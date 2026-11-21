@@ -139,16 +139,18 @@ class TokenizerPublicSource(unittest.TestCase):
         source = NATIVE.read_text()
         corpus = source.split("def tokenizer_bpe_identity_file(", 1)[1].split("def tokenizer_public_call(", 1)[0]
         for retained in ("bpe_encode_corpus_into(owner[]", "bpe_train_corpus_fill(handle,",
-                         "tokens_gather_rows_into(src, dst,", 'native_array_unfilled("i", total)',
+                         "lm_gather_rows(Int(py=source._addr)", 'native_array_unfilled("i", total)',
                          'neural_array_snapshot(ids_all, context)', 'neural_array_snapshot(output, context)',
                          '"mojolearn.bpe-trainer.v1"'):
             self.assertIn(retained, corpus)
         for forbidden in ("hashlib", 'Python.import_module', 'py_call(module.', 'py_call(native_loaded_module("array").array',
                           "tokenizer._m", "vocabulary.render", "source.__buffer__"):
             self.assertNotIn(forbidden, corpus)
-        typed = corpus.split("def tokenizer_gather_rows_native(", 1)[1].split("def tokenizer_gather_rows(", 1)[0]
-        self.assertNotIn("PythonObject", typed)
-        self.assertNotIn("py_call", typed)
+        # The typed gather is the RUN of the batch operations (no Python in its module).
+        typed = (ROOT / "core/lm_batch_run.mojo").read_text()
+        self.assertIn("tokens_gather_rows_into(src, dst,", typed)
+        for forbidden in ("PythonObject", "py_call", "std.python"):
+            self.assertNotIn(forbidden, typed)
 
 
 if __name__ == "__main__":

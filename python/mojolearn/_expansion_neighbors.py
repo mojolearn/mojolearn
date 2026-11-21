@@ -2113,11 +2113,15 @@ class SVGP(_XNeighbors):
     # One-call native public methods: the family owner runs the whole lifecycle
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "regressor"
 
     def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0,
-                 noise_variance=1.0, jitter=1e-6, numeric_mode=None):
+                 noise_variance=1.0, jitter=1e-6, numeric_mode=None, device=None):
         self.n_inducing = n_inducing
         self.inducing_points = inducing_points
         self.kernel_variance = kernel_variance
@@ -2125,15 +2129,7 @@ class SVGP(_XNeighbors):
         self.noise_variance = noise_variance
         self.jitter = jitter
         self.numeric_mode = numeric_mode
-
-    def _gamma_value(self):
-        ls = float(self.lengthscale)
-        return 1.0 / (2.0 * (ls * ls))  # ls ** 2 as one product, not the platform pow
-
-    def _k(self, A, B):
-        g = self._gamma_value()
-        K = self._kernel(A, B, "rbf", g, 0.0, 0)
-        return self._unary(K, _U_IDENTITY, _f32_scalar(self.kernel_variance), 0.0)
+        self.device = device
 
     def fit(self, X, y):
         """Fit the variational distribution for the given hyperparameters.

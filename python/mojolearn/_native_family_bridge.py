@@ -103,6 +103,13 @@ def tables(**fixed):
     context.update(fixed)
 
 
+#: Binding names the host surface routes no CPU module for, whose CPU
+#: identical image is loaded by name beside the device one (the metrics
+#: programs a device="cpu" estimator scores on beside a GPU set). One place:
+#: no family bridge loads such an image itself.
+_CPU_DEVICE_IMAGES = {"_mojolearn_x_metrics": "_mojolearn_x_metrics_host"}
+
+
 def _connect_cpu_binding(_backend, name):
     # glue: import-time connection of one binding name's CPU identical module
     # on a GPU installation: `(module, module name, mode reader name)`, or a
@@ -111,7 +118,7 @@ def _connect_cpu_binding(_backend, name):
     # already the CPU one (`family_binding_connections`).
     if _backend._CPU_ONLY is not None:
         return ('ImportError: this installation is CPU only; its own bindings are the CPU bindings',)
-    basename = _backend._HOST_MODULES.get(name)
+    basename = _backend._HOST_MODULES.get(name) or _CPU_DEVICE_IMAGES.get(name)
     if basename is None:
         return ("ValueError: device='cpu' is not available: " + name + ' has no CPU implementation. '
                 "Leave device=None to run on this installation's device",)

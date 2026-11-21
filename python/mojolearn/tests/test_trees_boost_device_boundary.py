@@ -264,3 +264,16 @@ def test_gradient_boosting_set_params_moves_the_next_fit_to_the_other_device(cls
     y = data(BaggingClassifier if cls is GradientBoostingClassifier else BaggingRegressor)[1]
     model.fit(x, y)
     assert model.vendor_used() == "cpu"
+
+
+# TreeExplainer takes no device of its own: it is prepared in the run context of the model it explains.
+def test_tree_explainer_follows_a_cpu_models_device():
+    from mojolearn import RandomForestRegressor, TreeExplainer
+
+    x, y = data(BaggingRegressor)
+    model = RandomForestRegressor(n_estimators=4, max_depth=3, random_state=0, device="cpu").fit(x, y)
+    explainer = TreeExplainer(model, x[:32])
+    values = np.asarray(explainer.shap_values(x[:8]))
+    assert values.shape == (8, x.shape[1])
+    assert np.isfinite(values).all()
+    explainer.close()

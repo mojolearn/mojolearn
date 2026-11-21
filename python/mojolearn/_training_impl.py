@@ -1073,25 +1073,10 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
 # checkpoint beside the optimizer moments.
 
 
-def _rng_call(binding, kind, n, offset, seed, stream, a, b, inp=None):
-    out = _buffers.empty(n, '<f4')
-    if inp is None:
-        inp = _buffers.zeros(1, '<f4')
-    # addresses = [out, inp]; params = [n, offset, seed_lo, seed_hi,
-    # stream_id, kind, a, b] (mirrored word for word in
-    # bindings/_mojolearn_training.mojo::neural_rng_binding).
-    binding.neural_rng(
-        [_buffers.addr(out, name="output buffer"), _buffers.addr_ro(inp, name="input buffer")],
-        [int(n), int(offset), int(seed & 0xFFFFFFFF),
-         int((seed >> 32) & 0xFFFFFFFF), int(stream), int(kind),
-         float(a), float(b)],
-    )
-    return out
-
-
 # The initializers compute their bound / std on the host in IEEE float64 with only +, -, *, / and
 # sqrt (correctly rounded everywhere), round to float32 and hand it to the device; the draw is
-# core/philox_neural.mojo's fixed integer-to-float mapping.
+# core/philox_neural.mojo's fixed integer-to-float mapping, reached as primitive operation 6 of
+# the training image's entry table (bindings/generator_draw_native_door.mojo).
 class Generator(object):
     """Seeded random stream for neural-network initialization and dropout.
 

@@ -76,6 +76,17 @@ def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
         var held = py_get(owner, key)
         if held is None or py_type(held) is not b.tuple or len(held) != 3 or py_type(held[1]) is not b.int:
             return
+        # A handle this estimator BORROWS is never released by it: the same
+        # fitted state was handed to it in memory from the estimator on the
+        # other device (python/mojolearn/_check_both.py `on_device`), which
+        # minted the handle and still owns and releases it. The mark names
+        # that exact (handle, binding); a handle this estimator minted itself
+        # afterwards differs and is released below.
+        var borrowed = py_get(fields, "_mojolearn_resident_borrowed")
+        if (borrowed is not None and py_type(borrowed) is b.tuple and len(borrowed) == 2
+                and py_type(borrowed[0]) is b.int and borrowed[1] is held[2]
+                and Int(py=borrowed[0]) == Int(py=held[1])):
+            return
         py_setitem(owner, key, PythonObject(None))
         # The binding's own compiled release entry; never a Python callback.
         var release = py_call(b.getattr, held[2], plan[4], PythonObject(None))
@@ -104,6 +115,11 @@ def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
         return
     var token = cached[1]
     if py_type(token) is not b.int:
+        return
+    # The same rule for the host index token: a borrowed one stays its owner's.
+    var lent = py_get(fields, "_mojolearn_resident_borrowed")
+    if (lent is not None and py_type(lent) is b.tuple and len(lent) == 2 and py_type(lent[0]) is b.int
+            and lent[1] is cached[2] and Int(py=lent[0]) == Int(py=token)):
         return
     py_setitem(fields, nk[].k__resident, PythonObject(None))
     # Exact native entry recorded from _mojolearn_ivf_search_host. Never

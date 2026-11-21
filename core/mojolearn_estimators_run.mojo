@@ -9,6 +9,7 @@ it did before; the bodies are moved unchanged, so the bits are unchanged
 (lane rs-metrics-estimators, 2026-11-12)."""
 from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_ESTIMATORS
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
+from core.linear_member import linear_member_publish
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from glm.linear_fit_device import linear_fit_device_v1, LINEAR_FIT_DEVICE_API
 from glm.linear_predict_device import linear_predict_device_v1
@@ -86,6 +87,9 @@ def _publish_linear_entry_table() raises:
     var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1))
     linear_table_publish[LINEAR_TABLE_ESTIMATORS](key,
         Int(api[].entries.unsafe_ptr()), [String(LINEAR_FIT_ABI), String(LINEAR_PREDICT_ABI)], [LINEAR_FIT_OPERATION_COUNT, 1], [linear_fit_device_v1, linear_predict_device_v1])
+    # The family's member entry (core/member_abi.mojo): Ridge and
+    # LinearRegression run as members of a meta-estimator through it.
+    linear_member_publish(key.mode, key.vendor, Int(api[].entries.unsafe_ptr()))
 
 
 def _publish_estimators_qn_table() raises:

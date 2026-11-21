@@ -7,6 +7,7 @@ numeric modes and fixed type metadata. Nothing here
 runs when a public method is called."""
 
 _LABEL_CONTEXT = {}
+_LABEL_CONTEXT_CPU = {}
 
 
 def _refusal(error):
@@ -80,6 +81,54 @@ def label_context():
             labels_namespace=types.SimpleNamespace,
         )
     return dict(_LABEL_CONTEXT)
+
+
+def _metrics_cpu():
+    # glue: the CPU identical metrics image's compiled entries, under both
+    # mode words (device="cpu" is identical only); a recorded refusal when the
+    # image does not load
+    from types import BuiltinFunctionType
+    from . import _backend
+    try:
+        module = _backend.load_host_module("_mojolearn_metrics_host")
+        table = {}
+        for name in ("r2_score", "r2_score_weighted", "metrics_numeric_mode", "umap_numeric_mode"):  # glue: fixed native exports
+            entry = getattr(module, name, None)
+            if isinstance(entry, BuiltinFunctionType):
+                table[name] = entry
+    except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+        table = _refusal(error)
+    return {"identical": {"_mojolearn_metrics": table}, "fast": {"_mojolearn_metrics": table}}
+
+
+def label_context_cpu():
+    """The label entries of a CPU scope beside a GPU set: the host label
+    kernels (`labels_base_binding=False`, which the label steps read from the
+    caller's context) and the CPU metrics tables. A family that builds its
+    own CPU scope merges these; nothing here is a process state."""
+    if "cpu" not in _LABEL_CONTEXT_CPU:
+        _LABEL_CONTEXT_CPU["cpu"] = dict(labels_base_binding=False, labels_bindings=_metrics_cpu())
+    return dict(_LABEL_CONTEXT_CPU["cpu"])
+
+
+def cpu_scope(context, **entries):
+    """Build `context["labels_cpu_scope"]`: the context a `device="cpu"`
+    classifier of this family hands the label boundary beside a GPU set
+    (bindings/labels_descriptor_boundary_door.mojo `labels_scope`). A copy of
+    `context` with the host label entries and the family's own CPU `entries`
+    (its CPU metrics tables, `vendor="cpu"`, ...). Call it LAST in the
+    family's connection: the copy does not follow later updates of
+    `context`. A CPU-only installation needs none and gets none."""
+    # glue: import-time connection, once per family context
+    from . import _backend
+    if _backend._CPU_ONLY is not None:
+        return None
+    scope = dict(context)
+    scope.pop("labels_cpu_scope", None)
+    scope.update(label_context_cpu())
+    scope.update(entries)
+    context["labels_cpu_scope"] = scope
+    return scope
 
 
 #: `bindings/labels_native_entry_pack.mojo` operation codes (lane ne1-h-labels).

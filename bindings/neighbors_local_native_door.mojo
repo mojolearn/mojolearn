@@ -7,8 +7,8 @@
 #
 # The shell hands over the binding `_bind()` resolved (the x_neighbors
 # binding of the estimator's numeric mode) first in `args`. LOF and NC use
-# native plans and fixed request envelopes. KNNImputer still uses the shared
-# `_op` boundary helper below. The A/B arms the module
+# native plans and fixed request envelopes; KNNImputer's typed RUN is
+# neighbors/knn_imputer_run.mojo. The A/B arms the module
 # read at import (MOJOLEARN_XN_UNFUSED_KNN, MOJOLEARN_XN_UNCOMPACT_IMPUTE,
 # MOJOLEARN_XN_OLD_ITEMS) are the import-time values in the context
 # (`family_xn_loc_flags`); NC_SPLIT_OPS is a build constant
@@ -17,10 +17,14 @@
 # Scalars derived on the host (the contamination percentile, the prior
 # checks) are the same binary64 operations in the same order; products that
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
-from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_module
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_module
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from neighbors.neighbors_local_run import ImpFitColumns
+from neighbors.knn_imputer_run import (
+    ImpFitRequest, ImpTransformRequest, imp_fit_run, imp_transform_run, imp_result_columns,
+)
 from bindings.admitted_family_door import admit_family
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
@@ -52,13 +56,13 @@ from neighbors.lof_run import (
 )
 from neighbors.neighbors_local_run import (
     LOF_RESULT_SCORES, LOF_RESULT_DECISION, LOF_RESULT_LABELS,
-    local_check_n_neighbors, local_copy_f32, local_write_i32,
+    local_check_n_neighbors,
     lof_refuse_metric, lof_refuse_metric_params, lof_check_contamination, lof_check_fit_rows,
     lof_fit_neighbors, lof_refuse_fit_predict_novelty, lof_check_novelty,
     nc_refuse_metric, nc_check_label_rows, nc_check_classes, nc_check_priors_ndim, nc_check_priors_size,
     nc_check_variance, nc_refuse_decision_metric,
-    imp_refuse_missing_values, imp_refuse_metric, imp_refuse_weights, imp_round_f32, imp_cells_length,
-    imp_colmiss_length, imp_read_count, imp_fit_columns, imp_check_features, imp_cells_operation, imp_keep_plan,
+    imp_refuse_missing_values, imp_refuse_metric, imp_refuse_weights, imp_round_f32, imp_check_features,
+    imp_keep_plan,
 )
 from core.nearest_centroid_plan import NcLabelCodes, NcFitPlan
 from neighbors.nearest_centroid_run import (
@@ -66,7 +70,7 @@ from neighbors.nearest_centroid_run import (
     NcFitRequest, NcFitOutcome, NcQueryRequest,
     nc_fit_count_run, nc_fit_priors_run, nc_fit_run, nc_labels_run, nc_decision_run, nc_proba_wide, nc_proba_run,
 )
-from bindings.admitted_input_unpack import admitted_array, admitted_vector, admitted_storage_native, admit_c_view, admitted_dtype
+from bindings.admitted_input_unpack import admitted_array, admitted_storage_native, admit_c_view, admitted_dtype
 from bindings.admitted_input_unpack import admitted_finite_refuse
 
 
@@ -211,14 +215,6 @@ def _out(shape: PythonObject, typestr: String, context: PythonObject) raises -> 
     return admitted_array(shape, typestr, context)
 
 
-def _op(binding: PythonObject, name: String, addrs: PythonObject, ints: PythonObject, floats: PythonObject,
-        context: PythonObject) raises:
-    """`_XNeighbors._op(name, bufs, ints, floats)`: the binding's `xn_<name>`
-    with the address, int and float lists. The caller keeps every buffer
-    alive across the call."""
-    xn_execute(binding, name, addrs, ints, floats)
-
-
 def _i(v: Int) -> PythonObject:
     return PythonObject(v)
 
@@ -226,24 +222,6 @@ def _i(v: Int) -> PythonObject:
 def _f32_scalar(value: PythonObject) raises -> Float64:
     """`_f32_scalar(v)`: `float(v)` rounded once to float32."""
     return imp_round_f32(Float64(py=family_call(_b().float, value)))
-
-
-def _copy_f32(x: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`X.copy()` of a C-order float32 array: a new Array of its shape."""
-    var out = _out(py_call(_b().tuple, x.shape), "<f4", context)
-    local_copy_f32(Int(py=classical_address(out)), Int(py=classical_address(x)), _size(x))
-    _ = x  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _i32_from_ints(values: List[Int], context: PythonObject) raises -> PythonObject:
-    """`_i32(list)`: an int32 vector Array of a short int list (class
-    offsets, kept columns, flags)."""
-    var out = admitted_vector(len(values), "<i4", context)
-    local_write_i32(values, Int(py=classical_address(out)))
-    _ = out  # keep the Python object alive through the writes above
-    return out
 
 
 # ------------------------------------------------------------------ LOF
@@ -733,6 +711,11 @@ def _nc_score(model: PythonObject, args: PythonObject, context: PythonObject,
 
 
 # ------------------------------------------------------------- KNNImputer
+#
+# Door split (lane dw-neighbors-b, 2026-11-21): UNPACK reads the fields and
+# admits X into a typed request, RUN is neighbors/knn_imputer_run.mojo (no
+# Python object; one GIL release around it), PACK publishes. Only the fitted
+# rows and the public result are Arrays; every intermediate is RUN's scratch.
 
 
 def _imp_check(fields: PythonObject, context: PythonObject) raises:
@@ -753,56 +736,46 @@ def _imp_check(fields: PythonObject, context: PythonObject) raises:
         imp_refuse_weights()
 
 
-def _imp_masked(binding: PythonObject, fields: PythonObject, source: PythonObject,
-                context: PythonObject) raises -> PythonObject:
-    """`KNNImputer._masked(X)`: a number's cells become NaN."""
-    var x = _f32(source, context)
+def _imp_missing(fields: PythonObject, count: Int) raises -> Tuple[Bool, Float64]:
+    """`KNNImputer._masked`'s decision as (mask, missing): a number's cells
+    become NaN (the number rounded once to float32); NaN and an empty X mask
+    nothing."""
     var mv = family_field(fields, "missing_values")
-    if _eq(mv, mv) and _size(x) != 0:
-        var out = _out(py_call(_b().tuple, x.shape), "<f4", context)
-        _op(binding, "p2m_mask_value", Python.list(classical_address(x), classical_address(out)),
-            Python.list(_i(_size(x))), Python.list(PythonObject(_f32_scalar(mv))), context)
-        _ = x  # keep the Python object alive through the native call above
-        return out
-    return x
-
-
-def _imp_nan_cells(binding: PythonObject, x: PythonObject, colmiss_only: Int,
-                   context: PythonObject) raises -> Tuple[PythonObject, PythonObject, Int]:
-    """`KNNImputer._nan_cells(X, colmiss_only)`: (cells, colmiss, count),
-    the per-column NaN counts as the int32 Array `xn_nan_cells` filled."""
-    var b = _b()
-    var n = _rows(x)
-    var d = _cols(x)
-    var lean = False
-    if colmiss_only != 0:
-        var probe = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_nc_fit_lean"), PythonObject(None))
-        if probe is not None:
-            lean = Int(py=family_call(b.int, family_call(probe))) != 0
-    var cells = _out(Python.tuple(imp_cells_length(n, d, lean)), "<i4", context)
-    var colmiss = _out(Python.tuple(imp_colmiss_length(d)), "<i4", context)
-    var info = _out(Python.tuple(1), "<i4", context)
-    _op(binding, "nan_cells", Python.list(classical_address(x), classical_address(cells), classical_address(colmiss),
-                                          classical_address(info)),
-        Python.list(_i(n), _i(d), _i(colmiss_only)), Python.list(), context)
-    _ = x  # keep the Python object alive through the native call above
-    var count = imp_read_count(Int(py=classical_address(info)))
-    _ = info  # keep the Python object alive through the read above
-    return (cells, colmiss, count)
+    if _eq(mv, mv) and count != 0:
+        return (True, _f32_scalar(mv))
+    return (False, Float64(0.0))
 
 
 def _imp_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """`KNNImputer.fit(X)`."""
+    # UNPACK
+    var b = _b()
     var fields = py_fields(model)
     _imp_check(fields, context)
     var binding = args[0]
-    var x = _imp_masked(binding, fields, args[1], context)
-    var n = _rows(x)
-    var d = _cols(x)
-    var found = _imp_nan_cells(binding, x, 1, context)
-    var colmiss = found[1]
-    var columns = imp_fit_columns(Int(py=classical_address(colmiss)), d, n)
-    _ = colmiss  # keep the Python object alive through the native reads above
+    var source = _f32(args[1], context)
+    var n = _rows(source)
+    var d = _cols(source)
+    var missing = _imp_missing(fields, _size(source))
+    # The fitted rows: X, or a new Array with the missing number's cells as NaN.
+    var x = source
+    var masked_at = 0
+    if missing[0]:
+        x = _out(py_call(b.tuple, source.shape), "<f4", context)
+        masked_at = Int(py=classical_address(x))
+    # Whether the bound image's column-count-only entry writes no cell list.
+    var lean = False
+    var probe = py_call(b.getattr, xn_module(binding), PythonObject("x_neighbors_nc_fit_lean"), PythonObject(None))
+    if probe is not None:
+        lean = Int(py=family_call(b.int, family_call(probe))) != 0
+    var request = ImpFitRequest(Int(py=classical_address(source)), masked_at, n, d, missing[1], lean)
+    var connection = LofConnection(binding)
+    var columns = ImpFitColumns(List[Bool](), List[Int]())
+    # RUN
+    with GILReleased(Python()):
+        columns = imp_fit_run(connection.driver, request)
+    _ = source  # keep the Python object alive through the native call above
+    # PACK
     var valid = Python.list()
     var miss = Python.list()
     for f in range(d):  # driver-loop: over the d feature columns (packing the fit's column masks)
@@ -817,35 +790,24 @@ def _imp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
 
 def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`KNNImputer.transform(X)`."""
+    # UNPACK, with the refusals in the public method's order
     var b = _b()
     var fields = py_fields(model)
     var binding = args[0]
-    var x = _imp_masked(binding, fields, args[1], context)
+    var x = _f32(args[1], context)
     var n = _rows(x)
     var d = _cols(x)
+    var missing = _imp_missing(fields, _size(x))
     imp_check_features(d, Int(py=family_field(fields, "n_features_in_")))
     var fit_x = family_field(fields, "_fit_X")
     var m = _rows(fit_x)
-    var out = _out(Python.tuple(n, d), "<f4", context)
     var k = _int_word(family_field(fields, "n_neighbors"))
     local_check_n_neighbors(k)
-    var distance = 1 if _eq(family_field(fields, "weights"), PythonObject("distance")) else 0
-    if _flag(context, "uncompact_impute"):
-        _op(binding, "knn_impute", Python.list(classical_address(x), classical_address(fit_x), classical_address(out)),
-            Python.list(_i(n), _i(m), _i(d), _i(k), _i(distance)), Python.list(), context)
-    else:
-        # one GPU thread per MISSING cell; a present cell keeps x
-        var found = _imp_nan_cells(binding, x, 0, context)
-        var cells = found[0]
-        var nc = found[2]
-        out = _copy_f32(x, context)
-        if nc != 0:
-            _op(binding, imp_cells_operation(_flag(context, "old_items")),
-                Python.list(classical_address(cells), classical_address(x), classical_address(fit_x),
-                            classical_address(out)),
-                Python.list(_i(n), _i(m), _i(d), _i(k), _i(distance), _i(nc)), Python.list(), context)
-        _ = cells  # keep the Python object alive through the native call above
-    _ = fit_x  # keep the Python object alive through the native calls above
+    var distance = _eq(family_field(fields, "weights"), PythonObject("distance"))
+    var uncompact = _flag(context, "uncompact_impute")
+    var old_items = False
+    if not uncompact:
+        old_items = _flag(context, "old_items")
     var valid = family_field(fields, "_valid")
     var present = List[Bool]()
     var true_word = PythonObject(True)
@@ -855,44 +817,25 @@ def _imp_transform(model: PythonObject, args: PythonObject, context: PythonObjec
         var item = valid[f]
         present.append((item is true_word) if py_type(item) is b.bool else _truth(item))
     var columns = imp_keep_plan(present)
-    if _truth(family_field(fields, "keep_empty_features")):
-        if n != 0 and not columns.all_valid:
-            var flag_array = _i32_from_ints(columns.flags, context)
-            var z = _out(Python.tuple(n, d), "<f4", context)
-            _op(binding, "p2m_zero_cols", Python.list(classical_address(out), classical_address(flag_array),
-                                                      classical_address(z)),
-                Python.list(_i(n), _i(d)), Python.list(), context)
-            _ = out  # keep the Python object alive through the native call above
-            _ = flag_array  # keep the Python object alive through the native call above
-            out = z
-    elif len(columns.keep) != d:
-        # `_take_cols(out, keep)`
-        var cols = _i32_from_ints(columns.keep, context)
-        var rows = _rows(out)
-        var taken = _out(Python.tuple(rows, len(columns.keep)), "<f4", context)
-        _op(binding, "take_cols", Python.list(classical_address(out), classical_address(cols), classical_address(taken)),
-            Python.list(_i(rows), _i(_cols(out)), _i(len(columns.keep))), Python.list(), context)
-        _ = out  # keep the Python object alive through the native call above
-        _ = cols  # keep the Python object alive through the native call above
-        out = taken
+    var keep_empty = _truth(family_field(fields, "keep_empty_features"))
     var miss = family_field(fields, "_miss_cols")
+    var indicator = List[Int]()
     if _truth(family_field(fields, "add_indicator")) and _truth(miss) and n != 0:
-        var c = _cols(out)
-        var q = len(miss)
-        var miss_cols = List[Int]()
-        for i in range(q):  # driver-loop: over the indicator columns (features missing at fit)
-            miss_cols.append(Int(py=miss[i]))
-        var miss_array = _i32_from_ints(miss_cols, context)
-        var res = _out(Python.tuple(n, c + q), "<f4", context)
-        var second = out if c != 0 else x
-        _op(binding, "p2m_nan_indicator", Python.list(classical_address(x), classical_address(second),
-                                                      classical_address(miss_array), classical_address(res)),
-            Python.list(_i(n), _i(d), _i(c), _i(q)), Python.list(), context)
-        _ = second  # keep the Python object alive through the native call above
-        _ = miss_array  # keep the Python object alive through the native call above
-        out = res
-    _ = x  # keep the Python object alive through the native calls above
-    return out
+        for i in range(len(miss)):  # driver-loop: over the indicator columns (features missing at fit)
+            indicator.append(Int(py=miss[i]))
+    var result = _out(Python.tuple(n, imp_result_columns(d, keep_empty, columns, len(indicator))), "<f4", context)
+    var request = ImpTransformRequest(Int(py=classical_address(x)), Int(py=classical_address(fit_x)),
+                                      Int(py=classical_address(result)), n, m, d, k, distance, missing[0],
+                                      missing[1], uncompact, old_items, keep_empty)
+    var connection = LofConnection(binding)
+    # RUN
+    with GILReleased(Python()):
+        imp_transform_run(connection.driver, request, columns, indicator)
+    _ = x  # keep the Python object alive through the native call above
+    _ = fit_x  # keep the Python object alive through the native call above
+    _ = result  # keep the Python object alive through the native call above
+    # PACK
+    return result
 
 
 # ------------------------------------------------------------------ door

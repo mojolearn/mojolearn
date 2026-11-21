@@ -232,6 +232,7 @@ from checks.native_tests.affinity_preference_plan import register as register_af
 from checks.native_tests.agglo_contract import register as register_agglo_contract
 from checks.native_tests.agglo_state import register as register_agglo_state
 from checks.native_tests.transport_frame import register as register_transport_frame
+from checks.native_tests.member_abi import register as register_member_abi
 from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
 from checks.native_tests.boundary_layout import register as register_boundary_layout
 from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
@@ -261,6 +262,7 @@ from checks.native_tests.kmeans_contract import register as register_kmeans_cont
 from checks.native_tests.kmeans_variants_contract import register as register_kmeans_variants_contract
 from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
 from checks.native_tests.parallel_byte_session import register as register_parallel_byte_session
+from checks.native_tests.cross_vendor_run import register as register_cross_vendor_run
 from checks.native_tests.kpca_contract import register as register_kpca_contract
 from checks.native_tests.kpca_state import register as register_kpca_state
 from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
@@ -603,6 +605,8 @@ from checks.native_tests.xtrees_glue_check import register as register_xtrees_gl
 from checks.native_tests.xtrees_zero_cover_check import register as register_xtrees_zero_cover_check
 from checks.native_tests.tsa_hw_route import register as register_tsa_hw_route
 from checks.native_tests.tsa_arima_route import register as register_tsa_arima_route
+from checks.native_tests.causal_owner import register as register_causal_owner
+from checks.native_tests.small_mlp_run import register as register_small_mlp_run
 
 def all_checks() -> List[Check]:
     var checks = List[Check]()
@@ -820,6 +824,7 @@ def all_checks() -> List[Check]:
     checks.append(register_agglo_contract())
     checks.append(register_agglo_state())
     checks.append(register_transport_frame())
+    checks.append(register_member_abi())
     checks.append(register_base_helpers_entry())
     checks.append(register_boundary_layout())
     checks.append(register_byte_lm_entry())
@@ -849,6 +854,7 @@ def all_checks() -> List[Check]:
     checks.append(register_kmeans_variants_contract())
     checks.append(register_kmeans_variants_lease())
     checks.append(register_parallel_byte_session())
+    checks.append(register_cross_vendor_run())
     checks.append(register_kpca_contract())
     checks.append(register_kpca_state())
     checks.append(register_label_score_keys_stress())
@@ -1188,4 +1194,6 @@ def all_checks() -> List[Check]:
     checks.append(register_xtrees_zero_cover_check())
     checks.append(register_tsa_hw_route())
     checks.append(register_tsa_arima_route())
+    checks.append(register_causal_owner())
+    checks.append(register_small_mlp_run())
     return checks^

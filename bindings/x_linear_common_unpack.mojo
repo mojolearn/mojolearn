@@ -3,18 +3,16 @@
 # (bindings/x_linear_native_door.mojo and the per-group
 # bindings/x_linear_<group>_unpack.mojo / _pack.mojo files): Python scalar
 # reads, the admitted X / y / fitted-array views, the float32 result words
-# and slices, the one operations call with the GIL released, and the class
-# weights. They live here, not in the door, so that a group's boundary file
+# and slices, the typed fit and decision builds with their released RUN, and
+# the class weights' UNPACK. They live here, not in the door, so that a group's boundary file
 # imports them without importing the door (which imports the groups).
 # Boundary code: Python objects are read and built here; the typed calls are
 # x_linear/door_run.mojo's.
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from core.linear_entry_table_ext import (
-    XL_OP_FLAGS, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_CLASS_PREP, XL_HAS_FIT_FOLD,
-)
+from core.linear_entry_table_ext import XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS
 from x_linear.door_run import (
-    XlDecisionRequest, xl_decision_run, XlFitRequest, xl_fit_run, xl_run_call, xl_run_fit, xl_run_status_refuse,
+    XlDecisionRequest, xl_decision_run, XlFitRequest, xl_fit_run, xl_fit_fold_held, xl_run_status_refuse,
     xl_run_word, xl_run_copy, xl_run_join, xl_block_dims, xl_run_block,
 )
 from bindings.x_linear_route_unpack import XLinearOps
@@ -136,17 +134,6 @@ def _xl_scope(entries: XLinearOps, context: PythonObject) raises -> PythonObject
     var scope = entries.scope
     classical_connect_numpy(scope)
     return scope
-
-
-def _xl_call(ops: XLinearOps, operation: Int, addresses: List[Int], ints: List[Int],
-             floats: List[Float64]) raises -> Int:
-    """One synchronous call of the x_linear operations entry with the GIL
-    released. The caller keeps every addressed buffer alive."""
-    var result = 0
-    var py = Python()
-    with GILReleased(py):
-        result = xl_run_call(ops.entry, operation, addresses, ints, floats)
-    return result
 
 
 def _xl_check_fitted(fields: PythonObject, model: PythonObject) raises:
@@ -345,56 +332,6 @@ def xl_decision_refuse(call: XlDecision, model: PythonObject) raises:
     _xl_status_refuse(call.status, model)
 
 
-def _xl_decision(model: PythonObject, x: AdmittedXView, coef: PythonObject, intercept: PythonObject, link: Int,
-                 squeeze: Bool, ops: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """`_decision(est, X, coef, intercept, link)` inside a fit, over an X
-    the caller keeps alive: build, run, refuse; the float32 scores."""
-    var call = xl_decision_build(XL_OP_DECISION, x, PythonObject(None), coef, intercept, link, squeeze, False, 0, 0,
-                                 0, ops, context)
-    xl_decision_released(call)
-    xl_decision_refuse(call, model)
-    return call.result
-
-
-
-def _xl_run(ops: XLinearOps, algo: Int, x_addr: Int, x_size: Int, n: Int, d: Int, y_addr: Int, y_size: Int,
-            ip: List[Int], fp: List[Float64], n_out: Int, n_fw: Int, n_iw: Int,
-            context: PythonObject, written: Int = 0) raises -> PythonObject:
-    """`_run_array`: one XL_OP_FIT call; the flat float32 result. The
-    targets are `y_size` 32-bit words at `y_addr` (the caller keeps them
-    alive); `y_size` 0 is no targets (one zero word, as `zeros((1,))`).
-    `written`: the leading result words the entry writes in full on every
-    binding (host and device); those are left unfilled and only the words
-    after them start as zeros. 0 (the default) zero-fills the whole result."""
-    # fx-rows (2026-11-18): the result was zero-filled (0.4 MB for 100k
-    # isotonic queries) and then overwritten word for word by the entry, and a
-    # one-word zero vector was allocated per call even when targets were
-    # given. A caller that proves `written` gets an unfilled result with only
-    # its tail zeroed; the zero word is allocated only when there are no
-    # targets. Timing: isotonic infer on taxi and istella (board), 50k random
-    # monotone pairs (non-board). No result word changes.
-    var out: PythonObject
-    if written > 0 and written <= n_out:
-        out = admitted_storage_native([n_out], "<f4", context, as_array=True)
-        var tail = _F32P(unsafe_from_address=labels_address(out))
-        for i in range(written, n_out):  # small-loop(the status words after the written prefix)
-            tail[i] = Float32(0)
-    else:
-        out = admitted_vector(n_out, "<f4", context)
-    var zero = PythonObject(None)
-    if y_size <= 0:
-        zero = admitted_vector(1, "<f4", context)
-    var ya = y_addr if y_size > 0 else labels_address(zero)
-    var out_addr = labels_address(out)
-    var py = Python()
-    with GILReleased(py):
-        _ = xl_run_fit(ops.entry, algo, x_addr, x_size, n, d, ya, y_size, ip, fp, n_out, n_fw, n_iw, out_addr)
-    _ = zero  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = zero^
-    return out
-
-
 def _xl_fold_matrix(source: PythonObject, est: String, ops: XLinearOps, context: PythonObject) raises -> AdmittedX:
     """`_xl_matrix` for a fit whose binding reads a device fold
     (XL_OP_FIT_FOLD, lane a8c-device-x-linear-prep-rfe): a model-selection
@@ -402,8 +339,14 @@ def _xl_fold_matrix(source: PythonObject, est: String, ops: XLinearOps, context:
     active and no host words exist); any other input, or a binding without
     the fold entry (XL_HAS_FIT_FOLD), is `_xl_matrix`'s."""
     if door_is_device_rows(source, context):
-        var flags = _xl_call(ops, XL_OP_FLAGS, List[Int](), List[Int](), List[Float64]())
-        if (flags & XL_HAS_FIT_FOLD) != 0:
+        # The one question a fold admission asks its binding (typed,
+        # x_linear/door_run.mojo `xl_fit_fold_held`), with the GIL released;
+        # only a DeviceRows input reaches it.
+        var held = False
+        var py = Python()
+        with GILReleased(py):
+            held = xl_fit_fold_held(ops.entry)
+        if held:
             return admit_x_unrecorded(source, est, context, defer_finite=True, device_x=True)
     return _xl_matrix(source, est, context)
 
@@ -438,7 +381,14 @@ def xl_fit_build(ops: XLinearOps, algo: Int, x_addr: Int, x_size: Int, n: Int, d
     `zeros((1,))`). `written`: the leading result words the entry writes in
     full on every binding (host and device); those are left unfilled and
     only the words after them start as zeros. 0 (the default) zero-fills
-    the whole result (fx-rows, 2026-11-18: see `_xl_run`)."""
+    the whole result."""
+    # fx-rows (2026-11-18): the result was zero-filled (0.4 MB for 100k
+    # isotonic queries) and then overwritten word for word by the entry, and a
+    # one-word zero vector was allocated per call even when targets were
+    # given. A caller that proves `written` gets an unfilled result with only
+    # its tail zeroed; the zero word is allocated only when there are no
+    # targets. Timing: isotonic infer on taxi and istella (board), 50k random
+    # monotone pairs (non-board). No result word changes.
     var result: PythonObject
     if written > 0 and written <= n_out:
         result = admitted_storage_native([n_out], "<f4", context, as_array=True)
@@ -521,16 +471,17 @@ def _xl_reals(values: List[Float64]) raises -> PythonObject:
 # ------------------------------------------------------------ class weights
 
 
-def _xl_class_prep(model: PythonObject, entries: XLinearOps, class_weight: PythonObject, classes: PythonObject,
-                   codes: PythonObject, sw_addr: Int, weighted: Bool, rows: Bool,
-                   context: PythonObject) raises -> Tuple[PythonObject, PythonObject, Int]:
-    """`_class_prep(est, class_weight, classes, codes, sample_weight,
-    weighted, rows)`: (the k class weights, the n row weights or None, the
-    largest unweighted class count), on the binding (`x_linear_class_prep`)."""
+def xl_class_weights_unpack(class_weight: PythonObject, classes: PythonObject,
+                            context: PythonObject) raises -> Tuple[PythonObject, Bool]:
+    """UNPACK of `_class_prep`'s class weights: the k float32 class-weight
+    words (the dict's values by fitted class, ones for None, unset for
+    'balanced', which the binding computes) and whether they are
+    'balanced'; the refusals of a dict that names an unknown class or of
+    any other value. The native step itself (XL_OP_CLASS_PREP) is RUN's
+    (x_linear/door_run.mojo `xl_class_prep_run`), made by the fit's RUN."""
     var b = _b()
     var labels = py_call(b.list, classes)
     var k = len(labels)
-    var n = Int(py=codes.shape[0])
     var balanced = _eq(class_weight, PythonObject("balanced"))
     var cw = PythonObject(None)
     if balanced:
@@ -548,15 +499,7 @@ def _xl_class_prep(model: PythonObject, entries: XLinearOps, class_weight: Pytho
         cw = _xl_floats(weights, context)
     else:
         raise Error("mojolearn: class_weight must be None, 'balanced' or a dict")
-    var out = admitted_vector(n, "<f4", context) if rows else PythonObject(None)
-    var largest = _xl_call(entries, XL_OP_CLASS_PREP,
-                           [labels_address(codes), sw_addr, labels_address(cw), 0 if out is None else labels_address(out)],
-                           [n, k, 1 if balanced else 0, 1 if (balanced and weighted and sw_addr != 0) else 0],
-                           List[Float64]())
-    _ = codes  # keep the Python object alive through the native call above
-    _ = cw  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    return (cw, out, largest)
+    return (cw, balanced)
 
 
 def _xl_bayes_refuse(model: PythonObject, fields: PythonObject, return_std: PythonObject) raises:

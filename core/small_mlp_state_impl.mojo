@@ -12,6 +12,7 @@ Python.
 from core.host_finite_scan import host_all_finite_f32
 from std.memory import unsafe_memcpy
 from core.shared_slot import SharedSlot
+from core.entry_table import EntryRef, entry_ref_unresolved
 
 comptime MLP_TOTAL = 195
 comptime MLP_MAX_STEP = 2147483647
@@ -84,16 +85,18 @@ struct MlpSlot(Copyable, Movable):
     # The trainer's captured program on the executor (-1: none;
     # autograd/small_mlp_program.mojo). While it is open its session
     # parameters and optimizer state are the truth for the weights and
-    # moments; `program_mode` names the numeric mode whose binding opened it.
+    # moments; `program_entry` is the program entry of the image that opened
+    # it (resolved once by the trainer's route), so its download and close
+    # are one indirect call and read no table.
     var program: Int
-    var program_mode: String
+    var program_entry: EntryRef
 
     def __init__(out self):
         self.live = False
         self.generation = 0
         self.state = MlpState()
         self.program = -1
-        self.program_mode = String()
+        self.program_entry = entry_ref_unresolved()
 
 
 struct MlpStore(Defaultable, Movable):
@@ -126,7 +129,7 @@ def mlp_store_create(var state: MlpState) raises -> Int:
     store[].slots[index].generation = generation
     store[].slots[index].state = state^
     store[].slots[index].program = -1
-    store[].slots[index].program_mode = String()
+    store[].slots[index].program_entry = entry_ref_unresolved()
     return generation * MLP_HANDLE_SPAN + index
 
 
@@ -150,7 +153,7 @@ def mlp_store_release(handle: Int) raises -> Bool:
     store[].slots[index].live = False
     store[].slots[index].state = MlpState()
     store[].slots[index].program = -1
-    store[].slots[index].program_mode = String()
+    store[].slots[index].program_entry = entry_ref_unresolved()
     return True
 
 

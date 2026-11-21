@@ -7,6 +7,10 @@ _ENTRY = _binding()._module.params_setter_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('parameter setters require a compiled native entry')
 _CONTEXT = dict(plans={}, missing=object(), ready=False)
+# The compiled device check of the setter (a `device` keyword is checked in
+# the shared words before anything changes; the route is dropped at commit).
+from ._device_table import connect_context as _connect_device_context
+_connect_device_context(_CONTEXT)
 
 # These are the field-only constructors already connected by
 # _native_msel_prep. No clone callback or parameter copy runs in set_params.

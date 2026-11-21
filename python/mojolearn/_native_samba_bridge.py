@@ -121,50 +121,29 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"Samba native execution requires a compiled {name}")
         entries[name] = entry
-    exact_schedule = training._lr_native("lr_schedule_exact")  # cpu-route: connects the existing exact host-scalar learning-rate entry at import; native owner evaluates one scalar per step
-    if not isinstance(exact_schedule, BuiltinFunctionType):
-        raise TypeError("Samba schedule requires a compiled exact schedule entry")
     core = {}
     for name in ("equal_elements", "reduce_stat", "all_finite_f32"):  # glue: connect existing native input admission entries at import
         entry = _buffer._native(name)
         if not isinstance(entry, BuiltinFunctionType):
             raise TypeError(f"Samba input admission requires a compiled {name}")
         core[name] = entry
-    # Reuse connected modules, without loading a second type-owning tier.
-    # These records let Generator preserve its per-instance numeric mode.
+    # Which numeric modes have a connected training image, for Generator
+    # (it keeps a per-instance numeric mode): True, or the reason it is not
+    # connected. The draw itself goes through the image's entry table
+    # (bindings/generator_draw_native_door.mojo), so no symbol is held here.
     import _operator
-    generator_bindings = {mode: unavailable if binding is None else {name: getattr(binding, name) for name in  # glue: import-time ABI symbols
-                               ("training_vendor", "training_numeric_mode", "neural_rng")}}
+    generator_bindings = {mode: True if binding is not None else unavailable}
     if _backend.vendor() not in (None, "cpu"):
         for route, connected in neural.CONTEXT["bindings"].items():  # glue: ABI connection records only
             if not route.startswith("gpu:"):
                 continue
             selected = connected["primitives"]
-            key = route.split(":", 1)[1]
-            if isinstance(selected, str):
-                generator_bindings[key] = selected
-                continue
-            symbols = {name: getattr(selected, name) for name in  # glue: import-time ABI symbols
-                       ("training_vendor", "training_numeric_mode", "neural_rng")}
-            if not all(isinstance(value, BuiltinFunctionType) for value in symbols.values()):  # glue: validate connection entries at import
-                raise TypeError("Generator execution requires compiled native RNG entries")
-            generator_bindings[key] = symbols
-    from . import _portable_math
-    try:
-        # import-time: connect the existing portable binary64 scalar sqrt ABI;
-        # native initializer preparation calls this C function directly.
-        generator_sqrt = _portable_math._load().mojolearn_sqrt
-        generator_sqrt_type = type(generator_sqrt)
-    except OSError as exc:
-        # Preserve import without the optional scalar library. Only an
-        # initializer requiring sqrt refuses, before consuming a stream.
-        generator_sqrt, generator_sqrt_type = str(exc), None
+            generator_bindings[route.split(":", 1)[1]] = selected if isinstance(selected, str) else True
     return {
         **core,
         "admission": _connect_admission(config_cls, model_cls, state_cls, training, neural, session_cls),
         "generator_bindings": generator_bindings, "generator_backend": _backend,
         "generator_index": _operator.index,
-        "generator_sqrt": generator_sqrt, "generator_sqrt_type": generator_sqrt_type,
         "neural": neural.CONTEXT, "entries": SimpleNamespace(canonical=binding, **entries),
         "mode": mode, "vendor": _backend.vendor(), "config_class": config_cls,
         "model_class": model_cls, "state_class": state_cls, "mamba3_state_class": Mamba3State,
@@ -172,7 +151,7 @@ def connect(config_cls, model_cls, training, neural, state_cls, session_cls=None
         "optimizer_class": training.AdamW,
         "optimizer_step_io": "optimizer_resident_step_io" in entries,
         "optimizer_maximize_device": "optimizer_maximize_dev" in entries,
-        "generator_class": training.Generator, "exact_schedule": exact_schedule,
+        "generator_class": training.Generator,
         # A restored schedule is built by the optimizer owner's native
         # `schedule_setstate` (dictionary fill, admission, one block bind).
         "schedule_native": training._OPT_NATIVE, "schedule_context": training._OPT_CONTEXT,

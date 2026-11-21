@@ -8,6 +8,7 @@ from check_neural_native_boundary import NATIVE_ROOTS, audit
 ROOT = Path(__file__).resolve().parents[1]
 BINDING = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
 PROVIDER = (ROOT / 'providers/python/generation_metadata_pyapi_door.mojo').read_text()
+OWNER = (ROOT / 'bindings/causal_operation_owner_door.mojo').read_text()
 NATIVE = (ROOT / 'core/generation_metadata.mojo').read_text()
 
 
@@ -28,6 +29,29 @@ def test_layer_request_and_route_types_are_native():
     assert result['passed'], result['failures']
     source = (ROOT / 'core/causal_layer_run.mojo').read_text()
     assert 'PythonObject' not in source and 'std.python' not in source
+
+
+def test_model_owner_words_are_native_and_decide_the_forward_route():
+    # dw-causal (2026-11-21): the model owner's words and rules import no Python; forward, step and the
+    # per-token legacy read decide the route and check the state on them, not on the model record.
+    result = audit(roots=('core.causal_owner',))
+    assert result['passed'], result['failures']
+    source = (ROOT / 'core/causal_owner.mojo').read_text()
+    assert 'PythonObject' not in source and 'std.python' not in source
+    for name in ('_run', '_run_prepared', '_use_native_generation_engine', '_resident_forward_ok', '_positions'):
+        body = function(name)
+        for read in ('model.kind', 'model._head_int15', 'model.max_positions', 'model.vocab_size', 'len(model._blocks)',
+                     '"parallel_call") is not None', '"native_primitives"'):
+            assert read not in body, (name, read)
+    forward = function('causal_lm_forward_binding')
+    assert forward.index('causal_model_owner(mods, model)') < forward.index('_run(mods, owner.words, model_held, model, ids, state, one)')
+    assert 'model.vocab_size' not in forward
+    read = function('_read')
+    assert read.index('causal_model_owner(mods, s.model)') < read.index('while wrote')
+    owner = (ROOT / 'bindings/causal_operation_owner_door.mojo').read_text()
+    template = owner.index('var template = py_call(bi.dict, fields)')
+    assert owner.index('native_owner = causal_model_owner_build(fields)') < template
+    assert 'add_type[CausalModelOwner]("_CausalModelOwner")' in (ROOT / 'bindings/_mojolearn_tokenizer_host.mojo').read_text()
 
 
 def test_layer_inner_execution_uses_native_dimensions_and_weight_addresses():
@@ -58,14 +82,26 @@ def test_native_template_keeps_mutable_progress_out_of_snapshot():
     assert 'st.positions' not in snapshots
 
 
-def test_snapshot_is_lazy_and_scoped_to_one_public_operation():
+def test_snapshot_is_lazy_and_scoped_to_one_model_generation():
+    # dw-causal (2026-11-21): the weight snapshot is the model owner's, built once per model generation at the
+    # first local forward; one operation keeps only its block captures (GenerationCallLayers), once per read.
     run = function('_run_prepared')
-    capture = run.index('snapshot = GenerationOperationSnapshot(')
+    capture = run.index('call_layers = _owner_call_layers(mods, held, model, True)')
+    build = function('_owner_call_layers')
+    assert build.index('if not owner[].snapshot:') < build.index('GenerationOperationSnapshot(model, model._native_entries, blocks)')
+    assert 'causal_model_snapshot_keep(held, built^)' in build
+    keep = OWNER.split('def causal_model_snapshot_keep(', 1)[1].split('\ndef ', 1)[0]
+    assert 'if not owner[].snapshot:' in keep and 'built.detach()' in keep  # written once, never replaced
+    snapshot = PROVIDER.split('struct GenerationOperationSnapshot', 1)[1].split('\ndef causal_layer_route', 1)[0]
+    assert 'var model:' not in snapshot and 'self.model' not in snapshot  # an owner-held snapshot keeps no capture
+    assert 'self.snapshot' not in PROVIDER.split('struct GenerationEngineAdmission', 1)[1]  # no per-call deep copy
     assert capture > run.index('py_call(parallel,')
     assert capture > run.index('return logits')
-    assert run.index('_state(mods, model, state, b, l)') < capture
+    # dw-causal (2026-11-21): the state check reads the model owner's typed words
+    assert run.index('_state(mods, words, model, state, b, l)') < capture
+    assert 'model.max_positions' not in function('_positions')
     read = function('_read')
-    declaration = 'var snapshot: Optional[GenerationOperationSnapshot] = None'
+    declaration = 'var call_layers: Optional[GenerationCallLayers] = None'
     assert read.index('try:') < read.index(declaration) < read.index('while wrote')
     assert declaration in function('_run')
     handle = re.search(r'^struct GenerationHandle.*?(?=^def |\Z)', BINDING, re.M | re.S).group()
@@ -91,7 +127,7 @@ def test_exact_array_owners_pin_addresses_and_foreign_copies_still_refresh():
     assert 'self.failures[k]' in resolve  # foreign refusals retain the original use position
     assert '_ = weights' in function('_causal_model_embedding_prepared')
     assert '_ = head' in function('_causal_model_head_prepared')
-    assert '_ = snapshot' in function('_run_snapshot')
+    assert 'var held: PythonObject' in PROVIDER.split('struct GenerationEngineAdmission', 1)[1]  # the owner pins the weights
 
 
 def test_prepared_embedding_head_and_layer_loop_do_not_read_model_metadata():

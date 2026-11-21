@@ -17,6 +17,7 @@ from bindings.params_metadata_native_door import _read, _resolved
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.params_keys_unpack import params_keys
 from bindings.py_balanced import py_item
+from providers.python.device_route_boundary_door import device_admit_class, device_route_clear
 
 
 def _constructor_layout(model: PythonObject, fields: PythonObject, plan: PythonObject) raises:
@@ -151,6 +152,12 @@ def _set_inner(model: PythonObject, params: PythonObject, context: PythonObject)
             if not py_contains(nested, name):
                 py_setitem(nested, name, Python.dict())
             py_setitem(nested[name], parts[2], params[key])
+    if py_contains(params, "device") and py_contains(values, "device"):
+        # A new device is refused in the shared words (unknown value, 'gpu'
+        # on a CPU-only installation, 'cpu' for a class that cannot run there
+        # beside a GPU set) before any nested or parent mutation.
+        device_admit_class(model, params["device"], py_get(context["backend_fields"], "_CPU_ONLY") is not None,
+                           py_get(context, "device_cpu"), b)
     var names = py_call(b.list, nested.keys())
     for i in range(len(names)):  # driver-loop: nested updates retain the original child object and argument order
         _ = _set(values[names[i]], nested[names[i]], context)
@@ -175,6 +182,9 @@ def _set_inner(model: PythonObject, params: PythonObject, context: PythonObject)
     for i in range(len(parameters)):  # driver-loop: commit the constructor state to the same estimator object
         py_setitem(fields, parameters[i], fresh[parameters[i]])
     py_setitem(fields, nk[].k__mojolearn_params_reset, fitted)
+    # The constructor state was replaced: the estimator's device route is
+    # dropped, so its next operation resolves the device and the mode again.
+    device_route_clear(model)
     return model
 
 

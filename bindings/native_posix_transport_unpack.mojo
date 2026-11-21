@@ -15,6 +15,18 @@ from bindings.native_posix_transport_run import (
 )
 
 
+def _gil_release() -> PosixBytes:
+    # The one place this file asks CPython for the GIL release entry: every
+    # blocking libc call below brackets itself with this pair.
+    ref cpy = Python().cpython()
+    return cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")()
+
+
+def _gil_restore(thread: PosixBytes):
+    ref cpy = Python().cpython()
+    cpy.lib.get_function[NoneType]("PyEval_RestoreThread")(thread)
+
+
 def posix_sleep(seconds: Float64) raises:
     if seconds < 0 or not isfinite(seconds) or seconds >= 9223372036854775808.0:
         raise Error("transport: invalid sleep interval")
@@ -23,30 +35,23 @@ def posix_sleep(seconds: Float64) raises:
     request[0] = whole
     request[1] = Int64((seconds - Float64(whole)) * 1e9)
     var remaining = Array[Int64, 2](fill=Int64(0))
-    ref cpy = Python().cpython()
-    var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
-    var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    var thread = release()
+    var thread = _gil_release()
     var status = external_call["nanosleep", c_int](request.unsafe_ptr(), remaining.unsafe_ptr())
     var number = posix_errno()
-    restore(thread)
+    _gil_restore(thread)
     if status != 0:
         posix_failure("nanosleep", number)
 
 
 def posix_ready(fd: Int, writing: Bool, deadline: Float64) raises:
-    # Match the existing native socket GIL release while the OS waits. Both
-    # public C entries are resolved before the release; the released section
-    # (`posix_ready_run`) touches only native storage and libc, never Python
+    # Match the existing native socket GIL release while the OS waits. The
+    # released section (`posix_ready_run`) touches only native storage and libc, never Python
     # objects, and its errors are native values raised after the restore.
-    ref cpy = Python().cpython()
-    var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
-    var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    var thread = release()
+    var thread = _gil_release()
     try:
         posix_ready_run(fd, writing, deadline)
     finally:
-        restore(thread)
+        _gil_restore(thread)
 
 
 def posix_resolve(var host: String, port: Int, passive: Bool) raises -> Int:
@@ -64,13 +69,10 @@ def posix_resolve(var host: String, port: Int, passive: Bool) raises -> Int:
         hostname = PosixBytes(unsafe_from_address=Int(host.as_c_string_slice().unsafe_ptr()))
     var result = Array[Int, 1](fill=0)
     var service_pointer = service.as_c_string_slice().unsafe_ptr()
-    ref cpy = Python().cpython()
-    var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
-    var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    var thread = release()
+    var thread = _gil_release()
     var status = external_call["getaddrinfo", c_int](hostname, service_pointer, hints.unsafe_ptr(), result.unsafe_ptr())
     var number = posix_errno()
-    restore(thread)
+    _gil_restore(thread)
     _ = host
     _ = service^
     if status != 0:
@@ -175,14 +177,11 @@ def posix_transfer(fd: Int, pointer: PosixBytes, count: Int, timeout: Float64, w
     # One GIL release for the whole transfer (it was one per readiness wait):
     # the caller holds the buffer export or owns the fresh bytearray, so the
     # bytes stay valid and unmoved; `posix_transfer_run` reads no Python object.
-    ref cpy = Python().cpython()
-    var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
-    var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    var thread = release()
+    var thread = _gil_release()
     try:
         posix_transfer_run(fd, pointer, count, timeout, writing)
     finally:
-        restore(thread)
+        _gil_restore(thread)
 
 
 def posix_spawn(var executable: String, var argv: List[String], var environment: List[String]) raises -> Int:
@@ -202,12 +201,9 @@ def posix_spawn(var executable: String, var argv: List[String], var environment:
         variables[i] = Int(environment[i].as_c_string_slice().unsafe_ptr())
     var pid = Array[c_int, 1](fill=c_int(0))
     var executable_pointer = executable.as_c_string_slice().unsafe_ptr()
-    ref cpy = Python().cpython()
-    var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
-    var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    var thread = release()
+    var thread = _gil_release()
     var status = external_call["posix_spawnp", c_int](pid.unsafe_ptr(), executable_pointer, Optional[PosixBytes](None), Optional[PosixBytes](None), arguments.unsafe_ptr(), variables.unsafe_ptr())
-    restore(thread)
+    _gil_restore(thread)
     _ = executable
     _ = argv
     _ = environment
@@ -220,13 +216,10 @@ def posix_spawn(var executable: String, var argv: List[String], var environment:
 
 def posix_wait(pid: Int, nohang: Bool) raises -> Int:
     var status = Array[c_int, 1](fill=c_int(0))
-    ref cpy = Python().cpython()
-    var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
-    var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    var thread = release()
+    var thread = _gil_release()
     var found = external_call["waitpid", c_int](c_int(pid), status.unsafe_ptr(), c_int(1 if nohang else 0))
     var number = posix_errno()
-    restore(thread)
+    _gil_restore(thread)
     if found >= 0:
         return -1 if found == 0 else Int(status[0])
     posix_failure("waitpid", number)

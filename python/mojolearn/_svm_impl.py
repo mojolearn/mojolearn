@@ -51,7 +51,6 @@ from . import _native_archive_bridge
 from . import _native_family_bridge
 from ._buffer import _native, _NATIVE as _NATIVE_CACHE
 from ._mode import NumericModeMixin, available_if
-from ._mode import _MODE_METADATA, _MODE_METADATA_CONTEXT, _OBJECT_GET  # the shared device admission
 
 #: `SVC.save`'s format tag (the kde svc host lane, 2026-09-14).
 _SVC_FORMAT = "mojolearn-svc-1"
@@ -507,18 +506,10 @@ class SVC(NumericModeMixin):
         probability=False,
         break_ties=False,
         numeric_mode=None,
-        device=None,
     ):
         # Stored verbatim (scikit-learn's convention); `_validate_params`
         # checks them when `fit` (or `load`) runs and keeps the checked
         # values the solver reads as `_hp_<name>`.
-        # `device` is checked in compiled code where it is given, before any
-        # field changes (the shared `device_admit` of the mode-metadata door,
-        # as `_mode._device_wrapper` calls it): None on a new instance calls
-        # nothing; a constructor run again (`set_params`) drops the route.
-        again = "device" in _OBJECT_GET(self, "__dict__")
-        if device is not None or again:
-            _MODE_METADATA(self, "device_admit", _MODE_METADATA_CONTEXT, device)
         self.C = C
         self.kernel = kernel
         self.degree = degree
@@ -536,7 +527,6 @@ class SVC(NumericModeMixin):
         self.probability = probability
         self.break_ties = break_ties
         self.numeric_mode = numeric_mode
-        self.device = device
 
     def __setstate__(self, state):
         return _NATIVE(self, "family_svc_public_svc_setstate", (state,), _NATIVE_CONTEXT)
@@ -1035,18 +1025,10 @@ class SVR(NumericModeMixin):
         nochange_steps=1000,
         output_type=None,
         numeric_mode=None,
-        device=None,
     ):
         # Stored verbatim (scikit-learn's convention); `_validate_params`
         # checks them when `fit` (or `load`) runs and keeps the checked
         # values the solver reads as `_hp_<name>`.
-        # `device` is checked in compiled code where it is given, before any
-        # field changes (the shared `device_admit` of the mode-metadata door,
-        # as `_mode._device_wrapper` calls it): None on a new instance calls
-        # nothing; a constructor run again (`set_params`) drops the route.
-        again = "device" in _OBJECT_GET(self, "__dict__")
-        if device is not None or again:
-            _MODE_METADATA(self, "device_admit", _MODE_METADATA_CONTEXT, device)
         self.kernel = kernel
         self.degree = degree
         self.gamma = gamma
@@ -1060,7 +1042,6 @@ class SVR(NumericModeMixin):
         self.nochange_steps = nochange_steps
         self.output_type = output_type
         self.numeric_mode = numeric_mode
-        self.device = device
 
     def __setstate__(self, state):
         return _NATIVE(self, "family_svc_public_svr_setstate", (state,), _NATIVE_CONTEXT)
