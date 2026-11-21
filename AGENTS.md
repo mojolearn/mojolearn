@@ -106,7 +106,10 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   relaxation (free reduction order, fused multiply-add allowed, reduced-precision matrix units where quality holds,
   elided waits, tile and block shape tuned per hardware) is one experiment define, measured for speed and checked
   for quality, which must not drop. `fast` and `identical` are both measured on NVIDIA first (the L40S); AMD and Apple
-  ride along and are tuned later if need be. The work order is the mode policy table
+  ride along and are tuned later if need be. A relaxation that wins its A/B on NVIDIA (faster, quality not down)
+  becomes the `fast` default on every vendor in the same change, and the route it replaces is deleted with a
+  tombstone; a vendor keeps a different `fast` route only where an actual measurement on that vendor chose it
+  (Andrew, 2026-11-20). The work order is the mode policy table
   (`docs/plans/SPEED_AND_CLEANUP_2026-11-18.md`; lane `ideas-mode-policy`). An `identical` build is never changed by a
   relaxation: a row switched off in an `identical` build is a compile error. `deterministic` stays retired; keep the
   rejection tests for retired mode values. The paper covers `identical` only, and uses the table to state what
