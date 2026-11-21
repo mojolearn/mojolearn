@@ -181,7 +181,7 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from bindings.native_process_pool_type import register_process_pool_owner
+from bindings.native_process_pool_type_door import register_process_pool_owner
 from checks.mode_policy import mode_policy_mask
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
@@ -1882,7 +1882,7 @@ def build__mojolearn() -> PythonObject:
     comptime assert BASE_GUARDS_OK, "invalid integrated experiment configuration (base guards)"
     try:
         var m = PythonModuleBuilder("_mojolearn")
-        # The process pool's record type (bindings/native_process_pool_type.mojo).
+        # The process pool's record type (bindings/native_process_pool_type_door.mojo).
         register_process_pool_owner(m)
         m.def_function[spectral_preparation_native_api_v1_binding]("spectral_preparation_native_api_v1")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")

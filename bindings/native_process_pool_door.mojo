@@ -215,7 +215,7 @@ def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: 
     var nk = native_keys()
     var native = ProcessPoolRecord(words^, cooperative)
     # The record's Python type is registered by every binding that builds this
-    # door (bindings/native_process_pool_type.mojo).
+    # door (bindings/native_process_pool_type_door.mojo).
     py_setitem(result, nk[].k_record, PythonObject(alloc=ProcessPoolOwner(native^)))
     # Configuration a caller may still set before the first request.
     py_setitem(result, nk[].k_module, child_module)
