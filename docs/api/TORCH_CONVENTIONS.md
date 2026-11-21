@@ -62,8 +62,8 @@ The neural models run float32 only, in both modes; `identical` defines its bits 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
 | `train(mode=True)`, `eval()` | yes | existing on `BatchNorm1d/2d`, `Dropout2d`, `BasicBlock` (native `bn_train`, `block_train`) |
-| `parameters()` | yes (`BasicBlock`) | existing native `block_parameters` |
-| `state_dict()` | owed | per-layer weights are `weight_`/`bias_` fields; a named export entry on the x_cnn door is needed |
+| `parameters()` | differs (`BasicBlock`) | existing native `block_parameters` returns `(layer, weight field, gradient field)` descriptors for the optimizers and tools/identity_lanes/cnn.py; moving it to torch's iterator is owed (its callers move with it) |
+| `state_dict()`, `load_state_dict()` | new (round 2) | `Conv2d`/`Conv1d` (`weight`, `bias`; Conv1d's weight torch's `(out, in // groups, k)`), `BatchNorm1d/2d` (`weight`, `bias`, `running_mean`, `running_var`, `num_batches_tracked`), `BasicBlock` (torchvision names `conv1.`, `bn1.`, `conv2.`, `bn2.`, `downsample.0/1.`): copies out; load is torch's `strict=True`, through the layer's `set_weights` admission (native ops `layer_state_dict` / `layer_load_state_dict`, `bindings/xcnn_conv_native_door.mojo`, `xcnn_bn_native_door.mojo`). A BasicBlock load checks every name first, then each sublayer's shapes in turn: a wrong shape in a later sublayer leaves the earlier ones loaded. GCNConv/SAGEConv: not added |
 
 ### Recurrent estimators (`LSTMRegressor`, `GRUClassifier`, `RNN*`)
 

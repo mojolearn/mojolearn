@@ -212,3 +212,43 @@ def test_causal_lm_parameters_are_torch_iterators(tmp_path):
     assert "lm_head.weight" in named
     arrays = list(model.parameters())
     assert len(arrays) == len(named)
+
+
+# ---- round 2: CNN layer state_dict / load_state_dict --------------------------
+
+def test_conv_state_dict_round_trips_and_matches_torch_names():
+    conv = mojolearn.Conv2d(3, 4, 3, device="cpu")
+    sd = conv.state_dict()
+    assert sorted(sd) == ["bias", "weight"] and sd["weight"].shape == (4, 3, 3, 3)
+    other = mojolearn.Conv2d(3, 4, 3, device="cpu").load_state_dict(sd)
+    assert np.asarray(other.weight_).tobytes() == sd["weight"].tobytes()
+    with pytest.raises(ValueError, match="no entry 'bias'"):
+        other.load_state_dict({"weight": sd["weight"]})
+    with pytest.raises(ValueError, match="unexpected keys"):
+        other.load_state_dict({**sd, "extra": sd["bias"]})
+
+
+def test_conv1d_state_dict_is_torch_rank_three():
+    conv = mojolearn.Conv1d(2, 5, 3, device="cpu")
+    sd = conv.state_dict()
+    assert sd["weight"].shape == (5, 2, 3)
+    assert mojolearn.Conv1d(2, 5, 3, device="cpu").load_state_dict(sd).state_dict()["weight"].tobytes() == sd["weight"].tobytes()
+
+
+def test_batchnorm_state_dict_has_torch_names():
+    bn = mojolearn.BatchNorm2d(4, device="cpu")
+    sd = bn.state_dict()
+    assert sorted(sd) == ["bias", "num_batches_tracked", "running_mean", "running_var", "weight"]
+    sd["running_mean"] = np.full(4, 0.5, dtype=np.float32)
+    bn.load_state_dict(sd)
+    assert np.asarray(bn.running_mean_).tobytes() == sd["running_mean"].tobytes()
+    with pytest.raises(ValueError, match="num_features"):
+        bn.load_state_dict({**sd, "weight": np.ones(3, dtype=np.float32)})
+
+
+def test_basic_block_state_dict_uses_torchvision_names():
+    block = mojolearn.BasicBlock(4, 4, device="cpu")
+    sd = block.state_dict()
+    assert "conv1.weight" in sd and "bn2.running_var" in sd and "conv1.bias" not in sd
+    again = mojolearn.BasicBlock(4, 4, random_state=1, device="cpu").load_state_dict(sd)
+    assert {k: np.asarray(v).tobytes() for k, v in again.state_dict().items()} == {k: np.asarray(v).tobytes() for k, v in sd.items()}
