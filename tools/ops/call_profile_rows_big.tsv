@@ -1,0 +1,25 @@
+# LONG rows for tools/ops/call_profile_job.sh (lane fx-profile-big-rows, 2026-11-20): pass as
+# CP_ROWS_FILE=tools/ops/call_profile_rows_big.tsv with CP_PASSES=pyspy,nsys,shim CP_REPORT_TOP=15. The rows of the
+# four kernels that hold 89% of board time and had no profile (ideas-rank-shared-RESULT.md section 3 item 1): the
+# x_decomp dense kit (lle, min-cov-det, als), the Isomap graph stage, the DBSCAN pair-distance pass, the online-linear
+# minibatch loop (pa-clf), and the next rows of its list (autoarima, permutation-test-score, gbdt-ordered,
+# select-mutual-info-reg, ridge-cv). Each is profiled in ONE call per pass (ms >= 10,000: no warmup, the window around
+# the first scored call), each pass under its cap (2 x the stored seconds + 300 s; `cap=` overrides).
+# ms = the stored board time of the row's fit (`new_ms`, L40S, build 7f5eac7eab: ~/mojolearn-evidence/measure-candidate/
+# build-7f5eac7eab/{full1p1r,full1p2r/x,full2p1/x,part2.part2/x}/compare-tg-nvidia.json). Race ids are the full board's
+# (tools/paper_compare.py plan_all); `tools/ops/targeted_rows.py plan` resolved every one on 2026-11-20.
+# Biggest first: a job cap kill loses the smallest rows.
+classical/dbscan/istella/rows=full	fit	name=dbscan-istella-fit	ms=590122
+algos/lle/taxi/rows=full	fit	name=lle-taxi-fit	ms=524886
+algos/lle/istella/rows=full	fit	name=lle-istella-fit	ms=507053
+algos/isomap/istella/rows=full	fit	name=isomap-istella-fit	ms=359020
+algos/isomap/taxi/rows=full	fit	name=isomap-taxi-fit	ms=358376
+algos/min-cov-det/istella/rows=full	fit	name=min-cov-det-istella-fit	ms=124633
+algos/pa-clf/istella/rows=full	fit	name=pa-clf-istella-fit	ms=112963
+algos/pa-clf/taxi/rows=full	fit	name=pa-clf-taxi-fit	ms=62454
+algos/als/text/rows=full	fit	name=als-text-fit	ms=52629
+algos/permutation-test-score/istella/rows=full	fit	name=permutation-test-score-istella-fit	ms=38067
+trees/gbdt-ordered/istella/rows=full	fit	name=gbdt-ordered-istella-fit	ms=34803
+algos/autoarima/synthetic/rows=full	fit	name=autoarima-synthetic-fit	ms=24803
+algos/ridge-cv/istella/rows=full	fit	name=ridge-cv-istella-fit	ms=24043
+algos/select-mutual-info-reg/istella/rows=full	fit	name=select-mutual-info-reg-istella-fit	ms=16540
