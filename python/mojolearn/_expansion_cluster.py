@@ -972,14 +972,28 @@ class BayesianGaussianMixture(_XCluster):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "density_estimator"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, n_components=1, covariance_type="full", tol=1e-3, reg_covar=1e-6,
                  max_iter=100, n_init=1, init_params="kmeans",
                  weight_concentration_prior_type="dirichlet_process", weight_concentration_prior=None,
                  mean_precision_prior=None, mean_prior=None, degrees_of_freedom_prior=None,
                  covariance_prior=None, random_state=None, warm_start=False, verbose=0,
-                 verbose_interval=10, numeric_mode=None):
-        return _NATIVE(self, "family_xc_initialize", (None, (n_components, covariance_type, tol, reg_covar, max_iter, n_init, init_params, weight_concentration_prior_type, weight_concentration_prior, mean_precision_prior, mean_prior, degrees_of_freedom_prior, covariance_prior, random_state, warm_start, verbose, verbose_interval, numeric_mode,)), _NATIVE_CONTEXT)
+                 verbose_interval=10, numeric_mode=None, device=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (n_components, covariance_type, tol, reg_covar, max_iter, n_init, init_params, weight_concentration_prior_type, weight_concentration_prior, mean_precision_prior, mean_prior, degrees_of_freedom_prior, covariance_prior, random_state, warm_start, verbose, verbose_interval, numeric_mode, device,)), _NATIVE_CONTEXT)
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for an estimator
+            that runs on the CPU.
+        """
+        return _NATIVE(self, "family_mix_vendor_used", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the mixture on `X`.
@@ -1120,6 +1134,10 @@ _native_family_bridge.tables(
 
 # Fixed binding connections belong to package setup, never a model operation.
 _native_family_bridge.connect_bindings("_mojolearn_x_cluster")
+# The CPU image of `device="cpu"`, connected once at import beside the device
+# image (providers/python/device_route_dw_neighbors_cluster_door.mojo).
+from ._native_device_bindings import connect_cpu_device as _connect_cpu_device
+_connect_cpu_device("_mojolearn_x_cluster")
 from ._native_owner_lifetime import connect_owner_context as _connect_cluster_owner_context
 _connect_cluster_owner_context(_NATIVE_CONTEXT)
 
