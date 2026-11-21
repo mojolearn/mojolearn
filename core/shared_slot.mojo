@@ -67,7 +67,7 @@ semantics, and whether `init_fn` running twice is a guaranteed contract.)
 """
 
 from std.atomic import Atomic, Ordering
-from std.ffi import _Global
+from std.ffi import _Global, c_int, external_call
 from std.os import abort
 from std.sys.info import size_of
 
@@ -104,12 +104,22 @@ def shared_slot_lock(word: MutPointer[Int64, MutUntrackedOrigin]):
 def shared_slot_try_lock(word: MutPointer[Int64, MutUntrackedOrigin]) -> Bool:
     """One attempt at the lock word: True when this thread now holds it.
     For a holder that keeps the word across long work (a busy mark): the
-    other thread refuses in words and never spins on it."""
+    other thread never spins on it (`shared_slot_wait_lock` yields)."""
     var expected = Int64(0)
     return Atomic.compare_exchange[
         success_ordering=Ordering.SEQUENTIAL,
         failure_ordering=Ordering.RELAXED,
     ](word, expected, Int64(1))
+
+
+def shared_slot_wait_lock(word: MutPointer[Int64, MutUntrackedOrigin]):
+    """Wait until this thread holds the lock word, giving the CPU away
+    between attempts. For a word another thread keeps across long work (a
+    busy mark around one prediction): the second caller waits its turn, it is
+    not refused. The holder must not change its GIL state while it holds the
+    word, so a waiter that holds the GIL never blocks it."""
+    while not shared_slot_try_lock(word):  # driver-loop: wait for the holder's one call to end
+        _ = external_call["sched_yield", c_int]()
 
 
 @always_inline

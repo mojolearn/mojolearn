@@ -143,7 +143,10 @@ Python objects: SERIAL BY NATURE under the GIL, one estimator per unit.
 
 Memory per worker: nothing for viewed or indexed sides; for a gathered side
 its rows (at most one copy of X and y), as a Python unit holds. The worker count is the caller's
-(`msel_unit_workers`: the n_jobs bound, the units, one on a GPU).
+(`msel_unit_workers`: the n_jobs bound, the units, one on a GPU), and ONE
+whenever an admitted candidate's resolved route is a GPU (read here from the
+plan's route, not from the caller: no two workers enqueue on one device
+context).
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
@@ -168,6 +171,7 @@ from bindings.py_admitted_registry import admitted_held_index
 from bindings.admitted_meta_scope_unpack import admitted_held_verify
 from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
+from core.device_route import DEVICE_CPU
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
     MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR,
@@ -765,6 +769,14 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                 except:
                     return scores^
                 index_all = scope >= 0 and (kind_mask & MEMBER_CAN_ROW_INDEX) != 0
+        # THE GPU WORKER CAP (THE GIL RULE, round 4): a member whose RESOLVED
+        # route is a GPU runs its units one at a time, whatever the caller's
+        # bound and whatever the process vendor says: several workers
+        # enqueueing on one device context is not proven. Read from the
+        # admitted route itself, as `member_set_workers` does.
+        if owner.plan.route.device != DEVICE_CPU:
+            workers = 1
+            run.workers = 1
         run.plans.append(owner.plan.copy())
         _ = py_call(members.append, est)
         _ = py_call(member_pins.append, owner.pins)

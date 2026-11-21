@@ -30,7 +30,7 @@ from core.admitted_finite_status import enqueue_finite_status
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T38_FUSED_LABELS.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_T37_WORKSPACE (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-04-base; code recoverable at 9d8b51b0a6.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_T37_WORKSPACE.expdel2-04-base.patch; record in docs/TOMBSTONES.md.
-from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_try_lock, shared_slot_unlock
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_wait_lock, shared_slot_unlock
 
 
 #: The resident path checks its input and output for non-finite values on
@@ -333,8 +333,9 @@ struct ResidentForest(Movable):
     #: The busy mark of the paths that still write this snapshot's own
     #: per-call state (the device pool of several GPUs, the snapshot's own
     #: workspace and status pair): one call at a time; a second call of the
-    #: SAME snapshot from another thread is refused in words, never made to
-    #: wait across a launch. The shared path (one device, the product's
+    #: SAME snapshot from another thread waits its turn (it is never
+    #: refused); a holder never changes its GIL state while it holds the
+    #: mark. The shared path (one device, the product's
     #: route) writes nothing of the snapshot and does not take it.
     var busy: List[Int64]
 
@@ -571,8 +572,10 @@ struct ResidentForest(Movable):
         """Take this snapshot's busy mark for a call that writes its own
         per-call state; the caller releases the returned word."""
         var word = rebind[MutPointer[Int64, MutUntrackedOrigin]](self.busy.unsafe_ptr())
-        if not shared_slot_try_lock(word):
-            raise Error("resident forest snapshot is in a prediction on another thread")
+        # A second call of the SAME snapshot from another thread WAITS for
+        # the first (round 4: two threads predicting one fitted forest both
+        # work); different snapshots never wait for each other.
+        shared_slot_wait_lock(word)
         return word
 
     def _predict_into_own[RF_INPUT: Bool](mut self,

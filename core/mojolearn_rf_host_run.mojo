@@ -66,7 +66,7 @@ same order (that docstring is the contract)."""
 
 
 # V2 (lane fx-gil, 2026-11-25): the registry gained its lock word.
-comptime RF_HOST_EXPORTS = SharedSlot[ForestExportRegistry[RfHostForest], "MojolearnRFFitExportHostV2", 2]
+comptime RF_HOST_EXPORTS = SharedSlot[ForestExportRegistry[RfHostForest], "MojolearnRFFitExportHostV3", 2]
 
 
 def _check_criterion(who: String, criterion: Int, classification: Bool) raises:

@@ -128,7 +128,7 @@ same order (that docstring is the contract; slot 20 is `device`, 21 the
 criterion code)."""
 
 # V2 (lane fx-gil, 2026-11-25): the registry gained its lock word.
-comptime ET_HOST_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], "MojolearnETFitExportHostV2", 2]
+comptime ET_HOST_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], "MojolearnETFitExportHostV3", 2]
 
 
 def _index(value: PythonObject) raises -> Int:
