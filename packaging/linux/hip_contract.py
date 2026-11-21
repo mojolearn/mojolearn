@@ -48,7 +48,7 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ptx_contract import approx_allowed  # noqa: E402
+from ptx_contract import approx_allowed, vendor_math_build  # noqa: E402
 
 EM_AMDGPU = 224
 #: Not correctly rounded on gfx942: refused wherever they appear (outside APPROX_ALLOW).
@@ -151,6 +151,7 @@ def audit_file(path, objdump, mcpu="gfx942", pool=None):
     if not blobs:
         report["errors"].append("no AMDGPU code object embedded")
         return report
+    vendor_math = vendor_math_build()  # the vendor-math measurement row (ptx_contract._VENDOR_MATH_ROW)
     jobs = [(objdump, mcpu, b) for b in blobs]
     results = pool.map(_disassemble, jobs, chunksize=8) if pool else map(_disassemble, jobs)
     for sites, err in results:
@@ -158,7 +159,7 @@ def audit_file(path, objdump, mcpu="gfx942", pool=None):
             report["errors"].append("llvm-objdump failed: " + err)
             continue
         for kernel, op in sites:
-            why = approx_allowed(kernel)
+            why = approx_allowed(kernel, vendor_math)
             if why:
                 report["allowed"][kernel] = why
             elif f"{kernel}: {op}" not in report["refused"]:
