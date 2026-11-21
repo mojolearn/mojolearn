@@ -590,8 +590,8 @@ def _gbdt_fit_ordered_arm(
     # takes the flags and builds single-column CTRs over its fold
     # permutations, as `train` does. What stays refused, by name: an
     # estimation permutation that is not the last and feature combinations
-    # (`train`'s own two refusals, its words), and a one-hot column (the
-    # oracle's refusal: its fold searcher scores `bin >` splits only).
+    # (`train`'s own two refusals, its words). A one-hot column is fitted
+    # (the fold searcher's take-bin arm), as on the device.
     var ctr_permutation_id = params.i(29)
     var max_ctr_complexity = params.i(34)
     if max_ctr_complexity < 1:

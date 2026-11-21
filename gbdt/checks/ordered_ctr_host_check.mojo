@@ -28,7 +28,7 @@ Checked, host against device:
   * Logloss with the learn rows as the eval set: the text, the held-out
     losses;
   * one permutation (one index, learn and estimation the same order);
-  * the host refuses a one-hot column under Ordered by name.
+  * a one-hot column (two categories) under Ordered: the same text and losses.
 
 The suite needs a GPU for the device arm; the host arm runs on the calling
 host. Serial by nature: pairs of fits, each pair compared whole.
@@ -268,18 +268,24 @@ def check_ordered_ctr_host() raises:
     _same_text(model_text(dev_one), host_one.text, "one permutation")
     print("  one permutation: same text")
 
+    # a one-hot column (b has two categories): the host fold searcher's
+    # take-bin arm against the device's, the same text and losses
     var binary = _fixture(True)
-    var message = String("")
-    try:
-        _ = _host_fit(binary[0], binary[1], True, 4, False)
-    except error:
-        message = String(error)
-    _need(message != "", "a one-hot column under Ordered was not refused")
+    var bx = binary[0].copy()
+    var by = binary[1].copy()
+    var dev_oh = _device_fit(ctx, bx, by, String("Logloss"), 4, True)
+    var host_oh = _host_fit(bx, by, True, 4, True)
     _need(
-        message.find("one-hot column") >= 0,
-        "a one-hot column was refused in other words: " + message,
+        host_oh.text.find(" one_hot 1") >= 0,
+        "the host text of the one-hot fit names no one-hot feature",
     )
-    print("  a one-hot column under Ordered is refused by name on the host")
+    _same_text(model_text(dev_oh), host_oh.text, "a one-hot column, Logloss")
+    _same_losses(dev_oh.losses, host_oh.losses, "one-hot learn loss")
+    _same_losses(dev_oh.test_losses, host_oh.test_losses, "one-hot held-out loss")
+    var dev_oh_rmse = _device_fit(ctx, bx, by, String("RMSE"), 4, False)
+    var host_oh_rmse = _host_fit(bx, by, False, 4, False)
+    _same_text(model_text(dev_oh_rmse), host_oh_rmse.text, "a one-hot column, RMSE")
+    print("  a one-hot column under Ordered: same text, same losses")
 
 
 def run_checks() raises:

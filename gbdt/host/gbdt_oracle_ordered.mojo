@@ -546,6 +546,15 @@ def _ordered_tree_structure(
     word_offset_of: List[Int],
     shift_of: List[UInt32],
     mask_of: List[UInt32],
+    # one flag per layout feature, or empty for none: a ONE-HOT feature's
+    # candidates are equality tests (`TBinarizedFeature::OneHotFeature`).
+    # Its histogram cells are the per-bin sums as filed (the scan skips its
+    # prefix sum, `scan_pointwise_histograms_kernel`'s `skipFeature`), the
+    # scorer reads the cell as one side and the partition less the cell as
+    # the other with the same expressions as a threshold, and the partition
+    # update sends `bin == split bin` right (`pw_split_resolve`'s take-bin
+    # arm).
+    one_hot_of: List[Bool],
     plain_l2: Bool = False,
     # the per-tree noise (`fit_oblivious_tree_structure`'s `score_std_dev`
     # and `seed`): a `TRandom(seed)` draw per LEVEL is the level's
@@ -567,6 +576,7 @@ def _ordered_tree_structure(
     if plain_cosine and (fold_count != 1 or plain_l2):
         raise Error("plain cosine needs one fold and cannot select L2")
     var doc_count = len(doc_ids)
+    var have_one_hot = len(one_hot_of) != 0
     var max_parts = 1 << (fold_bits + max_depth)
     var stripe = 1 << _int_log2_floor_ceil(fold_count)  # exact integer ceil(log2), as the device stripe (lane fb13)
     var s = _OrdSubsets(
@@ -757,6 +767,9 @@ def _ordered_tree_structure(
                     for f in range(n_feat):
                         if hp.folds[f] <= 1:
                             continue
+                        # a one-hot feature keeps its per-bin cells
+                        if have_one_hot and one_hot_of[hp.gids[f]]:
+                            continue
                         var sbase = (slot * hist_line + hp.first[f]) * 2
                         for st in range(2):
                             var running = Float32(0.0)
@@ -925,10 +938,17 @@ def _ordered_tree_structure(
         var bit = UInt32(1) << UInt32(depth + fold_bits)
         var value = best_bin << shift_of[fid]
         var mask = mask_of[fid] << shift_of[fid]
-        for i in range(doc_count):
-            var feature_val = cindex[word_offset_of[fid] + docs[i]] & mask
-            if feature_val > value:
-                s.bins[i] = s.bins[i] | bit
+        if have_one_hot and one_hot_of[fid]:
+            # take-bin: the rows of the split's category go right
+            for i in range(doc_count):
+                var feature_val = cindex[word_offset_of[fid] + docs[i]] & mask
+                if feature_val == value:
+                    s.bins[i] = s.bins[i] | bit
+        else:
+            for i in range(doc_count):
+                var feature_val = cindex[word_offset_of[fid] + docs[i]] & mask
+                if feature_val > value:
+                    s.bins[i] = s.bins[i] | bit
         var new_bins = List[UInt32](capacity=doc_count)
         var new_indices = List[Int](capacity=doc_count)
         for i in range(doc_count):
@@ -1394,7 +1414,7 @@ def gbdt_ordered_rmse_host_fit(
         var splits = _ordered_tree_structure(
             cindex, helpers, max_depth, sw, sg, doc_ids, part_bounds,
             fold_count, fold_bits, scale, l2_leaf_reg, feat_offset,
-            feat_shift, feat_mask,
+            feat_shift, feat_mask, List[Bool](),
         )
         # `compute_bins_for_model` (level d is bit d)
         var bins = List[Int](length=n, fill=0)
@@ -1734,13 +1754,16 @@ def _ordered_leaf_bins(
     word_offset_of: List[Int],
     shift_of: List[UInt32],
     mask_of: List[UInt32],
+    one_hot_of: List[Bool],
     n_rows: Int,
     mut bins: List[Int],
 ):
     """`compute_bins_for_model` (`gbdt/models/add_bin_values.mojo`): every
     row's leaf of one oblivious tree read off one compressed index, bit
-    `level` set when the row's bin exceeds the level's split bin. A tree
-    without splits sends every row to leaf 0.
+    `level` set when the row's bin exceeds the level's split bin, or EQUALS
+    it when the level's feature is one-hot (`one_hot_of`, one flag per
+    layout feature or empty for none: the take-bin split). A tree without
+    splits sends every row to leaf 0.
 
     Rows are the independent units, split across the host's workers
     (`host_parallelize`, the worker count from
@@ -1752,15 +1775,22 @@ def _ordered_leaf_bins(
     var offs = List[Int](length=slots, fill=0)
     var masks = List[UInt32](length=slots, fill=UInt32(0))
     var values = List[UInt32](length=slots, fill=UInt32(0))
+    #: 1 for a take-bin level, 0 for a threshold level
+    var equal = List[UInt32](length=slots, fill=UInt32(0))
+    var any_equal = False
     for level in range(depth):
         var fid = splits[level].feature
         offs[level] = word_offset_of[fid]
         masks[level] = mask_of[fid] << shift_of[fid]
         values[level] = UInt32(splits[level].bin) << shift_of[fid]
+        if len(one_hot_of) != 0 and one_hot_of[fid]:
+            equal[level] = UInt32(1)
+            any_equal = True
     var cp = _OrdU32Ptr(unsafe_from_address=Int(cindex.unsafe_ptr()))
     var op = _OrdIntPtr(unsafe_from_address=Int(offs.unsafe_ptr()))
     var mp = _OrdU32Ptr(unsafe_from_address=Int(masks.unsafe_ptr()))
     var vp = _OrdU32Ptr(unsafe_from_address=Int(values.unsafe_ptr()))
+    var ep = _OrdU32Ptr(unsafe_from_address=Int(equal.unsafe_ptr()))
     var bp = _OrdIntPtr(unsafe_from_address=Int(bins.unsafe_ptr()))
     var units = max(1, host_predict_task_count_work(n_rows, n_rows * slots))
     var chunk = host_predict_chunk(n_rows, units)
@@ -1773,7 +1803,24 @@ def _ordered_leaf_bins(
                     leaf += 1 << level
             bp[r] = leaf
 
-    host_parallelize(rows, units)
+    def rows_take_bin(unit: Int) {imm chunk, imm n_rows, imm depth, imm cp, imm op, imm mp, imm vp, imm ep, imm bp}:
+        for r in range(unit * chunk, min((unit + 1) * chunk, n_rows)):
+            var leaf = 0
+            for level in range(depth):
+                var word = cp[op[level] + r] & mp[level]
+                var right = word > vp[level]
+                if ep[level] != UInt32(0):
+                    right = word == vp[level]
+                if right:
+                    leaf += 1 << level
+            bp[r] = leaf
+
+    # a tree without a take-bin level keeps the threshold-only row loop
+    if any_equal:
+        host_parallelize(rows_take_bin, units)
+    else:
+        host_parallelize(rows, units)
+    _ = len(equal)
     # the tasks read these through pointers: named again past the join
     _ = len(offs)
     _ = len(masks)
@@ -1805,8 +1852,8 @@ def gbdt_ordered_host_fit(
     compressed index per permutation, each tree is searched on its learn
     permutation's index, and every permutation's leaves are read off that
     permutation's own index (`fit_ordered`'s `dep_bins`). A one-hot column
-    is refused by name: this file's fold searcher scores `bin >` splits
-    only."""
+    (flagged, or categorical at or below `one_hot_max_size`) is searched and
+    applied as equality splits, as on the device."""
     if n_rows < 4:
         raise Error(
             "Error: pool has just " + String(n_rows) + " groups or docs,"
@@ -1841,23 +1888,15 @@ def gbdt_ordered_host_fit(
         )
         n_cols = shape.n_columns
         cat_ctr_columns = shape.ctr_column_count
-        for c in range(len(cat_one_hot)):
-            if cat_one_hot[c]:
-                raise Error(
-                    "boosting_type='Ordered' with a one-hot column"
-                    " (one_hot_features, or a cat_features column with"
-                    " one_hot_max_size categories or fewer) is not"
-                    " implemented on device='cpu': the host fold searcher"
-                    " scores `bin >` splits only; use device='gpu' or"
-                    " boosting_type='Plain'"
-                )
     else:
         grid = gbdt_host_grid(
             x_colmajor, n_rows, n_features, params.border_count,
             params.border_build_max_samples, params.random_seed,
             params.nan_mode, params.border_type,
         )
-    var layout = build_layout(grid.fold_counts)
+    # the prelude's own layout rule (`build_layout(fold_counts, one_hot)`);
+    # `cat_one_hot` is empty for a float-only fit
+    var layout = build_layout(grid.fold_counts, cat_one_hot)
     if not cat_on:
         pidx.append(
             _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
@@ -2091,13 +2130,14 @@ def gbdt_ordered_host_fit(
             pidx[learn_p if dep_on else 0], helpers, max_depth, sw, sg,
             doc_ids, part_bounds,
             fold_count, fold_bits, scale, l2, feat_offset, feat_shift,
-            feat_mask, False, score_std, tree_seed,
+            feat_mask, cat_one_hot, False, score_std, tree_seed,
         )
         # the estimation permutation's leaves (the model's), rows across
         # the workers
         var bins = List[Int](length=n, fill=0)
         _ordered_leaf_bins(
-            pidx[est_ix], splits, feat_offset, feat_shift, feat_mask, n, bins
+            pidx[est_ix], splits, feat_offset, feat_shift, feat_mask,
+            cat_one_hot, n, bins,
         )
         var n_leaves = 1 << len(splits)
         # ---- the leaves ----
@@ -2106,8 +2146,8 @@ def gbdt_ordered_host_fit(
                 # this learn permutation's leaves from its own index (a
                 # learn permutation is never the estimation one here)
                 _ordered_leaf_bins(
-                    pidx[lp], splits, feat_offset, feat_shift, feat_mask, n,
-                    lp_bins,
+                    pidx[lp], splits, feat_offset, feat_shift, feat_mask,
+                    cat_one_hot, n, lp_bins,
                 )
             for f in range(n_folds):
                 var est = bounds[2 * f]
@@ -2143,7 +2183,7 @@ def gbdt_ordered_host_fit(
                 # one buffer for the fit, every row rewritten per tree
                 _ordered_leaf_bins(
                     test_cindex, splits, test_feat_offset, feat_shift,
-                    feat_mask, n_eval, test_bins,
+                    feat_mask, cat_one_hot, n_eval, test_bins,
                 )
                 var tree_values = List[Float32](capacity=n_leaves)
                 for leaf in range(n_leaves):

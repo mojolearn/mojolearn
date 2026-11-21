@@ -486,7 +486,7 @@ def gbdt_pointwise_host_fit(
         var splits = _ordered_tree_structure(
             cindex, helpers, max_depth, sw, sg, doc_ids, part_bounds,
             1, 0, scale, l2_leaf_reg, feat_offset, feat_shift, feat_mask,
-            True,
+            List[Bool](), True,
         )
         # ---- `compute_bins_for_model`, `partition_from_bins` ----
         var n_leaves = 1 << len(splits)
