@@ -68,18 +68,33 @@ def test_unfitted_model_has_no_digest(name, params, target):
 
 
 @pytest.mark.parametrize("name,params,target", CASES)
-def test_digest_is_lazy_and_never_stored_on_the_model(name, params, target):
+def test_digest_is_hashed_at_the_read_and_never_stored_on_the_model(name, params, target):
     model = _fit(name, params, target)
     assert "digest_" not in vars(model)             # nothing was hashed or stored by fit
     before = dict(vars(model))
     digest = model.digest_
-    assert model.digest_ == digest                  # the second read is the kept string
+    assert model.digest_ == digest                  # the unchanged model hashes to the same string again
     assert "digest_" not in vars(model) and vars(model).keys() == before.keys()
     assert "digest_" not in model.get_params()      # not a constructor parameter
 
 
+def test_an_in_place_write_into_a_fitted_array_changes_the_next_read():
+    # Nothing is kept between reads: a write into the elements of a stored fitted array (which changes no
+    # attribute of the model) is in the next digest.
+    model = _fit("Ridge", dict(alpha=1.0), "r")
+    first = model.digest_
+    stored = model.coef_
+    if not (isinstance(stored, np.ndarray) and stored.flags.writeable and np.shares_memory(stored, model.coef_)):
+        pytest.skip("coef_ is not handed out as the stored writeable array on this build")
+    stored[0] += np.float32(1.0)
+    second = model.digest_
+    assert second != first
+    stored[0] -= np.float32(1.0)
+    assert model.digest_ == first
+
+
 @pytest.mark.parametrize("name,params,target", CASES)
-def test_refit_drops_the_kept_digest(name, params, target):
+def test_refit_changes_the_digest(name, params, target):
     model = _fit(name, params, target)
     first = model.digest_
     model.fit(X_OTHER) if target is None else model.fit(X_OTHER, Y if target == "r" else C)
@@ -131,23 +146,33 @@ def test_meta_estimator_digest_includes_its_members():
     assert build(50.0).digest_ != first              # a member's fitted state changed
 
 
-@pytest.mark.parametrize("name,params,target", [
-    ("BaggingRegressor", dict(n_estimators=3, random_state=0), "r"),
-    ("LSTMRegressor", {}, None),
-])
-def test_a_family_without_a_digest_yet_refuses_in_words(name, params, target):
-    cls = getattr(mojolearn, name, None)
-    if cls is None:
+#: Classes whose answer-deciding state is (partly) in private fields, layer objects or one member forest
+#: (python/mojolearn/_digest_fields.py EXTRA / LAYERS): the digest must see it.
+PRIVATE_STATE = [
+    ("KNNImputer", dict(n_neighbors=3), None),            # all of its state is private
+    ("LocalOutlierFactor", dict(n_neighbors=5), None),
+    ("GaussianRandomProjection", dict(n_components=3, random_state=0), None),
+    ("PowerTransformer", {}, None),
+    ("GradientBoostingRegressor", dict(n_estimators=5, random_state=0), "r"),   # the inner learner
+    ("BaggingRegressor", dict(n_estimators=3, random_state=0), "r"),            # one forest or a member list
+    ("LinearSVR", {}, "r"),
+]
+
+
+@pytest.mark.parametrize("name,params,target", PRIVATE_STATE)
+def test_private_fitted_state_is_in_the_digest(name, params, target):
+    if getattr(mojolearn, name, None) is None:
         pytest.skip(f"no {name} in this build")
-    from mojolearn import _digest_fields
-    if not any(base in _digest_fields.REFUSED for base in cls.__mro__):
-        pytest.skip(f"{name} has a digest now")
-    if target is None:
-        pytest.skip("refusal is checked on a fitted model; this family's fit needs its own input shape")
-    model = _fit(name, params, target)
-    assert not hasattr(model, "digest_")
-    with pytest.raises(AttributeError, match="no digest_ yet"):
-        model.digest_
+    first = _fit(name, params, target).digest_
+    assert _fit(name, params, target).digest_ == first
+    assert _fit(name, params, target, X_OTHER).digest_ != first
+
+
+def test_how_the_input_arrived_is_not_in_the_digest():
+    # `input_copied_` records whether fit copied its input; the fitted model is the same either way.
+    from_array = mojolearn.Ridge(alpha=1.0).fit(X, Y).digest_
+    from_fortran = mojolearn.Ridge(alpha=1.0).fit(np.asfortranarray(X), Y).digest_
+    assert from_array == from_fortran
 
 
 def test_fast_mode_has_no_digest():

@@ -252,7 +252,10 @@ ALIASES = {
                  # oblivious_tree_options.cpp:20) and border-search row subsample
                  # (dev_max_subset_size_for_build_borders, binarization_options.cpp:22)
                  "rsm": "feature_fraction",
-                 "dev_max_subset_size_for_build_borders": "border_build_max_samples"},
+                 "dev_max_subset_size_for_build_borders": "border_build_max_samples",
+                 # feature combinations (tree CTRs): the same name on both; see
+                 # _semantic_ctr_complexity for the arms that cannot build one
+                 "max_ctr_complexity": "max_ctr_complexity"},
     "mojolearn": {"border_count": ("max_bin", _plus1), "boosting_type": "boosting_type",
                   "random_strength": "random_strength", "score_function": "score_function",
                   "bootstrap_type": "bootstrap_type",
@@ -262,6 +265,7 @@ ALIASES = {
                   "permutation_count": "permutation_count",
                   "fold_len_multiplier": "fold_len_multiplier",
                   "fold_permutation_block": "fold_permutation_block",
+                  "max_ctr_complexity": "max_ctr_complexity",
                   # the RF quantile bin count (cuML's n_bins) is a bin count
                   "n_bins": "max_bin",
                   # GradientBoosting's class weights as the positive-class weight
@@ -658,7 +662,9 @@ def _read_params_object(obj):
         got = dict(obj.get_params())
         for name in ("random_seed", "iterations", "depth", "learning_rate", "l2_leaf_reg",
                      "border_count", "min_data_in_leaf", "max_leaves", "grow_policy",
-                     "bootstrap_type", "subsample", "random_strength", "boosting_type"):
+                     "bootstrap_type", "subsample", "random_strength", "boosting_type",
+                     # unset is CatBoost's default 4, never a matched value
+                     "max_ctr_complexity"):
             got.setdefault(name, None)
         if str(got.get("boosting_type")) == "Ordered":
             # the Ordered knobs, whose unset defaults differ between their CPU
@@ -1696,6 +1702,35 @@ def _semantic_lgbm_lossguide(lane, param, arm, ours, theirs, library):
 
 #: smoke-fixes (2026-10-14) sub-lane r7: the trees lanes whose CatBoost GPU mappings live in
 #: _semantic_r7 (tools/speed_gbdt_arm.py lane_config, R7_SEARCHER_LANES).
+def _semantic_ctr_complexity(lane, param, arm, ours, theirs, library):
+    """FAIRNESS FIX (2026-11-21 audit): `max_ctr_complexity` (feature combinations, tree CTRs) became a
+    GradientBoosting argument and is compared on every gbdt lane. Before this mapping it was not compared
+    at all (ours refused every value above 1). A combination is built only from a categorical column that
+    feeds CTRs, so the knob changes no work in two cases, and only these are excused:
+      * no categorical column on either arm (ours cat_features and one_hot_features None, CatBoost
+        cat_features unset): no CTR exists on either, whatever the value, set or unset;
+      * the opponent has no CTR combinations at all (XGBoost, LightGBM: the field is absent from its
+        read-back) and ours is at 1, which builds none.
+    CatBoost left unset on categorical data (its default 4) against ours' explicit value still refuses, as
+    does ours above 1 against a library that cannot build a combination: both are different work."""
+    if param != "max_ctr_complexity" or not lane.startswith("gbdt-") or param not in ours:
+        return None
+    own_no_cats = ("cat_features" in ours and ours["cat_features"] is None
+                   and ours.get("one_hot_features") is None)
+    if library == "catboost":
+        if own_no_cats and theirs.get("cat_features") is None:
+            return "no categorical columns on either arm: no CTRs, so no feature combinations on either"
+        return None
+    if param in theirs:
+        return None
+    if own_no_cats:
+        return "no categorical columns on ours' arm and no CTR combinations in %s: none built on either" % library
+    if _r6_is(ours.get(param), 1):
+        return ("ours builds no feature combinations (max_ctr_complexity 1) and %s has no CTR "
+                "combinations: none built on either" % library)
+    return None
+
+
 _R7_CATBOOST_LANES = frozenset({"gbdt-symmetric", "gbdt-symmetric-1000", "gbdt-multiclass", "gbdt-ordered"})
 #: losses that read none of ours' loss_alpha/loss_delta/loss_q/loss_variance_power (Quantile,
 #: LogLinQuantile and Expectile read alpha, Huber delta, Lq q, Tweedie variance_power; ours
@@ -2090,7 +2125,7 @@ def semantic_exception(lane, param, arm, ours, theirs, library):
         return forecast_reason
     # smoke-fixes (2026-10-14): the per-sub-lane source-reviewed mappings, each value-conditional and lane-named
     for _mapping in (_semantic_r4, _semantic_r5, _semantic_r6, _semantic_querywise_pointwise, _semantic_r7, _semantic_r8, _semantic_r11, _semantic_r15, _semantic_r18,
-                     _semantic_lgbm_lossguide):
+                     _semantic_lgbm_lossguide, _semantic_ctr_complexity):
         why = _mapping(lane, param, arm, ours, theirs, library)
         if why:
             return why

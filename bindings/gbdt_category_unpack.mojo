@@ -12,14 +12,17 @@ map), at the boundary, before RUN:
     (`admit_f32`, column-major) and the categorical columns' Float32 words
     are keyed natively;
   * an X that holds text or None in a categorical column (an exact list or
-    tuple of exact list or tuple rows, or an exact object / unicode ndarray
-    through its own `tolist`) is read cell by cell with exact-type C-API
-    reads into one column-major float32 block (the numeric columns) and one
-    key block (the categorical columns). That read is one pass under the
-    GIL over Python objects, which is what the input is; it is serial
-    because CPython objects are read under the GIL. No Python method of a
-    cell runs: a cell that is not an exact int, float, bool, str or None is
-    refused by name.
+    tuple of exact list or tuple rows, or an exact object / unicode / bytes
+    ndarray through its own `tolist`) is read cell by cell with exact-type
+    C-API reads into one column-major float32 block (the numeric columns)
+    and one key block (the categorical columns). That read is one pass
+    under the GIL over Python objects, which is what the input is; it is
+    serial because CPython objects are read under the GIL. No Python method
+    of a cell runs: a cell is an exact int, float, bool, str, bytes or None,
+    or an exact NumPy scalar of the loaded numpy module (its integer, bool,
+    float32 / float64, str_ and bytes_ classes), whose value is read from
+    the buffer it exports; anything else is refused by name. Text and bytes
+    with the same UTF-8 bytes are one category.
 
 The codes are written over the categorical columns of the float block the
 fit reads. A block the door made (a cast, a transpose, the object path) is
@@ -38,6 +41,7 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
 from bindings.py_cpython_table import cpython_table
 from bindings.cpython_borrowed_unpack import borrowed_type_word
+from bindings.classical_pandas_door import _pd_class_word
 from bindings.trees_public_inputs_door import trees_builtins, trees_address
 from bindings.trees_keys_unpack import trees_keys
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_vector, admitted_words
@@ -57,6 +61,26 @@ from gbdt.data.category_map import (
 )
 
 comptime _CatWordPtr = MutPointer[Int, MutUntrackedOrigin]
+
+# What a cell's exact class says of the value its buffer holds
+# (`_CellWords.buffer_kind`); 0 is "not a buffer cell this file admits".
+comptime _CELL_SIGNED = 1
+comptime _CELL_UNSIGNED = 2
+comptime _CELL_BOOL = 3
+comptime _CELL_FLOAT = 4
+comptime _CELL_STR = 5
+comptime _CELL_BYTES = 6
+
+comptime _CellI8 = MutPointer[Int8, MutUntrackedOrigin]
+comptime _CellI16 = MutPointer[Int16, MutUntrackedOrigin]
+comptime _CellI32 = MutPointer[Int32, MutUntrackedOrigin]
+comptime _CellI64 = MutPointer[Int64, MutUntrackedOrigin]
+comptime _CellU8 = MutPointer[UInt8, MutUntrackedOrigin]
+comptime _CellU16 = MutPointer[UInt16, MutUntrackedOrigin]
+comptime _CellU32 = MutPointer[UInt32, MutUntrackedOrigin]
+comptime _CellU64 = MutPointer[UInt64, MutUntrackedOrigin]
+comptime _CellF32 = MutPointer[Float32, MutUntrackedOrigin]
+comptime _CellF64 = MutPointer[Float64, MutUntrackedOrigin]
 
 
 def gbdt_category_columns(cat: PythonObject) raises -> List[Int]:
@@ -105,6 +129,11 @@ struct _CellWords(Movable):
     var none_word: Int
     var list_word: Int
     var tuple_word: Int
+    #: exact `bytes`, and the exact scalar classes of the loaded numpy module
+    #: (none when numpy is not loaded) with each one's `_CELL_*` kind
+    var bytes_word: Int
+    var np_words: List[Int]
+    var np_kinds: List[Int]
 
     def __init__(out self) raises:
         var one = PythonObject(1)
@@ -121,6 +150,48 @@ struct _CellWords(Movable):
         self.none_word = borrowed_type_word(nothing._obj_ptr)
         self.list_word = borrowed_type_word(listed._obj_ptr)
         self.tuple_word = borrowed_type_word(tupled._obj_ptr)
+        # class words by C dict lookups in the loaded modules: nothing is
+        # imported, no attribute hook runs; an absent name is word 0, which
+        # no live object's class is
+        var words = List[Int]()
+        var kinds = List[Int]()
+        var bytes_word = 0
+        var modules = cpython_table()[].PyImport_GetModuleDict()
+        if modules:
+            bytes_word = _pd_class_word(modules, "builtins", "bytes")
+            var signed: List[String] = ["int8", "int16", "int32", "int64", "intc", "longlong"]
+            var unsigned: List[String] = ["uint8", "uint16", "uint32", "uint64", "uintc", "ulonglong"]
+            var floats: List[String] = ["float32", "float64"]
+            for i in range(len(signed)):  # small-loop(signed: NumPy signed integer scalar names): one class word each
+                var word = _pd_class_word(modules, "numpy", signed[i])
+                if word != 0:
+                    words.append(word)
+                    kinds.append(_CELL_SIGNED)
+            for i in range(len(unsigned)):  # small-loop(unsigned: NumPy unsigned integer scalar names): one class word each
+                var word = _pd_class_word(modules, "numpy", unsigned[i])
+                if word != 0:
+                    words.append(word)
+                    kinds.append(_CELL_UNSIGNED)
+            for i in range(len(floats)):  # small-loop(floats: NumPy float scalar names): one class word each
+                var word = _pd_class_word(modules, "numpy", floats[i])
+                if word != 0:
+                    words.append(word)
+                    kinds.append(_CELL_FLOAT)
+            var bool_word = _pd_class_word(modules, "numpy", "bool_")
+            if bool_word != 0:
+                words.append(bool_word)
+                kinds.append(_CELL_BOOL)
+            var str_word = _pd_class_word(modules, "numpy", "str_")
+            if str_word != 0:
+                words.append(str_word)
+                kinds.append(_CELL_STR)
+            var np_bytes_word = _pd_class_word(modules, "numpy", "bytes_")
+            if np_bytes_word != 0:
+                words.append(np_bytes_word)
+                kinds.append(_CELL_BYTES)
+        self.bytes_word = bytes_word
+        self.np_words = words^
+        self.np_kinds = kinds^
         _ = one
         _ = real
         _ = truth
@@ -129,11 +200,25 @@ struct _CellWords(Movable):
         _ = listed
         _ = tupled
 
+    def buffer_kind(self, word: Int) -> Int:
+        """The `_CELL_*` kind of a cell whose exact class is `word` and is
+        not one of the builtin number, str or None classes: `bytes`, or a
+        NumPy scalar class. 0 when it is neither."""
+        if word == 0:
+            return 0
+        if word == self.bytes_word:
+            return _CELL_BYTES
+        for i in range(len(self.np_words)):  # small-loop(np_words: NumPy scalar classes, under twenty): one class-word compare each
+            if self.np_words[i] == word:
+                return self.np_kinds[i]
+        return 0
+
 
 def _rows_hold_text(rows: PythonObject, columns: List[Int], w: _CellWords, name: String) raises -> Bool:
-    """Whether a list or tuple X holds a str or None in a categorical column
-    (then the object read runs; otherwise X is admitted as numbers, as it
-    always was). Borrowed class-word reads only."""
+    """Whether a list or tuple X holds a str, a bytes, None or a NumPy
+    scalar in a categorical column (then the object read runs; otherwise X
+    is admitted as numbers, as it always was). Borrowed class-word reads
+    only; a builtin int, float or bool cell costs three compares."""
     var t = cpython_table()
     var outer_list = borrowed_type_word(rows._obj_ptr) == w.list_word
     var n_rows = len(rows)
@@ -152,7 +237,9 @@ def _rows_hold_text(rows: PythonObject, columns: List[Int], w: _CellWords, name:
                 continue
             var cell = t[].PyList_GetItem(row, j) if row_list else t[].PyTuple_GetItem(row, j)
             var cw = borrowed_type_word(cell)
-            if cw == w.str_word or cw == w.none_word:
+            if cw == w.int_word or cw == w.float_word or cw == w.bool_word:
+                continue
+            if cw == w.str_word or cw == w.none_word or w.buffer_kind(cw) != 0:
                 found = True
                 break
         if found:
@@ -193,6 +280,9 @@ def _object_rows(rows: PythonObject, name: String, columns: List[Int], mut keys:
     keys.resize(len(columns) * n_rows, UInt64(0))
     var kp = CategoryKeyPtr(unsafe_from_address=Int(keys.unsafe_ptr()))
     var sp = _CatWordPtr(unsafe_from_address=Int(slot_of.unsafe_ptr()))
+    # the Py_buffer words of a bytes or NumPy scalar cell, one for the call
+    var view = List[Int](length=10, fill=0)
+    var view_ptr = view.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
     for r in range(n_rows):  # boundary-read: one exact-type slot read per cell of a user list (no buffer to view)
         var row = t[].PyList_GetItem(rows._obj_ptr, r) if outer_list else t[].PyTuple_GetItem(rows._obj_ptr, r)
         var rw = borrowed_type_word(row)
@@ -237,14 +327,94 @@ def _object_rows(rows: PythonObject, name: String, columns: List[Int], mut keys:
                 kp[slot * n_rows + r] = category_key_text(utf8, size)
             elif cw == w.none_word and slot >= 0:
                 kp[slot * n_rows + r] = CATEGORY_KEY_MISSING
-            elif slot >= 0:
-                raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                            + "] is not an int, float, bool, str or None; a categorical cell is "
-                            + "admitted by its exact type (convert NumPy scalars with .tolist())")
             else:
-                raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
-                            + "] is not a number; only the cat_features columns may hold text or None")
+                var kind = w.buffer_kind(cw)
+                if kind == 0 and slot >= 0:
+                    raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
+                                + "] is not an int, float, bool, str, bytes, None or a NumPy scalar of "
+                                + "those; a categorical cell is admitted by its exact type")
+                if kind == 0 or ((kind == _CELL_STR or kind == _CELL_BYTES) and slot < 0):
+                    raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
+                                + "] is not a number; only the cat_features columns may hold text or None")
+                if kind == _CELL_STR:
+                    # numpy.str_ is a str: the same C read, no method of the cell
+                    var size = 0
+                    var utf8 = t[].PyUnicode_AsUTF8AndSize(cell, Int(MutPointer(to=size)))
+                    if utf8 == 0:
+                        t[].PyErr_Clear()
+                        raise Error("mojolearn: " + name + "[" + String(r) + "][" + String(j)
+                                    + "] is not valid text (it cannot be encoded as UTF-8)")
+                    kp[slot * n_rows + r] = category_key_text(utf8, size)
+                    continue
+                # the value the cell exports (bytes, or a NumPy scalar's own
+                # storage, native byte order): read, then released at once
+                if t[].PyObject_GetBuffer(cell, view_ptr, Int32(0)) != 0:
+                    t[].PyErr_Clear()
+                    raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
+                                + "] does not export its value as a buffer")
+                var at = view[0]
+                var nbytes = view[2]
+                var key = UInt64(0)
+                var whole = 0
+                var real = Float64(0.0)
+                var is_real = False
+                var too_wide = False
+                var known = True
+                if kind == _CELL_BYTES:
+                    key = category_key_text(at, nbytes)
+                elif kind == _CELL_BOOL and nbytes == 1:
+                    whole = 1 if _CellU8(unsafe_from_address=at)[0] != UInt8(0) else 0
+                elif kind == _CELL_SIGNED and nbytes == 1:
+                    whole = Int(_CellI8(unsafe_from_address=at)[0])
+                elif kind == _CELL_SIGNED and nbytes == 2:
+                    whole = Int(_CellI16(unsafe_from_address=at)[0])
+                elif kind == _CELL_SIGNED and nbytes == 4:
+                    whole = Int(_CellI32(unsafe_from_address=at)[0])
+                elif kind == _CELL_SIGNED and nbytes == 8:
+                    whole = Int(_CellI64(unsafe_from_address=at)[0])
+                elif kind == _CELL_UNSIGNED and nbytes == 1:
+                    whole = Int(_CellU8(unsafe_from_address=at)[0])
+                elif kind == _CELL_UNSIGNED and nbytes == 2:
+                    whole = Int(_CellU16(unsafe_from_address=at)[0])
+                elif kind == _CELL_UNSIGNED and nbytes == 4:
+                    whole = Int(_CellU32(unsafe_from_address=at)[0])
+                elif kind == _CELL_UNSIGNED and nbytes == 8:
+                    var wide = _CellU64(unsafe_from_address=at)[0]
+                    if wide >= (UInt64(1) << UInt64(63)):
+                        too_wide = True
+                        real = Float64(wide)
+                    else:
+                        whole = Int(wide)
+                elif kind == _CELL_FLOAT and nbytes == 4:
+                    is_real = True
+                    real = Float64(_CellF32(unsafe_from_address=at)[0])
+                elif kind == _CELL_FLOAT and nbytes == 8:
+                    is_real = True
+                    real = _CellF64(unsafe_from_address=at)[0]
+                else:
+                    known = False
+                t[].PyBuffer_Release(view_ptr)
+                if not known:
+                    raise Error("TypeError: mojolearn: " + name + "[" + String(r) + "][" + String(j)
+                                + "] is a NumPy scalar of " + String(nbytes) + " bytes this reader does not hold")
+                if kind == _CELL_BYTES:
+                    kp[slot * n_rows + r] = key
+                elif is_real:
+                    if slot >= 0:
+                        kp[slot * n_rows + r] = category_key_f64(real)
+                    else:
+                        mp[j * n_rows + r] = Float32(real)
+                elif slot >= 0:
+                    if too_wide or not category_integer_in_range(whole):
+                        raise Error("mojolearn: " + name + "[" + String(r) + "][" + String(j)
+                                    + "] is an integer category outside -2**61 .. 2**61; pass it as text")
+                    kp[slot * n_rows + r] = category_key_integer(whole)
+                elif too_wide:
+                    mp[j * n_rows + r] = Float32(real)
+                else:
+                    mp[j * n_rows + r] = Float32(whole)
     _ = rows  # keep the Python object alive through the borrowed reads above
+    _ = view^
     _ = slot_of^
     var block_address = trees_address(matrix)
     return admitted_words(matrix, block_address, n_rows, n_features, False)
@@ -264,7 +434,9 @@ def gbdt_category_admit(X: PythonObject, name: String, columns: List[Int], mut k
     if ndarray is not None and cls is ndarray:
         # an exact ndarray: its dtype kind is a C slot read, `tolist` its own C method
         var kind = String(py=X.dtype.kind)
-        if kind == "O" or kind == "U":
+        # object, unicode and bytes arrays: their cells through the array's
+        # own C `tolist` (str for U, bytes for S), then the exact-type read
+        if kind == "O" or kind == "U" or kind == "S":
             if Int(py=X.ndim) != 2:
                 raise Error("mojolearn: " + name + " must be 2-D, got " + String(Int(py=X.ndim)) + "-D")
             var listed = py_call(ndarray.tolist, X)

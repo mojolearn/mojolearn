@@ -24,6 +24,7 @@ Behavior to know:
   rows scikit-learn would pick for that seed.
 """
 from . import _arena_io
+from ._digest_fields import read as _digest_read
 from ._array import Array as _Array
 from ._mode import _PARAMS_METADATA, _PARAMS_METADATA_CONTEXT
 # The splitters' random draws (lane/metrics): a module-level import, so the
@@ -1466,6 +1467,23 @@ class _BaseSearch:
     @property
     def _estimator_type(self):
         return _NATIVE(self, "family_msel_search_estimator_type", (), _NATIVE_CONTEXT)
+
+    @property
+    def digest_(self):
+        """The hash of this fitted search, as one lower-case hex string.
+
+        It covers the search results (``cv_results_``, ``best_params_``,
+        ``best_score_``, ``best_index_``, ``n_splits_``) and, when the search
+        refitted, the digest of ``best_estimator_``. In `identical` mode the
+        same search on the same data has the same `digest_` on every
+        supported device. It is computed each time it is read.
+
+        Raises
+        ------
+        AttributeError
+            If the search is not fitted, or runs in `fast` mode (Apple only).
+        """
+        return _digest_read(self)
 
     def get_params(self, deep=False):
         """Return the search's constructor parameters as a dict."""
