@@ -166,6 +166,8 @@ class IsolationForest(NumericModeMixin):
     #: on the estimator's route: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 18 (IsolationForest), kind 0 (core/isolation_forest_member.mojo).
+    _mojolearn_member = (18, 0)
     vendor_used = _native_trees_bridge.device_vendor_used
 
     def __init__(

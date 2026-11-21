@@ -236,6 +236,9 @@ class GaussianProcessClassifier(NumericModeMixin):
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "classifier"
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_GP = 23) and core/gp_member.mojo.
+    _mojolearn_member = (23, 1)
 
     _BINDING = "_mojolearn_gp"
 

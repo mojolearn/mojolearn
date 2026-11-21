@@ -27,6 +27,31 @@ Operations:
   n_features_in_), four on the resident form (the token last).
 - `IF_OP_RELEASE`: ints [token]; drops the resident forest that token names
   (a token nobody holds is a no-op). The member's FREE.
+- `IF_OP_EXPORT` (round 4; was the Python binding `iforest_forest_export`):
+  the fitted forest as the compact host form `save()`, pickle and the member's
+  EXPORT write (isolation_forest/forest_io.mojo). Addresses [train, info,
+  offsets, feature, threshold, left, right], ints the RUN ints then
+  [trees, total], floats the RUN floats. The resident forest the token names
+  (its key equal), else a fresh fit from `train` kept under a new token. The
+  five destinations 0 (trees / total 0) ask for the sizes only; otherwise
+  they receive the forest and must be sized exactly (trees + 1 offsets,
+  `total` words each). `info` takes SIX float64: offset_, max_samples_,
+  n_features_in_, token, trees, total. Returns the trees. A refit-per-call
+  image keeps the forest after the sizes call and drops it after the copy.
+- `IF_OP_FOREST_RUN` (round 4; was the Python binding `iforest_forest_run`):
+  ONE of score_samples / decision_function / predict over a SAVED compact
+  forest (a loaded or unpickled estimator, an imported member): addresses
+  [offsets, feature, threshold, left, right, query, out_f32, out_i32, info],
+  ints [trees, total, n_features, n_query, max_samples_, want, token], floats
+  [offset_]. The forest is uploaded once and kept under a token on a resident
+  image (`token` an earlier call's: no upload); `info` takes four float64
+  (offset_, max_samples_, n_features_in_, token). Returns `n_query`.
+
+Every operation runs with the GIL released by its caller; the resident
+stores' locks are held only for mint, the one take, the put and free.
+`IF_P_SINGLE` 1 (a member: its device is its route's) runs on one device;
+0 reads the calling thread's device plan (`MOJOLEARN_IFOREST_DEVICE_COUNT`),
+as the estimator's doors always did.
 
 Publication and lookup are small metadata operations with no independent
 numerical work to split. A layout change takes a new V suffix.
@@ -36,11 +61,14 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 
-comptime IF_ENTRY_ABI = "mojolearn.iforest_entry.v1"
+comptime IF_ENTRY_ABI = "mojolearn.iforest_entry.v2"
+"""v2 (round 4): IF_P_SINGLE joined the RUN ints; IF_OP_EXPORT and IF_OP_FOREST_RUN."""
 comptime IF_OP_CAPS = 0
 comptime IF_OP_RUN = 1
 comptime IF_OP_RELEASE = 2
-comptime IF_OP_COUNT = 3
+comptime IF_OP_EXPORT = 3
+comptime IF_OP_FOREST_RUN = 4
+comptime IF_OP_COUNT = 5
 
 # Capability bits (IF_OP_CAPS).
 comptime IF_CAP_RESIDENT = 1
@@ -73,12 +101,22 @@ comptime IF_P_CONTAMINATION_AUTO = 11
 comptime IF_P_WANT = 12
 comptime IF_P_RESIDENT = 13
 comptime IF_P_TOKEN = 14
-comptime IF_RUN_INTS = 15
+comptime IF_P_SINGLE = 15
+comptime IF_RUN_INTS = 16
 # IF_OP_RUN floats.
 comptime IF_F_MAX_SAMPLES_FRAC = 0
 comptime IF_F_MAX_FEATURES_FRAC = 1
 comptime IF_F_CONTAMINATION = 2
 comptime IF_RUN_FLOATS = 3
+# IF_OP_EXPORT: addresses [train, info] then the five destinations; ints the
+# RUN ints then [trees, total]; floats the RUN floats.
+comptime IF_EXPORT_ADDRESSES = 7
+comptime IF_EXPORT_INTS = IF_RUN_INTS + 2
+comptime IF_EXPORT_INFO = 6
+# IF_OP_FOREST_RUN.
+comptime IF_FOREST_ADDRESSES = 9
+comptime IF_FOREST_INTS = 7
+comptime IF_FOREST_FLOATS = 1
 
 
 struct IFRunRequest(Copyable, Defaultable, Movable):
@@ -114,6 +152,8 @@ struct IFRunRequest(Copyable, Defaultable, Movable):
     var want: Int
     var resident: Bool
     var token: Int
+    var single: Bool
+    """True: one device (a member's route); False: the thread's device plan."""
 
     def __init__(out self):
         self.train = 0
@@ -139,6 +179,52 @@ struct IFRunRequest(Copyable, Defaultable, Movable):
         self.want = 0
         self.resident = False
         self.token = 0
+        self.single = False
+
+
+@fieldwise_init
+struct IFForestSpans(Copyable, Movable):
+    """The five host arrays of a compact forest by address (offsets int32
+    of `trees + 1`, feature int32, threshold float32, left int32, right
+    int32, `total` words each); all 0 asks an export for the sizes only."""
+
+    var offsets: Int
+    var feature: Int
+    var threshold: Int
+    var left: Int
+    var right: Int
+    var trees: Int
+    var total: Int
+
+
+struct IFExportRequest(Copyable, Movable):
+    """One IF_OP_EXPORT: the fit's words (`fit.train`, `fit.info` (six
+    float64), the knobs, `fit.token`, `fit.single`; query / outputs / want
+    unused) and the destinations."""
+
+    var fit: IFRunRequest
+    var forest: IFForestSpans
+
+    def __init__(out self, var fit: IFRunRequest, var forest: IFForestSpans):
+        self.fit = fit^
+        self.forest = forest^
+
+
+@fieldwise_init
+struct IFForestRunRequest(Copyable, Movable):
+    """One IF_OP_FOREST_RUN over a saved forest."""
+
+    var forest: IFForestSpans
+    var query: Int
+    var out_f32: Int
+    var out_i32: Int
+    var info: Int
+    var n_features: Int
+    var n_query: Int
+    var max_samples: Int
+    var offset: Float64
+    var want: Int
+    var token: Int
 
 
 trait IFImage:
@@ -158,21 +244,23 @@ trait IFImage:
         """Drop the resident forest `token` names, if any."""
         ...
 
+    @staticmethod
+    def export(request: IFExportRequest) raises -> Int:
+        """The sizes, or the forest into the destinations, of the forest
+        the token names (else a fresh fit); writes `info`; returns trees."""
+        ...
 
-def if_run_request_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises -> IFRunRequest:
-    """UNPACK of the request spans (the image side)."""
-    if na != IF_RUN_ADDRESSES or np != IF_RUN_INTS or nf != IF_RUN_FLOATS:
-        raise Error("iforest_run: needs " + String(IF_RUN_ADDRESSES) + " addresses, "
-                    + String(IF_RUN_INTS) + " integers and " + String(IF_RUN_FLOATS) + " floats")
-    var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
+    @staticmethod
+    def forest_run(request: IFForestRunRequest) raises -> Int:
+        """One score over a saved forest; returns `n_query`."""
+        ...
+
+
+def _if_knobs_at(pp: Int, ff: Int) -> IFRunRequest:
+    """The RUN ints and floats (shared by IF_OP_RUN and IF_OP_EXPORT)."""
     var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
     var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
     var r = IFRunRequest()
-    r.train = a[IF_A_TRAIN]
-    r.query = a[IF_A_QUERY]
-    r.out_f32 = a[IF_A_OUT_F32]
-    r.out_i32 = a[IF_A_OUT_I32]
-    r.info = a[IF_A_INFO]
     r.n_train = p[IF_P_N_TRAIN]
     r.n_features = p[IF_P_N_FEATURES]
     r.n_query = p[IF_P_N_QUERY]
@@ -188,13 +276,70 @@ def if_run_request_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) rais
     r.want = p[IF_P_WANT]
     r.resident = p[IF_P_RESIDENT] != 0
     r.token = p[IF_P_TOKEN]
+    r.single = p[IF_P_SINGLE] != 0
     r.max_samples_frac = f[IF_F_MAX_SAMPLES_FRAC]
     r.max_features_frac = f[IF_F_MAX_FEATURES_FRAC]
     r.contamination = f[IF_F_CONTAMINATION]
+    return r^
+
+
+def if_run_request_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises -> IFRunRequest:
+    """UNPACK of the request spans (the image side)."""
+    if na != IF_RUN_ADDRESSES or np != IF_RUN_INTS or nf != IF_RUN_FLOATS:
+        raise Error("iforest_run: needs " + String(IF_RUN_ADDRESSES) + " addresses, "
+                    + String(IF_RUN_INTS) + " integers and " + String(IF_RUN_FLOATS) + " floats")
+    var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
+    var r = _if_knobs_at(pp, ff)
+    r.train = a[IF_A_TRAIN]
+    r.query = a[IF_A_QUERY]
+    r.out_f32 = a[IF_A_OUT_F32]
+    r.out_i32 = a[IF_A_OUT_I32]
+    r.info = a[IF_A_INFO]
     if r.info == 0:
         raise Error("iforest_run: the info address is null")
     if r.train == 0 or r.query == 0:
         raise Error("iforest_run: the training or query matrix address is null")
+    return r^
+
+
+def if_export_request_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises -> IFExportRequest:
+    """UNPACK of the IF_OP_EXPORT spans (the image side)."""
+    if na != IF_EXPORT_ADDRESSES or np != IF_EXPORT_INTS or nf != IF_RUN_FLOATS:
+        raise Error("iforest_forest_export: needs " + String(IF_EXPORT_ADDRESSES) + " addresses, "
+                    + String(IF_EXPORT_INTS) + " integers and " + String(IF_RUN_FLOATS) + " floats")
+    var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
+    var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
+    var r = _if_knobs_at(pp, ff)
+    r.train = a[0]
+    r.info = a[1]
+    var forest = IFForestSpans(a[2], a[3], a[4], a[5], a[6], p[IF_RUN_INTS], p[IF_RUN_INTS + 1])
+    if r.info == 0:
+        raise Error("iforest_forest_export: the info address is null")
+    if r.train == 0:
+        raise Error("iforest_forest_export: the training matrix address is null")
+    if r.n_train <= 0 or r.n_features <= 0:
+        raise Error("iforest_forest_export: n_train and n_features must both be positive")
+    var write = forest.offsets != 0
+    if write and (forest.feature == 0 or forest.threshold == 0 or forest.left == 0 or forest.right == 0
+                  or forest.trees < 1 or forest.total < 1):
+        raise Error("iforest_forest_export: a destination address or size is missing")
+    return IFExportRequest(r^, forest^)
+
+
+def if_forest_run_request_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises -> IFForestRunRequest:
+    """UNPACK of the IF_OP_FOREST_RUN spans (the image side)."""
+    if na != IF_FOREST_ADDRESSES or np != IF_FOREST_INTS or nf != IF_FOREST_FLOATS:
+        raise Error("iforest_forest_run: needs " + String(IF_FOREST_ADDRESSES) + " addresses, "
+                    + String(IF_FOREST_INTS) + " integers and " + String(IF_FOREST_FLOATS) + " float")
+    var a = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)
+    var p = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)
+    var f = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=ff)
+    var forest = IFForestSpans(a[0], a[1], a[2], a[3], a[4], p[0], p[1])
+    var r = IFForestRunRequest(forest^, a[5], a[6], a[7], a[8], p[2], p[3], p[4], f[0], p[5], p[6])
+    if r.info == 0 or r.query == 0:
+        raise Error("iforest_forest_run: the query or info address is null")
+    if r.n_features <= 0 or r.n_query <= 0:
+        raise Error("iforest_forest_run: n_features and n_query must both be positive")
     return r^
 
 
@@ -216,6 +361,10 @@ def if_entry_dispatch[I: IFImage](operation: Int, aa: Int, na: Int, pp: Int, np:
             if np != 1 or na != 0:
                 raise Error("iforest release: needs one integer (the token)")
             I.release(MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)[0])
+        elif operation == IF_OP_EXPORT:
+            value = I.export(if_export_request_at(aa, na, pp, np, ff, nf))
+        elif operation == IF_OP_FOREST_RUN:
+            value = I.forest_run(if_forest_run_request_at(aa, na, pp, np, ff, nf))
         else:
             raise Error("iforest entry: unknown operation " + String(operation))
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
@@ -308,11 +457,43 @@ def if_entry_run(entry: EntryRef, request: IFRunRequest) raises -> Int:
         request.max_samples_mode, request.max_samples_int, request.max_depth,
         request.max_features_mode, request.max_features_int, 1 if request.bootstrap else 0,
         request.random_state, 1 if request.contamination_auto else 0, request.want,
-        1 if request.resident else 0, request.token,
+        1 if request.resident else 0, request.token, 1 if request.single else 0,
     ]
     var f: Array[Float64, IF_RUN_FLOATS] = [request.max_samples_frac, request.max_features_frac,
                                             request.contamination]
     return entry_ref_call(entry, IF_OP_RUN, a, p, f)
+
+
+def if_entry_export(entry: EntryRef, request: IFRunRequest, forest: IFForestSpans) raises -> Int:
+    """One IF_OP_EXPORT through the resolved entry (`request.train`,
+    `request.info` (six float64), the knobs, `token`, `single`; destinations
+    all 0 for the sizes only). The caller keeps every lent buffer alive and
+    releases the GIL around the call. Returns the trees."""
+    var a: Array[Int, IF_EXPORT_ADDRESSES] = [request.train, request.info, forest.offsets, forest.feature,
+                                              forest.threshold, forest.left, forest.right]
+    var p: Array[Int, IF_EXPORT_INTS] = [
+        request.n_train, request.n_features, request.n_query, request.n_estimators,
+        request.max_samples_mode, request.max_samples_int, request.max_depth,
+        request.max_features_mode, request.max_features_int, 1 if request.bootstrap else 0,
+        request.random_state, 1 if request.contamination_auto else 0, request.want,
+        1 if request.resident else 0, request.token, 1 if request.single else 0, forest.trees, forest.total,
+    ]
+    var f: Array[Float64, IF_RUN_FLOATS] = [request.max_samples_frac, request.max_features_frac,
+                                            request.contamination]
+    return entry_ref_call(entry, IF_OP_EXPORT, a, p, f)
+
+
+def if_entry_forest_run(entry: EntryRef, request: IFForestRunRequest) raises -> Int:
+    """One IF_OP_FOREST_RUN through the resolved entry; the caller keeps the
+    forest, query, output and info buffers alive and releases the GIL."""
+    var a: Array[Int, IF_FOREST_ADDRESSES] = [
+        request.forest.offsets, request.forest.feature, request.forest.threshold, request.forest.left,
+        request.forest.right, request.query, request.out_f32, request.out_i32, request.info,
+    ]
+    var p: Array[Int, IF_FOREST_INTS] = [request.forest.trees, request.forest.total, request.n_features,
+                                         request.n_query, request.max_samples, request.want, request.token]
+    var f: Array[Float64, IF_FOREST_FLOATS] = [request.offset]
+    return entry_ref_call(entry, IF_OP_FOREST_RUN, a, p, f)
 
 
 def if_entry_release(entry: EntryRef, token: Int) raises:

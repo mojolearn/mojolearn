@@ -30,9 +30,8 @@ PUBLIC_TESTS = {
     "test_classical_exceptions_native_owner.py": "Fitted-state exception compatibility through native estimator entries and connected reduction/restoration bridges, with caller-owned pickle",
     "test_not_fitted_native_lifetime.py": "Public NotFittedError reduction payload, caller-owned pickle compatibility and native singleton ownership",
     "test_cache_supports_native.py": "Public DeviceCache.supports native binding metadata, Unicode prefix names, CPU refusal compatibility and callback admission",
-    "test_cache_lifecycle_native.py": "Public DeviceCache.live connected native store counts and identity-preserving context entry",
-    "test_cache_upload_native.py": "Public DeviceCache.id_of native hit/miss preparation, upload publication, retained owners and failure cleanup",
-    "test_cache_key_native.py": "Public DeviceCache.get and resident.stats native tuple-key admission, deep nesting and callback refusals",
+    "test_cache_lifecycle_native.py": "Public DeviceCache.live from the store resolved at construction, foreign-object refusal and context entry",
+    "test_cache_upload_native.py": "Public DeviceCache.id_of real uploads, native scalar key metadata, retained owners, refusals and concurrent publication",
     "test_cache_release_native.py": "Public DeviceCache constructor/reinitialization, release, close and context exit, and resident scope enter/exit, with first-failure error order and owners released after every free",
     "test_resident_lifecycle_native.py": "model_selection resident constructor/reinitialization, take, release, close and context exit for NumPy, pandas and Arrow-backed pandas owners, with first-failure error order",
     "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
@@ -44,8 +43,9 @@ PUBLIC_TESTS = {
     "test_minmax_scaler_native_lifecycle.py": "Public MinMaxScaler lifecycle, checkpoints, consumed state and native refusals",
     "test_sequential_native_buffers.py": "Public Sequential fit/predict preparation and consumed owned buffers",
     "test_iforest_depth_native.py": "Public HostIsolationForest.fit native depth-state promotion, arithmetic, warning phases and consumed state",
-    "test_cache_get_native.py": "Public DeviceCache.get native lookup, metadata conversion and callback refusals",
-    "test_cache_stats_native.py": "Public DeviceCache length and resident.stats native metadata, counters, thread-local semantics and hook refusals",
+    "test_cache_get_native.py": "Public DeviceCache.get native key admission and callback refusals on one real upload",
+    "test_device_cache_native_state.py": "DeviceCache and resident() on their native state: slots, construction refusals, scope lifecycle and x_prep store upload/hit/release/close",
+    "test_cache_stats_native.py": "Public DeviceCache length and resident.stats on the native state, thread-local semantics and hook refusals",
     "test_optimizer_native_scalar_constructors.py": "Native scalar preparation across public optimizer constructors, updates, checkpoints and device controls",
     "test_late_numpy_native_metadata.py": "Public cold/late NumPy metadata connection, builtin identity preservation and pre-hook factory/key refusals",
     "test_optimizer_native_config_order.py": "Native public optimizer get/set parameter order independent of mutable sorting",
@@ -122,66 +122,49 @@ TEST_DEPENDENCIES = {
     "test_native_cv_lda.py": ("pandas",),
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
+#: The skip reason of the x_prep word-store tests (`_real()` of
+#: python/mojolearn/tests/test_device_cache_native_state.py).
+CPU_WORD_STORE_SKIP = "real word-store slots require a GPU package; explicitly excluded from CPU selection"
+#: Whole files whose every case needs the x_prep word store (arena unit E,
+#: 2026-11-21): on CPU each case must skip with exactly this reason.
+CPU_FILE_NOT_APPLICABLE = {
+    "test_cache_get_native.py": CPU_WORD_STORE_SKIP,
+    "test_cache_upload_native.py": CPU_WORD_STORE_SKIP,
+}
 CPU_NOT_APPLICABLE = {
-    "test_cache_release_native.py": {
-        'test_real_slots_are_freed_by_one_native_call[close-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_real_slots_are_freed_by_one_native_call[exit-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_real_slots_are_freed_by_one_native_call[reinit-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_real_slots_are_freed_by_one_native_call[release-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_error_order_first_failure_all_slots_attempted_failed_retained[close-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_error_order_first_failure_all_slots_attempted_failed_retained[exit-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_error_order_first_failure_all_slots_attempted_failed_retained[reinit-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_repeated_close_and_close_after_release[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_context_exit_on_error_frees_and_propagates[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_failed_release_retains_the_entry[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_arrow_owner_finalizer_runs_after_every_free[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_resident_scope_exit_frees_scope_caches[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_real_slots_are_freed_by_one_native_call[close-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_real_slots_are_freed_by_one_native_call[exit-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_real_slots_are_freed_by_one_native_call[reinit-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_real_slots_are_freed_by_one_native_call[release-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_error_order_first_failure_all_slots_attempted_failed_retained[close-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_error_order_first_failure_all_slots_attempted_failed_retained[exit-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_error_order_first_failure_all_slots_attempted_failed_retained[reinit-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_repeated_close_and_close_after_release[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_context_exit_on_error_frees_and_propagates[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_failed_release_retains_the_entry[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_arrow_owner_finalizer_runs_after_every_free[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-        'test_resident_scope_exit_frees_scope_caches[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
-    },
-    "test_cache_lifecycle_native.py": {
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[1-x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[1-x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[2-x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
-        'test_cache_live_matches_real_store_count_after_consumed_allocations[2-x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
-        'test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
-        'test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
-    },
+    "test_cache_release_native.py": {name: CPU_WORD_STORE_SKIP for name in (
+        "test_empty_lifecycle_calls_are_native",
+        "test_release_preserves_the_key_contract",
+        *(f"test_real_slots_are_freed_by_one_native_call[{op}]" for op in ("close", "exit", "reinit", "release")),
+        "test_repeated_close_and_close_after_release",
+        "test_context_exit_on_error_frees_and_propagates",
+        *(f"test_error_order_first_failure_all_slots_attempted_failed_retained[{op}]" for op in ("close", "exit", "reinit")),
+        "test_failed_release_retains_the_entry",
+        "test_resident_scope_exit_frees_scope_caches[x_prep]",
+    )},
+    "test_cache_lifecycle_native.py": {name: CPU_WORD_STORE_SKIP for name in (
+        "test_cache_context_entry_preserves_identity[normal]",
+        "test_cache_context_entry_preserves_identity[subclass]",
+        *(f"test_cache_live_matches_real_store_count_after_consumed_allocations[{slots}]" for slots in (0, 1, 2)),
+        "test_cache_live_uses_captured_native_entry_and_ignores_mutable_int",
+    )},
+    "test_cache_stats_native.py": {name: CPU_WORD_STORE_SKIP for name in (
+        *(f"test_cache_length_is_the_native_entry_count[{kind}]" for kind in ("empty", "populated", "subclass", "getattribute")),
+        *(f"test_cache_statistics_use_retained_native_builtin_identities[{builtin}]"
+          for builtin in ("list", "tuple", "dict", "int", "float", "bytes")),
+    )},
+    "test_device_cache_native_state.py": {name: CPU_WORD_STORE_SKIP for name in (
+        "test_id_of_uploads_once_and_counts_hits_natively",
+        "test_counters_are_read_only_and_the_dictionary_state_is_gone",
+        "test_release_frees_one_entry_and_drops_its_source_last",
+        "test_same_address_with_another_length_is_another_entry",
+        "test_empty_buffer_and_wrong_itemsize_refuse_before_any_upload",
+        "test_reinitialization_and_garbage_collection_free_the_device_copies",
+        "test_context_manager_closes_the_cache",
+        "test_a_python_store_callback_is_never_called",
+        "test_supports_is_unchanged",
+    )},
 
-    "test_cache_upload_native.py": {
-        'test_cache_id_of_real_upload_hit_alias_and_owned_publication[x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_upload_hit_alias_and_owned_publication[x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[null-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[null-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[address_overflow-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[address_overflow-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[size_overflow-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[size_overflow-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_upload_uses_connected_store_entries[x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_upload_uses_connected_store_entries[x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[replace_dictionary-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[replace_dictionary-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[publish_competitor-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[publish_competitor-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[change_route-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[change_route-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[delete_counter_slot-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[delete_counter_slot-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[foreign_dictionary-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-        'test_cache_id_of_real_concurrent_publication_cleanup[foreign_dictionary-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
-    },
     "test_training_scalar_buffer_native.py": {
         "test_device_loss_scalar_conversion_and_failure_remain_native[label_smoothing-g-0.125-swapped]": "resident cross-entropy scalar options require the GPU training pool",
         "test_device_loss_scalar_conversion_and_failure_remain_native[ignore_index-c8-(-100+1j)-scalar]": "resident cross-entropy scalar options require the GPU training pool",
@@ -292,6 +275,8 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Owner lifecycle checks do not qualify the public __array__ conversion protocol"
             if vendor == "cpu":
                 scope["cpu_not_applicable_cases"] = dict(CPU_NOT_APPLICABLE[name])
+        if name in CPU_FILE_NOT_APPLICABLE and vendor == "cpu":
+            scope["cpu_not_applicable_file"] = CPU_FILE_NOT_APPLICABLE[name]
         if name in ("test_standard_scaler_native_lifecycle.py", "test_minmax_scaler_native_lifecycle.py", "test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_robust_scaler_native_transport.py", "test_maxabs_scaler_native_transport.py"):
             scope.update(execution_route="selected package scaler backend",
                          operation_mode="identical (explicit fixture configuration)",
@@ -347,15 +332,16 @@ def test_applicability(selected, vendor):
         if name == "test_host_density_constructors_native.py":
             scope.update(execution_route="native explicit CPU host constructor owner, including in GPU packages",
                          coverage_limit="Public KDE and IsolationForest construction/reinitialization only; fit/inference, save/hash and subclass registration remain separate")
-        if name == "test_cache_key_native.py":
-            scope.update(execution_route="native cache metadata only; no device slots",
-                         coverage_limit="Selected DeviceCache.get and resident.stats tuple-key admission only; constructor, upload, release and context lifecycle remain separate")
+        if name == "test_device_cache_native_state.py":
+            scope.update(execution_route="native DeviceCache / resident scope state on CPU and GPU; real x_prep store slots on GPU",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Slots, construction refusals, scope lifecycle and the cache's upload/hit/release/close; get key admission and stats have their own scopes")
         if name == "test_cache_supports_native.py":
             scope.update(execution_route="native DeviceCache.supports metadata on CPU and GPU; no device allocation or computation",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Only public capability lookup and its CPU refusal/prefix contracts; constructor, release, close and resident scope cleanup remain separate")
         if name == "test_cache_release_native.py":
-            scope.update(execution_route="native DeviceCache constructor/release/close/exit and resident scope enter/exit on CPU/GPU; real x_prep/x_metrics store slots on GPU",
+            scope.update(execution_route="native DeviceCache constructor/release/close/exit and resident scope enter/exit on CPU/GPU; real x_prep store slots on GPU",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Only the DeviceCache and resident scope lifecycle; id_of, get, live and stats have their own scopes")
         if name == "test_resident_lifecycle_native.py":
@@ -363,18 +349,18 @@ def test_applicability(selected, vendor):
                          operation_mode="identical base-binding transport, independent of estimator numeric mode",
                          coverage_limit="Only the model-selection resident lifecycle and take; foreign owners (pandas, Arrow-backed pandas) keep the established input-preparation step")
         if name == "test_cache_lifecycle_native.py":
-            scope.update(execution_route="native DeviceCache.live metadata and __enter__ on CPU/GPU; real x_prep/x_metrics store counters on GPU",
+            scope.update(execution_route="native DeviceCache.live and __enter__ on the x_prep store (GPU); foreign-object refusal on CPU/GPU",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Only public live-slot queries and context entry; constructor, supports, release, close, context exit and resident scope cleanup remain separate migration work")
         if name == "test_cache_upload_native.py":
-            scope.update(execution_route="native DeviceCache.id_of metadata on CPU and GPU; real x_prep/x_metrics word-store uploads on GPU",
+            scope.update(execution_route="native DeviceCache.id_of on real x_prep word-store uploads (GPU only)",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Public id_of hit/miss preparation, publication and cleanup only; constructor, release, close, resident contexts and compound cleanup failure injection remain separate qualification work")
         if name == "test_cache_get_native.py":
-            scope.update(execution_route="native host metadata on CPU and GPU packages; no device slots acquired",
+            scope.update(execution_route="native key admission against one real x_prep upload (GPU only)",
                          coverage_limit="Only DeviceCache.get; construction/upload/release and resident context lifecycle remain separate migration work")
         if name == "test_cache_stats_native.py":
-            scope.update(execution_route="native host metadata on CPU and GPU packages; no device slots acquired",
+            scope.update(execution_route="native resident.stats on CPU and GPU packages; length on real x_prep uploads (GPU)",
                          coverage_limit="Only DeviceCache.__len__ and resident.stats; get, construction/upload/release and resident context lifecycle remain separate migration work")
         if name == "test_device_rows_materialize_native.py":
             scope.update(execution_route="selected package backend, established identical base-binding resident store",
@@ -800,7 +786,8 @@ def test_scope_summary(summary, selected, vendor, exact_nodes=None, *, interpret
         elif case["outcome"] == "failed":
             scope["failures"] += 1
         else:
-            declared = CPU_NOT_APPLICABLE.get(name, {}).get(case["name"]) if vendor == "cpu" else None
+            declared = (CPU_NOT_APPLICABLE.get(name, {}).get(case["name"], CPU_FILE_NOT_APPLICABLE.get(name))
+                        if vendor == "cpu" else None)
             key = "not_applicable" if declared is not None and case["skip_reason"] == declared else "unexpected_skips"
             scope[key].append(case)
     for scope in scopes.values():

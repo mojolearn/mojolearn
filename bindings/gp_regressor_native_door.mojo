@@ -109,8 +109,15 @@ def _is_integral(value: PythonObject, context: PythonObject) raises -> Bool:
 
 def _gpr_validate(model: PythonObject, context: PythonObject) raises:
     """`GaussianProcessRegressor._validate_params`."""
+    _gpr_validate_fields(py_fields(model), context)
+
+
+def _gpr_validate_fields(fields: PythonObject, context: PythonObject) raises:
+    """`_gpr_validate` on a field dictionary: reads the public parameters from
+    `fields` and writes the private fit settings (`_kernel`, `_alpha`, ...)
+    into the same dictionary. The member admit passes a scratch copy so the
+    caller's template estimator is never changed."""
     var b = native_loaded_module("builtins")
-    var fields = py_fields(model)
     var kernel = family_field(fields, "kernel")
     var alpha = family_field(fields, "alpha")
     var optimizer = family_field(fields, "optimizer")
