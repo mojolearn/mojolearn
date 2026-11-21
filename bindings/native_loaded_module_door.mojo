@@ -278,13 +278,25 @@ struct SharedDictWatch(Defaultable, Movable):
     # watcher slot), otherwise the interpreter's dictionary watcher ID.
     var watcher: Int
     var epochs: Dict[Int, Int]
+    # The interned Python str `device` (its address; one reference is kept
+    # for the process), 0 until the first estimator route is kept; and the
+    # count of events on any watched dictionary that wrote, replaced or
+    # deleted that key (or cleared / cloned over the whole dictionary). An
+    # estimator's device route holds the count it was resolved at
+    # (providers/python/device_route_boundary_door.mojo): a direct
+    # `model.device = ...` moves the count, so no operation reads `device`
+    # to learn that it did not change.
+    var device_key: Int
+    var device_writes: Int
 
     def __init__(out self):
         self.watcher = -2
         self.epochs = Dict[Int, Int]()
+        self.device_key = 0
+        self.device_writes = 0
 
 
-comptime SHARED_DICT_WATCH = SharedSlot[SharedDictWatch, "MojolearnSharedDictWatchV2"]
+comptime SHARED_DICT_WATCH = SharedSlot[SharedDictWatch, "MojolearnSharedDictWatchV3", 3]
 
 
 def _shared_dict_modified_c(event: Int32, fields: PyObjectPtr, key: PyObjectPtr, value: PyObjectPtr) abi("C") -> Int32:
@@ -297,9 +309,38 @@ def _shared_dict_modified_c(event: Int32, fields: PyObjectPtr, key: PyObjectPtr,
             g[].epochs[address] = g[].epochs[address] + 1
         else:
             g[].epochs[address] = 1
+        # PyDict_EVENT_CLONED (3) and PyDict_EVENT_CLEARED (4) replace every
+        # key at once. One address compare and two word compares per event;
+        # a false count costs one estimator one read of its `device`.
+        var kind = Int(event)
+        if (g[].device_key != 0 and Int(key) == g[].device_key) or kind == 3 or kind == 4:
+            g[].device_writes += 1
     except:
         pass
     return 0
+
+
+def shared_device_writes(fields: PythonObject) raises -> Int:
+    """Arm the count of `device` writes for the instance dictionary `fields`
+    and return the ADDRESS of the process word that holds it (the word lives
+    in the process-wide slot and is never moved or freed); 0 where no
+    dictionary watcher reports writes (Python 3.10 / 3.11, no free watcher
+    slot, a dictionary that refused the watch): the caller keeps its full
+    check there. Called where an estimator's device route is kept (a route
+    miss), never per operation."""
+    if shared_dict_watcher() < 0:
+        return 0
+    var g = SHARED_DICT_WATCH.get_or_create_ptr()
+    if g[].device_key == 0:
+        ref cpy = Python().cpython()
+        var text = PythonObject("device")
+        var interned = native_loaded_module("sys").intern(text)
+        # Kept for the process: the address stays this interned str's.
+        cpy.Py_IncRef(interned._obj_ptr)
+        g[].device_key = Int(interned._obj_ptr)
+    if not shared_dict_watch(fields._obj_ptr):
+        return 0
+    return Int(UnsafePointer(to=g[].device_writes))
 
 
 def shared_dict_watcher() raises -> Int:

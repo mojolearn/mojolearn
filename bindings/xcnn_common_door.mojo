@@ -592,7 +592,10 @@ def xcnn_device_init(layer: PythonObject, fields: PythonObject, value: PythonObj
     if value is not None:
         device_admit_class(layer, value,
                            py_get(xcnn_item(context, XK_BACKEND_FIELDS), PythonObject("_CPU_ONLY")) is not None,
-                           py_get(context, PythonObject("xcnn_device_cpu")), xcnn_builtins())
+                           py_get(context, PythonObject("xcnn_device_cpu")), xcnn_builtins(),
+                           # No lazy CPU-image connection in this family's context
+                           # (`device_admit_class` takes six arguments since fx-audit 9).
+                           PythonObject(None))
     xcnn_put(fields, XK_DEVICE, value)
     device_route_clear(layer)
 
