@@ -228,17 +228,22 @@ struct ByteCheckpointArchive(Movable):
     """The admitted header of one archive: the state's metadata as its JSON
     object text, the element counts of parameters, m, v and flags, their
     SHA-256 digests (eight words each, 32 in all) and the file offset of the
-    first array byte."""
+    first array byte. `complete` says the file ends exactly with the last
+    array (probed while the header was read, so the caller can refuse a
+    truncated or extended file after it admitted the state and before it
+    allocates anything)."""
     var metadata: String
     var counts: List[Int]
     var digests: List[UInt32]
     var data_offset: Int
+    var complete: Bool
 
     def __init__(out self):
         self.metadata = String("")
         self.counts = List[Int]()
         self.digests = List[UInt32]()
         self.data_offset = 0
+        self.complete = False
 
 
 def _checkpoint_open_read(path: String, mut failure: ByteCheckpointWriteFailure) raises -> Int:
@@ -389,6 +394,27 @@ def byte_checkpoint_read_header(path: String, mut failure: ByteCheckpointWriteFa
         _ = len(state)
         archive.data_offset = 27 + length + 32
         _ = len(lead)
+        # The extent: the last array byte exists and nothing follows it. Two
+        # one-byte reads; counts no file could hold are not probed.
+        var total = 0
+        var bounded = True
+        for i in range(4):  # small-loop(the four checkpoint arrays)
+            if archive.counts[i] > (1 << 40):
+                bounded = False
+            else:
+                total += archive.counts[i] * 4
+        if bounded:
+            var probe = List[UInt8](length=1, fill=UInt8(0))
+            var last = 1
+            if total > 0:
+                last = _checkpoint_pread(fd, Int(probe.unsafe_ptr()), 1, archive.data_offset + total - 1)
+            var beyond = _checkpoint_pread(fd, Int(probe.unsafe_ptr()), 1, archive.data_offset + total)
+            _ = len(probe)
+            if last < 0:
+                _checkpoint_fail(failure, "read", path, -last)
+            if beyond < 0:
+                _checkpoint_fail(failure, "read", path, -beyond)
+            archive.complete = last == 1 and beyond == 0
     except error:
         _ = external_call["close", c_int](c_int(fd))
         raise error
@@ -429,7 +455,9 @@ def byte_checkpoint_read_arrays(path: String, archive: ByteCheckpointArchive, ad
     """Read the four arrays into the caller's storage (`addresses` in the
     order parameters, m, v, flags; `archive.counts[i]` elements of four bytes
     each, which the caller allocated) and check each against the header's
-    digest. The file must end with the last array. One host task per array."""
+    digest. The file's extent was probed with the header
+    (`archive.complete`); a file cut short since then is refused as a
+    truncated array. One host task per array."""
     if len(addresses) != 4 or len(archive.counts) != 4 or len(archive.digests) != 32:
         raise Error("Byte-LM checkpoint array registry mismatch")
     var plan = List[Int](length=13, fill=0)
@@ -453,12 +481,9 @@ def byte_checkpoint_read_arrays(path: String, archive: ByteCheckpointArchive, ad
         status_ptr.unsafe_store(unit, _checkpoint_read_unit(plan_ptr, expected_ptr, unit))
 
     host_parallelize(_read, 4)
-    var tail = List[UInt8](length=1, fill=UInt8(0))
-    var beyond = _checkpoint_pread(fd, Int(tail.unsafe_ptr()), 1, offset)
     _ = external_call["close", c_int](c_int(fd))
     _ = len(plan)
     _ = len(expected)
-    _ = len(tail)
     for i in range(4):  # small-loop(the four checkpoint arrays, refused in file order)
         if status[i] < 0:
             _checkpoint_fail(failure, "read", path, -status[i])
@@ -466,7 +491,3 @@ def byte_checkpoint_read_arrays(path: String, archive: ByteCheckpointArchive, ad
             raise Error("Byte-LM checkpoint truncated array")
         if status[i] == 2:
             raise Error("Byte-LM checkpoint array integrity mismatch: " + String("parameters" if i == 0 else ("m" if i == 1 else ("v" if i == 2 else "flags"))))
-    if beyond < 0:
-        _checkpoint_fail(failure, "read", path, -beyond)
-    if beyond != 0:
-        raise Error("Byte-LM checkpoint trailing array data")
