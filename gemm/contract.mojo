@@ -129,66 +129,26 @@ comptime GEMM_LEAF_ARM_NEURAL256 = 2
 comptime GEMM_LEAF_ARM_ALL256 = 3
 comptime GEMM_LEAF_ARM = 0
 comptime _NEURAL_GEMM_LEAF256 = GEMM_LEAF_ARM == GEMM_LEAF_ARM_ALL256
-# EXPERIMENT `-D MOJOLEARN_GEMM_FAST_LEAF512` (lane fx-gemm-leaf512,
-# 2026-11-19; default OFF, A/B OWED on the L40S, EXPERIMENTS.md row OPEN;
-# idea 3 / section S1 of briefs-20261118/ideas-gemm-headroom-RESULT.md).
-# BITS CHANGE: profile `mojolearn.identical.gemm.fp32.v2-leaf512`, the v1
-# formula with ONE constant changed (the shortest leaf 128 -> 512), on every
-# column at once because every column reads this constant through
-# `contract_leaf_size` and nothing else:
-#     L(k) = k               if k <= 512
-#            512             if ceil(k / 512) <= 1024
-#            ceil(k / 1024)  otherwise                    P = ceil(k / L)
-#     s_t(i, j) = chain over p in [t L, min((t+1) L, k)) ascending, seeded
-#                 +0.0:  acc = ftz(fma(ftz(A[i,p]), ftz(B[p,j]), acc))
-#     C[i, j]   = ftz(T(s_0 .. s_{P-1})),  T = the adjacent-pair balanced
-#                 tree of section 7.2, odd tail carried, every node ftz(x + y)
-# Why (hardware reasoning, any shape): a leaf boundary costs the device
-# kernels a flush, a fold push to a local-memory stack and a restart of the
-# window admission; four times longer leaves make it four times rarer, and a
-# product with k <= 512 becomes one chain a cell with no fold, no workspace
-# and no second (fold) launch. The serial FMA dependency per leaf is four
-# times longer; the kernels already run 32 independent chains a thread, so
-# that is not expected to bind (to be measured, not assumed).
-# This is the BUILD-WIDE contract: the classical, solver, loss, optimizer,
-# CNN, Mamba and transformer folds that take their leaves from
-# `contract_leaf_size` move with it, device and host column together (the
-# reader table is gemm/IDENTICAL_FP32_CONTRACT.md section 14). The small MLP
-# op keeps its measured leaf 128 explicitly (autograd/small_mlp_op.mojo).
-# No stored reference word is re-recorded while this is an arm.
-# A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
-# arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad; the words differ by design). Base -> arm ms:
-# lm-train-step 36.41 -> 36.04 (0.990; the row's three bases 36.30 to 36.41; loss after 2 steps 8.436234 -> 8.436235),
-# lm-forward 20.36 -> 20.85 (1.024; the row's bases 20.36 and 22.48, so noise; mean NLL equal to 9 digits),
-# mlp-train-step 0.717 -> 0.804 (1.12, ONE call each; that op keeps leaf 128, so this is the row's noise).
-# NOT DECIDED: the rows that decide it did not run. neural/gemm (4096^3) and the four linalg.matmul driver cases were
-# REFUSED on the arm's wheel by mojolearn.linalg's profile admission, a defect of the arm, not of the kernels: profile
-# version 4 was missing from `_EXPERIMENT_PROFILES` (python/mojolearn/_linalg_impl.py) and the job gave the arm's venv
-# no MOJOLEARN_EXPERIMENT_GEMM_PROFILE. Both fixed 2026-11-20 (the table entry; tools/ops/paper_compare_job.sh takes a
-# 4th field `env:...` on a wheel arm's line). Stays opt-in, owed RUN: stage the arm with
-# env:MOJOLEARN_EXPERIMENT_GEMM_PROFILE=mojolearn.identical.gemm.fp32.v2-leaf512. On the one clean row it is 1 %.
-comptime GEMM_LEAF512 = (
-    identical_mode_enabled() and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()
-)
-comptime CONTRACT_K_LEAF_MIN = (
-    512 if GEMM_LEAF512 else (256 if _NEURAL_GEMM_LEAF256 else 128)
-)
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_LEAF512 (the contract's shortest leaf 512 instead of 128, build-wide, profile
+# mojolearn.identical.gemm.fp32.v2-leaf512, version 4; NOISE on two A/Bs: abf2 2026-11-20, NVIDIA L40S host 79f003b8e8ae,
+# wheel e41b5148b24d, base and arm back to back in one job, one run per arm: lm-forward 21.19 -> 20.31 ms (0.96),
+# lm-train-step 36.42 -> 35.96 (0.99), mlp-train-step 0.886 -> 0.955 (1.08), median 0.99; round 3 on wheel 28a780604c:
+# 0.990, 1.024, 1.12. The neural/gemm row did not run on the arm in either job: the arm's wheel was staged without
+# MOJOLEARN_EXPERIMENT_GEMM_PROFILE both times, so mojolearn.linalg's profile admission refused version 4) deleted
+# 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch; record in docs/TOMBSTONES.md.
+comptime CONTRACT_K_LEAF_MIN = 256 if _NEURAL_GEMM_LEAF256 else 128
 comptime GEMM_NUMERICAL_PROFILE = (
-    "mojolearn.identical.gemm.fp32.v2-leaf512" if GEMM_LEAF512
-    else (
-        "mojolearn.identical.gemm.fp32.ni08-leaf256" if _NEURAL_GEMM_LEAF256
-        else "mojolearn.identical.gemm.fp32.v1"
-    )
+    "mojolearn.identical.gemm.fp32.ni08-leaf256" if _NEURAL_GEMM_LEAF256
+    else "mojolearn.identical.gemm.fp32.v1"
 )
 # Numerical-version metadata follows this shared host/device contract. These
 # experiment versions are not qualification claims and cannot borrow v1's
 # historical certification. Exact names distinguish the independent profiles.
-# Version 2 was the deleted leaf64 profile; it is not reused. Version 4 is
-# the leaf-512 arm above (the "v2" in its NAME is the contract revision; the
-# integer stays unique across every profile that ever existed).
-comptime GEMM_NUMERICAL_PROFILE_VERSION = (
-    4 if GEMM_LEAF512 else (3 if _NEURAL_GEMM_LEAF256 else 1)
-)
+# Version 2 was the deleted leaf64 profile; it is not reused. Version 4 was
+# the deleted leaf-512 arm (profile v2-leaf512, tombstone above); it is not
+# reused either: the integer stays unique across every profile that ever existed.
+comptime GEMM_NUMERICAL_PROFILE_VERSION = 3 if _NEURAL_GEMM_LEAF256 else 1
 
 #: The cap on the number of leaves.
 #:

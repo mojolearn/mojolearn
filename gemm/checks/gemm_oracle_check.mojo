@@ -115,12 +115,9 @@ from checks.mode_policy import KERNEL_FORM_IDENTICAL as IDENTICAL_BUILD
 # `contract_leaf_size(k)` is built from `(L, P)` and needs a stated NUMBER of
 # leaves (8 for F1/F5/F6, 4 for F8, 3 with a ragged 44-element tail for F7, 2
 # for the padding elision), not a stated k. Under v1 (K_LEAF_MIN = 128) these
-# are the literals the fixtures always used: 1024, 512, 300, 256, 200. Under
-# `-D MOJOLEARN_GEMM_FAST_LEAF512` (profile v2-leaf512) they are 4096, 2048,
-# 1068, 1024 and 584, so F1 and F5-F9 run at the new leaf with the same
-# leaf counts and the same predicted words (each prediction is a function of
-# `(L, P)` only). F2 names its leaves explicitly (128, 64, 256) and is
-# unchanged by the define.
+# are the literals the fixtures always used: 1024, 512, 300, 256, 200 (each
+# prediction is a function of `(L, P)` only). F2 names its leaves explicitly
+# (128, 64, 256).
 comptime FIXTURE_K_EIGHT_LEAVES = 8 * CONTRACT_K_LEAF_MIN
 comptime FIXTURE_K_FOUR_LEAVES = 4 * CONTRACT_K_LEAF_MIN
 comptime FIXTURE_K_TWO_LEAVES = 2 * CONTRACT_K_LEAF_MIN
@@ -747,9 +744,9 @@ def check_leaf_partition_is_a_pure_function_of_k() raises:
     want_l.append(1)
     ks.append(64)
     want_l.append(64)
-    # The rows from here on are stated in the profile's own constants, so the
-    # table pins v1 (128: the literals in the comments) and v2-leaf512 (512)
-    # alike. The formula it pins, for K = K_LEAF_MIN and M = MAX_LEAVES:
+    # The rows from here on are stated in the profile's own constants (v1:
+    # 128, the literals in the comments). The formula it pins, for
+    # K = K_LEAF_MIN and M = MAX_LEAVES:
     #     L(k) = k if k <= K;  K if ceil(k/K) <= M;  else ceil(k/M).
     comptime K = CONTRACT_K_LEAF_MIN
     comptime M = CONTRACT_MAX_LEAVES
@@ -773,39 +770,24 @@ def check_leaf_partition_is_a_pure_function_of_k() raises:
     # ceil(131200/1024) = 129. In general ceil((K M + K) / M) = K + 1.
     ks.append(4000000)
     want_l.append(3907)
-    # 4,000,000 is in the capped branch under both profiles (above 131,072
-    # and above 524,288), where L = ceil(k / 1024) does not read K_LEAF_MIN.
-    comptime if not (IDENTICAL_BUILD and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()):
-        # v1's own literals, read from the define and not from the constant:
-        # a build without the arm whose K_LEAF_MIN is anything but 128 fails
-        # here whatever the rows above (built from the constant) say.
-        ks.append(129)
-        want_l.append(128)
-        ks.append(300)
-        want_l.append(128)
-        ks.append(1024)
-        want_l.append(128)
-        ks.append(131072)
-        want_l.append(128)
-        ks.append(131200)
-        want_l.append(129)
-    else:
-        # v2-leaf512's own literals, so the arm is pinned by numbers and not
-        # only by the constant it is built from: one chain up to 512, P = 2
-        # at 513, the board-independent ragged 1500 (P = 3: 512, 512, 476),
-        # a non-multiple of the leaf.
-        ks.append(300)
-        want_l.append(300)
-        ks.append(512)
-        want_l.append(512)
-        ks.append(513)
-        want_l.append(512)
-        ks.append(1500)
-        want_l.append(512)
-        ks.append(524288)
-        want_l.append(512)
-        ks.append(524800)
-        want_l.append(513)
+    # 4,000,000 is in the capped branch (above 131,072), where
+    # L = ceil(k / 1024) does not read K_LEAF_MIN.
+    # v1's own literals, not built from the constant: a build whose K_LEAF_MIN
+    # is anything but 128 fails here whatever the rows above say.
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_LEAF512 (NOISE, A/B abf2 and round 3; its
+    # own literal rows 300, 512, 513, 1500, 524288, 524800) deleted 2026-11-20
+    # by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch
+    ks.append(129)
+    want_l.append(128)
+    ks.append(300)
+    want_l.append(128)
+    ks.append(1024)
+    want_l.append(128)
+    ks.append(131072)
+    want_l.append(128)
+    ks.append(131200)
+    want_l.append(129)
 
     for t in range(len(ks)):
         var k = ks[t]

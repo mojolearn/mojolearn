@@ -50,7 +50,7 @@ NAMES = ("sqrt", "rsqrt", "cbrt", "exp", "exp2", "expm1", "log", "log2", "log10"
 CLASSES = ("SAFE-FAST", "SAFE-ROW", "SAFE-EXACT", "SAFE-NOT-SHIPPED")
 POLICY_MODULE = "checks/mode_policy.mojo"
 #: Row names of the mode policy table, by bit of MODE_POLICY_MASK (checks/mode_policy.mojo).
-POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free", "bf16_units")
+POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free")
 _ROW_REASON = re.compile(r"#\s*SAFE-ROW:\s*(\w+):\s*\S")
 _SKIP_PREFIX = ("bench/", "experiments/", "docs/")
 _IMPORT = re.compile(r"^[ \t]*from[ \t]+(?:std\.)?math[ \t]+import[ \t]+(\([^)]*\)|[^\n]+)", re.M)

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The matrix-units relaxation of `fast` stays inside its arithmetic bound, and is off everywhere else.
+"""The matrix-units route of `fast` (its default on NVIDIA and AMD) stays inside its arithmetic bound, and is off
+everywhere else.
 
 One training step's three products, each run twice on the device: through the neural dispatch with the vendor
-route open (gemm/neural_dispatch.mojo::identical_gemm_into, `allow_vendor=True`, the route
-`-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS` relaxes), and on the FP32 kernel itself
-(gemm/checks/gemm_identical.mojo::identical_gemm_into with the vendor route closed, which no value of the arm
-reaches):
+route open (gemm/neural_dispatch.mojo::identical_gemm_into, which the matrix-units route of a fast-rows build
+takes), and on the FP32 kernel itself (gemm/checks/gemm_identical.mojo::identical_gemm_into with the vendor
+route closed, which the route never reaches):
 
     logits  Z[m x n]  = X[m x k] . W[n x k]^T      OP_NT
     dX      [m x k]   = dZ[m x n] . W[n x k]        OP_NN
@@ -13,7 +13,8 @@ reaches):
 
 plus a neighbouring non-square shape, a product under the size rule and a bias column sum.
 
-IN A BUILD WITH THE ARM (an NVIDIA `fast` build), for a product the size rule takes:
+IN A BUILD WITH THE ROUTE (a `fast` build on NVIDIA or AMD, without `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`), for a
+product the size rule takes:
   1. every cell is within `matrix_units_cell_bound(sum_k |a_k b_k|, k)` of the FP32 cell: both operands of
      every term truncated to TF32 (2 * 2^-10 + 2^-20 of the absolute sum) plus the FP32 fold allowance;
   2. the root-mean-square error over the product is at most 1.25 * 2^-10 of sqrt(sum (a_k b_k)^2). Truncating
@@ -21,11 +22,11 @@ IN A BUILD WITH THE ARM (an NVIDIA `fast` build), for a product the size rule ta
      2^-10 / sqrt(6) of scatter); rounding to nearest gives 0.41 * 2^-10. An operand cut to 8 significant bits
      (BF16) gives at least 1.6 * 2^-10 and fails, as does a dropped or doubled term. This is the test that
      stops a silent precision collapse: the per-cell bound alone is a worst case and would admit one;
-  3. at least one cell differs in bits from FP32: the route was taken. A build that carries the define and
+  3. at least one cell differs in bits from FP32: the route was taken. A build that has the route and
      routes nothing fails here.
   A product under the size rule and the bias sum must be bit-equal to FP32: they are not routed.
-IN EVERY OTHER IDENTICAL-KERNEL BUILD all six pairs must be bit-equal: without the arm `allow_vendor` selects
-nothing. (An old non-identical build sends the open route to the unbounded vendor product; nothing is asserted
+IN EVERY OTHER IDENTICAL-KERNEL BUILD (every identical build, and a fast build with the `_OFF` define) all six
+pairs must be bit-equal: without the route `allow_vendor` selects nothing. (An old non-identical build sends the open route to the unbounded vendor product; nothing is asserted
 there.)
 
 The reference sums run on the host in Float64, one row of C per unit across the host's cores. One owned GPU
@@ -43,11 +44,9 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.fast_matrix_units import (
     GEMM_FAST_MATRIX_UNITS, matrix_units_takes, matrix_units_workspace_floats, matrix_units_cell_bound,
 )
-# lane fx-fast-bf16 (2026-11-20): the same fixtures and tests hold the bf16-units arm (gemm/fast_bf16_units.mojo) to its
-# own operand bound. With both arms compiled a cell is held to the wider (bf16) bound.
-from gemm.fast_bf16_units import (
-    GEMM_FAST_BF16_UNITS, bf16_units_takes, bf16_units_workspace_floats, bf16_units_cell_bound,
-)
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (A/B abf2: median 0.96, mlp-clf/taxi infer 1.86; dominated by the TF32
+# route) deleted 2026-11-20 by lane/fx-verdicts6 with its bound and RMS tolerance here; code recoverable at 06d1e8ff34.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
 from gemm.checks.gemm_lowbit_check import _upload_f32, _download_f32, _poisoned
 from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
@@ -55,23 +54,8 @@ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, 
 comptime MATRIX_UNITS_FIXTURES = 6
 #: test 2's tolerance: 1.25 * 2^-10, squared
 comptime MATRIX_UNITS_RMS_REL_SQ = (Float64(1.25) / Float64(1024.0)) * (Float64(1.25) / Float64(1024.0))
-#: the bf16 arm's: 1.25 * 2^-9, squared (round to nearest at 8 significant bits, two operands a term)
-comptime BF16_UNITS_RMS_REL_SQ = (Float64(1.25) / Float64(512.0)) * (Float64(1.25) / Float64(512.0))
-#: either arm compiled
-comptime UNITS_ARM = GEMM_FAST_MATRIX_UNITS or GEMM_FAST_BF16_UNITS
-
-
-def _units_cell_bound(abs_sum: Float64, k: Int) -> Float64:
-    """The per-cell bound of the arm compiled in (the bf16 one when both are)."""
-    comptime if GEMM_FAST_BF16_UNITS:
-        return bf16_units_cell_bound(abs_sum, k)
-    return matrix_units_cell_bound(abs_sum, k)
-
-
-def _units_rms_rel_sq() -> Float64:
-    comptime if GEMM_FAST_BF16_UNITS:
-        return BF16_UNITS_RMS_REL_SQ
-    return MATRIX_UNITS_RMS_REL_SQ
+#: the route compiled in
+comptime UNITS_ARM = GEMM_FAST_MATRIX_UNITS
 
 
 def fixture_shape(fixture_id: Int) raises -> Tuple[Int, Int, Int, Int]:
@@ -158,7 +142,7 @@ def compare_rows(
                 diff = -diff
             comptime if UNITS_ARM:
                 # `not (diff <= bound)` so a NaN difference counts as over the bound
-                if not (diff <= _units_cell_bound(abs_sum, k)):
+                if not (diff <= matrix_units_cell_bound(abs_sum, k)):
                     row_over += 1
             row_diff += diff * diff
         op_ptr.unsafe_store(i, row_over)
@@ -199,7 +183,6 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
     var dc_ref = _poisoned(ctx, m * n)
     var need = identical_gemm_workspace_max_floats(m, n, k)
     need = max(need, matrix_units_workspace_floats(m, n, k, op))
-    need = max(need, bf16_units_workspace_floats(m, n, k))
     var ws_arm = ctx.enqueue_create_buffer[DType.float32](need)
     var ws_ref = ctx.enqueue_create_buffer[DType.float32](max(1, fp32_workspace_max_floats(m, n, k)))
     identical_gemm_into[True](ctx, dc_arm, da, db, ws_arm, m, n, k, op)
@@ -209,12 +192,12 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
     var arm = _download_f32(ctx, dc_arm, m * n, name + " (vendor route open)")
     var ref_c = _download_f32(ctx, dc_ref, m * n, name + " (FP32)")
     var r = compare_rows(arm, ref_c, a, b, m, n, k, op)
-    var routed = matrix_units_takes(m, n, k) or bf16_units_takes(m, n, k)
+    var routed = matrix_units_takes(m, n, k)
     comptime if UNITS_ARM:
         if routed:
             require(r[0] == 0, name + ": " + String(r[0]) + " cells outside the matrix unit's operand bound")
             require(
-                r[2] <= _units_rms_rel_sq() * r[3],
+                r[2] <= MATRIX_UNITS_RMS_REL_SQ * r[3],
                 name + ": squared error " + String(r[2]) + " over the arm's squared operand tolerance of the squared terms " + String(r[3]),
             )
             require(r[1] > 0, name + ": no cell differs from FP32, the matrix-units route was not taken")

@@ -1,0 +1,1039 @@
+diff --git a/checks/mode_policy.mojo b/checks/mode_policy.mojo
+index fd47012f3b..f2d216dad0 100644
+--- a/checks/mode_policy.mojo
++++ b/checks/mode_policy.mojo
+@@ -22,10 +22,8 @@ The three kinds of build
+   holds; every row is off; a row define is a compile error.
+ - `POLICY_BUILD_FAST_ROWS`: `-D MOJOLEARN_NUMERIC_IDENTICAL
+   -D MOJOLEARN_MODE_FAST_ROWS`. The identical kernels with the contract off.
+-  A row is off unless its define is passed or the table below says it is the
+-  measured default of the column (MATRIX_UNITS on NVIDIA and AMD). This is
+-  `fast` on NVIDIA and AMD (and the form Apple `fast` moves to once it is
+-  measured there).
++  Every row is off unless its define is passed. This is `fast` on NVIDIA and
++  AMD (and the form Apple `fast` moves to once it is measured there).
+ - `POLICY_BUILD_LEGACY_FAST`: no `MOJOLEARN_NUMERIC_IDENTICAL`. The `fast`
+   set as it was built before this table existed (Apple's shipped `fast` set):
+   the five seam rows are on, as the seams always compiled them there.
+@@ -38,8 +36,9 @@ The table (True = relaxed)
+     CONTRACT_FREE       False          False          False          True
+     FLUSH_OFF           False          False          False          True
+     VENDOR_MATH         False          False          False          True
+-    MATRIX_UNITS        False          True           False          False (its own gates)
++    MATRIX_UNITS        False          False          False          False (its own gates)
+     WAITS_ELIDED        False          False          False          False (its own gates)
++    BF16_UNITS          False          False          False          False (its own gates)
+     TILE_FREE           False          False          False          True
+ 
+ The host column reads the same rows as the device columns of its set, so a
+@@ -59,55 +58,54 @@ Who reads the rows
+     FLUSH_OFF       checks/numerics.mojo: ftz, ftz_simd
+     VENDOR_MATH     checks/numerics.mojo: identical_exp ... identical_clamp
+     TILE_FREE       checks/kernel_matrix.mojo: lib_block_size_for
+-    MATRIX_UNITS    gemm/fast_matrix_units.mojo: GEMM_FAST_MATRIX_UNITS (the neural products on the
+-                    matrix unit, the route below)
++    MATRIX_UNITS    gemm/fast_matrix_units.mojo: GEMM_FAST_MATRIX_UNITS (the NVIDIA TF32 arm,
++                    `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, a term of the row), and the
++                    classical family routes below
++    BF16_UNITS      gemm/fast_bf16_units.mojo: GEMM_FAST_BF16_UNITS (`-D MOJOLEARN_GEMM_FAST_BF16_UNITS=1`)
+     WAITS_ELIDED    no seam yet (only waits that can move a bit)
+ 
+ `MODE_POLICY_MASK` has bit i set when row i is relaxed. Bindings export it so
+ verification and the compiled-kernel audits read the rows from the binary.
+ 
+-The matrix-units route (the default of `fast` on NVIDIA and AMD)
+-----------------------------------------------------------------
+-    route (constant)          row           NVIDIA            AMD               Apple Metal             host
+-    ROUTE_GEMM_MATRIX_UNITS   MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  afn route (AFN_GEMM_*)  exact
+-
+-  gemm/fast_matrix_units.mojo: the large neural FP32 products (neural dispatch, every caller; the sequence
+-  executor; the public `linalg.matmul` entry) run on MAX `linalg.matmul`. One source for NVIDIA and AMD; on AMD
+-  the fp32 MFMA keeps full fp32 operands, so the relaxation there is the vendor's fold order and K grouping,
+-  not operand width. On Apple the products already have their matrix-unit route (gemm/afn_apple_fast.mojo), so
+-  the row stays off there and adds no second path; the host column has no matrix unit and stays exact.
+-
+-  PROMOTED 2026-11-20 (lane fx-verdicts6) on A/B abf2: NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d,
+-  base and arm back to back in one job (nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59), one run per arm, full
+-  datasets, arm `fast-matrix-units-tf32-all`. 12 of 13 cells faster, 1 flat, 0 slower, median arm / base 0.93:
+-  MLP fit 0.96-0.97 (4 cells), MLP infer 0.85-0.95, gemm 0.93, lm-forward 0.90, lm-train-step 0.82,
+-  transformer-forward 0.91, transformer-decode 1.00. Quality equal: mlp-clf accuracy 0.76790 vs 0.76795 and
+-  0.94345 vs 0.94326; mlp-reg r2 0.5224 vs 0.5206 and 0.93011 vs 0.93015; gemm max_rel_err_vs_fp64 2.8e-4
+-  (base 2.4e-7, expected of TF32 operands). NVIDIA only (AGENTS.md part 8); AMD takes the same source untimed
+-  (Andrew, 2026-11-20: a win on NVIDIA is the default on every vendor without its own measurement). Sample: one
+-  run per arm. Limits: no AMD or Apple timing; the size rule's constants are reasoned, not measured.
+-  The old `fast` route (every product on the exact FP32 kernels, row off) is
+-  `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`. `identical` builds are untouched: the row is False under the
+-  contract on every column and the route is not compiled.
+-
+-  TOMBSTONES (2026-11-20, lane fx-verdicts6, the same A/B; docs/TOMBSTONES.md "A/B abf2 verdicts"):
+-  # TOMBSTONE: MOJOLEARN_GEMM_FAST_MATRIX_UNITS (the tiers: kind 1 tf32 open callers only, 10 faster / 3 flat,
+-  #   median 0.96, dominated by kind 3 on every cell; kind 3 is the default) deleted 2026-11-20 by
+-  #   lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-  # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_MATRIX_UNITS.tiers.patch
+-  # TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS and its row MOJOLEARN_MODE_FAST_BF16_UNITS (row 7, mask bit 128;
+-  #   median 0.96 but mlp-clf/taxi infer 1.86, gemm max_rel_err 2.2e-3; dominated by tf32-all on every cell)
+-  #   deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-  # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
+-  # TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (ROUTE_DECOMP_MATRIX_UNITS; NOISE: median 1.00, 8 cells
+-  #   0.93-1.00) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-  # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch
+-  # TOMBSTONE: MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (ROUTE_NEIGHBORS_MATRIX_UNITS; NOISE: median 0.99, 6 cells
+-  #   0.98-1.01) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-  # Restore: git apply experiments/removed/MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS.patch
++The family routes of a row
++--------------------------
++A family route is one family's use of a row: one define, default off, a term
++of its row (so the row's mask bit is set and an identical build stops), and
++one constant here that the family's route module reads back. A route is taken
++only in a fast-rows build on the column it is written for; on any other
++column of a fast-rows build the define relaxes nothing there and the constant
++is False, so a host binding of the same set compiles and stays exact.
++
++    route (constant)              define                                   row           NVIDIA            AMD               Apple Metal                 host
++    GEMM matrix units             MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>  MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  afn route (AFN_GEMM_*)      exact
++    ROUTE_DECOMP_MATRIX_UNITS     MOJOLEARN_DECOMP_FAST_MATRIX_UNITS       MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  afn route (PCA Gram tile)   exact
++    ROUTE_NEIGHBORS_MATRIX_UNITS  MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS    MATRIX_UNITS  MAX matmul, TF32  MAX matmul, MFMA  Apple MMA distance kernels  exact
++    ROUTE_GEMM_BF16_UNITS         MOJOLEARN_GEMM_FAST_BF16_UNITS=1    BF16_UNITS    MAX matmul, bf16  MAX matmul, bf16  afn route (AFN_GEMM_BF16_MMA)  exact
++
++  GEMM: gemm/fast_matrix_units.mojo (neural dispatch, sequence executor). DECOMP:
++  decomposition/gram_matrix_units_route.mojo (PCA / truncated SVD: the Gram past the split-K width, the
++  projections). NEIGHBORS: neighbors/distance_matrix_units_route.mojo (brute-force k-NN: the expanded L2
++  distance product at wide features). One source for NVIDIA and AMD; on AMD the fp32 MFMA keeps full fp32
++  operands, so the relaxation there is the vendor's fold order and K grouping, not operand width.
++
++  BF16_UNITS is its own row because it is a different precision class (8 significant bits per operand, twice
++  the TF32 truncation bound) and its second reference is torch BF16. Its route is gemm/fast_bf16_units.mojo
++  (lane fx-fast-bf16, 2026-11-20): the neural dispatch, the sequence executor and the public `linalg.matmul`
++  entry narrow both operands to bf16 in scratch and run one MAX `linalg.matmul` on the half-precision matrix
++  unit (NVIDIA 16x8x16, AMD 16x16x16 / 32x32x8; api/mojo/layout/tensor_core/TensorCore), FP32 accumulation and
++  FP32 output; the master weights, the loss, the normalisations and the optimizer stay FP32. MAX has bf16
++  products on Apple M5 only and the Apple set has its own bf16 simdgroup route, so the Apple column points at
++  that and the define relaxes nothing there. `MOJOLEARN_MODE_FAST_BF16_UNITS` alone sets the row's bit and
++  changes no kernel: the family define is what a route reads.
++
++Each route has a quality check (the route's result against the exact FP32
++result, within a bound derived from the unit's operand width) and an owed A/B
++with quality beside the time (docs/apple-fast/EXPERIMENTS.md). None is a
++default: `policy_row_default` stays False until its A/B is in.
+ """
+ 
+ from std.sys.compile import is_defined
++from std.sys.defines import get_defined_int
+ from core.package_profile import identical_mode_enabled
+ from core.accelerator_target import (
+     TARGET_HAS_AMD_GPU,
+@@ -124,7 +122,8 @@ comptime POLICY_ROW_VENDOR_MATH = 3
+ comptime POLICY_ROW_MATRIX_UNITS = 4
+ comptime POLICY_ROW_WAITS_ELIDED = 5
+ comptime POLICY_ROW_TILE_FREE = 6
+-comptime POLICY_ROW_COUNT = 7
++comptime POLICY_ROW_BF16_UNITS = 7
++comptime POLICY_ROW_COUNT = 8
+ 
+ # The kinds of build.
+ comptime POLICY_BUILD_IDENTICAL = 0
+@@ -147,19 +146,14 @@ def policy_row_default(row: Int, build: Int, column: Int) -> Bool:
+         # The contract: nothing is relaxed on any column or on the host.
+         return False
+     if build == POLICY_BUILD_FAST_ROWS:
+-        # The identical kernels with the contract off. A row is relaxed on a
+-        # column only once it is measured for speed and checked for quality;
+-        # the measured default of a column is written here, with its A/B.
+-        # MATRIX_UNITS on NVIDIA and AMD: A/B abf2, 2026-11-20, NVIDIA L40S,
+-        # arm fast-matrix-units-tf32-all, median 0.93 over 13 cells, 0 slower,
+-        # quality equal (the numbers are in the module docstring). AMD takes
+-        # the same `linalg.matmul` source untimed. Apple keeps its own
+-        # matrix-unit route (gemm/afn_apple_fast.mojo) and the host has no
+-        # matrix unit, so the row is off on both.
++        # The identical kernels with the contract off. Zero rows relaxed on
++        # NVIDIA, AMD, Apple and the host until a relaxation is measured for
++        # speed and checked for quality on that column; the measured default
++        # of a column is written here, with its A/B.
+         if column == POLICY_COLUMN_NVIDIA:
+-            return row == POLICY_ROW_MATRIX_UNITS
++            return False
+         if column == POLICY_COLUMN_AMD:
+-            return row == POLICY_ROW_MATRIX_UNITS
++            return False
+         if column == POLICY_COLUMN_APPLE:
+             return False
+         return False
+@@ -171,6 +165,8 @@ def policy_row_default(row: Int, build: Int, column: Int) -> Bool:
+         return False
+     if row == POLICY_ROW_WAITS_ELIDED:
+         return False
++    if row == POLICY_ROW_BF16_UNITS:
++        return False
+     return True
+ 
+ 
+@@ -208,34 +204,61 @@ comptime POLICY_COLUMN = _policy_column()
+ # The contract: does this build promise the same bits on every vendor?
+ comptime CONTRACT_IDENTICAL = POLICY_BUILD == POLICY_BUILD_IDENTICAL
+ 
+-# The old `fast` route of the matrix-units row: `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` keeps every product on
+-# the exact FP32 kernels and clears the row's bit (the B arm of the promotion; the numbers are in the module
+-# docstring). It relaxes nothing, so it is legal in every build and is not a row define.
+-comptime _GEMM_MATRIX_UNITS_OFF = is_defined["MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF"]()
+-# The columns of the route: MAX `linalg.matmul` has NVIDIA (sm80 / sm90 / sm100: TF32 operands for fp32 inputs
+-# unless `use_tf32=False`), AMD CDNA (MFMA 16x16x4 for fp32) and Apple backends (max.modular.com,
+-# api/mojo/linalg/matmul/gpu, read 2026-11-19). The route is TAKEN on NVIDIA and AMD. On Apple the products
+-# already have their matrix-unit route (`gemm/afn_apple_fast.mojo` AFN_GEMM_FP32_MMA): the row points at that and
+-# adds no second path. The host column has no matrix unit.
+-comptime _MATRIX_UNITS_COLUMN = (TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU) and not TARGET_HAS_APPLE_GPU
++# The family arms that are a term of a row. A leaf cannot import the family,
++# so the row reads the family's define here and the family reads the row
++# back (never the define alone): the table stays the single source.
++#   MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind> (gemm/fast_matrix_units.mojo, the
++#   NVIDIA tensor-core products): any non-zero kind relaxes MATRIX_UNITS.
++comptime _GEMM_MATRIX_UNITS_DEFINED = get_defined_int["MOJOLEARN_GEMM_FAST_MATRIX_UNITS", 0]() != 0
++#   MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (decomposition/gram_matrix_units_route.mojo: the PCA / truncated-SVD Gram
++#   past the split-K width and the projections on the NVIDIA tensor cores).
++comptime _DECOMP_MATRIX_UNITS_DEFINED = is_defined["MOJOLEARN_DECOMP_FAST_MATRIX_UNITS"]()
++#   MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (neighbors/distance_matrix_units_route.mojo: the brute-force k-NN
++#   expanded-L2 distance product at wide features on the NVIDIA tensor cores).
++comptime _NEIGHBORS_MATRIX_UNITS_DEFINED = is_defined["MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS"]()
++#   MOJOLEARN_GEMM_FAST_BF16_UNITS=1 (gemm/fast_bf16_units.mojo: the neural products on the bf16 matrix
++#   unit, FP32 accumulation): any non-zero kind relaxes BF16_UNITS.
++comptime _GEMM_BF16_UNITS_DEFINED = get_defined_int["MOJOLEARN_GEMM_FAST_BF16_UNITS", 0]() != 0
++# The matrix-units routes are vendor-neutral in source: one call of MAX `linalg.matmul`, whose GPU backends are
++# NVIDIA (sm80 / sm90 / sm100: TF32 operands for fp32 inputs unless `use_tf32=False`), AMD CDNA (MFMA 16x16x4 for
++# fp32) and Apple (the 8x8 simdgroup product on M1-M4, a structured kernel on M5); max.modular.com,
++# api/mojo/linalg/matmul/gpu, read 2026-11-19. They are TAKEN on NVIDIA and AMD. On Apple each family already has
++# its matrix-unit route (`gemm/afn_apple_fast.mojo` AFN_GEMM_FP32_MMA for the products and the PCA Gram,
++# `neighbors/checks/apple_mma_distance.mojo` for the k-NN distance): the row points at those and adds no second
++# path, so the define relaxes nothing on the Apple column. The host column has no matrix unit. Where the define
++# relaxes nothing the term is False, the row's bit stays clear and the kernels are the exact ones.
++comptime _FAMILY_UNITS_COLUMN = (TARGET_HAS_NVIDIA_GPU or TARGET_HAS_AMD_GPU) and not TARGET_HAS_APPLE_GPU
++comptime _GEMM_MATRIX_UNITS_REQUESTED = _GEMM_MATRIX_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
++comptime _DECOMP_MATRIX_UNITS_REQUESTED = _DECOMP_MATRIX_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
++comptime _NEIGHBORS_MATRIX_UNITS_REQUESTED = _NEIGHBORS_MATRIX_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
++# The bf16 route has the same columns: MAX's half-precision matrix-unit product on NVIDIA and AMD; Apple has its
++# own bf16 route (gemm/afn_apple_fast.mojo AFN_GEMM_BF16_MMA; MAX's is M5 only); the host has no unit.
++comptime _GEMM_BF16_UNITS_REQUESTED = _GEMM_BF16_UNITS_DEFINED and _FAMILY_UNITS_COLUMN
+ 
+ # Any row define at all. Read by the compile error below, which must not
+ # depend on the resolved rows.
+ comptime _ANY_ROW_DEFINE = (
+-    is_defined["MOJOLEARN_MODE_FAST_FOLD_FREE"]()
+-    or is_defined["MOJOLEARN_MODE_FAST_CONTRACT_FREE"]()
+-    or is_defined["MOJOLEARN_MODE_FAST_FLUSH_OFF"]()
+-    or is_defined["MOJOLEARN_MODE_FAST_VENDOR_MATH"]()
+-    or is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]()
+-    or is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]()
+-    or is_defined["MOJOLEARN_MODE_FAST_TILE_FREE"]()
++    _GEMM_MATRIX_UNITS_DEFINED
++    or _DECOMP_MATRIX_UNITS_DEFINED
++    or _NEIGHBORS_MATRIX_UNITS_DEFINED
++    or _GEMM_BF16_UNITS_DEFINED
++    or (
++        is_defined["MOJOLEARN_MODE_FAST_FOLD_FREE"]()
++        or is_defined["MOJOLEARN_MODE_FAST_CONTRACT_FREE"]()
++        or is_defined["MOJOLEARN_MODE_FAST_FLUSH_OFF"]()
++        or is_defined["MOJOLEARN_MODE_FAST_VENDOR_MATH"]()
++        or is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]()
++        or is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]()
++        or is_defined["MOJOLEARN_MODE_FAST_TILE_FREE"]()
++        or is_defined["MOJOLEARN_MODE_FAST_BF16_UNITS"]()
++    )
+ )
+ 
+ 
+ def _row(row: Int, requested: Bool) -> Bool:
+     """Resolve one row for this build. Every row passes through here, so any
+     module that reads a row also compiles the refusal."""
+-    comptime assert not (CONTRACT_IDENTICAL and _ANY_ROW_DEFINE), "a MOJOLEARN_MODE_FAST_* relaxation was requested in a build that promises identical bits; relaxations are effective only in a fast build (-D MOJOLEARN_MODE_FAST_ROWS)"
++    comptime assert not (CONTRACT_IDENTICAL and _ANY_ROW_DEFINE), "a MOJOLEARN_MODE_FAST_* relaxation (or a family arm of one: MOJOLEARN_GEMM_FAST_MATRIX_UNITS, MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS, MOJOLEARN_GEMM_FAST_BF16_UNITS) was requested in a build that promises identical bits; relaxations are effective only in a fast build (-D MOJOLEARN_MODE_FAST_ROWS)"
+     return policy_row_default(row, POLICY_BUILD, POLICY_COLUMN) or requested
+ 
+ 
+@@ -247,34 +270,51 @@ comptime ROW_CONTRACT_FREE = _row(POLICY_ROW_CONTRACT_FREE, is_defined["MOJOLEAR
+ comptime ROW_FLUSH_OFF = _row(POLICY_ROW_FLUSH_OFF, is_defined["MOJOLEARN_MODE_FAST_FLUSH_OFF"]())
+ # Math library: exp, log, sqrt, division and the rest use the vendor's forms.
+ comptime ROW_VENDOR_MATH = _row(POLICY_ROW_VENDOR_MATH, is_defined["MOJOLEARN_MODE_FAST_VENDOR_MATH"]())
+-# Matrix units: the large neural products on the vendor's matrix unit (TF32 operands on NVIDIA, fp32 MFMA on
+-# AMD). The default of a fast-rows build on those two columns (`policy_row_default`); the row define sets the
+-# bit on any column of a fast build; `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` clears the default.
+-comptime _MATRIX_UNITS_ROW_DEFINED = is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]()
+-comptime ROW_MATRIX_UNITS = _row(POLICY_ROW_MATRIX_UNITS, _MATRIX_UNITS_ROW_DEFINED) and (
+-    _MATRIX_UNITS_ROW_DEFINED or not _GEMM_MATRIX_UNITS_OFF
++# Matrix units: reduced-precision products (TF32, BF16, MFMA forms).
++comptime ROW_MATRIX_UNITS = _row(
++    POLICY_ROW_MATRIX_UNITS,
++    (
++        is_defined["MOJOLEARN_MODE_FAST_MATRIX_UNITS"]()
++        or _GEMM_MATRIX_UNITS_REQUESTED
++        or _DECOMP_MATRIX_UNITS_REQUESTED
++        or _NEIGHBORS_MATRIX_UNITS_REQUESTED
++    ),
+ )
+-# The route of the row (the table in the module docstring): True in a fast-rows build (never the legacy fast
+-# set, whose products are the old vendor arms, and never under the contract, where the row is False) on the
+-# NVIDIA or AMD column, unless the `_OFF` define keeps the old route. gemm/fast_matrix_units.mojo imports it;
+-# no other module reads a define of the row. Resolved once, at compile time: no call pays a lookup.
++# The classical family routes of the matrix-units row (the table in the module docstring). True only in a
++# fast-rows build (never the legacy fast set, whose products are the old vendor arms, and never under the
++# contract: `_row` stops that build) on the NVIDIA or AMD column with the family's define passed. The family's route
++# module imports its constant; no other module reads the define.
+ comptime ROUTE_GEMM_MATRIX_UNITS = (
+-    POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_MATRIX_UNITS and _MATRIX_UNITS_COLUMN
+-    and not _GEMM_MATRIX_UNITS_OFF
++    POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_MATRIX_UNITS and _GEMM_MATRIX_UNITS_REQUESTED
++)
++comptime ROUTE_DECOMP_MATRIX_UNITS = (
++    POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_MATRIX_UNITS and _DECOMP_MATRIX_UNITS_REQUESTED
++)
++comptime ROUTE_NEIGHBORS_MATRIX_UNITS = (
++    POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_MATRIX_UNITS and _NEIGHBORS_MATRIX_UNITS_REQUESTED
+ )
+ # Waits: only the waits whose removal can move a bit.
+ comptime ROW_WAITS_ELIDED = _row(POLICY_ROW_WAITS_ELIDED, is_defined["MOJOLEARN_MODE_FAST_WAITS_ELIDED"]())
+ # Tile and block shape: only the tiles that bound a float fold.
+ comptime ROW_TILE_FREE = _row(POLICY_ROW_TILE_FREE, is_defined["MOJOLEARN_MODE_FAST_TILE_FREE"]())
++# BF16 matrix units: half-precision operands on the matrix unit, FP32 accumulation (gemm/fast_bf16_units.mojo).
++comptime ROW_BF16_UNITS = _row(
++    POLICY_ROW_BF16_UNITS,
++    is_defined["MOJOLEARN_MODE_FAST_BF16_UNITS"]() or _GEMM_BF16_UNITS_REQUESTED,
++)
++# The GEMM route of the bf16 row: True only in a fast-rows build on the NVIDIA or AMD column with the family
++# define passed. gemm/fast_bf16_units.mojo imports it; no other module reads the define.
++comptime ROUTE_GEMM_BF16_UNITS = (
++    POLICY_BUILD == POLICY_BUILD_FAST_ROWS and ROW_BF16_UNITS and _GEMM_BF16_UNITS_REQUESTED
++)
+ 
+ comptime ANY_ROW_RELAXED = (
+     ROW_FOLD_FREE or ROW_CONTRACT_FREE or ROW_FLUSH_OFF or ROW_VENDOR_MATH
+-    or ROW_MATRIX_UNITS or ROW_WAITS_ELIDED or ROW_TILE_FREE
++    or ROW_MATRIX_UNITS or ROW_WAITS_ELIDED or ROW_TILE_FREE or ROW_BF16_UNITS
+ )
+ 
+ # Bit i set = row i relaxed. 0 in every identical build; 79 in a legacy fast
+-# build (rows 0, 1, 2, 3 and 6); 16 in a fast-rows build on NVIDIA or AMD
+-# (row 4, the matrix-units default).
++# build (rows 0, 1, 2, 3 and 6).
+ comptime MODE_POLICY_MASK = (
+     (1 if ROW_FOLD_FREE else 0)
+     + (2 if ROW_CONTRACT_FREE else 0)
+@@ -283,6 +323,7 @@ comptime MODE_POLICY_MASK = (
+     + (16 if ROW_MATRIX_UNITS else 0)
+     + (32 if ROW_WAITS_ELIDED else 0)
+     + (64 if ROW_TILE_FREE else 0)
++    + (128 if ROW_BF16_UNITS else 0)
+ )
+ 
+ 
+diff --git a/checks/native_tests/gemm_matrix_units.mojo b/checks/native_tests/gemm_matrix_units.mojo
+index 1afbec4c1d..6bde924f25 100644
+--- a/checks/native_tests/gemm_matrix_units.mojo
++++ b/checks/native_tests/gemm_matrix_units.mojo
+@@ -1,11 +1,11 @@
+ # SPDX-License-Identifier: Apache-2.0
+-"""The matrix-units route of `fast` (its default on NVIDIA and AMD) stays inside its arithmetic bound, and is off
+-everywhere else.
++"""The matrix-units relaxation of `fast` stays inside its arithmetic bound, and is off everywhere else.
+ 
+ One training step's three products, each run twice on the device: through the neural dispatch with the vendor
+-route open (gemm/neural_dispatch.mojo::identical_gemm_into, which the matrix-units route of a fast-rows build
+-takes), and on the FP32 kernel itself (gemm/checks/gemm_identical.mojo::identical_gemm_into with the vendor
+-route closed, which the route never reaches):
++route open (gemm/neural_dispatch.mojo::identical_gemm_into, `allow_vendor=True`, the route
++`-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS` relaxes), and on the FP32 kernel itself
++(gemm/checks/gemm_identical.mojo::identical_gemm_into with the vendor route closed, which no value of the arm
++reaches):
+ 
+     logits  Z[m x n]  = X[m x k] . W[n x k]^T      OP_NT
+     dX      [m x k]   = dZ[m x n] . W[n x k]        OP_NN
+@@ -13,8 +13,7 @@ route closed, which the route never reaches):
+ 
+ plus a neighbouring non-square shape, a product under the size rule and a bias column sum.
+ 
+-IN A BUILD WITH THE ROUTE (a `fast` build on NVIDIA or AMD, without `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`), for a
+-product the size rule takes:
++IN A BUILD WITH THE ARM (an NVIDIA `fast` build), for a product the size rule takes:
+   1. every cell is within `matrix_units_cell_bound(sum_k |a_k b_k|, k)` of the FP32 cell: both operands of
+      every term truncated to TF32 (2 * 2^-10 + 2^-20 of the absolute sum) plus the FP32 fold allowance;
+   2. the root-mean-square error over the product is at most 1.25 * 2^-10 of sqrt(sum (a_k b_k)^2). Truncating
+@@ -22,11 +21,11 @@ product the size rule takes:
+      2^-10 / sqrt(6) of scatter); rounding to nearest gives 0.41 * 2^-10. An operand cut to 8 significant bits
+      (BF16) gives at least 1.6 * 2^-10 and fails, as does a dropped or doubled term. This is the test that
+      stops a silent precision collapse: the per-cell bound alone is a worst case and would admit one;
+-  3. at least one cell differs in bits from FP32: the route was taken. A build that has the route and
++  3. at least one cell differs in bits from FP32: the route was taken. A build that carries the define and
+      routes nothing fails here.
+   A product under the size rule and the bias sum must be bit-equal to FP32: they are not routed.
+-IN EVERY OTHER IDENTICAL-KERNEL BUILD (every identical build, and a fast build with the `_OFF` define) all six
+-pairs must be bit-equal: without the route `allow_vendor` selects nothing. (An old non-identical build sends the open route to the unbounded vendor product; nothing is asserted
++IN EVERY OTHER IDENTICAL-KERNEL BUILD all six pairs must be bit-equal: without the arm `allow_vendor` selects
++nothing. (An old non-identical build sends the open route to the unbounded vendor product; nothing is asserted
+ there.)
+ 
+ The reference sums run on the host in Float64, one row of C per unit across the host's cores. One owned GPU
+@@ -44,9 +43,11 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from gemm.fast_matrix_units import (
+     GEMM_FAST_MATRIX_UNITS, matrix_units_takes, matrix_units_workspace_floats, matrix_units_cell_bound,
+ )
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (A/B abf2: median 0.96, mlp-clf/taxi infer 1.86; dominated by the TF32
+-# route) deleted 2026-11-20 by lane/fx-verdicts6 with its bound and RMS tolerance here; code recoverable at 06d1e8ff34.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
++# lane fx-fast-bf16 (2026-11-20): the same fixtures and tests hold the bf16-units arm (gemm/fast_bf16_units.mojo) to its
++# own operand bound. With both arms compiled a cell is held to the wider (bf16) bound.
++from gemm.fast_bf16_units import (
++    GEMM_FAST_BF16_UNITS, bf16_units_takes, bf16_units_workspace_floats, bf16_units_cell_bound,
++)
+ from gemm.checks.gemm_lowbit_check import _upload_f32, _download_f32, _poisoned
+ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+ 
+@@ -54,8 +55,23 @@ from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report,
+ comptime MATRIX_UNITS_FIXTURES = 6
+ #: test 2's tolerance: 1.25 * 2^-10, squared
+ comptime MATRIX_UNITS_RMS_REL_SQ = (Float64(1.25) / Float64(1024.0)) * (Float64(1.25) / Float64(1024.0))
+-#: the route compiled in
+-comptime UNITS_ARM = GEMM_FAST_MATRIX_UNITS
++#: the bf16 arm's: 1.25 * 2^-9, squared (round to nearest at 8 significant bits, two operands a term)
++comptime BF16_UNITS_RMS_REL_SQ = (Float64(1.25) / Float64(512.0)) * (Float64(1.25) / Float64(512.0))
++#: either arm compiled
++comptime UNITS_ARM = GEMM_FAST_MATRIX_UNITS or GEMM_FAST_BF16_UNITS
++
++
++def _units_cell_bound(abs_sum: Float64, k: Int) -> Float64:
++    """The per-cell bound of the arm compiled in (the bf16 one when both are)."""
++    comptime if GEMM_FAST_BF16_UNITS:
++        return bf16_units_cell_bound(abs_sum, k)
++    return matrix_units_cell_bound(abs_sum, k)
++
++
++def _units_rms_rel_sq() -> Float64:
++    comptime if GEMM_FAST_BF16_UNITS:
++        return BF16_UNITS_RMS_REL_SQ
++    return MATRIX_UNITS_RMS_REL_SQ
+ 
+ 
+ def fixture_shape(fixture_id: Int) raises -> Tuple[Int, Int, Int, Int]:
+@@ -142,7 +158,7 @@ def compare_rows(
+                 diff = -diff
+             comptime if UNITS_ARM:
+                 # `not (diff <= bound)` so a NaN difference counts as over the bound
+-                if not (diff <= matrix_units_cell_bound(abs_sum, k)):
++                if not (diff <= _units_cell_bound(abs_sum, k)):
+                     row_over += 1
+             row_diff += diff * diff
+         op_ptr.unsafe_store(i, row_over)
+@@ -183,6 +199,7 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
+     var dc_ref = _poisoned(ctx, m * n)
+     var need = identical_gemm_workspace_max_floats(m, n, k)
+     need = max(need, matrix_units_workspace_floats(m, n, k, op))
++    need = max(need, bf16_units_workspace_floats(m, n, k))
+     var ws_arm = ctx.enqueue_create_buffer[DType.float32](need)
+     var ws_ref = ctx.enqueue_create_buffer[DType.float32](max(1, fp32_workspace_max_floats(m, n, k)))
+     identical_gemm_into[True](ctx, dc_arm, da, db, ws_arm, m, n, k, op)
+@@ -192,12 +209,12 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
+     var arm = _download_f32(ctx, dc_arm, m * n, name + " (vendor route open)")
+     var ref_c = _download_f32(ctx, dc_ref, m * n, name + " (FP32)")
+     var r = compare_rows(arm, ref_c, a, b, m, n, k, op)
+-    var routed = matrix_units_takes(m, n, k)
++    var routed = matrix_units_takes(m, n, k) or bf16_units_takes(m, n, k)
+     comptime if UNITS_ARM:
+         if routed:
+             require(r[0] == 0, name + ": " + String(r[0]) + " cells outside the matrix unit's operand bound")
+             require(
+-                r[2] <= MATRIX_UNITS_RMS_REL_SQ * r[3],
++                r[2] <= _units_rms_rel_sq() * r[3],
+                 name + ": squared error " + String(r[2]) + " over the arm's squared operand tolerance of the squared terms " + String(r[3]),
+             )
+             require(r[1] > 0, name + ": no cell differs from FP32, the matrix-units route was not taken")
+diff --git a/gemm/fast_matrix_units.mojo b/gemm/fast_matrix_units.mojo
+index 535d516be3..0e22e38df4 100644
+--- a/gemm/fast_matrix_units.mojo
++++ b/gemm/fast_matrix_units.mojo
+@@ -1,42 +1,33 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+-"""THE MATRIX-UNITS ROUTE OF `fast` ON NVIDIA AND AMD: NEURAL FP32 PRODUCTS ON THE MATRIX UNIT
+-(lane fx-fast-matrix-units, 2026-11-19; the default of `fast` since 2026-11-20, lane fx-verdicts6).
+-
+-DEFAULT ON in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`) on the NVIDIA and AMD columns; the old route (every
+-product on the exact FP32 kernels) is `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF`. One switch, on or off.
+-
+-PROMOTED on A/B abf2 (2026-11-20, NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d, base and arm back to
+-back in one job nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59, one run per arm, full datasets; arm
+-`fast-matrix-units-tf32-all`, then `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=3`): 12 of 13 cells faster, 1 flat, 0
+-slower, median arm / base 0.93. MLP fit 0.96-0.97 (mlp-clf and mlp-reg on istella and taxi), MLP infer
+-0.85-0.95, gemm 0.93, lm-forward 0.90, lm-train-step 0.82, transformer-forward 0.91, transformer-decode 1.00.
+-Quality equal: mlp-clf accuracy 0.76790 vs 0.76795 and 0.94345 vs 0.94326; mlp-reg r2 0.5224 vs 0.5206 and
+-0.93011 vs 0.93015; gemm max_rel_err_vs_fp64 2.8e-4 (base 2.4e-7, expected of TF32 operands). `fast` promises no
+-bits; `identical` is not touched (the route is not compiled under the contract). Limits: NVIDIA only (AGENTS.md
+-part 8), one run per arm; AMD takes the same source untimed; the size rule's constants are reasoned.
+-
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_MATRIX_UNITS (the tiers of the opt-in define: kind 1 = tf32 for the callers that
+-#   left the vendor route open only, 10 faster / 3 flat, median 0.96, dominated by kind 3 on every cell; kind 2 a
+-#   compile error; kind 3 = every neural-dispatch caller, the default now) deleted 2026-11-20 by
+-#   lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_MATRIX_UNITS.tiers.patch
+-
+-THE KERNEL. The vendor entry `linalg.matmul` (MAX stdlib): on NVIDIA TF32 operands, FP32 accumulation. This is
+-the only floating tensor-core product the tree can reach today: it is the kernel `_fast_vendor_gemm`
+-(gemm/checks/gemm_identical.mojo) calls in the old non-identical builds, and its precision class is recorded in
+-checks/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32. Every caller of the neural dispatch takes it,
+-including the callers that closed the old unbounded vendor route (`allow_vendor=False`: the Llama stage
+-projections, the CNN linear products, the MoE grouped products): the measured arm routed them and their rows
+-(lm-forward, lm-train-step, transformer-forward) are where it gained most.
+-
+-WHERE IT IS COMPILED, AND ON WHICH VENDOR. Only in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`: the identical
+-kernels with the contract off); in a build that promises identical bits the row is False and nothing here is
+-compiled into a launch (checks/mode_policy.mojo). The route is vendor-neutral source, one call of MAX
++"""THE MATRIX-UNITS RELAXATION OF `fast` ON NVIDIA: NEURAL FP32 PRODUCTS ON THE TENSOR CORES
++(lane fx-fast-matrix-units, 2026-11-19; stage 2 of briefs-20261118/ideas-mode-policy-RESULT.md).
++
++EXPERIMENT `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=<kind>`, default OFF, A/B owed with quality beside time
++(docs/apple-fast/EXPERIMENTS.md). Unverified: written without a compile.
++
++  kind 1 = tf32   the vendor entry `linalg.matmul` (MAX stdlib): TF32 operands, FP32 accumulation. This is the
++                  only floating tensor-core product the tree can reach today (the inventory is in the lane's
++                  result file): it is the kernel `_fast_vendor_gemm` (gemm/checks/gemm_identical.mojo) calls in
++                  the old non-identical builds, and its precision class is recorded in
++                  checks/kernel_matrix.mojo::column_vendor_fp32_matmul_is_tf32.
++  kind 2 = bf16   REFUSED at compile time: the bf16 matrix-unit route is its own define and policy row,
++                  `-D MOJOLEARN_GEMM_FAST_BF16_UNITS=1` (gemm/fast_bf16_units.mojo, row BF16_UNITS).
++  kind 3 = tf32, every neural-dispatch caller: kind 1, and also the callers that closed the vendor route
++                  (`allow_vendor=False` through gemm/neural_dispatch.mojo: the Llama stage projections, the
++                  CNN linear products, the MoE grouped products). They closed it against the old unbounded
++                  vendor route of the non-identical builds; whether they can take the bounded, size-ruled
++                  product is a quality measurement, so it is a second arm value with its own owed row and
++                  never the default of kind 1.
++
++WHERE IT IS LEGAL, AND ON WHICH VENDOR. Only in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`: the identical
++kernels with the contract off); in a build that promises identical bits the define is a compile error
++(checks/mode_policy.mojo `_row`, and `_matrix_units_checked`). The route is vendor-neutral source, one call of MAX
+ `linalg.matmul`, and is taken on NVIDIA (TF32 operands, the bound below) and on AMD (fp32 MFMA 16x16x4: operands
+ stay full fp32, so what is relaxed there is the vendor's fold order and K grouping; the bound below holds with
+-room). On Apple the products already have their matrix-unit route (gemm/afn_apple_fast.mojo), so the route is off
+-there and the policy row points at that route; the host column has no matrix unit and stays exact.
++room). On Apple the products already have their matrix-unit route (gemm/afn_apple_fast.mojo), so the arm is off
++there and the policy row points at that route; the host column has no matrix unit and stays exact. Measured on
++NVIDIA first; AMD rides along untimed.
+ 
+ WHAT IS RELAXED. A routed product rounds each OPERAND to TF32 (a sign, 8 exponent bits, 10 explicit mantissa
+ bits; 11 significant bits) inside the matrix unit and accumulates in FP32. Per operand the relative error is at
+@@ -56,9 +47,10 @@ holds every routed cell to it.
+ 
+ WHAT STAYS FP32, and why.
+   - Every product under the size rule below: it cannot gain.
+-  - The small products of the workspace-less entry `gemm/neural_dispatch.mojo::identical_gemm`: the bias
+-    column sums and the embedding gradient (a one-hot product: a gather, exact in FP32) have an edge under
+-    the rule. Its large products (the Mamba projections) are routed.
++  - Under kind 1, every caller that closed the vendor route (`allow_vendor=False`): the Llama stage
++    projections, the CNN linear products and the MoE grouped products. Kind 3 routes them.
++  - The workspace-less entry `gemm/neural_dispatch.mojo::identical_gemm`: its callers are the bias column
++    sums, the embedding gradient (a one-hot product: a gather, exact in FP32) and the Mamba projections.
+   - The bias gradient (a 1 x n x m or m x 1 x n column sum against ones): M or N is 1, under the rule; it is a
+     small fan-in sum whose terms do not cancel in pairs, so operand rounding would bias it.
+   - Everything that is not a GEMM of the neural dispatch: the loss and its gradient, softmax, the
+@@ -67,8 +59,9 @@ WHAT STAYS FP32, and why.
+     step there is a different learning rate), gradient clipping norms, the store epilogues (bias, activation).
+   - The classical callers (PCA, OLS, Gram, GP): they import gemm/checks/gemm_identical.mojo directly and are not
+     this arm.
+-  - OP_TN whose transpose does not fit the caller's workspace (`matrix_units_workspace_floats`):
+-    `linalg.matmul` has no transpose_a, so A is transposed into scratch first.
++  - OP_TN whose transpose does not fit the caller's workspace (`matrix_units_workspace_floats`), and every
++    transposed-A product of the sequence executor (sequence/gemm_matrix_units_route.mojo): `linalg.matmul` has
++    no transpose_a.
+ 
+ THE SIZE RULE (`matrix_units_takes`): sizes and the hardware unit only, no data shape.
+   1. K >= 32. The TF32 instruction (`mma.sync m16n8k8`) folds 8 terms of k; under four instructions of k the
+@@ -81,26 +74,69 @@ THE SIZE RULE (`matrix_units_takes`): sizes and the hardware unit only, no data
+      multiply-adds a second), so 2^27 of them are about 13 microseconds of arithmetic, the order of one launch.
+      Under that the call is bound by its launch and a faster unit cannot show, so it keeps its bits' worth of
+      precision.
+-  The constants are reasoned, not measured (docs/apple-fast/EXPERIMENTS.md row).
++  The constants are reasoned, not measured: the owed A/B times shapes on both sides of each
++  (docs/apple-fast/EXPERIMENTS.md row).
+ 
+-COST PER CALL on the route: three integer compares and one multiply chain in `matrix_units_takes`; no lookup,
+-allocation, lock or wait. The route is one compile-time constant (`GEMM_FAST_MATRIX_UNITS`), resolved once in
+-checks/mode_policy.mojo; where it is False nothing here is compiled into a launch.
++COST PER CALL under the arm: three integer compares and one multiply chain in `matrix_units_takes`; no lookup,
++allocation, lock or wait. With the define off nothing here is compiled into a launch.
+ """
++from std.sys.compile import is_defined
++from std.sys.defines import get_defined_int
+ from layout import TileTensor
+ from layout.tile_layout import row_major
+ from linalg.matmul import matmul
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+-from checks.mode_policy import ROUTE_GEMM_MATRIX_UNITS
++from checks.mode_policy import (
++    CONTRACT_IDENTICAL, POLICY_BUILD, POLICY_BUILD_FAST_ROWS, ROUTE_GEMM_MATRIX_UNITS,
++)
+ from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
+ from gemm.contract import OP_NN, OP_NT, OP_TN
+ 
+-#: The route: matrix-unit products for the large neural FP32 GEMMs of a `fast` build on NVIDIA and AMD. One
+-#: compile-time constant, the row's route in checks/mode_policy.mojo (default on there since A/B abf2, the numbers
+-#: in the module docstring; `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` keeps the exact FP32 route). False under the
+-#: contract, in the legacy fast set, on Apple and on the host.
+-comptime GEMM_FAST_MATRIX_UNITS = ROUTE_GEMM_MATRIX_UNITS
++#: The define's values.
++comptime MATRIX_UNITS_KIND_OFF = 0
++comptime MATRIX_UNITS_KIND_TF32 = 1
++comptime MATRIX_UNITS_KIND_BF16 = 2
++comptime MATRIX_UNITS_KIND_TF32_ALL = 3
++comptime MATRIX_UNITS_KIND = get_defined_int["MOJOLEARN_GEMM_FAST_MATRIX_UNITS", 0]()
++
++
++def _matrix_units_checked() -> Bool:
++    """The compile-time refusals. True when the TF32 arm is on."""
++    comptime assert (
++        MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_OFF
++        or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32
++        or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_BF16
++        or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
++    ), "MOJOLEARN_GEMM_FAST_MATRIX_UNITS takes 1 (tf32), 2 (bf16) or 3 (tf32, closed callers too)"
++    comptime assert MATRIX_UNITS_KIND != MATRIX_UNITS_KIND_BF16, (
++        "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=2 (bf16): the bf16 matrix-unit route is its own define,"
++        " -D MOJOLEARN_GEMM_FAST_BF16_UNITS=1 (gemm/fast_bf16_units.mojo)"
++    )
++    # The mode policy table is the single source (checks/mode_policy.mojo): the arm is a term of its
++    # matrix-units row, which that module resolves from this same define and refuses in an identical build. The
++    # arm compiles only in the fast-rows build kind with the row on, so MODE_POLICY_MASK carries the row's bit.
++    comptime assert MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_OFF or (
++        POLICY_BUILD == POLICY_BUILD_FAST_ROWS and not CONTRACT_IDENTICAL
++    ), (
++        "MOJOLEARN_GEMM_FAST_MATRIX_UNITS is a relaxation of `fast`: it needs -D MOJOLEARN_MODE_FAST_ROWS and is"
++        " refused in a build that promises identical bits"
++    )
++    # VENDOR-NEUTRAL (2026-11-19, lane fx-fast-nvidia-routes): the route is one call of MAX `linalg.matmul`, which
++    # has NVIDIA (TF32 operands), AMD CDNA (fp32 MFMA 16x16x4: full fp32 operands, the vendor's K grouping) and
++    # Apple backends. It is taken on NVIDIA and AMD. On Apple the neural products already have their matrix-unit
++    # route (gemm/afn_apple_fast.mojo, AFN_GEMM_FP32_MMA), so the policy row points at that and this arm is off
++    # there; the host column has no matrix unit. `ROUTE_GEMM_MATRIX_UNITS` (checks/mode_policy.mojo) is that
++    # column rule and the row's bit, in one place.
++    return ROUTE_GEMM_MATRIX_UNITS and (
++        MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32 or MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
++    )
++
++
++#: The arm: TF32 tensor-core products for the neural FP32 GEMMs of an NVIDIA `fast` build.
++comptime GEMM_FAST_MATRIX_UNITS = _matrix_units_checked()
++#: Kind 3: the arm also takes the neural-dispatch callers that closed the vendor route.
++comptime GEMM_FAST_MATRIX_UNITS_ALL = GEMM_FAST_MATRIX_UNITS and MATRIX_UNITS_KIND == MATRIX_UNITS_KIND_TF32_ALL
+ 
+ #: rule 1: four `m16n8k8` instructions of k
+ comptime MATRIX_UNITS_MIN_K = 32
+@@ -115,7 +151,8 @@ comptime MATRIX_UNITS_OPERAND_REL = Float64(1.0) / Float64(1024.0)
+ 
+ @always_inline
+ def vendor_matmul_size_rule(m: Int, n: Int, k: Int) -> Bool:
+-    """The size rule of the module docstring, with no route test: what a matrix unit can gain on."""
++    """The size rule of the module docstring, with no arm test: what a matrix unit can gain on. The family
++    routes of the matrix-units row (decomposition, neighbors) share it and add their own terms."""
+     if k < MATRIX_UNITS_MIN_K or m < MATRIX_UNITS_MIN_EDGE or n < MATRIX_UNITS_MIN_EDGE:
+         return False
+     return m * n * k >= MATRIX_UNITS_MIN_WORK
+@@ -124,7 +161,7 @@ def vendor_matmul_size_rule(m: Int, n: Int, k: Int) -> Bool:
+ @always_inline
+ def matrix_units_takes(m: Int, n: Int, k: Int) -> Bool:
+     """Whether an m x n x k product is large enough for the matrix unit (the size rule of the module
+-    docstring). Always False without the route."""
++    docstring). Always False without the arm."""
+     comptime if not GEMM_FAST_MATRIX_UNITS:
+         return False
+     return vendor_matmul_size_rule(m, n, k)
+@@ -132,7 +169,7 @@ def matrix_units_takes(m: Int, n: Int, k: Int) -> Bool:
+ 
+ @always_inline
+ def matrix_units_workspace_floats(m: Int, n: Int, k: Int, op: Int) -> Int:
+-    """Floats of caller workspace the route needs for this product: `m k` for an OP_TN it takes (the transpose of
++    """Floats of caller workspace the arm needs for this product: `m k` for an OP_TN it takes (the transpose of
+     A), else 0. `GemmWorkspace.run` grows its buffer to this; a caller-owned workspace that is shorter keeps
+     the product on FP32."""
+     comptime if not GEMM_FAST_MATRIX_UNITS:
+@@ -191,9 +228,10 @@ def vendor_matmul_gemm_into(
+     k: Int,
+     op: Int,
+ ) raises -> Bool:
+-    """The one matrix-unit product of the tree, with no route and no size test: `C = op(A) . op(B)` on MAX
+-    `linalg.matmul` (NVIDIA: TF32 operands, FP32 accumulation; AMD: fp32 MFMA). The neural route above calls it behind
+-    its compile-time constant and size rule, so it is instantiated only in a fast-rows build with the route on. Same contract as
++    """The one matrix-unit product of the tree, with no arm and no size test: `C = op(A) . op(B)` on MAX
++    `linalg.matmul` (NVIDIA: TF32 operands, FP32 accumulation; AMD: fp32 MFMA). The neural arm above and the
++    family routes of the matrix-units row call it behind their own compile-time route constant and size rule,
++    so it is instantiated only in a fast-rows build with a route on. Same contract as
+     `matrix_units_gemm_into`: asynchronous, False (nothing touched) for an OP_TN whose transpose does not fit
+     `ws` or an unknown op."""
+     if op == OP_NT:
+diff --git a/gemm/host_entry.mojo b/gemm/host_entry.mojo
+index d48ee97918..5f1608f9ba 100644
+--- a/gemm/host_entry.mojo
++++ b/gemm/host_entry.mojo
+@@ -66,9 +66,9 @@ from gemm.host_transport import (
+ from gemm.contract import OP_NN, OP_NT, OP_TN
+ from std.sys.compile import is_defined
+ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
+-# The matrix-units route of a `fast` build on NVIDIA and AMD (default there since 2026-11-20); False in every
+-# other build.
++# lane fx-fast-bf16 (2026-11-20): the two matrix-unit arms of a `fast` build; both False in every other build.
+ from gemm.fast_matrix_units import GEMM_FAST_MATRIX_UNITS, matrix_units_gemm_into, matrix_units_workspace_floats
++from gemm.fast_bf16_units import GEMM_FAST_BF16_UNITS, bf16_units_gemm_into, bf16_units_workspace_floats
+ from gemm.int_slices import IDN_GEMM_INT_SLICES, identical_gemm_int_slices_into, int_slices_admits
+ 
+ # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
+@@ -163,23 +163,29 @@ def identical_gemm_host(
+         # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
+         # gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
+         # (the neural Ozaki control itself is untouched). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
+-        # THE PUBLIC PRODUCT IN A `fast` SET (lane fx-fast-bf16, 2026-11-20). This entry imports the exact kernel
+-        # directly, so the first fast timing (build aa82adadef) ran the gemm row on the FP32 chain in both arms:
+-        # equal output hash, ratio 1.04. A fast-rows set on NVIDIA or AMD (the matrix-units route is its default
+-        # since A/B abf2: this row 64.77 -> 59.98 ms, 0.93, max_rel_err_vs_fp64 2.8e-4) sends a product the size
+-        # rule takes to the matrix unit; the lease's workspace holds the OP_TN transpose. The operands and the
+-        # output are disjoint pooled buffers of exactly the sizes the route needs. Per call on the route: the
+-        # integer rule; the same uploads, one download and one wait as below. In every other build (identical
+-        # included) this block is not compiled and the lines of the else branch are the code.
+-        # TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (median 0.96, mlp-clf/taxi infer 1.86, gemm max_rel_err 2.2e-3;
+-        # dominated by the TF32 route) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-        # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
+-        comptime if GEMM_FAST_MATRIX_UNITS:
+-            var units_ws = lease.f32(
+-                ctx, ROLE_WS,
+-                max(identical_gemm_workspace_max_floats(m, n, k), matrix_units_workspace_floats(m, n, k, op)),
+-            )
+-            if not matrix_units_gemm_into(ctx, c, a, b, units_ws, m, n, k, op):
++        # lane fx-fast-bf16 (2026-11-20): THE PUBLIC PRODUCT IN A `fast` SET WITH A MATRIX-UNIT ROW ON. This entry
++        # imports the exact kernel directly, so the first fast timing (build aa82adadef, arm
++        # fast-matrix-units-tf32) ran the gemm row on the FP32 chain in both arms: equal output hash, ratio 1.04.
++        # A set built with -D MOJOLEARN_GEMM_FAST_BF16_UNITS or -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS (fast-rows
++        # builds only; a compile error under the contract) now sends a product its size rule takes to that
++        # unit, bf16 asked first; the lease's workspace holds the bf16 images or the OP_TN transpose. The
++        # operands and the output are disjoint pooled buffers of exactly the sizes the routes need. Per call
++        # under an arm: the integer rule; the same uploads, one download and one wait as below. In every other
++        # build this block is not compiled and the two lines of the else branch are the code.
++        comptime if GEMM_FAST_BF16_UNITS or GEMM_FAST_MATRIX_UNITS:
++            var ws_floats = identical_gemm_workspace_max_floats(m, n, k)
++            comptime if GEMM_FAST_BF16_UNITS:
++                ws_floats = max(ws_floats, bf16_units_workspace_floats(m, n, k))
++            comptime if GEMM_FAST_MATRIX_UNITS:
++                ws_floats = max(ws_floats, matrix_units_workspace_floats(m, n, k, op))
++            var units_ws = lease.f32(ctx, ROLE_WS, ws_floats)
++            var units_took = False
++            comptime if GEMM_FAST_BF16_UNITS:
++                units_took = bf16_units_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
++            comptime if GEMM_FAST_MATRIX_UNITS:
++                if not units_took:
++                    units_took = matrix_units_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
++            if not units_took:
+                 identical_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
+             gemm_down_f32(ctx, lease, c, c_ptr, m * n)
+             _ = units_ws
+diff --git a/gemm/neural_dispatch.mojo b/gemm/neural_dispatch.mojo
+index 1680c8b61d..4f78f6a45e 100644
+--- a/gemm/neural_dispatch.mojo
++++ b/gemm/neural_dispatch.mojo
+@@ -24,16 +24,17 @@ from gemm.experiments.neural_profile import (
+     NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate,
+ )
+ from gemm.experiments.neural_switches import ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD
+-# The matrix-units route of a `fast` build on NVIDIA and AMD (gemm/fast_matrix_units.mojo: DEFAULT there since
+-# 2026-11-20, A/B abf2, median 0.93 over 13 cells, quality equal; -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF keeps the
+-# exact route). False on every other build, identical builds included.
++# lane fx-fast-matrix-units (2026-11-19, -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality): the
++# matrix-units relaxation of an NVIDIA `fast` build (gemm/fast_matrix_units.mojo). False on every other build.
+ from gemm.fast_matrix_units import (
+-    GEMM_FAST_MATRIX_UNITS,matrix_units_takes,matrix_units_workspace_floats,matrix_units_gemm_into,
++    GEMM_FAST_MATRIX_UNITS,GEMM_FAST_MATRIX_UNITS_ALL,
++    matrix_units_takes,matrix_units_workspace_floats,matrix_units_gemm_into,
++)
++# lane fx-fast-bf16 (2026-11-20, -D MOJOLEARN_GEMM_FAST_BF16_UNITS=1, default OFF, A/B owed with quality): the bf16
++# matrix-unit relaxation of a `fast` build (gemm/fast_bf16_units.mojo). False on every other build.
++from gemm.fast_bf16_units import (
++    GEMM_FAST_BF16_UNITS,bf16_units_takes,bf16_units_workspace_floats,bf16_units_gemm_into,
+ )
+-# TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (A/B abf2, NVIDIA L40S: median 0.96 but mlp-clf/taxi infer 8.49 -> 15.82
+-# ms, 1.86; gemm max_rel_err 2.2e-3; dominated by the TF32 route on every cell) deleted 2026-11-20 by
+-# lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
+ # lane fx-gemm-seq-packed (2026-11-18): the names `identical_gemm_leaf_ptr_into` below reads; nothing else uses them here.
+ from std.sys.compile import is_defined
+ from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
+@@ -144,6 +145,24 @@ def _matrix_units_admits(mut c: DeviceBuffer[DType.float32],
+     return True
+ 
+ 
++def _bf16_units_admits(mut c: DeviceBuffer[DType.float32],
++    mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
++    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int) -> Bool:
++    """`_matrix_units_admits` for the bf16 arm: the size rule, operands long enough, an output that overlaps no
++    input, and a workspace that holds the bf16 images and overlaps nothing. False sends the call to the routes
++    below with their own refusals."""
++    if not bf16_units_takes(m,n,k):
++        return False
++    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
++        return False
++    if _overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k):
++        return False
++    var wsn = bf16_units_workspace_floats(m,n,k)
++    if len(ws)<wsn or _overlaps(ws,wsn,c,m*n) or _overlaps(ws,wsn,a,m*k) or _overlaps(ws,wsn,b,n*k):
++        return False
++    return True
++
++
+ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
+     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
+     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
+@@ -152,14 +171,23 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
+     """ROLE is the caller class (ROLE_PROJECTION, ROLE_HEAD, ROLE_WGRAD); it
+     never changes the route."""
+     comptime assert ROLE == ROLE_PROJECTION or ROLE == ROLE_HEAD or ROLE == ROLE_WGRAD, "neural GEMM role"
+-    # The matrix-units route (the default of a `fast` build on NVIDIA and AMD, gemm/fast_matrix_units.mojo): a
+-    # large product of ANY caller (forward, dInput and dWeight alike; a caller that closed the old vendor route
+-    # with `allow_vendor=False` too, as the promoted arm measured) runs the matrix-unit product, FP32
+-    # accumulation. A product under the size rule and every refusal keep the route below. Per call on the
+-    # route: the integer tests of `_matrix_units_admits`, then one launch in place of the route's (two for
+-    # OP_TN: the transpose of A into `ws`); no allocation, lookup or wait. Asynchronous like the route below.
+-    # Not compiled where the route constant is False (every identical build).
+-    comptime if GEMM_FAST_MATRIX_UNITS:
++    # lane fx-fast-matrix-units: an NVIDIA `fast` build with the matrix-units row relaxed sends a large product of a
++    # caller that left the vendor route open (forward, dInput and dWeight alike) to the TF32 tensor-core product,
++    # FP32 accumulation. A caller that closed it (`allow_vendor=False`; taken too under the arm's value 3, its own
++    # owed row), a product under the size rule and every
++    # refusal keep the route below. Per call under the arm: the integer tests of `_matrix_units_admits`, then one
++    # launch in place of the route's (two for OP_TN: the transpose of A into `ws`); no allocation, lookup or wait.
++    # Asynchronous like the route below. Not compiled without the define.
++    # lane fx-fast-bf16: a `fast` build with the bf16-units row relaxed sends the same class of product (a caller
++    # that left the vendor route open, the size rule) to the bf16 matrix unit, FP32 accumulation and output; it is
++    # asked first, so a build with both arms runs bf16 where its rule takes and TF32 on the rest. Per call under
++    # the arm: the integer tests, then three launches (two narrows into `ws`, the product); no allocation, lookup
++    # or wait. Not compiled without the define.
++    comptime if GEMM_FAST_BF16_UNITS and allow_vendor:
++        if _bf16_units_admits(c,a,b,ws,m,n,k):
++            if bf16_units_gemm_into(ctx,c,a,b,ws,m,n,k,op):
++                return
++    comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+         if _matrix_units_admits(c,a,b,ws,m,n,k,op):
+             if matrix_units_gemm_into(ctx,c,a,b,ws,m,n,k,op):
+                 return
+@@ -401,18 +429,21 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
+     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
+     mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
+ ) raises:
+-    # lane fx-fast-nvidia-routes (2026-11-19): the matrix-units route END TO END. The workspace-less entry (the
+-    # Mamba projections and every other caller that owns no workspace) went straight to the incumbent, so a `fast`
+-    # build ran those products on the FP32 chain while the workspace callers ran on the matrix unit. A product the
+-    # size rule takes goes through `identical_gemm_into`, whose first block is the route; the workspace also
+-    # holds the OP_TN transpose. Small products (bias sums, a one-hot embedding gradient: an edge under 64) fail
+-    # the rule and keep the line below. Per call on the route: the integer size test; a taken product makes the
+-    # one allocation and the one wait the incumbent entry makes. Not compiled where the route is False.
+-    comptime if GEMM_FAST_MATRIX_UNITS:
+-        if matrix_units_takes(m,n,k):
++    # lane fx-fast-nvidia-routes (2026-11-19): the matrix-units arm END TO END. The workspace-less entry (the Mamba
++    # projections and every other caller that owns no workspace) went straight to the incumbent, so a `fast` build
++    # with the arm on ran those products on the FP32 chain while the workspace callers ran on the matrix unit. A
++    # product the size rule takes now goes through `identical_gemm_into`, whose first block is the arm; the
++    # workspace also holds the OP_TN transpose. Small products (bias sums, a one-hot embedding gradient: an edge
++    # under 64) fail the rule and keep the line below. Per call under the arm: the integer size test; a taken
++    # product makes the one allocation and the one wait the incumbent entry makes. Off: not compiled.
++    # lane fx-fast-bf16: the bf16 arm takes the same entry (its rule, its scratch in the same one allocation).
++    comptime if (GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL)) or (
++            GEMM_FAST_BF16_UNITS and allow_vendor):
++        if matrix_units_takes(m,n,k) or (allow_vendor and bf16_units_takes(m,n,k)):
+             neural_validate(m,n,k,op)
+             var units_ws = ctx.enqueue_create_buffer[DType.float32](
+-                max(identical_gemm_workspace_max_floats(m,n,k),matrix_units_workspace_floats(m,n,k,op)))
++                max(identical_gemm_workspace_max_floats(m,n,k),
++                    max(matrix_units_workspace_floats(m,n,k,op),bf16_units_workspace_floats(m,n,k))))
+             try:
+                 identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,units_ws,m,n,k,op)
+             except error:
+@@ -471,9 +502,12 @@ struct GemmWorkspace(Movable):
+         comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
+             neural_validate(m,n,k,op)
+         var required = identical_gemm_workspace_max_floats(m,n,k)
+-        # matrix-units route only: room for the transpose of A of an OP_TN the matrix unit takes.
+-        comptime if GEMM_FAST_MATRIX_UNITS:
++        # lane fx-fast-matrix-units (arm only): room for the transpose of A of an OP_TN the matrix unit takes.
++        comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+             required = max(required,matrix_units_workspace_floats(m,n,k,op))
++        # lane fx-fast-bf16 (arm only): room for the bf16 images of both operands of a product the bf16 unit takes.
++        comptime if GEMM_FAST_BF16_UNITS and allow_vendor:
++            required = max(required,bf16_units_workspace_floats(m,n,k))
+         self._ensure(ctx,required)
+         identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
+ 
+diff --git a/python/mojolearn/_verify.py b/python/mojolearn/_verify.py
+index 22bda42fa7..f0a132bd2b 100644
+--- a/python/mojolearn/_verify.py
++++ b/python/mojolearn/_verify.py
+@@ -395,7 +395,7 @@ _POLICY_MASK_ENTRIES = (
+ 
+ #: Row names by bit of the mask, as in checks/mode_policy.mojo.
+ _POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math",
+-                "matrix_units", "waits_elided", "tile_free")
++                "matrix_units", "waits_elided", "tile_free", "bf16_units")
+ 
+ 
+ def _read_policy_mask(module, entry):
+diff --git a/sequence/exec_device.mojo b/sequence/exec_device.mojo
+index e7ab0ae69c..26f31daafb 100644
+--- a/sequence/exec_device.mojo
++++ b/sequence/exec_device.mojo
+@@ -66,7 +66,11 @@ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_
+ # lane fx-gemm-seq-packed: the large products on the neural packed body (default since 2026-11-19, confirmed 2026-11-20)
+ from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
+ from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
+-# The matrix-units route of a `fast` build on NVIDIA and AMD (default there since 2026-11-20, A/B abf2).
++# lane fx-fast-matrix-units (2026-11-19): the matrix-units relaxation of an NVIDIA `fast` build (default OFF).
++from sequence.gemm_bf16_units_route import (
++    SEQ_GEMM_BF16_UNITS, SBU_NONE, seq_gemm_bf16_units_on, seq_gemm_bf16_units_launch,
++)
++from gemm.fast_bf16_units import bf16_units_workspace_floats
+ from sequence.gemm_matrix_units_route import (
+     SEQ_GEMM_MATRIX_UNITS, SMU_NONE, seq_gemm_matrix_units_on, seq_gemm_matrix_units_launch,
+     seq_gemm_matrix_units_ta_on, seq_gemm_matrix_units_ta_launch,
+@@ -1363,17 +1367,36 @@ struct DeviceExec(Exec, Movable):
+                 )
+                 self.execution_profile.kernel()
+                 return
+-        # TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (A/B abf2, NVIDIA L40S: median 0.96 but mlp-clf/taxi infer 8.49 ->
+-        # 15.82 ms, 1.86; dominated by the TF32 route on every cell) deleted 2026-11-20 by lane/fx-verdicts6; code
+-        # recoverable at 06d1e8ff34.
+-        # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
+-        # The matrix-units route (DEFAULT in a `fast` build on NVIDIA and AMD since 2026-11-20: A/B abf2, mlp fits
+-        # 0.96-0.97, infers 0.85-0.95, quality equal; -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF keeps the exact
+-        # route; never compiled in an identical build): a large plain dense product with row-major operands runs
+-        # the matrix-unit product, FP32 accumulation (sequence/gemm_matrix_units_route.mojo: the rule, what is not
++        # lane fx-fast-bf16 (-D MOJOLEARN_GEMM_FAST_BF16_UNITS=<kind>, default OFF, A/B owed with quality; legal only
++        # in a `fast` build): a large plain dense product runs on the bf16 matrix unit, FP32 accumulation and
++        # output (sequence/gemm_bf16_units_route.mojo: the addressings, what is not routed;
++        # gemm/fast_bf16_units.mojo: the bound, what stays FP32). Asked before the TF32 arm, so a build with both
++        # runs bf16 where its rule takes. The scratch for the two bf16 operand images is the executor's own
++        # allocation, freed here: `free` retires it until the next sync, after the launches that use it. An
++        # epilogue opcode runs its follower in FP32 as OP_GEMM_EPI_TAIL. Per call under the arm: eight integer
++        # tests, one take, one free, three launches; no wait. Off: not compiled.
++        comptime if SEQ_GEMM_BF16_UNITS and (
++                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
++            var bf16_form = seq_gemm_bf16_units_on[OP](a)
++            if bf16_form != SBU_NONE:
++                var bf16_scratch = self._alloc(bf16_units_workspace_floats(a.i0, a.i1, a.i2), False)
++                seq_gemm_bf16_units_launch(
++                    self.ctx, a, bf16_form, bf16_scratch.unsafe_origin_cast[MutAnyOrigin]()
++                )
++                self.execution_profile.kernel()
++                self.execution_profile.kernel()
++                self.execution_profile.kernel()
++                self.free(bf16_scratch)
++                comptime if OP != OP_GEMM:
++                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
++                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
++                return
++        # lane fx-fast-matrix-units (-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality; legal
++        # only in an NVIDIA `fast` build): a large plain dense product with row-major operands runs the TF32
++        # tensor-core product, FP32 accumulation (sequence/gemm_matrix_units_route.mojo: the rule, what is not
+         # routed, the error bound). An epilogue opcode then runs its follower in FP32 as OP_GEMM_EPI_TAIL on the
+         # stored words, the launch pair of the packed route below. After the split-K and coop tests above, which
+-        # keep their products; ahead of the packed rule, whose body is the FP32 chain. Per call on the route:
++        # keep their products; ahead of the packed rule, whose body is the FP32 chain. Per call under the arm:
+         # seven integer tests, one launch, and one more for an epilogue; no lookup, allocation or wait.
+         comptime if SEQ_GEMM_MATRIX_UNITS and (
+                 OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
+@@ -1385,12 +1408,12 @@ struct DeviceExec(Exec, Movable):
+                     if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
+                         self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
+                 return
+-            # lane fx-fast-nvidia-routes (2026-11-19): the same route for a transposed A (the tape's weight
++            # lane fx-fast-nvidia-routes (2026-11-19): the same arm for a transposed A (the tape's weight
+             # gradient X^T dY), so a training step's three products are all on the matrix unit. The m k
+             # scratch is the executor's own allocation (exact-count reuse from its idle list or pool after
+             # the first step) and is freed here: `free` retires it until the next sync, after the two
+-            # launches that use it. Per call on the route: the integer tests, one take, one free, two
+-            # launches; no wait. Not compiled where the route is False.
++            # launches that use it. Per call under the arm: the integer tests, one take, one free, two
++            # launches; no wait. Off: not compiled.
+             var units_ta_form = seq_gemm_matrix_units_ta_on[OP](a)
+             if units_ta_form != SMU_NONE:
+                 var units_scratch = self._alloc(a.i0 * a.i2, False)
+diff --git a/sequence/gemm_matrix_units_route.mojo b/sequence/gemm_matrix_units_route.mojo
+index 4e18de5f07..e450f41967 100644
+--- a/sequence/gemm_matrix_units_route.mojo
++++ b/sequence/gemm_matrix_units_route.mojo
+@@ -2,12 +2,9 @@
+ # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+ """LARGE SEQUENCE PRODUCTS ON THE MATRIX UNIT (lane fx-fast-matrix-units, 2026-11-19).
+ 
+-The sequence executor's side of the matrix-units route of a `fast` build on NVIDIA and AMD
+-(gemm/fast_matrix_units.mojo: what the route is, where it is compiled, the error bound, the size rule). DEFAULT
+-there since 2026-11-20 (lane fx-verdicts6, A/B abf2 on the NVIDIA L40S, arm fast-matrix-units-tf32-all: the MLP
+-rows that run through this executor, mlp-clf and mlp-reg fit 0.96-0.97 and infer 0.85-0.95, quality equal);
+-`-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` keeps the exact route. Where the route constant is False (every
+-identical build) nothing here is compiled into a launch and `DeviceExec._launch` is unchanged.
++The sequence executor's side of `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1` (gemm/fast_matrix_units.mojo: what the
++arm is, where it is legal, the error bound, the size rule). Default OFF, A/B owed with quality beside time.
++With the define off nothing here is compiled into a launch and `DeviceExec._launch` is unchanged.
+ 
+ WHAT MOVES. A plain dense GEMM launch of the executor (OP_GEMM, OP_GEMM_EPI, OP_AGK_GEMM_EPI: the forward and
+ dInput products of the tape and of the hand MLP) that the size rule takes runs `linalg.matmul` (TF32 operands,
+@@ -31,7 +28,13 @@ NOT ROUTED (today's FP32 route kept): the accumulate form (i7 != 0), a C that is
+ (i8 != N), the column-sum launches (i11 != 0), every product the split-K rule or the coop rule takes first
+ (they are tested before this rule), every product under the size rule, the host column.
+ 
+-COST PER CALL on the route: seven integer tests, then one launch (two with a follower); no lookup, allocation,
++UNVERIFIED, and one construct here is new to the tree: `TileTensor(ptr=..., layout=...)` over the executor's
++raw device pointers (the keyword constructor documented at max.modular.com, layout/tile_tensor/TileTensor;
++every other `TileTensor` in the tree is built from a `DeviceBuffer`). If it does not compile on the pinned
++toolchain, this module and its one block in sequence/exec_device.mojo come out together and the arm keeps the
++neural-dispatch products; nothing else reads this file.
++
++COST PER CALL under the arm: seven integer tests, then one launch (two with a follower); no lookup, allocation,
+ lock or wait.
+ """
+ from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
+@@ -44,7 +47,7 @@ from sequence.ops import Args, OP_GEMM, OP_GEMM_EPI
+ from autograd.ops import OP_AGK_GEMM_EPI
+ from gemm.fast_matrix_units import GEMM_FAST_MATRIX_UNITS, matrix_units_takes
+ 
+-#: The route on the sequence executor: a `fast` build on NVIDIA or AMD (one compile-time constant).
++#: The arm on the sequence executor: the NVIDIA `fast` matrix-units build.
+ comptime SEQ_GEMM_MATRIX_UNITS = GEMM_FAST_MATRIX_UNITS
+ 
+ #: `seq_gemm_matrix_units_on`'s answers: keep today's route, B stored k x n, B stored n x k.
+diff --git a/tools/identity_math_lint.py b/tools/identity_math_lint.py
+index e6ea37c8a4..40ca295ddb 100644
+--- a/tools/identity_math_lint.py
++++ b/tools/identity_math_lint.py
+@@ -50,7 +50,7 @@ NAMES = ("sqrt", "rsqrt", "cbrt", "exp", "exp2", "expm1", "log", "log2", "log10"
+ CLASSES = ("SAFE-FAST", "SAFE-ROW", "SAFE-EXACT", "SAFE-NOT-SHIPPED")
+ POLICY_MODULE = "checks/mode_policy.mojo"
+ #: Row names of the mode policy table, by bit of MODE_POLICY_MASK (checks/mode_policy.mojo).
+-POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free")
++POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free", "bf16_units")
+ _ROW_REASON = re.compile(r"#\s*SAFE-ROW:\s*(\w+):\s*\S")
+ _SKIP_PREFIX = ("bench/", "experiments/", "docs/")
+ _IMPORT = re.compile(r"^[ \t]*from[ \t]+(?:std\.)?math[ \t]+import[ \t]+(\([^)]*\)|[^\n]+)", re.M)
+diff --git a/tools/mode_policy_bounds.py b/tools/mode_policy_bounds.py
+index 623584fc26..c65e141115 100644
+--- a/tools/mode_policy_bounds.py
++++ b/tools/mode_policy_bounds.py
+@@ -24,7 +24,7 @@ fails an FP32 bound is reported, not excused, until its lane derives a bound and
+ """
+ 
+ #: Row names by bit of MODE_POLICY_MASK (checks/mode_policy.mojo).
+-POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free")
++POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free", "bf16_units")
+ MATRIX_UNITS_BIT = 1 << POLICY_ROWS.index("matrix_units")
+ MASK_BINDING, MASK_ENTRY = "_mojolearn", "mojolearn_mode_policy_mask"
+ 
+diff --git a/tools/test_measure_owed.py b/tools/test_measure_owed.py
+index 1b5bf3c68a..90d21c8e72 100644
+--- a/tools/test_measure_owed.py
++++ b/tools/test_measure_owed.py
+@@ -518,9 +518,8 @@ class CommittedOwed(unittest.TestCase):
+         # relaxation of `fast` names MOJOLEARN_MODE_FAST_ROWS with it (checks/mode_policy.mojo `_row`)
+         from release_github_build import normalize_defines
+         doc = json.load(open(os.path.join(PC.OUT_DIR, "owed-pre0867.json")))
+-        # lane fx-verdicts6, 2026-11-20: the matrix-units route is the default of the fast set; its old path
+-        # (MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF) is the one family name left, and means something only in a fast set
+-        rows = ("MOJOLEARN_MODE_FAST_", "MOJOLEARN_GEMM_FAST_MATRIX_UNITS")
++        rows = ("MOJOLEARN_MODE_FAST_", "MOJOLEARN_GEMM_FAST_MATRIX_UNITS", "MOJOLEARN_DECOMP_FAST_MATRIX_UNITS",
++                "MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS", "MOJOLEARN_GEMM_FAST_BF16_UNITS")
+         for name, arm in doc["b_arms"].items():
+             if arm["owed"] != "RUN" or arm.get("env"):
+                 continue

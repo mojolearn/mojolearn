@@ -73,7 +73,9 @@ exist.
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.gemm import gemm_tn
-from decomposition.gram_matrix_units_route import decomp_gram_units_into
+# TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S: pca, tsvd, svd 8 cells 0.93-1.00, median 1.00)
+# deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch
 from decomposition.impl.linalg.detail.pca import (
     PCAResult,
     eig_and_truncate,
@@ -102,10 +104,7 @@ def tsvd_fit(
     # and no centering. Their `tsvd_fit` asks cuBLAS for exactly this:
     # CUBLAS_OP_T, CUBLAS_OP_N. Same `gemm_tn` dispatch as PCA (split-K
     # kernel at these output widths; see core/gram_splitk.mojo).
-    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
-    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
-    if not decomp_gram_units_into(ctx, gram, x, n_cols, n_rows):
-        gemm_tn(ctx, gram, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
+    gemm_tn(ctx, gram, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
 
     ctx.synchronize()
 

@@ -54,7 +54,9 @@ from core.device_scan import device_first_negative, device_first_nonfinite
 from core.xtdz_coalesced import column_mean_launch
 from core.admitted_finite_status import enqueue_finite_word
 from core.gemm import gemm_nt
-from decomposition.gram_matrix_units_route import decomp_gram_units_into, decomp_project_units_into
+# TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S: pca, tsvd, svd 8 cells 0.93-1.00, median 1.00)
+# deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch
 from decomposition.impl.linalg.detail.pca import (
     PCA_FAST_GRAM_MMA,
     PCA_LEAN_SCRATCH,
@@ -463,10 +465,7 @@ def tsvd_fit_device(
     # The two halves of `tsvd_fit` by name, the Gram recorded between them
     # (row 38; see the PCA surface above for why).
     pca_validate(n_rows, n_features, n_components)
-    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
-    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
-    if not decomp_gram_units_into(ctx, gram, x, n_features, n_rows):
-        gemm_tn(ctx, gram, x, xa, xa2, n_features, n_features, n_rows)
+    gemm_tn(ctx, gram, x, xa, xa2, n_features, n_features, n_rows)
     ctx.synchronize()
     if trace.enabled:
         trace.record_device(ctx, "tsvd.gram", gram, n_features * n_features)
@@ -694,10 +693,7 @@ def _tsvd_explained_tail(
     var var_x = ctx.enqueue_create_buffer[DType.float32](n_features)
     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
     ctx.synchronize()
-    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
-    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
-    if not decomp_project_units_into(ctx, xt, x, components, n_rows, n_components, n_features):
-        gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
+    gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
     _column_variance(ctx, xt, mu_t, var_t, n_rows, n_components)
     _column_variance(ctx, x, mu_x, var_x, n_rows, n_features)
     # the tail on the device (decomposition/tsvd_finish.mojo, the host
@@ -815,10 +811,7 @@ def tsvd_transform_dev(
     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     if not _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
-        # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
-        # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
-        if not decomp_project_units_into(ctx, out, x, components, n_rows, n_components, n_features):
-            gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
+        gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
         ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
         ctx.synchronize()
     comptime if TSVD_FAST_POOL:
@@ -873,10 +866,7 @@ def inverse_transform_dev(
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
     ctx.synchronize()
-    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
-    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
-    if not decomp_project_units_into(ctx, out, scores, components_t, n_rows, n_features, n_components):
-        gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
+    gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
     if add_mean:
         ctx.enqueue_function[shift_columns_kernel](
             out.unsafe_ptr(), mean.unsafe_ptr(), Int32(n_rows), Int32(n_features),
@@ -1062,10 +1052,7 @@ def pca_whiten_inverse_transform_host(
         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
     )
     ctx.synchronize()
-    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
-    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
-    if not decomp_project_units_into(ctx, out, scores, components_t, n_rows, n_features, n_components):
-        gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
+    gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
     ctx.enqueue_function[shift_columns_kernel](
         out.unsafe_ptr(), mean.unsafe_ptr(), Int32(n_rows), Int32(n_features),
         Float32(1.0), grid_dim=((n_rows * n_features + 255) // 256, 1, 1),

@@ -282,6 +282,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_POOLIO_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CHOL_FAST_POOLIO_OFF"](), "removed 2026-11-18 (lane/fx-env-dead): CHOL_FAST_POOLIO_OFF (old path beside the default, cholesky device IO without the pool; no IDENTICAL A/B in four weeks) is gone; the pooled IO is the only path; code recoverable at 0c65d61fed; see docs/TOMBSTONES.md"
     # ---- end lane fx-env-dead
+    # ---- lane fx-verdicts6 (2026-11-20): verdicts of A/B abf2 (NVIDIA L40S host 79f003b8e8ae, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59)
+    # TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm: pca, tsvd and svd on istella and taxi, 8 cells 0.93-1.00, median 1.00) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_DECOMP_FAST_MATRIX_UNITS"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; NOISE: pca, tsvd and svd on istella and taxi, 8 cells 0.93-1.00, median 1.00): the PCA / truncated-SVD Gram and projections on the matrix unit in a fast build; the exact gemm_tn / gemm_nt products are the code; see docs/TOMBSTONES.md"
+    # ---- end lane fx-verdicts6
     return True
 
 

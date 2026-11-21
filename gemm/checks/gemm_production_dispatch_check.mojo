@@ -154,41 +154,25 @@ def run_checks() raises:
     # AMD short-contraction band (a pure host rule, checked on every column):
     # 4 < P <= 8 leaves of 128, i.e. 512 < k <= 1024, with a large output.
     # The band is stated in leaves (5..8), so its k range follows the
-    # profile's leaf: 512 < k <= 1024 under v1 (the literals below), and
-    # 2048 < k <= 4096 under -D MOJOLEARN_GEMM_FAST_LEAF512 (lane
-    # fx-gemm-leaf512, 2026-11-19; the rule's stated cost is per-leaf
-    # staging amortized over few leaves, so it follows the leaf count).
-    comptime if not (
-        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]()
-    ):
-        assert_true(amd_short_contract_large_output(4096, 768, 768))
-        assert_true(amd_short_contract_large_output(2048, 1024, 768))
-        assert_true(amd_short_contract_large_output(4096, 768, 513))
-        assert_true(amd_short_contract_large_output(4096, 768, 640))
-        assert_true(amd_short_contract_large_output(4096, 768, 896))
-        assert_true(amd_short_contract_large_output(4096, 768, 1024))
-        assert_true(not amd_short_contract_large_output(4096, 768, 512))
-        assert_true(not amd_short_contract_large_output(4096, 768, 1025))
-        assert_true(not amd_short_contract_large_output(4096, 768, 3072))
-        assert_true(not amd_short_contract_large_output(2048, 768, 768))
-        assert_true(not amd_short_contract_large_output(1024, 4096, 768))
-        # The band's leaf bounds are what the rule's comment says they are.
-        assert_true(contract_partition(640)[1] == 5)
-        assert_true(contract_partition(1024)[1] == 8)
-    else:
-        assert_true(amd_short_contract_large_output(4096, 768, 3072))
-        assert_true(amd_short_contract_large_output(2048, 1024, 3072))
-        assert_true(amd_short_contract_large_output(4096, 768, 2049))
-        assert_true(amd_short_contract_large_output(4096, 768, 4096))
-        assert_true(not amd_short_contract_large_output(4096, 768, 768))
-        assert_true(not amd_short_contract_large_output(4096, 768, 2048))
-        assert_true(not amd_short_contract_large_output(4096, 768, 4097))
-        assert_true(not amd_short_contract_large_output(2048, 768, 3072))
-        assert_true(not amd_short_contract_large_output(1024, 4096, 3072))
-        assert_true(contract_partition(512)[1] == 1)
-        assert_true(contract_partition(2560)[1] == 5)
-        assert_true(contract_partition(4096)[1] == 8)
+    # profile's leaf: 512 < k <= 1024 under v1 (the literals below).
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_LEAF512 (NOISE, A/B abf2 and round 3; the
+    # band's literals at leaf 512) deleted 2026-11-20 by lane/fx-verdicts6;
+    # code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch
+    assert_true(amd_short_contract_large_output(4096, 768, 768))
+    assert_true(amd_short_contract_large_output(2048, 1024, 768))
+    assert_true(amd_short_contract_large_output(4096, 768, 513))
+    assert_true(amd_short_contract_large_output(4096, 768, 640))
+    assert_true(amd_short_contract_large_output(4096, 768, 896))
+    assert_true(amd_short_contract_large_output(4096, 768, 1024))
+    assert_true(not amd_short_contract_large_output(4096, 768, 512))
+    assert_true(not amd_short_contract_large_output(4096, 768, 1025))
+    assert_true(not amd_short_contract_large_output(4096, 768, 3072))
+    assert_true(not amd_short_contract_large_output(2048, 768, 768))
+    assert_true(not amd_short_contract_large_output(1024, 4096, 768))
+    # The band's leaf bounds are what the rule's comment says they are.
+    assert_true(contract_partition(640)[1] == 5)
+    assert_true(contract_partition(1024)[1] == 8)
     # NVIDIA fold-stack class: the measured GPT-3-small dWeight shape keeps
     # FS4 under the generalized rule, and the class is a pure leaf bound.
     assert_true(gemm_kpack_fold_slots_for(6, 0) == 4)

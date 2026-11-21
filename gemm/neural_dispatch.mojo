@@ -24,17 +24,16 @@ from gemm.experiments.neural_profile import (
     NEURAL_PROFILE_CHANGED,NEURAL_LEAF,NEURAL_CHAINS,neural_validate,
 )
 from gemm.experiments.neural_switches import ROLE_PROJECTION,ROLE_HEAD,ROLE_WGRAD
-# lane fx-fast-matrix-units (2026-11-19, -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality): the
-# matrix-units relaxation of an NVIDIA `fast` build (gemm/fast_matrix_units.mojo). False on every other build.
+# The matrix-units route of a `fast` build on NVIDIA and AMD (gemm/fast_matrix_units.mojo: DEFAULT there since
+# 2026-11-20, A/B abf2, median 0.93 over 13 cells, quality equal; -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF keeps the
+# exact route). False on every other build, identical builds included.
 from gemm.fast_matrix_units import (
-    GEMM_FAST_MATRIX_UNITS,GEMM_FAST_MATRIX_UNITS_ALL,
-    matrix_units_takes,matrix_units_workspace_floats,matrix_units_gemm_into,
+    GEMM_FAST_MATRIX_UNITS,matrix_units_takes,matrix_units_workspace_floats,matrix_units_gemm_into,
 )
-# lane fx-fast-bf16 (2026-11-20, -D MOJOLEARN_GEMM_FAST_BF16_UNITS=1, default OFF, A/B owed with quality): the bf16
-# matrix-unit relaxation of a `fast` build (gemm/fast_bf16_units.mojo). False on every other build.
-from gemm.fast_bf16_units import (
-    GEMM_FAST_BF16_UNITS,bf16_units_takes,bf16_units_workspace_floats,bf16_units_gemm_into,
-)
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (A/B abf2, NVIDIA L40S: median 0.96 but mlp-clf/taxi infer 8.49 -> 15.82
+# ms, 1.86; gemm max_rel_err 2.2e-3; dominated by the TF32 route on every cell) deleted 2026-11-20 by
+# lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
 # lane fx-gemm-seq-packed (2026-11-18): the names `identical_gemm_leaf_ptr_into` below reads; nothing else uses them here.
 from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE,NUMERIC_IDENTICAL
@@ -145,24 +144,6 @@ def _matrix_units_admits(mut c: DeviceBuffer[DType.float32],
     return True
 
 
-def _bf16_units_admits(mut c: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
-    mut ws: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int) -> Bool:
-    """`_matrix_units_admits` for the bf16 arm: the size rule, operands long enough, an output that overlaps no
-    input, and a workspace that holds the bf16 images and overlaps nothing. False sends the call to the routes
-    below with their own refusals."""
-    if not bf16_units_takes(m,n,k):
-        return False
-    if len(c)<m*n or len(a)<m*k or len(b)<n*k:
-        return False
-    if _overlaps(c,m*n,a,m*k) or _overlaps(c,m*n,b,n*k):
-        return False
-    var wsn = bf16_units_workspace_floats(m,n,k)
-    if len(ws)<wsn or _overlaps(ws,wsn,c,m*n) or _overlaps(ws,wsn,a,m*k) or _overlaps(ws,wsn,b,n*k):
-        return False
-    return True
-
-
 def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],
     mut a: DeviceBuffer[DType.float32],mut b: DeviceBuffer[DType.float32],
@@ -171,23 +152,14 @@ def identical_gemm_into[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     """ROLE is the caller class (ROLE_PROJECTION, ROLE_HEAD, ROLE_WGRAD); it
     never changes the route."""
     comptime assert ROLE == ROLE_PROJECTION or ROLE == ROLE_HEAD or ROLE == ROLE_WGRAD, "neural GEMM role"
-    # lane fx-fast-matrix-units: an NVIDIA `fast` build with the matrix-units row relaxed sends a large product of a
-    # caller that left the vendor route open (forward, dInput and dWeight alike) to the TF32 tensor-core product,
-    # FP32 accumulation. A caller that closed it (`allow_vendor=False`; taken too under the arm's value 3, its own
-    # owed row), a product under the size rule and every
-    # refusal keep the route below. Per call under the arm: the integer tests of `_matrix_units_admits`, then one
-    # launch in place of the route's (two for OP_TN: the transpose of A into `ws`); no allocation, lookup or wait.
-    # Asynchronous like the route below. Not compiled without the define.
-    # lane fx-fast-bf16: a `fast` build with the bf16-units row relaxed sends the same class of product (a caller
-    # that left the vendor route open, the size rule) to the bf16 matrix unit, FP32 accumulation and output; it is
-    # asked first, so a build with both arms runs bf16 where its rule takes and TF32 on the rest. Per call under
-    # the arm: the integer tests, then three launches (two narrows into `ws`, the product); no allocation, lookup
-    # or wait. Not compiled without the define.
-    comptime if GEMM_FAST_BF16_UNITS and allow_vendor:
-        if _bf16_units_admits(c,a,b,ws,m,n,k):
-            if bf16_units_gemm_into(ctx,c,a,b,ws,m,n,k,op):
-                return
-    comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+    # The matrix-units route (the default of a `fast` build on NVIDIA and AMD, gemm/fast_matrix_units.mojo): a
+    # large product of ANY caller (forward, dInput and dWeight alike; a caller that closed the old vendor route
+    # with `allow_vendor=False` too, as the promoted arm measured) runs the matrix-unit product, FP32
+    # accumulation. A product under the size rule and every refusal keep the route below. Per call on the
+    # route: the integer tests of `_matrix_units_admits`, then one launch in place of the route's (two for
+    # OP_TN: the transpose of A into `ws`); no allocation, lookup or wait. Asynchronous like the route below.
+    # Not compiled where the route constant is False (every identical build).
+    comptime if GEMM_FAST_MATRIX_UNITS:
         if _matrix_units_admits(c,a,b,ws,m,n,k,op):
             if matrix_units_gemm_into(ctx,c,a,b,ws,m,n,k,op):
                 return
@@ -429,21 +401,18 @@ def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](
     ctx: DeviceContext,mut c: DeviceBuffer[DType.float32],mut a: DeviceBuffer[DType.float32],
     mut b: DeviceBuffer[DType.float32],m: Int,n: Int,k: Int,op: Int,
 ) raises:
-    # lane fx-fast-nvidia-routes (2026-11-19): the matrix-units arm END TO END. The workspace-less entry (the Mamba
-    # projections and every other caller that owns no workspace) went straight to the incumbent, so a `fast` build
-    # with the arm on ran those products on the FP32 chain while the workspace callers ran on the matrix unit. A
-    # product the size rule takes now goes through `identical_gemm_into`, whose first block is the arm; the
-    # workspace also holds the OP_TN transpose. Small products (bias sums, a one-hot embedding gradient: an edge
-    # under 64) fail the rule and keep the line below. Per call under the arm: the integer size test; a taken
-    # product makes the one allocation and the one wait the incumbent entry makes. Off: not compiled.
-    # lane fx-fast-bf16: the bf16 arm takes the same entry (its rule, its scratch in the same one allocation).
-    comptime if (GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL)) or (
-            GEMM_FAST_BF16_UNITS and allow_vendor):
-        if matrix_units_takes(m,n,k) or (allow_vendor and bf16_units_takes(m,n,k)):
+    # lane fx-fast-nvidia-routes (2026-11-19): the matrix-units route END TO END. The workspace-less entry (the
+    # Mamba projections and every other caller that owns no workspace) went straight to the incumbent, so a `fast`
+    # build ran those products on the FP32 chain while the workspace callers ran on the matrix unit. A product the
+    # size rule takes goes through `identical_gemm_into`, whose first block is the route; the workspace also
+    # holds the OP_TN transpose. Small products (bias sums, a one-hot embedding gradient: an edge under 64) fail
+    # the rule and keep the line below. Per call on the route: the integer size test; a taken product makes the
+    # one allocation and the one wait the incumbent entry makes. Not compiled where the route is False.
+    comptime if GEMM_FAST_MATRIX_UNITS:
+        if matrix_units_takes(m,n,k):
             neural_validate(m,n,k,op)
             var units_ws = ctx.enqueue_create_buffer[DType.float32](
-                max(identical_gemm_workspace_max_floats(m,n,k),
-                    max(matrix_units_workspace_floats(m,n,k,op),bf16_units_workspace_floats(m,n,k))))
+                max(identical_gemm_workspace_max_floats(m,n,k),matrix_units_workspace_floats(m,n,k,op)))
             try:
                 identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,units_ws,m,n,k,op)
             except error:
@@ -502,12 +471,9 @@ struct GemmWorkspace(Movable):
         comptime if NEURAL_GEMM_EXPERIMENT_ENABLED:
             neural_validate(m,n,k,op)
         var required = identical_gemm_workspace_max_floats(m,n,k)
-        # lane fx-fast-matrix-units (arm only): room for the transpose of A of an OP_TN the matrix unit takes.
-        comptime if GEMM_FAST_MATRIX_UNITS and (allow_vendor or GEMM_FAST_MATRIX_UNITS_ALL):
+        # matrix-units route only: room for the transpose of A of an OP_TN the matrix unit takes.
+        comptime if GEMM_FAST_MATRIX_UNITS:
             required = max(required,matrix_units_workspace_floats(m,n,k,op))
-        # lane fx-fast-bf16 (arm only): room for the bf16 images of both operands of a product the bf16 unit takes.
-        comptime if GEMM_FAST_BF16_UNITS and allow_vendor:
-            required = max(required,bf16_units_workspace_floats(m,n,k))
         self._ensure(ctx,required)
         identical_gemm_into[allow_vendor,ROLE](ctx,c,a,b,self.buffer,m,n,k,op)
 

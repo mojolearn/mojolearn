@@ -24,7 +24,7 @@ fails an FP32 bound is reported, not excused, until its lane derives a bound and
 """
 
 #: Row names by bit of MODE_POLICY_MASK (checks/mode_policy.mojo).
-POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free", "bf16_units")
+POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math", "matrix_units", "waits_elided", "tile_free")
 MATRIX_UNITS_BIT = 1 << POLICY_ROWS.index("matrix_units")
 MASK_BINDING, MASK_ENTRY = "_mojolearn", "mojolearn_mode_policy_mask"
 

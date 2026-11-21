@@ -700,9 +700,9 @@
   },
   "gemm-leaf512": {
    "define": "MOJOLEARN_GEMM_FAST_LEAF512",
-   "status": "define in code (gemm/contract.mojo GEMM_LEAF512 -> CONTRACT_K_LEAF_MIN 512, profile mojolearn.identical.gemm.fp32.v2-leaf512, version 4; IDENTICAL, no vendor branch): B = the contract's shortest leaf is 512 (one chain a cell up to k = 512, no fold and no workspace there; a quarter of the leaf boundaries above); A = the default leaf 128. BITS CHANGE under B on every column together: it is the build-wide leaf, so every fold that reads contract_leaf_size moves (GEMM, the classical moments and Gram, CD and SVM dots, loss and optimizer folds, CNN, Mamba, transformer), device and host from the one constant. The define must reach the whole wheel set, the host column included. The digests of A and B differ by design; quality is read from both arms' metrics",
-   "owed": "RUN",
-   "evidence": "A/B round 3 2026-11-20, NVIDIA L40S host 2ef132a6de04 (fresh pod, 14-core cgroup), wheel 28a780604c and its B set, base and arm back to back in one pod job (tag nvc-ab-20261120T063324Z-c630ad; ~/mojolearn-evidence/measure-candidate/build-28a780604c/ab3/x/ and ab3b/x/; tables, cross-job base spreads and driver rows ~/mojolearn-evidence/briefs-20261118/fx-verdicts5/), workers bound to the GPU's NUMA node, one scored run per arm, small rows the median of 20 calls: lm-train-step 36.41 -> 36.04 ms (0.990; the row's three bases 36.30-36.41), lm-forward 20.36 -> 20.85 (1.024; bases 20.36 and 22.48), mlp-train-step 0.717 -> 0.804 (1.12, one call; that op keeps leaf 128). neural/gemm and the four linalg.matmul driver cases were REFUSED on the arm's wheel (job 1 exit 1, job.log 08:16:44): mojolearn.linalg admitted no profile version 4 and the job set no MOJOLEARN_EXPERIMENT_GEMM_PROFILE. Fixed 2026-11-20: version 4 is in _EXPERIMENT_PROFILES (python/mojolearn/_linalg_impl.py) and a wheel arm's PC_B_ARMS line takes a 4th field env:VAR=VALUE (tools/ops/paper_compare_job.sh). NOT DECIDED: stage the arm with env:MOJOLEARN_EXPERIMENT_GEMM_PROFILE=mojolearn.identical.gemm.fp32.v2-leaf512 and time its gemm rows."
+   "status": "DELETED 2026-11-20 (lane fx-verdicts6): NOISE on two A/Bs; the define is refused (core/six_lane_experiment_guards.mojo), CONTRACT_K_LEAF_MIN is 128 and profile version 4 is retired; code recoverable at 06d1e8ff34, experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B round 3 2026-11-20, NVIDIA L40S host 2ef132a6de04 (fresh pod, 14-core cgroup), wheel 28a780604c and its B set, base and arm back to back in one pod job (tag nvc-ab-20261120T063324Z-c630ad; ~/mojolearn-evidence/measure-candidate/build-28a780604c/ab3/x/ and ab3b/x/; tables, cross-job base spreads and driver rows ~/mojolearn-evidence/briefs-20261118/fx-verdicts5/), workers bound to the GPU's NUMA node, one scored run per arm, small rows the median of 20 calls: lm-train-step 36.41 -> 36.04 ms (0.990; the row's three bases 36.30-36.41), lm-forward 20.36 -> 20.85 (1.024; bases 20.36 and 22.48), mlp-train-step 0.717 -> 0.804 (1.12, one call; that op keeps leaf 128). neural/gemm and the four linalg.matmul driver cases were REFUSED on the arm's wheel (job 1 exit 1, job.log 08:16:44): mojolearn.linalg admitted no profile version 4 and the job set no MOJOLEARN_EXPERIMENT_GEMM_PROFILE. Fixed 2026-11-20: version 4 is in _EXPERIMENT_PROFILES (python/mojolearn/_linalg_impl.py) and a wheel arm's PC_B_ARMS line takes a 4th field env:VAR=VALUE (tools/ops/paper_compare_job.sh). NOT DECIDED: stage the arm with env:MOJOLEARN_EXPERIMENT_GEMM_PROFILE=mojolearn.identical.gemm.fp32.v2-leaf512 and time its gemm rows. || A/B abf2 2026-11-20, NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d and its B set, base and arm back to back in one job (nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59; every row ~/mojolearn-evidence/briefs-20261118/abf2-SUMMARY-TG-nvidia.txt; job log ~/mojolearn-evidence/measure-candidate/build-e41b5148b2/abf2/job.log), one scored run per arm, full datasets, base -> arm ms: 3 cells, median 0.99: lm-forward 21.19 -> 20.31 (0.96), lm-train-step 36.42 -> 35.96 (0.99), mlp-train-step 0.886 -> 0.955 (1.08). The arm's plan held 3 rows where its base held 4: neural/gemm has a base cell (63.28 ms) and no arm cell; the arm's board unit ended rc=1 (job.log 23:17:05) and the arm was again staged without env:MOJOLEARN_EXPERIMENT_GEMM_PROFILE (no such field in the stage or job logs), so mojolearn.linalg's profile admission refused version 4 as in round 3. NOISE on every row that ran, twice: deleted."
   },
   "gemm-seq-packed": {
    "define": "MOJOLEARN_GEMM_FAST_SEQ_PACKED",
@@ -778,18 +778,26 @@
   },
   "fast-matrix-units-tf32": {
    "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1,MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (gemm/fast_matrix_units.mojo MATRIX_UNITS_KIND): B routes large neural FP32 GEMMs of callers with the vendor route open, and the sequence executor's plain dense row-major GEMM launches, to linalg.matmul (TF32 operands, FP32 accumulation); A = the FP32 kernels",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-20 (lane fx-verdicts6): the tier (value 1: only the callers that left the vendor route open) is dominated by value 3 on every cell; the route has one switch and no tiers. The define is refused (core/experiment_guards_neural.mojo); code recoverable at 06d1e8ff34, experiments/removed/MOJOLEARN_GEMM_FAST_MATRIX_UNITS.tiers.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B abf2 2026-11-20, NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d and its B set, base and arm back to back in one job (nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59; every row ~/mojolearn-evidence/briefs-20261118/abf2-SUMMARY-TG-nvidia.txt; job log ~/mojolearn-evidence/measure-candidate/build-e41b5148b2/abf2/job.log), one scored run per arm, full datasets, base -> arm ms: 13 cells, 10 faster, 3 flat, median 0.96: mlp-clf istella fit 868 -> 833 (0.96), infer 32.09 -> 29.14 (0.91); mlp-clf taxi fit 691 -> 652 (0.94), infer 8.51 -> 8.01 (0.94); mlp-reg istella fit 855 -> 826 (0.97), infer 17.36 -> 17.04 (0.98); mlp-reg taxi fit 680 -> 657 (0.97), infer 2.83 -> 2.54 (0.90); gemm 63.58 -> 60.67 (0.95); lm-forward 20.85 -> 20.71 (0.99); lm-train-step 36.63 -> 31.62 (0.86); transformer-decode 1093 -> 1089 (1.00); transformer-forward 2.59 -> 2.58 (1.00). DOMINATED by fast-matrix-units-tf32-all (lm-forward 0.90, lm-train-step 0.82, transformer-forward 0.91 there): deleted."
   },
   "fast-matrix-units-tf32-all": {
    "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS=3,MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (gemm/fast_matrix_units.mojo GEMM_FAST_MATRIX_UNITS_ALL): B1 plus the neural-dispatch callers that closed the vendor route (Llama stage projections, CNN linear, MoE grouped)",
+   "status": "PROMOTED 2026-11-20 (lane fx-verdicts6): the matrix-units route for every neural-dispatch caller is the default of a fast-rows build on NVIDIA and AMD (checks/mode_policy.mojo policy_row_default and ROUTE_GEMM_MATRIX_UNITS; gemm/fast_matrix_units.mojo). The old opt-in name is refused (core/experiment_guards_neural.mojo); the old exact route is arm fast-matrix-units-off. AMD takes the same linalg.matmul source untimed; Apple keeps its afn route and the host is exact (no MAX matmul route is written for either). identical builds untouched.",
+   "owed": "DECIDED",
+   "evidence": "A/B abf2 2026-11-20, NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d and its B set, base and arm back to back in one job (nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59; every row ~/mojolearn-evidence/briefs-20261118/abf2-SUMMARY-TG-nvidia.txt; job log ~/mojolearn-evidence/measure-candidate/build-e41b5148b2/abf2/job.log), one scored run per arm, full datasets, base -> arm ms: 13 cells, 12 faster, 1 flat, 0 slower, median 0.93: mlp-clf istella fit 866 -> 833 (0.96), infer 32.87 -> 27.94 (0.85); mlp-clf taxi fit 692 -> 668 (0.97), infer 8.49 -> 8.03 (0.95); mlp-reg istella fit 854 -> 824 (0.96), infer 17.03 -> 15.88 (0.93); mlp-reg taxi fit 680 -> 658 (0.97), infer 2.83 -> 2.54 (0.90); gemm 64.77 -> 59.98 (0.93); lm-forward 20.65 -> 18.60 (0.90); lm-train-step 36.38 -> 29.71 (0.82); transformer-decode 1089 -> 1088 (1.00); transformer-forward 2.58 -> 2.34 (0.91). Quality equal: mlp-clf accuracy 0.76790 vs 0.76795 and 0.94345 vs 0.94326; mlp-reg r2 0.5224 vs 0.5206 and 0.93011 vs 0.93015; gemm max_rel_err_vs_fp64 2.8e-4 (base 2.4e-7, expected of TF32 operands). PROMOTED."
+  },
+  "fast-matrix-units-off": {
+   "define": "MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF,MOJOLEARN_MODE_FAST_ROWS",
+   "status": "define in code (checks/mode_policy.mojo _GEMM_MATRIX_UNITS_OFF -> ROW_MATRIX_UNITS and ROUTE_GEMM_MATRIX_UNITS False): B = the fast set with every neural product on the exact FP32 kernels (the zero-row fast set, mode policy mask 0; its digests must equal the identical set's); A's partner is arm fast-rows, the fast set with the matrix-units route (the default since 2026-11-20, lane fx-verdicts6). The old path of that promotion. Owed: one confirming measurement of fast-rows against this arm on the same box, then the old path is deleted.",
    "owed": "RUN"
   },
   "fast-bf16-units": {
    "define": "MOJOLEARN_GEMM_FAST_BF16_UNITS=1,MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (gemm/fast_bf16_units.mojo BF16_UNITS_KIND, policy row BF16_UNITS): B narrows both operands of a large neural FP32 GEMM to bf16 in scratch (round to nearest even) and runs MAX linalg.matmul on the half-precision matrix unit, FP32 accumulation and FP32 output, at the neural dispatch (callers with the vendor route open), the sequence executor's plain dense GEMM launches (row-major or transposed A) and the public linalg.matmul entry; master weights, loss, normalisations and optimizer stay FP32; A = the FP32 kernels",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-20 (lane fx-verdicts6): DOMINATED by the TF32 route with one cell 1.86 slower and the larger error; the define and its policy row MOJOLEARN_MODE_FAST_BF16_UNITS are refused (core/experiment_guards_neural.mojo, core/six_lane_experiment_guards.mojo); code recoverable at 06d1e8ff34, experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B abf2 2026-11-20, NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d and its B set, base and arm back to back in one job (nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59; every row ~/mojolearn-evidence/briefs-20261118/abf2-SUMMARY-TG-nvidia.txt; job log ~/mojolearn-evidence/measure-candidate/build-e41b5148b2/abf2/job.log), one scored run per arm, full datasets, base -> arm ms: 13 cells, median 0.96: mlp-clf istella fit 867 -> 854 (0.98), infer 30.09 -> 24.76 (0.82); mlp-clf taxi fit 691 -> 661 (0.96), infer 8.49 -> 15.82 (1.86 SLOWER); mlp-reg istella fit 854 -> 845 (0.99), infer 16.87 -> 16.25 (0.96); mlp-reg taxi fit 680 -> 652 (0.96), infer 2.81 -> 2.66 (0.95); gemm 63.56 -> 58.76 (0.92, max_rel_err 2.2e-3); lm-forward 20.68 -> 20.80 (1.01); lm-train-step 36.48 -> 32.88 (0.90); transformer-decode 1090 -> 1093 (1.00); transformer-forward 2.58 -> 2.58 (1.00). Dominated by fast-matrix-units-tf32-all: deleted."
   },
   "mcd-lockstep": {
    "define": "MOJOLEARN_MCD_FAST_LOCKSTEP",
@@ -847,17 +855,19 @@
   },
   "fast-decomp-matrix-units": {
    "define": "MOJOLEARN_DECOMP_FAST_MATRIX_UNITS,MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (checks/mode_policy.mojo ROUTE_DECOMP_MATRIX_UNITS; decomposition/gram_matrix_units_route.mojo): B runs the PCA / truncated-SVD Gram past the split-K width and the projections on MAX linalg.matmul (NVIDIA TF32 operands, FP32 accumulation); A = the zero-row fast set (the exact kernels), flags -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_MODE_FAST_ROWS",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-20 (lane fx-verdicts6): NOISE; the define is refused (core/experiment_guards_decomposition.mojo); code recoverable at 06d1e8ff34, experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B abf2 2026-11-20, NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d and its B set, base and arm back to back in one job (nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59; every row ~/mojolearn-evidence/briefs-20261118/abf2-SUMMARY-TG-nvidia.txt; job log ~/mojolearn-evidence/measure-candidate/build-e41b5148b2/abf2/job.log), one scored run per arm, full datasets, base -> arm ms: 8 cells, median 1.00: svd istella 1149 -> 1149 (1.00), taxi 44.18 -> 44.28 (1.00); pca istella fit 134 -> 125 (0.93), infer 33.31 -> 33.28 (1.00); pca taxi fit 13.73 -> 13.56 (0.99), infer 2.74 -> 2.73 (1.00); tsvd istella 70.37 -> 65.51 (0.93), taxi 3.90 -> 3.91 (1.00). NOISE: deleted."
   },
   "fast-neighbors-matrix-units": {
    "define": "MOJOLEARN_MODE_FAST_ROWS,MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS",
-   "status": "define in code (checks/mode_policy.mojo ROUTE_NEIGHBORS_MATRIX_UNITS; neighbors/distance_matrix_units_route.mojo): B runs the tiled brute-force k-NN L2 distance product on MAX linalg.matmul at n_features >= 256, then the FP32 epilogue and the unchanged selectors; A = the zero-row fast set (fused exact kernels), flags -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_MODE_FAST_ROWS",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-20 (lane fx-verdicts6): NOISE; the define is refused (core/experiment_guards_cluster.mojo); code recoverable at 06d1e8ff34, experiments/removed/MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS.patch.",
+   "owed": "DECIDED",
+   "evidence": "A/B abf2 2026-11-20, NVIDIA L40S host 79f003b8e8ae, base wheel e41b5148b24d and its B set, base and arm back to back in one job (nvc1-0001, R2 tag nvc-ab-20261120T224801Z-458a59; every row ~/mojolearn-evidence/briefs-20261118/abf2-SUMMARY-TG-nvidia.txt; job log ~/mojolearn-evidence/measure-candidate/build-e41b5148b2/abf2/job.log), one scored run per arm, full datasets, base -> arm ms: 6 cells, median 0.99: knn istella 55.05 -> 55.55 (1.01), taxi 29.93 -> 30.07 (1.00); knn-clf istella 42.55 -> 42.04 (0.99), taxi 19.39 -> 19.08 (0.98); knn-reg istella 40.43 -> 39.99 (0.99), taxi 17.31 -> 17.07 (0.99). NOISE: deleted."
   },
   "fast-rows": {
    "define": "MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (core/package_profile.mojo MODE_FAST_ROWS; checks/mode_policy.mojo POLICY_BUILD_FAST_ROWS), lane fx-fast-set-build 2026-11-20: B = the zero-row fast set (the identical kernels with the contract off, no row on, mode policy mask 0); A = the identical set. The control of every fast arm: B must not be slower than A and its digests must equal A's (a difference is a seam that reads the build kind where it should read a row)",
+   "status": "define in code (core/package_profile.mojo MODE_FAST_ROWS; checks/mode_policy.mojo POLICY_BUILD_FAST_ROWS), lane fx-fast-set-build 2026-11-20: B = the zero-row fast set (the identical kernels with the contract off, no row on, mode policy mask 0); A = the identical set. The control of every fast arm: B must not be slower than A and its digests must equal A's (a difference is a seam that reads the build kind where it should read a row) UPDATED 2026-11-20 (lane fx-verdicts6): since the promotion of the matrix-units route this set is `fast` with its measured default, mode policy mask 16 on NVIDIA and AMD (the large neural products on the matrix unit), so its digests differ from A's on the rows that route by design; the zero-row control (mask 0, digests equal to A's) is arm fast-matrix-units-off.",
    "owed": "RUN"
   },
   "fast-flush-off": {
@@ -4972,7 +4982,9 @@
    "rows": "full",
    "b_arms": [
     "fast-matrix-units-tf32",
-    "fast-matrix-units-tf32-all"
+    "fast-matrix-units-tf32-all",
+    "fast-rows",
+    "fast-matrix-units-off"
    ],
    "columns": [
     "time",
@@ -4987,7 +4999,7 @@
     "mlp-reg": "held-out rmse (relative 0.05)",
     "gemm": "max_rel_err_vs_fp64: 0.01"
    },
-   "decides": "per row: B becomes the default of the NVIDIA fast set for that family only if it is faster than A beyond the noise floor AND every quality field is inside its tolerance against A; a row with a quality drop keeps FP32 whatever its time. B2 replaces B1 only if it is faster with quality equal."
+   "decides": "per row: B becomes the default of the NVIDIA fast set for that family only if it is faster than A beyond the noise floor AND every quality field is inside its tolerance against A; a row with a quality drop keeps FP32 whatever its time. B2 replaces B1 only if it is faster with quality equal. DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted."
   },
   {
    "id": "fast-bf16-units-board",
@@ -5072,13 +5084,15 @@
     }
    ],
    "b_arms": [
-    "fast-matrix-units-tf32"
+    "fast-matrix-units-tf32",
+    "fast-rows",
+    "fast-matrix-units-off"
    ],
    "columns": [
     "time",
     "max_rel_err_vs_fp64"
    ],
-   "decides": "each constant of matrix_units_takes (K 32, edge 64, work 2^27): moved to where B stops being faster than A; a shape the rule routes that is slower in B is a rule defect"
+   "decides": "each constant of matrix_units_takes (K 32, edge 64, work 2^27): moved to where B stops being faster than A; a shape the rule routes that is slower in B is a rule defect DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted."
   },
   {
    "id": "fast-bf16-units-shapes",
@@ -5178,14 +5192,16 @@
     }
    ],
    "b_arms": [
-    "fast-matrix-units-tf32"
+    "fast-matrix-units-tf32",
+    "fast-rows",
+    "fast-matrix-units-off"
    ],
    "columns": [
     "time",
     "held-out accuracy / log_loss",
     "loss per step for all 200 steps (divergence check), held-out loss"
    ],
-   "decides": "training with TF32 products does not diverge where FP32 does not: the B loss curve stays within 0.05 relative of A at every recorded step and the held-out loss within 0.05 relative"
+   "decides": "training with TF32 products does not diverge where FP32 does not: the B loss curve stays within 0.05 relative of A at every recorded step and the held-out loss within 0.05 relative DECIDED 2026-11-20 (lane fx-verdicts6, A/B abf2): fast-matrix-units-tf32-all is the default of the fast set; what is owed on this row is the confirming pair fast-rows (the route) against fast-matrix-units-off (the exact route), after which the old path is deleted."
   },
   {
    "id": "fast-bf16-units-nonboard",
@@ -5351,7 +5367,7 @@
    "b_arms": [
     "fast-decomp-matrix-units"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"
@@ -5399,7 +5415,7 @@
    "b_arms": [
     "fast-decomp-matrix-units"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "explained_variance_ratio max abs diff vs A",
@@ -5423,7 +5439,7 @@
    "b_arms": [
     "fast-neighbors-matrix-units"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "quality"
@@ -5476,7 +5492,7 @@
    "b_arms": [
     "fast-neighbors-matrix-units"
    ],
-   "owed": "RUN",
+   "owed": "DECIDED",
    "columns": [
     "time",
     "recall@k vs A",
