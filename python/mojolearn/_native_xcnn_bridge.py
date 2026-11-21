@@ -133,6 +133,24 @@ def _native_key(module, connected):
         connected["native_key"] = (mode, vendor)
 
 
+def _connect_cpu_device(context):
+    # glue: `device="cpu"` beside a GPU set: the CPU identical image of the
+    # x_cnn binding, loaded once at import; a layer's route holds its entries
+    # (bindings/xcnn_common_door.mojo `xcnn_entries`). A CPU-only
+    # installation has no second set: its one set is the CPU's. An image
+    # that does not load records why, and the layer that asks for it says so.
+    from . import _backend
+    if _backend._CPU_ONLY is not None:
+        return
+    bindings = {}
+    try:
+        bindings["identical"] = _connect_mode(
+            _backend.load_host_module(_backend._HOST_MODULES["_mojolearn_x_cnn"]))  # import-time: the CPU image
+    except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError) as error:
+        bindings["identical"] = type(error).__name__ + ": " + str(error)
+    context.update(xcnn_cpu_bindings=bindings)
+
+
 def connect():
     """`(entry, context)`: the compiled owner and the context every layer
     shares. Connected once; later calls return the same pair."""
@@ -165,6 +183,7 @@ def connect():
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context.update(xcnn_bindings=bindings)
+    _connect_cpu_device(context)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 
