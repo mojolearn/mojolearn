@@ -273,17 +273,51 @@ def _bgmm_fit_call(binding: PythonObject, x: PythonObject, aux: List[Float32], v
 def _bgmm_score_call(binding: PythonObject, x: PythonObject, aux: List[Float32], n: Int, d: Int, k: Int,
                      flags: Int) raises -> BgmmResultSlot:
     """ENTRY_BGMM_SCORE on the typed transport (ints [n, d, k, flags])."""
+    var result = _bgmm_score_span(binding, x, VariantsSpan(Int(aux.unsafe_ptr()), len(aux)), n, d, k, flags)
+    _ = aux  # the borrowed words stay alive through the entry above
+    return result^
+
+
+def _bgmm_score_span(binding: PythonObject, x: PythonObject, aux: VariantsSpan, n: Int, d: Int, k: Int,
+                     flags: Int) raises -> BgmmResultSlot:
+    """ENTRY_BGMM_SCORE on the typed transport over model words the caller
+    keeps alive (`aux` is a view, never copied)."""
     var connection = _bgmm_connection(binding)
     var source = variants_span(x)
     var result = BgmmResultSlot()
     try:
         with GILReleased(Python()):
-            connection.driver.score(source, VariantsSpan(Int(aux.unsafe_ptr()), len(aux)), n, d, k, flags, result)
+            connection.driver.score(source, aux, n, d, k, flags, result)
     finally:
         _ = connection.provider
         _ = x
-        _ = aux
     return result^
+
+
+def bgmm_score_words(means: PythonObject, pchol: PythonObject, consts: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """The model words ENTRY_BGMM_SCORE reads (means_ || _full_pchol ||
+    _log_consts, float32 C order, the layout `_aux` built), laid out ONCE
+    per fitted state as one float32 Array kept beside the fitted attributes
+    as `_score_words` (replaced by every refit, released with the fit's other
+    owners). The three sources are the owned float32 C-order Arrays the fit
+    or the member pack just published."""
+    var nm = Int(py=means.size)
+    var np = Int(py=pchol.size)
+    var nc = Int(py=consts.size)
+    var words = family_array(Python.tuple(nm + np + nc), "<f4", context)
+    var out = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(words)))
+    if nm:
+        unsafe_memcpy(dest=out, src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(means))), count=nm)
+    if np:
+        unsafe_memcpy(dest=out + nm, src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(pchol))), count=np)
+    if nc:
+        unsafe_memcpy(dest=out + nm + np,
+                      src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(consts))), count=nc)
+    _ = means
+    _ = pchol
+    _ = consts
+    return words
 
 
 def _sorted_repr(table: PythonObject) raises -> String:
@@ -763,10 +797,18 @@ def _bgmm_score(model: PythonObject, binding: PythonObject, source: PythonObject
         raise Error("mojolearn: X has " + String(d) + " features, " + String(py_type(model).__name__)
                     + " was fitted with " + family_str(fitted))
     k = Int(py=means.shape[0])
-    # the model block as byte copies (`_aux`)
-    var aux = _aux(Python.list(_any_f32(means, "aux", context), _any_f32(_get(model, "_full_pchol"), "aux", context),
-                               _any_f32(_get(model, "_log_consts"), "aux", context)))
-    var result = _bgmm_score_call(binding, x, aux, n, d, k, flags)
+    # The model words laid out once per fitted state (`bgmm_score_words`,
+    # published by the fit and by the member pack). Perf (lane
+    # ma-pub-cluster): this ran `_aux` (three `_any_f32` reads of means_,
+    # _full_pchol, _log_consts + one allocation + three memcpy) on EVERY
+    # predict / predict_proba / score_samples / score call; now one view of
+    # the held words, the same words in the same order (bits unchanged).
+    var words = _get_or(model, "_score_words", PythonObject(None))
+    if words is None:
+        raise Error("RuntimeError: this " + String(py_type(model).__name__) + " is not fitted yet")
+    var result = _bgmm_score_span(binding, x, VariantsSpan(Int(py=classical_address(words)), Int(py=words.size)),
+                                  n, d, k, flags)
+    _ = words  # the held words stay alive through the entry above
     _ = x^
     return result^
 
