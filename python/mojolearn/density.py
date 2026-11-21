@@ -141,6 +141,8 @@ class DBSCAN(_NumericModeMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 27 (Density), kind 1 (core/density_member.mojo; prediction_data=True only).
+    _mojolearn_member = (27, 1)
 
     #: `algorithm` names the eps-NEIGHBORHOOD SEARCH, and the two values
     #: are the two structures this library implements for it. scikit-learn's

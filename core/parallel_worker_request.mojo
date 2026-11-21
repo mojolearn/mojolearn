@@ -47,6 +47,15 @@ comptime PC_PARAMETERS = 15
 comptime PC_RUN = 16
 comptime PC_BLOCK_FIELDS = 17
 
+# The neural trainer's worker operations (bindings/parallel_neural_native_door.mojo).
+# A cached gradient request carries two words, the owner's cache epoch and
+# version; an update request carries none.
+comptime PN_MLP_GRADIENT_CACHED = 1
+comptime PN_SAMBA_GRADIENT_CACHED = 2
+comptime PN_MLP_UPDATE = 3
+comptime PN_SAMBA_UPDATE = 4
+comptime PN_GRADIENT_WORDS = 2
+
 
 struct WorkerRequest(Copyable, Movable):
     var op: Int

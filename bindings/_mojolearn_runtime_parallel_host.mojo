@@ -21,7 +21,7 @@ from bindings.tsa_hw_route_unpack import register_tsa_hw_resident_owner, registe
 from bindings.parallel_neural_native_door import parallel_neural_c, ParallelNeuralOwner
 from bindings.parallel_mlp_native_door import parallel_mlp_c
 from bindings.small_mlp_native_door import small_mlp_c, small_mlp_finalize_c
-from bindings.parallel_causal_native_door import parallel_causal_c, RemoteStateLifetime
+from bindings.parallel_causal_native_door import parallel_causal_c, RemoteStateLifetime, ParallelCausalOwner
 from std.python.bindings import lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_process_pool_type_door import register_process_pool_owner
@@ -81,6 +81,19 @@ def register_parallelneuralowner(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_ParallelNeuralOwner", existing)
 
 
+# The causal model's native owner (bindings/parallel_causal_native_door.mojo).
+def register_parallelcausalowner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[ParallelCausalOwner]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[ParallelCausalOwner]("_ParallelCausalOwner")
+        return
+    py_type_attach(module.module, "_ParallelCausalOwner", existing)
+
+
 def build__mojolearn_runtime_parallel_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
@@ -88,6 +101,7 @@ def build__mojolearn_runtime_parallel_host() -> PythonObject:
         # The process pool's record type (bindings/native_process_pool_type_door.mojo).
         register_process_pool_owner(module)
         register_parallelneuralowner(module)
+        register_parallelcausalowner(module)
         # The transport boundary these entries reach, set up as the tokenizer host does
         # (the same values; the tokenizer host initializes it first in one process).
         transport_initialize()

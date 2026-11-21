@@ -40,10 +40,11 @@ from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
-from bindings.member_boundary_door import member_admit, member_pack
+from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_held_door import member_held_adopt
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.prep_native_estimator_door import prep_estimator_plan
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
 from core.member_abi import (
@@ -84,6 +85,13 @@ struct MemberSetRun(Movable):
     # order the member sees them, repeats allowed.
     var picks: List[Int]
     var index_dtype: Int
+    # Per member: the address and row count of an X block of its own (a cv
+    # fold's rows the caller already gathered, shared by that fold's
+    # members), 0: the set's X. A member with its own block has no draws.
+    var own_x: List[Int]
+    var own_rows: List[Int]
+    # The caller's worker bound (an estimator's `n_jobs`), 0: none.
+    var cap: Int
     var workers: Int
     var states: List[Int]
     var failed: List[UInt8]
@@ -99,6 +107,9 @@ struct MemberSetRun(Movable):
         self.y_dtype = y_dtype
         self.picks = List[Int]()
         self.index_dtype = index_dtype
+        self.own_x = List[Int]()
+        self.own_rows = List[Int]()
+        self.cap = 0
         self.workers = 1
         self.states = List[Int]()
         self.failed = List[UInt8]()
@@ -114,6 +125,12 @@ struct MemberSet(Movable):
     var contexts: PythonObject
     var fields: PythonObject
     var pins: PythonObject
+    # Each member's import-time class plan (the held state's key at PACK).
+    var class_plans: PythonObject
+    # PACK leaves each fitted state with its estimator as its held member
+    # state. Set by a caller whose predict side reads held states; else the
+    # states are freed at PACK (a second copy of the model nobody reads).
+    var adopt: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -121,6 +138,8 @@ struct MemberSet(Movable):
         self.contexts = Python.list()
         self.fields = Python.list()
         self.pins = Python.list()
+        self.class_plans = Python.list()
+        self.adopt = False
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -133,8 +152,9 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     its fitted state into it) to the set, or answer False having added
     nothing when it is not a native member this set can fit: its class has no
     plan or no member mark, its family's admit keeps the estimator's own
-    doors, it has no fit, it is given weights it does not read, or the
-    targets are class codes and it is not a classifier (and the reverse).
+    doors or refuses (`member_admit_serving`: never raises, the fallback
+    rule), it has no fit, it is given weights it does not read, or the
+    targets are class codes and its family has no classifier.
     `context` is the caller's context (it holds the model-selection plans),
     `b` the builtins module. `classes`: the class count of code targets, 0
     for a regressor."""
@@ -147,16 +167,16 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
         return False
     var member_context = plan["context"]
     var fields = py_call(plan["fields_get"], estimator, py_type(estimator))
-    var owner = member_admit(estimator, fields, plan, member_context, b)
-    if not owner.published:
-        return False
-    if not owner.plan.member.can(MEMBER_CAN_FIT):
-        return False
-    if weights != 0 and not owner.plan.member.can(MEMBER_CAN_SAMPLE_WEIGHT):
-        return False
     # The family's union mask: a family of regressors and classifiers answers
-    # the kind-exact refusal itself at NEW / FIT.
-    if classes > 0 and not owner.plan.member.can(MEMBER_CAN_CLASSIFIER):
+    # the kind-exact refusal itself at NEW / FIT, and the caller then runs
+    # its own loop (a failing `member_set_run` publishes nothing).
+    var needs = MEMBER_CAN_FIT
+    if weights != 0:
+        needs = needs | MEMBER_CAN_SAMPLE_WEIGHT
+    if classes > 0:
+        needs = needs | MEMBER_CAN_CLASSIFIER
+    var owner = member_admit_serving(estimator, fields, plan, member_context, b, needs)
+    if not owner.published:
         return False
     owner.plan.classes = classes
     set.run.plans.append(owner.plan.copy())
@@ -166,6 +186,8 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     set.run.picks.append(row_count)
     set.run.picks.append(column_draw)
     set.run.picks.append(column_count)
+    set.run.own_x.append(0)
+    set.run.own_rows.append(0)
     set.run.states.append(0)
     set.run.failed.append(UInt8(0))
     set.run.errors.append(String(""))
@@ -173,18 +195,41 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     _ = py_call(set.contexts.append, member_context)
     _ = py_call(set.fields.append, fields)
     _ = py_call(set.pins.append, owner.pins)
+    _ = py_call(set.class_plans.append, plan)
     _ = owner.published
     return True
 
 
+def member_set_own_block(mut set: MemberSet, x: Int, rows: Int):
+    """UNPACK: the member admitted last reads its own float32 C-order X
+    block (`rows` x the set's columns, at address `x`; its target and
+    weights addresses then hold `rows` values) and not the set's X: a cv
+    fold's gathered rows, shared read-only by that fold's members. The
+    caller keeps the block alive through `member_set_run`."""
+    var last = len(set.run.own_x) - 1
+    if last < 0:
+        return
+    set.run.own_x[last] = x
+    set.run.own_rows[last] = rows
+
+
+def _set_cores(set: MemberSet) -> Int:
+    """The host cores, bounded by the caller's worker bound when it gave one."""
+    var cores = native_unit_cores()
+    if set.run.cap > 0:
+        cores = min(cores, set.run.cap)
+    return max(cores, 1)
+
+
 def member_set_workers(set: MemberSet) -> Int:
-    """The host cores bounded by the member count when every member's route
-    is the CPU; one when any member runs on a GPU (module note)."""
+    """The host cores (bounded by the caller's `cap`) bounded by the member
+    count when every member's route is the CPU; one when any member runs on
+    a GPU (module note)."""
     var count = len(set.run.plans)
     for u in range(count):  # driver-loop: over the members (their resolved routes)
         if set.run.plans[u].route.device != DEVICE_CPU:
             return 1
-    return max(min(native_unit_cores(), count), 1)
+    return max(min(_set_cores(set), count), 1)
 
 
 def member_set_width(set: MemberSet) -> Int:
@@ -195,7 +240,7 @@ def member_set_width(set: MemberSet) -> Int:
     for u in range(len(set.run.plans)):  # driver-loop: over the members (their resolved routes)
         if set.run.plans[u].route.device != DEVICE_CPU:
             return 1
-    return max(native_unit_cores(), 1)
+    return _set_cores(set)
 
 
 @always_inline
@@ -261,13 +306,15 @@ def _member_set_unit(address: Int, u: Int) raises:
     """Fit member `u` in a new state of its own; the state stays in
     `states[u]` for PACK. A failure releases it."""
     var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
-    var rows = run[].rows
+    var own = run[].own_x[u] != 0
+    var x_address = run[].own_x[u] if own else run[].x
+    var rows = run[].own_rows[u] if own else run[].rows
     var cols = run[].cols
     var row_draw = run[].picks[4 * u]
     var row_count = run[].picks[4 * u + 1]
     var column_draw = run[].picks[4 * u + 2]
     var column_count = run[].picks[4 * u + 3]
-    var drawn = row_count > 0 or column_count > 0
+    var drawn = not own and (row_count > 0 or column_count > 0)
     var member = run[].plans[u].member
     var by_index = (drawn and (row_count == 0 or member.can(MEMBER_CAN_ROW_INDEX))
         and (column_count == 0 or member.can(MEMBER_CAN_COLUMN_INDEX)))
@@ -277,7 +324,7 @@ def _member_set_unit(address: Int, u: Int) raises:
     var call = member_new(run[].plans[u])
     var done = False
     try:
-        call.x = MemberMatrix(run[].x, rows, cols)
+        call.x = MemberMatrix(x_address, rows, cols)
         call.y = MemberMatrix(run[].targets[u], rows, 1, run[].y_dtype)
         if run[].weights[u] != 0:
             call.weights = MemberMatrix(run[].weights[u], rows, 1)
@@ -369,20 +416,40 @@ def member_set_run(mut set: MemberSet) raises:
 def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: PythonObject) raises -> PythonObject:
     """PACK: member `u`'s fitted estimator (the clone given at admission,
     now holding the attributes its own fit writes); its state is released.
-    `classes`: the member's `classes_` (the labels its codes stand for; a
-    caller whose members see the ensemble's codes passes the codes
-    themselves), or None for a regressor. Labels never cross the ABI: they
-    are published here."""
+    `classes`: the labels the member's codes stand for (code c is
+    `classes[c]`; a caller whose members see the ensemble's codes passes the
+    codes themselves), or None for a regressor. Labels never cross the ABI:
+    the family's pack takes them (`member_pack_labeled`) and writes its own
+    class attributes, as its fit door does."""
     var estimator = set.estimators[u]
     var member_context = set.contexts[u]
     var fields = set.fields[u]
     try:
-        member_pack(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u])
-    finally:
+        if classes is None:
+            member_pack(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u])
+        else:
+            member_pack_labeled(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u], classes)
+    except error:
+        var failed = MemberCall(set.run.plans[u].route, set.run.states[u])
+        member_free(set.run.plans[u], failed)
+        set.run.states[u] = 0
+        raise error^
+    # `adopt`: the fitted state stays with the estimator as its held member
+    # state (bindings/member_held_door.mojo), so the caller's predict side
+    # reads it without an import. Not kept: freed here, as before.
+    var kept = False
+    if set.adopt:
+        try:
+            kept = member_held_adopt(estimator, set.class_plans[u], member_context, set.pins[u], set.run.plans[u],
+                                     set.run.states[u])
+        except:
+            kept = False
+    if not kept:
         var call = MemberCall(set.run.plans[u].route, set.run.states[u])
         member_free(set.run.plans[u], call)
-        set.run.states[u] = 0
-    if classes is not None:
-        py_setitem(fields, "classes_", classes)
+    set.run.states[u] = 0
+    # A family whose pack does not write the class count yet (the tree
+    # families: owed by their publication lane) gets it here, as round 1 did.
+    if classes is not None and not py_contains(fields, "n_classes_"):
         py_setitem(fields, "n_classes_", PythonObject(len(classes)))
     return estimator
