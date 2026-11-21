@@ -1985,13 +1985,13 @@ def gbdt_ordered_host_fit(
         n_cols = shape.n_columns
         cat_base_columns = shape.n_base_columns
         cat_ctr_columns = shape.ctr_column_count
-    var tree_on = len(cat_tree_state) > 0
     else:
         grid = gbdt_host_grid(
             x_colmajor, n_rows, n_features, params.border_count,
             params.border_build_max_samples, params.random_seed,
             params.nan_mode, params.border_type,
         )
+    var tree_on = len(cat_tree_state) > 0
     # the prelude's own layout rule (`build_layout(fold_counts, one_hot)`);
     # `cat_one_hot` is empty for a float-only fit
     var layout = build_layout(grid.fold_counts, cat_one_hot)
