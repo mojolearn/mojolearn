@@ -95,7 +95,7 @@ def build__mojolearn_tsa() -> PythonObject:
         m.def_function[holtwinters_resident_count_binding]("holtwinters_resident_count")
         # TOMBSTONE: dead Python exports holtwinters_resident_prepare, holtwinters_resident_release, holtwinters_query_resident (no caller: the ExponentialSmoothing owner reaches the resident operations through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-20; code recoverable at 3b1a75cca0.
         # Restore: git apply experiments/removed/dead_entries_tsa_hw_resident.patch
-        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 038b12431e.
         # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
         # The Holt-Winters operations table (core/tsa_entry_table.mojo): the
         # ExponentialSmoothing owner resolves it once per estimator and calls

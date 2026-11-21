@@ -127,7 +127,7 @@ def build__mojolearn_forecast_host() -> PythonObject:
         # 2026-09-16). It trains no model, so it belongs on the shipped side;
         # the `_mojolearn_tsa` route reaches it here when the reference
         # binding, which holds holtwinters_fit, is not built.
-        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+        # TOMBSTONE: dead Python exports kpss_test, select_d (no product caller: the stationarity functions and AutoARIMA's search reach these kernels through the published tsa operations table, core/tsa_entry_table.mojo TSA_OP_KPSS_TEST / TSA_OP_SELECT_D; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 038b12431e.
         # Restore: git apply experiments/removed/dead_entries_tsa_kpss_calls.patch
         # The Holt-Winters operations table of this inference image
         # (core/tsa_entry_table.mojo, family TSA_TABLE_FORECAST): the explicit
