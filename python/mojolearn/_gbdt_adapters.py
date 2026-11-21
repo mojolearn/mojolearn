@@ -327,6 +327,14 @@ _native_trees_bridge.register(GradientBoostingClassifier, "gbdt_adapter", trees_
 ))
 _native_trees_bridge.register(GradientBoostingRegressor, "gbdt_adapter")
 
+# CatBoost / XGBoost / LightGBM parameter names (python/mojolearn/_boosting_param_names.py),
+# one table for both adapters, built once here. The native constructor and
+# set_params read it only for a keyword that is not a parameter
+# (bindings/trees_gbdt_parameters_pack.mojo).
+from ._boosting_param_names import parameter_name_table as _parameter_name_table
+_TREES_CONTEXT['trees_gbdt_adapter_parameter_names'] = _parameter_name_table(
+    tuple(name for name in inspect.signature(_GBDTAdapter.__init__).parameters if name != "self"))  # glue: the adapter's constructor parameter names, once at import
+
 # Capture the explicit signature once; installed constructor execution is one
 # native call through the shared tree signature binder.
 _native_trees_bridge.connect_gbdt_parameters(
