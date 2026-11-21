@@ -16,10 +16,14 @@ step with the GIL held. Here:
     fold indices are read once as addresses.
   * RUN (GIL released): the units run on `workers` host tasks
     (`host_parallelize` over lanes; a lane takes units lane, lane + workers,
-    ...). Each unit gathers its fold's rows into its own buffers, makes its
-    own member state (`member_new`), fits, scores and frees it. With one
-    worker (a GPU member: its units share one device) the fold gather itself
-    is split across the host cores.
+    ...). X is NOT copied per fold: a fold side that is one run of rows (a
+    test fold of an unshuffled KFold, a time-series split's sides) is a view
+    of X; a scattered side goes to a member that reads row numbers
+    (`MEMBER_CAN_ROW_INDEX`) as the whole X plus the fold's index array.
+    Only a scattered side of a family without that bit is gathered into the
+    unit's own buffers (with one worker the gather itself is split across
+    the host cores). Each unit makes its own member state (`member_new`),
+    fits, scores and frees it.
   * Results go to typed slots per unit. If any unit fails, this route
     publishes nothing and answers `ran == False`: the Python units then run
     and raise the estimator's own exception.
@@ -38,8 +42,8 @@ C-order X with a target; the member answers fit and score and reads dense
 host views. Device fold sets, the slice route and learning_curve's test
 reuse keep their own route (the caller tests those before calling).
 
-Memory per worker: one fold's train and test rows (at most one copy of X and
-y), as a Python unit holds. The worker count is the caller's
+Memory per worker: nothing for viewed or indexed sides; for a gathered side
+its rows (at most one copy of X and y), as a Python unit holds. The worker count is the caller's
 (`msel_unit_workers`: the n_jobs bound, the units, one on a GPU).
 """
 from std.memory import unsafe_memcpy
@@ -56,8 +60,8 @@ from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.py_balanced import py_call, py_type, py_get
 from core.host_parallel import host_parallelize
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
-    MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER,
+    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, MEMBER_I64,
+    MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
 )
 
 #: Rows below which a fold gather is not split (a task costs more than the
@@ -89,8 +93,12 @@ struct MselMemberRun(Movable):
     # Per fold, four words: train index address, train rows, test index
     # address, test rows (int64 row numbers of X).
     var folds: List[Int]
+    # Per fold side (2 * fold + {0 train, 1 test}): the first row when the
+    # side is one run of consecutive rows (a view of X), else -1.
+    var starts: List[Int]
     var x: Int
     var y: Int
+    var rows: Int
     var cols: Int
     var n_folds: Int
     var n_units: Int
@@ -103,11 +111,14 @@ struct MselMemberRun(Movable):
     var failed: List[UInt8]
     var errors: List[String]
 
-    def __init__(out self, x: Int, y: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int, return_train: Bool):
+    def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
+        return_train: Bool):
         self.plans = List[MemberPlan]()
         self.folds = List[Int]()
+        self.starts = List[Int](length=2 * n_folds, fill=-1)
         self.x = x
         self.y = y
+        self.rows = rows
         self.cols = cols
         self.n_folds = n_folds
         self.n_units = n_units
@@ -155,6 +166,55 @@ def _gather(src: Int, index: Int, count: Int, cols: Int, dst: Int, split: Bool) 
     host_parallelize(_chunk, chunks)
 
 
+def _fold_run_start(index: Int, count: Int) -> Int:
+    """The first row when `index[0 .. count]` is one ascending run of
+    consecutive rows (the fold side is then a VIEW of X), else -1."""
+    if count <= 0:
+        return -1
+    var rows = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=index)
+    var first = Int(rows[0])
+    if Int(rows[count - 1]) - first != count - 1:
+        return -1
+    for i in range(1, count):
+        if Int(rows[i]) != first + i:
+            return -1
+    return first
+
+
+def _msel_member_fold_shape(address: Int, side: Int):
+    """One fold side (2 * fold + {0 train, 1 test}): is it a run of rows?"""
+    var run = MutPointer[MselMemberRun, MutUntrackedOrigin](unsafe_from_address=address)
+    var f = side // 2
+    var at = 4 * f + 2 * (side - 2 * f)
+    run[].starts[side] = _fold_run_start(run[].folds[at], run[].folds[at + 1])
+
+
+def _side_mode(start: Int, indexed: Bool) -> Int:
+    """How a fold side reaches the member: 0 a view of X (no copy), 1 the
+    whole X with the fold's row numbers (`call.row_index`, no copy), 2 rows
+    gathered into the unit's own buffer (a family that reads neither)."""
+    if start >= 0:
+        return 0
+    return 1 if indexed else 2
+
+
+def _side_set(run: MutPointer[MselMemberRun, MutUntrackedOrigin], mode: Int, start: Int, index: Int, count: Int,
+    gathered_x: Int, gathered_y: Int, mut call: MemberCall):
+    """Point the call's x, y and row_index at one fold side."""
+    var cols = run[].cols
+    call.row_index = MemberMatrix()
+    if mode == 0:
+        call.x = MemberMatrix(run[].x + start * cols * 4, count, cols)
+        call.y = MemberMatrix(run[].y + start * 4, count, 1)
+    elif mode == 1:
+        call.x = MemberMatrix(run[].x, run[].rows, cols)
+        call.y = MemberMatrix(run[].y, run[].rows, 1)
+        call.row_index = MemberMatrix(index, count, 1, MEMBER_I64)
+    else:
+        call.x = MemberMatrix(gathered_x, count, cols)
+        call.y = MemberMatrix(gathered_y, count, 1)
+
+
 def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int) raises:
     var c = u // run[].n_folds
     var f = u - c * run[].n_folds
@@ -164,30 +224,38 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     var train_rows = run[].folds[4 * f + 1]
     var test_index = run[].folds[4 * f + 2]
     var test_rows = run[].folds[4 * f + 3]
+    var indexed = run[].plans[c].member.can(MEMBER_CAN_ROW_INDEX)
+    var train_mode = _side_mode(run[].starts[2 * f], indexed)
+    var test_mode = _side_mode(run[].starts[2 * f + 1], indexed)
     var t0 = msel_seconds()
-    var x_train = List[Float32](length=train_rows * cols, fill=0.0)
-    var y_train = List[Float32](length=train_rows, fill=0.0)
-    var x_test = List[Float32](length=test_rows * cols, fill=0.0)
-    var y_test = List[Float32](length=test_rows, fill=0.0)
-    _gather(run[].x, train_index, train_rows, cols, Int(x_train.unsafe_ptr()), split)
-    _gather(run[].y, train_index, train_rows, 1, Int(y_train.unsafe_ptr()), split)
-    _gather(run[].x, test_index, test_rows, cols, Int(x_test.unsafe_ptr()), split)
-    _gather(run[].y, test_index, test_rows, 1, Int(y_test.unsafe_ptr()), split)
-    var train_x = MemberMatrix(Int(x_train.unsafe_ptr()), train_rows, cols)
-    var train_y = MemberMatrix(Int(y_train.unsafe_ptr()), train_rows, 1)
+    # X IS NOT COPIED PER FOLD when the side is a run of rows (a view) or the
+    # member reads row numbers. Only a scattered side of a family without
+    # MEMBER_CAN_ROW_INDEX is gathered, into this unit's own buffers.
+    var train_words = train_rows if train_mode == 2 else 0
+    var test_words = test_rows if test_mode == 2 else 0
+    var x_train = List[Float32](length=train_words * cols, fill=0.0)
+    var y_train = List[Float32](length=train_words, fill=0.0)
+    var x_test = List[Float32](length=test_words * cols, fill=0.0)
+    var y_test = List[Float32](length=test_words, fill=0.0)
+    if train_mode == 2:
+        _gather(run[].x, train_index, train_rows, cols, Int(x_train.unsafe_ptr()), split)
+        _gather(run[].y, train_index, train_rows, 1, Int(y_train.unsafe_ptr()), split)
+    if test_mode == 2:
+        _gather(run[].x, test_index, test_rows, cols, Int(x_test.unsafe_ptr()), split)
+        _gather(run[].y, test_index, test_rows, 1, Int(y_test.unsafe_ptr()), split)
     var call = member_new(run[].plans[c])
     try:
-        call.x = train_x
-        call.y = train_y
+        _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, Int(x_train.unsafe_ptr()),
+                  Int(y_train.unsafe_ptr()), call)
         _ = member_call(run[].plans[c].member, MEMBER_OP_FIT, call)
         var t1 = msel_seconds()
-        call.x = MemberMatrix(Int(x_test.unsafe_ptr()), test_rows, cols)
-        call.y = MemberMatrix(Int(y_test.unsafe_ptr()), test_rows, 1)
+        _side_set(run, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
+                  Int(y_test.unsafe_ptr()), call)
         _ = member_call(run[].plans[c].member, MEMBER_OP_SCORE, call)
         run[].test[u] = call.value
         if run[].return_train:
-            call.x = train_x
-            call.y = train_y
+            _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, Int(x_train.unsafe_ptr()),
+                      Int(y_train.unsafe_ptr()), call)
             _ = member_call(run[].plans[c].member, MEMBER_OP_SCORE, call)
             run[].train[u] = call.value
         run[].fit_time[u] = t1 - t0
@@ -243,7 +311,7 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
     # Everything that must stay alive (estimators, route owners, images,
     # index arrays, the admitted target) until the units have joined.
     var pins = Python.list()
-    var run = MselMemberRun(msel_addr(x), 0, cols, n_folds, n_units, workers, return_train)
+    var run = MselMemberRun(msel_addr(x), 0, rows, cols, n_folds, n_units, workers, return_train)
     for c in range(n_candidates):  # driver-loop: over candidates (admission with Python objects; once each)
         var est = base
         if candidates is not None:
@@ -291,9 +359,15 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
     def _lane(lane: Int) {imm address}:
         _msel_member_lane(address, lane)
 
+    def _shape(side: Int) {imm address}:
+        _msel_member_fold_shape(address, side)
+
     var py = Python()
     try:
         with GILReleased(py):
+            # The fold sides' shapes first (independent scans of the index
+            # arrays), then the units.
+            host_parallelize(_shape, 2 * n_folds)
             host_parallelize(_lane, lanes)
     finally:
         _ = pins
