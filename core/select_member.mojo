@@ -356,8 +356,9 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
         raise Error("member ABI: a SelectKBest member with a classification score needs call.classes")
     var k = Int(slot[].words[2])
     var keep_all = k < 0
-    if not keep_all and k > d:
-        raise Error("mojolearn: k should be 0 <= k <= n_features = " + String(d) + "; got " + String(k))
+    # The door's order (`prep_encode_native_door` SelectKBest fit): the scores
+    # run first, then chi2's non-negative check, then the k range refusal.
+    var k_ok = keep_all or k <= d
     var fam = Int(slot[].words[3])
     var prog = EncProgram(slot[].words[4] != 0.0)
     var plan = ScorePlan(0, 0, -1)
@@ -368,7 +369,7 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
         plan = score_pearson_stage(prog, ScorePearson(n, d, 0, 1, True, True, (fam & _IDN_SELECT_BLOCKED) != 0))
     var score_at = plan.extra if score == SELECT_SCORE_R_REGRESSION else plan.scores
     var mo = -1
-    if not keep_all:
+    if not keep_all and k_ok:
         mo = score_topk_stage(prog, score_at, 0, d, k)
     var arena = prep_enc_run(call, prog, call[].y.data, 0, False)
     _ = len(prog.consts_f)  # the program's own input words live past the run
@@ -377,6 +378,8 @@ def _fit_kbest(slot: _Slot, call: _Call) raises:
         for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
             if ap[plan.extra + 3 * d + j] < 0:
                 raise Error("mojolearn: Input X must be non-negative.")
+    if not k_ok:
+        raise Error("mojolearn: k should be 0 <= k <= n_features = " + String(d) + "; got " + String(k))
     slot[].clear()
     slot[].variances = List[Float32](length=d, fill=Float32(0))
     unsafe_memcpy(dest=slot[].variances.unsafe_ptr(), src=ap + score_at, count=d)
