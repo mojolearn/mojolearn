@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XNeighbors family (UNPACK / PACK of
 core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
-LocalOutlierFactor (kind 1), OneClassSVM (kind 2), KernelPCA (kind 3). Not
-yet published (admit refuses with the kind): PolynomialCountSketch AdditiveChi2Sampler SkewedChi2Sampler
+LocalOutlierFactor (kind 1), OneClassSVM (kind 2), KernelPCA (kind 3),
+PolynomialCountSketch (kind 4). Not yet published (admit refuses with the kind): PolynomialCountSketch AdditiveChi2Sampler SkewedChi2Sampler
 LabelPropagation LabelSpreading KNNImputer SVGP.
 
   * `xneighbors_member_admit` (UNPACK): the estimator's own parameter checks
@@ -33,6 +33,8 @@ LabelPropagation LabelSpreading KNNImputer SVGP.
     `family_xn_kpca_context`) and its resolved decomposition
     route (`_kpca_route`); a precomputed kernel answers False; pack =
     `kpca_fit`'s fields on that context's output arrays.
+    PolynomialCountSketch: admit = the door's parameter reads and the seed
+    word of an exact int random_state (else False); pack = `_pcs_fit`'s fields.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
@@ -56,7 +58,13 @@ from bindings.ocsvm_scalar_boundary_door import oc_kernel_admit, oc_parameter_re
 from bindings.svc_ocsvm_boundary_unpack import (
     _oc_float, _oc_int, _oc_kernel_code, _fast_tier_native, _ocsvm_labels_available,
 )
+from std.os import getenv
 from bindings.svc_common_pack import svc_scalar_array
+from bindings.neighbors_native_unpack import _pcs_int, _pcs_real, _pcs_hash
+from providers.python.array_metadata_pyapi_door import ArrayPin
+from bindings.pcs_native_boundary_unpack import pcs_seed_unpack
+from bindings.pcs_native_boundary_pack import pcs_array
+from core.pcs_native_api import pcs_options
 from bindings.kpca_native_door import (
     _kpca_route, _kpca_decomp_refused, _field as _kp_field, _int as _kp_int, _float as _kp_float,
     _name as _kp_name, _kernels as _kp_kernels, _kind as _kp_kind, _f32 as _kp_f32,
@@ -83,6 +91,7 @@ from core.member_abi import (
 )
 from core.xneighbors_member import (
     XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF, XNEIGHBORS_KIND_OCSVM, XNEIGHBORS_KIND_KERNEL_PCA,
+    XNEIGHBORS_KIND_PCS, PC_BLOCK_INDEX_HASH, PC_BLOCK_BIT_HASH, PC_BLOCK_FEATURES,
     KP_BLOCK_ROWS, KP_BLOCK_VALUES, KP_BLOCK_VECTORS, KP_BLOCK_COLUMNS, KP_BLOCK_TOTAL, KP_BLOCK_GAMMA,
     OC_BLOCK_VECTORS, OC_BLOCK_DUAL, OC_BLOCK_SUPPORT, OC_BLOCK_SCALARS, OC_GAMMA_VALUE, OC_GAMMA_SCALE, OC_GAMMA_AUTO,
     NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
@@ -313,6 +322,31 @@ def _kpca_admit(model: PythonObject, fields: PythonObject, b: PythonObject, mut 
     return True
 
 
+def _pcs_admit(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    """The door's parameter reads (`_pcs_int`, `_pcs_real`, `pcs_options`)
+    and the seed word of an exact int `random_state` (`pcs_seed_unpack`).
+    False: a RandomState or None random_state (the door draws a new seed from
+    it per fit, in Python), or an image that publishes no member entry."""
+    var degree = _pcs_int(family_field(fields, "degree"), "degree")
+    var components = _pcs_int(family_field(fields, "n_components"), "n_components")
+    _ = pcs_options(degree, components)
+    var coef0 = _pcs_real(family_field(fields, "coef0"), "coef0")
+    var gamma = _pcs_real(family_field(fields, "gamma"), "gamma")
+    var seed = family_field(fields, "random_state")
+    if py_type(seed) is not b.int:
+        return False
+    var word = pcs_seed_unpack(seed)
+    if not _route(model, context, b, owner):
+        return False
+    # The door reads this switch per transform; the environment is the same place.
+    var old_items = getenv("MOJOLEARN_XN_OLD_ITEMS") == "1"
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_PCS), Float64(degree), Float64(components), gamma, coef0,
+        Float64(word), 1.0 if old_items else 0.0]
+    owner.plan.params = words^
+    return True
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -321,6 +355,8 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         return _ocsvm_admit(model, fields, context, b, owner)
     if kind == XNEIGHBORS_KIND_KERNEL_PCA:
         return _kpca_admit(model, fields, b, owner)
+    if kind == XNEIGHBORS_KIND_PCS:
+        return _pcs_admit(model, fields, context, b, owner)
     if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
     if kind == XNEIGHBORS_KIND_LOF:
@@ -693,6 +729,65 @@ def _kpca_state(fields: PythonObject, context: PythonObject, b: PythonObject, pl
     return call.state
 
 
+def _pcs_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`_pcs_fit`'s fields: the two int32 hash tables and n_features_in_."""
+    var call = MemberCall(plan.route, state)
+    call.block = PC_BLOCK_FEATURES
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var features = Int(_F64P(unsafe_from_address=call.dst.data)[0])
+    call.block = PC_BLOCK_INDEX_HASH
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var indices = _pcs_table(call, context)
+    call.block = PC_BLOCK_BIT_HASH
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var signs = _pcs_table(call, context)
+    py_setitem(fields, "indexHash_", indices)
+    py_setitem(fields, "bitHash_", signs)
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _pcs_table(call: MemberCall, context: PythonObject) raises -> PythonObject:
+    """A new int32 Array (the door's `pcs_array`) holding the exported table."""
+    var shape: List[Int] = [call.dst.rows, call.dst.cols]
+    var table = pcs_array(shape, "<i4", context)
+    var count = call.dst.rows * call.dst.cols
+    if count > 0:
+        unsafe_memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(table))),
+            src=_I32P(unsafe_from_address=call.dst.data), count=count)
+    return table
+
+
+def _pcs_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    var features = _pcs_int(family_field(fields, "n_features_in_"), "n_features_in_")
+    var index_pin = ArrayPin()
+    var bit_pin = ArrayPin()
+    var degree = Int(plan.params[1])
+    var indices = _pcs_hash(family_field(fields, "indexHash_"), degree, "indexHash_", context, index_pin)
+    var signs = _pcs_hash(family_field(fields, "bitHash_"), degree, "bitHash_", context, bit_pin)
+    var count: List[Float64] = [Float64(features)]
+    var call = member_new(plan)
+    try:
+        call.block = PC_BLOCK_FEATURES
+        call.x = MemberMatrix(Int(count.unsafe_ptr()), 1, 1, MEMBER_F64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = PC_BLOCK_INDEX_HASH
+        call.x = MemberMatrix(indices.source.addr, degree, indices.source.cols, MEMBER_I32)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = PC_BLOCK_BIT_HASH
+        call.x = MemberMatrix(signs.source.addr, degree, signs.source.cols, MEMBER_I32)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = indices
+    _ = signs
+    _ = index_pin^
+    _ = bit_pin^
+    _ = count^
+    return call.state
+
+
 def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -703,6 +798,8 @@ def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: P
         _ocsvm_pack(fields, context, plan, state)
     elif plan.kind == XNEIGHBORS_KIND_KERNEL_PCA:
         _kpca_pack(fields, plan, state)
+    elif plan.kind == XNEIGHBORS_KIND_PCS:
+        _pcs_pack(fields, context, plan, state)
     else:
         _nc_pack(fields, context, b, plan, state)
 
@@ -717,4 +814,6 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
         return _ocsvm_state(fields, context, b, plan)
     if plan.kind == XNEIGHBORS_KIND_KERNEL_PCA:
         return _kpca_state(fields, context, b, plan)
+    if plan.kind == XNEIGHBORS_KIND_PCS:
+        return _pcs_state(fields, context, plan)
     return _nc_state(fields, context, plan)

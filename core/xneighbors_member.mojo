@@ -10,7 +10,7 @@ route resolved to (`x_neighbors_native_api_v1`, the `XnDriver` entry every
 x_neighbors door uses). No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor,
-2 OneClassSVM, 3 KernelPCA. The other classes of the family are not published yet
+2 OneClassSVM, 3 KernelPCA, 4 PolynomialCountSketch. The other classes of the family are not published yet
 (MEMBER-ABI-V2.md family 12). OUTPUTS with no state answers from the kind
 word and `call.classes` (NearestCentroid: proba `classes`, decision 1 for two
 classes else `classes`, predict 1; the outlier detectors: 1 column).
@@ -102,6 +102,19 @@ kept, 67 the fitted column means float32 1 x rows, 68 their total float32
 1 x 1, 69 gamma used (float64 1 x 1). A fit BORROWS X as its fitted rows
 (LIFETIME below, as LocalOutlierFactor).
 
+PolynomialCountSketch (kind 4). RUN: core/pcs_native_api.mojo
+`PCSNativeDriver.draw` / `.query` over the x_neighbors entry (`entry`), as
+bindings/neighbors_native_unpack.mojo `_pcs_fit` and
+bindings/neighbors_native_pack.mojo `_pcs_transform` run them. MEMBER_OP_NEW
+parameters (count 7): [0] kind 4, [1] degree, [2] n_components, [3] gamma,
+[4] coef0, [5] the seed word (`pcs_seed_unpack` of an exact int
+random_state: a RandomState or None draws per fit in Python and is not a
+member), [6] the old-items switch (`MOJOLEARN_XN_OLD_ITEMS`). Views: fit
+reads only the width of X; transform X float32 rows x features -> float32
+rows x n_components (host, dense). OUTPUTS answers n_components with no
+state. Blocks: 64 indexHash int32 degree x augmented, 65 bitHash int32 degree
+x augmented, 66 n_features_in (float64 1 x 1).
+
 LIFETIME: a NearestCentroid fit reads X and y only during the call (its
 fitted state is the centroids it computes); nothing of X is kept or copied.
 A LocalOutlierFactor fit BORROWS X as its fitted rows, as the estimator's
@@ -143,6 +156,7 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.ocsvm_resident_api import OcResidentDriver
 from core.ocsvm_plan import oc_take_rows_into
 from core.kpca_native_api import KPCAEigenRequest, KPCANativeDriver
+from core.pcs_native_api import PCSFitPlan, PCSNativeDriver, pcs_options, pcs_feature_width
 from core.kpca_native_plan import (
     KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCADenseFit, KPCAFitPrepareRequest, KPCAAlphaRequest,
     KPCAQueryRequest, KPCACenteredQuery, KPCANeighborDriver,
@@ -169,7 +183,8 @@ comptime XNEIGHBORS_KIND_NEAREST_CENTROID = 0
 comptime XNEIGHBORS_KIND_LOF = 1
 comptime XNEIGHBORS_KIND_OCSVM = 2
 comptime XNEIGHBORS_KIND_KERNEL_PCA = 3
-comptime XNEIGHBORS_KIND_COUNT = 4
+comptime XNEIGHBORS_KIND_PCS = 4
+comptime XNEIGHBORS_KIND_COUNT = 5
 comptime NC_BLOCK_CENTROIDS = MEMBER_BLOCK_FAMILY
 comptime NC_BLOCK_STD = MEMBER_BLOCK_FAMILY + 1
 comptime NC_BLOCK_DEVIATIONS = MEMBER_BLOCK_FAMILY + 2
@@ -193,6 +208,10 @@ comptime KP_BLOCK_COLUMNS = MEMBER_BLOCK_FAMILY + 3
 comptime KP_BLOCK_TOTAL = MEMBER_BLOCK_FAMILY + 4
 comptime KP_BLOCK_GAMMA = MEMBER_BLOCK_FAMILY + 5
 comptime _KP_BLOCKS = 6
+comptime PC_BLOCK_INDEX_HASH = MEMBER_BLOCK_FAMILY
+comptime PC_BLOCK_BIT_HASH = MEMBER_BLOCK_FAMILY + 1
+comptime PC_BLOCK_FEATURES = MEMBER_BLOCK_FAMILY + 2
+comptime _PC_BLOCKS = 3
 #: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
 comptime OC_GAMMA_VALUE = 0
 comptime OC_GAMMA_SCALE = 1
@@ -284,6 +303,16 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var kp_total: List[Float32]
     var kp_alphas: List[Float32]
     var kp_alphas_ready: Bool
+    # PolynomialCountSketch words (kind 4) and its two hash tables.
+    var pc_degree: Int
+    var pc_components: Int
+    var pc_gamma: Float64
+    var pc_coef0: Float64
+    var pc_seed: Int
+    var pc_old_items: Bool
+    var pc_augmented: Int
+    var pc_indices: List[Int32]
+    var pc_signs: List[Int32]
 
     def __init__(out self):
         self.generation = 0
@@ -357,6 +386,15 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.kp_total = List[Float32]()
         self.kp_alphas = List[Float32]()
         self.kp_alphas_ready = False
+        self.pc_degree = 2
+        self.pc_components = 100
+        self.pc_gamma = 1.0
+        self.pc_coef0 = 0.0
+        self.pc_seed = 0
+        self.pc_old_items = False
+        self.pc_augmented = 0
+        self.pc_indices = List[Int32]()
+        self.pc_signs = List[Int32]()
 
 
 struct XNeighborsMemberStore(Defaultable, Movable):
@@ -408,6 +446,8 @@ def _clear(slot: _SlotPtr):
     slot[].kp_total = List[Float32]()
     slot[].kp_alphas = List[Float32]()
     slot[].kp_alphas_ready = False
+    slot[].pc_indices = List[Int32]()
+    slot[].pc_signs = List[Int32]()
 
 
 def _mint(words: _F64P, count: Int) raises -> Int:
@@ -462,6 +502,13 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].kp_coef0 = words[8]
             slot[].kp_remove_zero = words[9] != 0.0
             slot[].kp_old_items = words[10] != 0.0
+        elif slot[].kind == XNEIGHBORS_KIND_PCS:
+            slot[].pc_degree = Int(words[1])
+            slot[].pc_components = Int(words[2])
+            slot[].pc_gamma = words[3]
+            slot[].pc_coef0 = words[4]
+            slot[].pc_seed = Int(words[5])
+            slot[].pc_old_items = words[6] != 0.0
         else:
             slot[].k = Int(words[1])
             slot[].novelty = words[2] != 0.0
@@ -504,6 +551,8 @@ def _name(slot: _SlotPtr) -> String:
         return String("OneClassSVM")
     if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
         return String("KernelPCA")
+    if slot[].kind == XNEIGHBORS_KIND_PCS:
+        return String("PolynomialCountSketch")
     return String("LocalOutlierFactor")
 
 
@@ -1286,6 +1335,123 @@ def _kp_import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------ PolynomialCountSketch
+
+
+def _pc_plan(slot: _SlotPtr) raises -> PCSFitPlan:
+    return PCSFitPlan(pcs_options(slot[].pc_degree, slot[].pc_components), slot[].features, slot[].pc_coef0)
+
+
+def _pc_fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """`PolynomialCountSketch.fit` (bindings/neighbors_native_unpack.mojo
+    `_pcs_fit`): the two hash tables drawn from the seed word (zeros when
+    there is no augmented column), as the door draws them. The fit reads only
+    the width of X. fit_transform: then the transform of the same rows."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    var transformed = call[].fit_output == MEMBER_OP_TRANSFORM
+    if call[].fit_output != 0 and not transformed:
+        member_unsupported(estimator, call[].fit_output)
+    slot[].fitted = False
+    slot[].features = call[].x.cols
+    var plan = _pc_plan(slot)
+    var count = plan.options.degree * plan.augmented
+    slot[].pc_indices = List[Int32](length=max(count, 1), fill=Int32(0))
+    slot[].pc_signs = List[Int32](length=max(count, 1), fill=Int32(0))
+    if plan.augmented > 0:
+        var driver = PCSNativeDriver(XnDriver(call[].route.entry.call))
+        driver.require_draw()
+        driver.draw(plan.draw(slot[].pc_seed, Int(slot[].pc_indices.unsafe_ptr()), Int(slot[].pc_signs.unsafe_ptr())))
+    slot[].pc_augmented = plan.augmented
+    slot[].rows = call[].x.rows
+    slot[].fitted = True
+    if transformed:
+        _pc_transform(slot, call)
+
+
+def _pc_transform(slot: _SlotPtr, call: _CallPtr) raises:
+    """`PolynomialCountSketch.transform` (bindings/neighbors_native_pack.mojo
+    `_pcs_transform`): the query over the state's own hash tables."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before transform")
+    _whole(call, estimator)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    pcs_feature_width(call[].x.cols, slot[].features)
+    var rows = call[].x.rows
+    _dense(call[].dst, MEMBER_F32, "the transform buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != slot[].pc_components:
+        raise Error("ValueError: the transform buffer holds " + String(slot[].pc_components)
+            + " components per row of X")
+    var plan = _pc_plan(slot)
+    var driver = PCSNativeDriver(XnDriver(call[].route.entry.call))
+    driver.query(plan.query(call[].x.data, Int(slot[].pc_indices.unsafe_ptr()), Int(slot[].pc_signs.unsafe_ptr()),
+        call[].dst.data, rows, slot[].pc_gamma, slot[].pc_coef0, slot[].pc_old_items))
+
+
+def _pc_export(slot: _SlotPtr, call: _CallPtr) raises:
+    """A view of one fitted block; the slot owns the words until this
+    state's next fit, import or free."""
+    if not slot[].fitted:
+        raise Error("NotFittedError: this PolynomialCountSketch member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block >= _PC_BLOCKS:
+            raise Error("member ABI: a PolynomialCountSketch member has three fitted blocks")
+        block = PC_BLOCK_INDEX_HASH + block
+    if block == PC_BLOCK_INDEX_HASH:
+        call[].dst = MemberMatrix(Int(slot[].pc_indices.unsafe_ptr()), slot[].pc_degree, slot[].pc_augmented,
+            MEMBER_I32)
+    elif block == PC_BLOCK_BIT_HASH:
+        call[].dst = MemberMatrix(Int(slot[].pc_signs.unsafe_ptr()), slot[].pc_degree, slot[].pc_augmented,
+            MEMBER_I32)
+    elif block == PC_BLOCK_FEATURES:
+        slot[].offset_word[0] = Float64(slot[].features)
+        call[].dst = MemberMatrix(Int(slot[].offset_word.unsafe_ptr()), 1, 1, MEMBER_F64)
+    else:
+        raise Error("member ABI: a PolynomialCountSketch member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _PC_BLOCKS
+
+
+def _pc_import(slot: _SlotPtr, call: _CallPtr) raises:
+    """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state."""
+    var estimator = _name(slot)
+    var block = call[].block
+    var count = call[].x.rows * call[].x.cols
+    if block == PC_BLOCK_FEATURES:
+        _dense(call[].x, MEMBER_F64, "n_features_in_", estimator)
+        if count != 1:
+            raise Error("member ABI: a PolynomialCountSketch feature count is one float64 word")
+        slot[].fitted = False
+        slot[].features = Int(_F64P(unsafe_from_address=call[].x.data)[0])
+    elif block == PC_BLOCK_INDEX_HASH or block == PC_BLOCK_BIT_HASH:
+        _dense(call[].x, MEMBER_I32, "a hash table", estimator)
+        if call[].x.rows != slot[].pc_degree:
+            raise Error("ValueError: PolynomialCountSketch hash tables must match degree")
+        slot[].fitted = False
+        var words = List[Int32](length=max(count, 1), fill=Int32(0))
+        if count > 0:
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_I32P(unsafe_from_address=call[].x.data), count=count)
+        if block == PC_BLOCK_INDEX_HASH:
+            slot[].pc_indices = words^
+        else:
+            slot[].pc_signs = words^
+        slot[].pc_augmented = call[].x.cols
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a PolynomialCountSketch member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var plan = _pc_plan(slot)
+    var count_words = plan.options.degree * plan.augmented
+    plan.admit_hash_widths(slot[].pc_augmented, slot[].pc_augmented)
+    if len(slot[].pc_indices) < count_words or len(slot[].pc_signs) < count_words:
+        raise Error("ValueError: PolynomialCountSketch hash tables do not match the fitted features")
+    slot[].fitted = True
+
+
 # ------------------------------------------------------------ dispatch
 
 
@@ -1298,6 +1464,7 @@ comptime _LOF_NOVELTY = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISI
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 comptime _LOF_OUTLIER = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT   # fit_predict: FIT + fit_output
 comptime _KERNEL_PCA = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+comptime _TRANSFORMER = _KERNEL_PCA   # fit, transform, export, import (fit_output TRANSFORM)
 comptime _OCSVM = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 
@@ -1307,8 +1474,8 @@ def _capabilities(slot: _SlotPtr) -> Int:
         return _LOF_NOVELTY if slot[].novelty else _LOF_OUTLIER
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         return _OCSVM
-    if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
-        return _KERNEL_PCA
+    if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA or slot[].kind == XNEIGHBORS_KIND_PCS:
+        return _TRANSFORMER
     return _NC_EUCLIDEAN if slot[].euclidean else _NC_MANHATTAN
 
 
@@ -1339,6 +1506,11 @@ def _new(call: _CallPtr) raises:
         if call[].param_count != 11:
             raise Error("member ABI: a KernelPCA member takes eleven parameters (kind, kernel, n_components, "
                 + "auto solver, resident, gamma given, gamma, degree, coef0, remove_zero_eig, old_items)")
+    elif kind == XNEIGHBORS_KIND_PCS:
+        if call[].param_count != 7:
+            raise Error("member ABI: a PolynomialCountSketch member takes seven parameters (kind, degree, "
+                + "n_components, gamma, coef0, seed word, old_items)")
+        _ = pcs_options(Int(words[1]), Int(words[2]))
     else:
         if call[].param_count != 7:
             raise Error("member ABI: a LocalOutlierFactor member takes seven parameters (kind, n_neighbors, "
@@ -1370,7 +1542,7 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _KERNEL_PCA
+            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER
         return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False)))
     if operation == MEMBER_OP_NEW:
         _new(call)
@@ -1388,6 +1560,12 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
         if asked == XNEIGHBORS_KIND_KERNEL_PCA:
             # The kept component count is chosen by the fit (rank, zero eigenvalues).
             raise Error("member ABI: a KernelPCA member's transform width is chosen by its fit; ask a fitted state")
+        if asked == XNEIGHBORS_KIND_PCS:
+            if call[].param_count != 7:
+                raise Error("member ABI: a PolynomialCountSketch member takes seven parameters")
+            call[].classes = 0
+            call[].out_cols = Int(_F64P(unsafe_from_address=call[].params)[2])
+            return 0
         _outputs(asked, call[].classes, call)
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
@@ -1398,7 +1576,23 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             call[].classes = 0
             call[].out_cols = slot[].kp_kept
             return 0
+        if slot[].kind == XNEIGHBORS_KIND_PCS:
+            call[].classes = 0
+            call[].out_cols = slot[].pc_components
+            return 0
         _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
+        return 0
+    if slot[].kind == XNEIGHBORS_KIND_PCS:
+        if operation == MEMBER_OP_FIT:
+            _pc_fit(slot, call)
+        elif operation == MEMBER_OP_TRANSFORM:
+            _pc_transform(slot, call)
+        elif operation == MEMBER_OP_EXPORT:
+            _pc_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _pc_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
         if operation == MEMBER_OP_FIT:

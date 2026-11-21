@@ -1030,6 +1030,11 @@ class PolynomialCountSketch(_XNeighbors):
     #: (providers/python/estimator_binding_pyapi_door.mojo); the check runs both devices in this process.
     _mojolearn_device = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    # An int random_state only (a RandomState or None keeps the estimator's own doors).
+    _mojolearn_member = (12, 4)
+
     def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
         self.gamma = gamma
         self.degree = degree
