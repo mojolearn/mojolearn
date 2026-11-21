@@ -129,7 +129,7 @@ def _checkpoint_create(path: String, mut temporary: String, mut failure: ByteChe
     return fd
 
 
-def _checkpoint_commit(fd: Int, mut opened: Bool, temporary: String, path: String,
+def _checkpoint_commit(fd: Int, mut opened: Bool, var temporary: String, var path: String,
                        mut failure: ByteCheckpointWriteFailure) raises:
     """fsync and close the written temporary, then one rename onto `path`.
     `opened` is False from the close on (the caller's cleanup reads it)."""
@@ -145,7 +145,7 @@ def _checkpoint_commit(fd: Int, mut opened: Bool, temporary: String, path: Strin
         _checkpoint_fail(failure, "replace", temporary, posix_errno())
 
 
-def _checkpoint_discard(fd: Int, opened: Bool, temporary: String):
+def _checkpoint_discard(fd: Int, opened: Bool, var temporary: String):
     """A failed write: close the descriptor if it is still open and remove
     the temporary. Best effort; the first failure is the one reported."""
     if opened:
@@ -326,7 +326,7 @@ struct ByteCheckpointArchive(Movable):
         self.complete = False
 
 
-def _checkpoint_open_read(path: String, mut failure: ByteCheckpointWriteFailure) raises -> Int:
+def _checkpoint_open_read(var path: String, mut failure: ByteCheckpointWriteFailure) raises -> Int:
     if path.byte_length() == 0 or path.find("\0") >= 0:
         raise Error("Byte-LM checkpoint path is empty or contains NUL")
     var cwd = -100  # AT_FDCWD
