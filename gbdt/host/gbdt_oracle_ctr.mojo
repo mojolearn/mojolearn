@@ -127,12 +127,16 @@ from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
     build_layout,
 )
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
     GbdtHostFitWithEval,
     GbdtHostGrid,
     GbdtHostModel,
     GbdtHostParams,
+    GbdtIntPtr,
     _binarize_columns,
+    _gbdt_units,
     _nan_token,
     gbdt_f32_token,
     gbdt_f64_token,
@@ -208,7 +212,11 @@ def _dense_cardinality(
     x_colmajor: List[Float32], n_rows: Int, f: Int
 ) raises -> Int:
     """The dense-code validation of `train` (`:1567-1596`): cardinality is
-    max + 1, every code below it present, at least two."""
+    max + 1, every code below it present, at least two.
+
+    SERIAL BY NATURE (admission, once per fit and feature): the refusal
+    names the FIRST bad row in row order (`dense_category_code` raises),
+    and the presence set grows with the running maximum."""
     var maxc = 0
     var seen = List[Bool](length=1, fill=False)
     for r in range(n_rows):
@@ -257,6 +265,85 @@ def _ctr_grid_for(config: TCtrConfig) -> TBinarizationOptions:
     return TBinarizationOptions(BORDER_SELECTION_MIN_ENTROPY, GBDT_CTR_GRID_BORDERS)
 
 
+#: the pointer a host task reads the binarized target through
+comptime _CtrU8Ptr = MutPointer[UInt8, MutUntrackedOrigin]
+
+
+def _ctr_copy_into(
+    src: List[Float32], src_offset: Int, count: Int, mut dst: List[Float32],
+    dst_offset: Int,
+):
+    """`dst[dst_offset + r] = src[src_offset + r]` for `count` rows (one
+    column's values; a move per row), the rows in `_gbdt_units` contiguous
+    ranges."""
+    var units = _gbdt_units(count, count)
+    var chunk = host_predict_chunk(count, units)
+    var src_p = rebind[HostF32Ptr](src.unsafe_ptr())
+    var dst_p = rebind[HostF32Ptr](dst.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm count, imm src_offset, imm dst_offset, imm src_p, imm dst_p}:
+        for r in range(unit * chunk, min(count, (unit + 1) * chunk)):
+            dst_p[dst_offset + r] = src_p[src_offset + r]
+
+    host_parallelize(rows, units)
+    _ = len(src)
+    _ = len(dst)
+
+
+def _ctr_max_code_range(col: HostF32Ptr, lo: Int, hi: Int) -> Int:
+    var maxc = 0
+    for r in range(lo, hi):
+        var code = Int(col[r])
+        if code > maxc:
+            maxc = code
+    return maxc
+
+
+def _ctr_max_code(col: List[Float32]) -> Int:
+    """The largest `Int(value)` of a column, 0 at least (an integer
+    maximum: any grouping). One maximum a task over a contiguous row
+    range, then the maximum of those."""
+    var n = len(col)
+    var units = _gbdt_units(n, 2 * n)
+    var chunk = host_predict_chunk(n, units)
+    var best = List[Int](length=max(units, 1), fill=0)
+    var col_p = rebind[HostF32Ptr](col.unsafe_ptr())
+    var best_p = rebind[GbdtIntPtr](best.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm col_p, imm best_p}:
+        best_p[unit] = _ctr_max_code_range(
+            col_p, min(n, unit * chunk), min(n, (unit + 1) * chunk)
+        )
+
+    host_parallelize(rows, units)
+    var maxc = 0
+    for u in range(len(best)):  # driver-loop: over the tasks' maxima
+        if best[u] > maxc:
+            maxc = best[u]
+    _ = len(col)
+    return maxc
+
+
+def _ctr_codes_of(col: List[Float32], mut codes: List[UInt32]):
+    """The dense codes of a CTR column, `UInt32(Int(value))` per row. The
+    column was admitted by `gbdt_ctr_column_kinds` (`_dense_cardinality`
+    ran `dense_category_code` on every row), so this is the conversion
+    alone: a move per row, the rows in `_gbdt_units` contiguous ranges."""
+    var n = len(codes)
+    var units = _gbdt_units(n, 2 * n)
+    var chunk = host_predict_chunk(n, units)
+    var col_p = rebind[HostF32Ptr](col.unsafe_ptr())
+    var codes_p = rebind[HostU32Ptr](codes.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n, imm col_p, imm codes_p}:
+        for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            codes_p[r] = UInt32(Int(col_p[r]))
+
+    host_parallelize(rows, units)
+    _ = len(col)
+    _ = len(codes)
+
+
 def _feature_freq_column(
     codes: List[UInt32], unique_values: Int, config: TCtrConfig
 ) -> List[Float32]:
@@ -265,20 +352,77 @@ def _feature_freq_column(
     Float32 once, then `(count + prior) / (totalWeight + priorObservations)`
     with `totalWeight = Float32(n)` (lane cpu4-gbdt: the device counts the
     segment length; below 2^24 rows this is the old Float32 running sum's
-    word, above it the count stays exact)."""
+    word, above it the count stays exact).
+
+    THE UNITS (lane gbdt-host-par). The counts are integers, exact in any
+    grouping: task `c` counts its contiguous row range per category and
+    the tasks' counts are added after the join (a task holds one count per
+    category, so the task count is also bounded by `n / categories`). The
+    quotient is one statement per row, in contiguous row ranges."""
     var n = len(codes)
-    var bin_counts = List[Int](length=unique_values, fill=0)
-    for r in range(n):
-        bin_counts[Int(codes[r])] += 1
+    var cats = max(unique_values, 1)
+    var units = _gbdt_units(n, 2 * n)
+    units = max(1, min(units, n // cats))
+    var chunk = host_predict_chunk(n, units)
+    var task_counts = List[Int](length=units * cats, fill=0)
+    var codes_p = rebind[HostU32Ptr](codes.unsafe_ptr())
+    var counts_p = rebind[GbdtIntPtr](task_counts.unsafe_ptr())
+
+    def count(unit: Int) {imm chunk, imm n, imm cats, imm codes_p, imm counts_p}:
+        var base = unit * cats
+        for r in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            var k = base + Int(codes_p[r])
+            counts_p[k] = counts_p[k] + 1
+
+    host_parallelize(count, units)
+    for u in range(1, units):  # driver-loop: over the tasks' count planes, added onto the first
+        for k in range(cats):
+            task_counts[k] += task_counts[u * cats + k]
     var total = Float32(n)
     var prior = config.numerator_shift()
     var prior_obs = config.denumerator_shift()
-    var out = List[Float32](length=n, fill=Float32(0.0))
-    for r in range(n):
-        out[r] = (Float32(bin_counts[Int(codes[r])]) + prior) / (
-            total + prior_obs
-        )
-    return out^
+    var column = List[Float32](length=n, fill=Float32(0.0))
+    var column_p = rebind[HostF32Ptr](column.unsafe_ptr())
+    var q_units = _gbdt_units(n, 4 * n)
+    var q_chunk = host_predict_chunk(n, q_units)
+
+    def quotient(unit: Int) {imm q_chunk, imm n, imm total, imm prior, imm prior_obs, imm codes_p, imm counts_p, imm column_p}:
+        for r in range(unit * q_chunk, min(n, (unit + 1) * q_chunk)):
+            column_p[r] = (Float32(counts_p[Int(codes_p[r])]) + prior) / (
+                total + prior_obs
+            )
+
+    host_parallelize(quotient, q_units)
+    _ = len(codes)
+    _ = len(task_counts)
+    _ = len(column)
+    return column^
+
+
+def _ordered_target_column_into(
+    codes: HostU32Ptr,
+    unique_values: Int,
+    num: Float32,
+    denom: Float32,
+    param: UInt32,
+    binarized_target: _CtrU8Ptr,
+    order: HostU32Ptr,
+    n: Int,
+    column: HostF32Ptr,
+):
+    """One ordered Borders column over one estimation order. SERIAL BY
+    NATURE: position `i` reads its category's counts of the rows BEFORE it
+    in the order (the device's stable sort by category then segmented
+    scan), so the positions of one column are a running prefix."""
+    var before = List[Float32](length=unique_values, fill=Float32(0.0))
+    var hits = List[Float32](length=unique_values, fill=Float32(0.0))
+    for i in range(n):
+        var row = Int(order[i])
+        var k = Int(codes[row])
+        column[row] = (hits[k] + num) / (before[k] + denom)
+        before[k] += Float32(1.0)
+        if UInt32(binarized_target[row]) > param:
+            hits[k] += Float32(1.0)
 
 
 def _ordered_target_columns(
@@ -286,48 +430,91 @@ def _ordered_target_columns(
     unique_values: Int,
     configs: List[TCtrConfig],
     binarized_target: List[UInt8],
-    order: List[UInt32],
+    orders: List[List[UInt32]],
 ) raises -> List[List[Float32]]:
     """`compute_simple_ctrs_gpu` (`ctr_calcers.mojo:801-891`) for Borders
-    configs: `TCtrBinBuilderGpu(order)` sorts the order STABLY by category,
-    `GatherTrivialWeights` + the segmented scan give each row the count of
-    its category's rows BEFORE it in that order, `FillBinarizedTargetsStats`
-    + the second scan the count of those whose binarized target exceeds
-    ParamId, and `MakeMeansAndScatter` divides with each config's prior
-    (`(tmp + num) / (weights + denom)`)."""
+    configs over EVERY estimation order: `TCtrBinBuilderGpu(order)` sorts
+    the order STABLY by category, `GatherTrivialWeights` + the segmented
+    scan give each row the count of its category's rows BEFORE it in that
+    order, `FillBinarizedTargetsStats` + the second scan the count of
+    those whose binarized target exceeds ParamId, and `MakeMeansAndScatter`
+    divides with each config's prior (`(tmp + num) / (weights + denom)`).
+
+    Returns the columns as `[order * len(configs) + config]`.
+
+    THE UNIT IS ONE COLUMN, a (permutation, config) pair: its counts and
+    its values are its own, so the columns run on `_gbdt_units` tasks, a
+    contiguous run of columns each. Inside a column the positions are a
+    running prefix along the order and stay one chain
+    (`_ordered_target_column_into`)."""
     var n = len(codes)
-    if len(order) != n:
-        raise Error(
-            "ctr estimation order has " + String(len(order)) + " entries for "
-            + String(n) + " rows"
-        )
+    var n_orders = len(orders)
+    var n_configs = len(configs)
+    for p in range(n_orders):  # driver-loop: over the permutations, their admission
+        if len(orders[p]) != n:
+            raise Error(
+                "ctr estimation order has " + String(len(orders[p]))
+                + " entries for " + String(n) + " rows"
+            )
     if len(binarized_target) != n:
         raise Error(
             "binarized target has " + String(len(binarized_target))
             + " entries for " + String(n) + " rows"
         )
-    var out = List[List[Float32]]()
-    for c in range(len(configs)):
+    var nums = List[Float32]()
+    var denoms = List[Float32]()
+    var params = List[Int]()
+    for c in range(n_configs):  # driver-loop: over the configs, their admission and priors
         if configs[c].ctr_type != CTR_BORDERS:
             raise Error(
                 "the ordered CTR restatement takes Borders configs only; got "
                 + ctr_type_name(configs[c].ctr_type)
             )
-        var before = List[Float32](length=unique_values, fill=Float32(0.0))
-        var hits = List[Float32](length=unique_values, fill=Float32(0.0))
-        var num = configs[c].numerator_shift()
-        var denom = configs[c].denumerator_shift()
-        var param = UInt32(configs[c].param_id)
-        var column = List[Float32](length=n, fill=Float32(0.0))
-        for i in range(n):
-            var row = Int(order[i])
-            var k = Int(codes[row])
-            column[row] = (hits[k] + num) / (before[k] + denom)
-            before[k] += Float32(1.0)
-            if UInt32(binarized_target[row]) > param:
-                hits[k] += Float32(1.0)
-        out.append(column^)
-    return out^
+        nums.append(configs[c].numerator_shift())
+        denoms.append(configs[c].denumerator_shift())
+        params.append(Int(configs[c].param_id))
+    var total = n_orders * n_configs
+    var columns = List[List[Float32]]()
+    var column_at = List[Int]()
+    for _ in range(total):  # driver-loop: over the columns, their storage
+        columns.append(List[Float32](length=n, fill=Float32(0.0)))
+    for k in range(total):  # driver-loop: over the columns, their addresses
+        column_at.append(Int(columns[k].unsafe_ptr()))
+    var order_at = List[Int]()
+    for p in range(n_orders):  # driver-loop: over the permutations, their addresses
+        order_at.append(Int(orders[p].unsafe_ptr()))
+    var units = _gbdt_units(total, 6 * total * n)
+    var chunk = host_predict_chunk(total, units)
+    var codes_p = rebind[HostU32Ptr](codes.unsafe_ptr())
+    var target_p = _CtrU8Ptr(unsafe_from_address=Int(binarized_target.unsafe_ptr()))
+    var nums_p = rebind[HostF32Ptr](nums.unsafe_ptr())
+    var denoms_p = rebind[HostF32Ptr](denoms.unsafe_ptr())
+    var params_p = rebind[GbdtIntPtr](params.unsafe_ptr())
+    var column_at_p = rebind[GbdtIntPtr](column_at.unsafe_ptr())
+    var order_at_p = rebind[GbdtIntPtr](order_at.unsafe_ptr())
+
+    def column_run(unit: Int) {imm chunk, imm total, imm n, imm n_configs, imm unique_values, imm codes_p, imm target_p, imm nums_p, imm denoms_p, imm params_p, imm column_at_p, imm order_at_p}:
+        for k in range(unit * chunk, min(total, (unit + 1) * chunk)):
+            var p = k // n_configs
+            var c = k - p * n_configs
+            _ordered_target_column_into(
+                codes_p, unique_values, nums_p[c], denoms_p[c],
+                UInt32(params_p[c]), target_p,
+                HostU32Ptr(unsafe_from_address=order_at_p[p]), n,
+                HostF32Ptr(unsafe_from_address=column_at_p[k]),
+            )
+
+    host_parallelize(column_run, units)
+    _ = len(codes)
+    _ = len(binarized_target)
+    _ = len(orders)
+    _ = len(nums)
+    _ = len(denoms)
+    _ = len(params)
+    _ = len(column_at)
+    _ = len(order_at)
+    _ = len(columns)
+    return columns^
 
 
 struct GbdtCtrHostFit(Movable):
@@ -405,10 +592,14 @@ def gbdt_ctr_host_prelude(
     arguments are filled (whatever they held is replaced).
 
     The loops here run over model structure (features, configs,
-    permutations) and, inside one column, over rows on the calling thread:
-    the running count along a permutation inside one ordered column is
-    serial by nature; the orders themselves are written across the
-    workers (`learn_order_host`)."""
+    permutations: driver loops, whose bodies append to the fit's column
+    lists in order). Inside them the rows run across the tasks
+    (`_gbdt_units`): a column's copy, its dense codes, its FeatureFreq
+    counts and quotients, the one-hot maximum, the per-permutation flat
+    planes; a feature's ordered Borders columns run one (permutation,
+    config) column a task, because the running count along a permutation
+    inside one ordered column is serial by nature; the orders themselves
+    are written across the workers (`learn_order_host`)."""
     if max_ctr_complexity < 1:
         raise Error(
             "max_ctr_complexity must be at least 1; got "
@@ -510,10 +701,9 @@ def gbdt_ctr_host_prelude(
     var tree_cat_features = List[Int]()
     var tree_cat_cards = List[Int]()
     var tree_cat_codes = List[List[UInt32]]()
-    for f in range(n_features):
-        var col = List[Float32](capacity=n_rows)
-        for r in range(n_rows):
-            col.append(x_colmajor[f * n_rows + r])
+    for f in range(n_features):  # driver-loop: over the input features (each appends its columns in order)
+        var col = List[Float32](length=n_rows, fill=Float32(0.0))
+        _ctr_copy_into(x_colmajor, f * n_rows, n_rows, col, 0)
         if kinds[f] != GBDT_COL_CTR:
             columns.append(col^)
             column_src.append(f)
@@ -521,14 +711,9 @@ def gbdt_ctr_host_prelude(
             column_ctr_grid.append(-1)
             dep_ordinal_of_column.append(-1)
             continue
-        var codes = List[UInt32](capacity=n_rows)
-        var maxc = 0
-        for r in range(n_rows):
-            var c = dense_category_code(col[r], f, r)
-            if c > maxc:
-                maxc = c
-            codes.append(UInt32(c))
-        var unique_values = maxc + 1
+        var codes = List[UInt32](length=n_rows, fill=UInt32(0))
+        _ctr_codes_of(col, codes)
+        var unique_values = _ctr_max_code(col) + 1
         var ctr_columns = List[List[Float32]]()
         for _ in range(len(configs)):
             ctr_columns.append(List[Float32]())
@@ -538,15 +723,18 @@ def gbdt_ctr_host_prelude(
             )
         var dep_first_ordinal = n_dep
         if len(dependent_configs) > 0:
-            for p in range(perm_count):
-                var dep = _ordered_target_columns(
-                    codes, unique_values, dependent_configs, binarized_target,
-                    ctr_orders[p],
-                )
-                for c in range(len(dependent_slots)):
-                    dep_by_perm[p].append(dep[c].copy())
+            # every (permutation, config) column of this feature at once,
+            # one column a task
+            var dep = _ordered_target_columns(
+                codes, unique_values, dependent_configs, binarized_target,
+                ctr_orders,
+            )
+            var n_dep_cfg = len(dependent_slots)
+            for p in range(perm_count):  # driver-loop: over the permutations and configs, filing the columns
+                for c in range(n_dep_cfg):
+                    dep_by_perm[p].append(dep[p * n_dep_cfg + c].copy())
                     if p == est_perm:
-                        ctr_columns[dependent_slots[c]] = dep[c].copy()
+                        ctr_columns[dependent_slots[c]] = dep[p * n_dep_cfg + c].copy()
             n_dep += len(dependent_slots)
         var base_col = len(columns)
         var ft = build_ctr_tables(
@@ -612,10 +800,9 @@ def gbdt_ctr_host_prelude(
         nan_treatment.append(NAN_TREATMENT_AS_IS)
         one_hot.append(column_kind[c] == GBDT_COL_ONE_HOT)
     if len(float_cols) > 0:
-        var fx = List[Float32](capacity=len(float_cols) * n_rows)
-        for k in range(len(float_cols)):
-            for r in range(n_rows):
-                fx.append(columns[float_cols[k]][r])
+        var fx = List[Float32](length=len(float_cols) * n_rows, fill=Float32(0.0))
+        for k in range(len(float_cols)):  # driver-loop: over the float columns, each one's rows across the tasks
+            _ctr_copy_into(columns[float_cols[k]], 0, n_rows, fx, k * n_rows)
         var fg = gbdt_host_grid(
             fx, n_rows, len(float_cols), params.border_count,
             params.border_build_max_samples, params.random_seed,
@@ -628,11 +815,7 @@ def gbdt_ctr_host_prelude(
             nan_treatment[c] = fg.nan_treatment[k]
     for c in range(n_columns):
         if column_kind[c] == GBDT_COL_ONE_HOT:
-            var maxc = 0
-            for r in range(n_rows):
-                var code = Int(columns[c][r])
-                if code > maxc:
-                    maxc = code
+            var maxc = _ctr_max_code(columns[c])
             if maxc > 254:
                 raise Error(
                     "one-hot feature " + String(c)
@@ -731,19 +914,15 @@ def gbdt_ctr_host_prelude(
 
     # ---- one compressed index per permutation (`:1745-1778`) ----
     var cindexes = List[List[UInt32]]()
-    for p in range(perm_count):
-        var flat = List[Float32](capacity=n_columns * n_rows)
+    for p in range(perm_count):  # driver-loop: over the permutations and columns, each column's rows across the tasks
+        # a tree-CTR slot holds no values: its rows stay the fill's +0.0
+        var flat = List[Float32](length=n_columns * n_rows, fill=Float32(0.0))
         for c in range(n_columns):
             var ord = dep_ordinal_of_column[c]
             if ord >= 0:
-                for r in range(n_rows):
-                    flat.append(dep_by_perm[p][ord][r])
-            elif column_kind[c] == GBDT_COL_TREE_SLOT:
-                for _ in range(n_rows):
-                    flat.append(Float32(0.0))
-            else:
-                for r in range(n_rows):
-                    flat.append(columns[c][r])
+                _ctr_copy_into(dep_by_perm[p][ord], 0, n_rows, flat, c * n_rows)
+            elif column_kind[c] != GBDT_COL_TREE_SLOT:
+                _ctr_copy_into(columns[c], 0, n_rows, flat, c * n_rows)
         cindexes.append(_binarize_columns(flat, n_rows, n_columns, grid, layout))
 
     # Compiled 2026-10-28 at 2d5c5081a83e: full CPU GBDT host binding,
