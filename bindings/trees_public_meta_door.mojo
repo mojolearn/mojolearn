@@ -82,6 +82,7 @@ from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
 from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_own_block, member_set_run, member_set_pack, member_set_release,
+    member_set_resident,
 )
 from core.member_abi import (
     MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
@@ -606,6 +607,13 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
         if not member_set_admit(set, clones[i], trees_address(targets[i]), w_address, 0, 0, 0, 0, classes, context, b):
             return False
         member_set_own_block(set, trees_address(xs[i]), Int(py=xs[i].shape[0]))
+        # Inside `resident()` a member that reads a scope keeps its X block
+        # on the device (bindings/member_set_door.mojo, THE RESIDENT SCOPE).
+        # A scope read that raises is the door loop's to refuse.
+        try:
+            member_set_resident(set, xs[i], context)
+        except:
+            return False
     # WHO REFUSES A NON-FINITE X OR y. X is held with its finite test
     # deferred to the member doors (`_hold_deferred`), which this route does
     # not run. A member whose kind tests its rows (`member_set_tests`,

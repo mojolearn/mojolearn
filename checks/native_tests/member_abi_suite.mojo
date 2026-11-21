@@ -27,6 +27,18 @@ from core.neighbors_member import neighbors_member_v2
 from core.scaler_member import scaler_member_v2
 from core.tree_member import tree_member_v2
 from core.xlinear_member import xlinear_member_v2
+from core.sgd_member import sgd_member_v2
+from core.cd_member import cd_member_v2
+from core.linear_svm_member import linear_svm_member_v2
+from core.kernel_ridge_member import kernel_ridge_member_v2
+from core.kernel_approx_member import kernel_approx_member_v2
+from core.gp_member import gp_member_v2
+from core.mlp_member import mlp_member_v2
+from core.sequence_member import sequence_member_v2
+from core.cnn_member import cnn_member_v2
+from core.pls_member import pls_member_v2
+from core.forecast_member import forecast_member_v2
+from core.forecast_seq_member import forecast_seq_member_v2
 from core.member_abi import (
     MemberCall, MemberMatrix, MemberPlan, MemberRef, member_call, member_publish, member_resolve_family,
     member_new, member_free, member_require, member_outputs, MEMBER_NEEDS_PREDICTOR, MEMBER_NEEDS_TRANSFORMER,
@@ -38,8 +50,16 @@ from core.member_abi import (
     MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_TRANSFORM,
     MEMBER_CAN_WEIGHTED_SCORE, MEMBER_CAN_DEVICE_VIEWS, MEMBER_CAN_CLASSIFIER,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
-    MEMBER_F32, MEMBER_F64, MEMBER_HOME_DEVICE,
+    MEMBER_F32, MEMBER_F64, MEMBER_HOME_DEVICE, MEMBER_I32, MEMBER_CAN_TEST_ROWS, MEMBER_CAN_DECISION,
 )
+from core.dart_member import dart_member_v2
+from core.isolation_forest_member import isolation_forest_member_v2
+from core.xcluster_member import xcluster_member_v2
+from core.mixture_member import mixture_member_v2
+from core.density_member import density_member_v2
+from core.hierarchy_member import hierarchy_member_v2
+from core.spectral_member import spectral_member_v2
+from core.member_abi import member_output_dtype, MEMBER_I32, MEMBER_CAN_SCORE_SAMPLES, MEMBER_DTYPE_UNSAID
 from core.member_families import MEMBER_FAMILY_SPARE3, MEMBER_FAMILY_COUNT, member_family_name
 
 comptime _LINEAR_FIXTURES = 5
@@ -47,7 +67,17 @@ comptime _LINEAR_FIXTURES = 5
 #: XLinear 2, Neighbors 11, Tree 13, Forest 14, ExtraTrees 15, KernelSvm 6,
 #: KMeans 24, Decomposition 31, Scaler 34.
 comptime _PUBLISHED = 10
-comptime MEMBER_ABI_FIXTURES = _LINEAR_FIXTURES + _PUBLISHED
+#: Sweep-b families (2026-11-21), in `_sweep_b` order: Dart 17,
+#: IsolationForest 18, XCluster 25, Mixture 26, Density 27, Hierarchy 29,
+#: Spectral 30.
+comptime _SWEEP_B = 7
+#: Sweep-a families without a fixture before (OUTPUTS width and element
+#: type without a state, kind-exact capabilities from the NEW words), in
+#: `_sweep_a_member` order: Sgd 3, Cd 4, LinearSvm 5, KernelRidge 7,
+#: KernelApprox 8, Gp 23, Mlp 19, Sequence 20, Cnn 21, Pls 22, Forecast 37,
+#: ForecastSeq 43.
+comptime _SWEEP_A = 12
+comptime MEMBER_ABI_FIXTURES = _LINEAR_FIXTURES + _PUBLISHED + _SWEEP_B + _SWEEP_A
 
 
 def require(ok: Bool, message: String) raises:
@@ -144,7 +174,179 @@ def _published_fixture(which: Int) raises:
             "member ABI: KMeans answers its output widths without a state")
 
 
+def _sweep_a_member(which: Int) raises -> MemberRef:
+    if which == 0:
+        return MemberRef(EntryRef(sgd_member_v2, 0), 0)
+    if which == 1:
+        return MemberRef(EntryRef(cd_member_v2, 0), 0)
+    if which == 2:
+        return MemberRef(EntryRef(linear_svm_member_v2, 0), 0)
+    if which == 3:
+        return MemberRef(EntryRef(kernel_ridge_member_v2, 0), 0)
+    if which == 4:
+        return MemberRef(EntryRef(kernel_approx_member_v2, 0), 0)
+    if which == 5:
+        return MemberRef(EntryRef(gp_member_v2, 0), 0)
+    if which == 6:
+        return MemberRef(EntryRef(mlp_member_v2, 0), 0)
+    if which == 7:
+        return MemberRef(EntryRef(sequence_member_v2, 0), 0)
+    if which == 8:
+        return MemberRef(EntryRef(cnn_member_v2, 0), 0)
+    if which == 9:
+        return MemberRef(EntryRef(pls_member_v2, 0), 0)
+    if which == 10:
+        return MemberRef(EntryRef(forecast_member_v2, 0), 0)
+    if which == 11:
+        return MemberRef(EntryRef(forecast_seq_member_v2, 0), 0)
+    raise Error("member ABI: no sweep-a fixture " + String(which))
+
+
+def _words(count: Int, kind: Float64) -> List[Float64]:
+    """`count` NEW words, all zero but the kind word 0."""
+    var words = List[Float64](length=count, fill=0.0)
+    if count > 0:
+        words[0] = kind
+    return words^
+
+
+def _ask(member: MemberRef, words: List[Float64], operation: Int, features: Int, targets: Int,
+    classes: Int) raises -> MemberCall:
+    """OUTPUTS for `operation` without a state, from the NEW words and the
+    shape words (what `member_outputs` / `member_output_dtype` send)."""
+    var call = MemberCall(DeviceRoute(0))
+    if len(words) > 0:
+        call.params = Int(words.unsafe_ptr())
+        call.param_count = len(words)
+    call.flags = operation
+    call.x.cols = features
+    call.y.cols = targets
+    call.classes = classes
+    _ = member_call(member, MEMBER_OP_OUTPUTS, call)
+    _ = len(words)
+    return call^
+
+
+def _answers(member: MemberRef, words: List[Float64], operation: Int, features: Int, targets: Int, classes: Int,
+    cols: Int, dtype: Int, what: String) raises:
+    var call = _ask(member, words, operation, features, targets, classes)
+    require(call.out_cols == cols and call.out_dtype == dtype, "member ABI: " + what + " answers "
+        + String(cols) + " column(s) of type " + String(dtype) + " without a state, got " + String(call.out_cols)
+        + " of type " + String(call.out_dtype))
+
+
+def _refuses(member: MemberRef, words: List[Float64], operation: Int, what: String) raises:
+    var refused = False
+    try:
+        _ = _ask(member, words, operation, 4, 1, 3)
+    except error:
+        refused = len(String(error)) > 0
+    require(refused, "member ABI: " + what + " refuses to size an operation it lacks")
+
+
+def _kind_mask(member: MemberRef, words: List[Float64]) raises -> Int:
+    """CAPABILITIES without a state, kind-exact from the NEW words."""
+    var call = MemberCall(DeviceRoute(0))
+    call.params = Int(words.unsafe_ptr())
+    call.param_count = len(words)
+    var mask = member_call(member, MEMBER_OP_CAPABILITIES, call)
+    _ = len(words)
+    return mask
+
+
+def _sweep_a_fixture(which: Int) raises:
+    """One sweep-a family, without a kernel and without a state."""
+    var member = _sweep_a_member(which)
+    var none = List[Float64]()
+    if which == 0:
+        var cls = _words(20, 2.0)  # SGDClassifier, loss='log_loss' (word 19)
+        cls[19] = 1.0
+        var reg = _words(20, 0.0)  # SGDRegressor
+        require((_kind_mask(member, cls) & (MEMBER_CAN_CLASSIFIER | MEMBER_CAN_PREDICT_PROBA))
+            == (MEMBER_CAN_CLASSIFIER | MEMBER_CAN_PREDICT_PROBA)
+            and (_kind_mask(member, reg) & MEMBER_CAN_CLASSIFIER) == 0, "member ABI: SGD kinds are kind-exact")
+        _answers(member, cls, MEMBER_OP_PREDICT, 4, 1, 3, 1, MEMBER_I32, "SGDClassifier predict")
+        _answers(member, cls, MEMBER_OP_PREDICT_PROBA, 4, 1, 3, 3, MEMBER_F32, "SGDClassifier predict_proba")
+        _answers(member, reg, MEMBER_OP_PREDICT, 4, 1, 0, 1, MEMBER_F32, "SGDRegressor predict")
+        _refuses(member, reg, MEMBER_OP_PREDICT_PROBA, "SGDRegressor")
+        cls[19] = 0.0
+        _refuses(member, cls, MEMBER_OP_PREDICT_PROBA, "SGDClassifier without log_loss")
+    elif which == 1:
+        var words = _words(7, 0.0)
+        _answers(member, words, MEMBER_OP_PREDICT, 4, 1, 0, 1, MEMBER_F32, "ElasticNet predict")
+        _refuses(member, words, MEMBER_OP_PREDICT_PROBA, "ElasticNet")
+    elif which == 2:
+        var svc = _words(11, 0.0)
+        var svr = _words(11, 1.0)
+        require((_kind_mask(member, svc) & MEMBER_CAN_CLASSIFIER) != 0
+            and (_kind_mask(member, svr) & (MEMBER_CAN_CLASSIFIER | MEMBER_CAN_DECISION)) == 0,
+            "member ABI: LinearSVC / LinearSVR are kind-exact")
+        _answers(member, svc, MEMBER_OP_PREDICT, 4, 1, 3, 1, MEMBER_I32, "LinearSVC predict")
+        _answers(member, svc, MEMBER_OP_DECISION, 4, 1, 3, 3, MEMBER_F32, "LinearSVC decision_function")
+        _answers(member, svr, MEMBER_OP_PREDICT, 4, 1, 0, 1, MEMBER_F32, "LinearSVR predict")
+        _refuses(member, svr, MEMBER_OP_DECISION, "LinearSVR")
+    elif which == 3:
+        require((_kind_mask(member, _words(6, 2.0)) & MEMBER_CAN_TEST_ROWS) != 0,
+            "member ABI: KernelRidge tests its rows")
+        _answers(member, none, MEMBER_OP_PREDICT, 4, 2, 0, 2, MEMBER_F32, "KernelRidge predict")
+        _refuses(member, none, MEMBER_OP_PREDICT_PROBA, "KernelRidge")
+    elif which == 4:
+        var rbf = _words(9, 1.0)
+        rbf[1] = 2.0
+        rbf[6] = 7.0
+        var nystroem = _words(9, 0.0)
+        nystroem[6] = 7.0
+        require((_kind_mask(member, rbf) & MEMBER_CAN_TEST_ROWS) != 0, "member ABI: RBFSampler tests its rows")
+        _answers(member, rbf, MEMBER_OP_TRANSFORM, 4, 0, 0, 7, MEMBER_F32, "RBFSampler transform")
+        _refuses(member, nystroem, MEMBER_OP_TRANSFORM, "Nystroem (its width is chosen by the fit)")
+        _refuses(member, rbf, MEMBER_OP_PREDICT, "RBFSampler")
+    elif which == 5:
+        var gpc = _words(1, 1.0)
+        var gpr = _words(1, 0.0)
+        require((_kind_mask(member, gpc) & (MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS))
+            == (MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS)
+            and (_kind_mask(member, gpr) & MEMBER_CAN_CLASSIFIER) == 0, "member ABI: GP kinds are kind-exact")
+        _answers(member, gpc, MEMBER_OP_PREDICT, 4, 1, 3, 1, MEMBER_I32, "GaussianProcessClassifier predict")
+        _answers(member, gpc, MEMBER_OP_PREDICT_PROBA, 4, 1, 3, 3, MEMBER_F64, "GaussianProcessClassifier proba")
+        _answers(member, gpr, MEMBER_OP_PREDICT_STD, 4, 1, 0, 1, MEMBER_F32, "GaussianProcessRegressor std")
+        _refuses(member, gpr, MEMBER_OP_PREDICT_PROBA, "GaussianProcessRegressor")
+    elif which == 6 or which == 7:
+        var count = 1 if which == 6 else 20
+        var cls = _words(count, 1.0)
+        var reg = _words(count, 0.0)
+        var name = String("MLP") if which == 6 else String("recurrent")
+        require((_kind_mask(member, cls) & MEMBER_CAN_CLASSIFIER) != 0
+            and (_kind_mask(member, reg) & MEMBER_CAN_CLASSIFIER) == 0, "member ABI: " + name + " kinds are kind-exact")
+        _answers(member, cls, MEMBER_OP_PREDICT, 4, 1, 4, 1, MEMBER_I32, name + " classifier predict")
+        _answers(member, cls, MEMBER_OP_PREDICT_PROBA, 4, 1, 4, 4, MEMBER_F32, name + " classifier predict_proba")
+        _answers(member, reg, MEMBER_OP_PREDICT, 4, 2, 0, 2, MEMBER_F32, name + " regressor predict")
+        _refuses(member, reg, MEMBER_OP_PREDICT_PROBA, name + " regressor")
+    elif which == 8:
+        _answers(member, none, MEMBER_OP_PREDICT, 12, 1, 5, 1, MEMBER_I32, "CNNClassifier predict")
+        _answers(member, none, MEMBER_OP_PREDICT_PROBA, 12, 1, 5, 5, MEMBER_F32, "CNNClassifier predict_proba")
+        _refuses(member, none, MEMBER_OP_DECISION, "CNNClassifier")
+    elif which == 9:
+        var words = _words(8, 0.0)
+        words[1] = 2.0
+        _answers(member, words, MEMBER_OP_PREDICT, 4, 3, 0, 3, MEMBER_F32, "PLSRegression predict")
+        _answers(member, words, MEMBER_OP_TRANSFORM, 4, 3, 0, 2, MEMBER_F32, "PLSRegression transform")
+        _answers(member, words, MEMBER_OP_INVERSE_TRANSFORM, 4, 3, 0, 4, MEMBER_F32, "PLSRegression inverse")
+        _refuses(member, words, MEMBER_OP_PREDICT_PROBA, "PLSRegression")
+    else:
+        var name = String("ARIMA") if which == 10 else String("ETS / Theta")
+        _answers(member, none, MEMBER_OP_PREDICT, 0, 2, 0, 2, MEMBER_F32, name + " forecast")
+        _refuses(member, none, MEMBER_OP_TRANSFORM, name)
+    _ = len(none)
+
+
 def _fixture(unit: Int) raises:
+    if unit >= _LINEAR_FIXTURES + _PUBLISHED:
+        var extra = unit - _LINEAR_FIXTURES - _PUBLISHED
+        if extra < _SWEEP_B:
+            _sweep_b_fixture(extra)
+        else:
+            _sweep_a_fixture(extra - _SWEEP_B)
+        return
     if unit >= _LINEAR_FIXTURES:
         _published_fixture(unit - _LINEAR_FIXTURES)
         return
@@ -158,8 +360,11 @@ def _fixture(unit: Int) raises:
             | MEMBER_CAN_DEVICE_VIEWS | MEMBER_CAN_CLASSIFIER)) == 0,
             "member ABI: a linear regressor has no predict_proba, transform, weighted score, device views or classes")
         call.classes = 7
+        call.flags = MEMBER_OP_PREDICT
         _ = member_call(_member(), MEMBER_OP_OUTPUTS, call)
-        require(call.out_cols == 1 and call.classes == 0, "member ABI: one output column, no classes")
+        require(call.out_cols == 1 and call.classes == 0 and call.out_dtype == MEMBER_F32,
+            "member ABI: one float32 output column, no classes")
+        call.flags = 0
         # a contiguous fold of a host view is a view: no copy
         var view = MemberMatrix(4096, 10, 3)
         var fold = view.rows_from(2, 5)
@@ -329,3 +534,80 @@ def run_checks() raises:
             _fixture(unit)
             raise Error("member ABI: fixture " + String(unit) + " failed on its host task and passed alone")
     _ = len(flags)
+
+
+def _sweep_b_member(which: Int) raises -> MemberRef:
+    """The member entry of sweep-b family `which` (the entry itself)."""
+    if which == 0:
+        return MemberRef(EntryRef(dart_member_v2, 0), 0)
+    if which == 1:
+        return MemberRef(EntryRef(isolation_forest_member_v2, 0), 0)
+    if which == 2:
+        return MemberRef(EntryRef(xcluster_member_v2, 0), 0)
+    if which == 3:
+        return MemberRef(EntryRef(mixture_member_v2, 0), 0)
+    if which == 4:
+        return MemberRef(EntryRef(density_member_v2, 0), 0)
+    if which == 5:
+        return MemberRef(EntryRef(hierarchy_member_v2, 0), 0)
+    if which == 6:
+        return MemberRef(EntryRef(spectral_member_v2, 0), 0)
+    raise Error("member ABI: no sweep-b fixture " + String(which))
+
+
+def _answers(member: MemberRef, var words: List[Float64], classes: Int, operation: Int, width: Int, dtype: Int,
+    name: String) raises:
+    """OUTPUTS without a state (items 10 and 26): the width and the element
+    type of `operation`, from the parameter words alone."""
+    var plan = MemberPlan()
+    plan.member = member
+    plan.route = DeviceRoute(0)
+    plan.params = words^
+    plan.classes = classes
+    require(member_outputs(plan, operation, 3, 1) == width,
+        "member ABI: " + name + " answers the width of operation " + String(operation) + " without a state")
+    require(member_output_dtype(plan, operation, 3, 1, MEMBER_DTYPE_UNSAID) == dtype,
+        "member ABI: " + name + " answers the element type of operation " + String(operation) + " without a state")
+
+
+def _sweep_b_fixture(which: Int) raises:
+    """One sweep-b family, without a kernel and without a state: what its
+    kind is, a stateless call refused in words, OUTPUTS widths and element
+    types answered from the parameter words."""
+    var member = _sweep_b_member(which)
+    var probe = MemberCall(DeviceRoute(0))
+    member.capabilities = member_call(member, MEMBER_OP_CAPABILITIES, probe)
+    var name = String("sweep-b ") + String(which)
+    require(member.has(MEMBER_NEEDS_PREDICTOR) or member.can(MEMBER_CAN_SCORE_SAMPLES),
+        "member ABI: " + name + " fits and predicts or scores")
+    require(member.can(MEMBER_CAN_CLASSIFIER) == (which == 0),
+        "member ABI: " + name + " is a classifier family only for DART")
+    var stateless = MemberCall(DeviceRoute(0))
+    var refused = False
+    try:
+        _ = member_call(member, MEMBER_OP_PREDICT, stateless)
+    except error:
+        refused = len(String(error)) > 0
+    require(refused, "member ABI: " + name + " refuses a call without a state")
+    if which == 0:
+        # DART: kind word 0 classifier (codes int32, proba float64), 1 regressor
+        _answers(member, [0.0], 3, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, [0.0], 3, MEMBER_OP_PREDICT_PROBA, 3, MEMBER_F64, name)
+        _answers(member, [1.0], 0, MEMBER_OP_PREDICT, 1, MEMBER_F32, name)
+    elif which == 1:
+        _answers(member, List[Float64](length=13, fill=0.0), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, List[Float64](length=13, fill=0.0), 0, MEMBER_OP_DECISION, 1, MEMBER_F32, name)
+    elif which == 2:
+        # MiniBatchKMeans with four clusters
+        var words: List[Float64] = [0.0, 4.0, 0.0, 1.0, 10.0, 0.0, 0.0, 16.0, -1.0, 0.0, 0.01]
+        _answers(member, words.copy(), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, words^, 0, MEMBER_OP_TRANSFORM, 4, MEMBER_F32, name)
+    elif which == 3:
+        var words: List[Float64] = [3.0, 100.0, 0.001, 0.000001, 0.0, 0.0]
+        _answers(member, words.copy(), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, words^, 0, MEMBER_OP_PREDICT_PROBA, 3, MEMBER_F32, name)
+    elif which == 4:
+        _answers(member, [1.0, 0.5, 5.0, 0.0, 0.0, 0.0, 0.0], 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)
+        _answers(member, [0.0, 1.0, 0.0, 0.0], 0, MEMBER_OP_SCORE_SAMPLES, 1, MEMBER_F32, name)
+    else:
+        _answers(member, List[Float64](length=8, fill=0.0), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, name)

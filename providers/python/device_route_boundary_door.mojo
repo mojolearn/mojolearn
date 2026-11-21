@@ -34,7 +34,7 @@ from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_model_records import records_get, records_put, records_drop, records_open, RECORDS_PREPARED
 from core.device_route import (
     DeviceRoute, DEVICE_CPU, DEVICE_GPU, DEVICE_INSTALL, device_code, device_refusal, device_installed,
@@ -224,6 +224,28 @@ def device_admit_class(model: PythonObject, value: PythonObject, cpu_only: Bool,
         device_cpu_absent(String(cls.__name__), String(answer))
     if connect is not None:
         _ = py_call(connect)
+
+
+def device_cpu_connect_late(context: PythonObject) raises -> Bool:
+    """Admit the CPU device once for an estimator that reached a device="cpu"
+    operation without construction (unpickle, copy, archive load: lane
+    fx-leftovers item 3, 2026-11-21). Construction and set_params admit it
+    in `device_admit_class`; a restored estimator never ran either, so its
+    label steps and its score's metrics silently used the process device's
+    images. The family contexts that load their CPU images lazily
+    (python/mojolearn/_native_family_bridge.py `shared_context`,
+    `cpu_scope_later`) hold `device_cpu_connect`; it is called here once
+    (it returns at its own flag after) and then set to None in place, so a
+    context it could not connect is never retried per call. Called only on
+    the CPU branch when the CPU entry (`labels_cpu_scope`,
+    `metrics_cpu_cells`) is missing: never on a GPU or connected call.
+    True when the connection ran."""
+    var connect = py_get(context, "device_cpu_connect")
+    if connect is None:
+        return False
+    py_setitem(context, "device_cpu_connect", PythonObject(None))
+    _ = py_call(connect)
+    return True
 
 
 def device_route_clear(model: PythonObject) raises:

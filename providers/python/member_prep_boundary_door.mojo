@@ -7,9 +7,11 @@ Apple fast direct fit entry, where admit answers False and the caller keeps
 the door), Binarizer (kind 2, `(35, 2)`), Normalizer (kind 3, `(35, 3)`),
 PolynomialFeatures (kind 4, `(35, 4)`), QuantileTransformer (kind 5,
 `(35, 5)`; admit answers False for a subsample below 1, which only the door
-handles), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`).
-The family's other classes (OrdinalEncoder OneHotEncoder TargetEncoder
-IterativeImputer KBinsDiscretizer SplineTransformer) carry no mark (each
+handles), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`),
+KBinsDiscretizer (kind 8, `(35, 8)`; admit answers False for a subsample
+or random_state that is not an integer), SplineTransformer (kind 9,
+`(35, 9)`). The family's other classes (OrdinalEncoder OneHotEncoder
+TargetEncoder IterativeImputer) carry no mark (each
 blocker in the lane's RESULT file): a caller keeps their own doors, and admit
 refuses their kinds in words.
 
@@ -46,8 +48,12 @@ from x_prep.prep_stateless_native_run import I64P, _poly_powers
 from bindings.prep_encode_native_door import (
     enc_caps, _missing_mark as enc_missing_mark, _qselect as enc_qselect, _truth as enc_truth,
     _float as enc_float, _is_str as enc_is_str, _real_like as enc_real_like, _int_list as enc_int_list,
-    IDN_STATS_BLOCKED,
+    IDN_STATS_BLOCKED, _kbins_strategy as enc_kbins_strategy, _seed64 as enc_seed64,
+    _spline_checks as enc_spline_checks, _extrapolation as enc_extrapolation, _spline_fused as enc_spline_fused,
+    _knot_rows as enc_knot_rows, _f32 as enc_f32,
 )
+from bindings.prep_stateless_native_door import _int_like as stateless_int_like
+from bindings.py_typed_call import py_call_typed
 from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT
 from bindings.x_prep_native_owner_run import XprepCaps
 from bindings.scaler_route_unpack import (
@@ -69,7 +75,9 @@ from core.prep_member import (
     PREP_POLY_PARAM_COUNT, PREP_QUANTILE_PARAM_COUNT, PREP_POWER_PARAM_COUNT,
     PREP_BLOCK_EXTRA, PREP_BLOCK_ANCHOR, PREP_BLOCK_ANCHOR_KIND,
     PREP_KIND_IMPUTER, PREP_IMPUTER_PARAM_COUNT,
-    PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH, PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT,
+    PREP_KIND_KBINS, PREP_KBINS_HEADER, PREP_KBINS_ONEHOT, PREP_KBINS_ONEHOT_DENSE, PREP_KBINS_ORDINAL,
+    PREP_KIND_SPLINE, PREP_SPLINE_HEADER,
+    PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH, PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT, PREP_ROUTE_TAKE_ROWS,
 )
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -135,6 +143,10 @@ def _route_admit(model: PythonObject, entries: PythonObject, context: PythonObje
         flags |= PREP_ROUTE_RANGES
     if caps.dev_put:
         flags |= PREP_ROUTE_DEV_PUT
+        # The device row gather of a fold (the door's DeviceRows test, read
+        # once here; the door per run).
+        if py_get(entries, "x_prep_dev_take_rows") is not None:
+            flags |= PREP_ROUTE_TAKE_ROWS
     # The image words of the preprocessing route (the scaler member's): the
     # member table key this family is published under.
     var calls = scaler_door_calls(model, entries, context) if scaler_route else scaler_door_calls(entries)
@@ -296,6 +308,98 @@ def _imputer_admit(model: PythonObject, fields: PythonObject, context: PythonObj
     owner.plan.params = words^
 
 
+def _kbins_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    # The encode door's `_kbins_fit` UNPACK, in its order, read once here
+    # (the door per fit). False (the caller keeps the door): a random_state
+    # or subsample that is not an integer (the door reads them only when it
+    # draws, which depends on the rows).
+    var b = native_loaded_module("builtins")
+    var encode = fields["encode"]
+    var encode_text = String(encode) if enc_is_str(encode) else String("")
+    if encode_text != "onehot" and encode_text != "onehot-dense" and encode_text != "ordinal":
+        raise Error("mojolearn: invalid encode " + stateless_repr(encode))
+    var strategy = enc_kbins_strategy(fields)
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = scaler_entries(model, mode, context)
+    var words = List[Float64](length=PREP_KBINS_HEADER, fill=0.0)
+    words[0] = Float64(PREP_KIND_KBINS)
+    words[1] = Float64(PREP_KBINS_ORDINAL if encode_text == "ordinal" else (
+        PREP_KBINS_ONEHOT_DENSE if encode_text == "onehot-dense" else PREP_KBINS_ONEHOT))
+    words[2] = Float64(strategy)
+    words[3] = -1.0
+    var subsample = fields["subsample"]
+    if subsample is not None:
+        if not stateless_int_like(subsample, context):
+            return False
+        words[3] = Float64(Int(py=py_call_typed(b.int, subsample)))
+        var state = fields["random_state"]
+        if state is not None and not stateless_int_like(state, context):
+            return False
+        var seed = enc_seed64(state)
+        words[4] = Float64(seed[0])
+        words[5] = Float64(seed[1])
+    words[6] = 1.0 if (stateless_fam(mode, entries) & IDN_STATS_BLOCKED) != 0 else 0.0
+    words[7] = 1.0 if xprep_r3("work") else 0.0
+    var n_bins = fields["n_bins"]
+    if stateless_int_like(n_bins, context):
+        words[9] = Float64(Int(py=py_call_typed(b.int, n_bins)))
+    else:
+        var items = py_call_typed(b.list, n_bins)
+        words[8] = Float64(len(items))
+        for i in range(len(items)):  # driver-loop: over the per-column n_bins argument
+            words.append(Float64(Int(py=py_call_typed(b.int, items[i]))))
+    _route_admit(model, entries, context, owner, enc_caps(model, entries), False)
+    owner.plan.params = words^
+    return True
+
+
+def _spline_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
+    # The encode door's `_spline_fit` UNPACK, in its order, read once here
+    # (the door per fit): `_spline_checks`, the extrapolation, the degree,
+    # the knots argument (the user's rows as float32 words; their shape and
+    # order are checked at the fit, where the feature count is known).
+    var b = native_loaded_module("builtins")
+    enc_spline_checks(fields)
+    var extrap_field = fields["extrapolation"]
+    var extrap = enc_extrapolation(extrap_field)
+    var words = List[Float64](length=PREP_SPLINE_HEADER, fill=0.0)
+    words[0] = Float64(PREP_KIND_SPLINE)
+    words[1] = Float64(Int(py=py_call_typed(b.int, fields["degree"])))
+    words[4] = Float64(extrap)
+    words[5] = 1.0 if String(extrap_field) == "error" else 0.0
+    words[6] = 1.0 if String(fields["handle_missing"]) == "error" else 0.0
+    words[7] = 1.0 if enc_truth(fields["include_bias"]) else 0.0
+    words[11] = 1.0 if String(fields["order"]) == "F" else 0.0
+    var knots_arg = fields["knots"]
+    if enc_is_str(knots_arg):
+        var knot_kind = String(knots_arg)
+        if knot_kind != "uniform" and knot_kind != "quantile":
+            raise Error("mojolearn: invalid knots " + stateless_repr(knots_arg))
+        words[2] = 1.0 if knot_kind == "quantile" else 2.0
+        words[3] = Float64(Int(py=py_call_typed(b.int, fields["n_knots"])))
+    else:
+        var rows = enc_knot_rows(knots_arg, context)
+        var r = len(rows)
+        var c = len(rows[0]) if r > 0 else 0
+        for i in range(r):  # driver-loop: over the user knots rows
+            if len(rows[i]) != c:
+                c = -1
+        words[2] = 0.0
+        words[12] = Float64(r)
+        words[13] = Float64(c)
+        if c > 0:
+            for i in range(r):  # driver-loop: over the user knots rows
+                for j in range(c):  # driver-loop: over one user knots row
+                    words.append(Float64(enc_f32(rows[i][j])))
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = scaler_entries(model, mode, context)
+    words[8] = 1.0 if enc_spline_fused(mode, entries) else 0.0
+    words[9] = 1.0 if (stateless_fam(mode, entries) & IDN_STATS_BLOCKED) != 0 else 0.0
+    words[10] = 1.0 if xprep_r3("work") else 0.0
+    _route_admit(model, entries, context, owner, enc_caps(model, entries), False)
+    owner.plan.params = words^
+
+
 def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -318,6 +422,11 @@ def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
         return True
     if kind == PREP_KIND_IMPUTER:
         _imputer_admit(model, fields, context, owner)
+        return True
+    if kind == PREP_KIND_KBINS:
+        return _kbins_admit(model, fields, context, owner)
+    if kind == PREP_KIND_SPLINE:
+        _spline_admit(model, fields, context, owner)
         return True
     raise Error("ValueError: mojolearn: Prep member kind " + String(kind) + " is not published")
 
@@ -343,7 +452,7 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the door's fit does."""
-    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_IMPUTER:
+    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_SPLINE:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     var call = MemberCall(plan.route, state)
     var scalars = _export(plan, call, MEMBER_BLOCK_SCALARS)
@@ -351,6 +460,12 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     var d = Int(words[0])
     if plan.kind == PREP_KIND_IMPUTER:
         _pack_imputer(fields, context, plan, call, d, words[1] != 0.0)
+        return
+    if plan.kind == PREP_KIND_KBINS:
+        _pack_kbins(fields, context, plan, call, d, Int(words[1]))
+        return
+    if plan.kind == PREP_KIND_SPLINE:
+        _pack_spline(fields, context, plan, call, d, Int(words[1]), Int(words[2]), Int(words[3]))
         return
     if plan.kind == PREP_KIND_POLYNOMIAL or plan.kind == PREP_KIND_QUANTILE or plan.kind == PREP_KIND_POWER:
         _pack_stateless_fitted(fields, context, plan, call, d, Int(words[1]) if plan.kind != PREP_KIND_POWER else 0)
@@ -384,6 +499,102 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     py_setitem(fields, "_mojolearn_fitted", True)
     if py_contains(fields, "feature_names_in_"):
         _ = py_call(fields.pop, "feature_names_in_")
+
+
+def _pack_kbins(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall, d: Int,
+    stride: Int) raises:
+    """The encode door's `_kbins_fit` PACK, in its order: bin_edges_ (one
+    vector of n_bins_ + 1 edges per column), n_bins_ (int64), the flat
+    `_edges` / `_ne` the door's transform reads, `_stride`."""
+    var edges = _export(plan, call, PREP_BLOCK_CENTER)
+    var counts = _export(plan, call, PREP_BLOCK_SCALE)
+    if edges.rows * edges.cols != d * stride or counts.rows * counts.cols != d:
+        raise Error("RuntimeError: mojolearn: a fitted KBinsDiscretizer block has the wrong size")
+    var output = context["output_context"]
+    var bin_edges = Python.list()
+    var n_bins_ = classical_typed(Python.tuple(d), "<i8", output)
+    var dest = I64P(unsafe_from_address=Int(py=classical_address(n_bins_)))
+    var ne = f32_ptr(counts.data)
+    for j in range(d):  # driver-loop: over the per-column edge counts (feature metadata)
+        var count = Int(ne[j])
+        _ = py_call(bin_edges.append, _vector(MemberMatrix(edges.data + 4 * j * stride, 1, count), context))
+        dest[j] = Int64(count - 1)
+        _ = n_bins_  # keep the Python object alive through the native write above
+    py_setitem(fields, "bin_edges_", bin_edges)
+    py_setitem(fields, "n_bins_", n_bins_)
+    py_setitem(fields, "_edges", _vector(edges, context))
+    py_setitem(fields, "_ne", _vector(counts, context))
+    py_setitem(fields, "_stride", stride)
+    py_setitem(fields, "numeric_mode_", context["backend_fields"]["_DEFAULT_MODE"])
+    py_setitem(fields, "n_features_in_", d)
+
+
+def _pack_spline(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall, d: Int,
+    nk: Int, k: Int, features: Int) raises:
+    """The encode door's `_spline_fit` PACK, in its order: `_knots`, then
+    per column bsplines_ (its knot row), `_lo`, `_hi`; `_nk`, `_k`,
+    n_features_out_, numeric_mode_, n_features_in_."""
+    var wd = nk + 2 * k
+    var knots = _export(plan, call, PREP_BLOCK_CENTER)
+    if knots.rows * knots.cols != d * wd:
+        raise Error("RuntimeError: mojolearn: a fitted SplineTransformer block has the wrong size")
+    py_setitem(fields, "_knots", _vector(knots, context))
+    var bsplines = Python.list()
+    var lows = Python.list()
+    var highs = Python.list()
+    var words = f32_ptr(knots.data)
+    for c in range(d):  # driver-loop: per-column fitted spline knots (feature count)
+        _ = py_call(bsplines.append, _vector(MemberMatrix(knots.data + 4 * c * wd, 1, wd), context))
+        _ = py_call(lows.append, PythonObject(Float64(words[c * wd + k])))
+        _ = py_call(highs.append, PythonObject(Float64(words[c * wd + k + nk - 1])))
+    py_setitem(fields, "bsplines_", bsplines)
+    py_setitem(fields, "_lo", lows)
+    py_setitem(fields, "_hi", highs)
+    py_setitem(fields, "_nk", nk)
+    py_setitem(fields, "_k", k)
+    py_setitem(fields, "n_features_out_", features)
+    py_setitem(fields, "numeric_mode_", context["backend_fields"]["_DEFAULT_MODE"])
+    py_setitem(fields, "n_features_in_", d)
+
+
+def _spline_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # The attributes the encode door's `_spline_transform` reads.
+    var d = _int_field(fields, "n_features_in_")
+    var nk = _int_field(fields, "_nk")
+    var k = _int_field(fields, "_k")
+    var scalars: List[Float64] = [Float64(d), Float64(nk), Float64(k), Float64(_int_field(fields, "n_features_out_"))]
+    var call = member_new(plan)
+    try:
+        _import_vector(plan, call, fields["_knots"], PREP_BLOCK_CENTER, d * (nk + 2 * k), context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    return call.state
+
+
+def _kbins_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # The attributes the encode door's `_kbins_transform` reads.
+    var d = _int_field(fields, "n_features_in_")
+    var stride = _int_field(fields, "_stride")
+    var scalars: List[Float64] = [Float64(d), Float64(stride)]
+    var call = member_new(plan)
+    try:
+        _import_vector(plan, call, fields["_edges"], PREP_BLOCK_CENTER, d * stride, context)
+        _import_vector(plan, call, fields["_ne"], PREP_BLOCK_SCALE, d, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    return call.state
 
 
 def _matrix(view: MemberMatrix, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
@@ -510,6 +721,10 @@ def prep_member_state(model: PythonObject, fields: PythonObject, context: Python
         return _fitted_state(fields, context, plan)
     if plan.kind == PREP_KIND_IMPUTER:
         return _imputer_state(fields, context, plan)
+    if plan.kind == PREP_KIND_KBINS:
+        return _kbins_state(fields, context, plan)
+    if plan.kind == PREP_KIND_SPLINE:
+        return _spline_state(fields, context, plan)
     if plan.kind != PREP_KIND_ROBUST and not maxabs:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     if (not py_contains(fields, "n_features_in_")

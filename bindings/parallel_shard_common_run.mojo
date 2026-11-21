@@ -325,6 +325,8 @@ comptime PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD = 32
 comptime PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD = 33
 comptime PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD = 34
 comptime PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD = 35
+# Bookkeeping, not numerical: a worker stores one fitted estimator's predict models (a "generation").
+comptime PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE = 36
 
 
 def shard_worker_op_name(op: Int) -> String:
@@ -374,6 +376,8 @@ def shard_worker_op_name(op: Int) -> String:
         return "arima_fit_shard"
     if op == PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD:
         return "hw_fit_shard"
+    if op == PARALLEL_FORECAST_WORKER_OPN_GENERATION_STORE:
+        return "forecast_generation_store"
     return "unknown"
 
 
@@ -394,6 +398,27 @@ def shard_request_words(op: Int) -> List[Int64]:
     the operation code and no handle or words (the operands ride in the
     payload record)."""
     return WorkerRequest(op).encode()
+
+
+def shard_request_operands(op: Int, var operands: List[Int]) -> List[Int64]:
+    """The wire words of one request whose typed operands ride in the
+    request itself (an encoded `WorkerRequest` with the operation code, no
+    handle and `operands` as its words): such a request has no payload
+    record to UNPACK, send, PACK and read back."""
+    var request = WorkerRequest(op)
+    request.words = operands^
+    return request.encode()
+
+
+def shard_request_decode(address: Int, byte_count: Int) raises -> WorkerRequest:
+    """A worker's decode of its request words when an operation may carry
+    typed operands (`shard_request_operands`): the request, with its
+    operation code and operand words. A frame without request words, or one
+    naming a handle, is refused here."""
+    var request = worker_request_decode(address, byte_count)
+    if request.handle != WORKER_NO_HANDLE:
+        raise Error("parallel shards: invalid worker request envelope")
+    return request^
 
 
 def shard_request_op(address: Int, byte_count: Int) raises -> Int:

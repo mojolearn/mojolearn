@@ -594,14 +594,41 @@ def _fitted(slot: _Slot, call: _Call) raises:
 
 def _outputs(slot: _Slot, operation: Int) -> Int:
     """Columns of `dst` per row for `operation` (MEMBER_OP_OUTPUTS)."""
-    var k = slot[].classes
-    if not _svc(slot) or operation == MEMBER_OP_PREDICT:
+    return _outputs_of(_svc(slot), slot[].classes, slot[].params[13] != 0.0, operation)
+
+
+def _outputs_of(svc: Bool, k: Int, ovo: Bool, operation: Int) -> Int:
+    """The width from the kind, the class count and decision_function_shape:
+    a state's answer and the stateless one (item 10) are the same rule."""
+    if not svc or operation == MEMBER_OP_PREDICT:
         return 1
     if operation == MEMBER_OP_PREDICT_PROBA:
         return k
     if k <= 2:
         return 1
-    return k * (k - 1) // 2 if slot[].params[13] != 0.0 else k
+    return k * (k - 1) // 2 if ovo else k
+
+
+def _dtype_of(svc: Bool, k: Int, ovo: Bool, operation: Int) -> Int:
+    """The element type of `dst` (the VIEWS rule of the docstring)."""
+    if not svc:
+        return MEMBER_F32
+    if operation == MEMBER_OP_PREDICT:
+        return MEMBER_I32
+    if operation == MEMBER_OP_PREDICT_PROBA or (k > 2 and not ovo):
+        return MEMBER_F64
+    return MEMBER_F32
+
+
+def _served(svc: Bool, probability: Bool, operation: Int) -> Bool:
+    """Whether the kind (and SVC's probability setting) has `operation`."""
+    if operation == MEMBER_OP_PREDICT:
+        return True
+    if not svc:
+        return False
+    if operation == MEMBER_OP_DECISION:
+        return True
+    return operation == MEMBER_OP_PREDICT_PROBA and probability
 
 
 def _svc_plan(slot: _Slot, call: _Call, settings: SvcOperationSettings, mut status: List[Int32],
@@ -732,12 +759,7 @@ def _predict(slot: _Slot, call: _Call, operation: Int) raises:
     var rows = call[].x.rows
     var estimator = _name(slot)
     var cols = _outputs(slot, operation)
-    var dtype = MEMBER_F32
-    if _svc(slot):
-        if operation == MEMBER_OP_PREDICT:
-            dtype = MEMBER_I32
-        elif operation == MEMBER_OP_PREDICT_PROBA or (slot[].classes > 2 and slot[].params[13] == 0.0):
-            dtype = MEMBER_F64
+    var dtype = _dtype_of(_svc(slot), slot[].classes, slot[].params[13] != 0.0, operation)
     _dense(call[].dst, dtype, "the output buffer", estimator)
     if call[].dst.rows != rows or call[].dst.cols != cols:
         raise Error("ValueError: the output buffer holds " + String(cols) + " value(s) per row of X")
@@ -982,9 +1004,21 @@ def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
         var common = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
         var svc = (MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER)
         if call[].state == 0:
+            if call[].param_count == _PARAMS and call[].params:
+                # Kind-exact from the NEW words: SVR has no classifier bits,
+                # SVC with probability=False no predict_proba.
+                var named = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+                if named[0] != 0.0:
+                    return common
+                return common | svc if named[12] != 0.0 else (common | svc) & ~MEMBER_CAN_PREDICT_PROBA
             return common | svc
         var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
-        return common | svc if _svc(slot) else common
+        if not _svc(slot):
+            return common
+        # A fitted state answers from what it holds (an imported one may
+        # carry probability); an unfitted one from its parameter word.
+        var probable = slot[].probability if slot[].fitted else slot[].params[12] != 0.0
+        return common | svc if probable else (common | svc) & ~MEMBER_CAN_PREDICT_PROBA
     if operation == MEMBER_OP_NEW:
         if call[].param_count != _PARAMS or not call[].params:
             raise Error("member ABI: a kernel SVM member takes " + String(_PARAMS) + " parameters")
@@ -1004,11 +1038,34 @@ def _kernel_svm_member(operation: Int, address: Int) raises -> Int:
         _ = _lookup(call[].state, True)
         call[].state = 0
         return 0
-    var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_OUTPUTS:
-        call[].out_cols = _outputs(slot, call[].flags)
-        call[].classes = slot[].classes if _svc(slot) else 0
+        # With a state the state answers; without one the NEW words (kind,
+        # probability, decision_function_shape) and `call.classes` do.
+        var svc_kind: Bool
+        var k: Int
+        var ovo: Bool
+        var probable: Bool
+        if call[].state != 0:
+            var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
+            svc_kind = _svc(held)
+            k = held[].classes if held[].fitted else call[].classes
+            ovo = held[].params[13] != 0.0
+            probable = held[].probability if held[].fitted else held[].params[12] != 0.0
+        elif call[].param_count == _PARAMS and call[].params:
+            var named = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+            svc_kind = named[0] == 0.0
+            k = call[].classes
+            ovo = named[13] != 0.0
+            probable = named[12] != 0.0
+        else:
+            raise Error("member ABI: a kernel SVM member's OUTPUTS without a state needs its NEW words")
+        if not _served(svc_kind, probable, call[].flags):
+            member_unsupported(String("SVC") if svc_kind else String("SVR"), call[].flags)
+        call[].out_cols = _outputs_of(svc_kind, k, ovo, call[].flags)
+        call[].out_dtype = _dtype_of(svc_kind, k, ovo, call[].flags)
+        call[].classes = k if svc_kind else 0
         return 0
+    var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT or ((operation == MEMBER_OP_DECISION

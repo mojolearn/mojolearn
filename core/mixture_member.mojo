@@ -376,6 +376,8 @@ def _import(slot: _Slot, call: _Call) raises:
 def _mixture_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # No MEMBER_CAN_TEST_ROWS: X is admitted finite by the caller (the
+        # GMM entry does not test it).
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
             | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
     if operation == MEMBER_OP_NEW:
@@ -401,6 +403,11 @@ def _mixture_member(operation: Int, address: Int) raises -> Int:
             components = Int(_Words(unsafe_from_address=call[].params)[0])
         call[].out_cols = components if call[].flags == MEMBER_OP_PREDICT_PROBA else 1
         call[].classes = 0
+        # predict: int32 component ids; predict_proba, score_samples: float32.
+        if call[].flags == MEMBER_OP_PREDICT:
+            call[].out_dtype = MEMBER_I32
+        elif call[].flags == MEMBER_OP_PREDICT_PROBA or call[].flags == MEMBER_OP_SCORE_SAMPLES:
+            call[].out_dtype = MEMBER_F32
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_FIT:

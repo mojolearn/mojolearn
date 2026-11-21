@@ -49,7 +49,7 @@ from bindings.parallel_public_result_door import parallel_public_result
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.native_process_pool_door import (
-    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
+    process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse,
     process_pool_create, process_pool_close, process_pool_closed, process_pool_pids, process_pool_devices,
 )
 from bindings.native_transport_door import transport_close
@@ -748,6 +748,115 @@ def _rebase_offsets(arrays: PythonObject, key: EntryRef, context: PythonObject) 
 # Their per-shard work calls the same native search/vote kernels directly;
 # partition, scheduling, resident snapshots, merge and join are native.
 
+struct ParallelIvfOwner(Movable, Writable):
+    """One distributed IVF index's native owner, stored once in the instance
+    dictionary as `_native`. The words a search decides on are typed: closed,
+    the feature and neighbor counts, the metric code, and per stored shard
+    the row count and the address of its global-id map. The Python objects
+    are pins the door built itself at construction: the process pool, the
+    list that keeps the map arrays alive, and the store token as the one
+    str every search request carries. `_closed`, `devices`, `n_neighbors`,
+    `n_features_in_`, `metric_code_` and `n_candidates_` on the instance are
+    mirrors for callers; this door writes them and never reads them."""
+    var owner_id: Int
+    var closed: Bool
+    var n_features: Int
+    var n_neighbors: Int
+    var metric: Int
+    var map_rows: List[Int]
+    var map_addrs: List[Int]
+    var token: PythonObject
+    var pool: PythonObject
+    var maps: PythonObject
+
+    def __init__(out self, owner_id: Int, n_features: Int, n_neighbors: Int, metric: Int,
+                 token: PythonObject, pool: PythonObject, maps: PythonObject):
+        self.owner_id = owner_id
+        self.closed = False
+        self.n_features = n_features
+        self.n_neighbors = n_neighbors
+        self.metric = metric
+        self.map_rows = List[Int]()
+        self.map_addrs = List[Int]()
+        self.token = token
+        self.pool = pool
+        self.maps = maps
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("ParallelIvfOwner(closed=", self.closed, ", shards=", len(self.map_rows), ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+struct ParallelNeighborOwner(Movable, Writable):
+    """The native owner of one `ReferenceShardedNeighbors` or
+    `ParallelQueries` holder, stored once in the instance dictionary as
+    `_native`: the process pool it keeps for its lifetime (a pin) and the
+    counter of the query tokens it has issued. `_pool` on the instance is a
+    mirror; this door writes it and never reads it. `estimator` and the
+    rows-per-shard attributes stay public settings, admitted at each call."""
+    var owner_id: Int
+    var tokens: Int
+    var pool: PythonObject
+
+    def __init__(out self, owner_id: Int, pool: PythonObject):
+        self.owner_id = owner_id
+        self.tokens = 0
+        self.pool = pool
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("ParallelNeighborOwner(tokens=", self.tokens, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+def _ivf_record_or_none(obj: PythonObject) raises -> PythonObject:
+    """The index's native owner record (None before `from_index` stored
+    it): one exact-type check and one instance-dictionary read per call."""
+    var record = py_get(_driver_fields(obj, "distributed_ivf_class"), parallel_keys()[].k__native)
+    if record is None:
+        return record
+    var owner_id = Int(py=py_call(shard_b().id, obj))
+    try:
+        if record.downcast_value_ptr[ParallelIvfOwner]()[].owner_id != owner_id:
+            raise Error("foreign")
+    except:
+        raise Error("TypeError: distributed IVF storage does not belong to this index")
+    return record
+
+
+def _ivf_record(obj: PythonObject) raises -> PythonObject:
+    var record = _ivf_record_or_none(obj)
+    if record is None:
+        raise Error("RuntimeError: DistributedIVFIndex is not initialized; use DistributedIVFIndex.from_index(index, devices=...)")
+    return record
+
+
+def _holder_record_or_none(obj: PythonObject) raises -> PythonObject:
+    """A neighbor holder's native owner record (None when its construction
+    was refused before the pool was opened). The caller has checked the
+    holder's exact class."""
+    var record = py_get(py_fields(obj), parallel_keys()[].k__native)
+    if record is None:
+        return record
+    var owner_id = Int(py=py_call(shard_b().id, obj))
+    try:
+        if record.downcast_value_ptr[ParallelNeighborOwner]()[].owner_id != owner_id:
+            raise Error("foreign")
+    except:
+        raise Error("TypeError: parallel neighbor storage does not belong to this holder")
+    return record
+
+
+def _holder_record(obj: PythonObject) raises -> PythonObject:
+    var record = _holder_record_or_none(obj)
+    if record is None:
+        raise Error("RuntimeError: the parallel neighbor holder is not initialized")
+    return record
+
+
 def _pool_open(devices: PythonObject) raises -> PythonObject:
     _ = shard_devices(devices)
     return shard_open(devices, _CHILD)
@@ -792,7 +901,10 @@ def _holder_init(args: PythonObject, reference: Bool) raises -> PythonObject:
         py_setitem(own, nk[].k_query_rows_per_shard, args[4])
     else:
         py_setitem(own, nk[].k_rows_per_shard, args[3])
-    py_setitem(own, nk[].k__pool, _pool_open(args[2]))
+    var pool = _pool_open(args[2])
+    # PACK, once per holder: the native owner; `_pool` is a mirror for callers.
+    py_setitem(own, nk[].k__native, PythonObject(alloc=ParallelNeighborOwner(Int(py=py_call(b.id, args[0])), pool)))
+    py_setitem(own, nk[].k__pool, pool)
     py_setitem(own, nk[].k_last_shards_, Python.list())
     return PythonObject(None)
 
@@ -842,7 +954,8 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     var holder = _driver_fields(args[0], "reference_driver_class")
     var nk = parallel_keys()
     var model = py_item(holder, nk[].k_estimator)
-    var pool = py_item(holder, nk[].k__pool)
+    var owner_record = _holder_record(args[0])
+    var pool = owner_record.downcast_value_ptr[ParallelNeighborOwner]()[].pool
     var method = String(args[2])
     var cls = py_type(model)
     if cls is not _t("nearest_class") and cls is not _t("knc_class") and cls is not _t("knr_class"):
@@ -1088,7 +1201,6 @@ def _release_query_state(pool: PythonObject, token: String, name: PythonObject, 
 # Prepared-registry slots of a ParallelQueries driver: its resident worker
 # snapshot claim (token, pool, worker ids, state key, name) and its token counter.
 comptime _QUERY_RESIDENT_SLOT = "parallel_query_resident_v1"
-comptime _QUERY_TOKENS_SLOT = "parallel_query_tokens_v1"
 
 
 def _freeze_carried(value: PythonObject, context: PythonObject, depth: Int) raises:
@@ -1123,7 +1235,8 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     var holder = _driver_fields(args[0], "query_driver_class")
     var nk = parallel_keys()
     var model = py_item(holder, nk[].k_estimator)
-    var pool = py_item(holder, nk[].k__pool)
+    var owner_record = _holder_record(args[0])
+    var pool = owner_record.downcast_value_ptr[ParallelNeighborOwner]()[].pool
     var methods = py_get(_t("query_methods"), py_type(model), Python.tuple())
     if len(methods) == 0:
         raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
@@ -1183,9 +1296,9 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         _ = py_call(key.append, "_index")
         _ = py_call(key.append, index_object)
     py_setitem(state, nk[].k_numeric_mode, "identical")
-    # The resident claim and the token counter live in the native prepared
-    # registry, weakly keyed by the driver object (outside its `__dict__`;
-    # never pickled or copied).
+    # The resident claim lives in the native prepared registry, weakly keyed
+    # by the driver object (outside its `__dict__`; never pickled or copied).
+    # The token counter is a word of the holder's native owner.
     var driver = args[0]
     var resident = prepared_get(mods, _QUERY_RESIDENT_SLOT, driver)
     var token = String()
@@ -1196,9 +1309,9 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         if resident is not None:
             prepared_drop(mods, _QUERY_RESIDENT_SLOT, driver)
             _release_query_state(pool, String(resident[0]), resident[4], workers)
-        var last_token = prepared_get(mods, _QUERY_TOKENS_SLOT, driver)
-        var counter = (Int(py=last_token) if last_token is not None else 0) + 1
-        prepared_put(mods, _QUERY_TOKENS_SLOT, driver, PythonObject(counter))
+        var held = owner_record.downcast_value_ptr[ParallelNeighborOwner]()
+        held[].tokens += 1
+        var counter = held[].tokens
         token = String("nq-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
         # The key notices replaced attributes by identity only. A carried Array
         # written in place would leave the workers' copy stale, so every
@@ -1304,16 +1417,19 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
     var pool = shard_open(devices, _CHILD)
     var obj = py_call(b.object.__new__, args[0])
     var own = py_fields(obj)
-    py_setitem(own, nk[].k__pool, pool)
     py_setitem(own, nk[].k__closed, False)
     py_setitem(own, nk[].k_n_features_in_, py_item(fields, nk[].k_n_features_in_))
     py_setitem(own, nk[].k_n_neighbors, py_item(fields, nk[].k_n_neighbors))
     py_setitem(own, nk[].k_metric_code_, py_item(fields, nk[].k_metric_code_))
     py_setitem(own, nk[].k_devices, devices)
     py_setitem(own, nk[].k_n_candidates_, PythonObject(None))
-    var token = String("ivf-") + String(external_call["getpid", Int32]()) + "-" + String(Int(py=py_call(b.id, obj)))
-    py_setitem(own, nk[].k__token, token)
+    var owner_id = Int(py=py_call(b.id, obj))
+    # The store token as one str, built once: every store and search request carries this object.
+    var token = PythonObject(String("ivf-") + String(external_call["getpid", Int32]()) + "-" + String(owner_id))
     var maps = b.list()
+    var held = ParallelIvfOwner(owner_id, Int(py=py_item(fields, nk[].k_n_features_in_)),
+                                Int(py=py_item(fields, nk[].k_n_neighbors)), Int(py=py_item(fields, nk[].k_metric_code_)),
+                                token, pool, maps)
     var requests = shard_wave()
     var base = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder", "list_data_",
                                                            "list_indices_", "list_offsets_", "n_rows_")), context)
@@ -1326,17 +1442,27 @@ def _ivf_from_index(args: PythonObject) raises -> PythonObject:
         py_setitem(state, nk[].k_list_offsets_, shard_row_vector(soff, part, context))
         py_setitem(state, nk[].k_list_indices_, shard_rows(local_all, lo, hi, context))
         py_setitem(state, nk[].k_list_data_, shard_rows(py_item(fields, nk[].k_list_data_), lo, hi, context))
-        _ = py_call(maps.append, shard_rows(map_all, lo, hi, context))
+        var mapping = shard_rows(map_all, lo, hi, context)
+        _ = py_call(maps.append, mapping)
+        # The map array is pinned by `maps` for the owner's lifetime: its row
+        # count and address are read here once, never again per search.
+        held.map_rows.append(hi - lo)
+        held.map_addrs.append(Int(py=classical_address(mapping)) if hi > lo else 0)
         requests.add(PARALLEL_SHARD_WORKER_OPN_IVF_STORE, PythonObject(None), Python.tuple(token, state))
-    py_setitem(own, nk[].k__id_maps, maps)
+    # PACK, once per index: the native owner.
+    var record = PythonObject(alloc=held^)
+    py_setitem(own, nk[].k__native, record)
     try:
         var receipts = _map(pool, requests)
+        var rec = record.downcast_value_ptr[ParallelIvfOwner]()
         for part in range(parts_count):  # driver-loop: one storage receipt per shard
-            ivf_receipt_admit(Int(py=receipts[part]), Int(py=maps[part].shape[0]))
+            ivf_receipt_admit(Int(py=receipts[part]), rec[].map_rows[part])
     except error:
         process_pool_close(pool)
+        record.downcast_value_ptr[ParallelIvfOwner]()[].closed = True
         py_setitem(own, nk[].k__closed, True)
         raise error^
+    _ = record  # the owner record is read through its pointer above
     return obj
 
 
@@ -1346,22 +1472,24 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
     distances finalized natively)."""
     var b = shard_b()
     var context = _ctx()
-    var own = _driver_fields(args[0], "distributed_ivf_class")
+    var record = _ivf_record(args[0])
+    var rec = record.downcast_value_ptr[ParallelIvfOwner]()
     var nk = parallel_keys()
-    ivf_open_admit(Bool(py=py_item(own, nk[].k__closed)))
+    ivf_open_admit(rec[].closed)
     var q = admit_family(args[1], 2, "queries", context).array
     ivf_queries_admit(Int(py=q.shape[0]))
-    ivf_features_admit(Int(py=q.shape[1]), Int(py=py_item(own, nk[].k_n_features_in_)))
-    var pool = py_item(own, nk[].k__pool)
-    var maps = py_item(own, nk[].k__id_maps)
+    ivf_features_admit(Int(py=q.shape[1]), rec[].n_features)
+    var shards = len(rec[].map_rows)
     try:
         var requests = shard_wave()
-        for i in range(len(py_item(own, nk[].k_devices))):  # driver-loop: one search request per stored shard
-            requests.add(PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH, PythonObject(None), Python.tuple(py_item(own, nk[].k__token), q))
-        var parts = _map(pool, requests)
-        ivf_parts_admit(len(parts), len(maps))
+        # One operand tuple for the wave: every shard's request carries the same token and queries.
+        var operands = Python.tuple(rec[].token, q)
+        for i in range(shards):  # driver-loop: one search request per stored shard
+            requests.add(PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH, PythonObject(None), operands)
+        var parts = _map(rec[].pool, requests)
+        ivf_parts_admit(len(parts), shards)
         var m = Int(py=q.shape[0])
-        var k = Int(py=py_item(own, nk[].k_n_neighbors))
+        var k = rec[].n_neighbors
         for i in range(len(parts)):  # driver-loop: checks one result shard
             var p = parts[i]
             if (Int(py=p[0].shape[0]) != m or Int(py=p[0].shape[1]) != k or Int(py=p[1].shape[0]) != m
@@ -1376,29 +1504,31 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
         var sizes: List[Int] = [len(parts), m, k]
         for i in range(len(parts)):  # driver-loop: four buffer addresses per result shard
             var p = parts[i]
-            var mapping = maps[i]
+            var counts_addr = Int(py=classical_address(p[2]))
             addrs.append(Int(py=classical_address(p[0])))
             addrs.append(Int(py=classical_address(p[1])))
-            addrs.append(Int(py=classical_address(p[2])))
-            addrs.append(Int(py=classical_address(mapping)) if Int(py=mapping.shape[0]) > 0
-                         else Int(py=classical_address(p[2])))
-            sizes.append(Int(py=mapping.shape[0]))
+            addrs.append(counts_addr)
+            # The shard's global-id map: its address and rows are the owner's words (an empty map
+            # passes the counts address, as before, so the merge never sees a null pointer).
+            addrs.append(rec[].map_addrs[i] if rec[].map_rows[i] > 0 else counts_addr)
+            sizes.append(rec[].map_rows[i])
         var status = 0
         with GILReleased(Python()):
             status = parallel_ivf_merge_shards(ivf_key, addrs, sizes)
         _ = parts  # keep the Python objects alive through the native call above
-        _ = maps  # keep the Python objects alive through the native call above
         _ = result  # keep the Python object alive through the native call above
         _ = ids  # keep the Python object alive through the native call above
         _ = counts  # keep the Python object alive through the native call above
         ivf_merge_admit(status)
-        if Int(py=py_item(own, nk[].k_metric_code_)) == 1:
+        if rec[].metric == 1:
             var result_addr = Int(py=classical_address(result))
-            var metric = Int(py=py_item(own, nk[].k_metric_code_))
+            var metric = rec[].metric
             with GILReleased(Python()):
                 _ = parallel_ivf_finalize(ivf_key, result_addr, m * k, metric)
             _ = result  # keep the Python object alive through the native call above
-        py_setitem(own, nk[].k_n_candidates_, counts)
+        # PACK: the candidate counts mirror on the instance.
+        py_setitem(py_fields(args[0]), nk[].k_n_candidates_, counts)
+        _ = record  # the owner (and through it the pinned map arrays) outlives the merge above
         return Python.tuple(result, ids)
     except error:
         _ivf_close(args[0])
@@ -1406,12 +1536,17 @@ def _ivf_search(args: PythonObject) raises -> PythonObject:
 
 
 def _ivf_close(obj: PythonObject) raises:
-    var own = _driver_fields(obj, "distributed_ivf_class")
-    var nk = parallel_keys()
-    py_setitem(own, nk[].k__closed, True)
-    var pool = py_get(own, PythonObject("_pool"), PythonObject(None))
-    if pool is not None and not process_pool_closed(pool):
-        process_pool_close(pool)
+    """Close is safe and idempotent: an index whose construction never
+    stored its owner has no pool."""
+    var record = _ivf_record_or_none(obj)
+    py_setitem(py_fields(obj), parallel_keys()[].k__closed, True)
+    if record is None:
+        return
+    var rec = record.downcast_value_ptr[ParallelIvfOwner]()
+    rec[].closed = True
+    if not process_pool_closed(rec[].pool):
+        process_pool_close(rec[].pool)
+    _ = record  # the owner record is read through its pointer above
 
 
 # ---------------------------------------------------------------- the scaler worker
@@ -1547,7 +1682,7 @@ def shard_worker(argv: PythonObject) raises:
                 # The typed request: one decode of the frame's words (a frame
                 # without request words is refused), then the code's branch.
                 var operation = shard_request_op(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
-                process_worker_reply(socket, turn.sequence, shard_worker_dispatch(operation, turn.value))
+                process_worker_reply(socket, turn.sequence, shard_worker_dispatch(operation, process_worker_value(turn)))
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))
     except error:
@@ -1610,17 +1745,20 @@ def parallel_shard_call(operation: Int, name: PythonObject, args: PythonObject) 
         if py_type(args[0]) is not _t("reference_driver_class") and py_type(args[0]) is not _t("query_driver_class"):
             raise Error("TypeError: parallel driver requires its exact connected class")
         # A construction that failed (every refusal of _holder_init runs
-        # before `_pool` is stored, and a failed _pool_open stores none) has
+        # before the owner is stored, and a failed _pool_open stores none) has
         # no pool: close is safe and idempotent there, as _ivf_close is
         # (cpu-surface-defects, 2026-11-16).
-        var pool = py_get(py_fields(args[0]), PythonObject("_pool"), PythonObject(None))
-        if pool is not None and not process_pool_closed(pool):
-            process_pool_close(pool)
+        var held = _holder_record_or_none(args[0])
+        if held is not None:
+            var held_pool = held.downcast_value_ptr[ParallelNeighborOwner]()[].pool
+            if not process_pool_closed(held_pool):
+                process_pool_close(held_pool)
         return PythonObject(None)
     if operation == PARALLEL_SHARD_OPN_IVF_INIT:
         raise Error("TypeError: use DistributedIVFIndex.from_index(index, devices=...)")
     if operation == PARALLEL_SHARD_OPN_IVF_ENTER:
-        ivf_open_admit(Bool(py=py_item(_driver_fields(args[0], "distributed_ivf_class"), nk[].k__closed)))
+        var entered = _ivf_record(args[0])
+        ivf_open_admit(entered.downcast_value_ptr[ParallelIvfOwner]()[].closed)
         return args[0]
     if operation == PARALLEL_SHARD_OPN_REFERENCE_QUERY:
         return _reference_query(args)

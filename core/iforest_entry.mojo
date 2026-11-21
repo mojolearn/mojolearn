@@ -49,6 +49,8 @@ Operations:
 
 Every operation runs with the GIL released by its caller; the resident
 stores' locks are held only for mint, the one take, the put and free.
+`IF_P_DEVICE_COUNT` > 1 (a member whose admit read the public thread's plan:
+`IF_P_DEVICES` = the ids in rank order) runs over exactly those devices; else
 `IF_P_SINGLE` 1 (a member: its device is its route's) runs on one device;
 0 reads the calling thread's device plan (`MOJOLEARN_IFOREST_DEVICE_COUNT`),
 as the estimator's doors always did.
@@ -61,8 +63,10 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 
-comptime IF_ENTRY_ABI = "mojolearn.iforest_entry.v2"
-"""v2 (round 4): IF_P_SINGLE joined the RUN ints; IF_OP_EXPORT and IF_OP_FOREST_RUN."""
+comptime IF_ENTRY_ABI = "mojolearn.iforest_entry.v3"
+"""v2 (round 4): IF_P_SINGLE joined the RUN ints; IF_OP_EXPORT and IF_OP_FOREST_RUN.
+v3 (sweep-b, 2026-11-21): IF_P_DEVICES and IF_P_DEVICE_COUNT joined the RUN ints
+(a member's device plan, MEMBER-ABI-V2 item 28)."""
 comptime IF_OP_CAPS = 0
 comptime IF_OP_RUN = 1
 comptime IF_OP_RELEASE = 2
@@ -102,7 +106,9 @@ comptime IF_P_WANT = 12
 comptime IF_P_RESIDENT = 13
 comptime IF_P_TOKEN = 14
 comptime IF_P_SINGLE = 15
-comptime IF_RUN_INTS = 16
+comptime IF_P_DEVICES = 16       # address of `device_count` Int device ids (rank order); 0: none
+comptime IF_P_DEVICE_COUNT = 17
+comptime IF_RUN_INTS = 18
 # IF_OP_RUN floats.
 comptime IF_F_MAX_SAMPLES_FRAC = 0
 comptime IF_F_MAX_FEATURES_FRAC = 1
@@ -154,6 +160,10 @@ struct IFRunRequest(Copyable, Defaultable, Movable):
     var token: Int
     var single: Bool
     """True: one device (a member's route); False: the thread's device plan."""
+    var devices: Int
+    """Address of `device_count` Int device ids in rank order (a member's
+    `call.devices`); used when `device_count` > 1, before `single`."""
+    var device_count: Int
 
     def __init__(out self):
         self.train = 0
@@ -180,6 +190,8 @@ struct IFRunRequest(Copyable, Defaultable, Movable):
         self.resident = False
         self.token = 0
         self.single = False
+        self.devices = 0
+        self.device_count = 0
 
 
 @fieldwise_init
@@ -277,6 +289,8 @@ def _if_knobs_at(pp: Int, ff: Int) -> IFRunRequest:
     r.resident = p[IF_P_RESIDENT] != 0
     r.token = p[IF_P_TOKEN]
     r.single = p[IF_P_SINGLE] != 0
+    r.devices = p[IF_P_DEVICES]
+    r.device_count = p[IF_P_DEVICE_COUNT]
     r.max_samples_frac = f[IF_F_MAX_SAMPLES_FRAC]
     r.max_features_frac = f[IF_F_MAX_FEATURES_FRAC]
     r.contamination = f[IF_F_CONTAMINATION]
@@ -458,6 +472,7 @@ def if_entry_run(entry: EntryRef, request: IFRunRequest) raises -> Int:
         request.max_features_mode, request.max_features_int, 1 if request.bootstrap else 0,
         request.random_state, 1 if request.contamination_auto else 0, request.want,
         1 if request.resident else 0, request.token, 1 if request.single else 0,
+        request.devices, request.device_count,
     ]
     var f: Array[Float64, IF_RUN_FLOATS] = [request.max_samples_frac, request.max_features_frac,
                                             request.contamination]
@@ -476,7 +491,8 @@ def if_entry_export(entry: EntryRef, request: IFRunRequest, forest: IFForestSpan
         request.max_samples_mode, request.max_samples_int, request.max_depth,
         request.max_features_mode, request.max_features_int, 1 if request.bootstrap else 0,
         request.random_state, 1 if request.contamination_auto else 0, request.want,
-        1 if request.resident else 0, request.token, 1 if request.single else 0, forest.trees, forest.total,
+        1 if request.resident else 0, request.token, 1 if request.single else 0,
+        request.devices, request.device_count, forest.trees, forest.total,
     ]
     var f: Array[Float64, IF_RUN_FLOATS] = [request.max_samples_frac, request.max_features_frac,
                                             request.contamination]

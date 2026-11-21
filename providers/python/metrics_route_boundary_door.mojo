@@ -24,6 +24,7 @@ from bindings.py_balanced import py_get, py_type
 from core.entry_table import EntryRef, entry_ref_word
 from core.linear_entry_table import LINEAR_TABLE_METRICS, linear_table_entry
 from core.device_route import DeviceRoute
+from providers.python.device_route_boundary_door import device_cpu_connect_late
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from providers.python.linear_entry_boundary_door import linear_entry_connection
@@ -65,6 +66,10 @@ def device_route_metrics_cpu(mut route: DeviceRoute, context: PythonObject, b: P
     python/mojolearn/_native_family_bridge.py `shared_context`). Returns the
     cells: the caller stores them among its owner's `images` pins."""
     var cells = py_get(context, "metrics_cpu_cells")
+    if cells is None and device_cpu_connect_late(context):
+        # A restored estimator (no construction ran the device admission):
+        # its route miss admits the CPU device once (lane fx-leftovers item 3).
+        cells = py_get(context, "metrics_cpu_cells")
     device_route_metrics_cells(route, cells, b)
     return cells
 

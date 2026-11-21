@@ -9,6 +9,7 @@ from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorErr
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
 from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_X_PREP
 from core.shared_slot import SharedSlot
+from core.naive_bayes_member import naive_bayes_member_publish
 from x_prep.host.program import run_program_host
 from x_prep.transport_abi import XP_TRANSPORT_ABI, XP_OP_COUNT, XP_RUN, xp_validate_call
 
@@ -49,3 +50,7 @@ def publish_x_prep_transport_host() raises:
     var owner = XPREP_TRANSPORT_HOST_OWNER.get_or_create_ptr()
     prep_table_publish[PREP_TABLE_X_PREP](PrepEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), Int(owner),
         [String(XP_TRANSPORT_ABI)], [XP_OP_COUNT], [x_prep_transport_host_v1])
+    # The NaiveBayes members (core/naive_bayes_member.mojo: GaussianNB) under
+    # the same key: they run their programs through the transport entry
+    # their route carries, never a table.
+    naive_bayes_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(owner))

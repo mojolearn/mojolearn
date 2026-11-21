@@ -68,6 +68,7 @@ struct SvmKeys(Defaultable, Movable):
     var k_component_indices_: PythonObject
     var k_components_: PythonObject
     var k_consts: PythonObject
+    var k_score_words: PythonObject
     var k_decision_function_shape: PythonObject
     var k_degree: PythonObject
     var k_dual: PythonObject
@@ -202,6 +203,7 @@ struct SvmKeys(Defaultable, Movable):
         self.k_component_indices_ = PythonObject(None)
         self.k_components_ = PythonObject(None)
         self.k_consts = PythonObject(None)
+        self.k_score_words = PythonObject(None)
         self.k_decision_function_shape = PythonObject(None)
         self.k_degree = PythonObject(None)
         self.k_dual = PythonObject(None)
@@ -340,6 +342,7 @@ def _svm_keys_fill(nk: UnsafePointer[SvmKeys, MutUntrackedOrigin]) raises:
     nk[].k_component_indices_ = py_key("component_indices_")
     nk[].k_components_ = py_key("components_")
     nk[].k_consts = py_key("consts")
+    nk[].k_score_words = py_key("score_words")
     nk[].k_decision_function_shape = py_key("decision_function_shape")
     nk[].k_degree = py_key("degree")
     nk[].k_dual = py_key("dual")

@@ -49,8 +49,8 @@ from bindings.native_transport_door import (
 )
 from bindings.native_transport_run import transport_terminate, transport_clock
 from bindings.native_process_wire_door import (
-    WireOutgoing, WireReply, wire_send, wire_receive, wire_send_fd, wire_receive_fd, wire_receive_typed_fd,
-    wire_reply_pack, wire_unpack, wire_text,
+    WireOutgoing, WireReply, wire_send, wire_send_fd, wire_receive_fd, wire_receive_typed_fd,
+    wire_reply_pack, wire_unpack, wire_text, _wire_socket,
 )
 from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
@@ -732,33 +732,52 @@ def process_worker_connect(argv: PythonObject) raises -> PythonObject:
 
 
 struct WorkerTurn(Movable):
-    """One request a worker received: `open` is False for the coordinator's
-    close (the worker then leaves its loop), `sequence` is echoed in the
-    reply, `request` holds the frame's request words (one encoded
-    `WorkerRequest`) and `value` is
-    the request's PACKed record."""
+    """One request a worker received, typed: `open` is False for the
+    coordinator's close (the worker then leaves its loop), `sequence` is
+    echoed in the reply, `request` holds the frame's request words (one
+    encoded `WorkerRequest`) and `frame` the request's record as it was read
+    (`WireReply`: the typed record and the stores its tensors were read
+    into). No Python value exists for the request until an operation asks
+    for one (`process_worker_value`); an operation whose RUN is typed reads
+    `frame.record` and never does.
+
+    Until 2026-11-21 (lane pools-frame, round 7) every request was PACKed
+    here (`wire_receive`: its Arrays, its containers) whether or not the
+    operation read Python values."""
     var open: Bool
     var sequence: Int
     var request: List[Int64]
-    var value: PythonObject
+    var frame: WireReply
 
-    def __init__(out self, open: Bool, sequence: Int, var request: List[Int64], value: PythonObject):
+    def __init__(out self, open: Bool, sequence: Int, var request: List[Int64], var frame: WireReply):
         self.open = open
         self.sequence = sequence
         self.request = request^
-        self.value = value
+        self.frame = frame^
 
 
 def process_worker_next(socket: PythonObject) raises -> WorkerTurn:
-    var message = wire_receive(socket)
+    var fd = -1
+    var timeout = Float64(-1)
+    _wire_socket(socket, fd, timeout)
+    var frame = wire_receive_typed_fd(fd, timeout)
+    _ = socket
     var words = List[Int64]()
-    if message.kind == WIRE_CLOSE:
-        return WorkerTurn(False, -1, words^, PythonObject(None))
-    if message.kind != WIRE_REQUEST:
+    if frame.kind == WIRE_CLOSE:
+        return WorkerTurn(False, -1, words^, frame^)
+    if frame.kind != WIRE_REQUEST:
         raise Error("process: worker received an invalid request kind")
-    # The received words change owner (no copy); the message keeps an empty list.
-    swap(words, message.request)
-    return WorkerTurn(True, message.sequence, words^, message.value)
+    # The received words change owner (no copy); the frame keeps an empty list.
+    swap(words, frame.request)
+    var sequence = frame.sequence
+    return WorkerTurn(True, sequence, words^, frame^)
+
+
+def process_worker_value(turn: WorkerTurn) raises -> PythonObject:
+    """PACK of a turn's request record, once, for an operation whose RUN
+    still takes Python values (the same PACK `process_worker_next` did for
+    every request)."""
+    return wire_reply_pack(turn.frame)
 
 
 def process_worker_reply(socket: PythonObject, sequence: Int, value: PythonObject) raises:
@@ -766,6 +785,14 @@ def process_worker_reply(socket: PythonObject, sequence: Int, value: PythonObjec
     written, so a value the frame cannot carry leaves the socket in step and
     the caller can still send its refusal."""
     var outgoing = wire_unpack(value)
+    var no_request = List[Int64]()
+    wire_send(socket, WIRE_RESULT, sequence, no_request, outgoing)
+
+
+def process_worker_reply_typed(socket: PythonObject, sequence: Int, outgoing: WireOutgoing) raises:
+    """A worker's result as the typed record the operation built
+    (`WireOutgoing`: record nodes written by the operation, tensors by
+    `wire_append`): no Python container is built to be UNPACKed again."""
     var no_request = List[Int64]()
     wire_send(socket, WIRE_RESULT, sequence, no_request, outgoing)
 
@@ -785,7 +812,9 @@ def process_echo_worker(argv: PythonObject) raises:
             var turn = process_worker_next(socket)
             if not turn.open:
                 break
-            process_worker_reply(socket, turn.sequence, turn.value)
+            # The echo sends the request back as it was read: its tensors
+            # are PACKed and UNPACKed, as the probe always did.
+            process_worker_reply(socket, turn.sequence, process_worker_value(turn))
     except:
         transport_close(socket)
         raise

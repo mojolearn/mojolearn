@@ -70,6 +70,7 @@ from bindings.xcnn_keys_unpack import (
     XCNN_OPN_SAGE_CACHED_SET, XCNN_OPN_SAGE_FORWARD, XCNN_OPN_SAGE_INIT,
 )
 from bindings.py_balanced import py_item
+from bindings.torch_parameter_form_pack import torch_parameter_form
 
 
 def _ones(count: Int, context: PythonObject) raises -> PythonObject:
@@ -1493,6 +1494,14 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     _ = keep
     _ = g
     return dx
+
+
+def xcnn_graph_parameters(layer: PythonObject, sage: Bool, form: Int, context: PythonObject) raises -> PythonObject:
+    """torch's `parameters()` (form 1) / `named_parameters()` (form 2) of a
+    GCNConv or SAGEConv layer (lane fx-leftovers item 2, 2026-11-21): every
+    entry of its `state_dict()` is a trainable weight or bias, in PyG's
+    order. Copies, as `state_dict()`'s are. Cold API call."""
+    return torch_parameter_form(xcnn_graph_state(layer, sage, False, Python.tuple(), context), form)
 
 
 def xcnn_graph_state(layer: PythonObject, sage: Bool, load: Bool, args: PythonObject, context: PythonObject) raises -> PythonObject:

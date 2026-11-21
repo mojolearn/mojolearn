@@ -310,11 +310,8 @@ def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied:
 
 
 def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject, forecast: Bool = False) raises -> PythonObject:
+    # UNPACK of the public arguments; the query is `arima_predict_fields`.
     var nk = tsa_keys()
-    # The route is resolved where the former entry selection ran: after the
-    # argument and fitted-state refusals, once per call.
-    var call = TsaHwCall(DeviceRoute(DEVICE_INSTALL), PythonObject(None))
-    var routed = False
     var fields = _fields(model)
     if not py_contains(fields, nk[].k_params_):
         raise Error("ValueError: " + _A + "call fit() before " + ("forecast" if forecast else "predict"))
@@ -322,6 +319,33 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
     var start = n_obs if forecast else _integer(args[0], context)
     var end = Int(py=PythonObject(n_obs) + _integer_object(args[0], context)) if forecast else n_obs if args[1] is None else _integer(args[1], context)
     var exog = args[1] if forecast else args[2]
+    return arima_predict_fields(model, fields, n_obs, start, end, exog, context, forecast)
+
+
+def arima_predict_span(model: PythonObject, start: Int, end: Int, context: PythonObject) raises -> PythonObject:
+    """`predict(start, end)` without future regressors on typed span words:
+    the parallel forecast worker's request (lane pools-frame, 2026-11-21: it
+    built an argument tuple of Python integers per request for
+    `arima_predict` to read back). The same field admission, fitted refusal
+    and query as `arima_predict`."""
+    var nk = tsa_keys()
+    var fields = _fields(model)
+    if not py_contains(fields, nk[].k_params_):
+        raise Error("ValueError: " + _A + "call fit() before predict")
+    var n_obs = _integer(py_item(fields, nk[].k_n_obs_), context)
+    return arima_predict_fields(model, fields, n_obs, start, end, PythonObject(None), context, False)
+
+
+def arima_predict_fields(model: PythonObject, fields: PythonObject, n_obs: Int, start: Int, end: Int,
+                         exog: PythonObject, context: PythonObject, forecast: Bool) raises -> PythonObject:
+    """The predict / forecast query on admitted fields and typed span words
+    (`fields` is the model's admitted instance storage, `n_obs` its fitted
+    length word; both read once by the caller)."""
+    var nk = tsa_keys()
+    # The route is resolved where the former entry selection ran: after the
+    # argument and fitted-state refusals, once per call.
+    var call = TsaHwCall(DeviceRoute(DEVICE_INSTALL), PythonObject(None))
+    var routed = False
     var order = _order(fields, context)
     var width = Int(py=PythonObject(end) - start)
     if width <= 0:
