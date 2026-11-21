@@ -23,7 +23,7 @@ from providers.python.device_route_dw_classical_door import (
     FamilyRouteOwner, family_route_held, family_route_keep, family_route_value, family_device_request,
     family_route_second_refuse,
 )
-from core.logistic_native_api import QnFitRequest, QnQueryRequest, QnFoldStore
+from core.logistic_native_api import QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_COUNT, QN_FOLD_COUNT
 from glm.qn_door_run import (
     QnDoorFitRequest, QnDoorFitResult, QnDoorPredictRequest,
     qn_check_lengths, qn_check_features, qn_check_coefficients, qn_change_tolerance,
@@ -92,7 +92,7 @@ def _qn_route_build(device_request: Int, mode: PythonObject, default_mode: Pytho
     owner.route.device = plan.device
     owner.route.mode = key.mode
     owner.route.vendor = key.vendor
-    owner.route.entry = EntryRef(entry, entry_ref_word(key.mode, key.vendor, 1))
+    owner.route.entry = EntryRef(entry, entry_ref_word(key.mode, key.vendor, QN_NATIVE_COUNT))
     # The resident-fold entry of the GPU base image: an identical-mode
     # cross-validation fold on the device is fitted from the fold store
     # without a host gather. A CPU route never reads the device store.
@@ -102,7 +102,7 @@ def _qn_route_build(device_request: Int, mode: PythonObject, default_mode: Pytho
         try:
             var fold = EstimatorsEntryKey(Int(py=fold_key[0]), Int(py=fold_key[1]))
             var fold_entry = estimators_table_entry[ESTIMATORS_TABLE_QN_FOLD](fold)
-            owner.route.second = EntryRef(fold_entry, entry_ref_word(fold.mode, fold.vendor, 1))
+            owner.route.second = EntryRef(fold_entry, entry_ref_word(fold.mode, fold.vendor, QN_FOLD_COUNT))
         except error:
             # Said by the fold fit that needs it, in the table's own words.
             owner.second_refusal = String(error)
