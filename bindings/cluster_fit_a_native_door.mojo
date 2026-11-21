@@ -36,7 +36,12 @@ from bindings.family_common_pack import (
     family_call,
     family_array,
 )
-from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, PENDING_PYTHON_ERROR
+from bindings.cluster_pending_error_unpack import _pending, _pending_text, _drop_pending
+from bindings.cluster_fit_public_native_unpack import (
+    _attr, _attr_or_none, _truthy, _int, _float, _eq, _one_of, _set, _f32, _seed, _weights, _init_array,
+)
+from bindings.cluster_fit_public_native_pack import meanshift_fit
+from cluster.cluster_fit_door_run import cluster_rows_cover
 from bindings.cluster_public_native_pack import cluster_operation, _xc_array
 from bindings.operation_names_xc import XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM
 from bindings.operation_names_cfa import (
@@ -68,155 +73,6 @@ from bindings.py_balanced import py_item
 comptime _OPTICS_PRECOMPUTED = 5
 
 
-# ---------------------------------------------------------------- helpers
-
-def _attr(model: PythonObject, name: String) raises -> PythonObject:
-    """`getattr(model, name)`; its AttributeError is restored unchanged."""
-    return family_raw_get(model, name)
-
-
-def _attr_or_none(model: PythonObject, name: String) raises -> PythonObject:
-    """`getattr(model, name, None)`."""
-    return family_raw_get_or(model, name, PythonObject(None))
-
-
-def _truthy(value: PythonObject) raises -> Bool:
-    """`bool(value)`."""
-    return Bool(py=family_call(native_loaded_module("builtins").bool, value))
-
-
-def _int(value: PythonObject) raises -> PythonObject:
-    """`int(value)`."""
-    return family_call(native_loaded_module("builtins").int, value)
-
-
-def _float(value: PythonObject) raises -> PythonObject:
-    """`float(value)`."""
-    return family_call(native_loaded_module("builtins").float, value)
-
-
-def _eq(value: PythonObject, other: PythonObject) raises -> Bool:
-    """`bool(value == other)`."""
-    return _truthy(family_call(native_loaded_module("operator").eq, value, other))
-
-
-def _one_of(value: PythonObject, a: String, b: String) raises -> Bool:
-    """`value in (a, b)`."""
-    return py_contains(Python.tuple(PythonObject(a), PythonObject(b)), value)
-
-
-def _set(model: PythonObject, var name: String, value: PythonObject) raises:
-    """`setattr(model, name, value)`. A fit storing new `cluster_centers_`
-    releases the model's resident device copy of the old ones at once
-    (bindings/cluster_resident_table_run.mojo, N024); the next query uploads
-    the new object once."""
-    if name == "cluster_centers_":
-        cres_forget(model, CRES_X_CLUSTER)
-    py_setattr(model, name^, value)
-
-
-def _pending(index: Int) raises -> PythonObject:
-    """A new reference to word `index` (0 type, 1 value) of the Python
-    exception `family_call` stashed, or None. The stash is kept."""
-    var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
-    var address = pending[].words[index]
-    if address == 0:
-        return PythonObject(None)
-    ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("Py_NewRef")(address)
-    return PythonObject(from_owned=pointer)
-
-
-def _drop_pending() raises:
-    """Release the stashed exception: the caller raises its own instead."""
-    ref cpy = Python().cpython()
-    var release = cpy.lib.get_function[NoneType]("Py_DecRef")
-    var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
-    for t in range(3):  # small-loop(the stashed exception's three references)
-        var address = pending[].words[t]
-        if address:
-            release(address)
-            pending[].words[t] = 0
-
-
-def _pending_is(error: Error, classes: PythonObject) raises -> Bool:
-    """True when `error` stands for a stashed exception of one of `classes`
-    (`except classes:`)."""
-    if String(error) != PYTHON_ERROR_PENDING:
-        return False
-    var kind = _pending(0)
-    if kind is None:
-        return False
-    return Bool(py=py_call(native_loaded_module("builtins").issubclass, kind, classes))
-
-
-def _pending_text(error: Error) raises -> String:
-    """`str(e)` of the stashed exception (`error` itself otherwise)."""
-    if String(error) != PYTHON_ERROR_PENDING:
-        return String(error)
-    var value = _pending(1)
-    if value is None:
-        return String("")
-    return String(py=py_call(native_loaded_module("builtins").str, value))
-
-
-def _f32(source: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`_expansion_cluster._f32(source, name)`: `as_f32_c(ndim=2)` and the
-    by-name NaN/inf refusal."""
-    try:
-        return admit_family(source, 2, name, context, finite=True).array
-    except error:
-        if family_nonfinite(error, name):
-            raise Error("mojolearn: " + name + " contains NaN or infinity")
-        raise Error(String(error))
-
-
-def _seed(random_state: PythonObject) raises -> Int:
-    """`_expansion_cluster._seed`: None is 0; a non-negative int keeps its
-    low 63 bits."""
-    if random_state is None:
-        return 0
-    var b = native_loaded_module("builtins")
-    if (py_type(random_state) is not b.int
-            or Bool(py=py_call(native_loaded_module("operator").lt, random_state, PythonObject(0)))):
-        raise Error("mojolearn: random_state must be None or a non-negative int "
-                    + "(the lane's seeded host stream; a RandomState object is not taken)")
-    return Int(py=py_call(native_loaded_module("operator").and_, random_state,
-                          PythonObject(9223372036854775807)))
-
-
-def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_expansion_cluster._weights`: None stays None; otherwise
-    `check_sample_weight(sample_weight, n, allow_negative=True)`."""
-    if sample_weight is None:
-        return PythonObject(None)
-    var pin = ArrayPin()
-    _ = admit_family_weights(sample_weight, n, True, context, pin)
-    return pin.keep
-
-
-def _init_array(model: PythonObject, source: PythonObject, init: PythonObject, k: Int, d: Int,
-                context: PythonObject) raises -> PythonObject:
-    """Admit explicit initial centers; model execution never invokes init callbacks."""
-    ref cpy = Python().cpython()
-    if cpy.lib.get_function[Int32]("PyCallable_Check")(init._obj_ptr) != 0:
-        raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers or use 'k-means++' or 'random'")
-    var arr = _f32(init, "init", context)
-    if Int(py=arr.shape[0]) != k or Int(py=arr.shape[1]) != d:
-        raise Error("The shape of the initial centers " + family_shape_repr(arr) + " does not match "
-                    + "the number of clusters " + String(k) + " and features " + String(d) + ".")
-    return arr
-
-
-def _flag(value: Bool) raises -> PythonObject:
-    return PythonObject(1 if value else 0)
-
-
-def _rows(model: PythonObject, k: Int, n: Int) raises:
-    if k < 1 or k > n:
-        raise Error("n_samples=" + String(n) + " should be >= n_clusters=" + String(k) + ".")
-
-
 # ---------------------------------------------------------------- MiniBatchKMeans
 
 def _mbk_fit(model: PythonObject, binding: PythonObject, source: PythonObject, sample_weight: PythonObject,
@@ -232,7 +88,7 @@ def _mbk_fit(model: PythonObject, binding: PythonObject, source: PythonObject, s
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var k = Int(py=_int(_attr(model, "n_clusters")))
-    _rows(model, k, n)
+    cluster_rows_cover(k, n)
     var weights = _weights(sample_weight, n, context)
     var init = _attr(model, "init")
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
@@ -243,7 +99,7 @@ def _mbk_fit(model: PythonObject, binding: PythonObject, source: PythonObject, s
             raise Error("init must be 'k-means++', 'random' or an array, got " + family_repr(init))
         init_random = _eq(init, PythonObject("random"))
     else:
-        init_arr = py_present(_init_array(model, source, init, k, d, context))
+        init_arr = py_present(_init_array(init, k, d, context))
     var n_init_field = _attr(model, "n_init")
     var n_init: Int
     if _eq(n_init_field, PythonObject("auto")):
@@ -324,7 +180,7 @@ def _mbk_partial_fit(model: PythonObject, binding: PythonObject, source: PythonO
     var state1 = PythonObject(0)
     var since = PythonObject(0)
     if first:
-        _rows(model, k, n)
+        cluster_rows_cover(k, n)
         var batch_eff = min(Int(py=_int(_attr(model, "batch_size"))), n)
         var size_field = _attr(model, "init_size")
         var size = 3 * batch_eff if size_field is None else Int(py=_int(size_field))
@@ -338,7 +194,7 @@ def _mbk_partial_fit(model: PythonObject, binding: PythonObject, source: PythonO
                 raise Error("init must be 'k-means++', 'random' or an array, got " + family_repr(init))
             code = 0 if _eq(init, PythonObject("k-means++")) else 1
         else:
-            parts.append(_init_array(model, source, init, k, d, context))
+            parts.append(_init_array(init, k, d, context))
             code = 2
         var seed = _seed(_attr(model, "random_state"))
         state0 = PythonObject(seed >> 32)
@@ -420,7 +276,7 @@ def _bisect_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     var k = Int(py=_int(_attr(model, "n_clusters")))
-    _rows(model, k, n)
+    cluster_rows_cover(k, n)
     var n_init = _int(_attr(model, "n_init"))
     if Int(py=n_init) < 1:
         raise Error("n_init must be >= 1")
@@ -464,56 +320,6 @@ def _centers_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
         _mbk_fit(model, binding, source, PythonObject(None), context)
     else:
         _bisect_fit(model, binding, source, PythonObject(None), context)
-
-
-# ---------------------------------------------------------------- MeanShift
-
-def _meanshift_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
-                   context: PythonObject) raises:
-    """`MeanShift.fit(X)`."""
-    var b = native_loaded_module("builtins")
-    var x = _f32(source, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var seeds = Optional[PythonObject]()
-    var seeds_field = _attr(model, "seeds")
-    if seeds_field is not None:
-        seeds = _f32(seeds_field, "seeds", context)
-        if Int(py=seeds.value().shape[1]) != d:
-            raise Error("seeds have " + String(Int(py=seeds.value().shape[1])) + " features, X has " + String(d))
-    var bw = Float64(0.0)
-    var bandwidth = _attr(model, "bandwidth")
-    if bandwidth is not None:
-        bw = Float64(py=_float(bandwidth))
-        if not bw > 0:
-            raise Error("bandwidth needs to be greater than zero or None, got "
-                        + String(py=py_call(b.format, PythonObject(bw), PythonObject("f"))))
-    # ORDER MATCHES x_cluster/entries.mojo::meanshift_entry: n, d, n_seeds,
-    # cluster_all, max_iter, bin_seeding, min_bin_freq.
-    var n_seeds = 0 if not seeds else Int(py=seeds.value().shape[0])
-    var cluster_all = _truthy(_attr(model, "cluster_all"))
-    var max_iter = _int(_attr(model, "max_iter"))
-    var bin_seeding = _truthy(_attr(model, "bin_seeding"))
-    var min_bin_freq = _int(_attr(model, "min_bin_freq"))
-    var connection = centroid_fit_connection(binding)
-    var request = MeanShiftFitRequest(variants_span(x), variants_span(py_or_none(seeds)), n, d, n_seeds,
-        cluster_all, Int(py=max_iter), bin_seeding, Int(py=min_bin_freq), bw)
-    var result = CentroidFitResultSlot()
-    try:
-        with GILReleased(Python()):
-            connection.driver.meanshift(request, result)
-    finally:
-        _ = connection.provider
-        _ = x
-        _ = seeds
-    var packed = CentroidPackedResult(result, False)
-    var kc = result.storage[0].clusters
-    _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(kc, d), "<f4", "f", context))
-    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
-    _set(model, "bandwidth_", PythonObject(result.storage[0].bandwidth))
-    _set(model, "n_iter_", PythonObject(result.storage[0].iterations))
-    _set(model, "n_features_in_", PythonObject(d))
 
 
 # ---------------------------------------------------------------- OPTICS
@@ -731,10 +537,10 @@ def cluster_fit_a_operation(model: PythonObject, operation: Int, args: PythonObj
         _centers_fit(model, binding, args[1], context)
         return cluster_operation(model, XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM, Python.tuple(binding, args[1]), context)
     if operation == CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT:
-        _meanshift_fit(model, binding, args[1], context)
+        meanshift_fit(model, binding, args[1], context)
         return model
     if operation == CFA_OPN_FAMILY_CFA_MEANSHIFT_FIT_PREDICT:
-        _meanshift_fit(model, binding, args[1], context)
+        meanshift_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
     if operation == CFA_OPN_FAMILY_CFA_OPTICS_FIT:
         _optics_fit(model, binding, args[1], context)
