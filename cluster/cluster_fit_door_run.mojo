@@ -11,7 +11,7 @@
 # iteration, batch, bisection and seed loop runs inside the entry.
 from core.kmeans_variants_api import VariantsSpan, BisectFitRequest
 from std.math import isinf
-from core.cluster_centroid_fit_api import MeanShiftFitRequest
+from core.cluster_centroid_fit_api import MeanShiftFitRequest, AffinityFitRequest
 from core.optics_fit_api import OpticsMetric, OpticsFitRequest
 
 
@@ -62,6 +62,39 @@ def meanshift_fit_request(source: VariantsSpan, seeds: VariantsSpan, n: Int, d: 
     estimate it)."""
     return MeanShiftFitRequest(source, seeds, n, d, n_seeds, cluster_all, max_iter, bin_seeding,
                                min_bin_freq, bandwidth)
+
+
+# ----------------------------------------------------- AffinityPropagation
+def affinity_damping_refused(damping: Float64) -> Bool:
+    """A damping outside [0.5, 1) (a NaN is refused too)."""
+    return not (0.5 <= damping and damping < 1)
+
+
+def affinity_iterations_positive(value: Int) raises:
+    """max_iter, then convergence_iter: each at least 1."""
+    if value < 1:
+        raise Error("max_iter and convergence_iter must be >= 1")
+
+
+def affinity_similarity_square(precomputed: Bool, n: Int, d: Int) raises:
+    if precomputed and n != d:
+        raise Error("The matrix of similarities must be a square array. Got (" + String(n) + ", " + String(d)
+                    + ") instead.")
+
+
+def affinity_preference_rows(count: Int, n: Int) raises:
+    if count != n:
+        raise Error("preference must be a scalar or have one value per sample")
+
+
+def affinity_fit_request(source: VariantsSpan, preference: VariantsSpan, n: Int, d: Int, precomputed: Bool,
+                         mode: Int, max_iter: Int, convergence_iter: Int, seed: Int, damping: Float64,
+                         scalar: Float64) -> AffinityFitRequest:
+    """ORDER MATCHES x_cluster/entries.mojo::affinity_entry: n, d,
+    precomputed, preference mode (0 median, 1 scalar, 2 one per sample),
+    max_iter, convergence_iter, seed; damping, the scalar preference."""
+    return AffinityFitRequest(source, preference, n, d, precomputed, mode, max_iter, convergence_iter, seed,
+                              damping, scalar)
 
 
 # ------------------------------------------------------------------ OPTICS

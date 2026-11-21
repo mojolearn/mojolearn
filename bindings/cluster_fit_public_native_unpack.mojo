@@ -29,6 +29,8 @@ from bindings.py_cluster_resident import CRES_X_CLUSTER, cres_forget
 from core.kmeans_variants_api import VariantsSpan, VariantsResultSlot
 from core.cluster_centroid_fit_api import CentroidFitResultSlot
 from core.optics_fit_api import OpticsMetric, OpticsFitResultSlot
+from core.affinity_preference_plan import AffinityPreferencePlan
+from bindings.affinity_preference_boundary_door import affinity_preference_prepare
 from bindings.optics_fit_boundary_door import optics_fit_connection
 from bindings.cluster_keys_unpack import cluster_keys
 from bindings.cluster_centroid_fit_boundary_door import centroid_fit_connection
@@ -38,6 +40,8 @@ from cluster.cluster_fit_door_run import (
     meanshift_seed_features, meanshift_bandwidth_refused, meanshift_fit_request,
     optics_minkowski_refused, optics_minkowski_metric, optics_euclidean_metric, optics_eps_refused,
     optics_xi_range, optics_precomputed_square, optics_fit_request,
+    affinity_damping_refused, affinity_iterations_positive, affinity_similarity_square,
+    affinity_preference_rows, affinity_fit_request,
 )
 
 
@@ -385,3 +389,78 @@ def bisect_fit_call(binding: PythonObject, stage: BisectFit, mut result: Variant
         _ = connection.provider
         _ = stage.x
         _ = stage.weights
+
+
+# ---------------------------------------------------------------- AffinityPropagation
+@fieldwise_init
+struct AffinityFit(Movable):
+    """`AffinityPropagation.fit(X)` as typed values. `x` is the admitted
+    float32 X, pinned through the fit; `preference` owns the per-sample
+    preferences as float32 words (mode 2); `scalar` is the scalar preference
+    (mode 1); mode 0 takes the median similarity."""
+    var x: PythonObject
+    var preference: AffinityPreferencePlan
+    var n: Int
+    var d: Int
+    var precomputed: Bool
+    var mode: Int
+    var max_iter: Int
+    var convergence_iter: Int
+    var seed: Int
+    var damping: Float64
+    var scalar: Float64
+
+
+def affinity_fit_stage(model: PythonObject, source: PythonObject, context: PythonObject) raises -> AffinityFit:
+    """The reads of `AffinityPropagation.fit`, in its order: affinity,
+    damping, the two iteration counts, X, preference, then max_iter,
+    convergence_iter, random_state and damping again."""
+    var affinity = _attr(model, "affinity")
+    if not _one_of(affinity, "euclidean", "precomputed"):
+        raise Error("affinity must be 'euclidean' or 'precomputed', got " + family_repr(affinity))
+    var damping_field = _attr(model, "damping")
+    if affinity_damping_refused(Float64(py=_float(damping_field))):
+        raise Error("damping must be in [0.5, 1), got " + family_str(damping_field))
+    affinity_iterations_positive(Int(py=_int(_attr(model, "max_iter"))))
+    affinity_iterations_positive(Int(py=_int(_attr(model, "convergence_iter"))))
+    var x = _f32(source, "X", context)
+    var n = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var pre = _eq(affinity, PythonObject("precomputed"))
+    affinity_similarity_square(pre, n, d)
+    var preference_plan = AffinityPreferencePlan()
+    var mode = 0
+    var scalar = Float64(0.0)
+    var preference = _attr(model, "preference")
+    if preference is not None:
+        var b = native_loaded_module("builtins")
+        if family_isinstance(preference, Python.tuple(b.int, b.float)):
+            mode = 1
+            scalar = Float64(py=_float(preference))
+        else:
+            preference_plan = affinity_preference_prepare(preference, context)
+            affinity_preference_rows(preference_plan.count, n)
+            mode = 2
+    var max_iter = _int(_attr(model, "max_iter"))
+    var conv = _int(_attr(model, "convergence_iter"))
+    var seed = _seed(_attr(model, "random_state"))
+    var repeated_damping = _float(damping_field)
+    return AffinityFit(x=x, preference=preference_plan^, n=n, d=d, precomputed=pre, mode=mode,
+                       max_iter=Int(py=max_iter), convergence_iter=Int(py=conv), seed=seed,
+                       damping=Float64(py=repeated_damping), scalar=scalar)
+
+
+def affinity_fit_call(binding: PythonObject, stage: AffinityFit, mut result: CentroidFitResultSlot) raises:
+    """The AffinityPropagation entry on the typed transport, the GIL
+    released around it."""
+    var connection = centroid_fit_connection(binding)
+    var request = affinity_fit_request(variants_span(stage.x), stage.preference.span(), stage.n, stage.d,
+        stage.precomputed, stage.mode, stage.max_iter, stage.convergence_iter, stage.seed, stage.damping,
+        stage.scalar)
+    try:
+        with GILReleased(Python()):
+            connection.driver.affinity(request, result)
+    finally:
+        _ = connection.provider
+        _ = stage.x
+        _ = stage.preference.count  # the preference words stay alive through the entry

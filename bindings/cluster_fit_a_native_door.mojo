@@ -40,7 +40,7 @@ from bindings.cluster_pending_error_unpack import _pending, _pending_text, _drop
 from bindings.cluster_fit_public_native_unpack import (
     _attr, _attr_or_none, _truthy, _int, _float, _eq, _one_of, _set, _f32, _seed, _weights, _init_array,
 )
-from bindings.cluster_fit_public_native_pack import meanshift_fit, optics_fit, bisect_fit
+from bindings.cluster_fit_public_native_pack import meanshift_fit, optics_fit, bisect_fit, affinity_fit
 from cluster.cluster_fit_door_run import cluster_rows_cover
 from bindings.cluster_public_native_pack import cluster_operation, _xc_array
 from bindings.operation_names_xc import XC_OPN_FAMILY_XC_VARIANTS_TRANSFORM
@@ -265,72 +265,6 @@ def _centers_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
         bisect_fit(model, binding, source, PythonObject(None), context)
 
 
-# ---------------------------------------------------------------- AffinityPropagation
-
-def _affinity_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
-                  context: PythonObject) raises:
-    """`AffinityPropagation.fit(X)`."""
-    var b = native_loaded_module("builtins")
-    var affinity = _attr(model, "affinity")
-    if not _one_of(affinity, "euclidean", "precomputed"):
-        raise Error("affinity must be 'euclidean' or 'precomputed', got " + family_repr(affinity))
-    var damping_field = _attr(model, "damping")
-    var damping = Float64(py=_float(damping_field))
-    if not (0.5 <= damping and damping < 1):
-        raise Error("damping must be in [0.5, 1), got " + family_str(damping_field))
-    if Int(py=_int(_attr(model, "max_iter"))) < 1 or Int(py=_int(_attr(model, "convergence_iter"))) < 1:
-        raise Error("max_iter and convergence_iter must be >= 1")
-    var x = _f32(source, "X", context)
-    var n = Int(py=x.shape[0])
-    var d = Int(py=x.shape[1])
-    var pre = _eq(affinity, PythonObject("precomputed"))
-    if pre and n != d:
-        raise Error("The matrix of similarities must be a square array. Got (" + String(n) + ", " + String(d)
-                    + ") instead.")
-    var preference_plan = AffinityPreferencePlan()
-    var mode = 0
-    var scalar = Float64(0.0)
-    var preference = _attr(model, "preference")
-    if preference is not None:
-        if family_isinstance(preference, Python.tuple(b.int, b.float)):
-            mode = 1
-            scalar = Float64(py=_float(preference))
-        else:
-            preference_plan = affinity_preference_prepare(preference, context)
-            if preference_plan.count != n:
-                raise Error("preference must be a scalar or have one value per sample")
-            mode = 2
-    # ORDER MATCHES x_cluster/entries.mojo::affinity_entry: n, d,
-    # precomputed, preference mode, max_iter, convergence_iter, seed;
-    # damping, the scalar preference.
-    var max_iter = _int(_attr(model, "max_iter"))
-    var conv = _int(_attr(model, "convergence_iter"))
-    var seed = _seed(_attr(model, "random_state"))
-    var repeated_damping = _float(damping_field)
-    var connection = centroid_fit_connection(binding)
-    var request = AffinityFitRequest(variants_span(x), preference_plan.span(), n, d, pre, mode,
-        Int(py=max_iter), Int(py=conv), seed, Float64(py=repeated_damping), scalar)
-    var result = CentroidFitResultSlot()
-    try:
-        with GILReleased(Python()):
-            connection.driver.affinity(request, result)
-    finally:
-        _ = connection.provider
-        _ = x
-        _ = preference_plan
-    var packed = CentroidPackedResult(result, True)
-    var k = len(result.storage[0].center_indices)
-    _set(model, "cluster_centers_indices_", _xc_array(packed.center_indices, Python.tuple(k), "<i4", "i", context))
-    _set(model, "labels_", _xc_array(packed.labels, Python.tuple(n), "<i4", "i", context))
-    _set(model, "affinity_matrix_", _xc_array(packed.affinity, Python.tuple(n, n), "<f4", "f", context))
-    # Observable final availability/responsibility diagonals stay public.
-    _set(model, "message_diag_", _xc_array(packed.message_diagonal, Python.tuple(len(result.storage[0].message_diagonal)), "<f4", "f", context))
-    _set(model, "n_iter_", PythonObject(result.storage[0].iterations))
-    _set(model, "n_features_in_", PythonObject(d))
-    if not pre:
-        _set(model, "cluster_centers_", _xc_array(packed.centers, Python.tuple(k, d), "<f4", "f", context))
-
-
 # ---------------------------------------------------------------- HDBSCAN
 # HDBSCAN.fit is `hdbscan_fit` (bindings/hdbscan_fit_boundary_pack.mojo: UNPACK,
 # typed RUN, PACK), called directly by HDBSCAN's lifecycle. The one code
@@ -382,10 +316,10 @@ def cluster_fit_a_operation(model: PythonObject, operation: Int, args: PythonObj
         optics_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
     if operation == CFA_OPN_FAMILY_CFA_AP_FIT:
-        _affinity_fit(model, binding, args[1], context)
+        affinity_fit(model, binding, args[1], context)
         return model
     if operation == CFA_OPN_FAMILY_CFA_AP_FIT_PREDICT:
-        _affinity_fit(model, binding, args[1], context)
+        affinity_fit(model, binding, args[1], context)
         return _attr(model, "labels_")
     if operation == CFA_OPN_FAMILY_CFA_HDBSCAN_FIT:
         _ = hdbscan_fit(model, binding, args[1], context)
