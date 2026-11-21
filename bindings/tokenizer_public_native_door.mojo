@@ -14,7 +14,6 @@ from bindings.native_instance_item_pack import native_instance_item
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_json_door import native_json_read, native_json_parse, native_path, native_path_exists
 from bindings.native_error_class import error_without_class
-from bindings.native_array_storage_door import native_array_unfilled
 from bindings.neural_block_admission_door import neural_array_snapshot
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -38,7 +37,6 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     vocab_fingerprint_hex, SpelledVocab, SpelledMerges, SPELLED_OK,
     SPELLED_BAD_ID, SPELLED_NOT_STR, SPELLED_RAISED, SPELLED_NOT_PAIR,
     SPELLED_NOT_LEVEL, spelled_vocab_tokens, spelled_merges_text, spelled_merges_list,
-    bpe_encode_corpus_into, bpe_train_corpus_fill,
 )
 from core.lm_batch_run import lm_gather_rows
 from core.shared_slot import SharedSlot
@@ -1425,13 +1423,6 @@ def vocab_pretrained_public_binding(cls: PythonObject, path: PythonObject, modul
     return vocab_json_public_binding(cls, data, filename, cfg, module, patterns)
 
 
-def tokenizer_bpe_identity_file(path: PythonObject) raises -> PythonObject:
-    var text = native_path(path)
-    var handle = BpeHandle()
-    bpe_handle_load(handle, String(text))
-    return _identity(ranks_text(handle.tok.value().ranks), handle.tok.value().n_vocab() - 1)
-
-
 def tokenizer_bpe_identity(tokenizer: PythonObject) raises -> PythonObject:
     var fields = _owner(tokenizer, _bpe_context()[0])
     var handle = native_instance_item(fields, PythonObject("_handle"))
@@ -1441,6 +1432,18 @@ def tokenizer_bpe_identity(tokenizer: PythonObject) raises -> PythonObject:
     var result = _identity(ranks_text(owner[].tok.value().ranks), owner[].tok.value().n_vocab() - 1)
     _ = handle
     return result
+
+
+def tokenizer_bpe_handle(tokenizer: PythonObject) raises -> PythonObject:
+    """UNPACK for a typed RUN outside this door (corpus tokenization): the
+    loaded native handle object of a connected BpeTokenizer. The caller keeps
+    the returned object alive past its RUN and reads it as a `BpeHandle`."""
+    var fields = _owner(tokenizer, _bpe_context()[0])
+    var handle = native_instance_item(fields, PythonObject("_handle"))
+    var owner = handle.downcast_value_ptr[BpeHandle]()
+    if not owner[].tok:
+        raise Error("ValueError: tokenizer handle is not loaded")
+    return handle
 
 
 def tokenizer_bpe_for(vocabulary: PythonObject) raises -> PythonObject:
@@ -1481,112 +1484,6 @@ def tokenizer_bpe_export(vocabulary: PythonObject) raises -> PythonObject:
     var result = Python.tuple(text, ranks, source, _identity(text, ranks))
     _ = handle
     _ = tokenizer
-    return result
-
-
-def tokenizer_trained_info(vocabulary: PythonObject) raises -> PythonObject:
-    var fields = _owner(vocabulary, _bpe_context()[1])
-    var tokens = native_instance_item(fields, PythonObject("tokens"))
-    var merges = native_instance_item(fields, PythonObject("merges"))
-    _sequence(tokens, "trained tokens")
-    _sequence(merges, "trained merges")
-    var stats = native_instance_item(fields, PythonObject("stats"))
-    _dictionary(stats)
-    _plain(stats)
-    var result = Python.dict()
-    py_setitem(result, "backend", py_get(stats, "backend"))
-    py_setitem(result, "format", PythonObject("mojolearn.bpe-trainer.v1"))
-    py_setitem(result, "tie_break", PythonObject(_str(native_instance_item(stats, PythonObject("tie_break")), "tie break")))
-    for name in [String("vocab_size"), String("min_frequency"), String("n_ties_broken")]:  # driver-loop: over the three native training recipe counters
-        py_setitem(result, PythonObject(name), PythonObject(_int(native_instance_item(stats, PythonObject(name)), name)))
-    py_setitem(result, "n_tokens", PythonObject(len(tokens)))
-    py_setitem(result, "n_merges", PythonObject(len(merges)))
-    return result
-
-
-def _corpus_points(value: PythonObject, n: Int) raises -> List[Int]:
-    var points = _ids(value)
-    var previous = -1
-    for i in range(len(points)):  # cpu-route: admit split-point metadata once before native document cutting
-        if points[i] < 0 or points[i] > n or points[i] < previous:
-            raise Error("ValueError: corpus split points must be sorted offsets inside the corpus")
-        previous = points[i]
-    return points^
-
-
-def tokenizer_bpe_encode_corpus(tokenizer: PythonObject, data: PythonObject, point_values: PythonObject, document_bytes: PythonObject) raises -> PythonObject:
-    var fields = _owner(tokenizer, _bpe_context()[0])
-    var handle = native_instance_item(fields, PythonObject("_handle"))
-    var owner = handle.downcast_value_ptr[BpeHandle]()
-    if not owner[].tok:
-        raise Error("ValueError: tokenizer handle is not loaded")
-    var bytes = _bytes(data, False)
-    var points = _corpus_points(point_values, len(bytes))
-    var width = _int(document_bytes, "document_bytes")
-    if width < 1:
-        raise Error("ValueError: document_bytes must be >= 1")
-    # No document can exceed its corpus. Normalize a larger positive limit
-    # before the existing cutter adds it to a later split offset; an otherwise
-    # valid Int.MAX limit must not wrap that addition. Document cuts and BPE
-    # arithmetic are unchanged, including the empty-corpus path.
-    width = min(width, max(len(bytes), 1))
-    var ids = List[Int32](length=max(len(bytes), 1), fill=0)
-    var bounds = List[Int64](length=max(len(points), 1), fill=0)
-    var stats = List[Int64](length=3, fill=0)
-    var total = bpe_encode_corpus_into(owner[], Int(bytes.unsafe_ptr()), points, len(bytes), len(points), width, len(bytes), Int(ids.unsafe_ptr()), Int(bounds.unsafe_ptr()), Int(stats.unsafe_ptr()))
-    if total < 0 or total > len(bytes):
-        raise Error("RuntimeError: corpus encoder returned an invalid token count")
-    # Existing array('i') result, allocated by native CPython sequence-repeat
-    # over the connected exact zero seed. No Python array constructor runs.
-    # lane fix-output-zero-fill (2026-11-14): unfilled; copy_from below writes all total ids.
-    var result_ids = native_array_unfilled("i", total)
-    var pin = AdmittedBorrowedBuffer(result_ids, True)
-    try:
-        pin.layout.value().copy_from(Int(ids.unsafe_ptr()))
-    except error:
-        pin.release()
-        raise error
-    pin.release()
-    var boundaries = Python.dict()
-    for i in range(len(points)):  # driver-loop: over the declared corpus range boundaries (a handful of split points)
-        py_setitem(boundaries, PythonObject(points[i]), PythonObject(Int(bounds[i])))
-    var result = Python.tuple(result_ids, boundaries, Int(stats[0]), Int(stats[1]), Int(stats[2]))
-    _ = bytes
-    _ = ids
-    _ = bounds
-    _ = stats
-    _ = handle
-    _ = data
-    _ = point_values
-    return result
-
-
-def tokenizer_bpe_train_corpus(data: PythonObject, point_values: PythonObject, lo_value: PythonObject, hi_value: PythonObject, document_bytes: PythonObject, vocab_size: PythonObject, min_frequency: PythonObject) raises -> PythonObject:
-    var bytes = _bytes(data, False)
-    var points = _corpus_points(point_values, len(bytes))
-    var lo = _int(lo_value, "lo")
-    var hi = _int(hi_value, "hi")
-    var width = _int(document_bytes, "document_bytes")
-    var size = _int(vocab_size, "vocab_size")
-    var frequency = _int(min_frequency, "min_frequency")
-    if lo < 0 or hi > len(bytes) or lo > hi:
-        raise Error("ValueError: bpe_train_corpus: [lo, hi) must lie inside the corpus")
-    if width < 1:
-        raise Error("ValueError: document_bytes must be >= 1")
-    # The trainer sees only [lo, hi); a larger positive document limit has the
-    # same cuts as this span length, without adding Int.MAX to a split offset.
-    width = min(width, max(hi - lo, 1))
-    # The verify sabotage arm is the build define -D MOJOLEARN_BPE_TRAINER_SABOTAGE
-    # (tokenizer/train/bpe_train.mojo), the CPU identity gate's sabotage host
-    # set already builds with; the run-time environment arm, a getenv per train
-    # call, is gone (lane envgate-neural-lm, 2026-11-15).
-    var reverse = BPE_TRAINER_SABOTAGE
-    var handle = BpeTrainedHandle()
-    bpe_train_corpus_fill(handle, Int(bytes.unsafe_ptr()), points, lo, hi, width, size, frequency, reverse)
-    var result = _trained_finish(handle.vocab.value(), size, frequency, _bpe_context())
-    _ = bytes
-    _ = data
-    _ = point_values
     return result
 
 

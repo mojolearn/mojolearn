@@ -11,6 +11,8 @@ from bindings.lm_corpus_files_door import corpus_files_initialize
 from bindings.lm_corpus_scalars_unpack import corpus_numeric_base
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, connect_native_mmap_exporter
 from core.shared_slot import SharedSlot
+from core.native_json_value import (JsonDoc, json_add_array, json_add_bool, json_add_null, json_add_number,
+    json_add_object, json_add_string, json_push, json_put)
 from bindings.lm_keys_unpack import lm_keys
 from bindings.py_balanced import py_item
 
@@ -113,6 +115,49 @@ def corpus_plain(value: PythonObject, depth: Int = 0) raises -> PythonObject:
     raise Error("TypeError: corpus metadata cannot invoke Python scalar/container protocols")
 
 
+def corpus_json_node(mut doc: JsonDoc, value: PythonObject, depth: Int = 0) raises -> Int:
+    """UNPACK: a passive metadata value (None, exact str, bool, int, float,
+    list, tuple, dict with exact str keys) as a node of `doc`, captured once.
+    A number keeps the interpreter's own spelling; nothing of the caller's is
+    called."""
+    if depth > 128:
+        raise Error("ValueError: corpus metadata exceeds supported JSON nesting")
+    var bi = native_loaded_module("builtins")
+    var cls = py_type(value)
+    if value is None:
+        return json_add_null(doc)
+    if cls is bi.str:
+        return json_add_string(doc, String(py=value))
+    if cls is bi.bool:
+        return json_add_bool(doc, Bool(py=value))
+    if cls is bi.int:
+        return json_add_number(doc, String(value))
+    if cls is bi.float:
+        var number = Float64(py=value)
+        if number != number:
+            return json_add_number(doc, String("NaN"))
+        if number - number != 0.0:
+            return json_add_number(doc, String("Infinity") if number > 0.0 else String("-Infinity"))
+        return json_add_number(doc, String(value))
+    if cls is bi.list or cls is bi.tuple:
+        var node = json_add_array(doc)
+        for i in range(len(value)):  # driver-loop: capture passive range/configuration elements once
+            var element = corpus_json_node(doc, value[i], depth + 1)
+            json_push(doc, node, element)
+        return node
+    if cls is not bi.dict:
+        raise Error("TypeError: corpus metadata requires native JSON containers and scalar values")
+    var keys = py_call(bi.list, value.keys())
+    for i in range(len(keys)):  # driver-loop: admit all dictionary keys before native JSON item lookup
+        if py_type(keys[i]) is not bi.str:
+            raise Error("TypeError: corpus JSON object keys must be exact strings")
+    var node = json_add_object(doc)
+    for i in range(len(keys)):  # driver-loop: capture passive manifest/checkpoint metadata once
+        var member = corpus_json_node(doc, value[keys[i]], depth + 1)
+        json_put(doc, node, String(py=keys[i]), member)
+    return node
+
+
 def corpus_fields(owner: PythonObject, cls: PythonObject, names: PythonObject) raises -> PythonObject:
     var nk = lm_keys()
     var bi = native_loaded_module("builtins")
@@ -141,7 +186,7 @@ def corpus_new(cls: PythonObject) raises -> PythonObject:
     for i in range(len(ancestry)):  # small-loop(public record allocation finalizer admission)
         if py_contains(_class_fields(ancestry[i]), nk[].k___del__):
             raise Error("TypeError: native corpus records cannot invoke Python finalizers")
-    return py_call(native_loaded_module("builtins").object.__new__, cls)
+    return py_call(bi.object.__new__, cls)
 
 
 def corpus_array(store: PythonObject, shape: PythonObject, context: PythonObject,

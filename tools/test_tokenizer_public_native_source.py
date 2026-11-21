@@ -137,12 +137,16 @@ class TokenizerPublicSource(unittest.TestCase):
 
     def test_corpus_native_storage_and_original_typed_algorithms_are_preserved(self):
         source = NATIVE.read_text()
-        corpus = source.split("def tokenizer_bpe_identity_file(", 1)[1].split("def tokenizer_public_call(", 1)[0]
-        for retained in ("bpe_encode_corpus_into(owner[]", "bpe_train_corpus_fill(handle,",
-                         "lm_gather_rows(Int(py=source._addr)", 'native_array_unfilled("i", total)',
-                         'neural_array_snapshot(ids_all, context)', 'neural_array_snapshot(output, context)',
-                         '"mojolearn.bpe-trainer.v1"'):
+        corpus = source.split("def tokenizer_bpe_identity(", 1)[1].split("def tokenizer_public_call(", 1)[0]
+        for retained in ("lm_gather_rows(Int(py=source._addr)",
+                         'neural_array_snapshot(ids_all, context)', 'neural_array_snapshot(output, context)'):
             self.assertIn(retained, corpus)
+        # Corpus training and encoding are the typed RUN of lm_corpus.prepare (lane dw-neural-models):
+        # the same tokenizer/impl functions, called without a Python object.
+        prepare = (ROOT / "bindings/lm_corpus_prepare_run.mojo").read_text()
+        for retained in ("bpe_encode_corpus_into(handle, data,", "bpe_train_corpus_fill(trained,",
+                         '"mojolearn.bpe-trainer.v1"'):
+            self.assertIn(retained, prepare)
         for forbidden in ("hashlib", 'Python.import_module', 'py_call(module.', 'py_call(native_loaded_module("array").array',
                           "tokenizer._m", "vocabulary.render", "source.__buffer__"):
             self.assertNotIn(forbidden, corpus)
