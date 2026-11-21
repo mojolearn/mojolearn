@@ -3,6 +3,13 @@
 
 These are boundary controls, not proof that sys.setprofile observes native
 C-API calls. Numerical/native handle contracts have separate Mojo fixtures.
+
+An estimator admits its connection ONCE, when its device route is resolved
+(its first operation; providers/python/linear_route_boundary_door.mojo). A
+substitute placed in the editable entry dictionary is therefore refused by
+the next estimator that resolves a route there, and an estimator whose route
+is already resolved keeps running on the images it admitted: the edited
+dictionary is no longer consulted per call.
 """
 import numpy as np
 import pytest
@@ -30,17 +37,18 @@ def setup_case(cls):
 @pytest.mark.parametrize("cls", [Ridge, LinearRegression])
 @pytest.mark.parametrize("fake", [(1,), (1, 0), 1, None])
 def test_connection_refuses_editable_key_or_pin_substitutes(cls, fake, monkeypatch):
-    entry, context, entries, model, x, _ = setup_case(cls)
-    # Prime the admitted-entry cache, then mutate the same live dictionary.
-    entry(model, "predict", (x,), context)
+    entry, context, entries, model, x, y = setup_case(cls)
+    before = np.asarray(entry(model, "predict", (x,), context)).copy()
     monkeypatch.setitem(entries, "_native_entry_connection", fake)
+    # The resolved estimator does not read the edited dictionary.
+    np.testing.assert_array_equal(np.asarray(entry(model, "predict", (x,), context)), before)
     with pytest.raises(TypeError, match="canonical connection owner"):
-        entry(model, "predict", (x,), context)
+        entry(cls(), _fit_operation(cls), (x, y, None), context)
 
 
 @pytest.mark.parametrize("cls", [Ridge, LinearRegression])
 def test_connection_refuses_callback_object_without_hooks(cls, monkeypatch):
-    entry, context, entries, model, x, _ = setup_case(cls)
+    entry, context, entries, model, x, y = setup_case(cls)
     calls = []
 
     class Hook:
@@ -53,31 +61,34 @@ def test_connection_refuses_callback_object_without_hooks(cls, monkeypatch):
             raise AssertionError("connection callback executed")
 
     monkeypatch.setitem(entries, "_native_entry_connection", Hook())
+    entry(model, "predict", (x,), context)
     with pytest.raises(TypeError, match="canonical connection owner"):
-        entry(model, "predict", (x,), context)
+        entry(cls(), _fit_operation(cls), (x, y, None), context)
     assert calls == []
 
 
 @pytest.mark.parametrize("cls", [Ridge, LinearRegression])
 def test_connection_refuses_other_native_family_after_cached_success(cls, monkeypatch):
-    entry, context, entries, model, x, _ = setup_case(cls)
+    entry, context, entries, model, x, y = setup_case(cls)
     entry(model, "predict", (x,), context)
     monkeypatch.setitem(entries, "_native_entry_connection", entries["_native_weighted_connection"])
+    entry(model, "predict", (x,), context)
     with pytest.raises(TypeError, match="connection family differs"):
-        entry(model, "predict", (x,), context)
+        entry(cls(), _fit_operation(cls), (x, y, None), context)
 
 
 @pytest.mark.parametrize("cls", [Ridge, LinearRegression])
 def test_connection_replacement_rechecks_selected_numeric_mode(cls, monkeypatch):
-    entry, context, entries, model, x, _ = setup_case(cls)
+    entry, context, entries, model, x, y = setup_case(cls)
     mode = context["backend_fields"]["_DEFAULT_MODE"]
     other = context["classical_bindings"]["fast" if mode == "identical" else "identical"]
     if isinstance(other, str):
         pytest.skip("The other numerical tier is not installed on this target")
     entry(model, "predict", (x,), context)
     monkeypatch.setitem(entries, "_native_entry_connection", other["_native_entry_connection"])
+    entry(model, "predict", (x,), context)
     with pytest.raises(RuntimeError, match="mode differs"):
-        entry(model, "predict", (x,), context)
+        entry(cls(), _fit_operation(cls), (x, y, None), context)
 
 
 def test_weighted_connection_refuses_estimator_owner(monkeypatch):
