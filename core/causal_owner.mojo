@@ -160,8 +160,10 @@ struct CausalBufferWords(Copyable, Movable):
     var present: Bool
     # C-contiguous.
     var contiguous: Bool
-    # float32 and writable.
+    # float32 and writable (`float32` and not read-only).
     var writable: Bool
+    # float32 (fixed for the pinned Array; read once at admission).
+    var float32: Bool
     var address: Int
     var nbytes: Int
     var shape: List[Int]
@@ -173,6 +175,7 @@ struct CausalBufferWords(Copyable, Movable):
         self.present = False
         self.contiguous = False
         self.writable = False
+        self.float32 = False
         self.address = 0
         self.nbytes = 0
         self.shape = List[Int]()

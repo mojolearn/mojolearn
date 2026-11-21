@@ -281,12 +281,6 @@ def _iforest_entry(svm: PythonObject) raises -> EntryRef:
     return if_entry_ref(Int(py=key[0]), Int(py=key[1]))
 
 
-def _resident_table(svm: PythonObject) raises -> Bool:
-    """True when the binding `svm` keeps the fitted forest resident
-    between calls (IF_CAP_RESIDENT)."""
-    return (if_entry_caps(_iforest_entry(svm)) & IF_CAP_RESIDENT) != 0
-
-
 def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonObject, want: Int, fresh: Bool,
          wide: Bool, context: PythonObject) raises -> PythonObject:
     """`IsolationForest._run` on a converted query: one fit-and-score
@@ -295,10 +289,17 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     with `wide` (a public caller's score_samples / decision_function) the
     float64 scores when the binary writes them (`iforest_scores_f64`),
     else the float32 scores the public door widens."""
-    var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
     var entry = _iforest_entry(svm)
-    var caps = if_entry_caps(entry)
+    return _run_on(model, fields, x, train, want, fresh, wide, context, svm, entry, if_entry_caps(entry))
+
+
+def _run_on(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonObject, want: Int, fresh: Bool,
+            wide: Bool, context: PythonObject, svm: PythonObject, entry: EntryRef, caps: Int) raises -> PythonObject:
+    """`_run` on the svm image, entry and capability word the caller
+    resolved once for its operation (lane fx-audit: the fit resolved them
+    three times)."""
+    var n_query = x.rows
     var resident = (caps & IF_CAP_RESIDENT) != 0
     # Lane forests-regression: no export runs at fit, so a refit-per-call
     # binary's fit is the sixteen-param one-shot of 0.8.55 and its scoring
@@ -454,7 +455,13 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # bytes either way: no bit change.
     var x = admit_f32(view, 2, "X", context, finite=False, admitted=True)
     _ = view^
-    var device_scan = _device_scan(fields, context)
+    # The svm image, its iforest entry and capability word, resolved once for
+    # the whole fit (lane fx-audit, audit-trees minor: the device-scan
+    # question, the borrow rule and the run each resolved them).
+    var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
+    var entry = _iforest_entry(svm)
+    var caps = if_entry_caps(entry)
+    var device_scan = (caps & IF_CAP_DEVICE_SCAN) != 0
     # The public door's admission (admit_x) already refused NaN and
     # infinity in this X (trees_finite_known, as the forest fit): no second
     # scan of it (lane A1 admit-trees-labels).
@@ -504,7 +511,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     # Same float32 bytes either way: no bit change. What the borrow gives up:
     # a caller editing X in place after fit changes what save() and pickle
     # write (as at 0.8.55); the scores of this estimator do not change.
-    var keep_borrowed = x.borrowed and _resident_table(trees_table(context, _mode(fields, context), "_mojolearn_svm"))
+    var keep_borrowed = x.borrowed and (caps & IF_CAP_RESIDENT) != 0
     if keep_borrowed:
         # The caller's float32 C-order buffer itself: a mojolearn Array is
         # kept as it is (`_as_array`); an ndarray is kept as a one-dimensional
@@ -547,7 +554,8 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject,
     _ = x  # keep the Python object alive through the native call above
     var out = PythonObject(None)
     try:
-        out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, False, context)
+        out = _run_on(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, False, context,
+                      svm, entry, caps)
         _ = x  # keep the Python object alive through the native call above
         # No read-out here; `save()` and pickle read the resident forest the
         # scores use when they run (`iforest_export_forest`), as 0.8.55 wrote

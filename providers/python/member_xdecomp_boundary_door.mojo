@@ -4,11 +4,12 @@
 core/xdecomp_member.mojo). Published: IncrementalPCA (kind 0,
 `_mojolearn_member = (32, 0)`), NMF (kind 3, `(32, 3)`),
 GaussianRandomProjection (kind 5, `(32, 5)`), SparseRandomProjection (kind 6,
-`(32, 6)`), FastICA (kind 7, `(32, 7)`), FactorAnalysis (kind 8, `(32, 8)`). The family's other classes (
-DictionaryLearning MiniBatchDictionaryLearning SparsePCA MiniBatchSparsePCA
-SparseCoder LatentDirichletAllocation Isomap MDS ClassicalMDS
-LocallyLinearEmbedding MinCovDet EllipticEnvelope) carry no mark yet: a
-caller keeps their own doors, and admit refuses their kinds in words.
+`(32, 6)`), FastICA (kind 7, `(32, 7)`), FactorAnalysis (kind 8, `(32, 8)`),
+DictionaryLearning (9), MiniBatchDictionaryLearning (10), SparseCoder (11),
+SparsePCA (12), MiniBatchSparsePCA (13), EllipticEnvelope (14), LatentDirichletAllocation (15). Falls back at admit (False): a
+callback, code_init or dict_init (the dictionary learners), V_init or U_init
+(SparsePCA), a w_init (FastICA). The family's other classes carry no mark
+yet: a caller keeps their own doors, and admit refuses their kinds in words.
 
   * `xdecomp_member_admit` (UNPACK, once per member): the estimator's own
     route through its resolver (the IncrementalPCA door's `_ipca_route`: a
@@ -52,12 +53,24 @@ from core.xdecomp_member import (
     XDECOMP_KIND_IPCA, XDECOMP_KIND_NMF, XDECOMP_ROUTE_RESIDENT, XDECOMP_ROUTE_NMF_INVERSE, XDECOMP_BLOCK_COMPONENTS, XDECOMP_BLOCK_SINGULAR,
     XDECOMP_BLOCK_MEAN, XDECOMP_BLOCK_VAR, XDECOMP_BLOCK_VARIANCE, XDECOMP_BLOCK_RATIO,
     XDECOMP_KIND_GRP, XDECOMP_KIND_SRP, XDECOMP_ROUTE_POOL, XDECOMP_BLOCK_RP_INVERSE, XDECOMP_KIND_ICA,
-    XDECOMP_KIND_FA,
+    XDECOMP_KIND_FA, XDECOMP_KIND_DL, XDECOMP_KIND_MBDL, XDECOMP_KIND_CODER, XDECOMP_KIND_SPCA, XDECOMP_KIND_MBSPCA,
+    XDECOMP_DL_PARAM_COUNT, XDECOMP_MBDL_PARAM_COUNT, XDECOMP_CODER_PARAM_COUNT, XDECOMP_SPCA_PARAM_COUNT,
+    XDECOMP_MBSPCA_PARAM_COUNT, XDECOMP_ROUTE_KIT_RESIDENT, XDECOMP_ROUTE_KIT_SHIFT, XDECOMP_KIND_ENVELOPE,
+    XDECOMP_ENVELOPE_PARAM_COUNT, XDECOMP_KIND_LDA, XDECOMP_LDA_PARAM_COUNT,
 )
+from bindings.lda_native_door import _batch_size as lda_batch_size
+from bindings.mcd_native_door import _typed as mcd_typed
+from core.decomp_native_impl import decomp_f32_to_u8
+from bindings.dict_learning_native_unpack import (
+    _check_algos as dl_check_algos, _algo_index as dl_algo_index, _fit_index as dl_fit_index,
+    _dict_words as dl_dict_words, _coder_dictionary as dl_coder_dictionary, _is_str as dl_is_str,
+)
+from bindings.py_lists import py_list_f64
 from bindings.ica_native_unpack import _whiten_code as ica_whiten_code
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.decomp_kit_native_door import (
     decomp_entries_routed, decomp_entries_ref, decomp_resident_binding, decomp_resident_drop,
+    decomp_kit_unpack, decomp_seed as kit_seed, decomp_seed_word, XD_SPARSE_ALGOS,
 )
 from bindings.decomp_owner_common_unpack import (
     decomp_eq, decomp_int, decomp_float, decomp_seed, decomp_repr, decomp_f32, decomp_le,
@@ -273,6 +286,19 @@ def xdecomp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
     if kind == XDECOMP_KIND_FA:
         _fa_admit(model, fields, context, owner)
         return True
+    if kind == XDECOMP_KIND_DL or kind == XDECOMP_KIND_MBDL:
+        return _dl_admit(model, fields, kind, context, owner)
+    if kind == XDECOMP_KIND_CODER:
+        _coder_admit(model, fields, context, owner)
+        return True
+    if kind == XDECOMP_KIND_SPCA or kind == XDECOMP_KIND_MBSPCA:
+        return _spca_admit(model, fields, kind, context, owner)
+    if kind == XDECOMP_KIND_ENVELOPE:
+        _mcd_admit(model, fields, context, owner)
+        return True
+    if kind == XDECOMP_KIND_LDA:
+        _lda_admit(model, fields, context, owner)
+        return True
     raise Error("ValueError: mojolearn: XDecomp member kind " + String(kind) + " is not published")
 
 
@@ -308,6 +334,15 @@ def xdecomp_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         return
     if plan.kind == XDECOMP_KIND_FA:
         _fa_pack(fields, context, plan, state)
+        return
+    if plan.kind >= XDECOMP_KIND_DL and plan.kind <= XDECOMP_KIND_MBSPCA:
+        _kit_pack(fields, context, plan, state)
+        return
+    if plan.kind == XDECOMP_KIND_ENVELOPE:
+        _mcd_pack(fields, context, plan, state)
+        return
+    if plan.kind == XDECOMP_KIND_LDA:
+        _lda_pack(fields, context, plan, state)
         return
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
@@ -391,6 +426,12 @@ def xdecomp_member_state(model: PythonObject, fields: PythonObject, context: Pyt
         return _ica_state(fields, context, plan)
     if plan.kind == XDECOMP_KIND_FA:
         return _fa_state(fields, context, plan)
+    if plan.kind >= XDECOMP_KIND_DL and plan.kind <= XDECOMP_KIND_MBSPCA:
+        return _kit_state(fields, context, plan)
+    if plan.kind == XDECOMP_KIND_ENVELOPE:
+        return _mcd_state(fields, context, plan)
+    if plan.kind == XDECOMP_KIND_LDA:
+        return _lda_state(fields, context, plan)
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
     var count = py_get(fields, "n_components_")
@@ -637,6 +678,416 @@ def _fa_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) rai
         _import(plan, call, fields, "components_", 2, XDECOMP_BLOCK_COMPONENTS, context)
         _import(plan, call, fields, "noise_variance_", 1, XDECOMP_BLOCK_COMPONENTS + 1, context)
         _import(plan, call, fields, "mean_", 1, XDECOMP_BLOCK_COMPONENTS + 2, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    return call.state
+
+
+# ---------------------------------------------------------------- the dictionary-learning kit
+
+
+def _kit_route(model: PythonObject, fields: PythonObject, context: PythonObject,
+    mut owner: MemberOwner) raises -> PythonObject:
+    """`_table_route` plus what `decomp_kit_unpack(entries)` reads: the
+    image's residency and its optional entries, as route flags."""
+    var entries = _table_route(model, fields, context, owner)
+    var kit = decomp_kit_unpack(entries)
+    var flags = owner.plan.route.flags | (kit.present << XDECOMP_ROUTE_KIT_SHIFT)
+    if kit.resident:
+        flags |= XDECOMP_ROUTE_KIT_RESIDENT
+    owner.plan.route.flags = flags
+    return entries
+
+
+def _flag(value: PythonObject) raises -> Float64:
+    return 1.0 if Bool(py=value) else 0.0
+
+
+def _coding_admit(fields: PythonObject, mut words: List[Float64]) raises:
+    # bindings/dict_learning_native_unpack.mojo `_coding_words` /
+    # `_encode_words`: each option read only where its route reads it; the
+    # lars / omp default budget needs the width and the atoms (RUN).
+    var index = dl_algo_index(fields["transform_algorithm"])
+    if index < 0:
+        raise Error("transform_algorithm must be one of " + String(XD_SPARSE_ALGOS))
+    words[1] = Float64(index)
+    words[2] = -1.0
+    words[3] = 1.0
+    if index == 2 or index == 3:
+        var nnz = fields["transform_n_nonzero_coefs"]
+        if nnz is not None:
+            words[2] = Float64(decomp_int(nnz))
+    else:
+        var alpha = py_get(fields, "transform_alpha")
+        if alpha is None:
+            alpha = py_get(fields, "alpha", PythonObject(1.0))
+        if alpha is not None:
+            words[3] = decomp_float(alpha)
+    var positive = fields["positive_code"]
+    if index == 4:
+        words[6] = _flag(positive)
+    elif index == 0 or index == 1:
+        words[4] = Float64(decomp_int(fields["transform_max_iter"]))
+        words[5] = Float64(decomp_int(positive))
+    words[7] = _flag(fields["split_sign"])
+
+
+def _dl_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    # `dictionary_learning_fit` / `minibatch_dictionary_fit`: the algorithm
+    # check first, in its words. A callback (refused by the door), a
+    # code_init or a dict_init (arrays of the fit's shapes) keep the door.
+    dl_check_algos(fields["fit_algorithm"], fields["transform_algorithm"])
+    if py_get(fields, "callback") is not None or py_get(fields, "dict_init") is not None:
+        return False
+    if kind == XDECOMP_KIND_DL and py_get(fields, "code_init") is not None:
+        return False
+    _ = _kit_route(model, fields, context, owner)
+    var count = XDECOMP_DL_PARAM_COUNT if kind == XDECOMP_KIND_DL else XDECOMP_MBDL_PARAM_COUNT
+    var words = List[Float64](length=count, fill=0.0)
+    words[0] = Float64(kind)
+    var requested = fields["n_components"]
+    words[8] = -1.0 if requested is None else Float64(decomp_int(requested))
+    var method = dl_fit_index(fields["fit_algorithm"])
+    if kind == XDECOMP_KIND_DL:
+        var dw = dl_dict_words(-1, fields["alpha"], fields["max_iter"], fields["tol"], method, fields["random_state"],
+                               Bool(py=fields["positive_dict"]), Bool(py=fields["positive_code"]),
+                               fields["transform_max_iter"])
+        words[9] = dw.alpha
+        words[10] = Float64(dw.max_iter)
+        words[11] = dw.tol
+        words[12] = Float64(dw.method)
+        words[13] = Float64(dw.seed)
+        words[14] = 1.0 if dw.positive_dict else 0.0
+        words[15] = 1.0 if dw.positive_code else 0.0
+        words[16] = Float64(dw.method_max_iter)
+    else:
+        # `_minibatch_words`' reads in its order; min(batch_size, n) and the
+        # zero-batch refusal need n (RUN).
+        words[9] = Float64(decomp_int(fields["batch_size"]))
+        words[10] = Float64(decomp_seed_word(kit_seed(fields["random_state"])))
+        words[11] = _flag(fields["shuffle"])
+        words[12] = decomp_float(fields["max_iter"])
+        var patience = fields["max_no_improvement"]
+        words[13] = -1.0 if patience is None else Float64(decomp_int(patience))
+        words[14] = Float64(method)
+        words[15] = Float64(decomp_int(fields["transform_max_iter"]))
+        words[16] = _flag(fields["positive_dict"])
+        words[17] = _flag(fields["positive_code"])
+        words[18] = decomp_float(fields["alpha"])
+        words[19] = decomp_float(fields["tol"])
+    _coding_admit(fields, words)
+    owner.plan.params = words^
+    return True
+
+
+def _coder_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
+    mut owner: MemberOwner) raises:
+    # `sparse_coder`: the algorithm check and the dictionary admitted as
+    # float32 once (`_coder_dictionary`); the plan pins it with the entries
+    # and its words go to the fit by address (no copy into the plan).
+    var dictionary = dl_coder_dictionary(fields, context)
+    var entries = _kit_route(model, fields, context, owner)
+    owner.pins = Python.tuple(entries, dictionary)
+    var words = List[Float64](length=XDECOMP_CODER_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(XDECOMP_KIND_CODER)
+    _coding_admit(fields, words)
+    words[8] = Float64(Int(py=classical_address(dictionary)))
+    words[9] = Float64(Int(py=dictionary.shape[0]))
+    words[10] = Float64(Int(py=dictionary.shape[1]))
+    owner.plan.params = words^
+
+
+def _spca_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    # `sparse_pca_fit`: the method check first, in its words; a V_init or a
+    # U_init (arrays of the fit's shapes) keeps the door.
+    var method = fields["method"]
+    if kind == XDECOMP_KIND_SPCA:
+        if not dl_is_str(method, "lars") and not dl_is_str(method, "cd"):
+            raise Error("method must be 'lars' or 'cd'")
+        if py_get(fields, "V_init") is not None or py_get(fields, "U_init") is not None:
+            return False
+    else:
+        dl_check_algos(method, PythonObject("lasso_lars"))
+    _ = _kit_route(model, fields, context, owner)
+    var count = XDECOMP_SPCA_PARAM_COUNT if kind == XDECOMP_KIND_SPCA else XDECOMP_MBSPCA_PARAM_COUNT
+    var words = List[Float64](length=count, fill=0.0)
+    words[0] = Float64(kind)
+    var requested = fields["n_components"]
+    words[1] = -1.0 if requested is None else Float64(decomp_int(requested))
+    if kind == XDECOMP_KIND_SPCA:
+        var dw = dl_dict_words(-1, fields["alpha"], fields["max_iter"], fields["tol"], dl_fit_index(method),
+                               fields["random_state"], False, False, PythonObject(1000))
+        words[2] = dw.alpha
+        words[3] = Float64(dw.max_iter)
+        words[4] = dw.tol
+        words[5] = Float64(dw.method)
+        words[6] = Float64(dw.seed)
+        words[7] = decomp_float(fields["ridge_alpha"])
+    else:
+        words[2] = decomp_float(fields["alpha"])
+        words[3] = Float64(decomp_int(fields["batch_size"]))
+        words[4] = Float64(decomp_seed_word(kit_seed(fields["random_state"])))
+        words[5] = _flag(fields["shuffle"])
+        words[6] = decomp_float(fields["max_iter"])
+        var patience = fields["max_no_improvement"]
+        words[7] = -1.0 if patience is None else Float64(decomp_int(patience))
+        words[8] = Float64(dl_fit_index(method))
+        words[9] = decomp_float(fields["tol"])
+        words[10] = decomp_float(fields["ridge_alpha"])
+    owner.plan.params = words^
+    return True
+
+
+def _kit_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    # The doors' fitted attributes, in their order (dictionary_learning_fit,
+    # minibatch_dictionary_fit, sparse_coder fit, sparse_pca_fit).
+    decomp_set_mode(fields, context)
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    var words = scalars_view.rows * scalars_view.cols
+    var count = Int(scalars[0])
+    var features = Int(scalars[1])
+    var iterations = Int(scalars[2])
+    var steps = Int(scalars[3])
+    var errors = List[Float64](capacity=max(words - 4, 0))
+    for k in range(4, words):  # driver-loop: over the fit's recorded errors
+        errors.append(scalars[k])
+    var kind = plan.kind
+    var spca = kind == XDECOMP_KIND_SPCA or kind == XDECOMP_KIND_MBSPCA
+    if kind == XDECOMP_KIND_MBDL:
+        py_setitem(fields, "n_steps_", PythonObject(steps))
+        py_setitem(fields, "n_iter_", PythonObject(iterations))
+    py_setitem(fields, "components_", _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS), context))
+    if kind == XDECOMP_KIND_CODER or spca:
+        py_setitem(fields, "n_components_", PythonObject(count))
+    if kind == XDECOMP_KIND_DL or kind == XDECOMP_KIND_SPCA:
+        py_setitem(fields, "error_", py_list_f64(errors))
+        py_setitem(fields, "n_iter_", PythonObject(iterations))
+    if kind == XDECOMP_KIND_MBSPCA:
+        py_setitem(fields, "n_iter_", PythonObject(iterations))
+    if spca:
+        var view = _export(plan, call, XDECOMP_BLOCK_COMPONENTS + 1)
+        var mean = decomp_f32(Python.tuple(features), context)
+        if features > 0:
+            unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(mean))), src=f32_ptr(view.data), count=features)
+        py_setitem(fields, "mean_", mean)
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _kit_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # What the doors' queries read: components_ (and mean_ for the
+    # SparsePCA kinds); SparseCoder reads its dictionary parameter, as its
+    # transform door does.
+    var kind = plan.kind
+    var spca = kind == XDECOMP_KIND_SPCA or kind == XDECOMP_KIND_MBSPCA
+    var source = PythonObject(None)
+    if kind == XDECOMP_KIND_CODER:
+        source = dl_coder_dictionary(fields, context)
+    else:
+        source = py_get(fields, "components_")
+        if source is None or (spca and py_get(fields, "mean_") is None):
+            raise Error("NotFittedError: this member is not fitted yet")
+    var iterations = py_get(fields, "n_iter_")
+    var steps = py_get(fields, "n_steps_")
+    var scalars: List[Float64] = [Float64(Int(py=source.shape[0])), Float64(Int(py=source.shape[1])),
+        Float64(decomp_int(iterations)) if iterations is not None else 0.0,
+        Float64(decomp_int(steps)) if steps is not None else 0.0]
+    var call = member_new(plan)
+    try:
+        if kind == XDECOMP_KIND_CODER:
+            call.block = XDECOMP_BLOCK_COMPONENTS
+            call.x = MemberMatrix(Int(py=classical_address(source)), 1, Int(scalars[0]) * Int(scalars[1]))
+            call.flags = 0
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        else:
+            _import(plan, call, fields, "components_", 2, XDECOMP_BLOCK_COMPONENTS, context)
+        if spca:
+            _import(plan, call, fields, "mean_", 1, XDECOMP_BLOCK_COMPONENTS + 1, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    _ = source
+    return call.state
+
+
+# ---------------------------------------------------------------- EllipticEnvelope
+
+
+def _mcd_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
+    # bindings/mcd_native_door.mojo `mcd_operation` fit: the contamination
+    # check first, in its words; then `mcd_fit`'s reads (h needs n: RUN).
+    var c = fields["contamination"]
+    var op = native_loaded_module("operator")
+    if not (Bool(py=py_call(op.lt, PythonObject(0), c)) and Bool(py=py_call(op.le, c, PythonObject(0.5)))):
+        raise Error("contamination must be in (0, 0.5]")
+    _ = _kit_route(model, fields, context, owner)
+    var words = List[Float64](length=XDECOMP_ENVELOPE_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(XDECOMP_KIND_ENVELOPE)
+    var fraction = fields["support_fraction"]
+    words[1] = -1.0 if fraction is None else decomp_float(fraction)
+    words[2] = Float64(decomp_seed_word(kit_seed(fields["random_state"])))
+    words[3] = _flag(fields["assume_centered"])
+    words[4] = decomp_float(c)
+    words[5] = _flag(fields["store_precision"])
+    owner.plan.params = words^
+
+
+def _mcd_vector(view: MemberMatrix, context: PythonObject) raises -> PythonObject:
+    # A fitted (n,) float32 vector, the door's `decomp_kit_out_shape` type.
+    var count = view.rows * view.cols
+    var vector = decomp_f32(Python.tuple(count), context)
+    if count > 0:
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(vector))), src=f32_ptr(view.data), count=count)
+    return vector
+
+
+def _mcd_support(view: MemberMatrix, context: PythonObject) raises -> PythonObject:
+    # The door's `_support_pack`: the 0 / 1 words as the public '<u1' (n,) Array.
+    var n = view.rows * view.cols
+    var out = mcd_typed(n, "<u1", "B", 1, context)
+    if n > 0:
+        decomp_f32_to_u8(f32_ptr(view.data), MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)), n)
+    return out
+
+
+def _mcd_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    # `mcd_fit`'s fitted fields, in its order.
+    decomp_set_mode(fields, context)
+    py_setitem(fields, "_seed", kit_seed(fields["random_state"]))
+    py_setitem(fields, "_draws", PythonObject(0))
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    var features = Int(scalars[0])
+    var offset = scalars[2]
+    py_setitem(fields, "raw_location_", _mcd_vector(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 2), context))
+    py_setitem(fields, "raw_covariance_", _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 3), context))
+    py_setitem(fields, "raw_support_", _mcd_support(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 6), context))
+    py_setitem(fields, "location_", _mcd_vector(_export(plan, call, XDECOMP_BLOCK_COMPONENTS), context))
+    py_setitem(fields, "covariance_", _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 4), context))
+    var stored = _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 1), context)
+    py_setitem(fields, "_precision", stored)
+    py_setitem(fields, "precision_", stored if Bool(py=fields["store_precision"]) else PythonObject(None))
+    py_setitem(fields, "support_", _mcd_support(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 7), context))
+    py_setitem(fields, "dist_", _mcd_vector(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 5), context))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+    py_setitem(fields, "offset_", PythonObject(offset))
+
+
+def _mcd_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # What the door's queries read: location_, _precision, offset_.
+    var precision = py_get(fields, "_precision")
+    var offset = py_get(fields, "offset_")
+    if precision is None or py_get(fields, "location_") is None or offset is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var dist = py_get(fields, "dist_")
+    var scalars: List[Float64] = [Float64(Int(py=precision.shape[0])),
+        Float64(Int(py=dist.shape[0])) if dist is not None else 0.0, Float64(py=offset)]
+    var call = member_new(plan)
+    try:
+        _import(plan, call, fields, "location_", 1, XDECOMP_BLOCK_COMPONENTS, context)
+        _import(plan, call, fields, "_precision", 2, XDECOMP_BLOCK_COMPONENTS + 1, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    return call.state
+
+
+# ---------------------------------------------------------------- LatentDirichletAllocation
+
+
+def _lda_prior(fields: PythonObject, name: String) raises -> PythonObject:
+    # `_init_fields`: the prior as given, else 1 / n_components.
+    var given = py_get(fields, PythonObject(name))
+    if given is not None:
+        return given
+    return PythonObject(1.0 / decomp_float(fields["n_components"]))
+
+
+def _lda_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
+    # bindings/lda_native_door.mojo `lda_fit`: the learning_method check
+    # first, in its words, then `_init_fields` and `_run`'s reads.
+    var method = fields["learning_method"]
+    if not Bool(py=py_call(native_loaded_module("operator").contains, Python.tuple("batch", "online"), method)):
+        raise Error("learning_method must be 'batch' or 'online'")
+    _ = _table_route(model, fields, context, owner)
+    var online = decomp_eq(method, PythonObject("online"))
+    var words = List[Float64](length=XDECOMP_LDA_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(XDECOMP_KIND_LDA)
+    words[1] = Float64(decomp_int(fields["n_components"]))
+    words[2] = decomp_float(_lda_prior(fields, "doc_topic_prior"))
+    words[3] = decomp_float(_lda_prior(fields, "topic_word_prior"))
+    words[8] = Float64(decomp_seed(fields["random_state"]))
+    words[4] = 1.0 if online else 0.0
+    words[5] = Float64(lda_batch_size(fields)) if online else 1.0
+    words[6] = Float64(decomp_int(fields["max_iter"]))
+    words[7] = Float64(decomp_int(fields["max_doc_update_iter"]))
+    words[9] = Float64(decomp_int(fields["evaluate_every"]))
+    words[10] = decomp_float(fields["learning_offset"])
+    words[11] = decomp_float(fields["learning_decay"])
+    words[12] = decomp_float(fields["mean_change_tol"])
+    words[13] = decomp_float(fields["total_samples"])
+    words[14] = decomp_float(fields["perp_tol"])
+    owner.plan.params = words^
+
+
+def _lda_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    # `lda_fit`'s fields, in its order (`_init_fields`, then the run's).
+    decomp_set_mode(fields, context)
+    py_setitem(fields, "doc_topic_prior_", _lda_prior(fields, "doc_topic_prior"))
+    py_setitem(fields, "topic_word_prior_", _lda_prior(fields, "topic_word_prior"))
+    var seed = fields["random_state"]
+    py_setitem(fields, "_seed", PythonObject(0) if seed is None else seed)
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    py_setitem(fields, "_draw", PythonObject(Int(scalars[3])))
+    py_setitem(fields, "n_batch_iter_", PythonObject(Int(scalars[4])))
+    py_setitem(fields, "n_iter_", PythonObject(Int(scalars[2])))
+    py_setitem(fields, "bound_", PythonObject(scalars[5]))
+    py_setitem(fields, "components_", _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS), context))
+    py_setitem(fields, "exp_dirichlet_component_",
+               _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 1), context))
+    py_setitem(fields, "n_features_in_", PythonObject(Int(scalars[1])))
+
+
+def _lda_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # What `lda_project` reads: components_, exp_dirichlet_component_, the
+    # fitted priors and the draw counters.
+    var components = py_get(fields, "components_")
+    if components is None or py_get(fields, "exp_dirichlet_component_") is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var iterations = py_get(fields, "n_iter_")
+    var bound = py_get(fields, "bound_")
+    var scalars: List[Float64] = [Float64(Int(py=components.shape[0])), Float64(Int(py=components.shape[1])),
+        Float64(decomp_int(iterations)) if iterations is not None else 0.0,
+        Float64(Int(py=py_get(fields, "_draw", PythonObject(0)))),
+        Float64(Int(py=py_get(fields, "n_batch_iter_", PythonObject(1)))),
+        decomp_float(bound) if bound is not None else 0.0,
+        decomp_float(fields["doc_topic_prior_"]), decomp_float(fields["topic_word_prior_"])]
+    var call = member_new(plan)
+    try:
+        _import(plan, call, fields, "components_", 2, XDECOMP_BLOCK_COMPONENTS, context)
+        _import(plan, call, fields, "exp_dirichlet_component_", 2, XDECOMP_BLOCK_COMPONENTS + 1, context)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE

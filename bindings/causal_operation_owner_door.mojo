@@ -362,6 +362,29 @@ def _causal_state_owner_kept(record: PythonObject, generation: Int, layers: Pyth
         return False
 
 
+def _causal_state_flags_refresh(record: PythonObject) raises:
+    # Once per public operation, on a kept owner (lane fx-audit, audit-neural
+    # finding 3): re-read the read-only flag of every admitted float32 buffer.
+    # The flag CAN flip in place on a live Array (the product does it: the
+    # fitted freeze `p3nc_fitted_freeze_unpack._fitted_mark`, the carried
+    # worker state `parallel_shard_native_door._freeze_carried`, the archive
+    # load; and `_readonly` is a plain writable slot), so words admitted by an
+    # earlier operation must not carry it. Shape, order, dtype and address are
+    # fixed for a pinned Array (its storage is never resized; the product
+    # writes those slots only on Arrays it is constructing), so they stay
+    # admitted. Cost: one slot read per admitted buffer per operation (2 to 5
+    # per unique layer state), never per token; the old path read the flag on
+    # every read.
+    var owner = record.downcast_value_ptr[CausalStateOwner]()
+    for li in range(len(owner[].layers)):  # driver-loop: over the state's unique layer state objects
+        var base = li * CAUSAL_STATE_BUFFERS
+        for j in range(CAUSAL_STATE_BUFFERS):  # small-loop(the fixed state buffer slots)
+            if not owner[].layers[li].buffers[j].admitted or not owner[].layers[li].buffers[j].float32:
+                continue
+            var pin = owner[].pins[base + j]
+            owner[].layers[li].buffers[j].writable = not Bool(py=pin._readonly)
+
+
 def causal_state_owner_bind(mut mods: NativeModules, state: PythonObject, fields: PythonObject,
                             layers: PythonObject, generation: Int) raises:
     """UNPACK, once per public operation, at the end of the state capture:
@@ -370,6 +393,7 @@ def causal_state_owner_bind(mut mods: NativeModules, state: PythonObject, fields
     var record = prepared_get(mods, _CAUSAL_STATE_SLOT, state)
     var nk = causal_keys()
     if _causal_state_owner_kept(record, generation, layers):
+        _causal_state_flags_refresh(record)
         py_setitem(fields, nk[].k__causal_native_state, record)
         return
     var held = _causal_state_owner_build(generation, layers)
@@ -427,7 +451,8 @@ def causal_state_layer_unpack(mut mods: NativeModules, held: PythonObject, index
             var shape = value.shape
             words.present = True
             words.contiguous = String(value.order) == "C"
-            words.writable = String(value.dtype) == "<f4" and not Bool(py=value._readonly)
+            words.float32 = String(value.dtype) == "<f4"
+            words.writable = words.float32 and not Bool(py=value._readonly)
             for k in range(len(shape)):  # small-loop(state buffer shape dims)
                 words.shape.append(Int(py=shape[k]))
             words.shape_text = String(shape)
