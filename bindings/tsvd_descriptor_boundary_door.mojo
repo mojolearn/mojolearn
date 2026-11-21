@@ -51,10 +51,9 @@ def tsvd_connect(factory: PythonObject, mode: Int, vendor: String) raises -> Int
     return index
 
 
-def tsvd_connection(mode: String, context: PythonObject) raises -> Int:
-    var nk = tsvd_keys()
-    return tsvd_connect(tsvd_factory(context, "tsvd_bindings", mode),
-        1 if mode == "identical" else 0, String(py_item(context, nk[].k_vendor)))
+# TOMBSTONE-NOTE (lane dw-decomp, 2026-11-21): `tsvd_connection(mode, context)` (the per-call read of
+# `tsvd_bindings[mode]`, its key admission, provider lookup and vendor String compare) is gone: an estimator's
+# connection is resolved once into its route owner (bindings/tsvd_native_door.mojo `_route_resolve`).
 
 
 def tsvd_provider(connection: Int) raises -> PythonObject:

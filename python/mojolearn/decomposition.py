@@ -397,8 +397,16 @@ class TruncatedSVD(_NumericModeMixin):
     #: the `_mode` class-creation wrappers leave this class unwrapped.
     _mojolearn_native_public = True
 
+    #: `device=None | "gpu" | "cpu"`: read once into the estimator's native route
+    #: owner (bindings/decomp_device_route_door.mojo); its check runs the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+    #: A model built without the constructor (a loaded file) runs this
+    #: installation's device.
+    device = None
+
     def __init__(self, n_components=2, *, algorithm="covariance_eigh", n_iter=5, n_oversamples=10,
-                 power_iteration_normalizer="auto", random_state=None, tol=0.0, numeric_mode=None):
+                 power_iteration_normalizer="auto", random_state=None, tol=0.0, numeric_mode=None, device=None):
         self.n_components = n_components
         self.tol = tol
         self.algorithm = algorithm
@@ -407,6 +415,18 @@ class TruncatedSVD(_NumericModeMixin):
         self.power_iteration_normalizer = power_iteration_normalizer
         self.random_state = random_state
         self.numeric_mode = numeric_mode
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _TSVD_ENTRY(self, "vendor_used", (), _TSVD_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the model to ``X``.
