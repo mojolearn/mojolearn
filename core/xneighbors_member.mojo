@@ -10,7 +10,8 @@ route resolved to (`x_neighbors_native_api_v1`, the `XnDriver` entry every
 x_neighbors door uses). No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor,
-2 OneClassSVM, 3 KernelPCA, 4 PolynomialCountSketch, 5 AdditiveChi2Sampler.
+2 OneClassSVM, 3 KernelPCA, 4 PolynomialCountSketch, 5 AdditiveChi2Sampler,
+6 SkewedChi2Sampler.
 The other classes of the family are not published yet
 (MEMBER-ABI-V2.md family 12). OUTPUTS with no state answers from the kind
 word and `call.classes` (NearestCentroid: proba `classes`, decision 1 for two
@@ -127,6 +128,22 @@ member) -> float32 rows x features * (2 steps - 1). OUTPUTS answers from
 `x.cols` with no state. Block: 64 n_features_in (float64 1 x 1). A fit reads
 X only during the call.
 
+SkewedChi2Sampler (kind 6). RUN: neighbors/chi2_run.mojo `schi2_fit_run`
+(the counter-based draw of the weights and offsets), `schi2_check_run` and
+`schi2_transform_run` (log(x + skewedness) into a slot scratch, then the
+map) over the x_neighbors entry, as bindings/neighbors_semi_native_door.mojo
+`_schi2_fit` / `_schi2_transform` run them with eager weights (the
+`identical` tier). The FAST tier's lazy-weights transform (kfeat bit 4) is
+not a member: admit answers False there and the caller keeps the door.
+MEMBER_OP_NEW parameters (count 4): [0] kind 6, [1] n_components, [2]
+skewedness, [3] the seed word (the low 32 bits of an exact int
+random_state; None or a RandomState draws per fit and is not a member).
+Views: fit reads only the width of X; transform X float32 rows x features
+(host, dense) -> float32 rows x n_components. OUTPUTS answers n_components
+with no state. Blocks: 64 random_weights float32 features x n_components,
+65 random_offset float32 1 x n_components (an import whose width differs from
+n_components is refused).
+
 LIFETIME: a NearestCentroid fit reads X and y only during the call (its
 fitted state is the centroids it computes); nothing of X is kept or copied.
 A LocalOutlierFactor fit BORROWS X as its fitted rows, as the estimator's
@@ -169,8 +186,11 @@ from core.ocsvm_resident_api import OcResidentDriver
 from core.ocsvm_plan import oc_take_rows_into
 from core.kpca_native_api import KPCAEigenRequest, KPCANativeDriver
 from core.pcs_native_api import PCSFitPlan, PCSNativeDriver, pcs_options, pcs_feature_width
-from neighbors.chi2_run import Achi2FitRequest, Achi2Request, achi2_fit_run, achi2_interval_check, achi2_transform_run
-from neighbors.neighbors_semi_run import xn_achi2_width
+from neighbors.chi2_run import (
+    Achi2FitRequest, Achi2Request, achi2_fit_run, achi2_interval_check, achi2_transform_run,
+    Schi2FitRequest, Schi2Request, schi2_fit_run, schi2_check_run, schi2_transform_run,
+)
+from neighbors.neighbors_semi_run import xn_achi2_width, xn_schi2_missing_fit
 from core.kpca_native_plan import (
     KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCADenseFit, KPCAFitPrepareRequest, KPCAAlphaRequest,
     KPCAQueryRequest, KPCACenteredQuery, KPCANeighborDriver,
@@ -199,7 +219,8 @@ comptime XNEIGHBORS_KIND_OCSVM = 2
 comptime XNEIGHBORS_KIND_KERNEL_PCA = 3
 comptime XNEIGHBORS_KIND_PCS = 4
 comptime XNEIGHBORS_KIND_ACHI2 = 5
-comptime XNEIGHBORS_KIND_COUNT = 6
+comptime XNEIGHBORS_KIND_SCHI2 = 6
+comptime XNEIGHBORS_KIND_COUNT = 7
 comptime NC_BLOCK_CENTROIDS = MEMBER_BLOCK_FAMILY
 comptime NC_BLOCK_STD = MEMBER_BLOCK_FAMILY + 1
 comptime NC_BLOCK_DEVIATIONS = MEMBER_BLOCK_FAMILY + 2
@@ -228,6 +249,9 @@ comptime PC_BLOCK_BIT_HASH = MEMBER_BLOCK_FAMILY + 1
 comptime PC_BLOCK_FEATURES = MEMBER_BLOCK_FAMILY + 2
 comptime _PC_BLOCKS = 3
 comptime AC_BLOCK_FEATURES = MEMBER_BLOCK_FAMILY
+comptime SC_BLOCK_WEIGHTS = MEMBER_BLOCK_FAMILY
+comptime SC_BLOCK_OFFSET = MEMBER_BLOCK_FAMILY + 1
+comptime _SC_BLOCKS = 2
 #: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
 comptime OC_GAMMA_VALUE = 0
 comptime OC_GAMMA_SCALE = 1
@@ -334,6 +358,14 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var ac_interval: Float64
     var ac_valid: Bool
     var ac_scan: Bool
+    # SkewedChi2Sampler words (kind 6), its fitted weights and offsets, and
+    # the transform's log scratch (grown once, reused by every later call).
+    var sc_components: Int
+    var sc_skew: Float64
+    var sc_seed: Int
+    var sc_weights: List[Float32]
+    var sc_offset: List[Float32]
+    var sc_scratch: List[Float32]
 
     def __init__(out self):
         self.generation = 0
@@ -420,6 +452,12 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.ac_interval = 0.5
         self.ac_valid = True
         self.ac_scan = False
+        self.sc_components = 100
+        self.sc_skew = 1.0
+        self.sc_seed = 0
+        self.sc_weights = List[Float32]()
+        self.sc_offset = List[Float32]()
+        self.sc_scratch = List[Float32]()
 
 
 struct XNeighborsMemberStore(Defaultable, Movable):
@@ -473,6 +511,9 @@ def _clear(slot: _SlotPtr):
     slot[].kp_alphas_ready = False
     slot[].pc_indices = List[Int32]()
     slot[].pc_signs = List[Int32]()
+    slot[].sc_weights = List[Float32]()
+    slot[].sc_offset = List[Float32]()
+    slot[].sc_scratch = List[Float32]()
 
 
 def _mint(words: _F64P, count: Int) raises -> Int:
@@ -539,6 +580,10 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].ac_interval = words[2]
             slot[].ac_valid = words[3] != 0.0
             slot[].ac_scan = words[4] != 0.0
+        elif slot[].kind == XNEIGHBORS_KIND_SCHI2:
+            slot[].sc_components = Int(words[1])
+            slot[].sc_skew = words[2]
+            slot[].sc_seed = Int(words[3])
         else:
             slot[].k = Int(words[1])
             slot[].novelty = words[2] != 0.0
@@ -585,6 +630,8 @@ def _name(slot: _SlotPtr) -> String:
         return String("PolynomialCountSketch")
     if slot[].kind == XNEIGHBORS_KIND_ACHI2:
         return String("AdditiveChi2Sampler")
+    if slot[].kind == XNEIGHBORS_KIND_SCHI2:
+        return String("SkewedChi2Sampler")
     return String("LocalOutlierFactor")
 
 
@@ -1561,6 +1608,117 @@ def _ac_import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------ SkewedChi2Sampler
+
+
+def _sc_fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """`SkewedChi2Sampler.fit` (bindings/neighbors_semi_native_door.mojo
+    `_schi2_fit`): the weights (features x n_components) and offsets
+    (n_components) from the counter-based draw of the seed word, eager (the
+    `identical` tier's form). The fit reads only the width of X.
+    fit_transform: then the transform of the same rows (the door's order)."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    var transformed = call[].fit_output == MEMBER_OP_TRANSFORM
+    if call[].fit_output != 0 and not transformed:
+        member_unsupported(estimator, call[].fit_output)
+    slot[].fitted = False
+    var features = call[].x.cols
+    var components = slot[].sc_components
+    if features < 1 or components < 1:
+        xn_schi2_missing_fit(features, components)
+    slot[].sc_weights = List[Float32](length=features * components, fill=Float32(0.0))
+    slot[].sc_offset = List[Float32](length=components, fill=Float32(0.0))
+    schi2_fit_run(XnDriver(call[].route.entry.call), Schi2FitRequest(slot[].sc_seed, features, components,
+        Int(slot[].sc_weights.unsafe_ptr()), Int(slot[].sc_offset.unsafe_ptr())))
+    slot[].features = features
+    slot[].rows = call[].x.rows
+    slot[].fitted = True
+    if transformed:
+        _sc_transform(slot, call)
+
+
+def _sc_transform(slot: _SlotPtr, call: _CallPtr) raises:
+    """`_schi2_transform` with eager weights: the refusal of an entry at or
+    below -skewedness (non-empty X), log(x + skewedness) into the slot's
+    scratch, the map into `dst` (rows x n_components float32)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before transform")
+    _whole(call, estimator)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var rows = call[].x.rows
+    var features = call[].x.cols
+    var components = slot[].sc_components
+    if features != slot[].features:
+        raise Error("ValueError: X has " + String(features) + " features, but SkewedChi2Sampler is expecting "
+            + String(slot[].features) + " features as input.")
+    _dense(call[].dst, MEMBER_F32, "the transform buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != components:
+        raise Error("ValueError: the transform buffer holds " + String(components) + " columns per row of X")
+    var count = rows * features
+    schi2_check_run(call[].x.data, count, slot[].sc_skew)
+    if len(slot[].sc_scratch) < max(count, 1):
+        slot[].sc_scratch.resize(max(count, 1), Float32(0.0))
+    schi2_transform_run(XnDriver(call[].route.entry.call), Schi2Request(call[].x.data,
+        Int(slot[].sc_weights.unsafe_ptr()), 0, Int(slot[].sc_offset.unsafe_ptr()), Int(slot[].sc_scratch.unsafe_ptr()),
+        call[].dst.data, rows, features, components, slot[].sc_skew, False, False))
+
+
+def _sc_export(slot: _SlotPtr, call: _CallPtr) raises:
+    """A view of one fitted block; the slot owns the words until this
+    state's next fit, import or free."""
+    if not slot[].fitted:
+        raise Error("NotFittedError: this SkewedChi2Sampler member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block >= _SC_BLOCKS:
+            raise Error("member ABI: a SkewedChi2Sampler member has two fitted blocks")
+        block = SC_BLOCK_WEIGHTS + block
+    if block == SC_BLOCK_WEIGHTS:
+        call[].dst = MemberMatrix(Int(slot[].sc_weights.unsafe_ptr()), slot[].features, slot[].sc_components,
+            MEMBER_F32)
+    elif block == SC_BLOCK_OFFSET:
+        call[].dst = MemberMatrix(Int(slot[].sc_offset.unsafe_ptr()), 1, slot[].sc_components, MEMBER_F32)
+    else:
+        raise Error("member ABI: a SkewedChi2Sampler member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _SC_BLOCKS
+
+
+def _sc_import(slot: _SlotPtr, call: _CallPtr) raises:
+    """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state (both
+    blocks, n_components wide)."""
+    var estimator = _name(slot)
+    var block = call[].block
+    var count = call[].x.rows * call[].x.cols
+    if block == SC_BLOCK_WEIGHTS or block == SC_BLOCK_OFFSET:
+        _dense(call[].x, MEMBER_F32, String("random_weights_") if block == SC_BLOCK_WEIGHTS
+            else String("random_offset_"), estimator)
+        if call[].x.cols != slot[].sc_components or (block == SC_BLOCK_OFFSET and call[].x.rows != 1):
+            raise Error("member ABI: SkewedChi2Sampler fitted arrays must be n_components = "
+                + String(slot[].sc_components) + " wide")
+        slot[].fitted = False
+        var words = List[Float32](length=max(count, 1), fill=Float32(0.0))
+        if count > 0:
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        if block == SC_BLOCK_WEIGHTS:
+            slot[].sc_weights = words^
+            slot[].features = call[].x.rows
+        else:
+            slot[].sc_offset = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a SkewedChi2Sampler member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if (slot[].features < 1 or len(slot[].sc_weights) < slot[].features * slot[].sc_components
+            or len(slot[].sc_offset) < slot[].sc_components):
+        raise Error("member ABI: a SkewedChi2Sampler import needs random_weights_ and random_offset_")
+    slot[].fitted = True
+
+
 # ------------------------------------------------------------ dispatch
 
 
@@ -1584,7 +1742,7 @@ def _capabilities(slot: _SlotPtr) -> Int:
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         return _OCSVM
     if (slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA or slot[].kind == XNEIGHBORS_KIND_PCS
-            or slot[].kind == XNEIGHBORS_KIND_ACHI2):
+            or slot[].kind == XNEIGHBORS_KIND_ACHI2 or slot[].kind == XNEIGHBORS_KIND_SCHI2):
         return _TRANSFORMER
     return _NC_EUCLIDEAN if slot[].euclidean else _NC_MANHATTAN
 
@@ -1625,6 +1783,10 @@ def _new(call: _CallPtr) raises:
         if call[].param_count != 5:
             raise Error("member ABI: an AdditiveChi2Sampler member takes five parameters (kind, sample_steps, "
                 + "interval, interval valid, device scan)")
+    elif kind == XNEIGHBORS_KIND_SCHI2:
+        if call[].param_count != 4:
+            raise Error("member ABI: a SkewedChi2Sampler member takes four parameters (kind, n_components, "
+                + "skewedness, seed word)")
     else:
         if call[].param_count != 7:
             raise Error("member ABI: a LocalOutlierFactor member takes seven parameters (kind, n_neighbors, "
@@ -1680,6 +1842,12 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             call[].classes = 0
             call[].out_cols = xn_achi2_width(call[].x.cols, Int(_F64P(unsafe_from_address=call[].params)[1]))
             return 0
+        if asked == XNEIGHBORS_KIND_SCHI2:
+            if call[].param_count != 4:
+                raise Error("member ABI: a SkewedChi2Sampler member takes four parameters")
+            call[].classes = 0
+            call[].out_cols = Int(_F64P(unsafe_from_address=call[].params)[1])
+            return 0
         if asked == XNEIGHBORS_KIND_PCS:
             if call[].param_count != 7:
                 raise Error("member ABI: a PolynomialCountSketch member takes seven parameters")
@@ -1704,7 +1872,23 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             call[].classes = 0
             call[].out_cols = xn_achi2_width(slot[].features if slot[].fitted else call[].x.cols, slot[].ac_steps)
             return 0
+        if slot[].kind == XNEIGHBORS_KIND_SCHI2:
+            call[].classes = 0
+            call[].out_cols = slot[].sc_components
+            return 0
         _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
+        return 0
+    if slot[].kind == XNEIGHBORS_KIND_SCHI2:
+        if operation == MEMBER_OP_FIT:
+            _sc_fit(slot, call)
+        elif operation == MEMBER_OP_TRANSFORM:
+            _sc_transform(slot, call)
+        elif operation == MEMBER_OP_EXPORT:
+            _sc_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _sc_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_ACHI2:
         if operation == MEMBER_OP_FIT:

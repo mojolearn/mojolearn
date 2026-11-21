@@ -2,8 +2,8 @@
 """The member boundary of the XNeighbors family (UNPACK / PACK of
 core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
 LocalOutlierFactor (kind 1), OneClassSVM (kind 2), KernelPCA (kind 3),
-PolynomialCountSketch (kind 4), AdditiveChi2Sampler (kind 5). Not yet published
-(admit refuses with the kind): SkewedChi2Sampler LabelPropagation LabelSpreading KNNImputer SVGP.
+PolynomialCountSketch (kind 4), AdditiveChi2Sampler (kind 5), SkewedChi2Sampler (kind 6).
+Not yet published (admit refuses with the kind): LabelPropagation LabelSpreading KNNImputer SVGP.
 
   * `xneighbors_member_admit` (UNPACK): the estimator's own parameter checks
     (bindings/neighbors_local_native_door.mojo `_nc_fit_unpack`), its route
@@ -37,6 +37,11 @@ PolynomialCountSketch (kind 4), AdditiveChi2Sampler (kind 5). Not yet published
     word of an exact int random_state (else False); pack = `_pcs_fit`'s fields.
     AdditiveChi2Sampler: admit = the door's steps / interval words and the
     image's device-scan bit; pack = n_features_in_.
+    SkewedChi2Sampler: admit = the door's n_components / skewedness reads and
+    the seed word of an exact int random_state (else False), and False on an
+    image whose transform takes the FAST lazy-weights path (kfeat bit 4): the
+    member serves the eager weights only; pack = `_schi2_fit`'s fields
+    (`_random_weights`, `random_offset_`, `n_features_in_`).
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
@@ -67,6 +72,7 @@ from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.pcs_native_boundary_unpack import pcs_seed_unpack
 from bindings.pcs_native_boundary_pack import pcs_array
 from bindings.neighbors_semi_native_door import _achi2_interval_unpack, _semi_kfeat_flags
+from bindings.family_common_unpack import family_is_int
 from core.pcs_native_api import pcs_options
 from bindings.kpca_native_door import (
     _kpca_route, _kpca_decomp_refused, _field as _kp_field, _int as _kp_int, _float as _kp_float,
@@ -95,7 +101,7 @@ from core.member_abi import (
 from core.xneighbors_member import (
     XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF, XNEIGHBORS_KIND_OCSVM, XNEIGHBORS_KIND_KERNEL_PCA,
     XNEIGHBORS_KIND_PCS, PC_BLOCK_INDEX_HASH, PC_BLOCK_BIT_HASH, PC_BLOCK_FEATURES,
-    XNEIGHBORS_KIND_ACHI2, AC_BLOCK_FEATURES,
+    XNEIGHBORS_KIND_ACHI2, AC_BLOCK_FEATURES, XNEIGHBORS_KIND_SCHI2, SC_BLOCK_WEIGHTS, SC_BLOCK_OFFSET,
     KP_BLOCK_ROWS, KP_BLOCK_VALUES, KP_BLOCK_VECTORS, KP_BLOCK_COLUMNS, KP_BLOCK_TOTAL, KP_BLOCK_GAMMA,
     OC_BLOCK_VECTORS, OC_BLOCK_DUAL, OC_BLOCK_SUPPORT, OC_BLOCK_SCALARS, OC_GAMMA_VALUE, OC_GAMMA_SCALE, OC_GAMMA_AUTO,
     NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
@@ -367,6 +373,30 @@ def _achi2_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     return True
 
 
+def _schi2_admit(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    """The door's words: n_components (`int`, read at fit), skewedness
+    (`float`, read at transform; read here once), the seed word (the low 32
+    bits of an exact int random_state, as `_schi2_fit`). False: a RandomState
+    or None random_state (the door draws a seed per fit from it), an image
+    whose transform takes the FAST lazy-weights path (`_semi_kfeat_flags` bit
+    4; Apple `fast` is paused and keeps its door), or an image that publishes
+    no member entry."""
+    var components = Int(py=py_call(b.int, family_field(fields, "n_components")))
+    var skew = Float64(py=py_call(b.float, family_field(fields, "skewedness")))
+    var seed = family_field(fields, "random_state")
+    if not family_is_int(seed):
+        return False
+    var word = Int(py=py_call(native_loaded_module("operator").and_, seed, PythonObject(0xFFFFFFFF)))
+    if not _route(model, context, b, owner):
+        return False
+    if (_semi_kfeat_flags(owner.pins[1], _family_context()) & 4) != 0:
+        return False
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_SCHI2), Float64(components), skew, Float64(word)]
+    owner.plan.params = words^
+    return True
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -379,6 +409,8 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         return _pcs_admit(model, fields, context, b, owner)
     if kind == XNEIGHBORS_KIND_ACHI2:
         return _achi2_admit(model, fields, context, b, owner)
+    if kind == XNEIGHBORS_KIND_SCHI2:
+        return _schi2_admit(model, fields, context, b, owner)
     if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
     if kind == XNEIGHBORS_KIND_LOF:
@@ -837,6 +869,51 @@ def _achi2_state(fields: PythonObject, b: PythonObject, plan: MemberPlan) raises
     return call.state
 
 
+def _schi2_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`_schi2_fit`'s fields: `_random_weights` (a pending `_schi2_z`
+    dropped, as `_schi2_set_weights`), `random_offset_`, `n_features_in_`."""
+    var call = MemberCall(plan.route, state)
+    call.block = SC_BLOCK_WEIGHTS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var features = call.dst.rows
+    var weights = _publish_block(call, "<f4", context, 4, False)
+    call.block = SC_BLOCK_OFFSET
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var offset = _publish_block(call, "<f4", context, 4, True)
+    _ = py_call(fields.pop, PythonObject("_schi2_z"), PythonObject(None))
+    py_setitem(fields, "_random_weights", weights)
+    py_setitem(fields, "random_offset_", offset)
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _schi2_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    """A state from `random_weights_` (the stored `_random_weights`, else a
+    public `random_weights_` field, as the door's getter) and `random_offset_`.
+    A pending `_schi2_z` (the FAST lazy form) is not imported."""
+    if py_get(fields, PythonObject("_schi2_z"), PythonObject(None)) is not None:
+        raise Error("member ABI: a SkewedChi2Sampler with pending lazy weights is not a member state")
+    var name = String("_random_weights")
+    if not py_contains(fields, PythonObject(name)):
+        name = String("random_weights_")
+    var weights = _f32_block(fields, name, 2, context)
+    var offset = _f32_block(fields, "random_offset_", 1, context)
+    var call = member_new(plan)
+    try:
+        call.block = SC_BLOCK_WEIGHTS
+        call.x = MemberMatrix(Int(py=classical_address(weights)), Int(py=weights.shape[0]), Int(py=weights.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = SC_BLOCK_OFFSET
+        call.x = MemberMatrix(Int(py=classical_address(offset)), 1, Int(py=offset.size))
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = weights
+    _ = offset
+    return call.state
+
+
 def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -851,6 +928,8 @@ def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: P
         _pcs_pack(fields, context, plan, state)
     elif plan.kind == XNEIGHBORS_KIND_ACHI2:
         _achi2_pack(fields, plan, state)
+    elif plan.kind == XNEIGHBORS_KIND_SCHI2:
+        _schi2_pack(fields, context, plan, state)
     else:
         _nc_pack(fields, context, b, plan, state)
 
@@ -869,4 +948,6 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
         return _pcs_state(fields, context, plan)
     if plan.kind == XNEIGHBORS_KIND_ACHI2:
         return _achi2_state(fields, b, plan)
+    if plan.kind == XNEIGHBORS_KIND_SCHI2:
+        return _schi2_state(fields, context, plan)
     return _nc_state(fields, context, plan)

@@ -1296,6 +1296,10 @@ class SkewedChi2Sampler(_XNeighbors):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 6)
+
     def __init__(self, *, skewedness=1.0, n_components=100, random_state=None, numeric_mode=None, device=None):
         self.skewedness = skewedness
         self.n_components = n_components
