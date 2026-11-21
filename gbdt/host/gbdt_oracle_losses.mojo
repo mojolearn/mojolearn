@@ -146,10 +146,9 @@ from gbdt.host.gbdt_oracle import (
     _binary_block,
     _half_byte_block,
     _halving_fold,
-    _pinned_partition_stat,
+    _pinned_partition_stats,
     _one_byte_block,
     _oracle_move_to,
-    _partition_stat,
     _regularize,
     _walker_move,
     gbdt_host_grid,
@@ -461,14 +460,14 @@ def _loss_eval(
         fv[b] = _halving_fold(s_score)
     gradient.clear()
     cached_der2.clear()
+    # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)
+    # launches across the cores (lane gbdt-host-par)
+    var leaf_sums = _partition_stats_level(
+        stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, len(sizes)
+    )
     for leaf in range(len(sizes)):
-        gradient.append(
-            Float64(_partition_stat(stats, n_rows, 0, offsets[leaf], sizes[leaf]))
-        )
-        cached_der2.append(
-            Float64(_partition_stat(stats, n_rows, 1, offsets[leaf], sizes[leaf]))
-            + lambda_reg
-        )
+        gradient.append(Float64(leaf_sums[2 * leaf]))
+        cached_der2.append(Float64(leaf_sums[2 * leaf + 1]) + lambda_reg)
     # lane cpu4-gbdt: the oracle's value fold is the device's
     # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
     value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
@@ -789,12 +788,17 @@ def _estimate_leaves_for_loss(
                 pairs.value().group_row_weights[row] if pairs.value().group_layout
                 else pairs.value().prep.row_weights[row]
             )
-    for leaf in range(n_leaves):
-        if loss.objective == GBDT_OBJ_PAIR_LOGIT:
-            weights_cpu.append(Float64(_pinned_partition_stat(
-                pair_row_weights, offsets[leaf], sizes[leaf], 2 * GBDT_PINNED_SM
-            )))
-        else:
+    if loss.objective == GBDT_OBJ_PAIR_LOGIT:
+        # the leaves' weight sums, the launches across the cores (lane
+        # gbdt-host-par): `_pinned_partition_stat` per leaf, unchanged
+        var leaf_weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
+        _pinned_partition_stats(
+            pair_row_weights, offsets, sizes, 2 * GBDT_PINNED_SM, leaf_weight_sums
+        )
+        for leaf in range(n_leaves):
+            weights_cpu.append(Float64(leaf_weight_sums[leaf]))
+    else:
+        for leaf in range(n_leaves):
             weights_cpu.append(Float64(sizes[leaf]))
     if loss.method == GBDT_LEAF_EXACT:
         return _exact_estimate(

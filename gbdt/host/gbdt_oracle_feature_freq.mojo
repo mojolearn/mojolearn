@@ -57,7 +57,7 @@ WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT
          `replace_active_cindex` sets `cindex_changed_since_histogram`, so no
          subtraction runs), the symmetric oracle's `_half_byte_block` and
          `_one_byte_block`; `scan_histograms_kernel`; `compute_partition_
-         stats` at the pinned 32 chunks (`_partition_stat`).
+         stats` at the pinned 32 chunks (`_partition_stats_level`).
        - `enqueue_score`: `compute_optimal_splits_kernel[COSINE]` with no
          noise, skip all zero and feature weight 1 (`_cosine_gain`), the
          block argmax and `resolve_and_pack_kernel` (largest gain, ties to
@@ -129,7 +129,6 @@ from gbdt.host.gbdt_oracle import (
     _binary_block,
     _half_byte_block,
     _one_byte_block,
-    _partition_stat,
     gbdt_f32_token,
 )
 from gbdt.digest.city import city_hash_64

@@ -118,7 +118,6 @@ from gbdt.host.gbdt_oracle import (
     _half_byte_block,
     _halving_fold,
     _one_byte_block,
-    _partition_stat,
     _target_std_dev,
     gbdt_bootstrap_seeds,
     gbdt_f64_token,
@@ -527,10 +526,14 @@ def gbdt_rmse_host_fit(
         # over the reordered stats planes, the searcher's leaf values, the
         # cursor update ----
         var leaf_values = List[Float32](length=n_live, fill=Float32(0.0))
+        # the (leaf, plane) launches across the cores (lane gbdt-host-par)
+        var leaf_sums = _partition_stats_level(
+            stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, n_live
+        )
         for i in range(n_live):
-            var w = _partition_stat(stats, n_rows, 0, offsets[i], sizes[i])
-            var g = _partition_stat(stats, n_rows, 1, offsets[i], sizes[i])
-            leaf_values[i] = _rmse_leaf_value(w, g, params.l2_leaf_reg)
+            leaf_values[i] = _rmse_leaf_value(
+                leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
+            )
         var scaled = rescaled_leaves(leaf_values, lr)
         apply_scaled_leaves_host(cursor, scaled, row_index, offsets, sizes, n_live)
 

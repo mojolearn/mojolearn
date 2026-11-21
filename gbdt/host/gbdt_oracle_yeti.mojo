@@ -20,7 +20,12 @@ from gbdt.data.yeti_rank_tasks import (
     yeti_rank_cuda_seed,
     yeti_rank_task_seed,
 )
-from gbdt.host.gbdt_oracle import GBDT_MSE_BLOCK, _halving_fold, _partition_stat
+from gbdt.host.gbdt_oracle import (
+    GBDT_MSE_BLOCK,
+    GBDT_PARTITION_CHUNKS,
+    _halving_fold,
+    _partition_stats_level,
+)
 from gbdt.host.gbdt_oracle_query import query_ids, query_means, query_offsets
 
 comptime _THREADS = 256
@@ -266,12 +271,12 @@ def yeti_rank_eval(
         stats[n_rows + dst] = pw[i]
     gradient.clear()
     cached_der2.clear()
+    # the leaves' two sums (`compute_partition_stats`): the (leaf, plane)
+    # launches across the cores (lane gbdt-host-par)
+    var leaf_sums = _partition_stats_level(
+        stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets_leaf, sizes_leaf, len(sizes_leaf)
+    )
     for leaf in range(len(sizes_leaf)):
-        gradient.append(
-            Float64(_partition_stat(stats, n_rows, 0, offsets_leaf[leaf], sizes_leaf[leaf]))
-        )
-        cached_der2.append(
-            Float64(_partition_stat(stats, n_rows, 1, offsets_leaf[leaf], sizes_leaf[leaf]))
-            + lambda_reg
-        )
+        gradient.append(Float64(leaf_sums[2 * leaf]))
+        cached_der2.append(Float64(leaf_sums[2 * leaf + 1]) + lambda_reg)
     value = Float64(0.0)

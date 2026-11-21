@@ -2115,19 +2115,6 @@ def _binary_block(
 comptime GBDT_PARTITION_CHUNKS = (2 * GBDT_PINNED_SM + 2 - 1) // 2
 
 
-def _partition_stat(
-    stats: List[Float32], line_size: Int, stat_id: Int, offset: Int, size: Int
-) -> Float32:
-    """`compute_partition_stats` for one (leaf, stat)
-    (`partitions_reduce.mojo:104-227`, `partition_stats_chunks` pinned to
-    (2 * 32 + n_stats - 1) // n_stats = 32 chunks at 2 stats): phase 1 strides
-    each 512-thread block over the leaf, phase 2 folds one partial per chunk,
-    each through the 512-lane halving tree."""
-    return _pinned_partition_stat(
-        stats, stat_id * line_size + offset, size, GBDT_PARTITION_CHUNKS
-    )
-
-
 def _partition_chunk_partial(
     stats: HostF32Ptr, base: Int, size: Int, max_chunks: Int, chunk: Int
 ) -> Float32:
@@ -2508,33 +2495,34 @@ def _ftz_lanes[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     return x
 
 
-def _split_level(
+def _split_leaves(
     cindex: List[UInt32],
-    word_base: Int,
-    field: UInt32,
-    value: UInt32,
-    one_hot: Bool,
     n_rows: Int,
-    n_live: Int,
     hist_cells: Int,
+    stat_count: Int,
+    left_ids: List[Int],
+    right_ids: List[Int],
+    l_word_base: List[Int],
+    l_field: List[UInt32],
+    l_value: List[UInt32],
+    l_one_hot: List[Int],
     mut row_index: List[Int],
     mut stats: List[Float32],
     mut p_off: List[Int],
     mut p_sz: List[Int],
     mut hist: List[Float32],
-    mut ids_compute: List[Int],
-    mut sub_from: List[Int],
-    mut sub_what: List[Int],
-    stat_count: Int = 2,
 ):
-    """The split chain of one symmetric level, every live leaf: a row goes
-    right when its feature bits (`word & field`) exceed `value`, or equal it
-    for a one-hot feature; a leaf's rows are reordered zeros then ones, each
-    side in its old order (the device's stable partition, `enqueue_post_
-    winner`), with every stat plane (`stat_count`, two by default; the
-    multiclass search has more); `copy_histograms_kernel` copies the
-    parent's histogram into the right child's slot; `update_partitions_and_
-    plan_kernel` writes the sizes, offsets and the next level's plan.
+    """The split chain of a set of leaves, each by its own split
+    (`l_word_base`, `l_field`, `l_value`, `l_one_hot`, one per leaf): a row
+    goes right when its feature bits (`word & field`) exceed `value`, or
+    equal it for a one-hot split; leaf `left_ids[i]`'s rows are reordered
+    zeros then ones, each side in its old order (the device's stable
+    partition, `enqueue_post_winner`), with every stat plane
+    (`stat_count`); `copy_histograms_kernel` copies the parent's histogram
+    into slot `right_ids[i]`; the sizes and offsets of both children are
+    written (`update_partitions_and_plan_kernel` /
+    `update_partitions_after_split_kernel`). The leaves' row ranges are
+    disjoint and their slots distinct.
 
     No float is folded here: rows and stats are moved, sizes are counted.
     THE SPLIT (lane gbdt-host-par). The unit is a PIECE, a run of at most
@@ -2545,22 +2533,27 @@ def _split_level(
     piece writes. A row's slot is its leaf's offset plus the zeros (or the
     leaf's zeros plus the ones) before it, exactly the stable order. The
     histogram copy's unit is one leaf. Task counts are `_gbdt_units`."""
+    var n_split = len(left_ids)
+    if n_split == 0:
+        return
     var live_rows = 0
-    for i in range(n_live):
-        live_rows += p_sz[i]
-    var units = _gbdt_units(max(live_rows, n_live), (2 + stat_count) * live_rows)
+    for i in range(n_split):
+        live_rows += p_sz[left_ids[i]]
+    var units = _gbdt_units(max(live_rows, n_split), (2 + stat_count) * live_rows)
     var piece_rows = max(1, (live_rows + units - 1) // units)
     var pc_lo = List[Int]()
     var pc_hi = List[Int]()
-    var leaf_first = List[Int](capacity=n_live + 1)
-    for i in range(n_live):
+    var pc_leaf = List[Int]()
+    var leaf_first = List[Int](capacity=n_split + 1)
+    for i in range(n_split):
         leaf_first.append(len(pc_lo))
-        var off = p_off[i]
-        var sz = p_sz[i]
+        var off = p_off[left_ids[i]]
+        var sz = p_sz[left_ids[i]]
         var c = 0
         while c * piece_rows < sz:
             pc_lo.append(off + c * piece_rows)
             pc_hi.append(min(off + (c + 1) * piece_rows, off + sz))
+            pc_leaf.append(i)
             c += 1
     leaf_first.append(len(pc_lo))
     var n_pieces = len(pc_lo)
@@ -2572,9 +2565,16 @@ def _split_level(
     var task_units = max(1, min(units, n_pieces))
     var lo_p = rebind[GbdtIntPtr](pc_lo.unsafe_ptr())
     var hi_p = rebind[GbdtIntPtr](pc_hi.unsafe_ptr())
+    var leaf_p = rebind[GbdtIntPtr](pc_leaf.unsafe_ptr())
     var zeros_p = rebind[GbdtIntPtr](pc_zeros.unsafe_ptr())
     var zero_at_p = rebind[GbdtIntPtr](pc_zero_at.unsafe_ptr())
     var one_at_p = rebind[GbdtIntPtr](pc_one_at.unsafe_ptr())
+    var base_p = rebind[GbdtIntPtr](l_word_base.unsafe_ptr())
+    var field_p = rebind[HostU32Ptr](l_field.unsafe_ptr())
+    var value_p = rebind[HostU32Ptr](l_value.unsafe_ptr())
+    var hot_p = rebind[GbdtIntPtr](l_one_hot.unsafe_ptr())
+    var left_p = rebind[GbdtIntPtr](left_ids.unsafe_ptr())
+    var right_p = rebind[GbdtIntPtr](right_ids.unsafe_ptr())
     var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
     var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
     var new_row_p = rebind[GbdtIntPtr](new_rows.unsafe_ptr())
@@ -2582,9 +2582,14 @@ def _split_level(
     var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
     var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
 
-    def count_zeros(unit: Int) {imm task_units, imm n_pieces, imm word_base, imm field, imm value, imm one_hot, imm lo_p, imm hi_p, imm zeros_p, imm row_p, imm cindex_p}:
+    def count_zeros(unit: Int) {imm task_units, imm n_pieces, imm lo_p, imm hi_p, imm leaf_p, imm base_p, imm field_p, imm value_p, imm hot_p, imm zeros_p, imm row_p, imm cindex_p}:
         var piece = unit
         while piece < n_pieces:
+            var leaf = leaf_p[piece]
+            var word_base = base_p[leaf]
+            var field = field_p[leaf]
+            var value = value_p[leaf]
+            var one_hot = hot_p[leaf] != 0
             var zeros = 0
             for pos in range(lo_p[piece], hi_p[piece]):
                 var feature_val = cindex_p[word_base + row_p[pos]] & field
@@ -2598,10 +2603,10 @@ def _split_level(
 
     host_parallelize(count_zeros, task_units)
 
-    # `update_partitions_and_plan_kernel`, and each piece's first slots
-    for i in range(n_live):  # driver-loop: over the live leaves and their pieces
-        var off = p_off[i]
-        var sz = p_sz[i]
+    # the children's sizes and offsets, and each piece's first slots
+    for i in range(n_split):  # driver-loop: over the split leaves and their pieces
+        var off = p_off[left_ids[i]]
+        var sz = p_sz[left_ids[i]]
         var left_sz = 0
         for piece in range(leaf_first[i], leaf_first[i + 1]):
             left_sz += pc_zeros[piece]
@@ -2612,22 +2617,18 @@ def _split_level(
             pc_one_at[piece] = one_at
             zero_at += pc_zeros[piece]
             one_at += (pc_hi[piece] - pc_lo[piece]) - pc_zeros[piece]
-        var right_sz = sz - left_sz
-        p_sz[i] = left_sz
-        p_off[n_live + i] = off + left_sz
-        p_sz[n_live + i] = right_sz
-        var small = n_live + i
-        var big = i
-        if left_sz < right_sz:
-            small = i
-            big = n_live + i
-        ids_compute[i] = small
-        sub_from[i] = big
-        sub_what[i] = small
+        p_sz[left_ids[i]] = left_sz
+        p_off[right_ids[i]] = off + left_sz
+        p_sz[right_ids[i]] = sz - left_sz
 
-    def scatter(unit: Int) {imm task_units, imm n_pieces, imm n_rows, imm stat_count, imm word_base, imm field, imm value, imm one_hot, imm lo_p, imm hi_p, imm zero_at_p, imm one_at_p, imm row_p, imm stats_p, imm new_row_p, imm new_stats_p, imm cindex_p}:
+    def scatter(unit: Int) {imm task_units, imm n_pieces, imm n_rows, imm stat_count, imm lo_p, imm hi_p, imm leaf_p, imm base_p, imm field_p, imm value_p, imm hot_p, imm zero_at_p, imm one_at_p, imm row_p, imm stats_p, imm new_row_p, imm new_stats_p, imm cindex_p}:
         var piece = unit
         while piece < n_pieces:
+            var leaf = leaf_p[piece]
+            var word_base = base_p[leaf]
+            var field = field_p[leaf]
+            var value = value_p[leaf]
+            var one_hot = hot_p[leaf] != 0
             var zero_at = zero_at_p[piece]
             var one_at = one_at_p[piece]
             for pos in range(lo_p[piece], hi_p[piece]):
@@ -2650,13 +2651,13 @@ def _split_level(
     host_parallelize(scatter, task_units)
 
     # `copy_histograms_kernel`: parent into the right slot
-    var copy_units = _gbdt_units(n_live, stat_count * n_live * hist_cells)
+    var copy_units = _gbdt_units(n_split, stat_count * n_split * hist_cells)
 
-    def copy_parent(unit: Int) {imm copy_units, imm n_live, imm stat_count, imm hist_cells, imm hist_p}:
+    def copy_parent(unit: Int) {imm copy_units, imm n_split, imm stat_count, imm hist_cells, imm left_p, imm right_p, imm hist_p}:
         var i = unit
-        while i < n_live:
-            var src_base = i * stat_count * hist_cells
-            var dst_base = (n_live + i) * stat_count * hist_cells
+        while i < n_split:
+            var src_base = left_p[i] * stat_count * hist_cells
+            var dst_base = right_p[i] * stat_count * hist_cells
             for c in range(stat_count * hist_cells):
                 hist_p[dst_base + c] = hist_p[src_base + c]
             i += copy_units
@@ -2665,11 +2666,64 @@ def _split_level(
     # the tasks read these through pointers: named again past the joins
     _ = len(pc_lo)
     _ = len(pc_hi)
+    _ = len(pc_leaf)
     _ = len(pc_zeros)
     _ = len(pc_zero_at)
     _ = len(pc_one_at)
     row_index = new_rows^
     stats = new_stats^
+
+
+def _split_level(
+    cindex: List[UInt32],
+    word_base: Int,
+    field: UInt32,
+    value: UInt32,
+    one_hot: Bool,
+    n_rows: Int,
+    n_live: Int,
+    hist_cells: Int,
+    mut row_index: List[Int],
+    mut stats: List[Float32],
+    mut p_off: List[Int],
+    mut p_sz: List[Int],
+    mut hist: List[Float32],
+    mut ids_compute: List[Int],
+    mut sub_from: List[Int],
+    mut sub_what: List[Int],
+    stat_count: Int = 2,
+):
+    """The split chain of one symmetric level: every live leaf `i` by the
+    level's one split into `i` (zeros) and `n_live + i` (ones), through
+    `_split_leaves` (the stable partition with every stat plane, the parent
+    histogram copy, the sizes and offsets), then the next level's plan
+    (`update_partitions_and_plan_kernel`): the smaller child is computed,
+    the larger is the subtraction's target, a tie computes the right."""
+    var left_ids = List[Int](capacity=n_live)
+    var right_ids = List[Int](capacity=n_live)
+    for i in range(n_live):  # driver-loop: over the live leaves (one descriptor each)
+        left_ids.append(i)
+        right_ids.append(n_live + i)
+    var l_word_base = List[Int](length=n_live, fill=word_base)
+    var l_field = List[UInt32](length=n_live, fill=field)
+    var l_value = List[UInt32](length=n_live, fill=value)
+    var l_one_hot = List[Int](length=n_live, fill=1 if one_hot else 0)
+    _split_leaves(
+        cindex, n_rows, hist_cells, stat_count, left_ids, right_ids,
+        l_word_base, l_field, l_value, l_one_hot, row_index, stats, p_off,
+        p_sz, hist,
+    )
+    for i in range(n_live):  # driver-loop: over the live leaves (the next level's plan)
+        var left_sz = p_sz[i]
+        var right_sz = p_sz[n_live + i]
+        var small = n_live + i
+        var big = i
+        if left_sz < right_sz:
+            small = i
+            big = n_live + i
+        ids_compute[i] = small
+        sub_from[i] = big
+        sub_what[i] = small
 
 
 #: the SIMD width of `_cosine_gains`' candidate step
