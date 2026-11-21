@@ -199,7 +199,8 @@ def _construct(model: PythonObject, positional: PythonObject, keywords: PythonOb
         var device = native_instance_item(values, "device")
         if device is not None or py_contains(fields, "device"):
             device_admit_class(model, device, py_get(context["backend_fields"], "_CPU_ONLY") is not None,
-                               py_get(context, "device_cpu"), b)
+                               py_get(context, "device_cpu"), b,
+                               py_get(context, "device_cpu_connect"))
             device_route_clear(model)
     if py_get(plan, "validation_kind") is not None and String(plan["validation_kind"]) == "umap":
         if py_contains(fields, "_parameters") or py_contains(fields, "_extras"):

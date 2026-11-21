@@ -98,6 +98,7 @@ from bindings.native_transport_door import transport_c, transport_initialize
 from bindings.cross_vendor_native_door import cross_vendor_c, CrossReadyOwner, CrossRateOwner, CrossFeedOwner, CrossWorkerOwner, CrossCoordinatorOwner
 from bindings.native_codec_door import codec_c
 from bindings.native_process_pool_door import process_c
+from bindings.native_process_pool_type_door import register_process_pool_owner
 from bindings.optimizer_lifecycle_unpack import optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router_door import optimizer_native_c, schedule_attribute_c
 from bindings.lr_schedule_block_door import register_lr_schedule_block
@@ -1023,6 +1024,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "parallel_byte_call")
         module.def_py_c_function(codec_c, "native_codec_call")
         module.def_py_c_function(process_c, "native_process_call")
+        # The process pool's record type (bindings/native_process_pool_type_door.mojo).
+        register_process_pool_owner(module)
         module.def_py_c_function(runtime_classical_unavailable_c, "parallel_mlp_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "small_mlp_call")
         module.def_py_c_function(runtime_classical_unavailable_c, "small_mlp_finalize")

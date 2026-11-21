@@ -21,6 +21,7 @@
 # classifier `predict` decodes the resident labels (or the argmax of the
 # vote) without returning to Python between the vote and the decode.
 from bindings.mode_answer_door import answer_mode_object
+from bindings.labels_descriptor_boundary_door import labels_scope
 from core.mode_answer import MODE_FAMILY_FOREST
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
@@ -1097,7 +1098,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, config: Forest
                        sample_weight: PythonObject, importances: Bool, tree_start: PythonObject, mode: String,
                        rf: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
-    var labels = trees_encode_labels(y, context)
+    var labels = trees_encode_labels(y, labels_scope(model, context))
     var nk = trees_keys()
     py_setitem(fields, nk[].k_classes_, labels.classes)
     var k = len(labels.classes)
@@ -1271,7 +1272,7 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
     var cfg = py_item(fields, nk[].k__cfg)
     var config = forest_config(fields, cfg, kind, not _classifier(kind), context)
     if _classifier(kind):
-        var labels = trees_encode_labels(y, context)
+        var labels = trees_encode_labels(y, labels_scope(model, context))
         py_setitem(fields, nk[].k_classes_, labels.classes)
         var k = len(labels.classes)
         py_setitem(fields, nk[].k_n_classes_, PythonObject(k))
@@ -1451,7 +1452,7 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
     var weights = PythonObject(None)
     var k = 0
     if classifier:
-        var labels = trees_encode_labels(y_source, context)
+        var labels = trees_encode_labels(y_source, labels_scope(model, context))
         _y_rows_check(labels.n, rows)
         py_setitem(fields, nk[].k_classes_, labels.classes)
         k = len(labels.classes)

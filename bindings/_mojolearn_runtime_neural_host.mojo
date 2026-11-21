@@ -10,6 +10,7 @@ from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
+from bindings.native_process_pool_type_door import register_process_pool_owner
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from std.sys.compile import is_defined
@@ -53,6 +54,8 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
     comptime assert NEURAL_GUARDS_OK, "invalid integrated experiment configuration (neural guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_neural_host")
+        # The process pool's record type (bindings/native_process_pool_type_door.mojo).
+        register_process_pool_owner(module)
         # The transport boundary these entries reach, set up as the tokenizer host does
         # (the same values; the tokenizer host initializes it first in one process).
         transport_initialize()

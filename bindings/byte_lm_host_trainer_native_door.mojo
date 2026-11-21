@@ -18,7 +18,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.native_array_storage_door import native_array_zeros
-from bindings.byte_lm_trainer_native_door import _validated_state, _tier_process
+from bindings.byte_lm_trainer_native_door import byte_state_unpack, _tier_process
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from providers.python.byte_lm_json_checkpoint_pyapi_door import byte_json_payload, byte_json_arrays, byte_json_read
 from bindings.linalg_ops_native_unpack import linalg_ops_operation
@@ -296,12 +296,21 @@ def byte_lm_host_inference_checkpoint(mut mods: NativeModules, cls: PythonObject
     var state_context = context["byte_lm_checkpoint_context"]
     classical_connect_numpy(state_context)
     var tier = _tier_process(mods, state_context)
-    var state = _validated_state(mods, source, state_context, tier)
-    var shape = _host_shape_from_state(state, context)
+    # UNPACK into the trainer's typed state (bindings/byte_lm_trainer_native_run.mojo
+    # `ByteLmStateData`): all four arrays are admitted, the moments and flags
+    # only to be validated. The model keeps the parameters alone.
+    var data = byte_state_unpack(mods, source, state_context, tier)
+    var shape = _host_shape_from_state(source, context)
     mods.released()
+    var count = data.n_total
+    var parameters = tsa_array("f", "<f4", Python.tuple(count), count, 4, state_context)
+    unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(parameters))),
+                  src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(data.parameters.unsafe_ptr())),
+                  count=count)
+    _ = data^  # the typed state lives through the copy above
     var result = native_storage_allocate(cls)
     _ = byte_lm_host_inference_construct(mods, result,
-        Python.tuple(state["parameters"], shape, args[1], args[2]), context)
+        Python.tuple(parameters, shape, args[1], args[2]), context)
     return result
 
 

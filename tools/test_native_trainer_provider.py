@@ -56,7 +56,9 @@ def test_byte_lm_frontdoors_and_native_state_share_provider():
     # lane byte-lm-sessions-native: the resident session is a native registry
     # handle owned by a thin native object; no Python provider or handle factory
     assert 'neural_descriptor' not in door
-    assert 'byte_lm_session_owner_new(_key(fields))' in door
+    # lane byte-state: the session is a typed field of the trainer's native state owner
+    assert 'ByteLmSessionOwner(s.key())' in (ROOT/'bindings/byte_lm_trainer_native_run.mojo').read_text()
+    assert 'byte_lm_trainer_owner_new(state^)' in door
     sessions=(ROOT/'core/byte_lm_entry_table_sessions.mojo').read_text()
     for forbidden in ('PythonObject','std.python','bindings.','providers.'):
         assert forbidden not in sessions
@@ -86,8 +88,8 @@ def test_training_constructors_share_admission_helpers():
         assert 'training_f32_scalar(' in src
         assert 'training_schedule_json(' in src
     construct=byte.split('def byte_lm_construct(')[1].split('def byte_lm_logits(')[0]
-    assert construct.index('_load_snapshot(mods, shape, context, tier)') < construct.index('training_f32_owned(')
-    assert 'training_f32_owned(' in construct
+    assert construct.index('_load_snapshot(mods, shape, context, tier)') < construct.index('training_words32_into(')
+    assert 'training_words32_into(' in construct
     copy=(ROOT/'core/training_input_copy.mojo').read_text()
     assert 'std.python' not in copy and 'PythonObject' not in copy
 

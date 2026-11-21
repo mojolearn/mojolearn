@@ -371,7 +371,7 @@ def case_resident_close_reopen(rec):
         _step(rec, trainer, tokens, 'step1')
         rec.event('close_begin')
         trainer.close()
-        rec.event('close_end', session_released=trainer._native_session is None)
+        rec.event('close_end', session_released=not trainer._session_info()['session'])
         _step(rec, trainer, tokens, 'step2')
     finally:
         trainer.close()

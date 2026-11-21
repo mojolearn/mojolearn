@@ -24,6 +24,10 @@ from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_ex
 from bindings.linalg_ops_lowbit_door import _lin_from_f16, lin_connected_binding
 from core.shared_slot import SharedSlot
 from std.sys.compile import is_defined
+from bindings.causal_checkpoint_run import (
+    checkpoint_header_length, checkpoint_offsets_check, checkpoint_info_count, checkpoint_read_plan,
+    checkpoint_mapped_check, checkpoint_row_major,
+)
 
 # The A/B switch of `checkpoint_widen_f16` (see the note there).
 comptime _F16_WIDEN_HOST = is_defined["MOJOLEARN_CHECKPOINT_FAST_F16_WIDEN_HOST"]()
@@ -151,26 +155,27 @@ def _info_validate(mut mods: NativeModules, fields: PythonObject) raises -> Pyth
         raise Error("TypeError: TensorInfo requires six native metadata fields")
     var name = model_string(mods, fields[0])
     var dtype = model_string(mods, fields[1])
-    var shape = Python.list()
-    var count = 1
-    var input_shape = fields[2]
-    model_sequence(mods, input_shape)
-    for j in range(len(input_shape)):  # driver-loop: over tensor shape metadata
-        var size = model_integer(mods, input_shape[j])
-        if size < 0 or (size != 0 and count > 9223372036854775807 // size):
-            raise Error("TensorInfo shape must hold non-negative dimensions")
-        count *= size
-        _ = py_call(shape.append, size)
+    # UNPACK: the shape and offsets as integers; RUN: `checkpoint_info_count`
+    # (bindings/causal_checkpoint_run.mojo); PACK: the captured record.
+    var dims = _checkpoint_shape(mods, fields[2])
     var begin = model_integer(mods, fields[3])
     var end = model_integer(mods, fields[4])
-    if begin < 0 or end < begin:
-        raise Error("TensorInfo offsets must satisfy 0 <= begin <= end")
-    var itemsize = 8 if dtype == "I64" else (4 if dtype == "F32" or dtype == "I32" else (2 if dtype == "BF16" or dtype == "F16" else 0))
-    if itemsize != 0 and (count > 9223372036854775807 // itemsize or count * itemsize != end - begin):
-        raise Error("TensorInfo bytes differ from dtype/shape")
+    var count = checkpoint_info_count(dtype, dims, begin, end)
+    var shape = Python.list()
+    for size in dims:  # driver-loop: over tensor shape metadata
+        _ = py_call(shape.append, PythonObject(size))
     var file = PythonObject(None) if fields[5] is None else native_path(fields[5])
     return Python.dict(name=PythonObject(name), dtype=PythonObject(dtype), shape=py_call(bi.tuple, shape),
         begin=PythonObject(begin), end=PythonObject(end), file=file, count=PythonObject(count))
+
+
+def _checkpoint_shape(mut mods: NativeModules, value: PythonObject) raises -> List[Int]:
+    # UNPACK: an exact list / tuple of exact integers.
+    model_sequence(mods, value)
+    var dims = List[Int](capacity=len(value))
+    for j in range(len(value)):  # driver-loop: over tensor shape metadata
+        dims.append(model_integer(mods, value[j]))
+    return dims^
 
 
 def _info_snapshot(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
@@ -268,18 +273,14 @@ def _checkpoint_array_from(mut mods: NativeModules, store: PythonObject, shape: 
     var captured_shape = model_plain(mods, shape)
     var result = py_call(bi.object.__new__, array_class)
     var itemsize = Int(py=store.itemsize)
-    var count = 1
+    # UNPACK: the shape as integers; RUN: `checkpoint_row_major` (count check,
+    # byte strides); PACK: the Array's member fields.
+    var stored = len(store)
+    var row_major = checkpoint_row_major(_checkpoint_shape(mods, captured_shape), itemsize, stored)
+    var count = stored
     var strides = Python.list()
-    var stride = itemsize
-    for i in range(len(captured_shape)):  # driver-loop: over tensor shape and row-major stride metadata
-        var size = model_integer(mods, captured_shape[len(captured_shape) - i - 1])
-        if size < 0 or (size != 0 and stride > 9223372036854775807 // size):
-            raise Error("safetensors: tensor shape exceeds native indexing")
-        count *= size
-        _ = py_call(strides.insert, 0, stride)
-        stride *= size
-    if count != len(store):
-        raise Error("safetensors: tensor shape does not match stored bytes")
+    for stride in row_major:  # driver-loop: over tensor row-major stride metadata
+        _ = py_call(strides.append, PythonObject(stride))
     var fields = Python.dict(_store=store, _mv=py_call(bi.memoryview, store), _base=PythonObject(None), _pin=PythonObject(None),
         _addr=PythonObject(native_buffer_address(store)), _readonly=PythonObject(False), shape=py_call(bi.tuple, captured_shape),
         dtype=PythonObject("<f4" if code == "f" else ("<u2" if code == "H" else ("<i8" if code == "q" else ("<i1" if code == "b" else "<i4")))),
@@ -331,13 +332,11 @@ def safetensors_init_binding(mut mods: NativeModules, value: PythonObject, input
     try:
         var head = _checkpoint_read_bytes(mods, fd, 8)
         if len(head) != 8:
-            raise Error("safetensors: file is shorter than its 8-byte header length")
-        var length = UInt64(0)
-        for i in range(8):  # driver-loop: over the little-endian 8-byte header length
-            length |= UInt64(Int(py=head[i])) << UInt64(8 * i)
-        if length > 100 * 1024 * 1024:
-            raise Error("safetensors: header length exceeds 104857600")
-        n = Int(length)
+            raise Error("safetensors: file is shorter than its 8-byte header length")  # before the byte reads below
+        var head_bytes = List[UInt8](capacity=8)
+        for i in range(8):  # driver-loop: over the 8-byte header length
+            head_bytes.append(UInt8(Int(py=head[i])))
+        n = checkpoint_header_length(head_bytes)
         raw = _checkpoint_read_bytes(mods, fd, n)
         if len(raw) != n:
             raise Error("safetensors: header is truncated")
@@ -367,8 +366,7 @@ def safetensors_init_binding(mut mods: NativeModules, value: PythonObject, input
             raise Error("safetensors: data_offsets requires a pair")
         var begin = model_integer(mods, offsets[0])
         var end = model_integer(mods, offsets[1])
-        if begin < 0 or end < begin or end > total - 8 - n:
-            raise Error("safetensors: tensor " + String(name) + " offsets fall outside the data section")
+        checkpoint_offsets_check(String(name), begin, end, total, n)
         var info = py_call(bi.object.__new__, context["info_class"])
         _ = tensor_info_init_binding(mods, info, Python.tuple(name, entry["dtype"], entry["shape"], begin, end, path))
         py_setitem(infos, name, info)
@@ -440,30 +438,24 @@ def safetensors_info_binding(mut mods: NativeModules, value: PythonObject, name:
 
 def _safetensors_read(mut mods: NativeModules, fields: PythonObject, info: PythonObject, name: PythonObject, bf16: PythonObject) raises -> PythonObject:
     var context = _checkpoint_context()
+    # UNPACK: the read form, the record's dtype / offsets and the file's data
+    # section; RUN: `checkpoint_read_plan` (admission, storage code,
+    # conversion); PACK: the Array (or packed bits record).
     var format = model_string(mods, bf16)
-    if format != "widen" and format != "bits":
-        raise Error("safetensors: bf16 must be widen or bits")
     var dtype = String(info["dtype"])
-    if dtype != "F32" and dtype != "F16" and dtype != "BF16" and dtype != "I32" and dtype != "I64":
-        raise Error("TypeError: tensor " + String(name) + " dtype " + dtype + " refuses by name (the reader admits F32, F16, BF16, I32 and I64)")
-    var begin = model_integer(mods, info["begin"])
-    var end = model_integer(mods, info["end"])
-    var data_start = model_integer(mods, native_instance_item(fields, PythonObject("data_start")))
-    var data_size = model_integer(mods, native_instance_item(fields, PythonObject("data_size")))
-    if data_start < 0 or data_size < 0 or end > data_size or data_start > 9223372036854775807 - end:
-        raise Error("ValueError: safetensors data offsets exceed the retained file")
+    var plan = checkpoint_read_plan(String(name), dtype, format, model_integer(mods, info["begin"]), model_integer(mods, info["end"]),
+        model_integer(mods, native_instance_item(fields, PythonObject("data_start"))),
+        model_integer(mods, native_instance_item(fields, PythonObject("data_size"))), len(info["shape"]))
     var mapped = _safetensors_map(fields)
     mods.released()
-    if data_start + end > len(mapped):
-        raise Error("ValueError: safetensors file changed after header admission")
+    checkpoint_mapped_check(plan, len(mapped))
     var bi = mods.module("builtins")
     var view = py_call(bi.memoryview, mapped)
-    var raw = view[py_call(bi.slice, data_start + begin, data_start + end)]
-    var code = "f" if dtype == "F32" else ("q" if dtype == "I64" else ("i" if dtype == "I32" else "H"))
-    var owned = checkpoint_array(mods, raw, info["shape"], code, context["array_class"])
+    var raw = view[py_call(bi.slice, plan.first, plan.last)]
+    var owned = checkpoint_array(mods, raw, info["shape"], plan.code, context["array_class"])
     _ = py_call(raw.release)
     _ = py_call(view.release)
-    if dtype == "F16" or (dtype == "BF16" and format == "widen"):
+    if plan.widen:
         var count = Int(py=info["count"])
         var out = checkpoint_zeros(mods, count, info["shape"], "f", context["array_class"])
         if count != 0:
@@ -472,7 +464,7 @@ def _safetensors_read(mut mods: NativeModules, fields: PythonObject, info: Pytho
             checkpoint_widen_halves(source, dest, count, dtype)
             _ = owned^
         return out
-    if dtype == "BF16" and format == "bits" and len(info["shape"]) == 2:
+    if plan.packed_bits:
         var packed = py_call(bi.object.__new__, context["bf16_class"])
         var packed_fields = model_record_fields(mods, packed, context["bf16_class"], Python.tuple("bits", "shape"))
         py_setitem(packed_fields, "bits", owned)
