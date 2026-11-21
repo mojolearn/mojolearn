@@ -125,6 +125,10 @@ from gbdt.models.add_non_symmetric_tree_doc_parallel import (
     NsResidentPack,
     ns_resident_apply,
 )
+from gbdt.models.kernel.combination_code import (
+    ResidentCombinationPlan,
+    enqueue_combination_columns_resident,
+)
 from gbdt.models.kernel.resident_ctr import (
     ResidentCtrPlan,
     enqueue_resident_ctr_expand,
@@ -356,6 +360,10 @@ struct ResidentGbdtModel(Movable):
     #: (`gbdt/models/kernel/resident_ctr.mojo`), built on the first predict
     #: of a model that needs it
     var ctr: Optional[ResidentCtrPlan]
+    #: the tree-CTR (feature combination) columns' device plan
+    #: (`gbdt/models/kernel/combination_code.mojo`), built with `ctr` on the
+    #: first predict of a model that carries combination maps
+    var comb: Optional[ResidentCombinationPlan]
     #: lane fix-gbdt-prebinned-infer (`IDN_NS_RESIDENT_PACK`): a
     #: Depthwise / Lossguide ensemble packed once, at the first predict
     var ns_pack: Optional[NsResidentPack]
@@ -384,8 +392,18 @@ struct ResidentGbdtModel(Movable):
                 " save_model(format='json')). Refused rather than scored"
                 " against a grid the rows were never mapped onto"
             )
+        if not tm.combination_ctrs.is_empty() and (
+            len(tm.tensor_ctr_registry.features) != 0
+        ):
+            raise Error(
+                "a model carries either a tensor CTR registry or combination"
+                " maps, never both"
+            )
         var approx_dim = model_approx_dim(tm.model)
         var n_input_features = model_input_features(tm)
+        # the section is checked once here, so a model whose combination
+        # maps this door cannot apply is refused at prepare
+        tm.combination_ctrs.check(n_input_features, len(tm.fold_counts))
         var n_columns = len(tm.fold_counts)
         if len(tm.borders) != n_columns:
             raise Error(
@@ -523,6 +541,7 @@ struct ResidentGbdtModel(Movable):
         self.needs_expansion = (
             len(tm.tensor_ctr_registry.features) != 0
             or len(tm.ctr_tables) != 0
+            or not tm.combination_ctrs.is_empty()
         )
         self.oblivious = oblivious
         self.total_levels = total_levels
@@ -553,12 +572,14 @@ struct ResidentGbdtModel(Movable):
         self.d_out_u64 = Optional[DeviceBuffer[DType.uint64]]()
         self.d_out_i64 = Optional[DeviceBuffer[DType.int64]]()
         self.ctr = Optional[ResidentCtrPlan]()
+        self.comb = Optional[ResidentCombinationPlan]()
         self.ns_pack = Optional[NsResidentPack]()
         self.ctx = ctx^
 
     def __deinit__(deinit self):
         # every buffer before the context it was created on (DEVIATION 1946)
         _ = self.ns_pack^
+        _ = self.comb^
         _ = self.ctr^
         _ = self.d_out_i64^
         _ = self.d_out_u64^
@@ -1044,16 +1065,46 @@ struct ResidentGbdtModel(Movable):
                 if reg.features[i].model_column != reg.first_model_column + i:
                     raise Error("tensor CTR registry model columns are not contiguous")
                 tensor_tables.append(reg.features[i].table.apply_table())
-            self.ctr = ResidentCtrPlan(
-                self.ctx, self.tm.ctr_tables, tensor_tables, self.n_columns,
-                self.tm.one_hot, self.n_input_features,
-            )
+            # the simple plan covers the BASE columns (raw and simple CTR);
+            # the tree-CTR columns are the model's last and have their own
+            # plan. A model without them takes the base plan over every
+            # column, as before.
+            var n_comb = len(self.tm.combination_ctrs.tables)
+            if n_comb == 0:
+                self.ctr = ResidentCtrPlan(
+                    self.ctx, self.tm.ctr_tables, tensor_tables, self.n_columns,
+                    self.tm.one_hot, self.n_input_features,
+                )
+            else:
+                var n_base = self.n_columns - n_comb
+                var base_one_hot = List[Bool]()
+                # driver-loop: over the base model columns (their one-hot flags)
+                for c in range(min(n_base, len(self.tm.one_hot))):  # small-loop(n_base: model columns): packs the one-hot flags once per model
+                    base_one_hot.append(self.tm.one_hot[c])
+                self.ctr = ResidentCtrPlan(
+                    self.ctx, self.tm.ctr_tables, tensor_tables, n_base,
+                    base_one_hot, self.n_input_features,
+                )
+                self.comb = ResidentCombinationPlan(
+                    self.ctx, self.tm.combination_ctrs, self.n_columns,
+                    self.n_input_features,
+                )
         self._prepare_workspace(n_rows)
         try:
-            enqueue_resident_ctr_expand(
-                self.ctx, self.ctr.value(), x, n_rows, row_major,
-                self.d_borders, self.d_raw.value(),
-            )
+            if self.comb:
+                enqueue_resident_ctr_expand(
+                    self.ctx, self.ctr.value(), x, n_rows, row_major,
+                    self.d_borders, self.d_raw.value(), read_bad=False,
+                )
+                enqueue_combination_columns_resident(
+                    self.ctx, self.comb.value(), self.ctr.value(), n_rows,
+                    row_major, self.d_raw.value(),
+                )
+            else:
+                enqueue_resident_ctr_expand(
+                    self.ctx, self.ctr.value(), x, n_rows, row_major,
+                    self.d_borders, self.d_raw.value(),
+                )
             self.ctx.synchronize()
         except e:
             self.ctx.synchronize()
