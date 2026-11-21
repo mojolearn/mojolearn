@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XLinear family; RUN is core/xlinear_member.mojo.
 Published kinds: 0 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor,
-3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
+3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor, 9 RidgeClassifier (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
 each class).
 
   * `xlinear_member_admit` (UNPACK, once per member): the estimator's own
@@ -39,10 +39,10 @@ from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
-    MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
+    MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from core.xlinear_member import (
-    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_QUANTILE, XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
+    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_QUANTILE, XL_MEMBER_RIDGE_CLASSIFIER, XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
     XL_MEMBER_BLOCK_ACTIVE,
 )
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
@@ -134,6 +134,21 @@ def _xl_quantile_words(fields: PythonObject) raises -> List[Float64]:
         _float(q), _float(py_item(fields, nk[].k_alpha)), _float(py_item(fields, nk[].k_tol))]
 
 
+def _xl_ridge_classifier_words(model: PythonObject, fields: PythonObject) raises -> List[Float64]:
+    """Kind 9: `xl_fit_ridge_classifier_unpack`'s refusals, then the three
+    words."""
+    var nk = x_linear_keys()
+    var name = _name(model)
+    if _truth(_attr(model, "positive", PythonObject(False))):
+        raise Error("mojolearn " + name + ": positive=True is not implemented")
+    if not py_contains(Python.tuple("auto", "cholesky"), _attr(model, "solver", PythonObject("auto"))):
+        raise Error("mojolearn " + name + ": solver must be 'auto' or 'cholesky'")
+    var alpha = py_item(fields, nk[].k_alpha)
+    if not _ge(alpha, PythonObject(0)):
+        raise Error("mojolearn RidgeClassifier: alpha must be >= 0")
+    return [Float64(XL_MEMBER_RIDGE_CLASSIFIER), _intercept_word(fields), _float(alpha)]
+
+
 def _intercept_word(fields: PythonObject) raises -> Float64:
     var nk = x_linear_keys()
     return 1.0 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0.0
@@ -157,6 +172,12 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         words = _xl_lars_words(model, fields, kind == XL_MEMBER_LASSO_LARS)
     elif kind == XL_MEMBER_QUANTILE:
         words = _xl_quantile_words(fields)
+    elif kind == XL_MEMBER_RIDGE_CLASSIFIER:
+        # Class weights are keyed by labels, which never cross the ABI: the
+        # caller keeps the estimator's own doors for such an instance.
+        if py_item(fields, nk[].k_class_weight) is not None:
+            return False
+        words = _xl_ridge_classifier_words(model, fields)
     else:
         raise Error("RuntimeError: mojolearn: unknown XLinear member kind " + String(kind))
     var ops = xl_route(model, fields, context, False)
@@ -207,6 +228,22 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
     var nk = x_linear_keys()
     var kind = Int(plan.params[0])
     var call = MemberCall(plan.route, state)
+    if kind == XL_MEMBER_RIDGE_CLASSIFIER:
+        # coef_ (T, d), intercept_ (T,), n_features_in_; classes_ is the caller's PACK.
+        call.block = MEMBER_BLOCK_COEF
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        var outputs = call.dst.rows
+        var d = call.dst.cols
+        var weights = classical_array(outputs, d, context)
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(weights))), src=f32_ptr(call.dst.data), count=outputs * d)
+        call.block = MEMBER_BLOCK_INTERCEPT
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+        var offsets = classical_array(outputs, 0, context)
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(offsets))), src=f32_ptr(call.dst.data), count=outputs)
+        py_setitem(fields, nk[].k_coef_, weights)
+        py_setitem(fields, nk[].k_intercept_, offsets)
+        py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
+        return
     call.block = MEMBER_BLOCK_COEF
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var cols = call.dst.cols
@@ -284,6 +321,8 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
     var coefficient_source = py_get(fields, nk[].k_coef_)
     if coefficient_source is None:
         raise Error("NotFittedError: this member is not fitted yet")
+    if kind == XL_MEMBER_RIDGE_CLASSIFIER:
+        return _xl_classifier_state(fields, context, plan, coefficient_source)
     var coef = admit_x(coefficient_source, 1, "coef_", context)
     var cols = Int(py=coef.size)
     var intercept = Float64(py=py_item(fields, nk[].k_intercept_))
@@ -313,4 +352,33 @@ def xlinear_member_state(model: PythonObject, fields: PythonObject, context: Pyt
         raise error
     _ = coef
     _ = len(scalars)
+    return call.state
+
+
+def _xl_classifier_state(fields: PythonObject, context: PythonObject, plan: MemberPlan,
+    coefficient_source: PythonObject) raises -> Int:
+    """Kind 9: coef_ (T, d), intercept_ (T,) and the class count of classes_."""
+    var nk = x_linear_keys()
+    var classes_source = py_get(fields, nk[].k_classes_)
+    if classes_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var coef = admit_x(coefficient_source, 2, "coef_", context)
+    var outputs = Int(py=coef.shape[0])
+    var d = Int(py=coef.shape[1])
+    var intercept = admit_x(py_item(fields, nk[].k_intercept_), 1, "intercept_", context)
+    var call = member_new(plan)
+    try:
+        call.block = MEMBER_BLOCK_COEF
+        call.x = MemberMatrix(Int(py=classical_address(coef)), outputs, d)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = MEMBER_BLOCK_INTERCEPT
+        call.x = MemberMatrix(Int(py=classical_address(intercept)), 1, Int(py=intercept.size))
+        call.classes = len(classes_source)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = coef
+    _ = intercept
     return call.state

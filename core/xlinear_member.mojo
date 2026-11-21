@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The XLinear family as MEMBERS (core/member_abi.mojo, schema v2): the
 generalized linear regressors PoissonRegressor, GammaRegressor and
-TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression, Lars, LassoLars and QuantileRegressor.
+TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression, Lars, LassoLars and QuantileRegressor; and the classifier
+RidgeClassifier.
 
 One entry, `xlinear_member_v2`, published by each x_linear image
 (`xlinear_member_publish`, beside its operations table). It runs the family's
@@ -15,7 +16,7 @@ metric). No kernel is touched.
 
 Kinds (the second word of each class's `_mojolearn_member`): 0
 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor, 3 HuberRegressor,
-4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor.
+4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor, 9 RidgeClassifier.
 
 MEMBER_OP_NEW parameters (Float64 words; word 0 is the kind, the count is
 the kind's):
@@ -35,8 +36,11 @@ the kind's):
     [4] alpha.
   * kind 8, 6 words: [0] 8, [1] fit_intercept, [2] max_iter, [3] quantile,
     [4] alpha, [5] tol.
+  * kind 9, 3 words: [0] 9, [1] fit_intercept, [2] alpha.
 The estimator's own checks (solver, warm_start, alpha >= 0, Tweedie's power
-and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter, LassoLars' alpha >= 0, the quantile in (0, 1)) run at the caller's admission.
+and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter, LassoLars' alpha >= 0, the quantile in (0, 1), RidgeClassifier's positive and solver words; an
+instance with class_weight set is not admitted: class weights are keyed by
+labels, which never cross the ABI) run at the caller's admission.
 
 Views: X dense row-major host float32; y and sample weights host float32
 vectors (one target); kinds 5..7 take no sample weights (a given weight is
@@ -47,7 +51,15 @@ for the others. SCORE is R^2 of that prediction (unweighted; a weighted score
 is not published). A GLM's targets outside its loss's range are refused after
 the fit, in the estimator's words.
 
-Fitted-state blocks (EXPORT / IMPORT), in index order:
+CLASSIFIER (kind 9): y is the caller's int32 class codes 0..classes-1
+(`MEMBER_I32`, rows x 1), `call.classes` the class count (>= 2) at FIT and
+at IMPORT-done. PREDICT writes int32 codes, rows x 1; DECISION float32
+scores, rows x T (T = 1 for two classes, else classes); SCORE is the mean
+accuracy (an exact count split over the host's workers). Its blocks: 0
+`MEMBER_BLOCK_COEF` float32 T x features, 1 `MEMBER_BLOCK_INTERCEPT` float32
+1 x T. A system that does not factor is refused in the estimator's words.
+
+Regressor fitted-state blocks (EXPORT / IMPORT), in index order:
 0 `MEMBER_BLOCK_COEF` float32 1 x features; 1 `MEMBER_BLOCK_SCALARS` float64
 in the kind's order: kinds 0..2 [intercept, n_iter]; kind 3 [intercept,
 scale, n_iter]; kind 4 [intercept, alpha_, lambda_, n_iter]; kind 5 [intercept, alpha_,
@@ -68,14 +80,14 @@ from std.memory import unsafe_memcpy
 from core.entry_table import entry_ref_unresolved
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
-from core.linear_entry_table_ext import XL_OP_DECISION
+from core.linear_entry_table_ext import XL_OP_DECISION, XL_OP_DECISION_CODES
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
-    MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
+    MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_DECISION,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF,
-    MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_DECISION, MEMBER_CAN_CLASSIFIER,
+    MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_XLINEAR
@@ -83,8 +95,8 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_linear.door_run import (
-    ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, LINK_IDENTITY, LINK_EXP, XlFitRequest, XlDecisionRequest, xl_fit_run,
-    xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
+    ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, LINK_IDENTITY, LINK_EXP,
+    ALGO_RIDGE, xl_run_block, XlFitRequest, XlDecisionRequest, xl_fit_run, xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
 )
 
 comptime _CHUNK = 256
@@ -95,6 +107,7 @@ comptime XL_MEMBER_ARD = 5
 comptime XL_MEMBER_LARS = 6
 comptime XL_MEMBER_LASSO_LARS = 7
 comptime XL_MEMBER_QUANTILE = 8
+comptime XL_MEMBER_RIDGE_CLASSIFIER = 9
 comptime XL_MEMBER_BLOCK_LAMBDA = MEMBER_BLOCK_FAMILY + 1
 comptime XL_MEMBER_BLOCK_ACTIVE = MEMBER_BLOCK_FAMILY + 2
 comptime XL_MEMBER_BLOCK_OUTLIERS = MEMBER_BLOCK_FAMILY
@@ -120,6 +133,8 @@ def xl_member_param_count(kind: Int) -> Int:
         return 5
     if kind == XL_MEMBER_QUANTILE:
         return 6
+    if kind == XL_MEMBER_RIDGE_CLASSIFIER:
+        return 3
     return 0
 
 
@@ -157,6 +172,11 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
     var active: List[Int32]
     # True after a fit (the training records are held), False after an import.
     var trained: Bool
+    # Classifier kinds: the class count and the decision rows T (`block`
+    # then holds T rows of [coef | intercept]; `record` the fit's
+    # [coef (T x features) | intercept (T)] words the export views).
+    var classes: Int
+    var outputs: Int
 
     def __init__(out self):
         self.generation = 0
@@ -171,6 +191,8 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
         self.record = List[Float32]()
         self.active = List[Int32]()
         self.trained = False
+        self.classes = 0
+        self.outputs = 1
 
     def forget(mut self):
         self.fitted = False
@@ -182,6 +204,8 @@ struct XLinearMemberSlot(Copyable, Movable, Defaultable):
         self.record = List[Float32]()
         self.active = List[Int32]()
         self.trained = False
+        self.classes = 0
+        self.outputs = 1
 
 
 struct XLinearMemberStore(Defaultable, Movable):
@@ -278,7 +302,9 @@ def _name(slot: _SlotP) -> String:
         return String("Lars")
     if kind == XL_MEMBER_LASSO_LARS:
         return String("LassoLars")
-    return String("QuantileRegressor")
+    if kind == XL_MEMBER_QUANTILE:
+        return String("QuantileRegressor")
+    return String("RidgeClassifier")
 
 
 def _loss_name(slot: _SlotP) -> String:
@@ -294,7 +320,13 @@ def _capabilities(kind: Int) -> Int:
         | MEMBER_CAN_COEF)
     if _weighted(kind):
         bits |= MEMBER_CAN_SAMPLE_WEIGHT
+    if kind < 0 or _classifier(kind):
+        bits |= MEMBER_CAN_DECISION | MEMBER_CAN_CLASSIFIER
     return bits
+
+
+def _classifier(kind: Int) -> Bool:
+    return kind == XL_MEMBER_RIDGE_CLASSIFIER
 
 
 def _weighted(kind: Int) -> Bool:
@@ -600,6 +632,200 @@ def _import(slot: _SlotP, call: _CallP) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------- classifiers
+
+
+def _codes_view(view: MemberMatrix, rows: Int, what: String, estimator: String) raises:
+    if not view.dense_host(MEMBER_I32) or view.cols != 1 or view.rows != rows:
+        raise Error("TypeError: a " + estimator + " member reads " + what
+            + " as int32 class codes, one per row of X (a dense host view)")
+
+
+def _keep_classes(slot: _SlotP, var record: List[Float32], outputs: Int, d: Int, classes: Int):
+    """Hold the fit's [coef (T x d) | intercept (T)] words and build the
+    decision block (T rows of [coef | intercept]) from them once."""
+    slot[].block = List[Float32](length=outputs * (d + 1), fill=0.0)
+    xl_run_block(Int(slot[].block.unsafe_ptr()), Int(record.unsafe_ptr()), Int(record.unsafe_ptr()) + 4 * outputs * d,
+        outputs, d)
+    slot[].record = record^
+    slot[].outputs = outputs
+    slot[].features = d
+    slot[].classes = classes
+
+
+def _cls_fit(slot: _SlotP, call: _CallP) raises:
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].fit_output != 0:
+        member_unsupported(estimator, call[].fit_output)
+    _dense(call[].x, "X", estimator)
+    var n = call[].x.rows
+    var d = call[].x.cols
+    _codes_view(call[].y, n, "y", estimator)
+    var k = call[].classes
+    if k < 2:
+        raise Error("mojolearn " + estimator + ": y has one class")
+    var outputs = 1 if k == 2 else k
+    var joined = List[Float32]()
+    var has_sw = 0
+    # `_ridge_run(..., codes_mode=True)`: the codes' 32-bit words, then the weights
+    var y = _targets(call, _kind(slot), n, estimator, joined, has_sw)
+    var p = slot[].params.copy()
+    slot[].forget()
+    var ip: List[Int] = [outputs, 1 if p[1] != 0.0 else 0, 1, has_sw, 1]
+    var fp: List[Float64] = [p[2]]
+    var n_out = outputs * d + outputs + 4
+    var result = List[Float32](length=n_out, fill=0.0)
+    var request = XlFitRequest(call[].route.entry.call, ALGO_RIDGE, call[].x.data, n * d, n, d, y, n * (1 + has_sw),
+        ip^, fp^, n_out, 3 * d * d + 3 * d + outputs + d * outputs + 2 * n, 1, Int(result.unsafe_ptr()), False, 0, 0,
+        0)
+    _ = xl_fit_run(request)
+    _ = joined^
+    # status 2: X'X + alpha I does not factor even in float-float
+    if result[outputs * d + outputs + 3] == 2.0:
+        raise Error("mojolearn " + estimator + ": X'X + alpha I is singular even in float-float (alpha="
+            + String(Float64(result[outputs * d + outputs])) + "); rescale X or use a larger alpha")
+    var record = List[Float32](length=outputs * d + outputs, fill=0.0)
+    unsafe_memcpy(dest=record.unsafe_ptr(), src=result.unsafe_ptr(), count=outputs * d + outputs)
+    _keep_classes(slot, record^, outputs, d, k)
+    slot[].trained = True
+    slot[].fitted = True
+
+
+def _cls_query(slot: _SlotP, call: _CallP) raises:
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].x.cols != slot[].features:
+        raise Error("ValueError: X has " + String(call[].x.cols) + " features, but " + estimator
+            + " is expecting " + String(slot[].features) + " features as input.")
+
+
+def _cls_codes(slot: _SlotP, call: _CallP, dst: Int) raises:
+    """Each row's int32 class code (`_LinearClassifierMixin.predict`)."""
+    if call[].x.rows == 0:
+        return
+    xl_decision_run(XlDecisionRequest(call[].route.entry.call, XL_OP_DECISION_CODES, call[].x.data,
+        Int(slot[].block.unsafe_ptr()), dst, call[].x.rows, call[].x.cols, slot[].outputs, LINK_IDENTITY, False, 0, 1,
+        0, 0))
+
+
+def _cls_predict(slot: _SlotP, call: _CallP) raises:
+    _cls_query(slot, call)
+    _codes_view(call[].dst, call[].x.rows, "the prediction buffer", _name(slot))
+    _cls_codes(slot, call, call[].dst.data)
+
+
+def _cls_decision(slot: _SlotP, call: _CallP) raises:
+    _cls_query(slot, call)
+    _dense(call[].dst, "the decision buffer", _name(slot))
+    if call[].dst.rows != call[].x.rows or call[].dst.cols != slot[].outputs:
+        raise Error("ValueError: the decision buffer holds " + String(slot[].outputs) + " scores per row of X")
+    if call[].x.rows == 0:
+        return
+    xl_decision_run(XlDecisionRequest(call[].route.entry.call, XL_OP_DECISION, call[].x.data,
+        Int(slot[].block.unsafe_ptr()), call[].dst.data, call[].x.rows, call[].x.cols, slot[].outputs, LINK_IDENTITY,
+        True, 0, 0, 0, 0))
+
+
+def _cls_score(slot: _SlotP, call: _CallP) raises:
+    _cls_query(slot, call)
+    var rows = call[].x.rows
+    var estimator = _name(slot)
+    _codes_view(call[].y, rows, "y", estimator)
+    if call[].weights.rows > 0:
+        raise Error("NotImplementedError: mojolearn: a weighted score of a " + estimator
+            + " member is not published; the caller predicts and runs its own weighted metric")
+    if rows == 0:
+        raise Error("ValueError: Found array with 0 sample(s) while a minimum of 1 is required.")
+    var predicted = List[Int32](length=rows, fill=0)
+    _cls_codes(slot, call, Int(predicted.unsafe_ptr()))
+    # The exact count of equal codes (an integer, so the split cannot change it).
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+    var counts = List[Int](length=tasks, fill=0)
+    var hits = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=Int(counts.unsafe_ptr()))
+    var codes = _I32P(unsafe_from_address=Int(predicted.unsafe_ptr()))
+    var truth = _I32P(unsafe_from_address=call[].y.data)
+
+    def task(worker: Int) {imm hits, imm codes, imm truth, imm chunk, imm rows}:
+        var begin = worker * chunk
+        var end = min(begin + chunk, rows)
+        var count = 0
+        for r in range(begin, end):
+            if truth[r] == codes[r]:
+                count += 1
+        hits[worker] = count
+
+    host_parallelize(task, tasks)
+    var total = 0
+    for worker in range(tasks):  # driver-loop: over the workers' partial counts
+        total += counts[worker]
+    _ = predicted^
+    call[].value = Float64(total) / Float64(rows)
+
+
+def _cls_export(slot: _SlotP, call: _CallP) raises:
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + _name(slot) + " member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block > 1:
+            raise Error("member ABI: a " + _name(slot) + " member state has two fitted blocks")
+        block = MEMBER_BLOCK_COEF if block == 0 else MEMBER_BLOCK_INTERCEPT
+    var words = Int(slot[].record.unsafe_ptr())
+    if block == MEMBER_BLOCK_COEF:
+        call[].dst = MemberMatrix(words, slot[].outputs, slot[].features)
+    elif block == MEMBER_BLOCK_INTERCEPT:
+        call[].dst = MemberMatrix(words + 4 * slot[].outputs * slot[].features, 1, slot[].outputs)
+    else:
+        raise Error("member ABI: a " + _name(slot) + " member state holds no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = 2
+    call[].classes = slot[].classes
+
+
+def _cls_import(slot: _SlotP, call: _CallP) raises:
+    """COEF (T x features) and INTERCEPT (1 x T), then DONE with
+    `call.classes`."""
+    if call[].block == MEMBER_BLOCK_COEF or call[].block == MEMBER_BLOCK_INTERCEPT:
+        _dense(call[].x, "a fitted block", _name(slot))
+        var count = call[].x.rows * call[].x.cols
+        var words = List[Float32](length=count, fill=0.0)
+        unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        slot[].fitted = False
+        if call[].block == MEMBER_BLOCK_COEF:
+            slot[].outputs = call[].x.rows
+            slot[].features = call[].x.cols
+            slot[].block = words^
+        else:
+            slot[].scalars = List[Float64](length=count, fill=0.0)
+            for j in range(count):  # driver-loop: over the fitted classes' intercepts (model structure)
+                slot[].scalars[j] = Float64(words[j])
+    elif call[].block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a " + _name(slot) + " member imports no fitted block " + String(call[].block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var outputs = slot[].outputs
+    var d = slot[].features
+    if len(slot[].block) != outputs * d or len(slot[].scalars) != outputs or outputs < 1:
+        raise Error("member ABI: a fitted " + _name(slot) + " state needs its coefficient (T x features) and "
+            + "intercept (1 x T) blocks")
+    var k = call[].classes
+    if k < 2 or (1 if k == 2 else k) != outputs:
+        raise Error("member ABI: a " + _name(slot) + " state of " + String(outputs) + " decision rows needs its "
+            + "class count at import")
+    var record = List[Float32](length=outputs * d + outputs, fill=0.0)
+    unsafe_memcpy(dest=record.unsafe_ptr(), src=slot[].block.unsafe_ptr(), count=outputs * d)
+    for j in range(outputs):  # driver-loop: over the fitted classes' intercepts (model structure)
+        record[outputs * d + j] = Float32(slot[].scalars[j])
+    slot[].scalars = List[Float64]()
+    _keep_classes(slot, record^, outputs, d, k)
+    slot[].fitted = True
+
+
 def _xlinear_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
@@ -630,8 +856,30 @@ def _xlinear_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_OUTPUTS:
         call[].out_cols = 1
         call[].classes = 0
+        if call[].state != 0:
+            var held = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+            if _classifier(_kind(held)):
+                call[].classes = held[].classes
+                if call[].flags == MEMBER_OP_DECISION:
+                    call[].out_cols = held[].outputs
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+    if _classifier(_kind(slot)):
+        if operation == MEMBER_OP_FIT:
+            _cls_fit(slot, call)
+        elif operation == MEMBER_OP_PREDICT:
+            _cls_predict(slot, call)
+        elif operation == MEMBER_OP_DECISION:
+            _cls_decision(slot, call)
+        elif operation == MEMBER_OP_SCORE:
+            _cls_score(slot, call)
+        elif operation == MEMBER_OP_EXPORT:
+            _cls_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _cls_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
+        return 0
     if operation == MEMBER_OP_FIT:
         _fit(slot, call)
     elif operation == MEMBER_OP_PREDICT:
