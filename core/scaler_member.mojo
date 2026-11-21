@@ -25,8 +25,11 @@ it: the core fills and restores it); StandardScaler fit reads
 `call.weights` (dense host float32, one per row; MEMBER_CAN_SAMPLE_WEIGHT for
 kind 0 only: a MinMaxScaler member refuses a given weight). No y, no row or
 column index, no device-home view. `call.fit_output = MEMBER_OP_TRANSFORM`
-writes the training rows' transform to `dst` (rows x features) after the fit,
-in the same call (the fit, then the transform kernel on the same host words).
+writes the training rows' transform to `dst` (rows x features) in the same
+call: on a direct route with no weights, the door's ONE combined kernel call
+(SCALER_OP_STANDARD_FIT_TRANSFORM / SCALER_OP_MINMAX_FIT_TRANSFORM: one upload
+of X); otherwise (NaN in X, weights, the host column) fit then transform, as
+the doors do.
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
   StandardScaler: 0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, seen kind
@@ -50,7 +53,7 @@ from std.sys.info import size_of
 from std.memory import unsafe_memcpy
 from core.scaler_core import (
     ScalerTableCalls, ScalerStandardFit, ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core,
-    scaler_transform_rows, scaler_transform_core,
+    scaler_minmax_keep_extrema, scaler_transform_rows, scaler_transform_core, SCALER_SEEN_INT,
 )
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
@@ -225,6 +228,12 @@ def _fit(slot: _Slot, call: _Call) raises:
     var calls = _calls(call)
     var x = _F32P(unsafe_from_address=call[].x.data)
     slot[].clear()
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _dense(call[].dst, "the output buffer", estimator)
+        if call[].dst.rows != n or call[].dst.cols != d:
+            raise Error("ValueError: the output buffer holds one value per element of X")
+        if calls.direct() and weight == 0 and _fit_transform_once(slot, call, calls, n, d):
+            return
     if slot[].kind() == SCALER_KIND_STANDARD:
         var fit = scaler_standard_fit_core(calls, x, n, d, slot[].words[1] != 0.0, slot[].words[2] != 0.0, weight)
         # Copies of the fit's two short rows (3d and d words): no field is
@@ -240,6 +249,44 @@ def _fit(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
     if call[].fit_output == MEMBER_OP_TRANSFORM:
         _transform(slot, call, False)
+
+
+def _fit_transform_once(slot: _Slot, call: _Call, calls: ScalerTableCalls, n: Int, d: Int) raises -> Bool:
+    """The door's fit_transform: ONE combined kernel call on one upload of
+    X (`SCALER_OP_STANDARD_FIT_TRANSFORM` / `SCALER_OP_MINMAX_FIT_TRANSFORM`,
+    the exports bindings/scaler_lifecycle_native_door.mojo and
+    bindings/minmax_native_door.mojo call), the fitted rows kept as those
+    doors keep them. False (nothing written) when X holds a NaN or an
+    infinity: the caller runs the two-step fit then transform, as the doors do."""
+    var dst = call[].dst.data
+    if slot[].kind() == SCALER_KIND_STANDARD:
+        var stats = List[Float32](length=3 * d, fill=0)
+        var got = calls.standard_fit_transform(call[].x.data, Int(stats.unsafe_ptr()), dst, n, d,
+            slot[].words[1] != 0.0, slot[].words[2] != 0.0)
+        if got == 0:
+            return False
+        slot[].stats = stats^
+        slot[].seen = List[Float32]()
+        slot[].scalars = [Float64(d), Float64(SCALER_SEEN_INT), Float64(n)]
+        slot[].features = d
+        slot[].fitted = True
+        if got < 0:
+            raise Error("StandardScaler transform overflowed in Float32")
+        return True
+    var raw = List[Float32](length=5 * d, fill=0)
+    var got = calls.minmax_fit_transform(call[].x.data, Int(raw.unsafe_ptr()), dst, n, d,
+        Float32(slot[].words[3]), Float32(slot[].words[4]), slot[].words[1] != 0.0)
+    if got == 0:
+        return False
+    # The door's `_keep_extrema` on a finite X: the c2_mm_keep program.
+    slot[].stats = scaler_minmax_keep_extrema(calls, _F32P(unsafe_from_address=Int(raw.unsafe_ptr())), 0, d)
+    _ = raw^
+    slot[].scalars = [Float64(d), Float64(n)]
+    slot[].features = d
+    slot[].fitted = True
+    if got < 0:
+        raise Error("MinMaxScaler transform overflowed in Float32")
+    return True
 
 
 def _transform(slot: _Slot, call: _Call, inverse: Bool) raises:
