@@ -40,17 +40,22 @@ def _flat(value):
 class Case:
     def __init__(self, name, build, query, supervised=False, target=None):
         self.name, self.build, self.query, self.supervised, self.target = name, build, query, supervised, target
+        self.data = lambda x: x
 
     def __repr__(self):
         return self.name
 
     def fit(self, model, x, y):
         if self.supervised:
-            return model.fit(x, y if self.target is None else self.target(y))
-        return model.fit(x)
+            return model.fit(self.data(x), y if self.target is None else self.target(y))
+        return model.fit(self.data(x))
 
     def answers(self, model, x):
-        return _flat(self.query(model, x))
+        return _flat(self.query(model, self.data(x)))
+
+    def on(self, data):
+        self.data = data
+        return self
 
 
 CASES = [
@@ -74,6 +79,19 @@ CASES = [
          lambda m, x: m.search(x[:64])),
     Case("CagraIndex", lambda **kw: mojolearn.CagraIndex(graph_degree=8, intermediate_graph_degree=16,
                                                           n_neighbors=5, **kw), lambda m, x: m.search(x[:64])),
+    # the kernel-feature, semi-supervised and imputation classes of the same binary (PageRank and Louvain take a
+    # graph; their construction-level rules are test_device_parameter.py's)
+    Case("PolynomialCountSketch", lambda **kw: mojolearn.PolynomialCountSketch(n_components=16, random_state=0, **kw),
+         lambda m, x: m.transform(x[:64])),
+    Case("AdditiveChi2Sampler", lambda **kw: mojolearn.AdditiveChi2Sampler(**kw),
+         lambda m, x: m.transform(x[:64])).on(np.abs),
+    Case("SkewedChi2Sampler", lambda **kw: mojolearn.SkewedChi2Sampler(n_components=16, random_state=0, **kw),
+         lambda m, x: m.transform(x[:64])).on(np.abs),
+    Case("LabelPropagation", lambda **kw: mojolearn.LabelPropagation(kernel="knn", n_neighbors=7, **kw),
+         lambda m, x: m.predict(x[:64]), supervised=True),
+    Case("LabelSpreading", lambda **kw: mojolearn.LabelSpreading(kernel="knn", n_neighbors=7, **kw),
+         lambda m, x: m.predict(x[:64]), supervised=True),
+    Case("KNNImputer", lambda **kw: mojolearn.KNNImputer(n_neighbors=3, **kw), lambda m, x: m.transform(x[:64])),
 ]
 ids = [case.name for case in CASES]
 

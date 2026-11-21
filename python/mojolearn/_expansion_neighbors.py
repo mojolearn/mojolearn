@@ -1000,12 +1000,18 @@ class PolynomialCountSketch(_XNeighbors):
     >>> Z = mojolearn.PolynomialCountSketch(n_components=64, random_state=0).fit_transform(X)
     """
 
-    def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None, device=None):
         self.gamma = gamma
         self.degree = degree
         self.coef0 = coef0
         self.n_components = n_components
         self.random_state = random_state
+        self.device = device
 
     @_native_local_method
     def fit(self, X, y=None):
@@ -1122,10 +1128,16 @@ class AdditiveChi2Sampler(_XNeighbors):
     _sklearn_input_tags = {"positive_only": True}
     _sklearn_requires_fit = False
 
-    def __init__(self, *, sample_steps=2, sample_interval=None, numeric_mode=None):
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, *, sample_steps=2, sample_interval=None, numeric_mode=None, device=None):
         self.sample_steps = sample_steps
         self.sample_interval = sample_interval
         self.numeric_mode = numeric_mode
+        self.device = device
 
     def fit(self, X, y=None):
         """Validate the input and the sampling settings.
@@ -1246,11 +1258,17 @@ class SkewedChi2Sampler(_XNeighbors):
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
-    def __init__(self, *, skewedness=1.0, n_components=100, random_state=None, numeric_mode=None):
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, *, skewedness=1.0, n_components=100, random_state=None, numeric_mode=None, device=None):
         self.skewedness = skewedness
         self.n_components = n_components
         self.random_state = random_state
         self.numeric_mode = numeric_mode
+        self.device = device
 
     def fit(self, X, y=None):
         """Draw the random weights and offsets.
@@ -1477,8 +1495,13 @@ class LabelPropagation(_LabelPropagationBase):
 
     _variant = "propagation"
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, max_iter=1000, tol=1e-3, n_jobs=None,
-                 numeric_mode=None):
+                 numeric_mode=None, device=None):
         self.kernel = kernel
         self.gamma = gamma
         self.n_neighbors = n_neighbors
@@ -1486,6 +1509,7 @@ class LabelPropagation(_LabelPropagationBase):
         self.tol = tol
         self.n_jobs = n_jobs
         self.numeric_mode = numeric_mode
+        self.device = device
 
 
 class LabelSpreading(_LabelPropagationBase):
@@ -1551,8 +1575,13 @@ class LabelSpreading(_LabelPropagationBase):
 
     _variant = "spreading"
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, alpha=0.2, max_iter=30, tol=1e-3, n_jobs=None,
-                 numeric_mode=None):
+                 numeric_mode=None, device=None):
         self.kernel = kernel
         self.gamma = gamma
         self.n_neighbors = n_neighbors
@@ -1561,6 +1590,7 @@ class LabelSpreading(_LabelPropagationBase):
         self.tol = tol
         self.n_jobs = n_jobs
         self.numeric_mode = numeric_mode
+        self.device = device
 
     def fit(self, X, y):
         """Fit the model and spread labels to the unlabeled samples.
@@ -1649,8 +1679,13 @@ class KNNImputer(_XNeighbors):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(self, *, missing_values=float("nan"), n_neighbors=5, weights="uniform",
-                 metric="nan_euclidean", copy=True, add_indicator=False, keep_empty_features=False):
+                 metric="nan_euclidean", copy=True, add_indicator=False, keep_empty_features=False, device=None):
         self.missing_values = missing_values
         self.n_neighbors = n_neighbors
         self.weights = weights
@@ -1658,6 +1693,7 @@ class KNNImputer(_XNeighbors):
         self.copy = copy
         self.add_indicator = add_indicator
         self.keep_empty_features = keep_empty_features
+        self.device = device
 
     @_native_local_method
     def fit(self, X, y=None):
@@ -1795,8 +1831,13 @@ class PageRank(_XNeighbors):
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
     def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, nstart=None, weight=True,
-                 dangling=None, numeric_mode=None):
+                 dangling=None, numeric_mode=None, device=None):
         self.alpha = alpha
         self.personalization = personalization
         self.max_iter = max_iter
@@ -1805,6 +1846,7 @@ class PageRank(_XNeighbors):
         self.weight = weight
         self.dangling = dangling
         self.numeric_mode = numeric_mode
+        self.device = device
 
     def fit(self, A, y=None):
         """Compute the PageRank scores of the graph.
@@ -1938,12 +1980,18 @@ class Louvain(_XNeighbors):
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
-    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, numeric_mode=None):
+    #: This class takes `device=`: its doors take every compiled module from the
+    #: estimator's device route, and the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def __init__(self, resolution=1.0, *, threshold=1e-7, max_level=None, seed=None, numeric_mode=None, device=None):
         self.resolution = resolution
         self.threshold = threshold
         self.max_level = max_level
         self.seed = seed
         self.numeric_mode = numeric_mode
+        self.device = device
 
     def fit(self, A, y=None):
         """Detect communities in the graph.
