@@ -49,6 +49,7 @@ from dbscan.impl.dbscan import (
     dbscan_fit_impl,
     dbscan_fit_impl_weighted,
 )
+from dbscan.impl.brute_edge_free import brute_edge_free_applies
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.impl.runner import dbscan_fit, rbc_take_one_pass
 from dbscan.impl.vertexdeg.algo import (
@@ -878,6 +879,19 @@ def check_dbscan_tiny_budget_agrees() raises:
     under many batches, because each batch runs its own `weak_cc_batched`
     and each run is at least one pass. Identical labels with identical pass
     counts would mean the budget never reached the loop.
+
+    THE EDGE-FREE BRUTE ROUTE RUNS NO PROPAGATION PASS. A brute fit whose
+    budget gives more than one batch leaves the per-batch `weak_cc` loop for
+    the bit-matrix + union-find route (`dbscan/impl/brute_edge_free.mojo`,
+    the default since 2026-11-20), and `dbscan_fit` returns 0 for it: there
+    is no pass to count. Whether a fit takes that route is the runner's own
+    admission test, `brute_edge_free_applies`, read here with the same
+    arguments. For such a fit the reach assertion is the route itself: it is
+    admitted only when `batch < n_rows`, so a many-batch return of exactly 0
+    against a one-batch return above 0 says the budget moved the batch and
+    the runner acted on it. A fit the test does not admit (the ball cover,
+    or a build with `MOJOLEARN_DBSCAN_FAST_BRUTE_EDGE_FREE_OFF`) keeps the
+    strict pass-count assertion. The labels are compared either way.
     """
     var ctx = DeviceContext()
     var n = WIDE_ROWS
@@ -917,7 +931,23 @@ def check_dbscan_tiny_budget_agrees() raises:
         download_host_into[DType.int32](ctx, labels_many, h_many)
         ctx.synchronize()
 
-        if passes_many <= passes_one:
+        var batch_many = compute_batch_size(n, n, method, 1)
+        var union_find_route = brute_edge_free_applies(
+            method == EPS_NN_BRUTE_FORCE, DBSCAN_METRIC_L2, False, n,
+            batch_many, DB_MIN_PTS,
+        )
+        if union_find_route:
+            if passes_many != 0 or passes_one <= 0:
+                raise Error(
+                    method_names[mi] + ": the budget-forced fit is admitted"
+                    + " to the edge-free brute route, which runs no"
+                    + " propagation pass, and returned "
+                    + String(passes_many) + " passes against "
+                    + String(passes_one) + " for one batch (expected 0"
+                    + " against at least 1); the budget never reached the"
+                    + " runner's route test"
+                )
+        elif passes_many <= passes_one:
             raise Error(
                 method_names[mi] + ": " + String(nb_tiny)
                 + " batches returned " + String(passes_many)

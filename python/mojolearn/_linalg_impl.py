@@ -97,7 +97,6 @@ PROFILE = f"{PROFILE_FAMILY}.v{PROFILE_VERSION}"
 _EXPERIMENT_PROFILES = {
     2: "mojolearn.identical.gemm.fp32.i04-leaf64",
     3: "mojolearn.identical.gemm.fp32.ni08-leaf256",
-    4: "mojolearn.identical.gemm.fp32.v2-leaf512",
 }
 _EXPECTED_PROFILE_ENV = "MOJOLEARN_EXPERIMENT_GEMM_PROFILE"
 

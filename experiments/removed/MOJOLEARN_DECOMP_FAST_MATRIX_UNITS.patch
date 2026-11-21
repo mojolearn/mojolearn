@@ -1,0 +1,599 @@
+diff --git a/checks/native_tests/family_matrix_units.mojo b/checks/native_tests/family_matrix_units.mojo
+new file mode 100644
+index 0000000000..3e2b5da15c
+--- /dev/null
++++ b/checks/native_tests/family_matrix_units.mojo
+@@ -0,0 +1,272 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of Mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The quality check of the classical family routes of the matrix-units row (lane fx-fast-nvidia-routes,
++2026-11-19): `-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS` (decomposition/gram_matrix_units_route.mojo) and
++`-D MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS` (neighbors/distance_matrix_units_route.mojo).
++
++Three fixtures, each a product one route takes, compared with the exact FP32 kernel on the same operands:
++  0  the PCA / truncated-SVD projection   Z[2048 x 128] = X[2048 x 512] . V[128 x 512]^T
++  1  the Gram past the split-K width      Z[256 x 256]  = X[4096 x 256]^T . X
++  2  the k-NN distance product            D[256 x 2048] = Q[256 x 256] . Y[2048 x 256]^T
++Under a route's define (a fast-rows build):
++  - every cell is inside `matrix_units_cell_bound` (operands truncated to 11 significant bits; AMD's fp32 MFMA
++    keeps full operands and sits well inside it),
++  - the RMS error is at most 1.25 * 2^-10 of the root of the summed squared terms (an 8-bit operand class,
++    BF16, would be at least 1.6: a silent precision collapse fails),
++  - on NVIDIA at least one cell differs from FP32 (the route was taken),
++  - fixture 2 also holds the neighbour property: the index the route's distances rank first is, by the exact
++    distances, within four cell bounds of the true nearest (two dots, each off by at most twice its bound).
++Without the define the route answers False, nothing else runs, and the fixture passes on that answer.
++
++GPU column only (the routes instantiate the MAX GPU matmul). Reference sums in Float64 on the host, one row of the
++output per unit across all cores (`host_parallelize`).
++"""
++from std.memory import bitcast
++from core.host_parallel import host_parallelize
++from checks.native_tests.int8_linalg import make_values
++from max.gpu.host import DeviceContext
++from gemm.contract import OP_NT, OP_TN
++from gemm.checks.gemm_identical import identical_gemm_into as fp32_gemm_into
++from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats as fp32_workspace_max_floats
++from gemm.fast_matrix_units import matrix_units_cell_bound
++from gemm.checks.gemm_lowbit_check import _upload_f32, _download_f32, _poisoned
++from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA
++from decomposition.gram_matrix_units_route import (
++    DECOMP_MATRIX_UNITS, decomp_gram_units_into, decomp_project_units_into,
++)
++from neighbors.distance_matrix_units_route import KNN_DISTANCE_MATRIX_UNITS, knn_distance_units_product
++from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
++
++
++comptime FAMILY_UNITS_FIXTURES = 3
++#: (1.25 * 2^-10)^2
++comptime FAMILY_UNITS_RMS_REL_SQ = (Float64(1.25) / Float64(1024.0)) * (Float64(1.25) / Float64(1024.0))
++
++
++def compare_family_rows(
++    arm: List[Float32], ref_c: List[Float32], a: List[Float32], b: List[Float32],
++    m: Int, n: Int, k: Int, op: Int, nearest: Bool,
++) -> Tuple[Int, Int, Float64, Float64, Int]:
++    """Per row of C, in parallel: (cells over the per-cell bound, cells whose bits differ, sum of squared
++    differences, sum over cells and terms of (a b)^2, rows that fail the neighbour property). OP_NT reads
++    a[m x k], b[n x k]; OP_TN reads a[k x m], b[k x n]. `nearest`: rank the row's cells as distances
++    |b_j|^2 - 2 c_ij and test the neighbour property of the module docstring."""
++    var over = List[Int](length=m, fill=0)
++    var moved = List[Int](length=m, fill=0)
++    var far = List[Int](length=m, fill=0)
++    var diff_sq = List[Float64](length=m, fill=0.0)
++    var term_sq = List[Float64](length=m, fill=0.0)
++    var op_ptr = over.unsafe_ptr()
++    var mp = moved.unsafe_ptr()
++    var fp = far.unsafe_ptr()
++    var dp = diff_sq.unsafe_ptr()
++    var tp = term_sq.unsafe_ptr()
++    var cp = arm.unsafe_ptr()
++    var rp = ref_c.unsafe_ptr()
++    var ap = a.unsafe_ptr()
++    var bp = b.unsafe_ptr()
++    def task(i: Int) {imm op_ptr, imm mp, imm fp, imm dp, imm tp, imm cp, imm rp, imm ap, imm bp, imm m, imm n, imm k, imm op, imm nearest}:
++        var row_over = 0
++        var row_moved = 0
++        var row_diff = Float64(0.0)
++        var row_term = Float64(0.0)
++        var max_bound = Float64(0.0)
++        var arm_best = Float64(0.0)
++        var ref_best = Float64(0.0)
++        var ref_at_arm = Float64(0.0)
++        for j in range(n):
++            var abs_sum = Float64(0.0)
++            var norm_b = Float64(0.0)
++            for p in range(k):
++                var av = Float64(0.0)
++                var bv = Float64(0.0)
++                if op == OP_NT:
++                    av = Float64(ap.unsafe_load(i * k + p))
++                    bv = Float64(bp.unsafe_load(j * k + p))
++                else:
++                    av = Float64(ap.unsafe_load(p * m + i))
++                    bv = Float64(bp.unsafe_load(p * n + j))
++                var term = av * bv
++                if term < 0.0:
++                    term = -term
++                abs_sum += term
++                row_term += term * term
++                norm_b += bv * bv
++            var got = cp.unsafe_load(i * n + j)
++            var want = rp.unsafe_load(i * n + j)
++            if bitcast[DType.uint32](got) != bitcast[DType.uint32](want):
++                row_moved += 1
++            var diff = Float64(got) - Float64(want)
++            if diff < 0.0:
++                diff = -diff
++            var bound = matrix_units_cell_bound(abs_sum, k)
++            # `not (diff <= bound)` so a NaN difference counts as over the bound
++            if not (diff <= bound):
++                row_over += 1
++            if bound > max_bound:
++                max_bound = bound
++            row_diff += diff * diff
++            if nearest:
++                var arm_score = norm_b - Float64(2.0) * Float64(got)
++                var ref_score = norm_b - Float64(2.0) * Float64(want)
++                if j == 0 or ref_score < ref_best:
++                    ref_best = ref_score
++                if j == 0 or arm_score < arm_best:
++                    arm_best = arm_score
++                    ref_at_arm = ref_score
++        var row_far = 0
++        if nearest:
++            if not (ref_at_arm - ref_best <= Float64(4.0) * max_bound):
++                row_far = 1
++        op_ptr.unsafe_store(i, row_over)
++        mp.unsafe_store(i, row_moved)
++        fp.unsafe_store(i, row_far)
++        dp.unsafe_store(i, row_diff)
++        tp.unsafe_store(i, row_term)
++    host_parallelize(task, m)
++    var total_over = 0
++    var total_moved = 0
++    var total_far = 0
++    var total_diff = Float64(0.0)
++    var total_term = Float64(0.0)
++    for i in range(m):
++        total_over += over[i]
++        total_moved += moved[i]
++        total_far += far[i]
++        total_diff += diff_sq[i]
++        total_term += term_sq[i]
++    _ = arm
++    _ = ref_c
++    _ = a
++    _ = b
++    return (total_over, total_moved, total_diff, total_term, total_far)
++
++
++def _judge(name: String, r: Tuple[Int, Int, Float64, Float64, Int]) raises:
++    require(r[0] == 0, name + ": " + String(r[0]) + " cells outside the matrix-unit operand bound")
++    require(
++        r[2] <= FAMILY_UNITS_RMS_REL_SQ * r[3],
++        name + ": squared error " + String(r[2]) + " over (1.25 * 2^-10)^2 of the squared terms " + String(r[3]),
++    )
++    require(r[4] == 0, name + ": " + String(r[4]) + " rows whose first-ranked neighbour is outside four cell bounds of the nearest")
++    comptime if TARGET_COLUMN == COLUMN_NVIDIA:
++        require(r[1] > 0, name + ": no cell differs from FP32, the matrix-units route was not taken")
++
++
++def check_projection(ctx: DeviceContext) raises:
++    var m = 2048
++    var n = 128
++    var k = 512
++    var name = String("decomp projection 2048 x 128 x 512")
++    var a = make_values(m, k, 131)
++    var b = make_values(n, k, 147)
++    var da = _upload_f32(ctx, a)
++    var db = _upload_f32(ctx, b)
++    var dc_arm = _poisoned(ctx, m * n)
++    var took = decomp_project_units_into(ctx, dc_arm, da, db, m, n, k)
++    ctx.synchronize()
++    comptime if DECOMP_MATRIX_UNITS:
++        require(took, name + ": the route declined a product its size rule takes")
++        var dc_ref = _poisoned(ctx, m * n)
++        var ws_ref = ctx.enqueue_create_buffer[DType.float32](max(1, fp32_workspace_max_floats(m, n, k)))
++        fp32_gemm_into[False](ctx, dc_ref, da, db, ws_ref, m, n, k, OP_NT)
++        ctx.synchronize()
++        var arm = _download_f32(ctx, dc_arm, m * n, name + " (route)")
++        var ref_c = _download_f32(ctx, dc_ref, m * n, name + " (FP32)")
++        _judge(name, compare_family_rows(arm, ref_c, a, b, m, n, k, OP_NT, False))
++        _ = dc_ref
++        _ = ws_ref
++    else:
++        require(not took, name + ": the route took a product in a build without its define")
++    _ = da
++    _ = db
++    _ = dc_arm
++
++
++def check_gram(ctx: DeviceContext) raises:
++    var m = 256
++    var k = 4096
++    var name = String("decomp Gram 256 x 256 x 4096")
++    var x = make_values(k, m, 163)
++    var dx = _upload_f32(ctx, x)
++    var dc_arm = _poisoned(ctx, m * m)
++    var took = decomp_gram_units_into(ctx, dc_arm, dx, m, k)
++    ctx.synchronize()
++    comptime if DECOMP_MATRIX_UNITS:
++        require(took, name + ": the route declined a Gram past the split-K width")
++        # the exact kernel takes two operand buffers; a second upload of the same values is its B
++        var dx2 = _upload_f32(ctx, x)
++        var dc_ref = _poisoned(ctx, m * m)
++        var ws_ref = ctx.enqueue_create_buffer[DType.float32](max(1, fp32_workspace_max_floats(m, m, k)))
++        fp32_gemm_into[False](ctx, dc_ref, dx, dx2, ws_ref, m, m, k, OP_TN)
++        ctx.synchronize()
++        var arm = _download_f32(ctx, dc_arm, m * m, name + " (route)")
++        var ref_c = _download_f32(ctx, dc_ref, m * m, name + " (FP32)")
++        _judge(name, compare_family_rows(arm, ref_c, x, x, m, m, k, OP_TN, False))
++        _ = dx2
++        _ = dc_ref
++        _ = ws_ref
++    else:
++        require(not took, name + ": the route took a Gram in a build without its define")
++    _ = dx
++    _ = dc_arm
++
++
++def check_knn_product(ctx: DeviceContext) raises:
++    var m = 256
++    var n = 2048
++    var k = 256
++    var name = String("k-NN distance product 256 x 2048 x 256")
++    comptime if KNN_DISTANCE_MATRIX_UNITS:
++        var a = make_values(m, k, 179)
++        var b = make_values(n, k, 191)
++        var da = _upload_f32(ctx, a)
++        var db = _upload_f32(ctx, b)
++        var dc_arm = _poisoned(ctx, m * n)
++        var dc_ref = _poisoned(ctx, m * n)
++        var ws_ref = ctx.enqueue_create_buffer[DType.float32](max(1, fp32_workspace_max_floats(m, n, k)))
++        knn_distance_units_product(ctx, dc_arm, da, db, m, n, k)
++        ctx.synchronize()
++        fp32_gemm_into[False](ctx, dc_ref, da, db, ws_ref, m, n, k, OP_NT)
++        ctx.synchronize()
++        var arm = _download_f32(ctx, dc_arm, m * n, name + " (route)")
++        var ref_c = _download_f32(ctx, dc_ref, m * n, name + " (FP32)")
++        _judge(name, compare_family_rows(arm, ref_c, a, b, m, n, k, OP_NT, True))
++        _ = da
++        _ = db
++        _ = dc_arm
++        _ = dc_ref
++        _ = ws_ref
++    else:
++        require(not KNN_DISTANCE_MATRIX_UNITS, name + ": unreachable")
++
++
++def _run_gpu(mut report: Report) raises:
++    var ctx = DeviceContext()
++    var cases = report.cases(FAMILY_UNITS_FIXTURES)
++    # driver-loop: over the three fixtures, one in-order device context
++    for fixture_id in range(FAMILY_UNITS_FIXTURES):
++        try:
++            if fixture_id == 0:
++                check_projection(ctx)
++            elif fixture_id == 1:
++                check_gram(ctx)
++            else:
++                check_knn_product(ctx)
++        except error:
++            cases.fail(fixture_id, error)
++
++
++def run_cases(column: Column, mut report: Report):
++    # GPU column only: the routes instantiate the MAX library's GPU matmul (see gemm_matrix_units.mojo).
++    try:
++        comptime if CPU_COLUMN_BUILD:
++            raise Error("family_matrix_units runs on the gpu column only")
++        else:
++            _run_gpu(report)
++    except error:
++        report.abort(error)
++
++
++def register() -> Check:
++    return Check("family_matrix_units", cpu=False, gpu=True, serial="", run=run_cases)
+diff --git a/checks/native_tests/registry.mojo b/checks/native_tests/registry.mojo
+index 6192ad183e..b50717fadd 100644
+--- a/checks/native_tests/registry.mojo
++++ b/checks/native_tests/registry.mojo
+@@ -83,9 +83,7 @@ from checks.native_tests.gbdt_public_fits import register as register_gbdt_publi
+ from checks.native_tests.gbdt_resident_ns_predict import register as register_gbdt_resident_ns_predict
+ from checks.native_tests.gbdt_shape_sweep import register as register_gbdt_shape_sweep
+ from checks.native_tests.gbdt_tree_metadata import register as register_gbdt_tree_metadata
+-# TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (NOISE, A/B abf2) deleted 2026-11-20 by
+-# lane/fx-verdicts6 with their check family_matrix_units; code recoverable at 06d1e8ff34.
+-# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch (the check is in that patch)
++from checks.native_tests.family_matrix_units import register as register_family_matrix_units
+ from checks.native_tests.gemm_matrix_units import register as register_gemm_matrix_units
+ from checks.native_tests.gp_entry_table import register as register_gp_entry_table
+ from checks.native_tests.gp_native import register as register_gp_native
+@@ -659,6 +657,7 @@ def all_checks() -> List[Check]:
+     checks.append(register_eigh_route())
+     checks.append(register_embedding_ne3_entries())
+     checks.append(register_embedding_surface())
++    checks.append(register_family_matrix_units())
+     checks.append(register_fresh_state_zeros())
+     checks.append(register_gbdt_ova_link())
+     checks.append(register_gbdt_public_fits())
+diff --git a/decomposition/estimator.mojo b/decomposition/estimator.mojo
+index 3fcbce1b2a..ca4cfd5fa1 100644
+--- a/decomposition/estimator.mojo
++++ b/decomposition/estimator.mojo
+@@ -54,9 +54,7 @@ from core.device_scan import device_first_negative, device_first_nonfinite
+ from core.xtdz_coalesced import column_mean_launch
+ from core.admitted_finite_status import enqueue_finite_word
+ from core.gemm import gemm_nt
+-# TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S: pca, tsvd, svd 8 cells 0.93-1.00, median 1.00)
+-# deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch
++from decomposition.gram_matrix_units_route import decomp_gram_units_into, decomp_project_units_into
+ from decomposition.impl.linalg.detail.pca import (
+     PCA_FAST_GRAM_MMA,
+     PCA_LEAN_SCRATCH,
+@@ -465,7 +463,10 @@ def tsvd_fit_device(
+     # The two halves of `tsvd_fit` by name, the Gram recorded between them
+     # (row 38; see the PCA surface above for why).
+     pca_validate(n_rows, n_features, n_components)
+-    gemm_tn(ctx, gram, x, xa, xa2, n_features, n_features, n_rows)
++    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
++    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
++    if not decomp_gram_units_into(ctx, gram, x, n_features, n_rows):
++        gemm_tn(ctx, gram, x, xa, xa2, n_features, n_features, n_rows)
+     ctx.synchronize()
+     if trace.enabled:
+         trace.record_device(ctx, "tsvd.gram", gram, n_features * n_features)
+@@ -693,7 +694,10 @@ def _tsvd_explained_tail(
+     var var_x = ctx.enqueue_create_buffer[DType.float32](n_features)
+     ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+     ctx.synchronize()
+-    gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
++    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
++    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
++    if not decomp_project_units_into(ctx, xt, x, components, n_rows, n_components, n_features):
++        gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
+     _column_variance(ctx, xt, mu_t, var_t, n_rows, n_components)
+     _column_variance(ctx, x, mu_x, var_x, n_rows, n_features)
+     # the tail on the device (decomposition/tsvd_finish.mojo, the host
+@@ -811,7 +815,10 @@ def tsvd_transform_dev(
+     var out = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+     if not _pca_finite_flagged(ctx, x, n_rows * n_features, finite_word):
+-        gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
++        # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
++        # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
++        if not decomp_project_units_into(ctx, out, x, components, n_rows, n_components, n_features):
++            gemm_nt(ctx, out, x, components, n_rows, n_components, n_features)
+         ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=out)
+         ctx.synchronize()
+     comptime if TSVD_FAST_POOL:
+@@ -866,7 +873,10 @@ def inverse_transform_dev(
+         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+     )
+     ctx.synchronize()
+-    gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
++    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
++    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
++    if not decomp_project_units_into(ctx, out, scores, components_t, n_rows, n_features, n_components):
++        gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
+     if add_mean:
+         ctx.enqueue_function[shift_columns_kernel](
+             out.unsafe_ptr(), mean.unsafe_ptr(), Int32(n_rows), Int32(n_features),
+@@ -1052,7 +1062,10 @@ def pca_whiten_inverse_transform_host(
+         block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+     )
+     ctx.synchronize()
+-    gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
++    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
++    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
++    if not decomp_project_units_into(ctx, out, scores, components_t, n_rows, n_features, n_components):
++        gemm_nt(ctx, out, scores, components_t, n_rows, n_features, n_components)
+     ctx.enqueue_function[shift_columns_kernel](
+         out.unsafe_ptr(), mean.unsafe_ptr(), Int32(n_rows), Int32(n_features),
+         Float32(1.0), grid_dim=((n_rows * n_features + 255) // 256, 1, 1),
+diff --git a/decomposition/gram_matrix_units_route.mojo b/decomposition/gram_matrix_units_route.mojo
+new file mode 100644
+index 0000000000..c0aa569971
+--- /dev/null
++++ b/decomposition/gram_matrix_units_route.mojo
+@@ -0,0 +1,135 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of Mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""PCA AND TRUNCATED SVD ON THE MATRIX UNIT: THE DECOMPOSITION ROUTE OF `fast`
++(lane fx-fast-nvidia-routes, 2026-11-19).
++
++EXPERIMENT `-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS`, default OFF, A/B owed with quality beside time
++(docs/apple-fast/EXPERIMENTS.md). Unverified: written without a compile. A family route of the matrix-units row of
++checks/mode_policy.mojo (`ROUTE_DECOMP_MATRIX_UNITS`): legal only in a `fast` build (`-D MOJOLEARN_MODE_FAST_ROWS`);
++a compile error in a build that promises identical bits. With the define off nothing here is compiled into a launch.
++
++WHAT `identical` PAYS HERE. The Gram X^T X (PCA's covariance, truncated SVD's first step) and the projections
++X V^T / scores V run one FMA chain per cell in a fixed order on the exact FP32 kernels (IDENTITY_PATHS rows 27, 28,
++40). The Gram is m m k multiply-adds and is the fit; at widths past the split-K kernel it runs at the scalar
++kernel's rate.
++
++WHAT THE ROUTE DOES. Those products run on MAX `linalg.matmul`: on NVIDIA the tensor cores with TF32 operands and
++FP32 accumulation, on AMD the fp32 MFMA (full fp32 operands; only the fold order is the vendor's). One source for
++both. On Apple the PCA Gram already has its matrix-unit route (the `afn_launch_tile` arm of
++decomposition/impl/linalg/detail/pca.mojo), so the row points at that and this route is off there; the host column
++is exact.
++  - Gram: `transpose_kernel` writes X^T row-major into a scratch of m k floats (data movement only; `linalg.matmul`
++    documents `transpose_a` as unsupported), then Z = Xt . Xt^T. One allocation and one wait per fit, the same
++    footprint the pre-identical route used (its two n d alias buffers).
++  - Projection: Z[m x n] = X[m x k] . Y[n x k]^T, one launch, no workspace, asynchronous like the route it replaces.
++
++WHAT STAYS EXACT. The split-K Gram (widths the split-K kernel holds: the product is small there and the kernel
++fills the machine by splitting k, core/gram_splitk.mojo), every product under the size rule, the column means and
++the centering, the eigensolver, the sign rule, the explained-variance arithmetic, and everything in OLS and ridge:
++their Gram feeds a solve whose error is the operand error times the condition number of X^T X, so they are not
++this route.
++
++THE SIZE RULE: `vendor_matmul_size_rule` (gemm/fast_matrix_units.mojo: K >= 32, both output edges >= 64,
++M N K >= 2^27; sizes and the hardware unit only) and, for the Gram, not a split-K shape.
++
++QUALITY. NVIDIA: each operand keeps 11 significant bits, so a cell differs from its FP32 value by at most
++`matrix_units_cell_bound` (1.95e-3 of the cell's ABSOLUTE sum; typically 4e-4 / sqrt(K) of it). For a centered
++Gram the diagonal is its own absolute sum, so each variance moves by at most 0.2 percent and the trace
++(total variance) by the same; an eigenvalue moves by at most the perturbation's norm (Weyl), so components whose
++eigenvalue is under about 1e-3 of the largest are no longer resolved from each other. The check
++(checks/native_tests/decomp_matrix_units.mojo) holds every Gram and projection cell to the bound; the owed A/B
++compares explained_variance_ratio, the reconstruction error and the projection against the zero-row fast set.
++"""
++from layout import TileTensor
++from layout.tile_layout import row_major
++from linalg.matmul import matmul
++from max.gpu.host import DeviceBuffer, DeviceContext
++
++from checks.mode_policy import ROUTE_DECOMP_MATRIX_UNITS
++from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
++from core.gram_splitk import gram_splitk_applies
++from gemm.fast_matrix_units import vendor_matmul_size_rule
++
++#: The route: PCA / truncated-SVD products on the matrix unit in an NVIDIA or AMD `fast` build.
++comptime DECOMP_MATRIX_UNITS = ROUTE_DECOMP_MATRIX_UNITS
++
++
++def decomp_gram_units_takes(m: Int, k: Int) raises -> Bool:
++    """Whether the route takes the Gram of a k x m matrix: past the split-K kernel and inside the size rule.
++    Always False without the route."""
++    comptime if not DECOMP_MATRIX_UNITS:
++        return False
++    if gram_splitk_applies(m, m, k):
++        return False
++    return vendor_matmul_size_rule(m, m, k)
++
++
++def decomp_gram_units_into(
++    ctx: DeviceContext,
++    mut z: DeviceBuffer[DType.float32],
++    mut x: DeviceBuffer[DType.float32],
++    m: Int,
++    k: Int,
++) raises -> Bool:
++    """`z[m x m] = x[k x m]^T . x[k x m]` on the matrix unit. True if it took the product (z is written and
++    the queue is drained, as after `gemm_tn`'s own allocating branch); False leaves every buffer untouched and
++    the caller runs `gemm_tn`. The caller has validated the operand lengths."""
++    comptime if not DECOMP_MATRIX_UNITS:
++        return False
++    if not decomp_gram_units_takes(m, k):
++        return False
++    if len(z) < m * m or len(x) < k * m:
++        return False
++    var xt = ctx.enqueue_create_buffer[DType.float32](m * k)
++    # xt[m x k] = x[k x m]^T: the launch of core/gemm.mojo::gemm_tn_via_transpose
++    ctx.enqueue_function[transpose_kernel](
++        xt.unsafe_ptr(),
++        x.unsafe_ptr(),
++        Int32(k),
++        Int32(m),
++        grid_dim=(
++            (m + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
++            min((k + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ),
++            1,
++        ),
++        block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
++    )
++    # The self-Gram reads `xt` as both operands (the form of core/gemm.mojo::gemm_nt_gram). `matmul` takes its
++    # operands mutably, and one variable may not be passed mutably twice ("aliasing values passed mutably to 'a'
++    # and 'b'"), so the second operand is a second HANDLE of the same device storage: a reference-count copy of
++    # the buffer handle, no second copy of X^T and no extra device memory.
++    var xt_b = xt
++    var tz = TileTensor(z, row_major(m, m))
++    var tx = TileTensor(xt, row_major(m, k))
++    var ty = TileTensor(xt_b, row_major(m, k))
++    matmul[transpose_b=True, target="gpu"](tz, tx, ty, ctx)
++    # `xt` is this function's: wait for the two launches that read it before it is released.
++    ctx.synchronize()
++    _ = xt_b^
++    _ = xt^
++    return True
++
++
++def decomp_project_units_into(
++    ctx: DeviceContext,
++    mut z: DeviceBuffer[DType.float32],
++    mut x: DeviceBuffer[DType.float32],
++    mut y: DeviceBuffer[DType.float32],
++    m: Int,
++    n: Int,
++    k: Int,
++) raises -> Bool:
++    """`z[m x n] = x[m x k] . y[n x k]^T` on the matrix unit (a transform or an inverse transform). True if it
++    took the product; False leaves every buffer untouched and the caller runs `gemm_nt`. Asynchronous: no
++    wait, the caller keeps z, x and y alive past its own synchronize, as for `gemm_nt`."""
++    comptime if not DECOMP_MATRIX_UNITS:
++        return False
++    if not vendor_matmul_size_rule(m, n, k):
++        return False
++    if len(z) < m * n or len(x) < m * k or len(y) < n * k:
++        return False
++    var tz = TileTensor(z, row_major(m, n))
++    var tx = TileTensor(x, row_major(m, k))
++    var ty = TileTensor(y, row_major(n, k))
++    matmul[transpose_b=True, target="gpu"](tz, tx, ty, ctx)
++    return True
+diff --git a/decomposition/impl/linalg/detail/pca.mojo b/decomposition/impl/linalg/detail/pca.mojo
+index 4dbaaa18a0..d1244060ac 100644
+--- a/decomposition/impl/linalg/detail/pca.mojo
++++ b/decomposition/impl/linalg/detail/pca.mojo
+@@ -18,9 +18,7 @@ from max.gpu.sync import barrier
+ from std.memory import stack_allocation
+ 
+ from core.gemm import gemm_nt, gemm_tn
+-# TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S: pca, tsvd, svd 8 cells 0.93-1.00, median 1.00)
+-# deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch
++from decomposition.gram_matrix_units_route import decomp_gram_units_into, decomp_project_units_into
+ from gemm.afn_apple_fast import (
+     AFN_EPI_NONE,
+     AFN_GEMM_APPLE,
+@@ -203,7 +201,10 @@ def compute_covariance(
+             grid_dim=((cells + 255) // 256, 1, 1),
+             block_dim=(256, 1, 1),
+         )
+-        gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
++        # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
++        # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
++        if not decomp_gram_units_into(ctx, cov, x, n_cols, n_rows):
++            gemm_tn(ctx, cov, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
+     ctx.enqueue_function[scale_in_place_kernel](
+         cov.unsafe_ptr(),
+         Int32(n_cols * n_cols),
+@@ -772,15 +773,18 @@ def pca_transform(
+         grid_dim=((cells + 255) // 256, 1, 1),
+         block_dim=(256, 1, 1),
+     )
+-    gemm_nt(
+-        ctx,
+-        output,
+-        x,
+-        components,
+-        n_rows,
+-        n_components,
+-        n_cols,
+-    )
++    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
++    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
++    if not decomp_project_units_into(ctx, output, x, components, n_rows, n_components, n_cols):
++        gemm_nt(
++            ctx,
++            output,
++            x,
++            components,
++            n_rows,
++            n_components,
++            n_cols,
++        )
+     ctx.enqueue_function[shift_columns_kernel](
+         x.unsafe_ptr(),
+         mu.unsafe_ptr(),
+diff --git a/decomposition/impl/linalg/detail/tsvd.mojo b/decomposition/impl/linalg/detail/tsvd.mojo
+index 7f055b02dc..028e1efe0f 100644
+--- a/decomposition/impl/linalg/detail/tsvd.mojo
++++ b/decomposition/impl/linalg/detail/tsvd.mojo
+@@ -73,9 +73,7 @@ exist.
+ from max.gpu.host import DeviceBuffer, DeviceContext
+ 
+ from core.gemm import gemm_tn
+-# TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S: pca, tsvd, svd 8 cells 0.93-1.00, median 1.00)
+-# deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+-# Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch
++from decomposition.gram_matrix_units_route import decomp_gram_units_into
+ from decomposition.impl.linalg.detail.pca import (
+     PCAResult,
+     eig_and_truncate,
+@@ -104,7 +102,10 @@ def tsvd_fit(
+     # and no centering. Their `tsvd_fit` asks cuBLAS for exactly this:
+     # CUBLAS_OP_T, CUBLAS_OP_N. Same `gemm_tn` dispatch as PCA (split-K
+     # kernel at these output widths; see core/gram_splitk.mojo).
+-    gemm_tn(ctx, gram, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
++    # fast route (-D MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
++    # decomposition/gram_matrix_units_route.mojo): False without the define, compiled out.
++    if not decomp_gram_units_into(ctx, gram, x, n_cols, n_rows):
++        gemm_tn(ctx, gram, x, x_alias, x_alias2, n_cols, n_cols, n_rows)
+ 
+     ctx.synchronize()
+ 

@@ -81,8 +81,8 @@ def _check_configuration() -> Bool:
     comptime assert TMB == 192 or TMB == 512 or TMB == 1024, "MOJOLEARN_IDN_GEMM_TILE_MIN_BLOCKS legal set {192, 512, 1024}"
     # Lane grid-act-5 (2026-10-08): IDENTICAL grid ge123e6f9 gemm_leaf split and neural_gemm_epilogue loser (docs/apple-fast/EXPERIMENTS.md). Deleted code recoverable at main 8ed94710a.
     comptime assert not (is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"]() and (get_defined_int["MOJOLEARN_IDN_GEMM_LEAF",0]() == 1 or get_defined_int["MOJOLEARN_IDN_GEMM_LEAF",0]() == 2)), "split 2026-10-08 (grid ge123e6f9, lane/grid-act-5): gemm_leaf=neural128 is the IDENTICAL default for the MLP training step only (mlp-train-step 0.886x, same bits; every other neural model slower, lm-train-step 13.6x); MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF has no effect with MOJOLEARN_IDN_GEMM_LEAF=1|2, which routes every neural caller to the profile"
-    # lane fx-gemm-leaf512 (2026-11-19): the small MLP op's host arm is the leaf-128 profile cell (autograd/small_mlp_host.mojo, neural_partition[128]); it equals the _OFF dispatch (identical_gemm_into) only while the contract's leaf is 128.
-    comptime assert not (is_defined["MOJOLEARN_GEMM_FAST_LEAF512"]() and is_defined["MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF"]()), "MOJOLEARN_GEMM_FAST_LEAF512 with MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF: the small MLP op's device GEMMs would take the contract's leaf 512 while its host arm keeps leaf 128 (autograd/small_mlp_host.mojo); build the two arms separately"
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_LEAF512 (NOISE, A/B abf2 and round 3) deleted 2026-11-20 by lane/fx-verdicts6 with this refusal of the arm beside MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF; the define itself is refused in the lane fx-verdicts6 block below; code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch
     # TOMBSTONE: MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF (its MLP step was deleted, plan row X2) deleted 2026-11-09 by lane/x2-small-mlp-on-executor; code recoverable at f59d913b0b. Refused in core/experiment_guards_neural.mojo.
     # TOMBSTONE restored 2026-11-09 by lane/r1-restore-measured-winners: MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF is live again (autograd/small_mlp_op.mojo); core/experiment_guards_neural.mojo no longer refuses it.
     # Lane i17-decide-nbr-lin-prep (2026-10-11), removed: A/B on main b2657cc89, one run per arm, NV L40S nv2 / AMD MI325X (docs/TOMBSTONES.md,
@@ -150,6 +150,14 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_IDENTITY_FAST_NAN_CANON (core/nan_canon.mojo): promoted to the default; the old opt-in name is refused.
     comptime assert not is_defined["MOJOLEARN_IDENTITY_FAST_NAN_CANON"](), "promoted 2026-11-20 (lane/fx-verdicts5, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, a cross-vendor identity fix, cost: gemm 0.917 inside a 19 % base spread, transformer-decode 1.009): it is the default; drop the define, or build the old form with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF"
     # ---- end lane fx-verdicts5
+    # ---- lane fx-verdicts6 (2026-11-20): verdicts of A/B abf2 (NVIDIA L40S host 79f003b8e8ae, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59)
+    # TOMBSTONE: MOJOLEARN_MODE_FAST_BF16_UNITS (ROW WITHOUT A ROUTE, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm: its one route MOJOLEARN_GEMM_FAST_BF16_UNITS was dominated by the TF32 route, mlp-clf/taxi infer 1.86) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MODE_FAST_BF16_UNITS"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; ROW WITHOUT A ROUTE: its one route MOJOLEARN_GEMM_FAST_BF16_UNITS was dominated by the TF32 route, mlp-clf/taxi infer 1.86): mode-policy row 7 (bf16 matrix units, mask bit 128) of checks/mode_policy.mojo; the table has seven rows; see docs/TOMBSTONES.md"
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_LEAF512 (NOISE, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm: lm-forward 0.96, lm-train-step 0.99, mlp-train-step 1.08, median 0.99; round 3 on wheel 28a780604c 0.990, 1.024, 1.12) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LEAF512.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_LEAF512"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; NOISE: lm-forward 0.96, lm-train-step 0.99, mlp-train-step 1.08, median 0.99; round 3 on wheel 28a780604c 0.990, 1.024, 1.12): the contract's shortest leaf 512 (profile v2-leaf512, version 4); the leaf is 128 on every column; see docs/TOMBSTONES.md"
+    # ---- end lane fx-verdicts6
     return True
 
 comptime SIX_LANE_CONFIGURATION_OK = _check_configuration()

@@ -60,8 +60,7 @@ def profile_dot_parallel(
     var count = Int(value)
     if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("parallel solver requires IDENTICAL and 1..64 devices")
-    # one leaf has nothing to shard (v1: k <= 128; the profile's own bound,
-    # so -D MOJOLEARN_GEMM_FAST_LEAF512 keeps one-leaf dots on one device)
+    # one leaf has nothing to shard (v1: k <= 128; the profile's own bound)
     if k <= CONTRACT_K_LEAF_MIN:
         return False
     var leaf = contract_leaf_size(k)

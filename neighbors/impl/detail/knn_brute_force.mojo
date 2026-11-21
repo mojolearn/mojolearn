@@ -76,9 +76,10 @@ from std.os import getenv
 
 from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
 from core.expand_distances import expand_distances_kernel
-from neighbors.distance_matrix_units_route import (
-    KNN_DISTANCE_MATRIX_UNITS, knn_distance_units_takes, knn_distance_units_product,
-)
+# TOMBSTONE: MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, one run per arm:
+# knn, knn-clf, knn-reg on istella and taxi 0.98-1.01, median 0.99) deleted 2026-11-20 by lane/fx-verdicts6; code
+# recoverable at 06d1e8ff34.
+# Restore: git apply experiments/removed/MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS.patch
 from core.device_fold import device_compact_equal_i32
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
 from core.gemm import gemm_nt
@@ -1083,19 +1084,9 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     var use_block_topk = use_transposed_index and block_topk_applies(
         n_index, n_features, k, mtr, use_vendor_topk
     )
-    # fast route (-D MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS, default OFF, fast-rows builds only;
-    # neighbors/distance_matrix_units_route.mojo: the rule, the bound, what stays exact): a wide-feature L2
-    # request runs the tiled arm with its distance product on the matrix unit, so the fused arms (which never
-    # store the distance matrix) stand down for it. Decided once per call from sizes; off: not compiled.
-    var use_units = False
-    comptime if KNN_DISTANCE_MATRIX_UNITS:
-        use_units = knn_distance_units_takes(
-            query_tile, index_tile, n_queries, n_index, n_features,
-            mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED, use_vendor_topk, len(dist_tile),
-        )
-        if use_units:
-            use_fused = False
-            use_block_topk = False
+    # TOMBSTONE: MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (NOISE: 6 cells 0.98-1.01) deleted 2026-11-20 by
+    # lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS.patch
     if not use_fused and not use_block_topk and len(dist_tile) < query_tile * index_tile:
         raise Error(
             "tiled_brute_force_knn: the distance tile holds "
@@ -1142,11 +1133,6 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
             and n_features >= KNN_SMEM_MIN_FEATURES
             and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
         )
-    comptime if KNN_DISTANCE_MATRIX_UNITS:
-        if use_units:
-            # the route's distances carry no exact-chain admission and no exponent metadata
-            use_exact = False
-            use_metadata = False
     var meta_on = use_metadata or use_exact
     var metadata_cells = n_queries + n_index if meta_on else 0
     var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells + metadata_cells)
@@ -1177,9 +1163,6 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
             and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
             and n_features >= KNN_SMEM_MIN_FEATURES
         )
-    comptime if KNN_DISTANCE_MATRIX_UNITS:
-        if use_units:
-            use_smem = False
 
     # Metadata is rebuilt for every request, including in-place input mutations.
     # The existing scratch allocation owns metadata until final synchronize.
@@ -1405,30 +1388,6 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     # staged through shared memory. Same bits from all four.
                     var is_sqrt_arg = Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0)
                     var layout_distance_launched = False
-                    comptime if KNN_DISTANCE_MATRIX_UNITS:
-                        if use_units:
-                            # The reference algorithm's two launches: the product on the matrix unit, then
-                            # the FP32 epilogue over the same rows x cols tile the exact kernels write.
-                            var units_q = queries.create_sub_buffer[DType.float32](
-                                q * n_features, rows * n_features
-                            )
-                            var units_y = index.create_sub_buffer[DType.float32](
-                                c * n_features, cols * n_features
-                            )
-                            knn_distance_units_product(
-                                ctx, dist_tile, units_q, units_y, rows, cols, n_features
-                            )
-                            ctx.enqueue_function[expand_distances_kernel](
-                                dist_tile.unsafe_ptr(),
-                                query_norm.unsafe_ptr().unsafe_offset(q),
-                                index_norm.unsafe_ptr().unsafe_offset(c),
-                                Int32(rows),
-                                Int32(cols),
-                                is_sqrt_arg,
-                                grid_dim=((cells + 255) // 256, 1, 1),
-                                block_dim=(256, 1, 1),
-                            )
-                            layout_distance_launched = True
                     comptime if KNN_SMEM_TILE:
                         # DEVIATION 3000: the shared-memory tile writes the
                         # same `rows x cols` matrix the register tile writes.

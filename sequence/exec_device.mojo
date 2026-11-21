@@ -66,11 +66,7 @@ from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_
 # lane fx-gemm-seq-packed: the large products on the neural packed body (default since 2026-11-19, confirmed 2026-11-20)
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
-# lane fx-fast-matrix-units (2026-11-19): the matrix-units relaxation of an NVIDIA `fast` build (default OFF).
-from sequence.gemm_bf16_units_route import (
-    SEQ_GEMM_BF16_UNITS, SBU_NONE, seq_gemm_bf16_units_on, seq_gemm_bf16_units_launch,
-)
-from gemm.fast_bf16_units import bf16_units_workspace_floats
+# The matrix-units route of a `fast` build on NVIDIA and AMD (default there since 2026-11-20, A/B abf2).
 from sequence.gemm_matrix_units_route import (
     SEQ_GEMM_MATRIX_UNITS, SMU_NONE, seq_gemm_matrix_units_on, seq_gemm_matrix_units_launch,
     seq_gemm_matrix_units_ta_on, seq_gemm_matrix_units_ta_launch,
@@ -1367,36 +1363,17 @@ struct DeviceExec(Exec, Movable):
                 )
                 self.execution_profile.kernel()
                 return
-        # lane fx-fast-bf16 (-D MOJOLEARN_GEMM_FAST_BF16_UNITS=<kind>, default OFF, A/B owed with quality; legal only
-        # in a `fast` build): a large plain dense product runs on the bf16 matrix unit, FP32 accumulation and
-        # output (sequence/gemm_bf16_units_route.mojo: the addressings, what is not routed;
-        # gemm/fast_bf16_units.mojo: the bound, what stays FP32). Asked before the TF32 arm, so a build with both
-        # runs bf16 where its rule takes. The scratch for the two bf16 operand images is the executor's own
-        # allocation, freed here: `free` retires it until the next sync, after the launches that use it. An
-        # epilogue opcode runs its follower in FP32 as OP_GEMM_EPI_TAIL. Per call under the arm: eight integer
-        # tests, one take, one free, three launches; no wait. Off: not compiled.
-        comptime if SEQ_GEMM_BF16_UNITS and (
-                OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
-            var bf16_form = seq_gemm_bf16_units_on[OP](a)
-            if bf16_form != SBU_NONE:
-                var bf16_scratch = self._alloc(bf16_units_workspace_floats(a.i0, a.i1, a.i2), False)
-                seq_gemm_bf16_units_launch(
-                    self.ctx, a, bf16_form, bf16_scratch.unsafe_origin_cast[MutAnyOrigin]()
-                )
-                self.execution_profile.kernel()
-                self.execution_profile.kernel()
-                self.execution_profile.kernel()
-                self.free(bf16_scratch)
-                comptime if OP != OP_GEMM:
-                    if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
-                        self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
-                return
-        # lane fx-fast-matrix-units (-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1, default OFF, A/B owed with quality; legal
-        # only in an NVIDIA `fast` build): a large plain dense product with row-major operands runs the TF32
-        # tensor-core product, FP32 accumulation (sequence/gemm_matrix_units_route.mojo: the rule, what is not
+        # TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (A/B abf2, NVIDIA L40S: median 0.96 but mlp-clf/taxi infer 8.49 ->
+        # 15.82 ms, 1.86; dominated by the TF32 route on every cell) deleted 2026-11-20 by lane/fx-verdicts6; code
+        # recoverable at 06d1e8ff34.
+        # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
+        # The matrix-units route (DEFAULT in a `fast` build on NVIDIA and AMD since 2026-11-20: A/B abf2, mlp fits
+        # 0.96-0.97, infers 0.85-0.95, quality equal; -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF keeps the exact
+        # route; never compiled in an identical build): a large plain dense product with row-major operands runs
+        # the matrix-unit product, FP32 accumulation (sequence/gemm_matrix_units_route.mojo: the rule, what is not
         # routed, the error bound). An epilogue opcode then runs its follower in FP32 as OP_GEMM_EPI_TAIL on the
         # stored words, the launch pair of the packed route below. After the split-K and coop tests above, which
-        # keep their products; ahead of the packed rule, whose body is the FP32 chain. Per call under the arm:
+        # keep their products; ahead of the packed rule, whose body is the FP32 chain. Per call on the route:
         # seven integer tests, one launch, and one more for an epilogue; no lookup, allocation or wait.
         comptime if SEQ_GEMM_MATRIX_UNITS and (
                 OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
@@ -1408,12 +1385,12 @@ struct DeviceExec(Exec, Movable):
                     if seq_gemm_epi_kind(a.i9, a.i10) != GK_PLAIN:
                         self._launch[OP_GEMM_EPI_TAIL](a, a.i0 * a.i1)
                 return
-            # lane fx-fast-nvidia-routes (2026-11-19): the same arm for a transposed A (the tape's weight
+            # lane fx-fast-nvidia-routes (2026-11-19): the same route for a transposed A (the tape's weight
             # gradient X^T dY), so a training step's three products are all on the matrix unit. The m k
             # scratch is the executor's own allocation (exact-count reuse from its idle list or pool after
             # the first step) and is freed here: `free` retires it until the next sync, after the two
-            # launches that use it. Per call under the arm: the integer tests, one take, one free, two
-            # launches; no wait. Off: not compiled.
+            # launches that use it. Per call on the route: the integer tests, one take, one free, two
+            # launches; no wait. Not compiled where the route is False.
             var units_ta_form = seq_gemm_matrix_units_ta_on[OP](a)
             if units_ta_form != SMU_NONE:
                 var units_scratch = self._alloc(a.i0 * a.i2, False)

@@ -66,9 +66,9 @@ from gemm.host_transport import (
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from std.sys.compile import is_defined
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
-# lane fx-fast-bf16 (2026-11-20): the two matrix-unit arms of a `fast` build; both False in every other build.
+# The matrix-units route of a `fast` build on NVIDIA and AMD (default there since 2026-11-20); False in every
+# other build.
 from gemm.fast_matrix_units import GEMM_FAST_MATRIX_UNITS, matrix_units_gemm_into, matrix_units_workspace_floats
-from gemm.fast_bf16_units import GEMM_FAST_BF16_UNITS, bf16_units_gemm_into, bf16_units_workspace_floats
 from gemm.int_slices import IDN_GEMM_INT_SLICES, identical_gemm_int_slices_into, int_slices_admits
 
 # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
@@ -163,29 +163,23 @@ def identical_gemm_host(
         # Tried 2026-10-08 (MOJOLEARN_IDN_GEMM_OZAKI_LINALG = 4 | 5 slices, run ge123e6f9): the linalg GEMM through
         # gemm.neural_dispatch's Ozaki int8 profile; NV/AMD gemm gaussian S=4 3.97x/2.06x, S=5 7.99x/2.51x SLOWER -> deleted
         # (the neural Ozaki control itself is untouched). Recoverable at main 42d1e42c6; row in docs/apple-fast/EXPERIMENTS.md.
-        # lane fx-fast-bf16 (2026-11-20): THE PUBLIC PRODUCT IN A `fast` SET WITH A MATRIX-UNIT ROW ON. This entry
-        # imports the exact kernel directly, so the first fast timing (build aa82adadef, arm
-        # fast-matrix-units-tf32) ran the gemm row on the FP32 chain in both arms: equal output hash, ratio 1.04.
-        # A set built with -D MOJOLEARN_GEMM_FAST_BF16_UNITS or -D MOJOLEARN_GEMM_FAST_MATRIX_UNITS (fast-rows
-        # builds only; a compile error under the contract) now sends a product its size rule takes to that
-        # unit, bf16 asked first; the lease's workspace holds the bf16 images or the OP_TN transpose. The
-        # operands and the output are disjoint pooled buffers of exactly the sizes the routes need. Per call
-        # under an arm: the integer rule; the same uploads, one download and one wait as below. In every other
-        # build this block is not compiled and the two lines of the else branch are the code.
-        comptime if GEMM_FAST_BF16_UNITS or GEMM_FAST_MATRIX_UNITS:
-            var ws_floats = identical_gemm_workspace_max_floats(m, n, k)
-            comptime if GEMM_FAST_BF16_UNITS:
-                ws_floats = max(ws_floats, bf16_units_workspace_floats(m, n, k))
-            comptime if GEMM_FAST_MATRIX_UNITS:
-                ws_floats = max(ws_floats, matrix_units_workspace_floats(m, n, k, op))
-            var units_ws = lease.f32(ctx, ROLE_WS, ws_floats)
-            var units_took = False
-            comptime if GEMM_FAST_BF16_UNITS:
-                units_took = bf16_units_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
-            comptime if GEMM_FAST_MATRIX_UNITS:
-                if not units_took:
-                    units_took = matrix_units_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
-            if not units_took:
+        # THE PUBLIC PRODUCT IN A `fast` SET (lane fx-fast-bf16, 2026-11-20). This entry imports the exact kernel
+        # directly, so the first fast timing (build aa82adadef) ran the gemm row on the FP32 chain in both arms:
+        # equal output hash, ratio 1.04. A fast-rows set on NVIDIA or AMD (the matrix-units route is its default
+        # since A/B abf2: this row 64.77 -> 59.98 ms, 0.93, max_rel_err_vs_fp64 2.8e-4) sends a product the size
+        # rule takes to the matrix unit; the lease's workspace holds the OP_TN transpose. The operands and the
+        # output are disjoint pooled buffers of exactly the sizes the route needs. Per call on the route: the
+        # integer rule; the same uploads, one download and one wait as below. In every other build (identical
+        # included) this block is not compiled and the lines of the else branch are the code.
+        # TOMBSTONE: MOJOLEARN_GEMM_FAST_BF16_UNITS (median 0.96, mlp-clf/taxi infer 1.86, gemm max_rel_err 2.2e-3;
+        # dominated by the TF32 route) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+        # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
+        comptime if GEMM_FAST_MATRIX_UNITS:
+            var units_ws = lease.f32(
+                ctx, ROLE_WS,
+                max(identical_gemm_workspace_max_floats(m, n, k), matrix_units_workspace_floats(m, n, k, op)),
+            )
+            if not matrix_units_gemm_into(ctx, c, a, b, units_ws, m, n, k, op):
                 identical_gemm_into(ctx, c, a, b, units_ws, m, n, k, op)
             gemm_down_f32(ctx, lease, c, c_ptr, m * n)
             _ = units_ws

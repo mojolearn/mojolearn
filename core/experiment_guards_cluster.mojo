@@ -618,6 +618,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER.fx-verdicts2.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_KNN_DOOR_FIT_XN_EAGER"](), "removed 2026-11-18 (lane/fx-verdicts2, A/B ab3 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T182558Z-cb6e02, one run per arm, digests equal): eager x_neighbors admission in every k-NN fit was arm/base 1.002 geomean over 4 cells (noise); the multi-output transpose resolves the binding; recoverable at 85c36e324f"
     # ---- end lane fx-verdicts2
+    # ---- lane fx-verdicts6 (2026-11-20): verdicts of A/B abf2 (NVIDIA L40S host 79f003b8e8ae, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59)
+    # TOMBSTONE: MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm: knn, knn-clf and knn-reg on istella and taxi, 6 cells 0.98-1.01, median 0.99) deleted 2026-11-20 by lane/fx-verdicts6; code recoverable at 06d1e8ff34.
+    # Restore: git apply experiments/removed/MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; NOISE: knn, knn-clf and knn-reg on istella and taxi, 6 cells 0.98-1.01, median 0.99): the brute-force k-NN distance product on the matrix unit in a fast build; the exact distance tiles are the code; see docs/TOMBSTONES.md"
+    # ---- end lane fx-verdicts6
     return True
 
 

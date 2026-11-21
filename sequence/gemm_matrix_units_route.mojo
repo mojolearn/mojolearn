@@ -2,9 +2,12 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LARGE SEQUENCE PRODUCTS ON THE MATRIX UNIT (lane fx-fast-matrix-units, 2026-11-19).
 
-The sequence executor's side of `-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS=1` (gemm/fast_matrix_units.mojo: what the
-arm is, where it is legal, the error bound, the size rule). Default OFF, A/B owed with quality beside time.
-With the define off nothing here is compiled into a launch and `DeviceExec._launch` is unchanged.
+The sequence executor's side of the matrix-units route of a `fast` build on NVIDIA and AMD
+(gemm/fast_matrix_units.mojo: what the route is, where it is compiled, the error bound, the size rule). DEFAULT
+there since 2026-11-20 (lane fx-verdicts6, A/B abf2 on the NVIDIA L40S, arm fast-matrix-units-tf32-all: the MLP
+rows that run through this executor, mlp-clf and mlp-reg fit 0.96-0.97 and infer 0.85-0.95, quality equal);
+`-D MOJOLEARN_GEMM_FAST_MATRIX_UNITS_OFF` keeps the exact route. Where the route constant is False (every
+identical build) nothing here is compiled into a launch and `DeviceExec._launch` is unchanged.
 
 WHAT MOVES. A plain dense GEMM launch of the executor (OP_GEMM, OP_GEMM_EPI, OP_AGK_GEMM_EPI: the forward and
 dInput products of the tape and of the hand MLP) that the size rule takes runs `linalg.matmul` (TF32 operands,
@@ -28,13 +31,7 @@ NOT ROUTED (today's FP32 route kept): the accumulate form (i7 != 0), a C that is
 (i8 != N), the column-sum launches (i11 != 0), every product the split-K rule or the coop rule takes first
 (they are tested before this rule), every product under the size rule, the host column.
 
-UNVERIFIED, and one construct here is new to the tree: `TileTensor(ptr=..., layout=...)` over the executor's
-raw device pointers (the keyword constructor documented at max.modular.com, layout/tile_tensor/TileTensor;
-every other `TileTensor` in the tree is built from a `DeviceBuffer`). If it does not compile on the pinned
-toolchain, this module and its one block in sequence/exec_device.mojo come out together and the arm keeps the
-neural-dispatch products; nothing else reads this file.
-
-COST PER CALL under the arm: seven integer tests, then one launch (two with a follower); no lookup, allocation,
+COST PER CALL on the route: seven integer tests, then one launch (two with a follower); no lookup, allocation,
 lock or wait.
 """
 from core.column_stats import CUDA_MAX_GRID_YZ, TRANSPOSE_TILE, transpose_kernel
@@ -47,7 +44,7 @@ from sequence.ops import Args, OP_GEMM, OP_GEMM_EPI
 from autograd.ops import OP_AGK_GEMM_EPI
 from gemm.fast_matrix_units import GEMM_FAST_MATRIX_UNITS, matrix_units_takes
 
-#: The arm on the sequence executor: the NVIDIA `fast` matrix-units build.
+#: The route on the sequence executor: a `fast` build on NVIDIA or AMD (one compile-time constant).
 comptime SEQ_GEMM_MATRIX_UNITS = GEMM_FAST_MATRIX_UNITS
 
 #: `seq_gemm_matrix_units_on`'s answers: keep today's route, B stored k x n, B stored n x k.
