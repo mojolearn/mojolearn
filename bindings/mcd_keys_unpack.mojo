@@ -18,6 +18,8 @@ comptime MCD_OPN_SCORE_SAMPLES = 5
 comptime MCD_OPN_DECISION_FUNCTION = 6
 comptime MCD_OPN_PREDICT = 7
 comptime MCD_OPN_ELLIPTIC_SCORE = 8
+comptime MCD_OPN_DEVICE_SET = 9
+comptime MCD_OPN_VENDOR_USED = 10
 
 
 struct McdKeys(Defaultable, Movable):
@@ -118,6 +120,8 @@ def _mcd_keys_fill(nk: UnsafePointer[McdKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "decision_function", MCD_OPN_DECISION_FUNCTION)
     py_op_add(ops, "predict", MCD_OPN_PREDICT)
     py_op_add(ops, "elliptic_score", MCD_OPN_ELLIPTIC_SCORE)
+    py_op_add(ops, "device_set", MCD_OPN_DEVICE_SET)
+    py_op_add(ops, "vendor_used", MCD_OPN_VENDOR_USED)
     nk[].ops = ops
     nk[].ready = True
 

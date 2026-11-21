@@ -1,0 +1,495 @@
+diff --git b/bindings/_mojolearn_forecast_host.mojo a/bindings/_mojolearn_forecast_host.mojo
+index 0cf61eccc1..e6980338bb 100644
+--- b/bindings/_mojolearn_forecast_host.mojo
++++ a/bindings/_mojolearn_forecast_host.mojo
+@@ -53,7 +53,11 @@ from bindings.arima_host_predict_pack import (
+     arima_forecast_binding,
+     arima_predict_binding,
+ )
+-from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
++from bindings.holtwinters_host_predict_door import (
++    HW_PREDICT_SABOTAGE,
++    holtwinters_forecast_binding,
++    holtwinters_predict_binding,
++)
+ from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding, select_d_host_binding
+ from tsa.tsa_ops_forecast_host import publish_tsa_hw_ops_forecast_host
+ 
+@@ -123,8 +127,8 @@ def build__mojolearn_forecast_host() -> PythonObject:
+         module.def_function[arima_forecast_binding]("arima_forecast")
+         # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
+-        # TOMBSTONE: dead Python exports holtwinters_forecast, holtwinters_predict (no product caller: the ExponentialSmoothing owner reaches these kernels through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 8e1fedd052.
+-        # Restore: git apply experiments/removed/dead_entries_tsa_hw_calls.patch
++        module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
++        module.def_function[holtwinters_predict_binding]("holtwinters_predict")
+         # The KPSS stationarity test (lane/expose-inference-surface,
+         # 2026-09-16). It trains no model, so it belongs on the shipped side;
+         # the `_mojolearn_tsa` route reaches it here when the reference
+diff --git b/bindings/_mojolearn_tsa.mojo a/bindings/_mojolearn_tsa.mojo
+index 2047d8d968..79ab7315df 100644
+--- b/bindings/_mojolearn_tsa.mojo
++++ a/bindings/_mojolearn_tsa.mojo
+@@ -52,11 +52,180 @@ from std.python.bindings import PythonModuleBuilder
+ from checks.vendor import COMPILED_VENDOR
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+ 
++from holtwinters.estimator import holtwinters_fit_ptr, holtwinters_forecast_ptr, holtwinters_predict_ptr
+ from holtwinters.resident_state import holtwinters_resident_count
+ from tsa.estimator import kpss_test_host, select_d_host
+ from tsa.tsa_ops_device import publish_tsa_hw_ops_device
+ 
+ 
++def holtwinters_fit_binding(
++    data_addr: PythonObject,
++    comps_addr: PythonObject,
++    stats_addr: PythonObject,
++    flags_addr: PythonObject,
++    params: PythonObject,
++    seasonal: PythonObject,
++) raises -> PythonObject:
++    """`ExponentialSmoothing(...).fit()` (holtwinters/, DEVIATIONS 660-665,
++    697-699). Returns `components_len = (n - frequency) * batch_size`.
++
++    `params` is, in this exact order (mirrored in
++    `python/mojolearn/_tsa_impl.py`):
++
++        0  n              observations per series
++        1  batch_size     cuML's ts_num
++        2  frequency      cuML's seasonal_periods
++        3  start_periods
++        4  eps            (float)
++        5  init_method    OPTIONAL: 0 heuristic (cuML's fit, the value when
++                          absent), 1 estimated (`holtwinters/impl/internal/
++                          hw_estimate.mojo`, the Python default)
++
++    `seasonal` is cuML's name string; `seasonal_from_name` refuses
++    anything but 'additive'/'add'/'multiplicative'/'mul' BY NAME, in their
++    words (`holtwinters.pyx:197`).
++
++    `data_addr` reads `batch_size * n` float32, SERIES-MAJOR: series `s`
++    occupies `[s * n, (s + 1) * n)`.
++
++    `comps_addr` is written with `3 * components_len` float32, in this
++    exact order (the same words in `holtwinters/estimator.mojo` and
++    `python/mojolearn/_tsa_impl.py`):
++
++        [0 * components_len, 1 * components_len)   level
++        [1 * components_len, 2 * components_len)   trend
++        [2 * components_len, 3 * components_len)   season
++
++    Each block is TIME-MAJOR: series `s` at step `i` is `[s + i *
++    batch_size]`. That is a TRANSPOSE of the input's layout, and it is
++    cuML's (`holtwinters.pyx:341-344`).
++
++    `stats_addr` is written with `4 * batch_size` float32, in this exact
++    order:
++
++        [0 * batch_size, 1 * batch_size)   sse
++        [1 * batch_size, 2 * batch_size)   alpha
++        [2 * batch_size, 3 * batch_size)   beta
++        [3 * batch_size, 4 * batch_size)   gamma
++
++    `flags_addr` is written with `2 * batch_size` int32, in this exact
++    order:
++
++        [0 * batch_size, 1 * batch_size)   niter
++        [1 * batch_size, 2 * batch_size)   criterion
++    """
++    if len(params) != 5 and len(params) != 6:
++        raise Error(
++            "holtwinters_fit: params must contain 5 or 6 values (n, batch_size,"
++            " frequency, start_periods, eps[, init_method]), got " + String(len(params))
++        )
++    var dp = _f32_ptr(Int(py=data_addr))
++    var cp = _f32_ptr(Int(py=comps_addr))
++    var sp = _f32_ptr(Int(py=stats_addr))
++    var fp = _i32_ptr(Int(py=flags_addr))
++    var n = Int(py=params[0])
++    var batch_size = Int(py=params[1])
++    var frequency = Int(py=params[2])
++    var start_periods = Int(py=params[3])
++    var eps = Float32(Float64(py=params[4]))
++    var init_method = Int(py=params[5]) if len(params) == 6 else 0
++    if init_method != 0 and init_method != 1:
++        raise Error("holtwinters_fit: init_method must be 0 (heuristic) or 1 (estimated), got " + String(init_method))
++    var sname = String(py=seasonal)
++    var components_len = 0
++    with GILReleased(Python()):
++        components_len = holtwinters_fit_ptr(
++            dp, cp, sp, fp, n, batch_size, frequency, start_periods, sname, eps,
++            init_method,
++        )
++    return PythonObject(components_len)
++
++
++def holtwinters_forecast_binding(
++    comps_addr: PythonObject,
++    out_addr: PythonObject,
++    params: PythonObject,
++    seasonal: PythonObject,
++) raises -> PythonObject:
++    """`.forecast(h)` (holtwinters/). Returns `h * batch_size`.
++
++    `params` is, in this exact order (mirrored in
++    `python/mojolearn/_tsa_impl.py`):
++
++        0  n              the FIT's observations per series
++        1  batch_size
++        2  frequency      the FIT's seasonal_periods
++        3  h              steps to forecast
++
++    `comps_addr` reads `3 * components_len` float32 in the SAME packed
++    order `holtwinters_fit` wrote: level, then trend, then season, each
++    `components_len = (n - frequency) * batch_size` and each time-major.
++
++    `out_addr` is written with `h * batch_size` float32, TIME-MAJOR:
++    series `s` at step `i` is `[s + i * batch_size]`.
++    """
++    if len(params) != 4:
++        raise Error(
++            "holtwinters_forecast: params must contain 4 values (n,"
++            " batch_size, frequency, h), got " + String(len(params))
++        )
++    var cp = _f32_ptr(Int(py=comps_addr))
++    var op = _f32_ptr(Int(py=out_addr))
++    var n = Int(py=params[0])
++    var batch_size = Int(py=params[1])
++    var frequency = Int(py=params[2])
++    var h = Int(py=params[3])
++    var sname = String(py=seasonal)
++    var written = 0
++    with GILReleased(Python()):
++        written = holtwinters_forecast_ptr(cp, op, n, batch_size, frequency, sname, h)
++    return PythonObject(written)
++
++
++def holtwinters_predict_binding(
++    comps_addr: PythonObject,
++    out_addr: PythonObject,
++    params: PythonObject,
++    seasonal: PythonObject,
++) raises -> PythonObject:
++    """The in-sample one-step predictions at times `[start, end)`, on the
++    device (`holtwinters/estimator.mojo::holtwinters_predict_ptr`). Returns
++    `(end - start) * batch_size`.
++
++    `params` is, in this exact order (mirrored in
++    `python/mojolearn/_tsa_impl.py` and the host binding):
++
++        0  n              the FIT's observations per series
++        1  batch_size
++        2  frequency      the FIT's seasonal_periods
++        3  start          0 <= start
++        4  end            start < end <= n
++
++    `comps_addr` reads the packed components as `holtwinters_forecast`
++    does; `out_addr` is written with `(end - start) * batch_size` float32,
++    TIME-MAJOR, the canonical quiet NaN where `t < 2 * frequency`.
++    """
++    if len(params) != 5:
++        raise Error(
++            "holtwinters_predict: params must contain 5 values (n,"
++            " batch_size, frequency, start, end), got " + String(len(params))
++        )
++    var cp = _f32_ptr(Int(py=comps_addr))
++    var op = _f32_ptr(Int(py=out_addr))
++    var n = Int(py=params[0])
++    var batch_size = Int(py=params[1])
++    var frequency = Int(py=params[2])
++    var start = Int(py=params[3])
++    var end = Int(py=params[4])
++    var sname = String(py=seasonal)
++    var written = 0
++    with GILReleased(Python()):
++        written = holtwinters_predict_ptr(
++            cp, op, n, batch_size, frequency, sname, start, end
++        )
++    return PythonObject(written)
++
++
+ def holtwinters_resident_count_binding() raises -> PythonObject:
+     """Live resident component sets (the tools/ lifetime check reads it)."""
+     return PythonObject(holtwinters_resident_count())
+@@ -180,10 +349,11 @@ def build__mojolearn_tsa() -> PythonObject:
+         var m = PythonModuleBuilder("_mojolearn_tsa")
+         m.def_function[tsa_vendor_binding]("tsa_vendor")
+         m.def_function[tsa_numeric_mode_binding]("tsa_numeric_mode")
+-        # TOMBSTONE: dead Python exports holtwinters_fit, holtwinters_forecast, holtwinters_predict (no product caller: the ExponentialSmoothing owner reaches these kernels through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 8e1fedd052.
+-        # Restore: git apply experiments/removed/dead_entries_tsa_hw_calls.patch
++        m.def_function[holtwinters_fit_binding]("holtwinters_fit")
++        m.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
+         # The in-sample prediction runs on the device (one thread per cell);
+         # the host bindings keep bindings/holtwinters_host_predict.mojo.
++        m.def_function[holtwinters_predict_binding]("holtwinters_predict")
+         m.def_function[holtwinters_resident_count_binding]("holtwinters_resident_count")
+         # TOMBSTONE: dead Python exports holtwinters_resident_prepare, holtwinters_resident_release, holtwinters_query_resident (no caller: the ExponentialSmoothing owner reaches the resident operations through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-20; code recoverable at 3b1a75cca0.
+         # Restore: git apply experiments/removed/dead_entries_tsa_hw_resident.patch
+diff --git b/bindings/_mojolearn_tsa_host.mojo a/bindings/_mojolearn_tsa_host.mojo
+index b8459be5a6..2005ffbab7 100644
+--- b/bindings/_mojolearn_tsa_host.mojo
++++ a/bindings/_mojolearn_tsa_host.mojo
+@@ -52,7 +52,11 @@ from checks.kernel_matrix import (
+ )
+ 
+ from checks.numerics import GLOBAL_NUMERIC_MODE
+-from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
++from bindings.holtwinters_host_predict_door import (
++    HW_PREDICT_SABOTAGE,
++    holtwinters_forecast_binding,
++    holtwinters_predict_binding,
++)
+ from holtwinters.host.hw_oracle import (
+     HW_ORACLE_HOST_SABOTAGE,
+     oracle_fit,
+@@ -62,11 +66,32 @@ from holtwinters.impl.runner import (
+     holtwinters_validate_params,
+ )
+ from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
++from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
+ from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
+ from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
+ from tsa.tsa_ops_host import publish_tsa_hw_ops_host
+ 
+ 
++def _index(value: PythonObject) raises -> Int:
++    # p3-cnn-sequence-tsa: an exact int (every argument the public wrapper
++    # builds) is read directly: no class-name reads, no operator module
++    # lookup, no Python call. Anything else keeps the checks below.
++    ref cpy = Python().cpython()
++    var zero = PythonObject(0)
++    var cls = PythonObject(from_owned=cpy.PyObject_Type(value._obj_ptr))
++    var int_type = PythonObject(from_owned=cpy.PyObject_Type(zero._obj_ptr))
++    if cls is int_type:
++        return Int(py=value)
++    var type_name = String(py=value.__class__.__name__)
++    if type_name == "bool" or type_name == "bool_":
++        raise Error("tsa host: integers expected, not booleans")
++    var operator_module = native_loaded_module("operator")
++    # operator.index through the balanced call: PythonObject.__call__ keeps one
++    # reference on each argument (bindings/py_balanced.mojo), which leaked every
++    # buffer address passed to a host entry.
++    return Int(py=_balanced_call(operator_module.index, value))
++
++
+ def tsa_host_numeric_mode_binding() raises -> PythonObject:
+     return PythonObject(GLOBAL_NUMERIC_MODE)
+ 
+@@ -108,6 +133,68 @@ def tsa_host_sabotage_binding() raises -> PythonObject:
+ # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
+ 
+ 
++def holtwinters_fit_binding(
++    data_addr: PythonObject,
++    comps_addr: PythonObject,
++    stats_addr: PythonObject,
++    flags_addr: PythonObject,
++    params: PythonObject,
++    seasonal: PythonObject,
++) raises -> PythonObject:
++    """`ExponentialSmoothing(...).fit()` on the host by
++    `oracle_fit[DType.float32]`. Returns `components_len = (n - frequency)
++    * batch_size`.
++
++    `params` is, in this exact order (mirrored in
++    `python/mojolearn/_tsa_impl.py` and in the GPU binding):
++
++        0  n              observations per series
++        1  batch_size     cuML's ts_num
++        2  frequency      cuML's seasonal_periods
++        3  start_periods
++        4  eps            (float)
++        5  init_method    OPTIONAL: 0 heuristic (absent), 1 estimated
++
++    `data_addr` reads `batch_size * n` float32, SERIES-MAJOR. `comps_addr`
++    is written with `3 * components_len` float32 (level, trend, season,
++    each TIME-MAJOR: series `s` at step `i` is `[s + i * batch_size]`),
++    `stats_addr` with `4 * batch_size` float32 (sse, alpha, beta, gamma),
++    `flags_addr` with `2 * batch_size` int32 (niter, criterion)."""
++    if len(params) != 5 and len(params) != 6:
++        raise Error(
++            "holtwinters_fit: params must contain 5 or 6 values (n, batch_size,"
++            " frequency, start_periods, eps[, init_method]), got " + String(len(params))
++        )
++    var data_address = _index(data_addr)
++    var cp = f32_ptr(_index(comps_addr))
++    var sp = f32_ptr(_index(stats_addr))
++    var fp = i32_ptr(_index(flags_addr))
++    var n = _index(params[0])
++    var batch_size = _index(params[1])
++    var frequency = _index(params[2])
++    var start_periods = _index(params[3])
++    var eps = Float32(Float64(py=params[4]))
++    var init_method = _index(params[5]) if len(params) == 6 else 0
++    if init_method != 0 and init_method != 1:
++        raise Error("holtwinters_fit: init_method must be 0 (heuristic) or 1 (estimated), got " + String(init_method))
++    var sname = String(py=seasonal)
++    var components_len = 0
++    with GILReleased(Python()):
++        components_len = holtwinters_fit_host_into(
++            data_address, n, batch_size, frequency, start_periods, eps, init_method, sname, cp, sp, fp,
++        )
++    return PythonObject(components_len)
++
++
++# `holtwinters_forecast` and `holtwinters_predict` are registered from
++# `bindings/holtwinters_host_predict.mojo` (lane/inference-holtwinters,
++# 2026-09-15), the source the shipped forecast inference binding registers
++# them from; the forecast body is `oracle_forecast`'s, one spelling.
++
++
++# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tsa_host.mojo
++# (the per-binding build) and in the merged roots tools/merged_bindings.py
++# writes from bindings/merged_groups.json (one shared file per directory set).
+ def build__mojolearn_tsa_host() -> PythonObject:
+     comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
+     try:
+@@ -118,8 +205,9 @@ def build__mojolearn_tsa_host() -> PythonObject:
+         module.def_function[tsa_host_sabotage_binding]("tsa_host_sabotage")
+         # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
+         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
+-        # TOMBSTONE: dead Python exports holtwinters_fit, holtwinters_forecast, holtwinters_predict (no product caller: the ExponentialSmoothing owner reaches these kernels through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 8e1fedd052.
+-        # Restore: git apply experiments/removed/dead_entries_tsa_hw_calls.patch
++        module.def_function[holtwinters_fit_binding]("holtwinters_fit")
++        module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
++        module.def_function[holtwinters_predict_binding]("holtwinters_predict")
+         module.def_function[kpss_test_binding]("kpss_test")
+         module.def_function[select_d_host_binding]("select_d")
+         # The Holt-Winters operations table (core/tsa_entry_table.mojo): the
+diff --git b/bindings/holtwinters_host_predict_door.mojo a/bindings/holtwinters_host_predict_door.mojo
+new file mode 100644
+index 0000000000..4f8c4787a8
+--- /dev/null
++++ a/bindings/holtwinters_host_predict_door.mojo
+@@ -0,0 +1,131 @@
++# SPDX-License-Identifier: Apache-2.0
++# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
++"""The Holt-Winters prediction entries on the host, shared by three bindings
++(lane/inference-holtwinters, 2026-09-15).
++
++`bindings/_mojolearn_tsa_host.mojo` (the internal reference binding, fit
++included) and `bindings/_mojolearn_forecast_host.mojo` (the inference binding
++the wheels ship, no fit) both register `holtwinters_forecast` and
++`holtwinters_predict` from here, so the two binaries answer a saved model
++through the same source. The GPU binding `bindings/_mojolearn_tsa.mojo`
++runs its in-sample prediction on the device
++(`holtwinters/estimator.mojo::holtwinters_predict_ptr`, the same cell
++arithmetic) and does not import this file (cpu-gpu-cleanup n-seq). Not a binding itself: it registers nothing, and the
++host surface tests glob only `_mojolearn_*_host.mojo`.
++
++The arithmetic is `holtwinters/host/hw_predict.mojo`, which imports only
++`checks/numerics.mojo`: no decomposition, no BFGS, no line search.
++
++THE SABOTAGE ARM, `HW_PREDICT_SABOTAGE`: under `-D MOJOLEARN_HOST_SABOTAGE=1`
++(the host builds' negative control) or `-D MOJOLEARN_HW_PREDICT_SABOTAGE=1`,
++every finite value either entry writes has its lowest bit flipped, a VALUE
++perturbation that leaves every order and shape alone, so a saved-model gate
++must read a mismatch on every forecast and in-sample prediction. The GPU
++build scripts pass neither define.
++"""
++from std.python import Python, PythonObject
++from bindings.native_loaded_module_door import native_loaded_module
++from bindings.py_balanced import py_call as _balanced_call, py_type as _balanced_type
++from std.python._cpython import GILReleased
++
++from core.hostptr import f32_ptr
++from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
++from bindings.holtwinters_host_predict_run import holtwinters_forecast_run, holtwinters_predict_run
++
++def _hw_index(value: PythonObject) raises -> Int:
++    # An exact int is its own index: no class-name string, module lookup or
++    # Python call per scalar argument (bool and int subclasses take the
++    # checked route below, as before).
++    if _balanced_type(value) is _balanced_type(PythonObject(0)):
++        return Int(py=value)
++    var type_name = String(py=value.__class__.__name__)
++    if type_name == "bool" or type_name == "bool_":
++        raise Error("holtwinters host: integers expected, not booleans")
++    var operator_module = native_loaded_module("operator")
++    # operator.index through the balanced call: PythonObject.__call__ keeps one
++    # reference on each argument (bindings/py_balanced.mojo), which leaked every
++    # buffer address passed to a host entry.
++    return Int(py=_balanced_call(operator_module.index, value))
++
++
++def holtwinters_forecast_binding(
++    comps_addr: PythonObject,
++    out_addr: PythonObject,
++    params: PythonObject,
++    seasonal: PythonObject,
++) raises -> PythonObject:
++    """`.forecast(h)` on the host by `hw_forecast_from_state`. Returns
++    `h * batch_size`.
++
++    `params` is, in this exact order (the same order in
++    `python/mojolearn/_tsa_impl.py` and in the GPU binding):
++
++        0  n              the FIT's observations per series
++        1  batch_size
++        2  frequency      the FIT's seasonal_periods
++        3  h              steps to forecast
++
++    `comps_addr` reads `3 * components_len` float32 in the packed order
++    `holtwinters_fit` wrote (level, trend, season, each `components_len =
++    (n - frequency) * batch_size` and TIME-MAJOR); `out_addr` is written with
++    `h * batch_size` float32, TIME-MAJOR."""
++    if len(params) != 4:
++        raise Error(
++            "holtwinters_forecast: params must contain 4 values (n,"
++            " batch_size, frequency, h), got "
++            + String(len(params))
++        )
++    var cp = f32_ptr(_hw_index(comps_addr))
++    var op = f32_ptr(_hw_index(out_addr))
++    var n = _hw_index(params[0])
++    var batch_size = _hw_index(params[1])
++    var frequency = _hw_index(params[2])
++    var h = _hw_index(params[3])
++    var sname = String(py=seasonal)
++    var written = 0
++    with GILReleased(Python()):
++        written = holtwinters_forecast_run(cp, op, n, batch_size, frequency, h, sname)
++    return PythonObject(written)
++
++
++def holtwinters_predict_binding(
++    comps_addr: PythonObject,
++    out_addr: PythonObject,
++    params: PythonObject,
++    seasonal: PythonObject,
++) raises -> PythonObject:
++    """The in-sample one-step predictions at times `[start, end)` by
++    `hw_predict_in_sample`. Returns `(end - start) * batch_size`.
++
++    `params` is, in this exact order (the same order in
++    `python/mojolearn/_tsa_impl.py`):
++
++        0  n              the FIT's observations per series
++        1  batch_size
++        2  frequency      the FIT's seasonal_periods
++        3  start          0 <= start
++        4  end            start < end <= n
++
++    `comps_addr` reads the packed components as `holtwinters_forecast`
++    does; `out_addr` is written with `(end - start) * batch_size` float32,
++    TIME-MAJOR, the canonical quiet NaN where `t < 2 * frequency`. A time
++    at or beyond `n` is the forecast's, and `ExponentialSmoothing.predict`
++    asks `holtwinters_forecast` for it."""
++    if len(params) != 5:
++        raise Error(
++            "holtwinters_predict: params must contain 5 values (n,"
++            " batch_size, frequency, start, end), got "
++            + String(len(params))
++        )
++    var cp = f32_ptr(_hw_index(comps_addr))
++    var op = f32_ptr(_hw_index(out_addr))
++    var n = _hw_index(params[0])
++    var batch_size = _hw_index(params[1])
++    var frequency = _hw_index(params[2])
++    var start = _hw_index(params[3])
++    var end = _hw_index(params[4])
++    var sname = String(py=seasonal)
++    var written = 0
++    with GILReleased(Python()):
++        written = holtwinters_predict_run(cp, op, n, batch_size, frequency, start, end, sname)
++    return PythonObject(written)

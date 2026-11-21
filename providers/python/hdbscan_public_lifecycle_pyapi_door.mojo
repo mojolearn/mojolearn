@@ -36,6 +36,7 @@ from core.hdbscan_query_api import (
 from core.kmeans_variants_api import VariantsSpan
 from bindings.metrics_native_support_door import metric_warn
 from providers.python.estimator_binding_pyapi_door import estimator_binding
+from providers.python.device_route_boundary_door import device_route_clear
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
 from bindings.py_optional import py_present
@@ -64,7 +65,12 @@ def _schema(context: PythonObject) raises -> PythonObject:
 def _initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     var names = _schema(context)
-    if len(names) != len(args):
+    # `device` is the constructor's last value, outside the names every
+    # operation admits again: an instance without the field runs this
+    # installation's device. Its check is the shared constructor door's (the
+    # public constructor is the full-reset native constructor); a constructor
+    # run again on a live estimator drops its binding route.
+    if len(names) + 1 != len(args):
         raise Error("TypeError: HDBSCAN constructor metadata differs")
     var replacements = List[PythonObject]()
     for i in range(len(names)):  # driver-loop: fixed constructor fields; admit every replaced owner first
@@ -76,6 +82,8 @@ def _initialize(model: PythonObject, args: PythonObject, context: PythonObject) 
         replacements.append(value)
     for i in range(len(names)):  # driver-loop: publish after complete lifetime admission
         py_setitem(fields, names[i], replacements[i])
+    py_setitem(fields, PythonObject("device"), args[len(names)])
+    device_route_clear(model)
     return PythonObject(None)
 
 

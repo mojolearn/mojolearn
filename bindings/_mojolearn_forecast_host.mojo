@@ -53,11 +53,7 @@ from bindings.arima_host_predict_pack import (
     arima_forecast_binding,
     arima_predict_binding,
 )
-from bindings.holtwinters_host_predict_door import (
-    HW_PREDICT_SABOTAGE,
-    holtwinters_forecast_binding,
-    holtwinters_predict_binding,
-)
+from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
 from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding, select_d_host_binding
 from tsa.tsa_ops_forecast_host import publish_tsa_hw_ops_forecast_host
 
@@ -127,8 +123,8 @@ def build__mojolearn_forecast_host() -> PythonObject:
         module.def_function[arima_forecast_binding]("arima_forecast")
         # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
-        module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
-        module.def_function[holtwinters_predict_binding]("holtwinters_predict")
+        # TOMBSTONE: dead Python exports holtwinters_forecast, holtwinters_predict (no product caller: the ExponentialSmoothing owner reaches these kernels through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 8e1fedd052.
+        # Restore: git apply experiments/removed/dead_entries_tsa_hw_calls.patch
         # The KPSS stationarity test (lane/expose-inference-surface,
         # 2026-09-16). It trains no model, so it belongs on the shipped side;
         # the `_mojolearn_tsa` route reaches it here when the reference

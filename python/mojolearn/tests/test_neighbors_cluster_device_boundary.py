@@ -6,10 +6,10 @@ The device is a constructor parameter. None is this installation's device: the G
 set, else the CPU. `get_params` returns what was passed (None stays None). `device="cpu"` always runs; on a GPU
 installation it runs the CPU binaries of the same family in the same process (`vendor_used() == "cpu"`) and in
 `identical` mode returns the bits the GPU returns. An unknown value, and an explicit `device="gpu"` on a CPU-only
-installation, are refused in words by the estimator's first operation: these classes are constructed and
-re-parameterized by the shared field-only constructor, which stores the value as given. The estimator reads the device
-once, at its first operation, into its native route owner, and reads it again only when the stored value is replaced.
-`get_params`, `set_params`, clone and pickle carry it.
+installation, are refused in words at construction and at `set_params`. The device is read once into the estimator's
+binding route; no public call reads it again, and `set_params` is the way to change it. `get_params`, `set_params`,
+clone and pickle carry it. The construction-level rules of every class are in test_device_parameter.py; this file
+holds the fit-level rows of the mixture, cluster, neighbors and density families.
 
 Each row of CASES is one estimator class: how to build it, its fit arguments and the methods whose answers are
 compared across devices. A family that gains `device=` adds its row.
@@ -51,6 +51,18 @@ CASES = [
     Case("BayesianGaussianMixture",
          lambda **kw: mojolearn.BayesianGaussianMixture(n_components=3, random_state=0, **kw),
          ("predict", "predict_proba", "score_samples")),
+    Case("MiniBatchKMeans", lambda **kw: mojolearn.MiniBatchKMeans(n_clusters=3, random_state=0, **kw),
+         ("predict", "transform")),
+    Case("BisectingKMeans", lambda **kw: mojolearn.BisectingKMeans(n_clusters=3, random_state=0, **kw), ("predict",)),
+    Case("MeanShift", lambda **kw: mojolearn.MeanShift(bandwidth=4.0, **kw), ("predict",)),
+    Case("OPTICS", lambda **kw: mojolearn.OPTICS(min_samples=5, **kw), ("fit_predict",)),
+    Case("AffinityPropagation", lambda **kw: mojolearn.AffinityPropagation(random_state=0, **kw), ("predict",)),
+    Case("DBSCAN", lambda **kw: mojolearn.DBSCAN(eps=2.5, min_samples=4, **kw), ("fit_predict",)),
+    Case("DBSCAN-prediction-data",
+         lambda **kw: mojolearn.DBSCAN(eps=2.5, min_samples=4, prediction_data=True, **kw), ("predict",)),
+    Case("KernelDensity", lambda **kw: mojolearn.KernelDensity(bandwidth=1.5, **kw), ("score_samples",)),
+    Case("HDBSCAN", lambda **kw: mojolearn.HDBSCAN(min_cluster_size=8, **kw), ("fit_predict",)),
+    Case("KMeans", lambda **kw: mojolearn.KMeans(n_clusters=3, random_state=0, **kw), ("predict", "transform")),
 ]
 ids = [case.name for case in CASES]
 
@@ -72,15 +84,13 @@ def test_device_is_a_constructor_parameter_with_default_none(case):
 
 @pytest.mark.parametrize("case", CASES, ids=ids)
 @pytest.mark.parametrize("bad", ["tpu", "GPU", " cpu", "", "None", 0, False, b"cpu"])
-def test_unknown_device_is_refused_in_words_by_the_first_operation(case, bad):
-    x = blobs()
-    model = case.build(device=bad)
+def test_unknown_device_is_refused_in_words_at_construction_and_set_params(case, bad):
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
-        model.fit(x)
+        case.build(device=bad)
+    model = case.build()
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
-        model.vendor_used()
-    # nothing was fitted by the refused call
-    assert not mojolearn._mode.is_fitted(model)
+        model.set_params(device=bad)
+    assert model.get_params()["device"] is None
 
 
 @pytest.mark.parametrize("case", CASES, ids=ids)
@@ -95,15 +105,12 @@ def test_default_device_is_this_installations_device(case):
 @pytest.mark.parametrize("case", CASES, ids=ids)
 def test_explicit_gpu_runs_on_a_gpu_installation_and_is_refused_in_words_on_a_cpu_only_one(case):
     x = blobs()
-    model = case.build(device="gpu")
     if TWO_DEVICES:
-        model.fit(x)
+        model = case.build(device="gpu").fit(x)
         assert model.vendor_used() == mojolearn.vendor() and model.get_params()["device"] == "gpu"
         return
     with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn.*Use device='cpu'"):
-        model.fit(x)
-    with pytest.raises(ValueError, match="Use device='cpu'"):
-        model.vendor_used()
+        case.build(device="gpu")
 
 
 @pytest.mark.parametrize("case", CASES, ids=ids)
@@ -153,14 +160,13 @@ def test_identical_mode_cpu_device_returns_the_gpu_bits(case):
 @pytest.mark.parametrize("case", CASES, ids=ids)
 def test_cpu_device_never_runs_a_fast_binary(case):
     x = blobs()
-    model = case.build(device="cpu", numeric_mode="fast")
-    with pytest.raises(Exception, match="device='cpu' runs in identical mode only|numeric_mode"):
-        model.fit(x)
+    with pytest.raises(Exception, match="identical mode only|numeric_mode"):
+        case.build(device="cpu", numeric_mode="fast").fit(x)
 
 
 @two_devices
 @pytest.mark.parametrize("case", CASES, ids=ids)
-def test_set_params_and_assignment_move_the_estimator_to_the_other_device(case):
+def test_set_params_moves_the_estimator_to_the_other_device(case):
     x = blobs()
     model = case.build().fit(x)
     assert model.vendor_used() == mojolearn.vendor()
@@ -168,11 +174,8 @@ def test_set_params_and_assignment_move_the_estimator_to_the_other_device(case):
     assert model.get_params()["device"] == "cpu" and model.vendor_used() == "cpu"
     model.fit(x)
     assert model.vendor_used() == "cpu"
-    # a directly assigned device is a replaced value: the next operation reads it
-    model.device = None
-    assert model.vendor_used() == mojolearn.vendor()
-    model.device = "cpu"
-    assert model.vendor_used() == "cpu"
+    model.set_params(device=None)
+    assert model.fit(x).vendor_used() == mojolearn.vendor()
 
 
 @pytest.mark.parametrize("case", CASES, ids=ids)

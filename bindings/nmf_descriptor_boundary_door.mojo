@@ -19,9 +19,8 @@ from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvid
 from bindings.nmf_keys_unpack import nmf_keys
 from bindings.decomp_device_route_door import (
     decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
-    decomp_route_expected_vendor, decomp_route_mode,
+    decomp_route_expected_vendor, decomp_route_mode, DecompRoute,
 )
-from core.device_route_dw_decomp import DecompRoute, decomp_route_cpu_identical
 from bindings.py_balanced import py_item
 
 
@@ -49,7 +48,7 @@ def _nmf_route(model: PythonObject, fields: PythonObject, mode: PythonObject, co
     # per estimator. A hit is one `device` read, one record read and three
     # pointer compares; the selection below runs at the estimator's first
     # operation and after its mode or device object changed.
-    var hit = decomp_route_hit(model, fields, mode, context)
+    var hit = decomp_route_hit(model, mode, context)
     if hit.found:
         _nmf_capability(model, hit.route.connection, capability, legacy_name)
         return hit.route.connection
@@ -63,11 +62,10 @@ def _nmf_route(model: PythonObject, fields: PythonObject, mode: PythonObject, co
     # The one read of `device`: None is this installation's device; a `cpu`
     # route of a GPU installation reads the CPU image's table
     # (python/mojolearn/_native_decomp_device_bridge.py), identical only.
-    var device = decomp_route_resolve_device(hit.device, context)
+    var device = decomp_route_resolve_device(fields, 1 if name == "identical" else 0, context)
     var cpu_image = decomp_route_on_cpu_image(device, context)
     var table = PythonObject(None)
     if cpu_image:
-        decomp_route_cpu_identical(name == "identical")
         table = py_get(context, nk[].k_nmf_cpu_bindings)
         if table is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
@@ -100,7 +98,7 @@ def _nmf_route(model: PythonObject, fields: PythonObject, mode: PythonObject, co
     if nmf_mode(index) != (1 if name == "identical" else 0):
         raise Error("RuntimeError: NMF native mode differs from selected execution")
     _nmf_capability(model, index, capability, legacy_name)
-    decomp_route_keep(model, DecompRoute(device, index, 1 if name == "identical" else 0), mode, hit.device, context, factory)
+    decomp_route_keep(model, DecompRoute(device, index, 1 if name == "identical" else 0), mode, context, factory)
     return index
 
 

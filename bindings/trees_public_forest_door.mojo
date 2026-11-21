@@ -25,7 +25,7 @@ from core.mode_answer import MODE_FAMILY_FOREST
 from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
-from bindings.trees_route_boundary_door import trees_device_unpack
+from providers.python.device_route_boundary_door import device_unpack
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs_door import (
     TreesLabels,
@@ -79,7 +79,9 @@ from xtrees.trees_forest_run import (
     forest_export_verdict_check, forest_fit_notice_codes, trees_refuse, trees_check_features, forest_fit_core,
 )
 from checks.numerics import portable_log2_64
-from bindings.forest_fit_boundary_unpack import forest_fit_request_py, forest_request_from_words_py
+from bindings.forest_fit_boundary_unpack import forest_request_from_words_py
+from bindings.gbdt_fit_boundary_unpack import gbdt_fit_param_py
+from core.forest_fit_request import ForestFitArgs
 from bindings.forest_fit_boundary_pack import forest_request_words_py
 from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF, FOREST_TABLE_ET
 from core.trees_entry_table import TreesEntryKey
@@ -176,8 +178,8 @@ def forest_kind(model: PythonObject, context: PythonObject) raises -> String:
 
 # TOMBSTONE: forest_check_fit_device (Extra Trees' fit-time `device must be
 # 'gpu'` test) deleted 2026-11-20 by lane dw-trees: the estimator's device is
-# admitted where every operation starts (bindings/trees_route_boundary_door.mojo
-# `trees_route_enter`: a fit refuses an unknown device before any input is read).
+# admitted where it is given: the constructor and `set_params`
+# (bindings/trees_route_boundary_door.mojo `trees_device_admit`).
 
 
 def forest_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -312,9 +314,9 @@ def _rf_base(params: PythonObject, criterion_code: PythonObject, class_weight: P
     configuration `_cfg`. `params` hold the base's arguments by name."""
     var b = trees_builtins()
     var nk = trees_keys()
-    # `device`: None, 'gpu' or 'cpu' (the pilot's rule and words); which table
-    # set runs is the route's question, answered where the operation starts.
-    _ = trees_device_unpack(py_item(params, nk[].k_device), True)
+    # `device`: None, 'gpu' or 'cpu' (the shared rule and words); an instance
+    # whose field was written past its constructor is refused here.
+    _ = device_unpack(py_item(params, nk[].k_device), b)
     if py_item(params, nk[].k_max_leaf_nodes) is not None:
         _refuse("max_leaf_nodes", String(py_item(tables, nk[].k_max_leaf_nodes_why)))
     var oob = py_item(params, nk[].k_oob_score)
@@ -427,7 +429,7 @@ def _et_derive(model: PythonObject, params: PythonObject, kind: String, context:
     var nk = trees_keys()
     var tables = py_item(context, nk[].k_trees_et_tables)
     var device = py_item(params, nk[].k_device)
-    _ = trees_device_unpack(device, True)
+    _ = device_unpack(device, b)
     if py_item(params, nk[].k_n_jobs) is not None:
         raise Error("NotImplementedError: n_jobs is not implemented: there is no CPU thread pool here -- the"
                     + " fit runs one host thread driving the GPU (device='gpu')."
@@ -661,15 +663,22 @@ def forest_fit_request(fields: PythonObject, cfg: PythonObject, kind: String, ro
     fit); the RF params read `fields["_cfg"]`. The public fit and the
     tree-range shard driver (`forest_shard_prepare`) both build their
     request here; `forest_fit_core` runs it."""
-    var params: PythonObject
-    var criterion: PythonObject
+    # The request's parameter views are filled slot by slot from the
+    # configuration (lane dw-trees, round 2): no Python list is built and
+    # read back per fit. Each slot goes through the one parameter conversion
+    # (`gbdt_fit_param_py`), so every view and flag is what the list gave.
+    var ints = List[Int](capacity=24)
+    var floats = List[Float64](capacity=24)
+    var bad = List[UInt8](capacity=24)
+    var crit = -1
     if _family(kind) == "et":
-        params = _et_params(fields, cfg, rows, cols, classes, context)
-        criterion = PythonObject(None)
+        _et_slots(fields, cfg, rows, cols, classes, context, ints, floats, bad)
     else:
-        params = _rf_params(fields, kind, rows, cols, classes, native, context)
-        criterion = py_item(py_item(fields, PythonObject("_cfg")), PythonObject("criterion"))
-    var args = forest_fit_request_py(x_addr, y_addr, params, criterion)
+        _rf_slots(fields, kind, rows, cols, classes, native, context, ints, floats, bad)
+        var criterion = py_item(py_item(fields, PythonObject("_cfg")), PythonObject("criterion"))
+        if criterion is not None:
+            crit = Int(py=criterion)
+    var args = ForestFitArgs(x_addr, y_addr, ints^, floats^, bad^, crit)
     args.weights = fit.weights
     args.tree_start = fit.tree_start
     args.oob = fit.oob
@@ -756,6 +765,52 @@ def _rf_params(fields: PythonObject, kind: String, rows: Int, cols: Int, classes
     return params
 
 
+def _rf_slots(fields: PythonObject, kind: String, rows: Int, cols: Int, classes: Int, rf: PythonObject,
+              context: PythonObject, mut ints: List[Int], mut floats: List[Float64], mut bad: List[UInt8]) raises:
+    """`_rf_params` without its Python list: the same 16 slots in
+    _mojolearn_rf.mojo's order (then min_weight_fraction_leaf when it is not
+    0; DecisionTreeRegressor's slot 7 is its tier's bin count), read from the
+    configuration in the same order and appended to the request's views.
+    Once per fit; a parameter slot loop, never row data."""
+    var nk = trees_keys()
+    var cfg = py_item(fields, nk[].k__cfg)
+    var n_estimators = py_item(cfg, nk[].k_n_estimators)
+    var max_depth = py_item(cfg, nk[].k_max_depth)
+    var max_leaves = py_item(cfg, nk[].k_max_leaves)
+    var fraction = PythonObject(_max_features_fraction(py_item(cfg, nk[].k_max_features), cols, context))
+    var n_bins = py_item(cfg, nk[].k_n_bins)
+    var min_samples_leaf = py_item(cfg, nk[].k_min_samples_leaf)
+    var min_samples_split = py_item(cfg, nk[].k_min_samples_split)
+    var min_impurity_decrease = py_item(cfg, nk[].k_min_impurity_decrease)
+    var bootstrap = PythonObject(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0)
+    var max_samples = py_item(cfg, nk[].k_max_samples)
+    var random_state = py_item(cfg, nk[].k_random_state)
+    var n_streams = py_item(cfg, nk[].k_n_streams)
+    var max_batch_size = py_item(cfg, nk[].k_max_batch_size)
+    var mwf = py_get(cfg, nk[].k_min_weight_fraction_leaf, PythonObject(0.0))
+    var weighted_leaf = _truthy(mwf)
+    if kind == "dt_regressor":
+        n_bins = _dt_tier_bins(fields, rf)
+    gbdt_fit_param_py(PythonObject(rows), ints, floats, bad)
+    gbdt_fit_param_py(PythonObject(cols), ints, floats, bad)
+    gbdt_fit_param_py(PythonObject(classes), ints, floats, bad)
+    gbdt_fit_param_py(n_estimators, ints, floats, bad)
+    gbdt_fit_param_py(max_depth, ints, floats, bad)
+    gbdt_fit_param_py(max_leaves, ints, floats, bad)
+    gbdt_fit_param_py(fraction, ints, floats, bad)
+    gbdt_fit_param_py(n_bins, ints, floats, bad)
+    gbdt_fit_param_py(min_samples_leaf, ints, floats, bad)
+    gbdt_fit_param_py(min_samples_split, ints, floats, bad)
+    gbdt_fit_param_py(min_impurity_decrease, ints, floats, bad)
+    gbdt_fit_param_py(bootstrap, ints, floats, bad)
+    gbdt_fit_param_py(max_samples, ints, floats, bad)
+    gbdt_fit_param_py(random_state, ints, floats, bad)
+    gbdt_fit_param_py(n_streams, ints, floats, bad)
+    gbdt_fit_param_py(max_batch_size, ints, floats, bad)
+    if weighted_leaf:
+        gbdt_fit_param_py(mwf, ints, floats, bad)
+
+
 def _et_max_features(max_features: PythonObject, context: PythonObject) raises -> PythonObject:
     """`extratrees._max_features_slots`: (spec, fraction)."""
     var b = trees_builtins()
@@ -792,30 +847,64 @@ def _et_bootstrap_rows(rows: Int, max_samples: PythonObject, context: PythonObje
     return PythonObject(max(count, 1))
 
 
-def _et_params(fields: PythonObject, cfg: PythonObject, rows: Int, cols: Int, classes: Int,
-               context: PythonObject) raises -> PythonObject:
-    """`extratrees._fit_params`: the 22-slot list in _mojolearn_trees.mojo's
-    order."""
+def _et_slots(fields: PythonObject, cfg: PythonObject, rows: Int, cols: Int, classes: Int,
+              context: PythonObject, mut ints: List[Int], mut floats: List[Float64], mut bad: List[UInt8]) raises:
+    """`extratrees._fit_params` without its Python list: the 22 slots in
+    _mojolearn_trees.mojo's order, read from the configuration in the same
+    order and appended to the request's views. Once per fit; a parameter
+    slot loop, never row data."""
     var nk = trees_keys()
-    _ = trees_device_unpack(py_item(fields, nk[].k_device), True)
+    _ = device_unpack(py_item(fields, nk[].k_device), trees_builtins())
     var slots = _et_max_features(py_item(cfg, nk[].k_max_features), context)
     var depth = py_item(cfg, nk[].k_max_depth)
     var seed = py_item(cfg, nk[].k_random_state)
     var leaves = py_item(cfg, nk[].k_max_leaf_nodes)
-    return Python.list(
-        PythonObject(rows), PythonObject(cols), PythonObject(classes), _int(py_item(cfg, nk[].k_n_estimators)),
-        PythonObject(-1) if depth is None else _int(depth),
-        _int(py_item(cfg, nk[].k_min_samples_split)), _int(py_item(cfg, nk[].k_min_samples_leaf)), _float(py_item(cfg, nk[].k_min_weight_fraction_leaf)),
-        slots[0], slots[1], _float(py_item(cfg, nk[].k_min_impurity_decrease)),
-        PythonObject(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0), PythonObject(1 if _truthy(py_item(cfg, nk[].k_oob_score)) else 0),
-        PythonObject(0) if seed is None else _int(seed), PythonObject(1 if _truthy(py_item(cfg, nk[].k_warm_start)) else 0),
-        _float(py_item(cfg, nk[].k_ccp_alpha)), PythonObject(0 if py_item(cfg, nk[].k_class_weight) is None else 1),
-        PythonObject(0 if py_item(cfg, nk[].k_monotonic_cst) is None else 1), _et_bootstrap_rows(rows, py_item(cfg, nk[].k_max_samples), context),
-        PythonObject(-1) if leaves is None else _int(leaves), PythonObject(1), _int(py_item(fields, nk[].k__criterion_code)),
-    )
+    var n_estimators = _int(py_item(cfg, nk[].k_n_estimators))
+    var max_depth = PythonObject(-1) if depth is None else _int(depth)
+    var min_samples_split = _int(py_item(cfg, nk[].k_min_samples_split))
+    var min_samples_leaf = _int(py_item(cfg, nk[].k_min_samples_leaf))
+    var min_weight_fraction_leaf = _float(py_item(cfg, nk[].k_min_weight_fraction_leaf))
+    var features_mode = slots[0]
+    var features_value = slots[1]
+    var min_impurity_decrease = _float(py_item(cfg, nk[].k_min_impurity_decrease))
+    var bootstrap = PythonObject(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0)
+    var oob_score = PythonObject(1 if _truthy(py_item(cfg, nk[].k_oob_score)) else 0)
+    var random_state = PythonObject(0) if seed is None else _int(seed)
+    var warm_start = PythonObject(1 if _truthy(py_item(cfg, nk[].k_warm_start)) else 0)
+    var ccp_alpha = _float(py_item(cfg, nk[].k_ccp_alpha))
+    var class_weighted = PythonObject(0 if py_item(cfg, nk[].k_class_weight) is None else 1)
+    var monotonic = PythonObject(0 if py_item(cfg, nk[].k_monotonic_cst) is None else 1)
+    var bootstrap_rows = _et_bootstrap_rows(rows, py_item(cfg, nk[].k_max_samples), context)
+    var max_leaf_nodes = PythonObject(-1) if leaves is None else _int(leaves)
+    var criterion_code = _int(py_item(fields, nk[].k__criterion_code))
+    gbdt_fit_param_py(PythonObject(rows), ints, floats, bad)
+    gbdt_fit_param_py(PythonObject(cols), ints, floats, bad)
+    gbdt_fit_param_py(PythonObject(classes), ints, floats, bad)
+    gbdt_fit_param_py(n_estimators, ints, floats, bad)
+    gbdt_fit_param_py(max_depth, ints, floats, bad)
+    gbdt_fit_param_py(min_samples_split, ints, floats, bad)
+    gbdt_fit_param_py(min_samples_leaf, ints, floats, bad)
+    gbdt_fit_param_py(min_weight_fraction_leaf, ints, floats, bad)
+    gbdt_fit_param_py(features_mode, ints, floats, bad)
+    gbdt_fit_param_py(features_value, ints, floats, bad)
+    gbdt_fit_param_py(min_impurity_decrease, ints, floats, bad)
+    gbdt_fit_param_py(bootstrap, ints, floats, bad)
+    gbdt_fit_param_py(oob_score, ints, floats, bad)
+    gbdt_fit_param_py(random_state, ints, floats, bad)
+    gbdt_fit_param_py(warm_start, ints, floats, bad)
+    gbdt_fit_param_py(ccp_alpha, ints, floats, bad)
+    gbdt_fit_param_py(class_weighted, ints, floats, bad)
+    gbdt_fit_param_py(monotonic, ints, floats, bad)
+    gbdt_fit_param_py(bootstrap_rows, ints, floats, bad)
+    gbdt_fit_param_py(max_leaf_nodes, ints, floats, bad)
+    gbdt_fit_param_py(PythonObject(1), ints, floats, bad)
+    gbdt_fit_param_py(criterion_code, ints, floats, bad)
 
 
-# -------------------------------------------------------------------- fit
+# TOMBSTONE: _et_params (the 22-slot Python list of an Extra Trees fit, built
+# and read back per fit) deleted 2026-11-21 by lane dw-trees: `_et_slots` fills
+# the request's views directly. `_rf_params` stays: five sites of
+# bindings/trees_public_boost_door.mojo, which reads open arms, still take its list.
 
 
 def _device_scan(native: PythonObject) raises -> Bool:
