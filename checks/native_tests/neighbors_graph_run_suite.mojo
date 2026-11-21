@@ -9,6 +9,9 @@ Independent fixtures run across the host's cores.
 """
 from std.math import isinf
 from core.host_parallel import host_parallelize
+from neighbors.graph_fit_run import (
+    XN_CAPABILITY_UNIT, PageRankRequest, ComponentsRequest, LouvainRequest, LouvainOutcome,
+)
 from neighbors.neighbors_graph_run import (
     XnOpRequest, XN_KERNEL_RBF, XN_U_IDENTITY, xn_f32_word, xn_i32_word, xn_f32_value, xn_double_words,
     xn_rows_match_check, xn_relabel_request, xn_relabel_decode, xn_fill_request, xn_iota_request,
@@ -23,7 +26,7 @@ from neighbors.neighbors_graph_run import (
     xn_unary_scale_request, xn_unary_shift_request, xn_matmul_request, xn_svgp_var_request,
 )
 
-comptime NEIGHBORS_GRAPH_RUN_FIXTURES = 17
+comptime NEIGHBORS_GRAPH_RUN_FIXTURES = 18
 
 
 def require(ok: Bool, message: String) raises:
@@ -308,6 +311,25 @@ def fixture(unit: Int) raises:
         require(not xn_svgp_fit_decode(Int(singular.unsafe_ptr()))[1], "svgp singular decode")
         _ = info
         _ = singular
+    elif unit == 17:
+        # graph fit RUN (neighbors/graph_fit_run.mojo): the requests and the
+        # outcome's defaults
+        var rank = PageRankRequest(True, 1, 2, 0, 9, 0, 3, 4, 0, 5, 0, 100, 1e-6, False, 0.85)
+        require(rank.csr and rank.indptr == 1 and rank.indices == 2 and rank.vals == 0 and rank.nnz == 9
+                and rank.adjacency == 0 and rank.x == 3 and rank.n == 4 and rank.personalization == 0
+                and rank.dangling == 5 and rank.nstart == 0 and rank.max_iter == 100 and rank.tol == 1e-6
+                and not rank.binary and rank.alpha == 0.85, "pagerank request")
+        var parts = ComponentsRequest(False, 0, 0, 0, 1, 2, 3)
+        require(not parts.csr and parts.adjacency == 1 and parts.labels == 2 and parts.n == 3,
+                "components request")
+        var louvain = LouvainRequest(False, 0, 0, 0, 0, 1, 2, 3, 0, 1.0, 1e-7)
+        require(not louvain.csr and louvain.adjacency == 1 and louvain.labels == 2 and louvain.n == 3
+                and louvain.max_level == 0 and louvain.resolution == 1.0 and louvain.threshold == 1e-7,
+                "louvain request")
+        var outcome = LouvainOutcome()
+        require(outcome.communities == 0 and outcome.modularity == 0.0 and outcome.levels == 0.0,
+                "louvain outcome default")
+        require(XN_CAPABILITY_UNIT == 4, "the unit_ff capability bit")
     else:
         require(same(xn_svgp_predict_request(1, 2, 3, 4, 5, 6, 7, 8, 9, 0.1, 0.2), "svgp_predict",
                      [1, 2, 3, 4, 5, 6], [7, 8, 9],

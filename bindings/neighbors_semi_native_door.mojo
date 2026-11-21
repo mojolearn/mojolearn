@@ -604,7 +604,11 @@ def _lp_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                                spreading, knn, k, kind, gamma, raw, weight, alpha, tol, max_iter, unfused, old_items)
     var connection = LofConnection(binding)
     var outcome = LpFitOutcome()
-    # RUN
+    # RUN: the label step, the graph and the loop as one resident operation
+    # (`lp_iterate_knn` / `lp_iterate`), on every binding (lane
+    # n4-mds-labelprop-nmf-loops, 2026-11-09).
+    # TOMBSTONE: label-propagation compact-graph binding loop (REFACTORED: lp_iterate_knn on every vendor and tier) deleted 2026-11-09 by lane/n4-mds-labelprop-nmf-loops; code recoverable at f59d913b0b.
+    # Restore: git apply -3 experiments/removed/N4_MDS_LABELPROP_NMF_HOST_LOOPS.patch; record in docs/TOMBSTONES.md.
     with GILReleased(Python()):
         outcome = lp_fit_run(connection.driver, request)
     _ = x  # keep the Python object alive through the native call above
