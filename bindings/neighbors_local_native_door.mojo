@@ -17,7 +17,7 @@
 # Scalars derived on the host (the contamination percentile, the prior
 # checks) are the same binary64 operations in the same order; products that
 # feed a sum are pinned (`pinned_mul_f64`), since Python never fuses.
-from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_execute, xn_module
+from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit_arguments, xn_module
 from providers.python.neighbors_public_lifecycle_pyapi_door import neighbors_public_begin, neighbors_public_end, neighbors_public_finish, neighbors_public_refusal
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -56,13 +56,13 @@ from neighbors.lof_run import (
 )
 from neighbors.neighbors_local_run import (
     LOF_RESULT_SCORES, LOF_RESULT_DECISION, LOF_RESULT_LABELS,
-    local_check_n_neighbors, local_copy_f32, local_write_i32,
+    local_check_n_neighbors,
     lof_refuse_metric, lof_refuse_metric_params, lof_check_contamination, lof_check_fit_rows,
     lof_fit_neighbors, lof_refuse_fit_predict_novelty, lof_check_novelty,
     nc_refuse_metric, nc_check_label_rows, nc_check_classes, nc_check_priors_ndim, nc_check_priors_size,
     nc_check_variance, nc_refuse_decision_metric,
-    imp_refuse_missing_values, imp_refuse_metric, imp_refuse_weights, imp_round_f32, imp_cells_length,
-    imp_colmiss_length, imp_read_count, imp_fit_columns, imp_check_features, imp_cells_operation, imp_keep_plan,
+    imp_refuse_missing_values, imp_refuse_metric, imp_refuse_weights, imp_round_f32, imp_check_features,
+    imp_keep_plan,
 )
 from core.nearest_centroid_plan import NcLabelCodes, NcFitPlan
 from neighbors.nearest_centroid_run import (
@@ -70,7 +70,7 @@ from neighbors.nearest_centroid_run import (
     NcFitRequest, NcFitOutcome, NcQueryRequest,
     nc_fit_count_run, nc_fit_priors_run, nc_fit_run, nc_labels_run, nc_decision_run, nc_proba_wide, nc_proba_run,
 )
-from bindings.admitted_input_unpack import admitted_array, admitted_vector, admitted_storage_native, admit_c_view, admitted_dtype
+from bindings.admitted_input_unpack import admitted_array, admitted_storage_native, admit_c_view, admitted_dtype
 from bindings.admitted_input_unpack import admitted_finite_refuse
 
 
