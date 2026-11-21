@@ -16,12 +16,24 @@ ARRAY_ADMISSION = plain("bindings/native_array_snapshot_door.mojo", (ROOT / "bin
 class NeuralAdmissionSource(unittest.TestCase):
     def test_public_owner_admits_before_scalar_and_binding_selection(self):
         # neural_block_owner delegates to the full owner build (db970cfce4).
+        # Both owner forms share one setup (snapshot first); only the parallel
+        # worker's holder is an object, the plan build's owner is typed.
+        setup = PUBLIC.split("def _neural_block_owner_setup(")[1].split("\ndef ", 1)[0]
         body = PUBLIC.split("def _neural_block_owner_full(")[1].split("\ndef ", 1)[0]
+        typed = PUBLIC.split("def _neural_block_owner_typed(")[1].split("\ndef ", 1)[0]
         door = PUBLIC.split("def neural_block_owner(")[1].split("\ndef ", 1)[0]
+        execution = PUBLIC.split("def neural_block_execution(")[1].split("\ndef ", 1)[0]
         self.assertIn("return _neural_block_owner_full(mods, block, context)", door)
-        self.assertLess(body.index("neural_block_snapshot(mods, block, context)"), body.index('String(fields["_native_kind"])'))
-        self.assertNotIn('object.__getattribute__', body)
+        self.assertLess(setup.index("neural_block_snapshot(mods, block, context)"), setup.index('String(fields["_native_kind"])'))
+        for part in (setup, body, typed):
+            self.assertNotIn('object.__getattribute__', part)
+            self.assertIn("_neural_block_owner_setup(", part if part is not setup else "_neural_block_owner_setup(")
         self.assertIn('"_native_block_fields"', body)
+        self.assertNotIn("SimpleNamespace", typed)
+        self.assertNotIn("py_setattr", typed)
+        self.assertIn("causal_lm_admit(mods, admission,", typed)
+        self.assertIn("_neural_block_owner_typed(mods, block, context)", execution)
+        self.assertNotIn("_neural_block_owner_full", execution)
 
     def test_array_metadata_uses_native_slots_and_retains_owner(self):
         # The first overload is the per-call NativeModules wrapper; check the real body.
