@@ -111,7 +111,7 @@ from gbdt.ctrs.ctr_binarization import (
     ctr_border_type_code,
 )
 from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
-from gbdt.ctrs.ctr_order import ctr_estimation_order_host
+from gbdt.ctrs.ctr_order import learn_order_host
 from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
     ctrs_estimation_permutation,
@@ -123,7 +123,10 @@ from gbdt.ctrs.tree_ctr import (
     TreeCtrPlan,
 )
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS, NAN_TREATMENT_AS_TRUE
-from gbdt.gpu_data.compressed_index_builder import build_layout
+from gbdt.gpu_data.compressed_index_builder import (
+    CompressedIndexLayout,
+    build_layout,
+)
 from gbdt.host.gbdt_oracle import (
     GbdtHostFitWithEval,
     GbdtHostGrid,
@@ -353,7 +356,22 @@ struct GbdtCtrHostFit(Movable):
         self.combination_ctrs = combination_ctrs^
 
 
-def gbdt_ctr_host_fit(
+@fieldwise_init
+struct GbdtCtrHostShape(Copyable, Movable):
+    """What `gbdt_ctr_host_prelude` resolved beside the lists it fills."""
+
+    #: the estimation permutation (the last unless named)
+    var est_perm: Int
+    #: the search layout's columns: the base columns, then the tree-CTR
+    #: slots when `max_ctr_complexity` is above 1
+    var n_columns: Int
+    #: the columns before the tree-CTR slots (the model's base columns)
+    var n_base_columns: Int
+    var ctr_column_count: Int
+    var layout: CompressedIndexLayout
+
+
+def gbdt_ctr_host_prelude(
     x_colmajor: List[Float32],
     y: List[Float32],
     n_rows: Int,
@@ -362,20 +380,35 @@ def gbdt_ctr_host_fit(
     flags: List[UInt32],
     permutation_count: Int,
     ctr_estimation_permutation_id: Int,
-    eval: GbdtHostEval = GbdtHostEval.none(),
-    max_ctr_complexity: Int = 1,
-) raises -> GbdtCtrHostFit:
-    """`train` with categorical columns on the covered configuration (see
-    the module docstring for what that is and what mirrors what).
+    order_block: Int,
+    eval_x: List[Float32],
+    eval_rows: Int,
+    max_ctr_complexity: Int,
+    mut grid_out: GbdtHostGrid,
+    mut cindexes_out: List[List[UInt32]],
+    mut test_cindex_out: List[UInt32],
+    mut one_hot_out: List[Bool],
+    mut tables_out: List[TCtrValueTable],
+    mut tree_state_out: List[GbdtTreeCtrHost],
+) raises -> GbdtCtrHostShape:
+    """Everything a categorical host fit does before its boosting loop
+    (steps 1 to 4 of the module docstring, and the held-out index of step
+    5): the column kinds, the CTR columns over each permutation's order,
+    the apply-time tables, the grids, the layout and one compressed index
+    per permutation. The Plain fit (`gbdt_ctr_host_fit`) and the Ordered
+    fit (`gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit`) both
+    call it, so the two share one spelling of the columns.
 
-    `max_ctr_complexity` above 1 grows tree CTRs (feature combinations),
-    the host column of `gbdt/methods/tree_ctr_search.mojo`: the layout
-    gains `max_depth` persist slots and one candidate slot per (CTR-bearing
-    categorical feature, tree-CTR config), the boost loop takes its
-    level-synchronized arm (`gbdt/host/gbdt_oracle.mojo::
-    _tree_ctr_levels_host`), and the model's last columns are the
-    combinations the trees chose. At 1 nothing here differs from the fit
-    without them."""
+    `order_block` is the block size of the CTR estimation orders: 1 for a
+    Plain fit, the fold permutation block for an Ordered one (`train`'s
+    `ctr_order_block`). `eval_rows` 0 is no held-out set. The six `_out`
+    arguments are filled (whatever they held is replaced).
+
+    The loops here run over model structure (features, configs,
+    permutations) and, inside one column, over rows on the calling thread:
+    the running count along a permutation inside one ordered column is
+    serial by nature; the orders themselves are written across the
+    workers (`learn_order_host`)."""
     if max_ctr_complexity < 1:
         raise Error(
             "max_ctr_complexity must be at least 1; got "
@@ -389,13 +422,12 @@ def gbdt_ctr_host_fit(
         raise Error("y size mismatch")
     if len(flags) != n_features:
         raise Error("cat flags must be one per feature")
-    if eval.n_rows < 0:
+    if order_block < 1:
+        raise Error("the CTR order block must be at least 1")
+    if eval_rows < 0:
         raise Error("eval_set row count must not be negative")
-    if eval.has_test():
-        if len(eval.x_colmajor) != eval.n_rows * n_features:
-            raise Error("eval_set x_colmajor size mismatch")
-        if len(eval.y) != eval.n_rows:
-            raise Error("eval_set y size mismatch")
+    if eval_rows > 0 and len(eval_x) != eval_rows * n_features:
+        raise Error("eval_set x_colmajor size mismatch")
     var kinds = gbdt_ctr_column_kinds(flags, x_colmajor, n_rows, n_features)
 
     # ---- the CTR prelude (`gbdt/train.mojo:1336-1491`) ----
@@ -452,9 +484,12 @@ def gbdt_ctr_host_fit(
             # cpu4-gbdt; seeded by lane cat-ctr): the load shuffle keyed
             # by `random_seed`, composed for every permutation but 0 with
             # its keyed bijection, the same words as
-            # `launch_ctr_estimation_order` writes
+            # `launch_ctr_estimation_order` writes. `order_block` 1 is
+            # the Plain CTR order (`ctr_estimation_order_host`'s words);
+            # an Ordered fit passes its fold permutation block, so order
+            # p IS its fold permutation p (`ordered_permutations`)
             ctr_orders.append(
-                ctr_estimation_order_host(n_rows, p, params.random_seed)
+                learn_order_host(n_rows, p, order_block, params.random_seed)
             )
 
     # ---- the column loop (`:1532-1676`) ----
@@ -677,8 +712,8 @@ def gbdt_ctr_host_fit(
         for p in range(len(ctr_orders)):
             tree_orders.append(ctr_orders[p].copy())
         var tree_test_x = List[Float32]()
-        if eval.has_test():
-            tree_test_x = eval.x_colmajor.copy()
+        if eval_rows > 0:
+            tree_test_x = eval_x.copy()
         else:
             # read through a pointer: never an empty list
             tree_test_x.append(Float32(0.0))
@@ -689,7 +724,7 @@ def gbdt_ctr_host_fit(
                 tree_col_raw^, tree_col_borders^, tree_col_nan^,
                 tree_cat_codes.copy(), tree_orders^, binarized_target.copy(),
                 target_classes_count, perm_count,
-                eval.n_rows if eval.has_test() else 0, n_features,
+                eval_rows if eval_rows > 0 else 0, n_features,
                 tree_test_x^,
             )
         )
@@ -722,19 +757,85 @@ def gbdt_ctr_host_fit(
     # the only counter mode this entry exposes. Supporting Full would
     # require admitting that option and carrying its counts explicitly.
     var test_cindex = List[UInt32]()
-    if eval.has_test():
+    if eval_rows > 0:
         # the base columns from the tables; a tree-CTR slot starts at zero
         # on the held-out rows too (the fit writes its bins)
         var eval_expanded = expand_raw_columns(
-            tables, n_base_columns, eval.x_colmajor, eval.n_rows
+            tables, n_base_columns, eval_x, eval_rows
         )
         if tree_on:
-            eval_expanded.resize(n_columns * eval.n_rows, Float32(0.0))
+            eval_expanded.resize(n_columns * eval_rows, Float32(0.0))
         test_cindex = _binarize_columns(
-            eval_expanded, eval.n_rows, n_columns, grid, layout
+            eval_expanded, eval_rows, n_columns, grid, layout
         )
+    grid_out = grid^
+    cindexes_out = cindexes^
+    test_cindex_out = test_cindex^
+    one_hot_out = one_hot^
+    tables_out = tables^
+    tree_state_out = tree_state^
+    return GbdtCtrHostShape(
+        est_perm, n_columns, n_base_columns, ctr_column_count, layout^
+    )
+
+
+
+def gbdt_ctr_host_fit(
+    x_colmajor: List[Float32],
+    y: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    params: GbdtHostParams,
+    flags: List[UInt32],
+    permutation_count: Int,
+    ctr_estimation_permutation_id: Int,
+    eval: GbdtHostEval = GbdtHostEval.none(),
+    max_ctr_complexity: Int = 1,
+) raises -> GbdtCtrHostFit:
+    """`train` with categorical columns on the covered configuration (see
+    the module docstring for what that is and what mirrors what).
+
+    `max_ctr_complexity` above 1 grows tree CTRs (feature combinations),
+    the host column of `gbdt/methods/tree_ctr_search.mojo`: the layout
+    gains `max_depth` persist slots and one candidate slot per (CTR-bearing
+    categorical feature, tree-CTR config), the boost loop takes its
+    level-synchronized arm (`gbdt/host/gbdt_oracle.mojo::
+    _tree_ctr_levels_host`), and the model's last columns are the
+    combinations the trees chose. At 1 nothing here differs from the fit
+    without them.
+
+    The columns, grids, tables and per-permutation indexes are
+    `gbdt_ctr_host_prelude`'s (which also checks the sizes of the learn
+    arguments); this function is the Plain boosting loop over them and the
+    model's tree-CTR tail."""
+    if eval.n_rows < 0:
+        raise Error("eval_set row count must not be negative")
+    if eval.has_test():
+        if len(eval.x_colmajor) != eval.n_rows * n_features:
+            raise Error("eval_set x_colmajor size mismatch")
+        if len(eval.y) != eval.n_rows:
+            raise Error("eval_set y size mismatch")
+    var grid = GbdtHostGrid(List[List[Float32]](), List[Int](), List[Int]())
+    var cindexes = List[List[UInt32]]()
+    var test_cindex = List[UInt32]()
+    var one_hot = List[Bool]()
+    var tables = List[TCtrValueTable]()
+    var tree_state = List[GbdtTreeCtrHost]()
+    # block 1: the Plain CTR orders. The held-out rows are read only when
+    # there are some (`eval.n_rows` above 0).
+    var shape = gbdt_ctr_host_prelude(
+        x_colmajor, y, n_rows, n_features, params, flags, permutation_count,
+        ctr_estimation_permutation_id, 1, eval.x_colmajor, eval.n_rows,
+        max_ctr_complexity, grid, cindexes, test_cindex, one_hot, tables,
+        tree_state,
+    )
+    var est_perm = shape.est_perm
+    var n_columns = shape.n_columns
+    var n_base_columns = shape.n_base_columns
+    var ctr_column_count = shape.ctr_column_count
+    var tree_on = len(tree_state) > 0
     var fit = gbdt_host_boost(
-        cindexes, est_perm, y, n_rows, n_columns, grid^, layout, params,
+        cindexes, est_perm, y, n_rows, n_columns, grid^, shape.layout, params,
         -1, Float32(1.0), Float32(0.0), eval, test_cindex, tree_state,
     )
 
@@ -820,11 +921,26 @@ def _ctr_table_records_host(
 def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
     """`model_text` (`gbdt/models/model_text.mojo:374-670`) for an oblivious
     one-dimensional model with CTR and one-hot columns and zero bias."""
-    ref m = r.fit.model
+    return gbdt_ctr_host_model_text_of(
+        r.fit.model, r.one_hot, r.tables, r.ctr_column_count,
+        r.combination_ctrs,
+    )
+
+
+def gbdt_ctr_host_model_text_of(
+    m: GbdtHostModel,
+    one_hot: List[Bool],
+    tables: List[TCtrValueTable],
+    ctr_column_count: Int,
+    combination_ctrs: TCombinationCtrs,
+) raises -> String:
+    """`gbdt_ctr_host_model_text` over the parts, for a fit that does not
+    come as a `GbdtCtrHostFit` (the Ordered fit, which adds its `bias`
+    record with `gbdt_text_with_bias`)."""
     var n_columns = len(m.fold_counts)
     var table_of_column = List[Int](length=n_columns, fill=-1)
-    for i in range(len(r.tables)):
-        var c = r.tables[i].column
+    for i in range(len(tables)):
+        var c = tables[i].column
         if c < 0 or c >= n_columns:
             raise Error(
                 "a CTR table names column " + String(c) + " of "
@@ -834,9 +950,9 @@ def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
             raise Error("two CTR tables name column " + String(c))
         table_of_column[c] = i
     # the tree-CTR columns (feature combinations): the model's last columns
-    var n_comb = len(r.combination_ctrs.tables)
+    var n_comb = len(combination_ctrs.tables)
     if n_comb != 0:
-        r.combination_ctrs.check(n_columns, n_columns)
+        combination_ctrs.check(n_columns, n_columns)
     var first_comb = n_columns - n_comb
     var out = String("")
     out += "# mojolearn model. One record per line, keyword first.\n"
@@ -845,15 +961,15 @@ def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
     out += "# loses one ULP on ~0.46% of float32 values (measured).\n"
     out += "# Format and CTR seam: gbdt/models/model_text.mojo.\n"
     out += String("format ") + String("mojolearn-model") + " " + String(2) + "\n"
-    out += String("features ") + String(n_columns) + " " + String(len(r.one_hot)) + "\n"
+    out += String("features ") + String(n_columns) + " " + String(len(one_hot)) + "\n"
     out += String("trees ") + String(m.n_trees()) + "\n"
     out += String("losses ") + String(len(m.losses)) + "\n"
-    if r.ctr_column_count != 0:
-        out += String("ctr_columns ") + String(r.ctr_column_count) + "\n"
+    if ctr_column_count != 0:
+        out += String("ctr_columns ") + String(ctr_column_count) + "\n"
     for f in range(n_columns):
         var kind = String("float")
         if f >= first_comb:
-            if r.one_hot[f] or table_of_column[f] >= 0:
+            if one_hot[f] or table_of_column[f] >= 0:
                 raise Error(
                     "tree-CTR column " + String(f) + " is also flagged"
                     " one-hot or carries a simple CTR table"
@@ -861,11 +977,11 @@ def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
             kind = String("tree_ctr")
         elif table_of_column[f] >= 0:
             kind = String("ctr")
-        elif r.one_hot[f]:
+        elif one_hot[f]:
             kind = String("cat")
         var line = (
             String("feature ") + String(f) + " folds " + String(m.fold_counts[f])
-            + " one_hot " + String(1 if r.one_hot[f] else 0)
+            + " one_hot " + String(1 if one_hot[f] else 0)
             + " type " + kind
             + " nan " + _nan_token(m.nan_treatment[f])
             + " borders " + String(len(m.borders[f]))
@@ -877,15 +993,15 @@ def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
         var ti = table_of_column[f]
         if ti < 0:
             continue
-        out += _ctr_table_records_host(String("ctr_table"), f, r.tables[ti])
+        out += _ctr_table_records_host(String("ctr_table"), f, tables[ti])
     # the tree CTRs: the maps, then one table per tree-CTR column in column
     # order (`model_text`'s order). A model without them writes nothing.
     if n_comb != 0:
-        out += combination_maps_text(r.combination_ctrs.maps)
+        out += combination_maps_text(combination_ctrs.maps)
         for i in range(n_comb):
             out += _ctr_table_records_host(
                 String("combination_table"), first_comb + i,
-                r.combination_ctrs.tables[i],
+                combination_ctrs.tables[i],
             )
     for t in range(m.n_trees()):
         var lo = m.tree_split_offsets[t]
@@ -901,7 +1017,7 @@ def gbdt_ctr_host_model_text(r: GbdtCtrHostFit) raises -> String:
                 String("split ") + String(t) + " " + String(level) + " "
                 + String(fid) + " " + String(m.split_bins[lo + level])
             )
-            if r.one_hot[fid]:
+            if one_hot[fid]:
                 line += " split_type take_bin"
             out += line + "\n"
         for i in range(n_values):
