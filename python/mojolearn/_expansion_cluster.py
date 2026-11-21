@@ -261,6 +261,8 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 25 (XCluster), kind 0 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 0)
 
     def __init__(self, n_clusters=8, *, init="k-means++", max_iter=100, batch_size=1024,
                  verbose=0, compute_labels=True, random_state=None, tol=0.0,
@@ -400,6 +402,8 @@ class BisectingKMeans(_CentersMixin, _XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 25 (XCluster), kind 1 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 1)
 
     def __init__(self, n_clusters=8, *, init="random", n_init=1, random_state=None, max_iter=300,
                  verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia", numeric_mode=None, device=None):
@@ -523,6 +527,9 @@ class MeanShift(_XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+
+    #: Member ABI family 25 (XCluster), kind 2 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 2)
 
     def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
                  cluster_all=True, n_jobs=None, max_iter=300, numeric_mode=None, device=None):
@@ -802,6 +809,9 @@ class AffinityPropagation(_XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+
+    #: Member ABI family 25 (XCluster), kind 4 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 4)
 
     def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
                  preference=None, affinity="euclidean", verbose=False, random_state=None, numeric_mode=None, device=None):
