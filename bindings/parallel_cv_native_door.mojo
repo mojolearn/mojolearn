@@ -25,8 +25,10 @@ from bindings.native_codec_door import codec_initialize
 from bindings.native_process_pool_door import (
     process_initialize, process_pool_create, process_pool_start, process_pool_map_typed, process_pool_close, process_pool_environment_set,
     process_worker_connect, process_worker_next, process_worker_value, process_worker_reply, process_worker_refuse, WorkerTurn,
-    process_pool_pids,
+    process_pool_pids, process_worker_reply_typed,
 )
+from bindings.native_process_wire_door import WireOutgoing, wire_append
+from core.parallel_worker_frame import WIRE_TUPLE
 from bindings.native_transport_door import transport_close
 from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
 from bindings.classical_attributes_door import classical_connect_numpy
@@ -122,7 +124,7 @@ def _worker_error(error: Error, context: PythonObject) raises -> String:
 
 
 def _fold_rows(typed: WorkerRequest, request: PythonObject, mut rows: MselFoldRows, inventory: PythonObject,
-               context: PythonObject) raises -> PythonObject:
+               context: PythonObject) raises -> WireOutgoing:
     # The typed request holds the fold index (handle) and the capture flag
     # (its word); the payload is (model, scorer, train, test). The fold's
     # rows are gathered here out of the run's X and y the data request left.
@@ -151,10 +153,19 @@ def _fold_rows(typed: WorkerRequest, request: PythonObject, mut rows: MselFoldRo
     var captured = PythonObject(None)
     if typed.words[0] != 0:
         captured = msel_parallel_capture(estimator, x_test, y_test, score, inventory, context)
-    return Python.tuple(PythonObject(typed.handle), score, captured)
+    # The reply record (fold index, score, capture), written as typed nodes:
+    # the fold index is the request's own word. REMOVED 2026-11-21 (lane
+    # pools-frame): the Python int and 3-tuple built per fold only to be
+    # UNPACKed again by the reply.
+    var reply = WireOutgoing()
+    reply.record.node(WIRE_TUPLE, 3)
+    reply.record.integer(typed.handle)
+    wire_append(score, reply)
+    wire_append(captured, reply)
+    return reply^
 
 
-def _worker_data(request: PythonObject, mut rows: MselFoldRows, context: PythonObject) raises -> PythonObject:
+def _worker_data(request: PythonObject, mut rows: MselFoldRows, context: PythonObject) raises:
     # The data request's payload (X, y): this run's X and y, kept for every
     # later fold request.
     var b = native_loaded_module("builtins")
@@ -162,7 +173,6 @@ def _worker_data(request: PythonObject, mut rows: MselFoldRows, context: PythonO
         raise Error("ValueError: malformed native CV data request")
     rows.close(context)
     rows = MselFoldRows(request[0], request[1], Python.list(), False, context)
-    return PythonObject(True)
 
 
 def _worker_request(socket: PythonObject, turn: WorkerTurn, mut inventory: PythonObject,
@@ -178,18 +188,24 @@ def _worker_request(socket: PythonObject, turn: WorkerTurn, mut inventory: Pytho
     try:
         # The typed request (a frame without request words is refused here).
         var typed = worker_request_decode(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
-        var result = PythonObject(None)
         var code = typed.op
         cv_request_admit(code, inventory is not None)
         if code == CV_REQUEST_IDENTITY:
+            # Once per worker per run: the inventory is a Python record.
             if inventory is None:
                 inventory = native_worker_inventory(String(py_item(metadata, nk[].k_vendor)), py_item(metadata, nk[].k_environ))
-            result = inventory
+            process_worker_reply(socket, sequence, inventory)
         elif code == CV_REQUEST_DATA:
-            result = _worker_data(process_worker_value(turn), rows, context)
+            _worker_data(process_worker_value(turn), rows, context)
+            var loaded = WireOutgoing()
+            loaded.record.boolean(True)
+            process_worker_reply_typed(socket, sequence, loaded)
         else:
-            result = _fold_rows(typed, process_worker_value(turn), rows, inventory, context)
-        process_worker_reply(socket, sequence, result)
+            # The request's PACK stays: the model and scorer records, the
+            # fold's index Arrays and the estimator they build are Python
+            # values of the model-selection doors (msel_fit, msel_score).
+            var reply = _fold_rows(typed, process_worker_value(turn), rows, inventory, context)
+            process_worker_reply_typed(socket, sequence, reply)
     except error:
         process_worker_refuse(socket, sequence, _worker_error(error, context))
 
