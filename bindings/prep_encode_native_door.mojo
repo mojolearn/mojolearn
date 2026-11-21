@@ -861,7 +861,8 @@ def _fit_categories_with_codes(values: PythonObject, entries: PythonObject, caps
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var p = EncProg()
-    var plan = cat_fit_stage(p.prog, CatFit(n, d, p.own_x(values), NONE, CAT_FIT_INVERSE))
+    var x = p.own_x(values)
+    var plan = cat_fit_stage(p.prog, CatFit(n, d, x, NONE, CAT_FIT_INVERSE))
     var ran = p.run_caps(entries, context, caps)
     return (_cat_fit_pack(ran, plan, n, d, context), _take2(ran, plan.inverse, n, d, context))
 
@@ -1094,8 +1095,8 @@ def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, conte
     stages (bindings/prep_encode_cats_run.mojo `cat_codes_stage`)."""
     var record = _category_record(owner, categories, context)
     var x = p.own_x(values)
-    var staged = cat_codes_stage(p.prog, Int(py=values[3]), Int(py=values[4]), x, _cat_block(p, record, True),
-                                 device_only)
+    var block = _cat_block(p, record, True)
+    var staged = cat_codes_stage(p.prog, Int(py=values[3]), Int(py=values[4]), x, block, device_only)
     return (staged.codes, staged.unknown)
 
 
@@ -2105,7 +2106,8 @@ def _all_integral(model: PythonObject, view: PythonObject, vector: Bool, context
     var entries = scaler_entries(model, _default_mode(context), context)
     var caps = enc_caps(model, entries)
     var p = EncProg()
-    var tot = score_integral_stage(p.prog, p.own(words, n * per), n * per, kind, n)
+    var held = p.own(words, n * per)
+    var tot = score_integral_stage(p.prog, held, n * per, kind, n)
     var ran = p.run_caps(entries, context, caps)
     return _iword(ran, tot) == 0
 
@@ -2188,7 +2190,8 @@ def _put_codes(mut p: EncProg, codes: PythonObject) raises -> Int:
     # `_Prog.put_codes`: int32 codes as words, then their floats (i2f):
     # UNPACK of the codes as an owner, then the typed stage.
     var count = Int(py=codes.size)
-    return cat_i2f_stage(p.prog, count, p.own(codes, count))
+    var held = p.own(codes, count)
+    return cat_i2f_stage(p.prog, count, held)
 
 
 def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, folds: PythonObject, n_folds: Int,
@@ -2589,7 +2592,8 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
             var got = _score_words(scores, d, context)
             _ = scores  # keep the Python object alive through the native call above
             var count = Int(py=got[0].size)
-            var mo = score_topk_words_stage(p.prog, p.own(got[0], count), count, got[1], d, k)
+            var held = p.own(got[0], count)
+            var mo = score_topk_words_stage(p.prog, held, count, got[1], d, k)
             var ran = p.run_caps(entries, context, caps)
             mask = _topk_from(ran, mo, d)
     if keep_all:
