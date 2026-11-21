@@ -13,6 +13,7 @@ one lock word and one dictionary read with the interpreter lock held; a miss
 pins the source and uploads with the lock released. Nothing here is reached
 per row, per batch or per token.
 """
+from std.memory import ArcPointer
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_get, py_setitem, py_type

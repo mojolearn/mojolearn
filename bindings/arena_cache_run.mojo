@@ -17,6 +17,7 @@ Serial by nature: the frees of one close go to one binding store on one
 device context, which serializes them (each is a slot bookkeeping update,
 not work); there is nothing to split across cores.
 """
+from std.memory import ArcPointer
 from core.arena_state import (
     ARENA_CACHES, ARENA_SCOPES, ARENA_HANDLE_NONE, ArenaStoreEntry, ArenaScopeState,
     DeviceCacheState, arena_handle, arena_handle_word,

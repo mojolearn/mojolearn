@@ -6,6 +6,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from std.os import getenv
 from bindings.x_prep_native_owner_run import xprep_r3, XprepInput, XprepRunInput, XprepRoute, XprepCaps, xprep_execute, xprep_release
 from std.time import perf_counter_ns
+from std.memory import ArcPointer
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setattr
 from bindings.classical_arrays_door import classical_address, classical_is_array, classical_c_order, classical_wrap_array
