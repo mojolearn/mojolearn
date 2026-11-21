@@ -154,6 +154,10 @@ class LinearSVC(_LinearSVMBase):
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LINEAR_SVM = 5) and core/linear_svm_member.mojo.
+    _mojolearn_member = (5, 0)
+
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
     _estimator_type = "classifier"
@@ -329,6 +333,10 @@ class LinearSVR(_LinearSVMBase):
     # One-call native public methods: the family owner runs the whole lifecycle
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LINEAR_SVM = 5) and core/linear_svm_member.mojo.
+    _mojolearn_member = (5, 1)
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.

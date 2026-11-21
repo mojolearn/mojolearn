@@ -88,6 +88,36 @@ def _linear_check_common(model: PythonObject, fields: PythonObject) raises:
             raise Error("mojolearn " + name + ": " + names[i] + " must be a positive integer, got " + family_str(value))
 
 
+def linear_svr_check_fields(model: PythonObject, fields: PythonObject) raises -> PythonObject:
+    """LinearSVR.fit's parameter checks, in its order (epsilon, then
+    `_check_common`); returns the epsilon field. Shared with the member
+    admission (providers/python/member_linear_svm_boundary_door.mojo)."""
+    var operator = native_loaded_module("operator")
+    var nk = svm_keys()
+    var epsilon = svc_field(fields, nk[].k_epsilon, "epsilon")
+    if not (Bool(py=family_call(operator.le, PythonObject(0.0), epsilon))
+            and Bool(py=family_call(operator.lt, epsilon, family_call(svc_builtins().float, PythonObject("inf"))))):
+        raise Error("mojolearn LinearSVR: epsilon must be finite and non-negative, got " + family_str(epsilon))
+    _linear_check_common(model, fields)
+    return epsilon
+
+
+def linear_svc_check_fields(model: PythonObject, fields: PythonObject) raises:
+    """LinearSVC.fit's parameter checks, in its order (multi_class, then
+    `_check_common`). Shared with the member admission."""
+    var operator = native_loaded_module("operator")
+    var nk = svm_keys()
+    var multi_class = svc_field(fields, nk[].k_multi_class, "multi_class")
+    if Bool(py=family_call(operator.ne, multi_class, PythonObject("ovr"))):
+        raise Error("mojolearn LinearSVC: multi_class must be 'ovr', got " + family_repr(multi_class))
+    _linear_check_common(model, fields)
+
+
+def linear_svm_strengths(fields: PythonObject) raises -> Array[Float64, 2]:
+    """[l1, l2] strengths of the fit request (1/C on the chosen penalty)."""
+    return _linear_strengths_values(fields)
+
+
 def _linear_strengths_values(fields: PythonObject) raises -> Array[Float64, 2]:
     var nk = svm_keys()
     var inv_c = 1.0 / svc_float(svc_field(fields, nk[].k_C, "C"))
@@ -176,14 +206,9 @@ struct LinearSvrFitUnpacked(Movable):
 def linear_svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LinearSvrFitUnpacked:
     """`LinearSVR.fit(X, y, sample_weight)`; args = (None, X, y, sample_weight); the
     driver comes from the estimator's held route (`linear_svc_route`)."""
-    var operator = native_loaded_module("operator")
     var fields = py_fields(model)
     var nk = svm_keys()
-    var epsilon = svc_field(fields, nk[].k_epsilon, "epsilon")
-    if not (Bool(py=family_call(operator.le, PythonObject(0.0), epsilon))
-            and Bool(py=family_call(operator.lt, epsilon, family_call(svc_builtins().float, PythonObject("inf"))))):
-        raise Error("mojolearn LinearSVR: epsilon must be finite and non-negative, got " + family_str(epsilon))
-    _linear_check_common(model, fields)
+    var epsilon = linear_svr_check_fields(model, fields)
     var xc_pin = ArrayPin()
     var xc = admit_family_meta(args[1], 2, "X", context, xc_pin)
     py_setitem(fields, nk[].k_input_copied_, PythonObject(admit_family_copied(xc, args[1])))
@@ -244,13 +269,9 @@ struct LinearSvcFitUnpacked(Movable):
 def linear_svc_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LinearSvcFitUnpacked:
     """`LinearSVC.fit(X, y, sample_weight)`; args = (None, X, y, sample_weight); the
     driver comes from the estimator's held route (`linear_svc_route`)."""
-    var operator = native_loaded_module("operator")
     var fields = py_fields(model)
     var nk = svm_keys()
-    var multi_class = svc_field(fields, nk[].k_multi_class, "multi_class")
-    if Bool(py=family_call(operator.ne, multi_class, PythonObject("ovr"))):
-        raise Error("mojolearn LinearSVC: multi_class must be 'ovr', got " + family_repr(multi_class))
-    _linear_check_common(model, fields)
+    linear_svc_check_fields(model, fields)
     var xc_pin = ArrayPin()
     var xc = admit_family_meta(args[1], 2, "X", context, xc_pin)
     py_setitem(fields, nk[].k_input_copied_, PythonObject(admit_family_copied(xc, args[1])))
