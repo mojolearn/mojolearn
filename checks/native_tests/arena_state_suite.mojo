@@ -11,10 +11,10 @@ from core.state_registry import StateHandle
 from core.arena_state import (
     ARENA_ROWS, ARENA_CACHES, ARENA_SCOPES, ARENA_RESIDENTS, ARENA_HANDLE_NONE,
     DeviceRowsState, DeviceCacheState, ArenaScopeState, ArenaResidentState, ArenaResidentEntry,
-    arena_handle_word, arena_handle,
+    ArenaStoreFree, arena_handle_word, arena_handle, arena_resident_close_entries, arena_resident_release_entry,
 )
 
-comptime ARENA_STATE_FIXTURES = 6
+comptime ARENA_STATE_FIXTURES = 8
 
 
 def require(ok: Bool, message: String) raises:
@@ -121,6 +121,86 @@ def resident_entries() raises:
     ARENA_RESIDENTS.release(arena_handle(word))
 
 
+struct _FaultStore(ArenaStoreFree):
+    # A store whose free fails for chosen ids, recording every attempt and
+    # every kept failure in order (the native form of the resident tests'
+    # former `msel_free` fault injection; lane fx-leftovers item 9).
+    var fail: List[Int]
+    var attempted: List[Int]
+    var failures: List[String]
+
+    def __init__(out self, var fail: List[Int]):
+        self.fail = fail^
+        self.attempted = List[Int]()
+        self.failures = List[String]()
+
+    def free(mut self, store_id: Int) raises:
+        if store_id < 0:
+            return
+        self.attempted.append(store_id)
+        for i in range(len(self.fail)):  # small-loop(the fixture's failing ids)
+            if self.fail[i] == store_id:
+                raise Error("msel store: id " + String(store_id) + " is not live")
+
+    def failed(mut self, error: Error) raises:
+        self.failures.append(String(error))
+
+
+def resident_close_order() raises:
+    # Entries 900..904 with store ids 5, 6, -1 (an empty index buffer), 7, 8;
+    # the frees of the first (5) and the last (8) fail.
+    var word = arena_handle_word(ARENA_RESIDENTS.insert(ArenaResidentState()))
+    var lease = ARENA_RESIDENTS.acquire(arena_handle(word))
+    var ids: List[Int] = [5, 6, -1, 7, 8]
+    for i in range(len(ids)):  # small-loop(the fixture's entries)
+        _ = lease[].publish(ArenaResidentEntry(900 + i, 4096 * (i + 1), 80, 10, ids[i] < 0, ids[i], 0, 0))
+    var fail_ids: List[Int] = [5, 8]
+    var store = _FaultStore(fail_ids^)
+    var drained = List[ArenaResidentEntry]()
+    var kept = arena_resident_close_entries(lease[], store, drained)
+    require(len(drained) == 5, "close drains every entry")
+    require(len(store.attempted) == 4 and store.attempted[0] == 5 and store.attempted[1] == 6
+            and store.attempted[2] == 7 and store.attempted[3] == 8,
+            "every slot is attempted in entry order, past the first failure")
+    require(len(store.failures) == 2 and store.failures[0] == "msel store: id 5 is not live"
+            and store.failures[1] == "msel store: id 8 is not live", "failures kept in order, the first first")
+    require(kept[0] and not kept[1] and not kept[2] and not kept[3] and kept[4], "only the failed entries are kept")
+    require(lease[].find(900).store_id == 5 and lease[].find(904).store_id == 8,
+            "the failed entries are published again for a retry")
+    require(lease[].find(901).store_id == -2 and lease[].find(902).store_id == -2 and lease[].find(903).store_id == -2,
+            "the freed entries are gone")
+    # A retry once the store frees them: nothing kept, nothing left.
+    var healthy = _FaultStore(List[Int]())
+    var again = List[ArenaResidentEntry]()
+    var kept_again = arena_resident_close_entries(lease[], healthy, again)
+    require(len(again) == 2 and not kept_again[0] and not kept_again[1] and len(healthy.failures) == 0,
+            "the retry frees the two retained entries")
+    require(len(lease[].drain()) == 0, "empty after the retry")
+    ARENA_RESIDENTS.release(arena_handle(word))
+
+
+def resident_release_order() raises:
+    var word = arena_handle_word(ARENA_RESIDENTS.insert(ArenaResidentState()))
+    var lease = ARENA_RESIDENTS.acquire(arena_handle(word))
+    _ = lease[].publish(ArenaResidentEntry(910, 4096, 80, 10, False, 11, 0, 0))
+    _ = lease[].publish(ArenaResidentEntry(911, 8192, 8, 1, True, 12, 0, 0))
+    var removed = ArenaResidentEntry(0, 0, 0, 0, False, -2, 0, 0)
+    var fail_ids: List[Int] = [11]
+    var failing = _FaultStore(fail_ids^)
+    require(arena_resident_release_entry(lease[], failing, 910, removed), "a failed release keeps its entry")
+    require(len(failing.failures) == 1 and removed.store_id == 11, "the failure is kept, the entry returned")
+    require(lease[].find(910).store_id == 11, "the failed entry is published again for a retry")
+    var healthy = _FaultStore(List[Int]())
+    require(not arena_resident_release_entry(lease[], healthy, 911, removed) and removed.store_id == 12,
+            "a healthy release frees and drops its entry")
+    require(lease[].find(911).store_id == -2 and len(healthy.attempted) == 1, "the released entry is gone")
+    require(not arena_resident_release_entry(lease[], healthy, 999, removed) and removed.store_id == -2
+            and len(healthy.attempted) == 1, "an owner never put is a no-op")
+    require(not arena_resident_release_entry(lease[], healthy, 910, removed) and lease[].find(910).store_id == -2,
+            "the retry frees the retained entry")
+    ARENA_RESIDENTS.release(arena_handle(word))
+
+
 def scope_caches() raises:
     var word = arena_handle_word(ARENA_SCOPES.insert(ArenaScopeState(1 << 16)))
     var lease = ARENA_SCOPES.acquire(arena_handle(word))
@@ -145,8 +225,12 @@ def fixture(unit: Int) raises:
         cache_chain_order()
     elif unit == 4:
         resident_entries()
-    else:
+    elif unit == 5:
         scope_caches()
+    elif unit == 6:
+        resident_close_order()
+    else:
+        resident_release_order()
 
 
 def run_checks() raises:
@@ -163,4 +247,4 @@ def run_checks() raises:
     for value in failures:
         failed += value
     require(failed == 0, "arena_state failed " + String(failed) + " fixtures")
-    print("PASS arena_state:", ARENA_STATE_FIXTURES, "native handle/rows/cache/resident/scope fixtures")
+    print("PASS arena_state:", ARENA_STATE_FIXTURES, "native handle/rows/cache/resident/scope/close-order fixtures")

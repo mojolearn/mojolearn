@@ -18,7 +18,9 @@ Views: X dense row-major host float32; y and sample weights host float32
 vectors (one target). Anything else is refused in words (a device-home
 view, a row or column index: the caller hands over gathered host words); the
 caller's UNPACK admits the data (finite, shapes) exactly as the estimator's
-own door does. `call.fit_output = MEMBER_OP_PREDICT` writes the training
+own door does (MEMBER_CAN_TEST_ROWS clear: the fit and predict entries do
+not test finiteness). OUTPUTS answers PREDICT only: one float32 column
+(`out_dtype` MEMBER_F32). `call.fit_output = MEMBER_OP_PREDICT` writes the training
 rows' predictions to `dst` in the fit call. A weighted score is not
 published (no MEMBER_CAN_WEIGHTED_SCORE): the caller predicts and runs its
 own weighted metric.
@@ -342,7 +344,12 @@ def _linear_member(operation: Int, address: Int) raises -> Int:
         call[].state = 0
         return 0
     if operation == MEMBER_OP_OUTPUTS:
+        # One target column of float32 predictions, with or without a state;
+        # an operation this member lacks is refused, never sized.
+        if call[].flags != MEMBER_OP_PREDICT:
+            member_unsupported("LinearRegression / Ridge", call[].flags)
         call[].out_cols = 1
+        call[].out_dtype = MEMBER_F32
         call[].classes = 0
         return 0
     var slot = MutPointer[LinearMemberSlot, MutUntrackedOrigin](unsafe_from_address=_lookup(call[].state, False))

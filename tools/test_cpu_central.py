@@ -63,6 +63,29 @@ def test_no_box_refuses_every_box_command(tmp_path, cmd):
     assert got.returncode != 0 and "the CPU check box is not up" in got.stderr, got.stderr
 
 
+def test_check_filter_takes_globs_and_comma_lists(tmp_path):
+    # lane fx-leftovers item 6: `*` travels as `%`, which the submit's --env rule refused, and so did every filter
+    # with a star. A star glob, a comma list and both pass the filter check and reach the box lookup (no box here);
+    # a value the job line cannot carry is refused by name before any box is touched.
+    for good in ("arena_*", "arena_,svm_", "bindings/*door.mojo,providers/python/*_door.mojo", "x_decomp*,*labels*"):
+        got = run(tmp_path, "check", "HEAD", "parse", "--filter", good)
+        assert got.returncode != 0 and "--filter" not in got.stderr, (good, got.stderr)
+        assert "the CPU check box is not up" in got.stderr, (good, got.stderr)
+    for bad in ("a b", "it's", 'a"b', "a;b"):
+        got = run(tmp_path, "check", "HEAD", "parse", "--filter", bad)
+        assert got.returncode != 0 and "--filter" in got.stderr, (bad, got.stderr)
+    assert no_box_rented(tmp_path)
+
+
+def test_job_filter_reads_percent_as_star_over_comma_globs():
+    sys.path.insert(0, str(ROOT / "tools/ops"))
+    import native_checks_report as ncr
+    names = ["arena_rows", "arena_cols", "svm_fit", "labels_scope_cpu"]
+    assert ncr.select(names, "arena_%") == ["arena_cols", "arena_rows"]
+    assert ncr.select(names, "arena_rows,svm_%") == ["arena_rows", "svm_fit"]
+    assert ncr.select(names, "%labels%, svm_fit") == ["labels_scope_cpu", "svm_fit"]
+
+
 def test_check_argument_handling(tmp_path):
     got = run(tmp_path, "check")
     assert got.returncode != 0 and "check <sha>" in got.stderr

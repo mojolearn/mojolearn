@@ -75,7 +75,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.linear_entry_table_ext import XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS
 from core.member_abi import (
-    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
+    MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_DECISION,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_SCORE_SAMPLES, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_SCORE_SAMPLES,
@@ -618,10 +618,25 @@ def _import(slot: _SlotP, call: _CallP) raises:
 def _sgd_member(operation: Int, address: Int) raises -> Int:
     var call = _CallP(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
+        # A live state answers for its kind and settings; without one the
+        # NEW words do when given (kind-exact, item 17), else the union.
+        var bits: Int
+        var regressor: Bool
         if call[].state == 0:
-            return _capabilities(-1, True)
-        var asked = _SlotP(unsafe_from_address=_lookup(call[].state, False))
-        return _capabilities(_kind(asked), asked[].params[19] != 0.0)
+            if not call[].params or call[].param_count != SGD_MEMBER_PARAMS:
+                return _capabilities(-1, True)
+            var words = _F64P(unsafe_from_address=call[].params)
+            bits = _capabilities(Int(words[0]), words[19] != 0.0)
+            regressor = not _classifier(Int(words[0])) and Int(words[0]) != SGD_MEMBER_ONE_CLASS
+        else:
+            var asked = _SlotP(unsafe_from_address=_lookup(call[].state, False))
+            bits = _capabilities(_kind(asked), asked[].params[19] != 0.0)
+            regressor = not _classifier(_kind(asked)) and _kind(asked) != SGD_MEMBER_ONE_CLASS
+        if regressor and not call[].route.has_fifth:
+            # A regressor's score is the metrics image's R^2 entry: refused
+            # at RUN without it, so not advertised.
+            bits &= ~MEMBER_CAN_SCORE
+        return bits
     if operation == MEMBER_OP_NEW:
         if not call[].params or call[].param_count < 1:
             raise Error("member ABI: an SGD member takes its kind as parameter word 0")
@@ -651,13 +666,37 @@ def _sgd_member(operation: Int, address: Int) raises -> Int:
         elif call[].params and call[].param_count >= 1:
             asked_kind = Int(_F64P(unsafe_from_address=call[].params)[0])
             classes = call[].classes
+        var op = call[].flags
+        if asked_kind >= 0:
+            # An operation the kind lacks is refused, never sized (proba
+            # needs loss='log_loss': word 19).
+            var probability = True
+            if call[].state != 0:
+                probability = _SlotP(unsafe_from_address=_lookup(call[].state, False))[].params[19] != 0.0
+            elif call[].param_count == SGD_MEMBER_PARAMS:
+                probability = _F64P(unsafe_from_address=call[].params)[19] != 0.0
+            var can = _capabilities(asked_kind, probability)
+            var served = ((op == MEMBER_OP_PREDICT and (can & MEMBER_CAN_PREDICT) != 0)
+                or (op == MEMBER_OP_DECISION and (can & MEMBER_CAN_DECISION) != 0)
+                or (op == MEMBER_OP_PREDICT_PROBA and (can & MEMBER_CAN_PREDICT_PROBA) != 0)
+                or (op == MEMBER_OP_SCORE_SAMPLES and (can & MEMBER_CAN_SCORE_SAMPLES) != 0))
+            if not served:
+                member_unsupported("an SGD member of kind " + String(asked_kind), op)
         call[].out_cols = 1
         call[].classes = 0
+        # Regressor predict, every decision, score_samples and proba:
+        # float32; a classifier's or SGDOneClassSVM's predict: int32 codes.
+        call[].out_dtype = MEMBER_F32
+        if op == MEMBER_OP_PREDICT and asked_kind >= 0 and (_classifier(asked_kind)
+                or asked_kind == SGD_MEMBER_ONE_CLASS):
+            call[].out_dtype = MEMBER_I32
+        elif op == MEMBER_OP_PREDICT and asked_kind < 0:
+            call[].out_dtype = MEMBER_DTYPE_UNSAID  # the kind decides (codes or values)
         if asked_kind >= 0 and _classifier(asked_kind):
             call[].classes = classes
-            if call[].flags == MEMBER_OP_DECISION:
+            if op == MEMBER_OP_DECISION:
                 call[].out_cols = max(1, 1 if classes == 2 else classes)
-            elif call[].flags == MEMBER_OP_PREDICT_PROBA:
+            elif op == MEMBER_OP_PREDICT_PROBA:
                 call[].out_cols = max(1, classes)
         return 0
     var slot = _SlotP(unsafe_from_address=_lookup(call[].state, False))

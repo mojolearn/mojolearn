@@ -57,6 +57,27 @@ def _native_key(entries):
         entries["x_decomp_native_key"] = (mode, vendor)
 
 
+def _connect_cpu_image(context):
+    """The CPU image of `device="cpu"` beside the device set: the same
+    entries form, of the host x_decomp binary (its published table key is
+    (identical, cpu)), under `decomp_cpu_bindings`. Run once, by
+    `_native_family_bridge.connect_cpu` at the first device="cpu" admission
+    (or a restored device="cpu" estimator's first route), before the
+    context's CPU label scope is copied. A CPU-only process never runs it."""
+    # glue: lazy connection of one host image, once per process
+    from . import _backend
+    try:
+        cpu = _entries(_backend.load_host_module("_mojolearn_x_decomp_host"))
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+        cpu = type(error).__name__ + ": " + str(error)
+    if isinstance(cpu, dict):
+        # the CPU image's own metrics image, held by the entries the
+        # estimator's route names: EllipticEnvelope.score reads it there
+        from ._native_labels_bridge import cpu_metrics_entries
+        cpu["x_metrics_entries"] = cpu_metrics_entries()
+    context["decomp_cpu_bindings"] = {"identical": cpu}
+
+
 def connect(door, **classes):
     # glue: compiled entries and plain metadata are retained during import;
     # `door` names the tokenizer-host export, `classes` the classes the
@@ -82,20 +103,6 @@ def connect(door, **classes):
     # Every output and working buffer is a mojolearn Array, as `_M.out()` made.
     context.update(output_context=_numpy_free_context(), decomp_bindings=connected, decomp_modules=modules,
                    **classes)
-    # glue: the CPU image of `device="cpu"`, connected once beside the device
-    # set: the same entries form, of the host x_decomp binary (its published
-    # table key is (identical, cpu)). Nothing is loaded in a CPU-only process.
-    if context.get("vendor") not in (None, "cpu"):
-        try:
-            cpu = _entries(_backend.load_host_module("_mojolearn_x_decomp_host"))
-        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
-            cpu = type(error).__name__ + ": " + str(error)
-        if isinstance(cpu, dict):
-            # the CPU image's own metrics image, held by the entries the
-            # estimator's route names: EllipticEnvelope.score reads it there
-            from ._native_labels_bridge import cpu_metrics_entries
-            cpu["x_metrics_entries"] = cpu_metrics_entries()
-        context["decomp_cpu_bindings"] = {"identical": cpu}
     # The shared native label and accuracy steps (EllipticEnvelope.score).
     from ._native_labels_bridge import label_context
     context.update(label_context())
@@ -103,8 +110,15 @@ def connect(door, **classes):
     # a GPU set run the host label kernels (bindings/mcd_native_door.mojo
     # `elliptic_score`, `labels_scope`); the scope is built at the first
     # device="cpu" admission, never at import.
+    # lane fx-leftovers item 4 (2026-11-21): the CPU image of device="cpu"
+    # (`_connect_cpu_image`) loads with that scope, at the first device="cpu"
+    # admission beside a GPU set, never at import (it was loaded here, at
+    # import, in every GPU process).
     from ._native_family_bridge import cpu_scope_later
-    cpu_scope_later(context)
+    if context.get("vendor") not in (None, "cpu"):
+        cpu_scope_later(context, _connect_cpu_image)
+    else:
+        cpu_scope_later(context)
     entry = getattr(_binding()._module, door)
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError(f"the native decomposition owner requires a compiled {door}")

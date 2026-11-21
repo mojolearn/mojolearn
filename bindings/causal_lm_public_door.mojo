@@ -505,22 +505,91 @@ def _positions(words: CausalModelWords, state: PythonObject, length: Int) raises
         causal_positions_admit(words, True, Int(py=state.positions), Int(py=state.max_tokens), length)
 
 
+def _causal_weight_copy(mut mods: NativeModules, value: PythonObject) raises -> PythonObject:
+    # state_dict() (lane fx-leftovers item 1, 2026-11-21): an independent copy
+    # of one weight, so the model's own arrays never leave it and no exposure
+    # mark is set. Cold API call (one per checkpoint tensor of state_dict).
+    # An Array: one unfilled allocation and one byte copy of its C-order
+    # storage. A packed bfloat16 / int8 record is returned as stored: the
+    # model executes the float32 copy it unpacked at construction, so an
+    # edit of the record never reaches a forward. A foreign C-contiguous
+    # buffer (f / i / b) is copied into an Array of its shape.
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var nk = causal_keys()
+    var context = _causal_context()
+    if value is None:
+        return value
+    var dims = List[Int]()
+    if py_type(value) is g[].array_cls:
+        var captured = generation_array_snapshot(value)
+        if String(captured.order) != "C":
+            raise Error("CausalLM: state_dict requires C-contiguous model weights")
+        var dtype = String(captured.dtype)
+        var code = String("f")
+        if dtype == "<i4":
+            code = "i"
+        elif dtype == "<i1":
+            code = "b"
+        elif dtype != "<f4":
+            raise Error("TypeError: CausalLM state_dict: unsupported weight dtype " + dtype)
+        for i in range(len(captured.shape)):  # small-loop(array shape dimension words)
+            dims.append(Int(py=captured.shape[i]))
+        var copied = generation_array_unfilled(dims, code)
+        generation_bytes_copy(Int(py=copied._addr), Int(py=captured._addr), Int(py=captured.nbytes))
+        _ = captured  # keep the source storage alive through the byte copy above
+        return copied
+    if py_type(value) is py_item(context, nk[].k_bf16_class) or py_type(value) is py_item(context, nk[].k_int8_class):
+        return value
+    var view = generation_buffer_view(value)
+    if not Bool(py=view.c_contiguous):
+        raise Error("CausalLM: state_dict requires C-contiguous model weights")
+    var format = String(view.format)
+    if format != "f" and format != "i" and format != "b":
+        raise Error("TypeError: CausalLM state_dict: unsupported weight buffer format " + format)
+    for i in range(len(view.shape)):  # small-loop(buffer shape dimension words)
+        dims.append(Int(py=view.shape[i]))
+    var copied = generation_array_unfilled(dims, format)
+    var destination = py_call(copied._mv.cast, "B")
+    py_setitem(destination, py_call(g[].bi.slice, PythonObject(None)), py_call(view.cast, "B"))
+    _ = view
+    return copied
+
+
+def _causal_weight_out(mut mods: NativeModules, value: PythonObject, copies: Bool) raises -> PythonObject:
+    if copies:
+        return _causal_weight_copy(mods, value)
+    return value
+
+
 def causal_lm_parameters_binding(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
+    # parameters() / named_parameters(): the model's own arrays (exposure mark set).
+    return causal_lm_parameters_binding(mods, model, False)
+
+
+def causal_lm_parameters_binding(mut mods: NativeModules, model: PythonObject, copies: Bool) raises -> PythonObject:
+    # `copies` (state_dict, lane fx-leftovers item 1, 2026-11-21): every array
+    # is an independent copy and the model is NOT marked exposed, so the kept
+    # resident session and decode program stay and a later forward reuses
+    # them. Before, state_dict shared this entry with parameters(): it set
+    # `_parameters_exposed` and dropped the resident sessions, so every
+    # forward after a state_dict() opened a new session. parameters() keeps
+    # its semantics (live arrays, mark set, sessions dropped).
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var result = g[].bi.dict()
-    # The live arrays leave the model: a kept resident session set could miss
-    # an in-place edit, so it is dropped and generation opens per call again.
     var model_fields = _standalone_record_fields(mods, model)
-    causal_model_cache_set(mods, model, model_fields, "_parameters_exposed", True)
-    causal_model_cache_set(mods, model, model_fields, "_resident_sessions", PythonObject(None))
-    causal_model_cache_set(mods, model, model_fields, "_decode_program", PythonObject(None))
+    if not copies:
+        # The live arrays leave the model: a kept resident session set could miss
+        # an in-place edit, so it is dropped and generation opens per call again.
+        causal_model_cache_set(mods, model, model_fields, "_parameters_exposed", True)
+        causal_model_cache_set(mods, model, model_fields, "_resident_sessions", PythonObject(None))
+        causal_model_cache_set(mods, model, model_fields, "_decode_program", PythonObject(None))
     var p = model.plan
     var original_parameters = py_get(model_fields, "_causal_original_parameters", model_fields)
-    py_setitem(result, p.embed_name, original_parameters["_embed"])
+    py_setitem(result, p.embed_name, _causal_weight_out(mods, original_parameters["_embed"], copies))
     if p.norm_name is not None:
-        py_setitem(result, p.norm_name, original_parameters["_norm"])
+        py_setitem(result, p.norm_name, _causal_weight_out(mods, original_parameters["_norm"], copies))
     if p.head_name is not None:
-        py_setitem(result, p.head_name, original_parameters["_head"])
+        py_setitem(result, p.head_name, _causal_weight_out(mods, original_parameters["_head"], copies))
     var weight_names = model._native_entries["weight_names"]
     # Same canonical optional slot order as the transformer native ABI.
     var optional_names = [String("q_proj.bias"), String("k_proj.bias"), String("v_proj.bias"),
@@ -557,9 +626,10 @@ def causal_lm_parameters_binding(mut mods: NativeModules, model: PythonObject) r
             var name = py_get(names, key, PythonObject("layers." + String(i) + "." + String(key)))
             var rows = py_get(slices, key)
             if rows is None:
-                py_setitem(result, name, originals[key])
+                py_setitem(result, name, _causal_weight_out(mods, originals[key], copies))
             else:
                 # A fused checkpoint tensor (Phi-3 QKV / gate-up) is split
+                # (the joined array below is already a fresh copy)
                 # for execution. Return every row under its checkpoint name.
                 var piece = py_call(g[].bi.list, rows)
                 _ = py_call(piece.append, values[key])
@@ -4028,7 +4098,7 @@ def _causal_public_execute[operation: Int](py_self: PyObjectPtr, args_ptr: PyObj
         var checkpoint = PythonObject(None)
         var last_logits = PythonObject(None)
         var stream_native = PythonObject(None)
-        comptime if operation == 1 or operation == 2 or operation == 3 or operation == 4 or operation == 7 or operation == 8 or operation == 9 or operation == 10 or operation == 12 or operation == 13:
+        comptime if operation == 1 or operation == 2 or operation == 3 or operation == 4 or operation == 7 or operation == 8 or operation == 9 or operation == 10 or operation == 12 or operation == 13 or operation == 18:
             model = causal_model_capture(mods, args[0], _causal_context())
         comptime if operation == 2:
             state = causal_state_capture(mods, args[1], model, _causal_context())
@@ -4092,6 +4162,9 @@ def _causal_public_execute[operation: Int](py_self: PyObjectPtr, args_ptr: PyObj
             result = causal_lm_resume_binding(mods, model, checkpoint, args[2])
         elif operation == 13:
             result = causal_lm_parameters_binding(mods, model)
+        elif operation == 18:
+            # state_dict(): copies, no exposure mark (lane fx-leftovers item 1).
+            result = causal_lm_parameters_binding(mods, model, True)
         elif operation == 14:
             result = causal_lm_blocks_binding(mods, args[0])
         elif operation == 15:

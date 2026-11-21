@@ -13,6 +13,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_afn import BYTE_LM_FAST_APPLE
 from training.checks.optimizer_contract import OptimizerConfig
+from training.byte_lm_optimizer_bits import optimizer_config_bits_equal
 from training.byte_lm_config import ByteConfig
 from training.byte_lm import ByteTrainer
 from training.byte_lm_logits import ByteLogitsScratch
@@ -285,16 +286,9 @@ def _nonfinite(value: Float32) -> Bool:
 
 def _same_optimizer_bits(a: OptimizerConfig, b: OptimizerConfig) -> Bool:
     """Bitwise equality of every optimizer scalar, signed zero included:
-    the spelling `_byte_lm_run`'s resident admission uses."""
-    return (a.kind == b.kind and a.nesterov == b.nesterov
-        and bitcast[DType.uint32](a.lr) == bitcast[DType.uint32](b.lr)
-        and bitcast[DType.uint32](a.beta1) == bitcast[DType.uint32](b.beta1)
-        and bitcast[DType.uint32](a.beta2) == bitcast[DType.uint32](b.beta2)
-        and bitcast[DType.uint32](a.eps) == bitcast[DType.uint32](b.eps)
-        and bitcast[DType.uint32](a.weight_decay) == bitcast[DType.uint32](b.weight_decay)
-        and bitcast[DType.uint32](a.momentum) == bitcast[DType.uint32](b.momentum)
-        and bitcast[DType.uint32](a.dampening) == bitcast[DType.uint32](b.dampening)
-        and bitcast[DType.uint32](a.max_norm) == bitcast[DType.uint32](b.max_norm))
+    the spelling `_byte_lm_run`'s resident admission uses (one definition,
+    training/byte_lm_optimizer_bits.mojo)."""
+    return optimizer_config_bits_equal(a, b)
 
 
 def _require_open(session: ByteLMSession) raises:

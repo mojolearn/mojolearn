@@ -20,6 +20,7 @@
 from std.memory import unsafe_memcpy, unsafe_memcmp, bitcast
 from core.hostptr import read_f32, read_i32, f32_ptr, i32_ptr
 from training.byte_lm_config import ByteConfig
+from training.byte_lm_optimizer_bits import optimizer_words_bits_equal
 from training.byte_lm_host_io import all_finite_f32_scan
 from training.byte_lm_host_execution import (
     byte_host_logits_native, byte_host_next_native, byte_host_train_native,
@@ -209,9 +210,10 @@ struct ByteHostSession(Movable, Writable):
 
     def admit(self, cfg: ByteConfig, opt: List[Float64], completed: Int, flags: Int) raises:
         self.require_shape(cfg, completed)
-        for i in range(len(opt)):  # driver-loop: over admitted optimizer settings
-            if opt[i] != self.optimizer[i]:
-                raise Error("byte LM: resident optimizer mismatch")
+        # By bits (signed zero included), as the device session admits; it
+        # compared with `!=`, which admitted -0.0 for 0.0 (lane fx-leftovers item 5).
+        if not optimizer_words_bits_equal(opt, self.optimizer):
+            raise Error("byte LM: resident optimizer mismatch")
         if unsafe_memcmp(self.flags.unsafe_ptr(), i32_ptr(flags), len(self.flags)) != 0:
             raise Error("byte LM: resident momentum flags mismatch")
 

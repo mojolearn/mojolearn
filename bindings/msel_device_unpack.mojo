@@ -10,7 +10,7 @@ this binding.
 
     msel_alloc(nbytes) -> id              resident zero bytes
     msel_read(id, dst_addr, nbytes)       download
-    msel_free(id) / msel_live() -> count  (release-test fault injection and counts)
+    msel_live() -> count                  (live store ids, for the resident tests)
     msel_scatter_rows(dst_id, n_dst, dst_code, src_addr, src_code, n_src, width, idx_id)
     msel_proba_column(src_addr, code, n, k, col, dst_addr)
     msel_rebase_offsets_i32(raw_addr, n_raw, lens_addr, parts, n_out, dst_addr)

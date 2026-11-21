@@ -978,6 +978,10 @@ class KBinsDiscretizer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 8): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 8)
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
                  dtype=None, subsample=200_000, random_state=None, device=None):
@@ -1316,6 +1320,9 @@ class MultinomialNB(_DiscreteNB):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: the meta-estimators run this class through its native member entry
+    #: (core/naive_bayes_member.mojo; dense X).
+    _mojolearn_member = (9, 1)
     _csr_ok = True
     _needs_min = True
 
@@ -1378,6 +1385,9 @@ class BernoulliNB(_DiscreteNB):
     >>> model = mojolearn.BernoulliNB().fit(X, y)
     """
     _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior", "device")
+    #: the meta-estimators run this class through its native member entry
+    #: (core/naive_bayes_member.mojo; dense X).
+    _mojolearn_member = (9, 2)
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
@@ -1999,6 +2009,10 @@ class SplineTransformer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 9): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 9)
     _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
 
     def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,
@@ -3049,6 +3063,9 @@ class ComplementNB(_DiscreteNB):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"positive_only": True}
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm", "device")
+    #: the meta-estimators run this class through its native member entry
+    #: (core/naive_bayes_member.mojo; dense X).
+    _mojolearn_member = (9, 3)
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True

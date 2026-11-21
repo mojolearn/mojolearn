@@ -6,11 +6,11 @@ instance's one `_owner` slot; every public attribute is read-only.
 
 Rewritten with the native state (2026-11-21, arena unit E): `_take` and
 `_host` are gone (a `take` other than `model_selection._Resident.take` is
-not kept, and `materialize` refuses it in words). Reinitialization no
-longer refuses an old base whose release would run a finalizer: it
-releases the previous view's pins when it returns. The tests below hold
-the old base themselves, so no finalizer runs inside the audited call, and
-then show the pin was released.
+not kept, and `materialize` refuses it in words). Reinitialization admits
+every owner the old view's release would drop before anything changes: an
+old base, indices or host rows whose release could run a finalizer or a
+weak-reference callback is refused in words (TypeError) and the view is
+left as it was (restored natively, lane fx-leftovers item 7).
 """
 from array import array
 import numpy as np
@@ -158,68 +158,78 @@ class _Finalizer:
         self.calls.append('finalizer')
 
 
-def _reinitialize_holding_the_old_base(rows):
-    # The caller's reference keeps the old base alive: the audited call
-    # releases only the view's own pin, and no finalizer runs inside it.
-    old = rows.base
-    base, indices = Array.from_list([[9.,8.]], '<f4'), Array.from_list([0], '<i8')
-    assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
-    assert rows.base is base and rows.base is not old
-    return old
+def _refused_reinitialization(rows, base=None, indices=None):
+    # The audited call must refuse BEFORE the view changes and run no Python.
+    previous_base = rows.base
+    if base is None:
+        base, indices = Array.from_list([[9.,8.]], '<f4'), Array.from_list([0], '<i8')
+    audit = audit_native_call(rows.__init__, base, indices, None)
+    assert isinstance(audit.exception, TypeError), audit.report()
+    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
+    assert rows.base is previous_base
+    return audit.exception
 
 
 @pytest.mark.parametrize('field', ['base', 'indices'])
-def test_reinitialization_releases_the_previous_view_pins(field):
+def test_reinitialization_refuses_a_previous_view_pin_with_a_finalizer(field):
     calls = []
     held = _Finalizer(calls)
     previous = (np.array([[held, 1.]], dtype='O') if field == 'base' else np.array([0], dtype='i8'))
     rows = (DeviceRows(previous, np.array([0], dtype='i8'), None) if field == 'base' else
             DeviceRows(np.zeros((2, 3), dtype='f4'), previous, None))
-    del held
-    base, indices = Array.from_list([[9.,8.]], '<f4'), Array.from_list([0], '<i8')
-    assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
-    assert calls == []
-    del previous
-    # The view held the old buffer; it is released, nothing leaks.
-    assert calls == (['finalizer'] if field == 'base' else [])
+    del held, previous
+    if field == 'base':
+        _refused_reinitialization(rows)
+        assert calls == []
+        rows.base[0, 0] = None  # application cleanup, outside the audited product operation
+        assert calls == ['finalizer']
+    else:
+        # plain int64 indices own no finalizer: the view is replaced natively
+        base, indices = Array.from_list([[9.,8.]], '<f4'), Array.from_list([0], '<i8')
+        assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
+        assert rows.base is base and calls == []
 
 
 @pytest.mark.parametrize('slot', ['_pin', '_store', 'strides', 'order'])
-def test_reinitialization_releases_all_previous_array_slot_owners(slot):
+def test_reinitialization_admits_all_previous_array_slot_owners(slot):
     calls = []
     rows = _fresh_rows()
     setattr(rows.base, slot, _Finalizer(calls))
-    old = _reinitialize_holding_the_old_base(rows)
+    _refused_reinitialization(rows)
     assert calls == []
-    setattr(old, slot, None)
+    setattr(rows.base, slot, None)
     assert calls == ['finalizer']
 
 
 @pytest.mark.parametrize('source', ['array', 'numpy'])
-def test_reinitialization_releases_owned_buffer_weakref_targets(source):
+def test_reinitialization_refuses_owned_buffer_weakref_callbacks(source):
     import weakref
     calls = []
     rows = _fresh_rows(source)
     owner = rows.base._store if source == 'array' else rows.base
     reference = weakref.ref(owner, lambda unused: calls.append('weakref'))
     del owner
-    old = _reinitialize_holding_the_old_base(rows)
+    error = _refused_reinitialization(rows)
+    assert 'weak-reference' in str(error)
     assert not calls and reference() is not None
-    del old
-    assert reference() is None and calls == ['weakref']
 
 
-def test_reinitialization_releases_nested_dtype_metadata():
+def test_reinitialization_refuses_nested_dtype_metadata_without_releasing_it():
     calls = []
     rows = DeviceRows(np.zeros((2, 3), dtype=np.dtype('f4', metadata={'owner': _Finalizer(calls)})),
                       np.array([0], dtype='i8'), None)
-    old = rows.base
-    base, indices = np.zeros((2, 2), dtype='f8'), np.array([1], dtype='i8')
-    assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
-    # The dtype is read from the base at each read.
-    assert not calls and rows.dtype == np.dtype('f8')
-    del old
-    assert calls == ['finalizer']
+    _refused_reinitialization(rows, np.zeros((2, 2), dtype='f8'), np.array([1], dtype='i8'))
+    assert not calls and rows.dtype == np.dtype('f4')
+
+
+def test_reinitialization_keeps_a_base_the_caller_passes_again():
+    # The same base passed again is not released: nothing to admit, no refusal.
+    calls = []
+    held = _Finalizer(calls)
+    base = np.array([[held, 1.]], dtype='O')
+    rows = DeviceRows(base, np.array([0], dtype='i8'), None)
+    assert audit_native_call(rows.__init__, base, np.array([0], dtype='i8'), None).assert_native() is None
+    assert rows.base is base and calls == []
 
 
 @pytest.mark.parametrize('layout', ['structured', 'subarray', 'metadata', 'object', 'structured_object'])
@@ -248,7 +258,7 @@ def test_reinitialization_preserves_native_dtype_layouts_and_owned_metadata(layo
 
 
 @pytest.mark.parametrize('structured', [False, True])
-def test_reinitialization_releases_owned_object_buffer_finalizers(structured):
+def test_reinitialization_refuses_owned_object_buffer_finalizers(structured):
     calls = []
     dtype = np.dtype([('owner', 'O'), ('value', 'f8')]) if structured else np.dtype('O')
     rows = DeviceRows(np.zeros((2, 3), dtype=dtype), np.array([1], dtype='i8'), None)
@@ -256,9 +266,5 @@ def test_reinitialization_releases_owned_object_buffer_finalizers(structured):
         rows.base['owner'][0, 0] = _Finalizer(calls)
     else:
         rows.base[0, 0] = _Finalizer(calls)
-    old = rows.base
-    replacement = np.zeros((2, 2), dtype='f8')
-    assert audit_native_call(rows.__init__, replacement, np.array([0], dtype='i8'), None).assert_native() is None
-    assert not calls and rows.base is replacement
-    del old
-    assert calls == ['finalizer']
+    _refused_reinitialization(rows, np.zeros((2, 2), dtype='f8'), np.array([0], dtype='i8'))
+    assert not calls
