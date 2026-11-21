@@ -3055,6 +3055,9 @@ class ComplementNB(_DiscreteNB):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"positive_only": True}
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm", "device")
+    #: the meta-estimators run this class through its native member entry
+    #: (core/naive_bayes_member.mojo; dense X).
+    _mojolearn_member = (9, 3)
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
