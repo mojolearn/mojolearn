@@ -93,13 +93,13 @@ def test_native_explicit_weight_constructor_and_load_preserve_aliases(monkeypatc
         _poison(patch)
         audit_native_call(model.__init__, config, weights=weights).assert_native()
     assert model.generator.state_dict() == {"seed": 0, "counter": 0}
-    assert {name: value.tobytes() for name, value in model.parameters().items()} == expected
-    before = model.parameters()
+    assert {name: value.tobytes() for name, value in model.named_parameters()} == expected
+    before = dict(model.named_parameters())
     replacement = {name: np.full(shape, 0.125, dtype="f4") for name, shape in config.registry()}
     with monkeypatch.context() as patch:
         _poison(patch)
         audit_native_call(model.load_weights, replacement).assert_native()
-    for name, value in model.parameters().items():
+    for name, value in model.named_parameters():
         assert value is before[name]
         assert value.tobytes() == replacement[name].tobytes()
 

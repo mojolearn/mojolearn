@@ -282,6 +282,9 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     >>> model = mojolearn.ExtraTreesClassifier(n_estimators=50).fit(X, y)
     >>> proba = model.predict_proba(X)
     """
+    # The member ABI mark (core/member_abi.mojo, family 15 MEMBER_FAMILY_EXTRA_TREES): fit and predict run native
+    # inside a meta-estimator (core/extra_trees_member.mojo).
+    _mojolearn_member = (15, 0)
     predict = _ForestClassifierPredict.predict
 
     def __init__(
@@ -443,6 +446,9 @@ class ExtraTreesRegressor(_ExtraTreesBase):
     >>> model = mojolearn.ExtraTreesRegressor(n_estimators=50).fit(X, y)
     >>> pred = model.predict(X)
     """
+    # The member ABI mark (core/member_abi.mojo, family 15 MEMBER_FAMILY_EXTRA_TREES): fit and predict run native
+    # inside a meta-estimator (core/extra_trees_member.mojo).
+    _mojolearn_member = (15, 1)
 
     def __init__(
         self,

@@ -45,6 +45,7 @@ from bindings.trees_public_inputs_door import (
     trees_call,
 )
 from bindings.trees_public_inputs_run import trees_finite_f32
+from bindings.gbdt_category_unpack import gbdt_category_block_list, gbdt_category_admit, gbdt_category_apply
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
 from bindings.py_optional import py_present
 from gbdt.trees_gbdt_run import gbdt_mode_checked, gbdt_text_has_ctr, _type_or_value
@@ -260,6 +261,21 @@ def _fitted_x(fields: PythonObject, X: PythonObject, layout: Bool, before: Strin
     var nk = trees_keys()
     if py_item(fields, nk[].k_model_) is None:
         raise Error("RuntimeError: mojolearn: " + before + " before fit()")
+    # lane cat-ctr: a model fitted with cat_features carries its category
+    # map; its categorical columns are admitted like the fit's (numbers,
+    # text or None) and encoded through the map, searched in place, before
+    # RUN. One dict read per call with the interned key; None for every
+    # other model, whose admission below is unchanged.
+    var category_map = py_get(fields, nk[].k_category_map_)
+    if category_map is not None:
+        var fitted_width = _int(py_item(fields, nk[].k_n_features_in_))
+        var cat_columns = gbdt_category_block_list(category_map, fitted_width)
+        var cat_keys = List[UInt64]()
+        var xc = gbdt_category_admit(X, "X", cat_columns, cat_keys, context)
+        if xc.cols != fitted_width:
+            raise Error("mojolearn: model was fitted on " + String(fitted_width) + " features, got " + String(xc.cols))
+        gbdt_category_apply(xc, cat_keys, category_map, fitted_width, context)
+        return xc^
     var x = trees_forest_x(X, "X", context) if layout else admit_f32(X, 2, "X", context, order="F", finite=False)
     var fitted = _int(py_item(fields, nk[].k_n_features_in_))
     if x.cols != fitted:

@@ -21,6 +21,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_labels_door import classical_accuracy_routed, labels_shape_of
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.admitted_input_unpack import classical_view
 from bindings.classical_arrays_door import classical_address, classical_wrap_array
 from bindings.admitted_input_unpack import admit_x
@@ -266,7 +267,11 @@ def elliptic_score(model: PythonObject, args: PythonObject, envelope: Bool, cont
     if metrics is not None and py_type(metrics) is py_type(PythonObject("")):
         raise Error(String(py=metrics))
     try:
-        return PythonObject(classical_accuracy_routed(y, prediction, sample_weight, mode, metrics, context))
+        # The label steps (encode, union, codes) on the estimator's device too:
+        # the CPU label scope of a device="cpu" estimator beside a GPU set,
+        # `context` otherwise (labels_scope: one route read, a hit here).
+        return PythonObject(classical_accuracy_routed(y, prediction, sample_weight, mode, metrics,
+                                                      labels_scope(model, context)))
     except error:
         if String(error).startswith("ZeroDivisionError"):
             raise Error("ZeroDivisionError: Weights sum to zero, can't be normalized")

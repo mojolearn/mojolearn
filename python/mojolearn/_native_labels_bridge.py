@@ -101,13 +101,46 @@ def _metrics_cpu():
     return {"identical": {"_mojolearn_metrics": table}, "fast": {"_mojolearn_metrics": table}}
 
 
+def cpu_metrics_entries():
+    """The connected entries of the CPU x_metrics image in the program
+    runner's form (python/mojolearn/_native_arena_prog.py), or the text of
+    why it is not connected; connected once per process. The accuracy step
+    of a `device="cpu"` estimator runs its COUNT tail on it
+    (bindings/classical_labels_door.mojo `labels_accuracy_routed`)."""
+    # glue: import-time connection, once
+    if "x_metrics" not in _LABEL_CONTEXT_CPU:
+        from types import BuiltinFunctionType
+        from . import _backend
+        from ._native_arena_prog import _FAMILIES, _error_text
+        _, mandatory, optional, _ = _FAMILIES["x_metrics"]
+        try:
+            module = _backend.load_host_module("_mojolearn_x_metrics_host")
+            entries = {mandatory: getattr(module, mandatory)}
+            for name in optional:  # glue: fixed optional native exports connected during import
+                try:
+                    entries[name] = getattr(module, name)
+                except (AttributeError, ImportError):
+                    continue
+            for name, entry in entries.items():  # glue: admit only compiled entries
+                if not isinstance(entry, BuiltinFunctionType):
+                    raise TypeError(f"arena programs require compiled {name}")
+            entries.update(prog_family="x_metrics", arena_binding=module, arena_binding_id=id(module))
+            _LABEL_CONTEXT_CPU["x_metrics"] = entries
+        except Exception as error:  # noqa: BLE001 - raised by the score that needs the image
+            _LABEL_CONTEXT_CPU["x_metrics"] = _error_text(error)
+    return _LABEL_CONTEXT_CPU["x_metrics"]
+
+
 def label_context_cpu():
     """The label entries of a CPU scope beside a GPU set: the host label
     kernels (`labels_base_binding=False`, which the label steps read from the
-    caller's context) and the CPU metrics tables. A family that builds its
-    own CPU scope merges these; nothing here is a process state."""
+    caller's context), the CPU metrics tables (R^2) and the CPU x_metrics
+    runner entries (`labels_metrics_entries`: the accuracy COUNT tail). A
+    family that builds its own CPU scope merges these; nothing here is a
+    process state."""
     if "cpu" not in _LABEL_CONTEXT_CPU:
-        _LABEL_CONTEXT_CPU["cpu"] = dict(labels_base_binding=False, labels_bindings=_metrics_cpu())
+        _LABEL_CONTEXT_CPU["cpu"] = dict(labels_base_binding=False, labels_bindings=_metrics_cpu(),
+                                         labels_metrics_entries=cpu_metrics_entries())
     return dict(_LABEL_CONTEXT_CPU["cpu"])
 
 
@@ -117,16 +150,25 @@ def cpu_scope(context, **entries):
     (bindings/labels_descriptor_boundary_door.mojo `labels_scope`). A copy of
     `context` with the host label entries and the family's own CPU `entries`
     (its CPU metrics tables, `vendor="cpu"`, ...). Call it LAST in the
-    family's connection: the copy does not follow later updates of
-    `context`. A CPU-only installation needs none and gets none."""
+    family's connection where it can; a context that grows later (the
+    shared family context, which later imports extend) is copied again by
+    `labels_scope` at the first label step after it grew. A CPU-only
+    installation needs none and gets none."""
     # glue: import-time connection, once per family context
     from . import _backend
     if _backend._CPU_ONLY is not None:
         return None
+    cpu = label_context_cpu()
+    cpu.update(entries)
+    context["labels_cpu_entries"] = cpu
+    context["labels_cpu_scope"] = None
     scope = dict(context)
-    scope.pop("labels_cpu_scope", None)
-    scope.update(label_context_cpu())
-    scope.update(entries)
+    scope.pop("labels_cpu_scope")
+    scope.update(cpu)
+    # `labels_scope` copies again when `context` has grown since (a shared
+    # family context that later imports extend): the size it was copied at.
+    scope["labels_cpu_source"] = context
+    scope["labels_cpu_source_size"] = len(context)
     context["labels_cpu_scope"] = scope
     return scope
 

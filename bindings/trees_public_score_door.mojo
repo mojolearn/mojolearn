@@ -18,6 +18,7 @@
 from core.mode_answer import MODE_FAMILY_FOREST, answer_mode_word
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.labels_stat_boundary_pack import labels_stat_pack
 from bindings.base_helpers_released_unpack import base_reduce_stat
 from bindings.py_balanced import py_call, py_type, py_setitem, py_fields
@@ -368,7 +369,7 @@ def _score_codes(model: PythonObject, pair: PythonObject, y: PythonObject, sampl
     if rows != n:
         raise Error("score target and prediction lengths differ")
     var mode = PythonObject(forest_effective_mode(py_fields(model), context))
-    return PythonObject(classical_score_from_codes(y, classes, codes, sample_weight, mode, context))
+    return PythonObject(classical_score_from_codes(y, classes, codes, sample_weight, mode, labels_scope(model, context)))
 
 
 def _as_array(m: AdmittedX, context: PythonObject) raises -> PythonObject:

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed parts of the parallel shard driver (RUN): the driver read shift, the numerical
 operation names, the dtype item table, and the process counters (injected transport faults and
-store tokens). The Python pool and trace records stay in `bindings/parallel_shard_common_door.mojo`."""
+store tokens) and the trace records (`ShardTraceRecord`). The pool is a typed record of the process pool door."""
 from std.ffi import external_call
 from std.memory import unsafe_memcpy
 from std.os import getenv
@@ -157,6 +157,33 @@ def shard_item(dtype: String) raises -> Tuple[String, Int]:
 comptime SHARD_DEVICE_NOT_AN_INDEX = -1
 #: The trace keeps this many pool records; the oldest go first.
 comptime SHARD_TRACE_RECORDS = 256
+
+
+struct ShardTraceRecord(Copyable, Movable):
+    """One started pool in the trace: its id (the pool dictionary's
+    `trace_record` word), its devices and, per request it served, the
+    worker's process id and the operation's name."""
+    var id: Int
+    var devices: List[Int]
+    var pids: List[Int]
+    var operations: List[String]
+
+    def __init__(out self, id: Int, var devices: List[Int]):
+        self.id = id
+        self.devices = devices^
+        self.pids = List[Int]()
+        self.operations = List[String]()
+
+
+def shard_trace_find(records: List[ShardTraceRecord], id: Int) -> Int:
+    """The position of the record with `id`, or -1 when the trace no longer
+    holds it (taken, or pushed out by newer pools). Newest first: a pool
+    in use is almost always among the last records."""
+    for back in range(len(records)):  # small-loop(at most SHARD_TRACE_RECORDS pool records, once per request batch)
+        var at = len(records) - 1 - back
+        if records[at].id == id:
+            return at
+    return -1
 
 # What `shard_run` does with the idle pool it found (`shard_idle_action`).
 comptime SHARD_IDLE_FORGET = 0   # inherited across fork: drop the record, close nothing

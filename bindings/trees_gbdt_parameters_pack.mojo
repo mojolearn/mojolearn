@@ -10,6 +10,7 @@ from bindings.params_metadata_native_door import _read, _resolved
 from bindings.trees_constructor_native_unpack import tree_store_parameters
 from bindings.trees_constructor_native_pack import tree_constructor_values
 from bindings.trees_keys_unpack import trees_keys
+from bindings.parameter_names_unpack import names_in_table, resolve_parameter_names
 from bindings.py_balanced import py_item
 from bindings.trees_route_boundary_door import trees_device_admit
 from providers.python.device_route_boundary_door import device_route_clear
@@ -19,7 +20,19 @@ def gbdt_adapter_construct(model: PythonObject, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
     var nk = trees_keys()
-    var prepared = tree_constructor_values(model, args, py_item(context, nk[].k_trees_gbdt_adapter_constructors))
+    var constructors = py_item(context, nk[].k_trees_gbdt_adapter_constructors)
+    var prepared: PythonObject
+    try:
+        prepared = tree_constructor_values(model, args, constructors)
+    except error:
+        # A keyword the signature does not hold may be a CatBoost / XGBoost /
+        # LightGBM name (lane api-boost): only on this refused path is the
+        # name table read; the binder refused before storing anything.
+        var table = py_get(context, PythonObject("trees_gbdt_adapter_parameter_names"))
+        if not names_in_table(args[2], table):
+            raise error^
+        prepared = tree_constructor_values(
+            model, Python.tuple(args[0], args[1], resolve_parameter_names(args[2], table)), constructors)
     if fields is not prepared[0]:
         raise Error("TypeError: native GBDT constructor requires stable instance storage")
     var values = prepared[1]
@@ -34,7 +47,7 @@ def gbdt_adapter_construct(model: PythonObject, args: PythonObject,
     return PythonObject(None)
 
 
-def gbdt_adapter_set_params(model: PythonObject, values: PythonObject,
+def gbdt_adapter_set_params(model: PythonObject, var values: PythonObject,
                             context: PythonObject) raises -> PythonObject:
     var b = native_loaded_module("builtins")
     if py_type(values) is not b.dict:
@@ -52,6 +65,18 @@ def gbdt_adapter_set_params(model: PythonObject, values: PythonObject,
     for i in range(len(keys)):  # driver-loop: the existing shallow schema rejects unknown names before mutation
         if not py_contains(replacement, keys[i]):
             _ = py_call(unknown.append, keys[i])
+    if len(unknown):
+        # CatBoost / XGBoost / LightGBM names (lane api-boost), read only when
+        # a name is not a parameter: stored under the canonical name, or
+        # refused in the table's words; the rest stay unknown.
+        var table = py_get(context, PythonObject("trees_gbdt_adapter_parameter_names"))
+        if names_in_table(unknown, table):
+            values = resolve_parameter_names(values, table)
+            keys = py_call(b.list, values)
+            unknown = Python.list()
+            for i in range(len(keys)):  # driver-loop: the resolved names, against the same schema
+                if not py_contains(replacement, keys[i]):
+                    _ = py_call(unknown.append, keys[i])
     if len(unknown):
         raise Error("Invalid " + String(py_type(model).__name__) + " parameters: " + String(py_call(b.repr, py_call(b.sorted, unknown))))
     # `device` is checked where it is given, before any field changes.

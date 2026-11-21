@@ -108,6 +108,7 @@ struct ClassicalKeys(Defaultable, Movable):
     var k_integer: PythonObject
     var k_intercept_: PythonObject
     var k_labels_base_binding: PythonObject
+    var k_labels_metrics_entries: PythonObject
     var k_labels_bindings: PythonObject
     var k_legacy: PythonObject
     var k_line: PythonObject
@@ -289,6 +290,7 @@ struct ClassicalKeys(Defaultable, Movable):
         self.k_integer = PythonObject(None)
         self.k_intercept_ = PythonObject(None)
         self.k_labels_base_binding = PythonObject(None)
+        self.k_labels_metrics_entries = PythonObject(None)
         self.k_labels_bindings = PythonObject(None)
         self.k_legacy = PythonObject(None)
         self.k_line = PythonObject(None)
@@ -474,6 +476,7 @@ def _classical_keys_fill(nk: UnsafePointer[ClassicalKeys, MutUntrackedOrigin]) r
     nk[].k_integer = py_key("integer")
     nk[].k_intercept_ = py_key("intercept_")
     nk[].k_labels_base_binding = py_key("labels_base_binding")
+    nk[].k_labels_metrics_entries = py_key("labels_metrics_entries")
     nk[].k_labels_bindings = py_key("labels_bindings")
     nk[].k_legacy = py_key("legacy")
     nk[].k_line = py_key("line")

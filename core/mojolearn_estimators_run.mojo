@@ -11,6 +11,7 @@ from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
 from core.linear_member import linear_member_publish
 from core.decomposition_member import decomposition_member_publish
+from core.logistic_member import logistic_member_publish
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from glm.linear_fit_device import linear_fit_device_v1, LINEAR_FIT_DEVICE_API
 from glm.linear_predict_device import linear_predict_device_v1
@@ -107,3 +108,5 @@ def _publish_estimators_qn_table() raises:
     var api = LOGISTIC_DEVICE_API.get_or_create_ptr()
     estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), word),
         Int(api[].entries.unsafe_ptr()), qn_device_native_v1)
+    # LogisticRegression's member entry (core/logistic_member.mojo).
+    logistic_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(api[].entries.unsafe_ptr()))

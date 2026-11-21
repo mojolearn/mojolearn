@@ -514,7 +514,7 @@ class Ridge(_NumericModeMixin):
         super().__init_subclass__(**kw)
         _native_classical_bridge.register_subclass(cls, globals().get("_CLASSICAL"))
 
-    def __init__(self, *, alpha=1.0, solver="auto", fit_intercept=True,
+    def __init__(self, alpha=1.0, *, solver="auto", fit_intercept=True,
                  normalize=False, numeric_mode=None, device=None):
         # Stored verbatim (scikit-learn's convention); fit checks them.
         # `device` alone is checked here: an unknown value, and 'gpu' on an
@@ -752,13 +752,16 @@ class LogisticRegression(_NumericModeMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LOGISTIC = 1) and core/logistic_member.mojo.
+    _mojolearn_member = (1, 0)
 
     # `device` (None: this installation's device; "gpu"; "cpu") is checked
     # here when it is given (an unknown value, and 'gpu' on an installation
     # without a GPU set, are refused in words) and read once, at the
     # estimator's first operation, into its native route owner. Its docstring
     # entry is added when the family's first GPU run has passed.
-    def __init__(self, *, penalty="l2", tol=1e-4, C=1.0, fit_intercept=True,
+    def __init__(self, penalty="l2", *, tol=1e-4, C=1.0, fit_intercept=True,
                  class_weight=None, max_iter=1000, linesearch_max_iter=50,
                  l1_ratio=None, solver="qn", numeric_mode=None, device=None):
         return _LR_CALL(self, "initialize", (penalty, tol, C, fit_intercept, class_weight,
