@@ -2172,6 +2172,10 @@ class LassoCV(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 11)
+
     def __init__(self, *, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
                  precompute="auto", max_iter=1000, tol=1e-4, copy_X=True, cv=None, verbose=False,
                  n_jobs=None, positive=False, random_state=None, selection="cyclic", numeric_mode=None, device=None):
@@ -2289,6 +2293,10 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
     """
 
     _BINDING = _BINDING
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 12)
 
     def __init__(self, *, l1_ratio=0.5, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
                  precompute="auto", max_iter=1000, tol=1e-4, cv=None, copy_X=True, verbose=0,
@@ -2421,6 +2429,10 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 13)
+
     def __init__(self, *, Cs=10, fit_intercept=True, cv=None, dual=False, penalty="l2", scoring=None,
                  solver="lbfgs", tol=1e-4, max_iter=100, class_weight=None, n_jobs=None, verbose=0,
                  refit=True, intercept_scaling=1.0, random_state=None, l1_ratios=None, numeric_mode=None, device=None):
@@ -2536,6 +2548,10 @@ class IsotonicRegression(NumericModeMixin):
     _mojolearn_device = True
 
     _BINDING = _BINDING
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 14)
     _estimator_type = "regressor"
     # scikit-learn's IsotonicRegression tags: X is one feature, 1-D
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}

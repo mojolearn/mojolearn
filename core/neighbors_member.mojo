@@ -32,7 +32,9 @@ writes int32 codes (rows x 1); predict_proba writes float32 rows x classes
 (a class absent from the fitted rows has probability 0). Regressor: y one
 float32 column; predict writes float32 rows x 1. One output only (no
 MEMBER_CAN_MULTI_OUTPUT). The caller's UNPACK admits X and y (finite,
-shapes) as for every member; the member tests no word again. Score is not
+shapes) as for every member; the member tests no word again. OUTPUTS with
+no state answers from the NEW words: predict_proba `call.classes` columns
+(the classifier), predict `max(1, y.cols)`. Score is not
 published: the caller predicts and runs its own metric.
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
@@ -587,6 +589,19 @@ def _neighbors_member(operation: Int, address: Int) raises -> Int:
         _release_index(held)
         _ = _lookup(call[].state, True)
         call[].state = 0
+        return 0
+    if operation == MEMBER_OP_OUTPUTS and call[].state == 0:
+        # No state (member_outputs): answer from the NEW words, as a state made
+        # from them and fitted on `x.cols` features, `y.cols` targets would.
+        if call[].param_count != 6 or not call[].params:
+            raise Error("member ABI: a k-NN member takes six parameters (kind, n_neighbors, metric, "
+                + "metric argument, weights, query_tile)")
+        var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+        if words[0] == 1.0:
+            if call[].flags == MEMBER_OP_PREDICT_PROBA:
+                raise Error("member ABI: KNeighborsRegressor has no predict_proba")
+            call[].classes = 0
+        call[].out_cols = call[].classes if call[].flags == MEMBER_OP_PREDICT_PROBA else max(1, call[].y.cols)
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_OUTPUTS:

@@ -6,6 +6,7 @@
 from gbdt.models.oblivious_model import TAdditiveModel
 from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
+from gbdt.models.combination_map import TCombinationCtrs
 
 
 @fieldwise_init
@@ -58,3 +59,9 @@ struct TrainedModel(Movable):
     these columns and their split-history bins in level order. Public
     combination training remains refused until this registry is populated by
     the production structure-search driver rather than focused checks."""
+    var combination_ctrs: TCombinationCtrs
+    """The tree CTRs (feature combinations) the trees split on: the
+    combination maps and one table per tree-CTR column. Those columns are
+    the model's LAST columns, after every raw and simple-CTR column, and are
+    not counted in `ctr_column_count`. Empty for a model without them. See
+    `gbdt/models/combination_map.mojo`."""
