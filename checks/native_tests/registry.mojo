@@ -261,6 +261,7 @@ from checks.native_tests.kmeans_contract import register as register_kmeans_cont
 from checks.native_tests.kmeans_variants_contract import register as register_kmeans_variants_contract
 from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
 from checks.native_tests.parallel_byte_session import register as register_parallel_byte_session
+from checks.native_tests.cross_vendor_run import register as register_cross_vendor_run
 from checks.native_tests.kpca_contract import register as register_kpca_contract
 from checks.native_tests.kpca_state import register as register_kpca_state
 from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
@@ -291,6 +292,7 @@ from checks.native_tests.neighbors_kde_run import register as register_neighbors
 from checks.native_tests.neighbors_knn_run import register as register_neighbors_knn_run
 from checks.native_tests.neighbors_local_run import register as register_neighbors_local_run
 from checks.native_tests.neighbors_semi_run import register as register_neighbors_semi_run
+from checks.native_tests.neighbors_split_run import register as register_neighbors_split_run
 from checks.native_tests.neural_entry import register as register_neural_entry
 from checks.native_tests.nmf_contract import register as register_nmf_contract
 from checks.native_tests.nmf_state import register as register_nmf_state
@@ -600,6 +602,7 @@ from checks.native_tests.x_neighbors_sketch_check import register as register_x_
 from checks.native_tests.xtrees_glue_check import register as register_xtrees_glue_check
 from checks.native_tests.xtrees_zero_cover_check import register as register_xtrees_zero_cover_check
 from checks.native_tests.tsa_hw_route import register as register_tsa_hw_route
+from checks.native_tests.tsa_arima_route import register as register_tsa_arima_route
 from checks.native_tests.causal_owner import register as register_causal_owner
 
 def all_checks() -> List[Check]:
@@ -847,6 +850,7 @@ def all_checks() -> List[Check]:
     checks.append(register_kmeans_variants_contract())
     checks.append(register_kmeans_variants_lease())
     checks.append(register_parallel_byte_session())
+    checks.append(register_cross_vendor_run())
     checks.append(register_kpca_contract())
     checks.append(register_kpca_state())
     checks.append(register_label_score_keys_stress())
@@ -877,6 +881,7 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_knn_run())
     checks.append(register_neighbors_local_run())
     checks.append(register_neighbors_semi_run())
+    checks.append(register_neighbors_split_run())
     checks.append(register_neural_entry())
     checks.append(register_nmf_contract())
     checks.append(register_nmf_state())
@@ -1183,5 +1188,6 @@ def all_checks() -> List[Check]:
     checks.append(register_xtrees_glue_check())
     checks.append(register_xtrees_zero_cover_check())
     checks.append(register_tsa_hw_route())
+    checks.append(register_tsa_arima_route())
     checks.append(register_causal_owner())
     return checks^

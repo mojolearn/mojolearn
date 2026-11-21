@@ -80,7 +80,8 @@ def test_subset_matches_existing_native_constructor_plans_and_inheritance():
 
 
 def test_owned_fitted_state_covers_all_linear_owner_writes():
-    owner = (ROOT / 'bindings/x_linear_native_door.mojo').read_text()
+    # The door and its per-group boundary files (the PACK functions publish).
+    owner = '\n'.join(path.read_text() for path in sorted((ROOT / 'bindings').glob('x_linear_*.mojo')))
     # The owner writes through its held name keys (bindings/py_keys.mojo):
     # `nk[].k_<name>` is the key of the field `<name>`.
     writes = set(re.findall(r'py_setitem\(fields, nk\[\]\.k_(\w+)', owner))

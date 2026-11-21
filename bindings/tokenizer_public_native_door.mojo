@@ -39,8 +39,8 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     SPELLED_BAD_ID, SPELLED_NOT_STR, SPELLED_RAISED, SPELLED_NOT_PAIR,
     SPELLED_NOT_LEVEL, spelled_vocab_tokens, spelled_merges_text, spelled_merges_list,
     bpe_encode_corpus_into, bpe_train_corpus_fill,
-    tokens_gather_rows_width, tokens_gather_rows_into,
 )
+from core.lm_batch_run import lm_gather_rows
 from core.shared_slot import SharedSlot
 
 
@@ -1590,30 +1590,6 @@ def tokenizer_bpe_train_corpus(data: PythonObject, point_values: PythonObject, l
     return result
 
 
-def tokenizer_gather_rows_native(source_address: Int, source_count: Int, target_address: Int, target_count: Int, batch: Int, length: Int, lo: Int, modulus: Int, base: Int) raises -> Int:
-    # The caller owns admission and retains its already captured source/output
-    # storage. This typed helper neither rereads metadata nor takes callbacks.
-    if source_count < 0 or target_count < 0 or batch < 0 or length < 1 or length == 9223372036854775807 or lo < 0 or modulus < 1 or base < 0:
-        raise Error("ValueError: tokens_gather_rows: bad dims")
-    var requested_width = length + 1
-    if lo > source_count or modulus - 1 > source_count - lo or requested_width > source_count - lo - (modulus - 1):
-        raise Error("ValueError: tokens_gather_rows: a row runs past the id array")
-    if batch > 0 and (batch - 1) > (9223372036854775807 - base) // length:
-        raise Error("ValueError: token row position exceeds native indexing")
-    var width = tokens_gather_rows_width(source_count, batch, length, lo, modulus, base)
-    if batch > 0 and width > 9223372036854775807 // batch:
-        raise Error("ValueError: token row output size overflows native indexing")
-    if target_count != batch * width:
-        raise Error("ValueError: token row output size differs from batch times row width")
-    if batch == 0:
-        return 0
-    if source_address == 0 or target_address == 0:
-        raise Error("ValueError: token row gathering requires non-null retained storage")
-    var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=source_address)
-    var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=target_address)
-    return tokens_gather_rows_into(src, dst, batch, length, width, lo, modulus, base)
-
-
 def tokenizer_gather_rows(ids_all: PythonObject, output: PythonObject, batch_value: PythonObject, length_value: PythonObject, lo_value: PythonObject, modulus_value: PythonObject, base_value: PythonObject) raises -> PythonObject:
     var context = _bpe_context()[7]
     var source = neural_array_snapshot(ids_all, context)
@@ -1629,7 +1605,8 @@ def tokenizer_gather_rows(ids_all: PythonObject, output: PythonObject, batch_val
         raise Error("TypeError: token row gathering requires contiguous int32 Arrays")
     if Bool(py=target._readonly) or Bool(py=target._store.readonly):
         raise Error("TypeError: token row output must have writable native storage")
-    var count = tokenizer_gather_rows_native(Int(py=source._addr), Int(py=source.size), Int(py=target._addr), Int(py=target.size), batch, length, lo, modulus, base)
+    # RUN: the typed gather (core/lm_batch_run.mojo); UNPACK above, PACK the count below.
+    var count = lm_gather_rows(Int(py=source._addr), Int(py=source.size), Int(py=target._addr), Int(py=target.size), batch, length, lo, modulus, base)
     _ = source
     _ = target
     _ = ids_all

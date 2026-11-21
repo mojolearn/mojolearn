@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Initializer scalar-ABI and complete draw-boundary regression oracles."""
+"""Initializer scalar rounding and complete draw-boundary regression oracles."""
 import pytest
 
 from mojolearn import _native_samba_bridge as bridge
@@ -78,7 +78,7 @@ def test_initializer_refusals_preserve_order_and_stream_consumption(operation, o
     assert gen.counter == old.counter == advance
 
 
-def test_initializer_invokes_cached_c_abi_without_python_math_or_loader(monkeypatch):
+def test_initializer_runs_without_python_math_or_loader(monkeypatch):
     shape, options = (3, 7), dict(fan_in=13)
     expected = LegacyInitializers(5).kaiming_uniform(shape, **options)
     gen = training.Generator(5)
@@ -93,21 +93,11 @@ def test_initializer_invokes_cached_c_abi_without_python_math_or_loader(monkeypa
 
 
 @pytest.mark.parametrize('operation,options', CASES[::2])
-def test_missing_scalar_library_refuses_before_consuming_a_stream(monkeypatch, operation, options):
-    gen = training.Generator(7)
-    with monkeypatch.context() as patch:
-        patch.setitem(bridge.CONTEXT, 'generator_sqrt', 'missing-library-fixture')
-        refusal(getattr(gen, operation), OSError, (3, 7), **options)
-        assert gen.counter == 0
-        # Ordinary draws do not acquire an initializer-only library dependency.
-        bits(checked(gen.uniform, 3), LegacyDraws(7).uniform(3))
-        assert gen.counter == 1
-
-
-def test_initializer_rejects_a_python_callback_in_the_c_entry_slot(monkeypatch):
-    called = []
-    gen = training.Generator(7)
-    with monkeypatch.context() as patch:
-        patch.setitem(bridge.CONTEXT, 'generator_sqrt', lambda value: called.append(value))
-        refusal(gen.kaiming_uniform, TypeError, (3, 7), fan_in=13)
-    assert not called and gen.counter == 0
+def test_initializer_needs_no_scalar_library_entry(operation, options):
+    # The square roots are native binary64 in the compiled door: the bridge
+    # holds no scalar entry and no RNG symbol for it to call.
+    assert 'generator_sqrt' not in bridge.CONTEXT and 'generator_sqrt_type' not in bridge.CONTEXT
+    assert all(value is True or isinstance(value, str) for value in bridge.CONTEXT['generator_bindings'].values())
+    gen, old = training.Generator(7), LegacyInitializers(7)
+    bits(checked(getattr(gen, operation), (3, 7), **options), getattr(old, operation)((3, 7), **options))
+    assert gen.counter == old.counter == 1

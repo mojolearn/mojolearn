@@ -7,6 +7,14 @@ typed host scans and copies the door used to run inline.
 estimator's fields, admits the arrays, resolves the metric tables and calls
 these checks at the point the public method made them, so the refusal order
 and wording are unchanged. Nothing here imports Python.
+
+The queries themselves (lane dw-neighbors, 2026-11-21): `KnnQueryRequest` is
+one k-NN query as plain words; `knn_search_run`, `knn_rbc_search_run`,
+`knn_classify_run`, `knn_regress_run` and the two votes on merged neighbors
+run it through the neighbors operations table
+(core/neighbors_entry_table.mojo) of the image the boundary resolved, with
+the host finite scans the CPU column and the ball cover need in front. The
+boundary enters each with the GIL released, once per public call.
 """
 from std.math import isfinite
 from std.memory import unsafe_memcpy
@@ -15,6 +23,13 @@ from std.time import perf_counter_ns
 from core.shared_slot import SharedSlot
 from core.family_cast_impl import family_min_f32
 from core.host_finite_scan import host_all_finite_f32, host_all_finite_f64, host_finite_status
+from core.native_descriptor_abi import NativeDescriptorCall
+from core.neighbors_native_driver import XnDriver
+from core.neighbors_entry_table import (
+    NbFold, nb_classify_call, nb_classify_resident_call, nb_regress_call, nb_regress_resident_call,
+    nb_search_call, nb_search_resident_call, nb_rbc_search_call, nb_classify_neighbors_call,
+    nb_regress_neighbors_call,
+)
 
 #: cuVS `DistanceType` values the refusals and the input checks read
 #: (python/mojolearn/neighbors.py `_DIST_LP_UNEXPANDED`, `_DIST_JENSEN_SHANNON`).
@@ -492,3 +507,224 @@ def knn_door_clock_close() raises:
         clock[].line += String(" total_ms ") + String(ms)
         print(clock[].line)
         clock[].line = String()
+
+
+# ------------------------------------------------------------------ queries
+
+
+@fieldwise_init
+struct KnnDistWords(Copyable, Movable):
+    """The resolved `[metric, metric_arg, weights]` of an estimator: the
+    distance code, its argument (Minkowski's p; rounded to Float32 by the
+    entry) and the vote weights code."""
+    var metric: Int
+    var metric_arg: Float64
+    var weights: Int
+
+
+struct KnnQueryRequest(Copyable, Movable):
+    # Addresses of admitted storage the boundary keeps alive: the fitted
+    # float32 index rows and the float32 query rows (0 for a fold the
+    # resident entry gathers on the device).
+    var index: Int
+    var queries: Int
+    var n_index: Int
+    var n_queries: Int
+    var n_features: Int
+    var k: Int
+    var query_tile: Int
+    var metric: Int
+    var metric_arg: Float64
+    var weights: Int
+    # The device-resident copy of the index (`resident`), minted by the GPU
+    # image; the CPU column keeps none and searches the host rows.
+    var resident: Bool
+    var handle: Int
+    # Host finite scans in front of the entry (the CPU column, the ball
+    # cover): the index at an estimator's first query, a borrowed query.
+    var scan_index: Bool
+    var scan_queries: Bool
+    # The resident entry tests the queries it uploads and returns the word.
+    var device_status: Bool
+    var fold: NbFold
+
+    def __init__(out self, index: Int, queries: Int, n_index: Int, n_queries: Int, n_features: Int, k: Int,
+                 query_tile: Int, dist: KnnDistWords):
+        self.index = index
+        self.queries = queries
+        self.n_index = n_index
+        self.n_queries = n_queries
+        self.n_features = n_features
+        self.k = k
+        self.query_tile = query_tile
+        self.metric = dist.metric
+        self.metric_arg = dist.metric_arg
+        self.weights = dist.weights
+        self.resident = False
+        self.handle = 0
+        self.scan_index = False
+        self.scan_queries = False
+        self.device_status = False
+        self.fold = NbFold.none()
+
+
+struct KnnQueryOutcome(Copyable, Movable):
+    """What a query RUN returns: the entry's word (the query tile that ran;
+    the candidate count of a ball-cover search), the finite word of the host
+    index scan, the finite word of the queries (host scan or the resident
+    entry's upload) and a fold's index-range word. `ran` is False when a
+    host scan refused before the entry."""
+    var used: Int
+    var index_status: Int
+    var status: Int
+    var range_status: Int
+    var ran: Bool
+
+    def __init__(out self):
+        self.used = 0
+        self.index_status = 0
+        self.status = 0
+        self.range_status = 0
+        self.ran = False
+
+
+def _knn_host_scans(request: KnnQueryRequest, mut outcome: KnnQueryOutcome) -> Bool:
+    # parallel: each scan splits its words across the host's cores (host_finite_status)
+    if request.scan_index:
+        outcome.index_status = knn_finite_status(request.index, request.n_index * request.n_features)
+        if outcome.index_status != 0:
+            return False
+    if request.scan_queries:
+        outcome.status = knn_finite_status(request.queries, request.n_queries * request.n_features)
+        if outcome.status != 0:
+            return False
+    return True
+
+
+def _knn_status_address(request: KnnQueryRequest, status: List[Int32]) -> Int:
+    if request.device_status or request.fold.has_fold != 0:
+        return Int(status.unsafe_ptr())
+    return 0
+
+
+def knn_check_fold_entry(request: KnnQueryRequest) raises:
+    if request.fold.has_fold != 0 and not request.resident:
+        raise Error("RuntimeError: a resident k-NN fold needs the binding's resident entries")
+
+
+def knn_search_run(entry: NativeDescriptorCall, request: KnnQueryRequest, distances: Int,
+                   ids: Int) raises -> KnnQueryOutcome:
+    """`kneighbors`: `n_queries x k` float32 distances and uint32 ids,
+    ascending per row; through the resident index when one is held."""
+    var outcome = KnnQueryOutcome()
+    if not _knn_host_scans(request, outcome):
+        return outcome
+    if request.resident:
+        var status = List[Int32](length=2, fill=Int32(0))
+        outcome.used = nb_search_resident_call(
+            entry, request.handle, request.index, request.queries, distances, ids,
+            _knn_status_address(request, status), request.n_index, request.n_queries, request.n_features,
+            request.k, True, request.query_tile, request.metric, request.metric_arg)
+        outcome.status = Int(status[0])
+        _ = status^
+    else:
+        outcome.used = nb_search_call(
+            entry, request.index, request.queries, distances, ids, request.n_index, request.n_queries,
+            request.n_features, request.k, True, request.query_tile, request.metric, request.metric_arg)
+    outcome.ran = True
+    return outcome
+
+
+def knn_rbc_search_run(entry: NativeDescriptorCall, request: KnnQueryRequest, ids: Int,
+                       distances: Int) raises -> KnnQueryOutcome:
+    """`kneighbors` under algorithm='rbc': int32 ids (-1 in an unfilled
+    slot) and float32 true distances; `used` is the candidate count."""
+    var outcome = KnnQueryOutcome()
+    if not _knn_host_scans(request, outcome):
+        return outcome
+    outcome.used = nb_rbc_search_call(
+        entry, request.index, request.queries, ids, distances, request.n_index, request.n_queries,
+        request.n_features, request.k, request.metric, request.metric_arg)
+    outcome.ran = True
+    return outcome
+
+
+def knn_classify_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: Int, labels: Int, proba: Int,
+                     uniq: Int, want_proba: Bool, class_counts: List[Int]) raises -> KnnQueryOutcome:
+    """The classifier's search and vote, one entry call."""
+    knn_check_fold_entry(request)
+    var outcome = KnnQueryOutcome()
+    if not _knn_host_scans(request, outcome):
+        return outcome
+    if request.resident:
+        # Two words: the finite word, and for a fold the index-range word.
+        var status = List[Int32](length=2, fill=Int32(0))
+        outcome.used = nb_classify_resident_call(
+            entry, request.handle, request.index, request.queries, y, labels, proba, uniq,
+            _knn_status_address(request, status), request.n_index, request.n_queries, request.n_features,
+            request.k, request.query_tile, want_proba, class_counts, request.metric, request.metric_arg,
+            request.weights, request.fold)
+        outcome.status = Int(status[0])
+        outcome.range_status = Int(status[1])
+        _ = status^
+    else:
+        outcome.used = nb_classify_call(
+            entry, request.index, request.queries, y, labels, proba, uniq, request.n_index, request.n_queries,
+            request.n_features, request.k, request.query_tile, want_proba, class_counts, request.metric,
+            request.metric_arg, request.weights)
+    outcome.ran = True
+    return outcome
+
+
+def knn_regress_run(entry: NativeDescriptorCall, request: KnnQueryRequest, y: Int, dst: Int,
+                    n_outputs: Int) raises -> KnnQueryOutcome:
+    """The regressor's search and (weighted) mean, one entry call."""
+    knn_check_fold_entry(request)
+    var outcome = KnnQueryOutcome()
+    if not _knn_host_scans(request, outcome):
+        return outcome
+    if request.resident:
+        var status = List[Int32](length=2, fill=Int32(0))
+        outcome.used = nb_regress_resident_call(
+            entry, request.handle, request.index, request.queries, y, dst,
+            _knn_status_address(request, status), request.n_index, request.n_queries, request.n_features,
+            request.k, request.query_tile, n_outputs, request.metric, request.metric_arg, request.weights,
+            request.fold)
+        outcome.status = Int(status[0])
+        outcome.range_status = Int(status[1])
+        _ = status^
+    else:
+        outcome.used = nb_regress_call(
+            entry, request.index, request.queries, y, dst, request.n_index, request.n_queries,
+            request.n_features, request.k, request.query_tile, n_outputs, request.metric, request.metric_arg,
+            request.weights)
+    outcome.ran = True
+    return outcome
+
+
+def knn_vote_classify_run(entry: NativeDescriptorCall, distances: Int, ids: Int, y: Int, labels: Int, proba: Int,
+                          uniq: Int, n_index: Int, n_queries: Int, k: Int, want_proba: Bool,
+                          class_counts: List[Int], weights: Int) raises:
+    """The vote on globally merged neighbors (reference-sharded predict)."""
+    nb_classify_neighbors_call(entry, distances, ids, y, labels, proba, uniq, n_index, n_queries, k, want_proba,
+                               class_counts, weights)
+
+
+def knn_vote_regress_run(entry: NativeDescriptorCall, distances: Int, ids: Int, y: Int, dst: Int, n_index: Int,
+                         n_queries: Int, k: Int, n_outputs: Int, weights: Int) raises:
+    """The (weighted) mean on globally merged neighbors."""
+    nb_regress_neighbors_call(entry, distances, ids, y, dst, n_index, n_queries, k, n_outputs, weights)
+
+
+def knn_transpose_targets_run(driver: XnDriver, source: Int, columns: Int, rows: Int, outputs: Int,
+                              integer: Bool) raises:
+    """A fit's `rows x outputs` targets (int32 labels when `integer`, else
+    float32) as `outputs` contiguous columns (POLICY 6): the x_neighbors
+    transpose."""
+    var a: Array[Int, 2] = [source, columns]
+    var p: Array[Int, 2] = [rows, outputs]
+    var f: Array[Float64, 0] = []
+    if integer:
+        _ = driver.run("p2m_transpose_i", a, p, f)
+    else:
+        _ = driver.run("p2m_transpose", a, p, f)

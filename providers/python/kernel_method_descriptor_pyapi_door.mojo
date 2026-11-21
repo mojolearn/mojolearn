@@ -5,9 +5,8 @@ from std.python import PythonObject
 from bindings.py_balanced import py_get, py_setitem
 from providers.python.neural_descriptor_pyapi_door import (
     neural_descriptor_entry, neural_descriptor_reuse, neural_descriptor_execute,
-    neural_descriptor_info,
 )
-from kernel_methods.descriptor_schema import KERNEL_METHOD_ABI, KERNEL_METHOD_OPERATIONS, kernel_method_operation, kernel_method_scalar_mask
+from kernel_methods.descriptor_schema import KERNEL_METHOD_ABI, KERNEL_METHOD_OPERATIONS
 from bindings.svm_keys_unpack import svm_keys
 
 
@@ -28,26 +27,9 @@ def kernel_method_provider(fields: PythonObject, binding: PythonObject, identica
     return result
 
 
-def kernel_method_execute(native: PythonObject, name: String, addrs: PythonObject,
-                          params: PythonObject, handle: Int = 0) raises -> PythonObject:
-    var operation = kernel_method_operation(name)
-    var schema = kernel_method_scalar_mask(operation)
-    if len(params) != schema[0] or len(addrs) > 8:
-        raise Error("kernel methods provider: packed admission does not match operation")
-    var a = List[Int]()
-    if operation == 6:
-        a.append(handle)
-    for i in range(len(addrs)):  # small-loop(at most eight fixed native buffer slots)
-        a.append(Int(py=addrs[i]))
-    var p = List[Int](length=schema[0], fill=0)
-    var f = List[Float64](length=schema[0], fill=0)
-    for i in range(schema[0]):  # small-loop(at most ten scalar parameter slots)
-        var value = params[i]
-        if (schema[1] & (1 << i)) != 0:
-            f[i] = Float64(py=value)
-        else:
-            p[i] = Int(py=value)
-    return PythonObject(neural_descriptor_execute(native, operation, a, p, f))
+# The packed admission `kernel_method_execute` (two Python lists re-read per
+# call) is gone: the door builds a typed request and RUN calls the table
+# (kernel_methods/native_call_run.mojo `KmCall`, `km_call_run`).
 
 
 def kernel_method_metadata(native: PythonObject, operation: Int) raises -> Int:

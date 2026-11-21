@@ -17,8 +17,8 @@ from bindings.family_common_unpack import (
 from bindings.mode_metadata_native_door import _fields
 from bindings.metrics_native_support_door import metric_warn
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_metadata_once, array_shape_once
-from providers.python.estimator_binding_pyapi_door import estimator_binding, estimator_binding_mode
-from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
+from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding
 from providers.python.x_neighbors_descriptor_pyapi_door import xn_admit
 from providers.python.hierarchy_public_lifecycle_pyapi_unpack import hierarchy_public_begin, hierarchy_public_end, hierarchy_public_refusal
 from providers.python.hierarchy_public_lifecycle_pyapi_pack import hierarchy_public_finish
@@ -375,11 +375,21 @@ def cfb_agglo_operation(model: PythonObject, operation: Int, args: PythonObject,
     var call = hierarchy_public_begin(model, operation, public_args, context)
     var result = PythonObject(None)
     try:
-        var estimators = args[0] if args[0] is not None else host_estimator_binding_mode(model, call.settings.numeric_mode, "_mojolearn_estimators", context)
+        # The four modules are the ESTIMATOR'S: its binding route holds them
+        # (one record read and, per held name, a name compare and two pointer
+        # compares on a hit; the device is read on a miss only). A saved host
+        # class keeps its connected CPU binding. The solver keeps the process
+        # default mode it always ran in (requested None).
+        var mode = call.settings.numeric_mode
+        var estimators = args[0]
+        if estimators is None:
+            estimators = host_estimator_binding(model, "_mojolearn_estimators", mode, context)
+        if estimators is None:
+            estimators = estimator_binding_routed(model, mode, "_mojolearn_estimators", context)
         if call.fitting:
-            var solver = args[1] if explicit else estimator_binding(PythonObject(None), "_mojolearn_solver", context)
-            var cluster = args[2] if explicit else estimator_binding_mode(call.settings.numeric_mode, "_mojolearn_x_cluster", context)
-            var neighbors = xn_admit(args[3] if explicit else estimator_binding_mode(call.settings.numeric_mode, "_mojolearn_x_neighbors", context))
+            var solver = args[1] if explicit else estimator_binding_routed(model, PythonObject(None), "_mojolearn_solver", context)
+            var cluster = args[2] if explicit else estimator_binding_routed(model, mode, "_mojolearn_x_cluster", context)
+            var neighbors = xn_admit(args[3] if explicit else estimator_binding_routed(model, mode, "_mojolearn_x_neighbors", context))
             agglo_publish(call.fields, "input_copied_", PythonObject(not (call.x_pin.keep is call.source)), context)
             var bindings = AggloBindings(estimators, solver, cluster, neighbors)
             _agglo_fit(call.fields, call.settings, bindings, call.x, call.x_pin, context)

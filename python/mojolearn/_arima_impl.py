@@ -441,6 +441,12 @@ class ARIMA(NumericModeMixin):
     """
 
     _BINDING = "_mojolearn_arima"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`),
+    #: by the default form: `get_params` returns `device`, and the fitted
+    #: attributes are instance fields (the resident copy is a record of the
+    #: estimator, so each side keeps its own). The CPU binding carries the fit.
+    _mojolearn_device = True
 
     # Every public method is one tsa_native_call whose owner does the whole
     # lifecycle (numeric_mode in arima_initialize, fit bookkeeping and the

@@ -125,9 +125,9 @@ def test_native_admission_preserves_mode_check_and_live_host_replacement():
 
 
 def test_cluster_native_boundary_refuses_initializer_callbacks_before_array_conversion():
-    source = _door('bindings/cluster_fit_a_native_door.mojo')
+    source = _door('bindings/cluster_fit_public_native_unpack.mojo')
     assert 'def _callable_init(' not in source
-    helper = source.split('def _init_array(', 1)[1].split('def _flag(', 1)[0]
+    helper = source.split('def _init_array(', 1)[1].split('\ndef ', 1)[0]
     assert helper.index('PyCallable_Check') < helper.index('_f32(init,')
     assert 'pass explicit initial centers' in helper
     seed = source.split('def _seed(', 1)[1].split('def _weights(', 1)[0]

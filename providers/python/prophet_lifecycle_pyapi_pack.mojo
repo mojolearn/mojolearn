@@ -21,6 +21,8 @@ from providers.python.prophet_lifecycle_pyapi_unpack import (
 )
 from bindings.prophet_keys_unpack import prophet_keys
 from bindings.py_balanced import py_item
+from bindings.forecast_device_door import forecast_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 
 
 comptime _PROPHET_LAYOUT_SLOT = "xseq_prophet_layout_v1"  # p3-cnn-sequence-tsa class record
@@ -60,7 +62,10 @@ def prophet_initialize(model: PythonObject, args: PythonObject, context: PythonO
     var nk = prophet_keys()
     var fields = prophet_fields(model, context)
     var b = native_loaded_module("builtins")
-    for i in range(len(args)):  # driver-loop: passive constructor settings before comparisons or conversions
+    # `device` (None, "gpu" or "cpu"), the last argument, is checked first,
+    # before any field changes, in the shared refusal words.
+    forecast_device_admit(args[13], context)
+    for i in range(13):  # driver-loop: passive constructor settings before comparisons or conversions
         if i == 1:
             classical_admit_value(args[i], py_item(context, nk[].k_xseq_lifecycle_context))
         else:
@@ -81,7 +86,9 @@ def prophet_initialize(model: PythonObject, args: PythonObject, context: PythonO
             value = py_call(b.float, value)
         py_setitem(updates, names[i], value)
     py_setitem(updates, nk[].k_seasonalities, Python.dict())
+    py_setitem(updates, "device", args[13])
     forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
+    device_route_clear(model)
     return PythonObject(None)
 
 
