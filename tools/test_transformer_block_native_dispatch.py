@@ -56,8 +56,10 @@ def test_public_fresh_session_ephemeral_and_backward_are_hooked():
     assert '_neural_table_reserved(train_entry, handle, NEURAL_BLOCK_RESERVE, NEURAL_BLOCK_RELEASE, NEURAL_BLOCK_SESSION_BACKWARD, addresses, params,' in flat
     assert '_neural_table_call(train_entry, NEURAL_BLOCK_BACKWARD, addresses, params,' in flat
     # The route choice still keys on the image exporting each supported entry.
-    assert 'py_contains(e, "transformer_session_forward_fresh")' in PUBLIC
-    assert 'py_contains(e, "transformer_forward_fresh")' in PUBLIC
+    # dw-neural-models (2026-11-21): read once at plan construction (NativeBlockPlan words), not per forward.
+    assert 'self.session_fresh = py_contains(self.entries, "transformer_session_forward_fresh")' in PUBLIC
+    assert 'self.forward_fresh = py_contains(self.entries, "transformer_forward_fresh")' in PUBLIC
+    assert 'py_contains(e, ' not in PUBLIC
     assert '_native_has_entry(mods, entries, "transformer_session_backward")' in PUBLIC
 
 
