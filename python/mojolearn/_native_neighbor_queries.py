@@ -10,8 +10,14 @@ _SYMBOLS = {
     # (its `neighbors_native_key`, captured below), not exports by name.
     "base": ("_mojolearn", ("mojolearn_numeric_mode", "knn_index_prepare", "knn_index_release")),
     "sort": ("_mojolearn_x_neighbors", ("x_neighbors_numeric_mode", "x_neighbors_native_api_v1",)),
-    "ivf": ("_mojolearn_ivf", ("ivf_numeric_mode", "ivf_flat_search", "ivf_flat_index_prepare",
-        "ivf_flat_index_search", "ivf_flat_index_release", "ivf_flat_index_export", "ivf_flat_extend")),
+    # The IVF queries call the image's IVF-Flat operations table (its
+    # `ivf_native_key`, captured below), not exports by name. The release and
+    # the list-data export stay captured for the two doors that still read
+    # them by name from the resident tuple's binding, which after a search is
+    # this captured table: the native finalizer
+    # (bindings/host_archive_lifetime_door.mojo) and the archive writer's
+    # device array (bindings/archive_schema_native_door.mojo).
+    "ivf": ("_mojolearn_ivf", ("ivf_numeric_mode", "ivf_flat_index_release", "ivf_flat_index_export")),
 }
 
 
@@ -34,12 +40,15 @@ def _capture(binding, name, symbols):
     # exact module: read the key through it (it forwards to the host module
     # that published it), or every CPU k-NN/radius query refused (smoke-triage
     # 2026-11-15: lanes knn*, radius*, x-neighbors-metrics; 8 test files).
-    try:
-        key = getattr(binding, "neighbors_native_key")
-    except (ImportError, AttributeError):
-        key = None
-    if type(key) is tuple:
-        result.neighbors_native_key = key
+    # The IVF owner reads `ivf_native_key` the same way
+    # (bindings/ivf_ops_native_door.mojo ivf_ops_key).
+    for attribute in ("neighbors_native_key", "ivf_native_key"):  # glue: the two fixed table-key attributes, at import
+        try:
+            key = getattr(binding, attribute)
+        except (ImportError, AttributeError):
+            key = None
+        if type(key) is tuple or type(key) is int:  # the neighbors key is a tuple, the IVF key one int
+            setattr(result, attribute, key)
     _BINDING_ALIASES[id(binding)] = (binding, result)
     _BINDING_ALIASES[id(result)] = (result, result)
     return result

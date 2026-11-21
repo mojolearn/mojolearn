@@ -555,6 +555,7 @@ from checks.native_tests.hierarchy_linkage_host_check import register as registe
 from checks.native_tests.holtwinters_hw_estimate_check import register as register_holtwinters_hw_estimate_check
 from checks.native_tests.holtwinters_hw_predict_ptr_check import register as register_holtwinters_hw_predict_ptr_check
 from checks.native_tests.ivf_ivf_large_k_check import register as register_ivf_ivf_large_k_check
+from checks.native_tests.ivf_ops_table import register as register_ivf_ops_table
 from checks.native_tests.kde_reused_workspace_check import register as register_kde_reused_workspace_check
 from checks.native_tests.kernel_methods_nystroem_basis_sort_check import register as register_kernel_methods_nystroem_basis_sort_check
 from checks.native_tests.mamba_mamba3_increment_tile_check import register as register_mamba_mamba3_increment_tile_check
@@ -885,6 +886,7 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_local_run())
     checks.append(register_neighbors_semi_run())
     checks.append(register_neighbors_split_run())
+    checks.append(register_ivf_ops_table())
     checks.append(register_neural_entry())
     checks.append(register_nmf_contract())
     checks.append(register_nmf_state())

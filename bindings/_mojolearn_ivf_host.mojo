@@ -25,10 +25,11 @@ from core.hostptr import read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from bindings.parallel_ivf_entry_host import publish_parallel_ivf_host
+from bindings.py_balanced import py_setattr
+from ivf.ops_entry_host_build import publish_ivf_ops_host
 from bindings.ivf_host_search_door import (
     ivf_flat_index_prepare_binding,
     ivf_flat_index_release_binding,
-    ivf_flat_index_search_binding,
     ivf_finalize_distances_binding,
     ivf_flat_extend_binding,
     ivf_flat_partial_search_binding,
@@ -127,12 +128,16 @@ def build__mojolearn_ivf_host() -> PythonObject:
         m.def_function[ivf_flat_partial_search_binding]("ivf_flat_partial_search")
         m.def_function[ivf_finalize_distances_binding]("ivf_finalize_distances")
         m.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
-        m.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
         m.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
         var published_module = m.finalize()
         # The parallel IVF table: the distributed IVF owner calls this
         # entry natively (the doors ivf_merge_shards / ivf_shard_plan are gone).
         publish_parallel_ivf_host()
+        # The IVF-Flat operations table (core/ivf_entry_table.mojo), the full
+        # CPU column: the key the IVF doors read from the module.
+        var ops_key = publish_ivf_ops_host()
+        py_setattr(published_module, "ivf_native_key",
+                   PythonObject(ops_key.mode | (ops_key.vendor << 8) | (ops_key.image << 16)))
         return published_module
     except e:
         abort(String("failed to create _mojolearn_ivf_host: ", e))
