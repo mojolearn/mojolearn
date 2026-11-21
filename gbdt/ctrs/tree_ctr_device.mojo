@@ -18,6 +18,13 @@ adds its one categorical feature (the reference's `SetIndices(base)` +
 `AddCompressedBins`), so a level costs one sort per candidate and not one
 per member per candidate.
 
+The FeatureFreq columns' Median grid (`tree_ctr.mojo`, THE MEDIAN GRID)
+takes its order statistics here: `launch_tree_median_words` sorts one
+column exactly (`core/sort_ops.mojo`'s stable radix sort of the values'
+bits), gathers the sorted copy and writes the column's `2 + 2 * borders`
+words into a level-wide record buffer the caller reads home ONCE per level
+for all candidates.
+
 Parallel: every launch is one thread per row (or the calcers' own grids).
 The candidates of a level are enqueued one after another on the fit's one
 queue. Nothing here reads a row on the host; the calcers drain once per
@@ -41,7 +48,18 @@ from gbdt.ctrs.ctr_calcers import (
     THistoryBasedCtrCalcerGpu,
     TWeightedBinFreqCalcerGpu,
 )
-from gbdt.ctrs.tree_ctr import tree_ctr_check_configs
+from core.sort_ops import (
+    SortScratch,
+    sort_op_f32,
+    sort_op_gather_rows_f32,
+)
+from core.step_gate import step_gate_open_word
+from gbdt.ctrs.tree_ctr import (
+    TreeF32Any,
+    tree_ctr_check_configs,
+    tree_ctr_median_pair_into,
+    tree_ctr_median_words,
+)
 from gbdt.gpu_data.gpu_structures import CFeature
 
 comptime TREE_CTR_BLOCK = 256
@@ -243,3 +261,86 @@ def tree_ctr_candidate_columns_device(
     ctx.synchronize()
     _ = builder^
     return out^
+
+
+def tree_median_gather_kernel(
+    sorted: TreeF32Any,
+    n_in: Int32,
+    border_count_in: Int32,
+    words: TreeF32Any,
+    base_in: Int32,
+):
+    """One column's Median record from its ascending copy: the minimum and
+    maximum (thread 0), and one thread per border for its pair
+    (`tree_ctr_median_pair_into`, the statement the host checks run)."""
+    var n = Int(n_in)
+    var border_count = Int(border_count_in)
+    var base = Int(base_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var stride = Int(block_dim.x) * Int(grid_dim.x)
+    if i == 0:
+        words.unsafe_store(base, sorted.unsafe_load(0))
+        words.unsafe_store(base + 1, sorted.unsafe_load(n - 1))
+    while i < border_count:
+        tree_ctr_median_pair_into(sorted, n, border_count, i, words, base)
+        i += stride
+
+
+struct TreeMedianScratch(Movable):
+    """The Median gather's device scratch for columns of up to `capacity`
+    rows: the sort's order and scratch, the sorted copy and the open gate
+    the sort ops take outside a loop. Allocate once per fit."""
+
+    var capacity: Int
+    var gate: DeviceBuffer[DType.int32]
+    var order: DeviceBuffer[DType.int32]
+    var sorted: DeviceBuffer[DType.float32]
+    var sort: SortScratch
+
+    def __init__(out self, ctx: DeviceContext, capacity: Int) raises:
+        var cap = max(capacity, 1)
+        self.capacity = cap
+        self.gate = step_gate_open_word(ctx)
+        self.order = ctx.enqueue_create_buffer[DType.int32](cap)
+        self.sorted = ctx.enqueue_create_buffer[DType.float32](cap)
+        self.sort = SortScratch(ctx, cap)
+
+
+def launch_tree_median_words(
+    ctx: DeviceContext,
+    mut column: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    border_count: Int,
+    mut scratch: TreeMedianScratch,
+    mut words: DeviceBuffer[DType.float32],
+    base: Int,
+) raises:
+    """ENQUEUED: the Median record of `column[0:n_rows]` (a FeatureFreq
+    tree-CTR column: finite values, no NaN) into `words[base : base +
+    tree_ctr_median_words(border_count)]`. The caller reads `words` home
+    once for every candidate of the level and hands each record to
+    `tree_ctr_median_from_words`. `column` is read only. The scratch is
+    reused by the next call on the same queue, in queue order."""
+    if n_rows <= 0:
+        raise Error("tree CTR Median grid: no rows")
+    if border_count < 1:
+        raise Error("tree CTR Median grid: no borders asked")
+    if n_rows > scratch.capacity or len(column) < n_rows:
+        raise Error("tree CTR Median grid: the column exceeds the scratch")
+    if base < 0 or base + tree_ctr_median_words(border_count) > len(words):
+        raise Error("tree CTR Median grid: the words buffer is too small")
+    sort_op_f32(
+        ctx, scratch.gate, column, scratch.order, n_rows, False, scratch.sort
+    )
+    sort_op_gather_rows_f32(
+        ctx, scratch.gate, column, scratch.order, scratch.sorted, n_rows, 1
+    )
+    ctx.enqueue_function[tree_median_gather_kernel](
+        scratch.sorted.unsafe_ptr(),
+        Int32(n_rows),
+        Int32(border_count),
+        words.unsafe_ptr(),
+        Int32(base),
+        grid_dim=(1, 1, 1),
+        block_dim=(TREE_CTR_BLOCK, 1, 1),
+    )

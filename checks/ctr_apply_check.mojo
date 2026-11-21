@@ -74,6 +74,7 @@ from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     expand_raw_columns,
 )
+from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import TTensorCtrRegistry
 from gbdt.models.model_text import (
     f32_token,
@@ -972,7 +973,8 @@ def build_categorical_model(with_tables: Bool = True) raises -> TrainedModel:
     return TrainedModel(
         m^, fold_counts^, one_hot^, borders^, nan_treatment^, losses^,
         List[Float64](), -1, False, 1, tables^,
-        TTensorCtrRegistry(len(fold_counts))
+        TTensorCtrRegistry(len(fold_counts)),
+        TCombinationCtrs(),
     )
 
 

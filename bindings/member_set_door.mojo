@@ -35,23 +35,46 @@ gathered block (drawn rows x drawn columns of float32, the targets and the
 weights of those rows), which the serial loops held one at a time; nothing
 for a member that reads the whole X or an index view. With one worker the
 gather itself is split across the host cores.
+
+A MEMBER ROUTE NEVER TURNS A REFUSAL INTO A RESULT. A classifier member is
+fitted with the ensemble's class count, so a member whose own rows (a cv
+fold, a bootstrap draw) lack a class would fit where its own fit door, which
+encodes the classes it is given, fits another model or refuses (too few
+classes), and where the caller then reads a narrower output (stacking's
+"output width changed between folds"). `member_set_run` therefore reads every
+classifier unit's codes first (`_set_cover_unit`: one pass over its int32
+codes, the units across the host cores, a lone unit's rows split across
+them) and raises before any fit when a unit lacks a class or holds a code
+outside 0 .. classes-1: nothing is published and the caller's own loop runs,
+whose doors decide as they always did. The caller hands over rows it has
+admitted as its doors would (finite X and float targets): the member entries
+read admitted words.
+
+THE PREDICT SIDE (`member_predict_held`): one member call on the fitted state
+the estimator holds (bindings/member_held_door.mojo), written into a new
+Array; not served = the caller's door.
 """
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
-from bindings.member_boundary_door import member_admit, member_pack
+from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_held_door import member_held, member_held_release, member_held_adopt
+from bindings.admitted_input_unpack import admitted_unfilled
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.prep_native_estimator_door import prep_estimator_plan
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
-    MEMBER_OP_FIT, MEMBER_F32, MEMBER_I32, MEMBER_I64,
-    MEMBER_CAN_FIT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
+    MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_outputs_of,
+    MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
+    MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
+    MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX,
 )
+from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 
 #: Default ON. `-D MOJOLEARN_MEMBER_SET_OFF` makes `member_set_admit` answer
 #: False for every member, so every caller keeps its own member loop: the B
@@ -84,10 +107,22 @@ struct MemberSetRun(Movable):
     # order the member sees them, repeats allowed.
     var picks: List[Int]
     var index_dtype: Int
+    # Per member: the address and row count of an X block of its own (a cv
+    # fold's rows the caller already gathered, shared by that fold's
+    # members), 0: the set's X. A member with its own block has no draws.
+    var own_x: List[Int]
+    var own_rows: List[Int]
+    # The caller's worker bound (an estimator's `n_jobs`), 0: none.
+    var cap: Int
     var workers: Int
     var states: List[Int]
     var failed: List[UInt8]
     var errors: List[String]
+    # The class-cover pass of `member_set_run` (module note): the units whose
+    # codes are read (one per distinct target and draw) and, per member, 1
+    # when its codes lack a class or hold a code out of range.
+    var cover_units: List[Int]
+    var uncovered: List[UInt8]
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -99,10 +134,15 @@ struct MemberSetRun(Movable):
         self.y_dtype = y_dtype
         self.picks = List[Int]()
         self.index_dtype = index_dtype
+        self.own_x = List[Int]()
+        self.own_rows = List[Int]()
+        self.cap = 0
         self.workers = 1
         self.states = List[Int]()
         self.failed = List[UInt8]()
         self.errors = List[String]()
+        self.cover_units = List[Int]()
+        self.uncovered = List[UInt8]()
 
 
 struct MemberSet(Movable):
@@ -114,6 +154,16 @@ struct MemberSet(Movable):
     var contexts: PythonObject
     var fields: PythonObject
     var pins: PythonObject
+    # Each member's import-time class plan (the held state's key at PACK).
+    var class_plans: PythonObject
+    # PACK leaves each fitted state with its estimator as its held member
+    # state. Set by a caller whose predict side reads held states; else the
+    # states are freed at PACK (a second copy of the model nobody reads).
+    var adopt: Bool
+    # With `adopt`: also the states of tree, forest and extra-trees members
+    # whose route is the CPU. Set by a caller that predicts those through
+    # their held states when no device copy of X is staged for them (bagging).
+    var adopt_trees: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -121,6 +171,9 @@ struct MemberSet(Movable):
         self.contexts = Python.list()
         self.fields = Python.list()
         self.pins = Python.list()
+        self.class_plans = Python.list()
+        self.adopt = False
+        self.adopt_trees = False
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -133,8 +186,9 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     its fitted state into it) to the set, or answer False having added
     nothing when it is not a native member this set can fit: its class has no
     plan or no member mark, its family's admit keeps the estimator's own
-    doors, it has no fit, it is given weights it does not read, or the
-    targets are class codes and it is not a classifier (and the reverse).
+    doors or refuses (`member_admit_serving`: never raises, the fallback
+    rule), it has no fit, it is given weights it does not read, or the
+    targets are class codes and its family has no classifier.
     `context` is the caller's context (it holds the model-selection plans),
     `b` the builtins module. `classes`: the class count of code targets, 0
     for a regressor."""
@@ -147,16 +201,16 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
         return False
     var member_context = plan["context"]
     var fields = py_call(plan["fields_get"], estimator, py_type(estimator))
-    var owner = member_admit(estimator, fields, plan, member_context, b)
-    if not owner.published:
-        return False
-    if not owner.plan.member.can(MEMBER_CAN_FIT):
-        return False
-    if weights != 0 and not owner.plan.member.can(MEMBER_CAN_SAMPLE_WEIGHT):
-        return False
     # The family's union mask: a family of regressors and classifiers answers
-    # the kind-exact refusal itself at NEW / FIT.
-    if classes > 0 and not owner.plan.member.can(MEMBER_CAN_CLASSIFIER):
+    # the kind-exact refusal itself at NEW / FIT, and the caller then runs
+    # its own loop (a failing `member_set_run` publishes nothing).
+    var needs = MEMBER_CAN_FIT
+    if weights != 0:
+        needs = needs | MEMBER_CAN_SAMPLE_WEIGHT
+    if classes > 0:
+        needs = needs | MEMBER_CAN_CLASSIFIER
+    var owner = member_admit_serving(estimator, fields, plan, member_context, b, needs)
+    if not owner.published:
         return False
     owner.plan.classes = classes
     set.run.plans.append(owner.plan.copy())
@@ -166,25 +220,51 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     set.run.picks.append(row_count)
     set.run.picks.append(column_draw)
     set.run.picks.append(column_count)
+    set.run.own_x.append(0)
+    set.run.own_rows.append(0)
     set.run.states.append(0)
     set.run.failed.append(UInt8(0))
     set.run.errors.append(String(""))
+    set.run.uncovered.append(UInt8(0))
     _ = py_call(set.estimators.append, estimator)
     _ = py_call(set.contexts.append, member_context)
     _ = py_call(set.fields.append, fields)
     _ = py_call(set.pins.append, owner.pins)
+    _ = py_call(set.class_plans.append, plan)
     _ = owner.published
     return True
 
 
+def member_set_own_block(mut set: MemberSet, x: Int, rows: Int):
+    """UNPACK: the member admitted last reads its own float32 C-order X
+    block (`rows` x the set's columns, at address `x`; its target and
+    weights addresses then hold `rows` values) and not the set's X: a cv
+    fold's gathered rows, shared read-only by that fold's members. The
+    caller keeps the block alive through `member_set_run`."""
+    var last = len(set.run.own_x) - 1
+    if last < 0:
+        return
+    set.run.own_x[last] = x
+    set.run.own_rows[last] = rows
+
+
+def _set_cores(set: MemberSet) -> Int:
+    """The host cores, bounded by the caller's worker bound when it gave one."""
+    var cores = native_unit_cores()
+    if set.run.cap > 0:
+        cores = min(cores, set.run.cap)
+    return max(cores, 1)
+
+
 def member_set_workers(set: MemberSet) -> Int:
-    """The host cores bounded by the member count when every member's route
-    is the CPU; one when any member runs on a GPU (module note)."""
+    """The host cores (bounded by the caller's `cap`) bounded by the member
+    count when every member's route is the CPU; one when any member runs on
+    a GPU (module note)."""
     var count = len(set.run.plans)
     for u in range(count):  # driver-loop: over the members (their resolved routes)
         if set.run.plans[u].route.device != DEVICE_CPU:
             return 1
-    return max(min(native_unit_cores(), count), 1)
+    return max(min(_set_cores(set), count), 1)
 
 
 def member_set_width(set: MemberSet) -> Int:
@@ -195,7 +275,7 @@ def member_set_width(set: MemberSet) -> Int:
     for u in range(len(set.run.plans)):  # driver-loop: over the members (their resolved routes)
         if set.run.plans[u].route.device != DEVICE_CPU:
             return 1
-    return max(native_unit_cores(), 1)
+    return _set_cores(set)
 
 
 @always_inline
@@ -257,17 +337,114 @@ def _set_gather(address: Int, u: Int, count: Int, width: Int, dst_x: Int, dst_y:
     host_parallelize(_chunk, chunks)
 
 
+def _set_cover_span(targets: Int, draw: Int, wide: Bool, first: Int, count: Int, classes: Int, seen: Int) -> Bool:
+    """Mark in the `classes` bytes at `seen` every code of the int32 codes at
+    `targets` over rows `first .. first + count` (the rows the draw at `draw`
+    names, or the rows themselves when `draw` is 0). False when a code is
+    outside 0 .. classes-1. Rows are independent: a caller may split the
+    range, one `seen` block per part."""
+    var y = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=targets)
+    var marks = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=seen)
+    var inside = True
+    for i in range(first, first + count):
+        var r = _set_pick(draw, i, wide) if draw != 0 else i
+        var code = Int(y[r])
+        if code < 0 or code >= classes:
+            inside = False
+        else:
+            marks[code] = UInt8(1)
+    return inside
+
+
+def _set_cover_unit(address: Int, u: Int, split: Bool) -> Bool:
+    """True when classifier member `u`'s own rows hold every code
+    0 .. classes-1 and no other (module note). `split`: this is the only
+    unit being read, so its rows are split across the host cores."""
+    var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
+    var classes = run[].plans[u].classes
+    if classes <= 0 or run[].y_dtype != MEMBER_I32:
+        return True
+    var own = run[].own_x[u] != 0
+    var row_count = run[].picks[4 * u + 1]
+    var count = run[].own_rows[u] if own else (row_count if row_count > 0 else run[].rows)
+    var draw = 0 if (own or row_count == 0) else run[].picks[4 * u]
+    var wide = run[].index_dtype == MEMBER_I64
+    var targets = run[].targets[u]
+    var cores = native_unit_cores()
+    var chunks = 1
+    if split and cores > 1 and count >= _SET_SPLIT_WORDS:
+        chunks = cores
+    var seen = List[UInt8](length=chunks * classes, fill=UInt8(0))
+    var outside = List[UInt8](length=chunks, fill=UInt8(0))
+    var seen_address = Int(seen.unsafe_ptr())
+    var outside_address = Int(outside.unsafe_ptr())
+    var per = (count + chunks - 1) // chunks
+
+    def _part(part: Int) {imm targets, imm draw, imm wide, imm count, imm classes, imm seen_address,
+                          imm outside_address, imm per}:
+        var first = part * per
+        if first >= count:
+            return
+        if not _set_cover_span(targets, draw, wide, first, min(per, count - first), classes,
+                               seen_address + part * classes):
+            MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=outside_address)[part] = UInt8(1)
+
+    if chunks == 1:
+        _part(0)
+    else:
+        host_parallelize(_part, chunks)
+    var covered = True
+    for part in range(chunks):  # driver-loop: over the parts of this unit's rows
+        if outside[part] != UInt8(0):
+            covered = False
+    if covered:
+        for code in range(classes):  # driver-loop: over the classes (each part's mark)
+            var marked = UInt8(0)
+            for part in range(chunks):  # driver-loop: over the parts of this unit's rows
+                marked = marked | seen[part * classes + code]
+            if marked == UInt8(0):
+                covered = False
+                break
+    # Integer addresses carry no lifetime: the mark blocks live to here.
+    _ = len(seen)
+    _ = len(outside)
+    return covered
+
+
+def _member_set_cover_lane(address: Int, lane: Int, lanes: Int):
+    """One worker of the class-cover pass: units lane, lane + lanes, ... of
+    `cover_units`; each writes only its own `uncovered` slot."""
+    var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
+    var total = len(run[].cover_units)
+    var i = lane
+    while i < total:  # driver-loop: over this worker's units
+        var u = run[].cover_units[i]
+        if not _set_cover_unit(address, u, lanes <= 1):
+            run[].uncovered[u] = UInt8(1)
+        i += lanes
+
+
+def _set_same_codes(run: MemberSetRun, u: Int, v: Int) -> Bool:
+    """Members `u` and `v` read the same codes over the same rows (one
+    target shared by a set's members, no draw): one cover pass serves both."""
+    return (run.targets[u] == run.targets[v] and run.own_rows[u] == run.own_rows[v]
+        and (run.own_x[u] != 0) == (run.own_x[v] != 0) and run.plans[u].classes == run.plans[v].classes
+        and run.picks[4 * u + 1] == 0 and run.picks[4 * v + 1] == 0)
+
+
 def _member_set_unit(address: Int, u: Int) raises:
     """Fit member `u` in a new state of its own; the state stays in
     `states[u]` for PACK. A failure releases it."""
     var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
-    var rows = run[].rows
+    var own = run[].own_x[u] != 0
+    var x_address = run[].own_x[u] if own else run[].x
+    var rows = run[].own_rows[u] if own else run[].rows
     var cols = run[].cols
     var row_draw = run[].picks[4 * u]
     var row_count = run[].picks[4 * u + 1]
     var column_draw = run[].picks[4 * u + 2]
     var column_count = run[].picks[4 * u + 3]
-    var drawn = row_count > 0 or column_count > 0
+    var drawn = not own and (row_count > 0 or column_count > 0)
     var member = run[].plans[u].member
     var by_index = (drawn and (row_count == 0 or member.can(MEMBER_CAN_ROW_INDEX))
         and (column_count == 0 or member.can(MEMBER_CAN_COLUMN_INDEX)))
@@ -277,7 +454,7 @@ def _member_set_unit(address: Int, u: Int) raises:
     var call = member_new(run[].plans[u])
     var done = False
     try:
-        call.x = MemberMatrix(run[].x, rows, cols)
+        call.x = MemberMatrix(x_address, rows, cols)
         call.y = MemberMatrix(run[].targets[u], rows, 1, run[].y_dtype)
         if run[].weights[u] != 0:
             call.weights = MemberMatrix(run[].weights[u], rows, 1)
@@ -342,23 +519,51 @@ def member_set_run(mut set: MemberSet) raises:
     """RUN: fit every member of the set, the GIL released, on
     `member_set_workers` host tasks. After it every member holds a fitted
     state for `member_set_pack`; on a failure every state is released and
-    the first failing member's words (in member order) are raised."""
+    the first failing member's words (in member order) are raised.
+
+    Classifier sets are read first (module note: the class-cover pass): when
+    a member's own rows lack a class, or hold a code out of range, nothing
+    is fitted and the set raises, so the caller's own loop and its doors
+    decide. One pass over each distinct target's int32 codes, against the
+    label encode every member's fit door ran on its rows."""
     var count = len(set.run.plans)
     if count == 0:
         return
     set.run.workers = member_set_workers(set)
+    set.run.cover_units.clear()
+    if set.run.y_dtype == MEMBER_I32:
+        for u in range(count):  # driver-loop: over the members (one cover pass per distinct target)
+            if set.run.plans[u].classes <= 0:
+                continue
+            if u > 0 and _set_same_codes(set.run, u, u - 1):
+                continue
+            set.run.cover_units.append(u)
     var address = Int(UnsafePointer(to=set.run))
     var lanes = set.run.workers
+    # The cover pass is host work whatever the members' route.
+    var cover_lanes = max(min(native_unit_cores(), len(set.run.cover_units)), 1)
+
+    def _cover(lane: Int) {imm address, imm cover_lanes}:
+        _member_set_cover_lane(address, lane, cover_lanes)
 
     def _lane(lane: Int) {imm address}:
         _member_set_lane(address, lane)
 
+    var lacking = False
     var py = Python()
     try:
         with GILReleased(py):
-            host_parallelize(_lane, lanes)
+            if len(set.run.cover_units) > 0:
+                host_parallelize(_cover, cover_lanes)
+                for u in range(count):  # driver-loop: over the members (the cover verdicts)
+                    if set.run.uncovered[u] != UInt8(0):
+                        lacking = True
+            if not lacking:
+                host_parallelize(_lane, lanes)
     finally:
         _ = set.pins
+    if lacking:
+        raise Error("ValueError: a member's rows do not hold every class of the ensemble: its own fit decides")
     for u in range(count):  # driver-loop: over the members, for the first failure in member order
         if set.run.failed[u] != UInt8(0):
             var words = set.run.errors[u].copy()
@@ -369,20 +574,188 @@ def member_set_run(mut set: MemberSet) raises:
 def member_set_pack(mut set: MemberSet, u: Int, classes: PythonObject, b: PythonObject) raises -> PythonObject:
     """PACK: member `u`'s fitted estimator (the clone given at admission,
     now holding the attributes its own fit writes); its state is released.
-    `classes`: the member's `classes_` (the labels its codes stand for; a
-    caller whose members see the ensemble's codes passes the codes
-    themselves), or None for a regressor. Labels never cross the ABI: they
-    are published here."""
+    `classes`: the labels the member's codes stand for (code c is
+    `classes[c]`; a caller whose members see the ensemble's codes passes the
+    codes themselves), or None for a regressor. Labels never cross the ABI:
+    the family's pack takes them (`member_pack_labeled`) and writes its own
+    class attributes, as its fit door does."""
     var estimator = set.estimators[u]
     var member_context = set.contexts[u]
     var fields = set.fields[u]
     try:
-        member_pack(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u])
-    finally:
+        if classes is None:
+            member_pack(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u])
+        else:
+            member_pack_labeled(estimator, fields, member_context, b, set.run.plans[u], set.run.states[u], classes)
+    except error:
+        var failed = MemberCall(set.run.plans[u].route, set.run.states[u])
+        member_free(set.run.plans[u], failed)
+        set.run.states[u] = 0
+        raise error^
+    # `adopt`: the fitted state stays with the estimator as its held member
+    # state (bindings/member_held_door.mojo), so the caller's predict side
+    # reads it without an import. Not kept: freed here, as before.
+    var kept = False
+    var family = set.run.plans[u].family
+    # A tree, forest or extra-trees member is predicted by its own door (from
+    # the one device copy of X the caller stages): its state would be a
+    # second copy of the model nobody reads, except where the caller says it
+    # reads them (`adopt_trees`, CPU routes: nothing is staged there).
+    var read = (not (family == MEMBER_FAMILY_TREE or family == MEMBER_FAMILY_FOREST
+        or family == MEMBER_FAMILY_EXTRA_TREES)
+        or (set.adopt_trees and set.run.plans[u].route.device == DEVICE_CPU))
+    if set.adopt and read:
+        try:
+            kept = member_held_adopt(estimator, set.class_plans[u], member_context, set.pins[u], set.run.plans[u],
+                                     set.run.states[u])
+        except:
+            kept = False
+    if not kept:
         var call = MemberCall(set.run.plans[u].route, set.run.states[u])
         member_free(set.run.plans[u], call)
-        set.run.states[u] = 0
-    if classes is not None:
-        py_setitem(fields, "classes_", classes)
+    set.run.states[u] = 0
+    # A family whose pack does not write the class count yet (the tree
+    # families: owed by their publication lane) gets it here, as round 1 did.
+    if classes is not None and not py_contains(fields, "n_classes_"):
         py_setitem(fields, "n_classes_", PythonObject(len(classes)))
     return estimator
+
+
+def member_marked(estimator: PythonObject, context: PythonObject) -> Bool:
+    """True when `estimator`'s class carries a member mark (its family may
+    serve it; `member_predict_held` still answers per call). One class-plan
+    read: a caller asks once per public operation for members of one class,
+    before work only the native route needs (its finite proof of X). Never
+    raises."""
+    comptime if not MEMBER_SET_NATIVE:
+        return False
+    try:
+        var plan = prep_estimator_plan(estimator, context)
+        if plan is None:
+            return False
+        return py_get(plan, "member") is not None
+    except:
+        return False
+
+
+struct MemberOut(Movable):
+    """`member_predict_held`'s answer. `array`: the member's output, or None
+    when it is not served (the caller's door runs). `dtype`: the element
+    type the member wrote (MEMBER_F32 / F64 / I32 / I64), -1 when unknown:
+    a caller that asks the same member again hands it back as `known`."""
+    var array: PythonObject
+    var dtype: Int
+
+    def __init__(out self):
+        self.array = PythonObject(None)
+        self.dtype = -1
+
+
+def _out_typestr(dtype: Int) -> String:
+    if dtype == MEMBER_F64:
+        return "<f8"
+    if dtype == MEMBER_I32:
+        return "<i4"
+    if dtype == MEMBER_I64:
+        return "<i8"
+    return "<f4"
+
+
+def _member_predict_held(member: PythonObject, x: Int, n: Int, d: Int, operation: Int, classifier: Bool,
+    width: Int, known: Int, skip_trees: Bool, context: PythonObject, b: PythonObject) raises -> MemberOut:
+    var out = MemberOut()
+    out.dtype = known
+    var plan = prep_estimator_plan(member, context)
+    if plan is None:
+        return out^
+    var mark = py_get(plan, "member")
+    if mark is None or Bool(py=plan["classifier"]) != classifier:
+        return out^
+    if skip_trees:
+        var family = Int(py=mark[0])
+        if family == MEMBER_FAMILY_TREE or family == MEMBER_FAMILY_FOREST or family == MEMBER_FAMILY_EXTRA_TREES:
+            return out^
+    var needs = MEMBER_CAN_PREDICT
+    if operation == MEMBER_OP_PREDICT_PROBA:
+        needs = MEMBER_CAN_PREDICT_PROBA
+    elif operation == MEMBER_OP_DECISION:
+        needs = MEMBER_CAN_DECISION
+    var member_context = plan["context"]
+    var fields = py_call(plan["fields_get"], member, py_type(member))
+    var held = member_held(member, fields, plan, member_context, b, needs)
+    if not held.published:
+        return out^
+    var call = MemberCall(held.plan.route, held.state)
+    try:
+        var cols = member_outputs_of(held.plan, call, operation)
+        if cols >= 1 and (width == 0 or cols == width):
+            var codes = classifier and operation == MEMBER_OP_PREDICT
+            # The element type a family writes is its own (codes int32 or
+            # int64, scores and probabilities float32 or float64) and the ABI
+            # has no word for it yet: an unknown type is learned by asking
+            # for the narrow one, then the wide one. A regressor writes float32.
+            var attempts = 2 if (known < 0 and classifier) else 1
+            for attempt in range(attempts):  # driver-loop: over the two element types (first use only)
+                var dtype = known
+                if dtype < 0:
+                    if codes:
+                        dtype = MEMBER_I32 if attempt == 0 else MEMBER_I64
+                    else:
+                        dtype = MEMBER_F32 if attempt == 0 else MEMBER_F64
+                var shape = List[Int](length=1, fill=n)
+                if cols > 1:
+                    shape.append(cols)
+                # Unfilled: the member writes every cell before anything reads it.
+                var dst = admitted_unfilled(shape, _out_typestr(dtype), context)
+                call.x = MemberMatrix(x, n, d)
+                call.dst = MemberMatrix(dst.addr, n, cols, dtype)
+                var written = False
+                try:
+                    with GILReleased(Python()):
+                        _ = member_call(held.plan.member, operation, call)
+                    written = True
+                except:
+                    written = False
+                if written:
+                    out.array = dst.keep
+                    out.dtype = dtype
+                    break
+                out.dtype = -1
+    except:
+        out.array = PythonObject(None)
+        out.dtype = -1
+    member_held_release(held)   # after the call: a kept state stays with the estimator
+    return out^
+
+
+def member_predict_held(member: PythonObject, x: Int, n: Int, d: Int, operation: Int, classifier: Bool,
+    width: Int, known: Int, skip_trees: Bool, context: PythonObject, b: PythonObject) -> MemberOut:
+    """PREDICT SIDE: the fitted estimator `member`'s `operation`
+    (MEMBER_OP_PREDICT, _PREDICT_PROBA or _DECISION) over the `n` x `d`
+    float32 C-order host rows at `x`, through the member state the estimator
+    holds (bindings/member_held_door.mojo: a hit after the first use, and the
+    state a native fit left with it): one member call, the GIL released,
+    written into a new Array, (n,) for one column per row, else (n, columns).
+    A classifier's predict writes its class CODES (code c is the member's
+    c-th class); the caller maps them.
+
+    `array` None, with nothing changed, when the member is not served: its
+    class has no member mark, it is not of the asked kind (`classifier`),
+    its output has not `width` columns (0: any), its family lacks the
+    operation, admits or imports nothing, or the call refuses. The caller
+    then runs the member's own door, which raises the estimator's own words
+    (the fallback rule). Never raises.
+
+    THE CALLER has admitted the rows as the member's door would (finite) and
+    keeps them alive through the call. `known`: the element type this member
+    wrote before for this operation, or -1 (`MemberOut.dtype`). `skip_trees`:
+    a tree, forest or extra-trees member is not served: the caller's door
+    predicts those from the one device copy of X it staged for all of them.
+    Once per member per public operation; serial by nature (one state, one
+    call at a time; the member splits its own rows)."""
+    comptime if not MEMBER_SET_NATIVE:
+        return MemberOut()
+    try:
+        return _member_predict_held(member, x, n, d, operation, classifier, width, known, skip_trees, context, b)
+    except:
+        return MemberOut()

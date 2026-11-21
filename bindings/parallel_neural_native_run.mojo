@@ -8,6 +8,9 @@ Python values into these arguments, moves the frames and packs the results;
 no Python object reaches this file. A few words per training step: nothing
 to split across cores."""
 from core.mode_answer import MODE_FAMILY_NEURAL, word_runs_identical
+from core.parallel_worker_request import (
+    WorkerRequest, PN_MLP_GRADIENT_CACHED, PN_SAMBA_GRADIENT_CACHED, PN_MLP_UPDATE, PN_SAMBA_UPDATE, PN_GRADIENT_WORDS,
+)
 
 comptime NEURAL_SCHEMA = "mojolearn.parallel-neural.v1"
 comptime NEURAL_REDUCTION = "ordered_sum"
@@ -206,7 +209,35 @@ def neural_restore_operation(operation: String) raises -> Int:
 
 
 def neural_envelope_admit(fields: Int) raises:
-    if fields != 3:
+    """A request's payload is the pair (model slot, arguments); the
+    operation and the cache words ride in the typed request."""
+    if fields != 2:
+        raise Error("parallel neural: invalid worker request envelope")
+
+
+def neural_gradient_words(samba: Bool, state: NeuralTrainerState, count: Int) -> List[List[Int64]]:
+    """The typed requests of one gradient wave: the same operation and cache
+    words (epoch, version) for each of the `count` logical shards."""
+    var request = WorkerRequest(PN_SAMBA_GRADIENT_CACHED if samba else PN_MLP_GRADIENT_CACHED)
+    request.words.append(state.cache_epoch)
+    request.words.append(state.cache_version)
+    var wire = request.encode()
+    var words = List[List[Int64]]()
+    for _ in range(count):  # driver-loop: over logical training shards in immutable reduction order
+        words.append(wire.copy())
+    return words^
+
+
+def neural_update_words(samba: Bool) -> List[List[Int64]]:
+    """The typed request of the one cooperative update."""
+    var request = WorkerRequest(PN_SAMBA_UPDATE if samba else PN_MLP_UPDATE)
+    var words = List[List[Int64]]()
+    words.append(request.encode())
+    return words^
+
+
+def neural_gradient_words_admit(request: WorkerRequest) raises:
+    if len(request.words) != PN_GRADIENT_WORDS:
         raise Error("parallel neural: invalid worker request envelope")
 
 

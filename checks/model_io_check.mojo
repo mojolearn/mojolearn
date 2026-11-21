@@ -69,6 +69,7 @@ from gbdt.models.model_text import (
     save_model,
 )
 from gbdt.models.ctr_value_table import TCtrValueTable
+from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import (
     TTensorCtrRegistry,
     build_feature_freq_tensor_table_host,
@@ -535,7 +536,8 @@ def build_synthetic(ctr_columns: Int = 0) raises -> TrainedModel:
                         nan_treatment^, losses^,
                         List[Float64](), -1, False,
                         ctr_columns, List[TCtrValueTable](),
-                        TTensorCtrRegistry(len(fold_counts)))
+                        TTensorCtrRegistry(len(fold_counts)),
+                        TCombinationCtrs())
 
 
 def check_synthetic_roundtrip(ctx: DeviceContext) raises:

@@ -50,8 +50,8 @@ from bindings.kde_public_native_pack import _kde_scores, _kde_release
 from bindings.neighbors_ann_native_door import _ivf_metric, _ann_key_entry
 from bindings.host_inference_scalars_door import host_inference_scalar
 from core.shared_slot import SharedSlot
-from bindings.parallel_keys_unpack import (
-    parallel_keys,
+from bindings.parallel_keys_unpack import parallel_keys
+from bindings.parallel_shard_common_run import (
     PARALLEL_SHARD_WORKER_OPN_IVF_SEARCH,
     PARALLEL_SHARD_WORKER_OPN_IVF_STORE,
     PARALLEL_SHARD_WORKER_OPN_QUERY_ROWS,

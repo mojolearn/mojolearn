@@ -21,13 +21,13 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from std.memory import unsafe_memcpy
 from bindings.classical_validate_unpack import classical_check_y, classical_estimator_name
-from bindings.member_boundary_door import member_admit, member_pack
+from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
 from bindings.member_owner_unpack import MemberOwner
 from bindings.member_set_door import MEMBER_SET_NATIVE
 from core.member_abi import (
-    MemberCall, MemberMatrix, member_call, member_new, member_free,
+    MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities,
     MEMBER_OP_FIT, MEMBER_OP_EXPORT, MEMBER_CAN_FIT, MEMBER_CAN_EXPORT, MEMBER_CAN_COEF, MEMBER_CAN_IMPORTANCES,
-    MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32,
+    MEMBER_CAN_CLASSIFIER, MEMBER_BLOCK_COEF, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_F32, MEMBER_I32,
 )
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.optimizer_public_words_unpack import stash_python_error
@@ -215,9 +215,11 @@ struct RfeMember(Movable):
     family has not published a member entry RFE can use, and the rounds keep
     the estimator's own doors (`_fit_clone`, `prep_estimator_attribute`).
     True: `owner.plan` makes one member state per round; `template` is the
-    one clone PACK writes the final fit into; `y` is the admitted float32
-    target every round reads by address; `block` names the fitted block the
-    importances come from and `squared` whether it is squared and summed."""
+    one clone PACK writes the final fit into; `y` is the admitted target
+    every round reads by address (float32 values for a regressor kind, the
+    int32 class codes of `labels` for a classifier kind: encoded once per
+    fit); `block` names the fitted block the importances come from and
+    `squared` whether it is squared and summed over its rows."""
     var native: Bool
     var owner: MemberOwner
     var template: PythonObject
@@ -225,6 +227,8 @@ struct RfeMember(Movable):
     var member_context: PythonObject
     var y: PythonObject
     var y_address: Int
+    var y_dtype: Int
+    var labels: PythonObject
     var block: Int
     var squared: Bool
 
@@ -236,6 +240,8 @@ struct RfeMember(Movable):
         self.member_context = PythonObject(None)
         self.y = PythonObject(None)
         self.y_address = 0
+        self.y_dtype = MEMBER_F32
+        self.labels = PythonObject(None)
         self.block = 0
         self.squared = False
 
@@ -243,12 +249,15 @@ struct RfeMember(Movable):
 def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObject, fit_params: PythonObject,
                 context: PythonObject, b: PythonObject) raises -> RfeMember:
     """UNPACK, once per RFE fit: admit the estimator as a native member when
-    its class is a published REGRESSOR member that exports the block the
-    importance getter names ('auto': coef, else feature importances as
+    its class is a published member whose KIND fits and exports the block
+    the importance getter names ('auto': coef, else feature importances as
     given; 'coef_' / 'feature_importances_': that block, squared, as the
-    attribute path squares it), with no fit parameters. Classifier members
-    keep their own doors (their labels and `classes_` are the door's);
-    dotted getter paths too."""
+    attribute path squares it), with no fit parameters. A classifier kind
+    gets its labels encoded here, once (codes and class count to every
+    round's FIT, the labels to the final PACK). Dotted getter paths, an
+    admission the family refuses and a target the encoder or the regressor
+    admission refuses keep the estimator's own doors (the fallback rule):
+    they answer or refuse in their own words."""
     var member = RfeMember()
     comptime if not MEMBER_SET_NATIVE:
         return member^
@@ -261,29 +270,46 @@ def _rfe_member(estimator: PythonObject, y: PythonObject, n: Int, g: PythonObjec
     var plan = prep_estimator_plan(estimator, context)
     if plan is None:
         return member^
-    if py_get(plan, "member") is None or Bool(py=plan["classifier"]):
+    if py_get(plan, "member") is None:
         return member^
+    var classifier = Bool(py=plan["classifier"])
     var template = prep_estimator_clone(estimator, context)
     var member_context = plan["context"]
     var fields = py_call(plan["fields_get"], template, py_type(template))
-    var owner = member_admit(template, fields, plan, member_context, b)
+    var owner = member_admit_serving(template, fields, plan, member_context, b, MEMBER_CAN_FIT | MEMBER_CAN_EXPORT)
     if not owner.published:
         return member^
-    if not owner.plan.member.can(MEMBER_CAN_FIT) or not owner.plan.member.can(MEMBER_CAN_EXPORT):
-        return member^
-    if getter != "feature_importances_" and owner.plan.member.can(MEMBER_CAN_COEF):
-        member.block = MEMBER_BLOCK_COEF
-        member.squared = True
-    elif getter != "coef_" and owner.plan.member.can(MEMBER_CAN_IMPORTANCES):
-        member.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
-        member.squared = not auto
-    else:
-        return member^
-    # The target once, as a regressor member's fit door admits it (present,
-    # real, one column, finite, as long as X). A target that admission
-    # refuses keeps the member's own door, which refuses it in its own words.
     try:
-        member.y = classical_check_y(y, n, classical_estimator_name(estimator), member_context)
+        if classifier:
+            # The labels once, as a classifier's fit door encodes them: the
+            # class list it would publish and one int32 code per row.
+            var encoded = classical_encode_labels(y, member_context)
+            var count = len(encoded.classes)
+            if encoded.n != n or count < 2:
+                return member^
+            owner.plan.classes = count
+            member.y = encoded.codes
+            member.y_dtype = MEMBER_I32
+            member.labels = encoded.classes
+        else:
+            # The target once, as a regressor member's fit door admits it
+            # (present, real, one column, finite, as long as X).
+            member.y = classical_check_y(y, n, classical_estimator_name(estimator), member_context)
+        # The mask of THIS kind (the family's union also holds its other
+        # kinds' bits): one state minted, asked and released, once per fit.
+        var mask = member_kind_capabilities(owner.plan)
+        if ((mask & MEMBER_CAN_CLASSIFIER) != 0) != classifier:
+            return member^
+        if (mask & MEMBER_CAN_FIT) == 0 or (mask & MEMBER_CAN_EXPORT) == 0:
+            return member^
+        if getter != "feature_importances_" and (mask & MEMBER_CAN_COEF) != 0:
+            member.block = MEMBER_BLOCK_COEF
+            member.squared = True
+        elif getter != "coef_" and (mask & MEMBER_CAN_IMPORTANCES) != 0:
+            member.block = MEMBER_BLOCK_FEATURE_IMPORTANCES
+            member.squared = not auto
+        else:
+            return member^
     except:
         return member^
     member.y_address = Int(py=classical_address(member.y))
@@ -302,7 +328,7 @@ def _rfe_member_fit(member: RfeMember, block: PythonObject, n: Int, k: Int) rais
     var done = False
     try:
         call.x = MemberMatrix(Int(py=classical_address(block)), n, k)
-        call.y = MemberMatrix(member.y_address, n, 1)
+        call.y = MemberMatrix(member.y_address, n, 1, member.y_dtype)
         var py = Python()
         with GILReleased(py):
             _ = member_call(member.owner.plan.member, MEMBER_OP_FIT, call)
@@ -315,12 +341,14 @@ def _rfe_member_fit(member: RfeMember, block: PythonObject, n: Int, k: Int) rais
     return call^
 
 
-def _rfe_member_keys(mut pr: ClsProg, member: RfeMember, block: PythonObject, n: Int, m: Int,
-                     context: PythonObject, cc: PythonObject) raises -> Int:
+def _rfe_member_words(member: RfeMember, block: PythonObject, n: Int, m: Int,
+                      cc: PythonObject) raises -> PythonObject:
     """A round over a native member: fit a new state on the block, read its
     importance block by EXPORT (a view of words the state owns; no Python
-    attribute), stage the ordered keys as `_importance_keys` stages them and
-    release the state. Returns the keys' offset."""
+    attribute) and release the state. Returns the block as the float32 Array
+    `_keys_of` stages: m words, or (rows, m) for a coefficient block with one
+    row per class or output. Raises when the member refuses the round; the
+    caller then runs the estimator's own doors (nothing was staged)."""
     var call = _rfe_member_fit(member, block, n, m)
     var words = PythonObject(None)
     try:
@@ -328,26 +356,34 @@ def _rfe_member_keys(mut pr: ClsProg, member: RfeMember, block: PythonObject, n:
         call.flags = 0
         _ = member_call(member.owner.plan.member, MEMBER_OP_EXPORT, call)
         var view = call.dst
-        if not view.dense_host(MEMBER_F32) or view.rows * view.cols != m:
-            raise Error("mojolearn: RFE importances have " + String(view.rows * view.cols) + " words, expected "
-                        + String(m))
-        # m words (one per surviving column), copied once into the Array the
-        # round's program puts; the view dies with the state below.
-        words = f32_array(m, cc)
-        unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.data), count=m)
+        var rows = view.rows
+        if not view.dense_host(MEMBER_F32) or view.cols != m or rows < 1 or (rows > 1 and not member.squared):
+            raise Error("mojolearn: RFE importances are " + String(view.rows) + " x " + String(view.cols)
+                        + " words, expected " + String(m) + " columns")
+        # rows * m words, copied once into the Array the round's program
+        # puts; the view dies with the state below.
+        if rows == 1:
+            words = f32_array(m, cc)
+        else:
+            words = classical_typed(Python.tuple(rows, m), "<f4", cc["output_context"])
+        unsafe_memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.data), count=rows * m)
     finally:
         member_free(member.owner.plan, call)
-    return _keys_of(pr, words, member.squared, m, context, cc)
+    return words
 
 
 def _rfe_member_final(member: RfeMember, block: PythonObject, n: Int, k: Int, b: PythonObject) raises -> PythonObject:
     """The final estimator over a native member: fitted on the selected
-    block, its state written into the clone (`member_pack`: the attributes
-    its own fit writes, so RFE's predict / score / transform read it as
-    before) and released."""
+    block, its state written into the clone (`member_pack`, a classifier
+    with its labels: the attributes its own fit writes, so RFE's predict /
+    score / transform read it as before) and released."""
     var call = _rfe_member_fit(member, block, n, k)
     try:
-        member_pack(member.template, member.fields, member.member_context, b, member.owner.plan, call.state)
+        if member.labels is None:
+            member_pack(member.template, member.fields, member.member_context, b, member.owner.plan, call.state)
+        else:
+            member_pack_labeled(member.template, member.fields, member.member_context, b, member.owner.plan,
+                                call.state, member.labels)
     finally:
         member_free(member.owner.plan, call)
     return member.template
@@ -502,8 +538,18 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         var k = nsup - drop
         var pr = ClsProg()
         var key = 0
+        # A member that refuses a round (a view or dtype its family does not
+        # read, a fit failure) is dropped for the rest of the fit: this round
+        # and the later ones run the estimator's own doors, which raise the
+        # estimator's own words if the request is wrong (the fallback rule).
+        var words = PythonObject(None)
         if member.native and classical_is_array(block, cc):
-            key = _rfe_member_keys(pr, member, block, n, nsup, context, cc)
+            try:
+                words = _rfe_member_words(member, block, n, nsup, cc)
+            except:
+                member.native = False
+        if words is not None:
+            key = _keys_of(pr, words, member.squared, nsup, context, cc)
         else:
             _rfe_hold_block(block, hold, mark, cc)
             var est = _fit_clone(estimator, block, y, fit_params, context)
@@ -522,8 +568,11 @@ def _rfe_rounds(model: PythonObject, fields: PythonObject, estimator: PythonObje
         nsup = k
     var final = PythonObject(None)
     if member.native and classical_is_array(block, cc):
-        final = _rfe_member_final(member, block, n, nsup, b)
-    else:
+        try:
+            final = _rfe_member_final(member, block, n, nsup, b)
+        except:
+            member.native = False
+    if final is None:
         _rfe_hold_block(block, hold, mark, cc)
         final = _fit_clone(estimator, block, y, fit_params, context)
     _ = member.native  # the member's pins outlive every member call above

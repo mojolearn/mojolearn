@@ -280,7 +280,6 @@ struct HostTreeArchiveKeys(Defaultable, Movable):
     var k_host_tree_entry_type: PythonObject
     var k_host_tree_native_key: PythonObject
     var k_i: PythonObject
-    var k_iforest_resident: PythonObject
     var k_iforest_resident_release: PythonObject
     var k_inertia_: PythonObject
     var k_inference_engine: PythonObject
@@ -761,7 +760,6 @@ struct HostTreeArchiveKeys(Defaultable, Movable):
         self.k_host_tree_entry_type = PythonObject(None)
         self.k_host_tree_native_key = PythonObject(None)
         self.k_i = PythonObject(None)
-        self.k_iforest_resident = PythonObject(None)
         self.k_iforest_resident_release = PythonObject(None)
         self.k_inertia_ = PythonObject(None)
         self.k_inference_engine = PythonObject(None)
@@ -1246,7 +1244,6 @@ def _host_tree_archive_keys_fill(nk: UnsafePointer[HostTreeArchiveKeys, MutUntra
     nk[].k_host_tree_entry_type = py_key("host_tree_entry_type")
     nk[].k_host_tree_native_key = py_key("host_tree_native_key")
     nk[].k_i = py_key("i")
-    nk[].k_iforest_resident = py_key("iforest_resident")
     nk[].k_iforest_resident_release = py_key("iforest_resident_release")
     nk[].k_inertia_ = py_key("inertia_")
     nk[].k_inference_engine = py_key("inference_engine")

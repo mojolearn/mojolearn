@@ -21,6 +21,9 @@ from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any
 from bindings.py_optional import py_present
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
+from std.python._cpython import GILReleased
+from core.entry_table import EntryRef
+from core.iforest_entry import IFRunRequest, IF_CAP_RESIDENT, if_entry_caps, if_entry_ref, if_entry_run
 
 comptime _HOST_TOKEN_SLOT = "trees_iforest_host_resident_v1"
 
@@ -172,24 +175,68 @@ def host_iforest_owned_x(fields: PythonObject) raises -> Bool:
     return Bool(py=x._readonly)
 
 
+def host_iforest_entry() raises -> EntryRef:
+    """The CPU image's native iforest entry (core/iforest_entry.mojo;
+    `_mojolearn_svm_host` publishes it under identical / CPU, the only tier
+    that image builds), resolved once per operation: the table's slot read,
+    no CPython call."""
+    return if_entry_ref(1, 0)
+
+
+def host_iforest_request(fields: PythonObject, n_train: Int, n_features: Int, n_query: Int,
+                         want: Int) raises -> IFRunRequest:
+    """UNPACK: the fit's knobs from the resolved fields into the typed
+    request (the former sixteen `iforest_run` slots); addresses and the
+    resident form are the caller's."""
+    var nk = host_tree_archive_keys()
+    var r = IFRunRequest()
+    r.n_train = n_train
+    r.n_features = n_features
+    r.n_query = n_query
+    r.n_estimators = Int(py=py_item(fields, nk[].k__n_estimators))
+    r.max_samples_mode = Int(py=py_item(fields, nk[].k__max_samples_mode))
+    r.max_samples_int = Int(py=py_item(fields, nk[].k__max_samples_int))
+    r.max_samples_frac = Float64(py=py_item(fields, nk[].k__max_samples_frac))
+    r.max_depth = Int(py=py_item(fields, nk[].k__max_depth))
+    r.max_features_mode = Int(py=py_item(fields, nk[].k__max_features_mode))
+    r.max_features_int = Int(py=py_item(fields, nk[].k__max_features_int))
+    r.max_features_frac = Float64(py=py_item(fields, nk[].k__max_features_frac))
+    r.bootstrap = Bool(py=py_item(fields, nk[].k__bootstrap))
+    r.random_state = Int(py=py_item(fields, nk[].k__seed))
+    r.contamination_auto = Bool(py=py_item(fields, nk[].k__contamination_auto))
+    r.contamination = Float64(py=py_item(fields, nk[].k__contamination))
+    r.want = want
+    return r^
+
+
+def host_iforest_run(entry: EntryRef, request: IFRunRequest) raises:
+    """One fit-and-score through the native entry with the GIL released (as
+    inside the former Python binding `iforest_run`); the caller keeps every
+    lent buffer alive."""
+    with GILReleased(Python()):
+        _ = if_entry_run(entry, request)
+
+
 def _host_resident_entries(entry: PythonObject, context: PythonObject) raises -> PythonObject:
     """The `(iforest_resident_release,)` entry of the binary that serves
-    `entry` when that binary keeps the fitted forest resident between calls
-    (`iforest_resident()` is 1, `IDN_IF_RESIDENT`); None otherwise. Read from
+    `entry` (any fixed entry of the CPU image, `iforest_forest_run`) when
+    that binary keeps the fitted forest resident between calls
+    (IF_CAP_RESIDENT of its native iforest entry); None otherwise. Read from
     the minting module's dictionary (no module __getattr__), and refused
-    unless each is a fixed native entry, like `iforest_run` itself."""
+    unless it is a fixed native entry."""
     var nk = host_tree_archive_keys()
+    if entry is None:
+        return PythonObject(None)
     var owner = entry.__self__
     if owner is None or py_type(owner) is not py_item(context, nk[].k_host_iforest_module_type):
         return PythonObject(None)
     var table = py_fields(owner)
-    var probe = py_get(table, nk[].k_iforest_resident)
     var release = py_get(table, nk[].k_iforest_resident_release)
-    if probe is None or release is None:
+    if release is None:
         return PythonObject(None)
-    if py_type(probe) is not py_item(context, nk[].k_host_tree_entry_type) or py_type(release) is not py_item(context, nk[].k_host_tree_entry_type):
+    if py_type(release) is not py_item(context, nk[].k_host_tree_entry_type):
         raise Error("TypeError: explicit CPU inference requires a fixed native entry")
-    if Int(py=py_call(probe)) != 1:
+    if (if_entry_caps(host_iforest_entry()) & IF_CAP_RESIDENT) == 0:
         return PythonObject(None)
     return Python.tuple(release)
 
@@ -308,34 +355,11 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
     var out = host_archive_typed(Python.tuple(rows), "<i4" if want == 2 else "<f4", py_item(context, nk[].k_output_context))
     if not py_contains(fields, nk[].k__seed):
         _iforest_resolve(fields, context)
-    var params = Python.list(count, features, rows, py_item(fields, nk[].k__n_estimators), py_item(fields, nk[].k__max_samples_mode), py_item(fields, nk[].k__max_samples_int), py_item(fields, nk[].k__max_samples_frac), py_item(fields, nk[].k__max_depth), py_item(fields, nk[].k__max_features_mode), py_item(fields, nk[].k__max_features_int), py_item(fields, nk[].k__max_features_frac), Int(Bool(py=py_item(fields, nk[].k__bootstrap))), py_item(fields, nk[].k__seed), Int(Bool(py=py_item(fields, nk[].k__contamination_auto))), py_item(fields, nk[].k__contamination), want)
-    var entry = _kernel_entry("iforest_run", context)
-    # Lane perf-sweep-trees (2026-11-05): the resident form of the GPU owner
-    # (bindings/trees_public_iforest.mojo::_run) on the explicit CPU entry.
-    # Before it every score call refit the whole forest from `_x` and the
-    # seed. A binary with `iforest_resident()` == 1 takes a seventeenth
-    # param, the token: 0 fits once and keeps the forest; a live token whose
-    # key (training buffer address and shape, every resolved control) is
-    # unchanged scores with no fit. The forest is a pure function of the seed
-    # and the X bits, so the scores are the refit's bit for bit.
-    # Lane perf-trees-owed (2026-11-06): the token is a native side record of
-    # the estimator (bindings/trees_side_records.mojo): (token, the fitted
-    # `_x` it was minted for, its lifetime). Scoring no longer writes
-    # `_if_token` into `__dict__` (scikit-learn's checks require predict and
-    # score to leave it unchanged) and no pickle or copy carries the handle.
-    # A refit stores a new `_x`, so the held token no longer applies and a
-    # fresh forest is minted; the replaced record's lifetime releases the old
-    # one, and the last one is released when the estimator goes.
-    var resident = _host_resident_entries(entry, context)
+    var request = host_iforest_request(fields, count, features, rows, want)
+    var resident = _host_resident_entries(_kernel_entry("iforest_forest_run", context), context)
     if resident is not None and not host_iforest_owned_x(fields):
-        # N390 (ne1-a-trees, 2026-11-06): the resident key is the training
-        # buffer's address and shape, not its contents. A fitted `_x` that is
-        # the caller's own storage (a float32 C-order input kept without a
-        # copy) can be edited in place and cannot be made read-only, so it
-        # keeps the per-call fit: every build then scores the edited values.
         resident = PythonObject(None)
     var held = 0
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var record = Optional[PythonObject]()
     var same_train = False
     if resident is not None:
@@ -343,10 +367,16 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
         same_train = Bool(record) and record.value()[1] is py_item(fields, nk[].k__x)
         if same_train:
             held = Int(py=record.value()[0])
-        _ = py_call(params.append, PythonObject(held))
+        request.resident = True
+        request.token = held
     var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", py_item(context, nk[].k_output_context))
+    request.train = Int(py=classical_address(train))
+    request.query = Int(py=classical_address(query))
+    request.out_f32 = Int(py=classical_address(out)) if want != 2 else 0
+    request.out_i32 = Int(py=classical_address(out)) if want == 2 else 0
+    request.info = Int(py=classical_address(info))
     try:
-        _ = py_call(entry, classical_address(train), classical_address(query), classical_address(out) if want != 2 else PythonObject(0), classical_address(out) if want == 2 else PythonObject(0), classical_address(info), params)
+        host_iforest_run(host_iforest_entry(), request)
     except error:
         var text = String(error)
         if ("NaN" in text or "Infinit" in text or "infinit" in text

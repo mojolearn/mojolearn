@@ -54,7 +54,7 @@ from bindings.trees_public_inputs_door import (
 from bindings.admitted_input_run import AdmittedXView
 from bindings.admitted_input_unpack import (
     AdmittedX, admit_f32, admit_weight_words, admit_ids, admitted_words, admitted_array, admitted_vector,
-    admit_c_view, admitted_dtype, admitted_storage,
+    admit_c_view, admitted_dtype, admitted_storage, admitted_unfilled,
 )
 from bindings.classical_arrays_door import classical_address
 # TOMBSTONE: TreesView / _view_of_array / trees_view / trees_check_rank / trees_f32 / trees_check_sample_weight / trees_all_finite / trees_vector / trees_empty uses and _place_view (the trees admission aliases; internal Arrays are read as themselves) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
@@ -81,9 +81,12 @@ from bindings.trees_public_boost_door import (
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
 from bindings.member_set_door import (
-    MemberSet, member_set_admit, member_set_run, member_set_pack, member_set_release,
+    MemberSet, member_set_admit, member_set_own_block, member_set_run, member_set_pack, member_set_release,
 )
-from core.member_abi import MEMBER_F32, MEMBER_I32
+from core.member_abi import (
+    MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
+)
+from bindings.member_set_door import MEMBER_SET_NATIVE, member_predict_held
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split, prep_estimator_predict_internal,
@@ -348,7 +351,8 @@ comptime _MEMBER_CODES_SLOT = "trees_meta_member_codes_v1"
 
 
 def _member_class_codes(member: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`(classes_, listed classes, int32 code Array, index of 1 or -1)` of a
+    """`(classes_, listed classes, int32 code Array, index of 1 or -1,
+    classes are 0..k-1, native element types)` of a
     fitted member, kept per member in the native side table (lane
     perf2-trees, 2026-11-06: every soft-vote, stacking, multi-output and
     calibrated predict rebuilt the int32 Array, one `int()` per class plus an
@@ -380,7 +384,17 @@ def _member_class_codes(member: PythonObject, context: PythonObject) raises -> P
         if Int(py=subs[i]) == 1:
             at = i
             break
-    var record = Python.tuple(classes, py_call(b.list, listed), array, PythonObject(at))
+    # [4]: the classes are 0 .. k-1 in order (a member's code is the
+    # ensemble's code). [5]: the element type the member's native entry wrote
+    # for predict, predict_proba and decision_function (`_member_native`; -1
+    # not known yet), written in place when learned.
+    var identity = True
+    for i in range(len(subs)):  # driver-loop: over the member's fitted classes
+        if Int(py=subs[i]) != i:
+            identity = False
+            break
+    var record = Python.tuple(classes, py_call(b.list, listed), array, PythonObject(at), PythonObject(identity),
+                              Python.list(PythonObject(-1), PythonObject(-1), PythonObject(-1)))
     _ = trees_side_put(_MEMBER_CODES_SLOT, member, record)
     return record
 
@@ -526,6 +540,15 @@ def _member_label_codes(member: PythonObject, Xa: PythonObject, context: PythonO
     Every other member predicts through its compiled plan as before."""
     if _forest_classifier_member(member, context):
         return _member_codes(member, Xa, context)
+    # A member of a published family: its codes from the state it holds
+    # (`_member_native`: only when its classes are 0 .. k-1 in order, so its
+    # code is the ensemble's). int32 codes are the answer; int64 ones are
+    # narrowed once, as the door's labels were.
+    var native = _member_native(member, Xa, MEMBER_OP_PREDICT, True, context)
+    if native is not None:
+        if String(native.dtype) == "<i4":
+            return native
+        return _i32_vec(native, "codes", context)
     return _i32_vec(meta_member_call(member, "predict", Python.tuple(Xa), context), "codes", context)
 
 
@@ -538,61 +561,221 @@ def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights:
     _ = meta_member_call(member, "fit", Python.tuple(X, y), context, keywords)
 
 
-def _fit_members_native(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject,
-                        float_targets: Bool, weights: PythonObject, counts: PythonObject,
-                        context: PythonObject) raises -> Bool:
+def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonObject,
+                      float_targets: Bool, weights: PythonObject, counts: PythonObject, jobs: Int,
+                      context: PythonObject) raises -> Bool:
     """Fit the unfitted `clones` as ONE NATIVE MEMBER SET (core/member_abi.mojo,
-    bindings/member_set_door.mojo): every member admitted once, the fits run
-    with the GIL released on host workers (independent members in parallel;
-    one worker when a member's route is a GPU), the fitted states written
-    into the clones as their own fit writes them. False, with nothing run,
-    when any clone is not a native member (its family has not published, or
-    its admit keeps the estimator's own doors): the caller then runs its
-    `_fit_member` loop for all of them.
+    bindings/member_set_door.mojo): every unit admitted once, the fits run
+    with the GIL released on host workers (independent units in parallel,
+    at most `jobs`; one worker when a member's route is a GPU), the fitted
+    states written into the clones as their own fit writes them. False, with
+    nothing published, when any clone is not a native member (its family has
+    not published, or its admit keeps the estimator's own doors) or any
+    member refuses its fit or its publication: the caller then runs its
+    `_fit_member` loop for all of them, which raises the estimator's own
+    words if the request is wrong (the fallback rule).
 
-    `X`: the float32 C-order `n` x `d` Array every member reads (by view: no
-    copy). `targets[i]`: member i's target Array of `n` values, float32
-    (`float_targets`) or the int32 class codes 0 .. counts[i]-1 (`counts`:
-    one class count per member; None for regressors). `weights`: the float32
-    sample weights Array or None."""
+    Unit i: `xs[i]` its float32 C-order X Array of `d` columns (read by view:
+    no copy; members of one cv fold share the fold's block), `targets[i]`
+    its target Array of as many values, float32 (`float_targets`) or the
+    int32 class codes 0 .. counts[i]-1 (`counts`: one class count per unit;
+    None for regressors), `weights[i]` its float32 sample weights Array or
+    None.
+
+    A classifier unit whose rows lack a class of the ensemble (a cv fold) is
+    never fitted here: the set refuses before any fit
+    (bindings/member_set_door.mojo, the class-cover pass) and the door loop
+    fits the members on the classes they are given, as before, so the
+    callers' own checks (stacking's output width between folds) still fire."""
     var b = trees_builtins()
     var m = len(clones)
     if m == 0:
         return False
-    var set = MemberSet(trees_address(X), n, d, MEMBER_F32 if float_targets else MEMBER_I32, MEMBER_I32)
-    var w_address = 0
-    if weights is not None:
-        w_address = trees_address(weights)
-    for i in range(m):  # driver-loop: over members (admission, once each)
+    var set = MemberSet(trees_address(xs[0]), Int(py=xs[0].shape[0]), d, MEMBER_F32 if float_targets else MEMBER_I32,
+                        MEMBER_I32)
+    set.run.cap = jobs
+    # The members keep their fitted states: this door's predict sites read
+    # them (`_member_native`), so a member's first predict imports nothing.
+    set.adopt = True
+    for i in range(m):  # driver-loop: over the units (admission, once each)
         var classes = 0
         if counts is not None:
             classes = Int(py=counts[i])
+        var w_address = 0
+        if weights[i] is not None:
+            w_address = trees_address(weights[i])
         if not member_set_admit(set, clones[i], trees_address(targets[i]), w_address, 0, 0, 0, 0, classes, context, b):
             return False
-    member_set_run(set)
-    _ = X  # keep the Python objects alive through the member fits above
+        member_set_own_block(set, trees_address(xs[i]), Int(py=xs[i].shape[0]))
+    # The member entries read admitted words. X is held with its finite test
+    # deferred to the member doors (`_hold_deferred`), which this route does
+    # not run: each distinct X block and float target is proven here (a held
+    # block's recorded verdict, else one scan). Not finite: the door loop,
+    # whose first door refuses in the estimator's own words.
+    for i in range(m):  # driver-loop: over the units (one verdict per distinct block)
+        if (i == 0 or not (xs[i] is xs[i - 1])) and not _x_finite(xs[i], d):
+            return False
+        if float_targets and (i == 0 or not (targets[i] is targets[i - 1])):
+            var finite_y = trees_finite_f32(trees_address(targets[i]), Int(py=targets[i].shape[0]))
+            _ = targets  # keep the Python objects alive through the scan above
+            if not finite_y:
+                return False
+    var fitted = False
+    try:
+        member_set_run(set)   # a failing unit releases every state
+        fitted = True
+    except:
+        fitted = False
+    _ = xs  # keep the Python objects alive through the member fits above
     _ = targets
     _ = weights
+    if not fitted:
+        return False
+    var packed = False
     try:
-        for i in range(m):  # driver-loop: over members (publication)
+        for i in range(m):  # driver-loop: over the units (publication)
             var codes = PythonObject(None)
             if counts is not None:
                 codes = py_call(b.list, py_call(b.range, counts[i]))
             _ = member_set_pack(set, i, codes, b)
-    finally:
-        member_set_release(set)  # a failing publication leaves no state behind
-    return True
+        packed = True
+    except:
+        packed = False
+    member_set_release(set)  # a failing publication leaves no state behind
+    return packed
+
+
+def _fit_units(clones: PythonObject, xs: PythonObject, d: Int, targets: PythonObject, float_targets: Bool,
+               weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject) raises:
+    """Fit every unit: as one native member set when every member's family
+    has published its member entry (`_fit_units_native`), else one member
+    fit door call after the other (`_fit_member`)."""
+    if _fit_units_native(clones, xs, d, targets, float_targets, weights, counts, jobs, context):
+        return
+    for i in range(len(clones)):  # driver-loop: over the units
+        _fit_member(clones[i], xs[i], targets[i], weights[i], context)
+
+
+def _fit_members_native(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject,
+                        float_targets: Bool, weights: PythonObject, counts: PythonObject, jobs: Int,
+                        context: PythonObject) raises -> Bool:
+    """`_fit_units_native` for members that all read the one X (`n` x `d`)
+    and the one sample-weight Array (or None)."""
+    var m = len(clones)
+    return _fit_units_native(clones, _repeat(X, m), d, targets, float_targets, _repeat(weights, m), counts, jobs,
+                             context)
 
 
 def _fit_members(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject, float_targets: Bool,
-                 weights: PythonObject, counts: PythonObject, context: PythonObject) raises:
-    """Fit every clone: as one native member set when every member's family
-    has published its member entry (`_fit_members_native`), else one member
-    fit door call after the other (`_fit_member`)."""
-    if _fit_members_native(clones, X, n, d, targets, float_targets, weights, counts, context):
-        return
-    for i in range(len(clones)):  # driver-loop: over members
-        _fit_member(clones[i], X, targets[i], weights, context)
+                 weights: PythonObject, counts: PythonObject, jobs: Int, context: PythonObject) raises:
+    """`_fit_units` for members that all read the one X (`n` x `d`) and the
+    one sample-weight Array (or None)."""
+    var m = len(clones)
+    _fit_units(clones, _repeat(X, m), d, targets, float_targets, _repeat(weights, m), counts, jobs, context)
+
+
+def _x_finite(Xa: PythonObject, d: Int) raises -> Bool:
+    """The finite verdict of the float32 C-order Array `Xa` (`d` columns)
+    for a native member call, which reads admitted words and runs no member
+    door: the recorded verdict of a held block (proved once for the whole
+    operation and for every fold held as rows of it,
+    `admitted_held_verify`), else one host scan (SIMD tasks across the
+    cores), after which a finite block is held for the rest of the open
+    scope so that it is scanned once, not once per member."""
+    var held = admitted_held_index(Xa)
+    if held >= 0:
+        return admitted_held_verify(held)
+    var n = _rows(Xa)
+    var finite = trees_finite_f32(trees_address(Xa), n * d)
+    _ = Xa  # keep the Python object alive through the native call above
+    if finite and n > 0 and d > 0 and admitted_scope_open():
+        admitted_hold(Xa, trees_address(Xa), n, d)
+    return finite
+
+
+def _member_native(member: PythonObject, X: PythonObject, operation: Int, classifier: Bool,
+                   context: PythonObject) -> PythonObject:
+    """A fitted member's `operation` (MEMBER_OP_PREDICT, _PREDICT_PROBA,
+    _DECISION) over X through the member state it holds
+    (bindings/member_set_door.mojo `member_predict_held`: a hit after the
+    first use, and the state a native fit left with it; one member call, the
+    GIL released, written into a new Array), or None when it is not served
+    and the caller runs the member's own door (the fallback rule). Never
+    raises. X is the float32 C-order Array every caller of this door reads
+    (`_x_array`, a fold gather, the stacked meta features).
+
+    A regressor (`classifier` False): its float32 predictions, (n,) for one
+    output, (n, outputs) for more. A classifier: predict = its int32 or int64
+    class codes, served only when its classes are 0 .. k-1 in order (a
+    member's code is then the ensemble's code, the value its door's decoded
+    label had); predict_proba = (n, its class count) columns in its class
+    order, as its door's; decision_function = (n,) for one column, else
+    (n, columns).
+
+    NOT SERVED HERE, by rule: a class without a member mark; a tree, forest
+    or extra-trees member (its door predicts from the one device copy of X
+    this door stages for all of them, bindings/trees_staged_input_door.mojo;
+    a member call would upload X once per member); a non-finite X (the
+    door refuses it). Once per member per public operation."""
+    comptime if not MEMBER_SET_NATIVE:
+        return PythonObject(None)
+    try:
+        var plan = prep_estimator_plan(member, context)
+        if plan is None or py_get(plan, "member") is None:
+            return PythonObject(None)
+        var n = _rows(X)
+        var d = _cols(X)
+        if n <= 0 or d <= 0 or String(py=X.dtype) != "<f4" or String(py=X.order) != "C":
+            return PythonObject(None)
+        var width = 0
+        var known = MEMBER_F32
+        var slot = 0
+        var record = PythonObject(None)
+        if classifier:
+            record = _member_class_codes(member, context)
+            if operation == MEMBER_OP_PREDICT:
+                if not Bool(py=record[4]):
+                    return PythonObject(None)
+                width = 1
+            elif operation == MEMBER_OP_PREDICT_PROBA:
+                slot = 1
+                width = len(record[1])
+            else:
+                slot = 2
+            known = Int(py=record[5][slot])
+        if not _x_finite(X, d):
+            return PythonObject(None)
+        var out = member_predict_held(member, trees_address(X), n, d, operation, classifier, width, known, True,
+                                      context, trees_builtins())
+        _ = X  # the rows are read through the whole member call
+        if classifier and out.dtype != known:
+            py_setitem(record[5], PythonObject(slot), PythonObject(out.dtype))
+        return out.array
+    except:
+        return PythonObject(None)
+
+
+def _member_scores(member: PythonObject, method: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A fitted classifier member's `predict_proba` or `decision_function`
+    of X: through its held native member state when its family serves it
+    (`_member_native`), else its own door (`meta_member_call`), which also
+    raises the estimator's own words for a method it does not have."""
+    if method == "predict_proba" or method == "decision_function":
+        var native = _member_native(member, X, MEMBER_OP_PREDICT_PROBA if method == "predict_proba"
+                                    else MEMBER_OP_DECISION, True, context)
+        if native is not None:
+            return native
+    return meta_member_call(member, method, Python.tuple(X), context)
+
+
+def _predict32(member: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A fitted regressor member's float32 predictions of X: through its held
+    native member state when its family serves it, else its internal
+    float32 predict door (`meta_member_call`)."""
+    var native = _member_native(member, X, MEMBER_OP_PREDICT, False, context)
+    if native is not None:
+        return native
+    return meta_member_call(member, Python.tuple(X), context)
 
 
 def _repeat(value: PythonObject, m: Int) raises -> PythonObject:
@@ -687,13 +870,20 @@ def _check_x(model: PythonObject, X: PythonObject, context: PythonObject) raises
     return Xa
 
 
-def _refuse_jobs(model: PythonObject, verbose: Bool, why: String) raises:
+def _jobs(model: PythonObject, verbose: Bool) raises -> Int:
+    """The worker bound of a meta-estimator's member fits from its `n_jobs`
+    (`native_unit_jobs`: None and -1 every core, k > 0 at most k), after the
+    `verbose` refusal where the estimator has that parameter. Members of
+    published families fit in parallel (bindings/member_set_door.mojo);
+    members on their own doors fit one after another whatever the bound.
+    The results do not depend on it."""
+    # TOMBSTONE: _refuse_jobs (n_jobs refused: "the members / columns / classes fit one after another") deleted
+    # 2026-11-21 by lane ma-callers round 2: published members fit in parallel, so n_jobs is the worker bound.
+    # Restore: git revert of that commit (no experiment define; a refusal, not an arm).
     var nk = trees_keys()
-    if verbose:
-        if _attr(model, nk[].k_n_jobs, PythonObject(None)) is not None or _truthy(_attr(model, nk[].k_verbose, PythonObject(0))):
-            _refuse("n_jobs/verbose", why)
-    elif _attr(model, nk[].k_n_jobs, PythonObject(None)) is not None:
-        _refuse("n_jobs", why)
+    if verbose and _truthy(_attr(model, nk[].k_verbose, PythonObject(0))):
+        _refuse("verbose", "nothing logs per member.")
+    return native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), _owner(model))
 
 
 # ------------------------------------------------------------------ cv folds
@@ -877,7 +1067,7 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
         var voting = _attr(model, nk[].k_voting, PythonObject(None))
         if not py_contains(Python.tuple("hard", "soft"), voting):
             raise Error("voting must be 'hard' or 'soft'")
-    _refuse_jobs(model, True, "the members fit one after another.")
+    var jobs = _jobs(model, True)
     var Xa = _x_array(X, context)
     var target = y
     if classifier:
@@ -900,7 +1090,7 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     if classifier:
         var k = len(_attr(model, PythonObject("classes_"), Python.list()))
         native = _fit_members_native(clones, Xa, _rows(Xa), _cols(Xa), _repeat(target, m), False, weights,
-                                     _repeat(PythonObject(k), m), context)
+                                     _repeat(PythonObject(k), m), jobs, context)
     else:
         var y32 = PythonObject(None)
         try:
@@ -909,7 +1099,7 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
             y32 = PythonObject(None)
         if y32 is not None and _rows(y32) == _rows(Xa):
             native = _fit_members_native(clones, Xa, _rows(Xa), _cols(Xa), _repeat(y32, m), True, weights,
-                                         PythonObject(None), context)
+                                         PythonObject(None), jobs, context)
     for i in range(m):  # driver-loop: over members
         if not native:
             _fit_member(clones[i], Xa, target, weights, context)
@@ -943,7 +1133,7 @@ def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, contex
     var floats: List[Float64] = [Float64(n), Float64(k)]
     for i in range(len(members)):  # driver-loop: over members
         var e = members[i]
-        var xa = admit_f32(meta_member_call(e, "predict_proba", Python.tuple(Xa), context), 2,
+        var xa = admit_f32(_member_scores(e, "predict_proba", Xa, context), 2,
                            "sub-estimator output", context, finite=False)
         var cols = _sub_cols(e, context)
         keep.append(xa.array)
@@ -1015,12 +1205,12 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
         var e = members[j]
         if soft:
             var p = _zeros(n * k, context)
-            _acc_cols_w(xt, p, meta_member_call(e, "predict_proba", Python.tuple(Xa), context), _sub_cols(e, context), n, k, 1.0, context)
+            _acc_cols_w(xt, p, _member_scores(e, "predict_proba", Xa, context), _sub_cols(e, context), n, k, 1.0, context)
             var blk = admit_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "p", context, finite=False)
             _ = _place(xt, out, n, width, blk.view(), rows, j * k)
             _ = blk^
         else:
-            var blk = _out2d(meta_member_call(e, Python.tuple(Xa), context), n, context)
+            var blk = _out2d(_predict32(e, Xa, context), n, context)
             _ = _place(xt, out, n, width, blk.view(), rows, j)
             _ = blk^
     return trees_reshape(out, Python.tuple(n, width), context)
@@ -1049,7 +1239,7 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
         raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
     var acc = _zeros(n, context)
     for i in range(m):  # driver-loop: over members
-        _acc_w(xt, acc, meta_member_call(members[i], Python.tuple(Xa), context), n, Float64(py=w[i]), context)
+        _acc_w(xt, acc, _predict32(members[i], Xa, context), n, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
 
@@ -1058,7 +1248,7 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
 
 
 def _stacking_validate(model: PythonObject, context: PythonObject) raises:
-    _refuse_jobs(model, True, "the members fit one after another.")
+    _ = _jobs(model, True)
     var nk = trees_keys()
     var method = _attr(model, nk[].k_stack_method, PythonObject("auto"))
     if not py_contains(Python.tuple("auto", "predict_proba", "decision_function", "predict"), method):
@@ -1083,8 +1273,8 @@ def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool, cont
 def _stack_out(xt: PythonObject, est: PythonObject, method: String, Xs: PythonObject, n: Int, binary: Bool,
                context: PythonObject) raises -> PythonObject:
     """`_StackingBase._out`: a binary predict_proba keeps its second column."""
-    var out = (meta_member_call(est, Python.tuple(Xs), context) if method == "predict"
-               else meta_member_call(est, method, Python.tuple(Xs), context))
+    var out = (_predict32(est, Xs, context) if method == "predict"
+               else _member_scores(est, method, Xs, context))
     if method == "predict_proba" and binary:
         var p = _out2d(out, n, context)
         var col = _one_col(xt, p.view(), 1, context)
@@ -1132,7 +1322,8 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var full = Python.list()
     for i in range(n_members):  # driver-loop: over members
         _ = py_call(full.append, _clone(active.ests[i], context))
-    _fit_members(full, Xa, n, d, _repeat(y_full, n_members), not codes, sw, counts, context)
+    var jobs = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), owner)
+    _fit_members(full, Xa, n, d, _repeat(y_full, n_members), not codes, sw, counts, jobs, context)
     for i in range(n_members):  # driver-loop: over members
         _ = py_call(fitted.append, full[i])
     var methods = Python.list()
@@ -1161,50 +1352,77 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var meta = _zeros(n * width, context)
     var meta_view = meta
     var cols_view = _arange(xt, d, context)
-    for f in range(len(splits)):  # driver-loop: over the cv folds
-        # Each fold has different index buffers; snapshot them once here,
-        # then share the retained native descriptors across all its members.
-        var tr_view = splits[f][0]
-        var te_view = splits[f][1]
-        var col0 = 0
-        # The fold's train/test gathers are the same for every member: made
-        # once per fold, not once per member (p3-trees; folds x members host
-        # copies of X, y and the weights before). Members never write their
-        # inputs (the scikit-learn fit contract), so sharing them is safe.
-        var y_tr: PythonObject
-        if codes:
-            y_tr = _gather_codes(xt, y_view, tr_view, context)
-        else:
-            y_tr = _gather_vec(xt, trees_address(y_view), Int(py=y_view.shape[0]), tr_view, context)
-        var w_tr = PythonObject(None)
-        if sw is not None:
-            w_tr = _gather_vec(xt, sw_addr, n, tr_view, context)
-            _ = sw  # keep the Python object alive through the native call above
-        var Xtr = _gather(xt, trees_address(x_view), n, d, tr_view, cols_view, context)
-        _ = Xa  # keep the Python object alive through the native call above
-        var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
-        _ = Xa  # keep the Python object alive through the native call above
-        if admitted_is_held(Xa):
-            # Rows of a held X carry its verdict (finite rows of a finite X;
-            # rows of an X an outer cross-validation held with its finite
-            # test deferred stay deferred and linked to it, lane s2): the
-            # fold's members read the fold matrices as admitted too.
-            admitted_hold_rows_of(Xa, Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
-            admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
-        var fold_members = Python.list()
-        for i in range(n_members):  # driver-loop: over members
-            _ = py_call(fold_members.append, _clone(active.ests[i], context))
-        _fit_members(fold_members, Xtr, Int(py=tr_view.shape[0]), d, _repeat(y_tr, n_members), not codes, w_tr,
-                     counts, context)
-        for i in range(len(active.ests)):  # driver-loop: over members
-            var e = fold_members[i]
-            var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, Int(py=te_view.shape[0]), binary, context), Int(py=te_view.shape[0]), context)
+    # The cv folds x members are independent fits: fitted as ONE unit set per
+    # wave of folds (lane ma-callers round 2; was one fold after another,
+    # only a fold's members together). A wave holds as many folds' train
+    # blocks as its workers can use at once: ceil(workers / members) folds on
+    # a CPU route (workers = the cores, bounded by n_jobs), one fold on a GPU
+    # (its member fits share the one device), so the memory held is one train
+    # block per fold of the wave and nothing is held that no worker reads.
+    # The gathers and the members' test outputs stay one after another: they
+    # share this owner's `xt` program state (and the one device).
+    var n_folds = len(splits)
+    var wave = max(1, (native_unit_device_workers(jobs, context) + n_members - 1) // max(n_members, 1))
+    var f0 = 0
+    while f0 < n_folds:  # driver-loop: over waves of cv folds
+        var f1 = min(n_folds, f0 + wave)
+        var unit_members = Python.list()
+        var unit_x = Python.list()
+        var unit_y = Python.list()
+        var unit_w = Python.list()
+        for f in range(f0, f1):  # driver-loop: over the wave's cv folds (train gathers)
+            # The fold's train gathers are the same for every member: made
+            # once per fold, not once per member (p3-trees; folds x members host
+            # copies of X, y and the weights before). Members never write their
+            # inputs (the scikit-learn fit contract), so sharing them is safe.
+            var tr_view = splits[f][0]
+            var y_tr: PythonObject
+            if codes:
+                y_tr = _gather_codes(xt, y_view, tr_view, context)
+            else:
+                y_tr = _gather_vec(xt, trees_address(y_view), Int(py=y_view.shape[0]), tr_view, context)
+            var w_tr = PythonObject(None)
+            if sw is not None:
+                w_tr = _gather_vec(xt, sw_addr, n, tr_view, context)
+                _ = sw  # keep the Python object alive through the native call above
+            var Xtr = _gather(xt, trees_address(x_view), n, d, tr_view, cols_view, context)
             _ = Xa  # keep the Python object alive through the native call above
-            var got = _place(xt, meta_view, n, width, blk.view(), te_view, col0)
-            _ = blk^
-            if got != native_widths[i]:
-                raise Error("a member's output width changed between folds (a class missing from a fold)")
-            col0 += got
+            if admitted_is_held(Xa):
+                # Rows of a held X carry its verdict (finite rows of a finite X;
+                # rows of an X an outer cross-validation held with its finite
+                # test deferred stay deferred and linked to it, lane s2): the
+                # fold's members read the fold matrices as admitted too.
+                admitted_hold_rows_of(Xa, Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
+            for i in range(n_members):  # driver-loop: over members
+                _ = py_call(unit_members.append, _clone(active.ests[i], context))
+                _ = py_call(unit_x.append, Xtr)
+                _ = py_call(unit_y.append, y_tr)
+                _ = py_call(unit_w.append, w_tr)
+        var unit_counts = PythonObject(None)
+        if codes:
+            unit_counts = _repeat(final_counts[0], len(unit_members))
+        _fit_units(unit_members, unit_x, d, unit_y, not codes, unit_w, unit_counts, jobs, context)
+        # The wave's train blocks are dropped before its test blocks are made.
+        _ = py_call(unit_x.clear)
+        _ = py_call(unit_y.clear)
+        _ = py_call(unit_w.clear)
+        for f in range(f0, f1):  # driver-loop: over the wave's cv folds (test outputs)
+            var te_view = splits[f][1]
+            var col0 = 0
+            var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
+            _ = Xa  # keep the Python object alive through the native call above
+            if admitted_is_held(Xa):
+                admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
+            for i in range(n_members):  # driver-loop: over members
+                var e = unit_members[(f - f0) * n_members + i]
+                var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, Int(py=te_view.shape[0]), binary, context), Int(py=te_view.shape[0]), context)
+                _ = Xa  # keep the Python object alive through the native call above
+                var got = _place(xt, meta_view, n, width, blk.view(), te_view, col0)
+                _ = blk^
+                if got != native_widths[i]:
+                    raise Error("a member's output width changed between folds (a class missing from a fold)")
+                col0 += got
+        f0 = f1
     if passthrough:
         var xb = admitted_words(Xa, trees_address(x_view), n, d)
         _ = Xa  # keep the Python object alive through the native call above
@@ -1219,7 +1437,8 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var final_ = _clone(final, context)
     _set(model, "final_estimator_", final_)
     var meta32 = _f32_array(trees_reshape(meta, Python.tuple(n, width), context), 2, "meta", context)
-    _fit_members(_repeat(final_, 1), meta32, n, width, _repeat(y_full, 1), not codes, sw, final_counts, context)
+    _fit_members(_repeat(final_, 1), meta32, n, width, _repeat(y_full, 1), not codes, sw, final_counts, jobs,
+                 context)
     _set(model, "n_features_in_", PythonObject(d))
     _set(model, "_fitted", PythonObject(True))
     return model
@@ -1321,7 +1540,7 @@ def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: Pytho
     var n = _rows(Xm)
     var xt = _xt(py_fields(model), context)
     var acc = _class_zero(xt, n * k, context)
-    _acc_cols_w(xt, acc, meta_member_call(final_, "predict_proba", Python.tuple(Xm), context), _sub_cols(final_, context), n, k, 1.0, context)
+    _acc_cols_w(xt, acc, _member_scores(final_, "predict_proba", Xm, context), _sub_cols(final_, context), n, k, 1.0, context)
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
@@ -1452,7 +1671,7 @@ def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonO
 
 def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
                                context: PythonObject) raises -> PythonObject:
-    _refuse_jobs(model, False, "the columns fit one after another.")
+    var jobs = _jobs(model, False)
     var xt = _xt(py_fields(model), context)
     var Xa = _x_array(X, context)
     _multioutput_y(y)
@@ -1481,7 +1700,7 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
         _ = py_call(clones.append, _clone(est, context))
     # The columns are independent members: one native member set (parallel)
     # when the family has published, else one fit door call per column.
-    _fit_members(clones, Xa, n, _cols(Xa), columns, True, weights, PythonObject(None), context)
+    _fit_members(clones, Xa, n, _cols(Xa), columns, True, weights, PythonObject(None), jobs, context)
     for j in range(len(clones)):  # driver-loop: over the output columns (one member each)
         _ = py_call(fitted.append, clones[j])
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
@@ -1525,7 +1744,7 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
     # member per call. The widening is exact, so the placed values (and
     # bits) are the same.
     for j in range(m):  # driver-loop: over members
-        var blk = _out2d(meta_member_call(members[j], Python.tuple(Xa), context), n, context)
+        var blk = _out2d(_predict32(members[j], Xa, context), n, context)
         _ = _place(xt, out, n, m, blk.view(), rows, j)
         _ = blk^
     return trees_reshape(out, Python.tuple(n, m), context)
@@ -1596,7 +1815,7 @@ def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) rai
 def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
                                 context: PythonObject) raises -> PythonObject:
     var b = trees_builtins()
-    _refuse_jobs(model, False, "the columns fit one after another.")
+    var jobs = _jobs(model, False)
     var Xa = _x_array(X, context)
     var n = _rows(Xa)
     var target = y
@@ -1656,7 +1875,7 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
             _ = py_call(code_columns.append, labels.codes)
             _ = py_call(counts.append, PythonObject(len(labels.classes)))
             _ = py_call(classes.append, labels.classes)
-    _fit_members(clones, Xa, n, _cols(Xa), code_columns, False, weights, counts, context)
+    _fit_members(clones, Xa, n, _cols(Xa), code_columns, False, weights, counts, jobs, context)
     for j in range(len(clones)):  # driver-loop: over the output columns (one member each)
         _ = py_call(fitted.append, clones[j])
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
@@ -1767,7 +1986,7 @@ def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context:
     for j in range(len(members)):  # driver-loop: over members
         var k = len(classes[j])
         var acc = _zeros(n * k, context)
-        _acc_cols_w(xt, acc, meta_member_call(members[j], "predict_proba", Python.tuple(Xa), context), _sub_cols(members[j], context), n, k, 1.0, context)
+        _acc_cols_w(xt, acc, _member_scores(members[j], "predict_proba", Xa, context), _sub_cols(members[j], context), n, k, 1.0, context)
         _ = py_call(out.append, trees_reshape(acc, Python.tuple(n, k), context))
     return out
 
@@ -1904,7 +2123,7 @@ def _indicator(xt: PythonObject, codes: PythonObject, j: Int, context: PythonObj
 
 
 def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
-    _refuse_jobs(model, True, "the classes fit one after another.")
+    var jobs = _jobs(model, True)
     var xt = _xt(py_fields(model), context)
     var Xa = _x_array(X, context)
     var labels = trees_encode_labels(y, labels_scope(model, context))
@@ -1930,7 +2149,7 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
     # One binary member per target (0/1 codes, two classes): independent,
     # fitted together.
     _fit_members(clones, Xa, _rows(Xa), _cols(Xa), targets, False, PythonObject(None),
-                 _repeat(PythonObject(2), len(targets)), context)
+                 _repeat(PythonObject(2), len(targets)), jobs, context)
     for i in range(len(clones)):  # driver-loop: over members
         _ = py_call(fitted.append, clones[i])
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
@@ -1942,7 +2161,7 @@ def _proba_positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context
     """`OneVsRestClassifier._proba_positive`: predict_proba's column for
     code 1 (zeros when the member never saw it), float32 (n,)."""
     var n = _rows(Xa)
-    var p = _out2d(meta_member_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
+    var p = _out2d(_member_scores(e, "predict_proba", Xa, context), n, context)
     var at = _index_of_one(e, context)
     if at < 0:
         _ = p^
@@ -1956,7 +2175,7 @@ def _positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context: Pyth
     """`OneVsRestClassifier._positive`: decision_function when the member
     has one, else predict_proba's column for code 1."""
     if prep_estimator_has(e, "decision_function", context):
-        return _f32_array(meta_member_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
+        return _f32_array(_member_scores(e, "decision_function", Xa, context), 1, "score", context)
     return _proba_positive(xt, e, Xa, context)
 
 
@@ -1978,7 +2197,7 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
         var bc: Int
         var at: Int
         if decision and prep_estimator_has(e, "decision_function", context):
-            var score = _f32_array(meta_member_call(e, "decision_function", Python.tuple(Xa), context), 1, "score", context)
+            var score = _f32_array(_member_scores(e, "decision_function", Xa, context), 1, "score", context)
             var blk = _out2d(score, n, context)
             keep.append(blk.array)
             addrs.append(blk.address)
@@ -1986,7 +2205,7 @@ def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int
             at = 0
             _ = blk^
         else:
-            var p = _out2d(meta_member_call(e, "predict_proba", Python.tuple(Xa), context), n, context)
+            var p = _out2d(_member_scores(e, "predict_proba", Xa, context), n, context)
             at = _index_of_one(e, context)
             keep.append(p.array)
             addrs.append(p.address)
@@ -2084,9 +2303,9 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var out: PythonObject
     if prep_estimator_has(e, "decision_function", context):
-        out = meta_member_call(e, "decision_function", Python.tuple(Xa), context)
+        out = _member_scores(e, "decision_function", Xa, context)
     else:
-        out = meta_member_call(e, "predict_proba", Python.tuple(Xa), context)
+        out = _member_scores(e, "predict_proba", Xa, context)
     var blk = _out2d(out, n, context)
     var glue = _xr(xt)
     if k == 2:
@@ -2243,6 +2462,9 @@ struct _CalUnits(Movable):
     var mctx: PythonObject
     var rows_class: PythonObject
     var rows_take: PythonObject
+    # The ensemble's class count (set by _calibrated_fit; 0: the member
+    # doors fit every fold): what a fold's native member is fitted with.
+    var k: Int
 
     def __init__(out self, model: PythonObject, xt: PythonObject, base: PythonObject, Xa: PythonObject,
                  splits: PythonObject, codes: PythonObject, cols: PythonObject, n: Int, d: Int, ensemble: Bool,
@@ -2271,6 +2493,7 @@ struct _CalUnits(Movable):
         self.mctx = PythonObject(None)
         self.rows_class = PythonObject(None)
         self.rows_take = PythonObject(None)
+        self.k = 0
 
     def fold_side(self, idx: PythonObject) raises -> PythonObject:
         """Fold side `idx` (cv row indices) of X for the member: a resident
@@ -2317,7 +2540,24 @@ struct _CalUnits(Movable):
                 ytr = _gather_codes(self.xt, self.codes, tr, self.context)
             finally:
                 native_unit_gate_leave(self.gate)
-            _fit_member(e, xtr, ytr, PythonObject(None), self.context)
+            # A member of a published family is fitted through its member
+            # entry on the fold's host rows (one unit: admitted once, the GIL
+            # released for the fit, its fitted state left with the clone for
+            # the scores below), with the ensemble's class count. A fold that
+            # lacks a class is refused by the set before any fit
+            # (bindings/member_set_door.mojo, the class-cover pass: one pass
+            # over the fold's codes) and takes the member's fit door, which
+            # fits the classes present, as does every unpublished family and
+            # the resident DeviceRows route (the member program gathers its
+            # rows on the device: tuned, untouched). Outside the gate: the
+            # fits of different folds overlap, as the door fits do.
+            var native = False
+            if not self.dev and self.k > 0:
+                native = _fit_units_native(_repeat(e, 1), _repeat(xtr, 1), self.d, _repeat(ytr, 1), False,
+                                           _repeat(PythonObject(None), 1), _repeat(PythonObject(self.k), 1), 1,
+                                           self.context)
+            if not native:
+                _fit_member(e, xtr, ytr, PythonObject(None), self.context)
             self._enter()
             try:
                 var Xte = self.fold_side(te)
@@ -2437,6 +2677,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     # calibrators per fold: no bits change.
     var jobs = native_unit_jobs(_attr(model, nk[].k_n_jobs, PythonObject(None)), "CalibratedClassifierCV")
     var units = _CalUnits(model, xt, base, Xa, splits, labels.codes, cols, n, d, ensemble, context)
+    units.k = k
     # fb12-rows (2026-11-17): the folds' X stays on the GPU. Each fold side
     # was `_gather` (xtrees gather_f32_device): all of X uploaded, the rows
     # gathered and DOWNLOADED, twice per fold, then each member uploaded its
@@ -2508,7 +2749,12 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             _ = _place(xt, S, n, c, blk.view(), splits[f][1], 0)
             _ = blk^
         var e = _clone(base, context)
-        _fit_member(e, Xa, labels.codes, PythonObject(None), context)
+        # The one member over every row sees every class (the codes were
+        # encoded from this y): a native member fit when its family has
+        # published, else its fit door. (A fold of `_CalUnits` may lack a
+        # class: that fold's member takes its fit door, `_CalUnits.unit`.)
+        _fit_members(_repeat(e, 1), Xa, n, d, _repeat(labels.codes, 1), False, PythonObject(None),
+                     _repeat(PythonObject(k), 1), jobs, context)
         _ = py_call(pairs.append, Python.tuple(e, _fit_calibrators(model, xt, trees_reshape(S, Python.tuple(n, c), context),
                                                                    labels.codes, context)))
     _set(model, "n_features_in_", PythonObject(d))
@@ -2533,9 +2779,9 @@ def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject
         var cals = pairs[i][1]
         var out: PythonObject
         if prep_estimator_has(e, "decision_function", context):
-            out = meta_member_call(e, "decision_function", Python.tuple(Xa), context)
+            out = _member_scores(e, "decision_function", Xa, context)
         else:
-            out = meta_member_call(e, "predict_proba", Python.tuple(Xa), context)
+            out = _member_scores(e, "predict_proba", Xa, context)
         var blk = _out2d(out, n, context)
         keep.append(blk.array)
         var at = 0

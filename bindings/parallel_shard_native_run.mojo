@@ -42,8 +42,9 @@ def shard_features_admit(given: Int, fitted: Int) raises:
         raise Error("ValueError: input feature count differs from fit")
 
 
-def shard_envelope_admit(fields: Int) raises:
-    if fields != 3:
+def shard_envelope_admit(exact: Bool, fields: Int) raises:
+    """A request's payload record: the exact tuple `(state, args)`."""
+    if not exact or fields != 2:
         raise Error("parallel shards: invalid worker request envelope")
 
 

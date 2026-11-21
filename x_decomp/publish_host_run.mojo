@@ -7,6 +7,7 @@ from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT
 from x_decomp.descriptor_host import X_DECOMP_HOST_API, x_decomp_host_v1
+from core.xdecomp_member import xdecomp_member_publish
 
 
 def _publish_linear_entry_table() raises:
@@ -16,3 +17,5 @@ def _publish_linear_entry_table() raises:
     var key = LinearEntryKey(GLOBAL_NUMERIC_MODE, 0)
     linear_table_publish[LINEAR_TABLE_DECOMP](key,
         Int(api[].entries.unsafe_ptr()), [String(XD_ABI_NAME)], [XD_OPERATION_COUNT], [x_decomp_host_v1])
+    # The XDecomp members (core/xdecomp_member.mojo), vendor word 0.
+    xdecomp_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(api[].entries.unsafe_ptr()))

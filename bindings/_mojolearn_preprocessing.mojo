@@ -14,6 +14,8 @@ from core.scaler_native_device import ScalerDeviceKernels
 from core.scaler_native_api import SCALER_NATIVE_ABI, SCALER_OP_COUNT
 from core.prep_entry_table import PrepEntryKey, prep_table_publish, PREP_TABLE_SCALER
 from core.scaler_member import scaler_member_publish
+from core.prep_member import prep_member_publish
+from core.select_member import select_member_publish
 from x_prep.transport_abi import xp_vendor_word
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.vendor import COMPILED_VENDOR
@@ -300,6 +302,10 @@ def publish_scaler_table_device() raises:
     # StandardScaler and MinMaxScaler members (core/scaler_member.mojo): they call
     # the scaler and x_prep entries their route carries, never a table.
     scaler_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(api))
+    # The Prep members (core/prep_member.mojo: RobustScaler), under the same key.
+    prep_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(api))
+    # The Select members (core/select_member.mojo: VarianceThreshold), under the same key.
+    select_member_publish(Int(GLOBAL_NUMERIC_MODE), word, Int(api))
 
 
 def build__mojolearn_preprocessing() -> PythonObject:

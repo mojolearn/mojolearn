@@ -67,8 +67,9 @@ def forecast_length_admit(returned: Int, expected: Int) raises:
         raise Error("ValueError: Holt-Winters worker returned a different series length")
 
 
-def forecast_envelope_admit(fields: Int) raises:
-    if fields != 3:
+def forecast_envelope_admit(exact: Bool, fields: Int) raises:
+    """A request's payload record: the exact tuple `(state, args)`."""
+    if not exact or fields != 2:
         raise Error("parallel forecasting: invalid worker request envelope")
 
 
