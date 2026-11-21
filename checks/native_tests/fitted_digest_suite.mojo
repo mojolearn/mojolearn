@@ -11,7 +11,7 @@ busy inside a fixture and a second split around them would nest the pool.
 """
 from core.sha256 import Sha256
 from core.fitted_digest import fitted_digest_hex, fitted_digest_text, FITTED_DIGEST_FORMAT, FITTED_DIGEST_CHUNK
-from core.native_archive_write import NativeArchiveMember, archive_owned, archive_uint
+from core.native_archive_write import NativeArchiveMember, archive_owned, archive_uint, archive_prepare
 
 
 def _require(ok: Bool, message: String) raises:
@@ -105,6 +105,89 @@ def _layout() raises:
     _ = c_words
 
 
+def _strided_bytes(width: Int, shape: List[Int], strides: List[Int], backing_size: Int, base: Int,
+                   c_bytes: List[UInt8]) -> List[UInt8]:
+    """A backing store of `backing_size` bytes (junk 0xEE elsewhere) where
+    C-order element e of `c_bytes` sits at `base + sum(index * stride)`."""
+    var backing = List[UInt8](length=backing_size, fill=0xEE)
+    var rank = len(shape)
+    var count = len(c_bytes) // width
+    for e in range(count):
+        var rest = e
+        var offset = base
+        for axis in range(rank - 1, -1, -1):
+            offset += (rest % shape[axis]) * strides[axis]
+            rest //= shape[axis]
+        for b in range(width):
+            backing[offset + b] = c_bytes[e * width + b]
+    return backing^
+
+
+def _against_c(what: String, width: Int, shape: List[Int], strides: List[Int], backing_size: Int,
+               base: Int, c_bytes: List[UInt8]) raises:
+    """The strided member and the C-order member of the same values have
+    one digest, and the strided member's bytes are left as they were."""
+    var backing = _strided_bytes(width, shape, strides, backing_size, base, c_bytes)
+    var before = backing.copy()
+    var dtype = String("<f8") if width == 8 else String("<f4")
+    var strided = List[NativeArchiveMember]()
+    strided.append(NativeArchiveMember("w", dtype, shape.copy(), strides.copy(),
+                                       Int(backing.unsafe_ptr()) + base, len(c_bytes), width, List[UInt8]()))
+    var plain = List[NativeArchiveMember]()
+    plain.append(archive_owned("w", dtype, shape.copy(), width, c_bytes.copy()))
+    _require(fitted_digest_hex("Ridge", strided) == fitted_digest_hex("Ridge", plain),
+             what + " hashes as its C-order bytes")
+    for i in range(len(backing)):
+        _require(backing[i] == before[i], what + ": the field's own bytes are not modified")
+    _ = strided
+    _ = backing
+
+
+def _c_words(count: Int, width: Int) -> List[UInt8]:
+    var bytes = List[UInt8]()
+    for e in range(count):
+        archive_uint(bytes, UInt64(e + 1) * UInt64(0x9E3779B97F4A7C15), width)
+    return bytes^
+
+
+def _layouts(unit: Int) raises:
+    """Every layout a fitted field can arrive in, against its C order."""
+    if unit == 0:
+        # a view with negative strides (x[:, ::-1]): element (i, j) at 12 i - 4 j
+        _against_c("a negative-stride view", 4, [2, 3], [12, -4], 24, 8, _c_words(6, 4))
+    elif unit == 1:
+        # a non-contiguous slice (x[:, :3] of a 2 x 4 block): padded rows
+        _against_c("a padded-row view", 4, [2, 3], [16, 4], 32, 0, _c_words(6, 4))
+    elif unit == 2:
+        # a 3-D Fortran-ordered field (a device field downloaded column-major)
+        _against_c("a 3-D Fortran field", 8, [2, 3, 2], [8, 16, 48], 96, 0, _c_words(12, 8))
+    elif unit == 3:
+        # every second column (x[:, ::2]) of a Fortran block
+        _against_c("a column-step view", 4, [3, 2], [4, 24], 48, 0, _c_words(6, 4))
+    else:
+        # a Fortran field longer than one chunk: the gather crosses chunks
+        var columns = FITTED_DIGEST_CHUNK // 16 + 1
+        _against_c("a Fortran field of two chunks", 8, [2, columns], [8, 16], 16 * columns, 0,
+                   _c_words(2 * columns, 8))
+
+
+def _pooled_prepare() raises:
+    """The save path's pooled `prepare` linearizes a column-major member in
+    the list it was given (the C-order bytes are at `source` after it)."""
+    var c_bytes = _c_words(6, 4)
+    var shape: List[Int] = [2, 3]
+    var strides: List[Int] = [4, 8]
+    var f_bytes = _strided_bytes(4, shape, strides, 24, 0, c_bytes)
+    var members = List[NativeArchiveMember]()
+    members.append(NativeArchiveMember("coef_", "<f4", shape^, strides^, 0, 24, 4, f_bytes^))
+    members.append(archive_owned("intercept_", "<f4", [1], 4, _c_words(1, 4)))
+    _ = archive_prepare(members)
+    var at = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=members[0].source)
+    for i in range(24):
+        _require(at[i] == c_bytes[i], "a pooled prepare leaves the C-order bytes in the member")
+    _ = members
+
+
 def _chunk_digest(mut dst: List[UInt8], address: Int, count: Int):
     var hasher = Sha256()
     hasher.update(address, count)
@@ -153,7 +236,7 @@ def _by_hand() raises:
 
 
 def run_checks() raises:
-    comptime FIXTURES = 9
+    comptime FIXTURES = 15
     var failures = 0
     for unit in range(FIXTURES):  # serial: every fixture splits across the host pool itself (module docstring)
         try:
@@ -163,8 +246,12 @@ def run_checks() raises:
                 _changes(unit - 1)
             elif unit == 7:
                 _layout()
-            else:
+            elif unit == 8:
                 _by_hand()
+            elif unit < 14:
+                _layouts(unit - 9)
+            else:
+                _pooled_prepare()
         except problem:
             print("FAIL fitted_digest fixture", unit, String(problem))
             failures += 1
