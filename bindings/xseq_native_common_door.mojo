@@ -33,7 +33,7 @@ from bindings.xseq_keys_unpack import xseq_keys
 from bindings.py_balanced import py_item
 from core.device_route import device_mode_code, device_route_plan, device_route_admit
 from providers.python.device_route_boundary_door import (
-    DeviceRouteOwner, device_route_held, device_route_keep, device_request,
+    DeviceRouteOwner, device_route_held, device_route_keep, device_request, device_cpu_connect_late,
 )
 
 comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -161,9 +161,13 @@ def _xseq_route_build(requested_device: Int, mode_field: PythonObject, default_m
     var metrics = PythonObject(None)
     if plan.cpu_table:
         # A GPU installation running `device="cpu"`: the CPU identical
-        # images loaded beside the device images at import
-        # (python/mojolearn/_native_xseq_bridge.py).
+        # images loaded beside the device images at the first device="cpu"
+        # admission (fx-host-import: python/mojolearn/_native_xseq_bridge.py,
+        # no longer at import); an estimator restored without construction
+        # connects them here, once (the three tables load together).
         var cpu = py_get(context, PythonObject("xseq_cpu_bindings"))
+        if cpu is None and device_cpu_connect_late(context):
+            cpu = py_get(context, PythonObject("xseq_cpu_bindings"))
         var cpu_keys = py_get(context, PythonObject("xseq_cpu_native_keys"))
         if cpu is None or cpu_keys is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")

@@ -191,6 +191,19 @@ def decomp_route_on_cpu_image(device: Int, context: PythonObject) raises -> Bool
     return device == DEVICE_CPU and _decomp_process_vendor(context) != 0
 
 
+def decomp_cpu_table(context: PythonObject, key: PythonObject) raises -> PythonObject:
+    """The family's CPU table under `key` (a route on the CPU image), or
+    None when it is not connected. The host image loads at the first
+    device="cpu" admission (fx-host-import:
+    python/mojolearn/_native_decomp_device_bridge.py, no longer at import);
+    an estimator restored without construction connects it here, once.
+    Miss path only (route resolution, once per estimator)."""
+    var table = py_get(context, key)
+    if table is None and device_cpu_connect_late(context):
+        table = py_get(context, key)
+    return table
+
+
 def decomp_route_expected_vendor(device: Int, context: PythonObject) raises -> String:
     """The vendor word the route's compiled image must report. Miss path only."""
     if device == DEVICE_CPU:

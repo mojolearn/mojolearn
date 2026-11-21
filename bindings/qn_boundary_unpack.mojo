@@ -21,7 +21,7 @@ from core.entry_table import EntryRef, entry_ref_word
 from core.device_route import DeviceRoute, device_mode_code, device_route_plan, device_route_admit
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_route_held, device_route_keep, device_route_value, device_request,
-    device_route_refuse,
+    device_route_refuse, device_cpu_connect_late,
 )
 from core.logistic_native_api import QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_COUNT, QN_FOLD_COUNT
 from glm.qn_door_run import (
@@ -75,9 +75,13 @@ def _qn_route_build(requested_device: Int, mode: PythonObject, default_mode: Pyt
     var entries = PythonObject(None)
     if plan.cpu_table:
         # A GPU installation running `device="cpu"`: the CPU image loaded
-        # beside the device image at import
-        # (python/mojolearn/_native_qn_bridge.py connect_cpu_device).
+        # beside the device image at the first device="cpu" admission
+        # (fx-host-import: python/mojolearn/_native_qn_bridge.py
+        # connect_cpu_device, no longer at import); an estimator restored
+        # without construction connects it here, once.
         var cpu = py_get(context, nk[].k_qn_cpu_bindings)
+        if cpu is None and device_cpu_connect_late(context):
+            cpu = py_get(context, nk[].k_qn_cpu_bindings)
         if cpu is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
         entries = py_item(cpu, PythonObject(mode_name))

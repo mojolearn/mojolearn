@@ -215,8 +215,22 @@ _CPU_FAST_REFUSAL = ("ValueError: device='cpu' runs in identical mode only; "
 
 
 def connect_cpu_device(context):
-    """Connect the CPU table set of `device="cpu"` once, at connection, beside
-    the device table set (`context["trees_bindings"]`).
+    """Register the CPU table set of `device="cpu"` beside the device table
+    set: it loads at the first device="cpu" admission beside a GPU set
+    (fx-host-import, `_native_family_bridge.cpu_load_later`), never at
+    import; an estimator restored without construction connects it at its
+    first CPU route (bindings/trees_route_boundary_door.mojo
+    `trees_cpu_context`). Nothing is registered in a CPU-only process."""
+    # glue: import-time registration, once
+    if context.get("vendor") == "cpu":
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_device(context))
+
+
+def _load_cpu_device(context):
+    """Connect the CPU table set of `device="cpu"` once, beside the device
+    table set (`context["trees_bindings"]`).
 
     On a GPU installation the host image of every tree binding is loaded and
     its entries kept under `context["trees_cpu_bindings"]`, in the shape of
@@ -228,7 +242,7 @@ def connect_cpu_device(context):
     operation that needs one of its entries."""
     # glue: load the CPU images once and retain their entry tables
     from . import _backend, host_surface
-    if context.get("vendor") == "cpu":
+    if "trees_cpu_bindings" in context:
         return
     routed = host_surface.routed_modules()
     per_mode = {}
@@ -253,7 +267,7 @@ def connect_cpu_device(context):
     tables = tuple(table for table in per_mode.values() if type(table) is dict)  # glue: exclude import-time refusal strings
     context['trees_state_retained'] = context['trees_state_retained'] + tables
     context['trees_state_releases'] = context['trees_state_releases'] + tuple(
-        table[name] for table in tables  # glue: the CPU images' resident release identities, once at connection
+        table[name] for table in tables  # glue: the CPU images' resident release identities, once at the CPU load
         for name in ('forest_release_gpu', 'gbdt_resident_release', 'iforest_resident_release')  # glue: existing compiled release ABIs
         if name in table)
     # The label steps of a device="cpu" classifier run the host label kernels

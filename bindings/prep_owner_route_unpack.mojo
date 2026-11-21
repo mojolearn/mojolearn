@@ -21,8 +21,9 @@ image's capability bits), so the scalers' selection functions
 What differs from the scalers is where the CPU context comes from. The
 family's connected context is completed after its bridge returns (the
 selector context, the encode entry, the native estimator entry of the
-model-selection family), so the bridge cannot snapshot it. Import connects
-only the host image's entry table (`prep_cpu_bindings`); the CPU context is
+model-selection family), so the bridge cannot snapshot it. The first
+device="cpu" admission connects only the host image's entry table
+(`prep_cpu_bindings`; fx-host-import: never at import); the CPU context is
 built HERE, once per process, by the first estimator whose route resolves to
 the CPU beside a device set: the connected context copied, with
 `vendor="cpu"`, the host entry table as its bindings and the host column of
@@ -45,7 +46,7 @@ from bindings.x_prep_native_owner_run import XprepCaps
 from bindings.prep_entry_cache_unpack import prep_entry_text
 from core.device_route import DEVICE_GPU, DEVICE_CPU, device_installed
 from providers.python.device_route_boundary_door import (
-    DeviceRouteOwner, device_request, device_route_owner, device_route_keep,
+    DeviceRouteOwner, device_request, device_route_owner, device_route_keep, device_cpu_connect_late,
 )
 from x_prep.transport_abi import xp_vendor_word
 
@@ -57,6 +58,12 @@ def _prep_cpu_scope(root: PythonObject, b: PythonObject) raises -> PythonObject:
     if cpu is not None:
         return cpu
     var images = py_get(root, "prep_cpu_bindings")
+    # The host image loads at the first device="cpu" admission
+    # (fx-host-import: python/mojolearn/_native_prep_encode_bridge.py, no
+    # longer at import); an estimator restored without construction
+    # connects it here, once.
+    if images is None and device_cpu_connect_late(root):
+        images = py_get(root, "prep_cpu_bindings")
     if images is None:
         raise Error("ImportError: device='cpu' is not connected in this installation")
     if py_type(images) is b.str:

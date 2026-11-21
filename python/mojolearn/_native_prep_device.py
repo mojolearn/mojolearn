@@ -7,8 +7,12 @@ _FAST_ON_CPU = "device='cpu' runs in identical mode only; numeric_mode='fast' is
 
 
 def connect_cpu_device(context, cpu_entries):
-    """Connect the CPU context of `device="cpu"` once, at import, beside the
-    scaler's own connected context.
+    """Register the CPU context of `device="cpu"` beside the scaler's own
+    connected context: built at the first device="cpu" admission beside a
+    GPU set (fx-host-import, `_native_family_bridge.cpu_load_later`), never
+    at import; an estimator restored without construction connects it at
+    its first CPU route (bindings/scaler_route_unpack.mojo
+    `_scaler_route_build`).
 
     `cpu_entries(load)` builds the scaler's entry dictionary from the host
     binaries (`load` is `_backend.load_host_module`), exactly as its
@@ -20,8 +24,7 @@ def connect_cpu_device(context, cpu_entries):
     the scaler's own context already is the CPU one and nothing is loaded. A
     host binary that is not built is kept as its refusal text, said when a
     `device="cpu"` estimator first runs."""
-    # glue: load the CPU images once and retain their entries beside the device ones
-    from . import _backend
+    # glue: import-time registration, once per scaler context
     # The builtins module the shared compiled device check takes
     # (providers/python/device_route_boundary_door.mojo `device_admit`): read
     # by the scaler doors only for a device that is not None and when an
@@ -29,6 +32,16 @@ def connect_cpu_device(context, cpu_entries):
     import builtins
     context["prep_builtins"] = builtins
     if context["vendor"] == "cpu" or "prep_cpu_context" in context:
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_device(context, cpu_entries))
+
+
+def _load_cpu_device(context, cpu_entries):
+    # glue: once, at the first device="cpu" admission beside a GPU set: load
+    # the CPU images and retain their entries beside the device ones
+    from . import _backend
+    if "prep_cpu_context" in context:
         return
     try:
         entries = cpu_entries(_backend.load_host_module)
@@ -44,21 +57,32 @@ def connect_cpu_device(context, cpu_entries):
 
 
 def connect_cpu_context(context, overrides):
-    """Connect the CPU context of `device="cpu"` for a preprocessing owner
+    """Register the CPU context of `device="cpu"` for a preprocessing owner
     whose device questions are context keys (the classifier owner, the
     selectors, the iterative imputer): the owner's context with the keys
-    `overrides(load)` returns replaced, `vendor="cpu"` among them.
+    `overrides(load)` returns replaced, `vendor="cpu"` among them. Built at
+    the first device="cpu" admission beside a GPU set, never at import
+    (`_native_family_bridge.cpu_load_later`), as `connect_cpu_device`.
 
     `overrides` may only replace keys the context already holds: the CPU
     context then differs from its source in those values alone, and a key
     the source gains after import (another family connecting to it) is
     copied over when an estimator's route is next resolved. In a CPU-only
     process the owner's context already is the CPU one."""
-    # glue: load the CPU images once and retain their entries beside the device ones
-    from . import _backend
+    # glue: import-time registration, once per owner context
     import builtins
     context["prep_builtins"] = builtins
     if context["vendor"] == "cpu" or "prep_cpu_context" in context:
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_context(context, overrides))
+
+
+def _load_cpu_context(context, overrides):
+    # glue: once, at the first device="cpu" admission beside a GPU set: load
+    # the CPU images and retain their entries beside the device ones
+    from . import _backend
+    if "prep_cpu_context" in context:
         return
     try:
         replaced = dict(overrides(_backend.load_host_module), vendor="cpu")

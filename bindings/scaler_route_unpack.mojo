@@ -46,6 +46,7 @@ from core.prep_entry_table import PrepEntryKey, xp_transport_ref, scaler_ref
 from core.scaler_native_api import SCALER_OP_DIRECT
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_request, device_admit, device_route_owner, device_route_keep, device_route_clear,
+    device_cpu_connect_late,
 )
 from x_prep.transport_abi import xp_vendor_word
 
@@ -135,6 +136,12 @@ def _scaler_route_build(model: PythonObject, context: PythonObject) raises -> De
         owner.route.device = device_installed(device_request(py_fields(model), b), process_vendor)
         if owner.route.device == DEVICE_CPU and process_vendor != 0:
             var cpu = py_get(context, "prep_cpu_context")
+            # Built at the first device="cpu" admission (fx-host-import:
+            # python/mojolearn/_native_prep_device.py, no longer at import);
+            # an estimator restored without construction connects it here,
+            # once, at its first route resolution.
+            if cpu is None and device_cpu_connect_late(context):
+                cpu = py_get(context, "prep_cpu_context")
             if cpu is None:
                 raise Error("ImportError: device='cpu' is not connected in this installation")
             if py_type(cpu) is b.str:

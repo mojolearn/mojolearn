@@ -70,7 +70,7 @@ def connect(pca_class):
     except (ImportError, AttributeError, TypeError, RuntimeError):
         fold = None
     context["pca_fold_factory"] = fold if isinstance(fold, BuiltinFunctionType) else None
-    # glue: the CPU image of `device="cpu"`, connected once beside the device set
+    # glue: the CPU image of `device="cpu"`, registered now and loaded at the first device="cpu" admission (fx-host-import)
     from ._native_decomp_device_bridge import connect_cpu_device, ESTIMATORS_HOST
     connect_cpu_device(context, ESTIMATORS_HOST, {"pca_native_api_v1": "pca_cpu_bindings"})
     entry = _binding()._module.pca_native_call

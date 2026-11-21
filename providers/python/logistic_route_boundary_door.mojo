@@ -47,6 +47,7 @@ from core.logistic_route import (
 )
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_unpack, device_request, device_route_owner, device_route_keep,
+    device_cpu_connect_late,
 )
 
 
@@ -131,11 +132,16 @@ def _logistic_route_build(model: PythonObject, device: Int, mode: PythonObject, 
         resolved = device_installed(device, process_vendor)
         if resolved == DEVICE_CPU and process_vendor != 0:
             # A GPU installation: the CPU images, loaded beside the device
-            # images at import (python/mojolearn/_native_logistic_bridge.py
-            # connect_cpu_device).
+            # images at the first device="cpu" admission (fx-host-import:
+            # python/mojolearn/_native_logistic_bridge.py connect_cpu_device,
+            # no longer at import); an estimator restored without
+            # construction connects them here, once (both tables load
+            # together).
             if expected_mode != 1:
                 device_cpu_fast()
             var cpu = py_get(context, "lr_cpu_bindings")
+            if cpu is None and device_cpu_connect_late(context):
+                cpu = py_get(context, "lr_cpu_bindings")
             if cpu is None:
                 raise Error("ImportError: device='cpu' is not connected in this installation")
             entries = py_item(cpu, word)

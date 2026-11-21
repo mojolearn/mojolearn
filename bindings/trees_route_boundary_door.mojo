@@ -16,7 +16,7 @@ estimator's route holds is the context its operations run in: the connection
 context (this installation's table set), or, for `device="cpu"` on a GPU
 installation, the CPU run context, whose `trees_bindings` is the CPU table
 set (`context["trees_cpu_bindings"]`, the host images the bridge loads
-beside the device images at import: exactly what a CPU-only installation
+beside the device images at the first CPU admission: exactly what a CPU-only installation
 connects). The run context is kept under the binding name
 `trees_run_context` of the estimator's binding route, so every shared drop
 of that route (`device_route_clear`, the shared constructor's
@@ -36,7 +36,7 @@ from bindings.trees_keys_unpack import trees_keys
 from bindings.trees_public_inputs_door import trees_builtins
 from core.device_route import DEVICE_CPU, device_vendor_code
 from providers.python.device_route_boundary_door import (
-    device_admit, device_binding_held, device_binding_device, device_binding_keep,
+    device_admit, device_binding_held, device_binding_device, device_binding_keep, device_cpu_connect_late,
 )
 
 comptime _TREES_RUN = "trees_run_context"
@@ -71,6 +71,12 @@ def trees_cpu_context(context: PythonObject) raises -> PythonObject:
         if size is not None and Int(py=size) == len(context):
             return run
     var cpu = py_get(context, nk[].k_device_cpu_bindings)
+    # Loaded at the first device="cpu" admission (fx-host-import:
+    # python/mojolearn/_native_trees_bridge.py, no longer at import); an
+    # estimator restored without construction connects it here, once. Before
+    # the size below is counted: the load adds its keys first.
+    if cpu is None and device_cpu_connect_late(context):
+        cpu = py_get(context, nk[].k_device_cpu_bindings)
     if cpu is None:
         raise Error("ImportError: device='cpu' is not connected in this installation")
     var b = trees_builtins()
