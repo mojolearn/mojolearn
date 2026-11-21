@@ -1721,6 +1721,10 @@ class KNNImputer(_XNeighbors):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 9)
+
     def __init__(self, *, missing_values=float("nan"), n_neighbors=5, weights="uniform",
                  metric="nan_euclidean", copy=True, add_indicator=False, keep_empty_features=False, device=None):
         self.missing_values = missing_values

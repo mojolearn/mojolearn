@@ -11,7 +11,8 @@ x_neighbors door uses). No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor,
 2 OneClassSVM, 3 KernelPCA, 4 PolynomialCountSketch, 5 AdditiveChi2Sampler,
-6 SkewedChi2Sampler.
+6 SkewedChi2Sampler, 9 KNNImputer (7 LabelPropagation and 8 LabelSpreading
+are reserved: not members, see the boundary).
 The other classes of the family are not published yet
 (MEMBER-ABI-V2.md family 12). OUTPUTS with no state answers from the kind
 word and `call.classes` (NearestCentroid: proba `classes`, decision 1 for two
@@ -144,6 +145,26 @@ with no state. Blocks: 64 random_weights float32 features x n_components,
 65 random_offset float32 1 x n_components (an import whose width differs from
 n_components is refused).
 
+KNNImputer (kind 9). RUN: neighbors/knn_imputer_run.mojo `imp_fit_run`
+(the fit's column masks; the missing number's cells masked into the slot's
+rows) and `imp_transform_run`, over the x_neighbors entry, as
+bindings/neighbors_local_native_door.mojo `_imp_fit` / `_imp_transform`
+run them; the kept-column plan (`imp_keep_plan`) is built once per fitted
+state (the door builds it per transform). MEMBER_OP_NEW parameters (count
+10): [0] kind 9, [1] n_neighbors, [2] weights 'distance' (0 / 1), [3]
+missing_values is a number (0: NaN), [4] that number as a float32 word, [5]
+keep_empty_features, [6] add_indicator, [7] the uncompact-impute switch, [8]
+the old-items switch (the door's `family_xn_loc_flags`), [9] the image's lean
+fit entry (`x_neighbors_nc_fit_lean`). Views: X float32 rows x features
+(host, dense) -> float32 rows x (kept columns + one indicator column per
+feature missing at fit). OUTPUTS with no state answers only when the width is
+not chosen by the fit (keep_empty_features and no indicator: `x.cols`).
+Blocks: 64 the fitted rows float32 rows x features, 65 the columns valid at
+fit int32 1 x features (0 / 1), 66 the columns missing at fit int32 1 x count
+(absent when none). A fit BORROWS X as its fitted rows when no number is
+masked (as the estimator keeps the user's array), else the slot owns the
+masked copy (the door allocates the same new array).
+
 LIFETIME: a NearestCentroid fit reads X and y only during the call (its
 fitted state is the centroids it computes); nothing of X is kept or copied.
 A LocalOutlierFactor fit BORROWS X as its fitted rows, as the estimator's
@@ -209,7 +230,9 @@ from neighbors.neighbors_local_run import (
     LOF_RESULT_SCORES, LOF_RESULT_DECISION, LOF_RESULT_LABELS, lof_check_fit_rows, lof_fit_neighbors,
     lof_check_novelty, lof_refuse_fit_predict_novelty, local_check_n_neighbors,
     nc_check_classes, nc_check_priors_size, nc_check_variance, nc_refuse_decision_metric,
+    ImpKeepPlan, imp_keep_plan, imp_check_features,
 )
+from neighbors.knn_imputer_run import ImpFitRequest, ImpTransformRequest, imp_fit_run, imp_transform_run, imp_result_columns
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -220,7 +243,10 @@ comptime XNEIGHBORS_KIND_KERNEL_PCA = 3
 comptime XNEIGHBORS_KIND_PCS = 4
 comptime XNEIGHBORS_KIND_ACHI2 = 5
 comptime XNEIGHBORS_KIND_SCHI2 = 6
-comptime XNEIGHBORS_KIND_COUNT = 7
+comptime XNEIGHBORS_KIND_LABEL_PROPAGATION = 7   # reserved: not a member (the unlabeled marker; boundary)
+comptime XNEIGHBORS_KIND_LABEL_SPREADING = 8     # reserved: not a member (the unlabeled marker; boundary)
+comptime XNEIGHBORS_KIND_IMPUTER = 9
+comptime XNEIGHBORS_KIND_COUNT = 10
 comptime NC_BLOCK_CENTROIDS = MEMBER_BLOCK_FAMILY
 comptime NC_BLOCK_STD = MEMBER_BLOCK_FAMILY + 1
 comptime NC_BLOCK_DEVIATIONS = MEMBER_BLOCK_FAMILY + 2
@@ -252,6 +278,10 @@ comptime AC_BLOCK_FEATURES = MEMBER_BLOCK_FAMILY
 comptime SC_BLOCK_WEIGHTS = MEMBER_BLOCK_FAMILY
 comptime SC_BLOCK_OFFSET = MEMBER_BLOCK_FAMILY + 1
 comptime _SC_BLOCKS = 2
+comptime IM_BLOCK_ROWS = MEMBER_BLOCK_FAMILY
+comptime IM_BLOCK_VALID = MEMBER_BLOCK_FAMILY + 1
+comptime IM_BLOCK_MISSING = MEMBER_BLOCK_FAMILY + 2
+comptime _IM_BLOCKS = 3
 #: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
 comptime OC_GAMMA_VALUE = 0
 comptime OC_GAMMA_SCALE = 1
@@ -366,6 +396,21 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var sc_weights: List[Float32]
     var sc_offset: List[Float32]
     var sc_scratch: List[Float32]
+    # KNNImputer words (kind 9) and its fitted columns; the fitted rows are
+    # `rows_addr` (borrowed X, or `fit_rows`), as for LocalOutlierFactor.
+    var im_k: Int
+    var im_distance: Bool
+    var im_mask: Bool
+    var im_missing: Float64
+    var im_keep_empty: Bool
+    var im_indicator: Bool
+    var im_uncompact: Bool
+    var im_old_items: Bool
+    var im_lean: Bool
+    var im_valid: List[Int32]
+    var im_miss: List[Int]
+    var im_miss32: List[Int32]
+    var im_plan: ImpKeepPlan
 
     def __init__(out self):
         self.generation = 0
@@ -458,6 +503,19 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.sc_weights = List[Float32]()
         self.sc_offset = List[Float32]()
         self.sc_scratch = List[Float32]()
+        self.im_k = 5
+        self.im_distance = False
+        self.im_mask = False
+        self.im_missing = 0.0
+        self.im_keep_empty = False
+        self.im_indicator = False
+        self.im_uncompact = False
+        self.im_old_items = False
+        self.im_lean = False
+        self.im_valid = List[Int32]()
+        self.im_miss = List[Int]()
+        self.im_miss32 = List[Int32]()
+        self.im_plan = ImpKeepPlan(List[Int](), List[Int](), True)
 
 
 struct XNeighborsMemberStore(Defaultable, Movable):
@@ -514,6 +572,10 @@ def _clear(slot: _SlotPtr):
     slot[].sc_weights = List[Float32]()
     slot[].sc_offset = List[Float32]()
     slot[].sc_scratch = List[Float32]()
+    slot[].im_valid = List[Int32]()
+    slot[].im_miss = List[Int]()
+    slot[].im_miss32 = List[Int32]()
+    slot[].im_plan = ImpKeepPlan(List[Int](), List[Int](), True)
 
 
 def _mint(words: _F64P, count: Int) raises -> Int:
@@ -584,6 +646,16 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].sc_components = Int(words[1])
             slot[].sc_skew = words[2]
             slot[].sc_seed = Int(words[3])
+        elif slot[].kind == XNEIGHBORS_KIND_IMPUTER:
+            slot[].im_k = Int(words[1])
+            slot[].im_distance = words[2] != 0.0
+            slot[].im_mask = words[3] != 0.0
+            slot[].im_missing = words[4]
+            slot[].im_keep_empty = words[5] != 0.0
+            slot[].im_indicator = words[6] != 0.0
+            slot[].im_uncompact = words[7] != 0.0
+            slot[].im_old_items = (words[8] != 0.0) and not slot[].im_uncompact
+            slot[].im_lean = words[9] != 0.0
         else:
             slot[].k = Int(words[1])
             slot[].novelty = words[2] != 0.0
@@ -632,6 +704,8 @@ def _name(slot: _SlotPtr) -> String:
         return String("AdditiveChi2Sampler")
     if slot[].kind == XNEIGHBORS_KIND_SCHI2:
         return String("SkewedChi2Sampler")
+    if slot[].kind == XNEIGHBORS_KIND_IMPUTER:
+        return String("KNNImputer")
     return String("LocalOutlierFactor")
 
 
@@ -1719,6 +1793,159 @@ def _sc_import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------ KNNImputer
+
+
+def _im_columns(slot: _SlotPtr, valid: List[Bool], missing: List[Int]):
+    """The fitted column words and the kept-column plan, once per fitted state."""
+    slot[].im_valid = List[Int32](length=max(len(valid), 1), fill=Int32(0))
+    for f in range(len(valid)):  # driver-loop: over the d feature columns (the fit's column masks)
+        slot[].im_valid[f] = Int32(1) if valid[f] else Int32(0)
+    slot[].im_miss = missing.copy()
+    slot[].im_miss32 = List[Int32](length=max(len(missing), 1), fill=Int32(0))
+    for i in range(len(missing)):  # driver-loop: over the columns missing at fit
+        slot[].im_miss32[i] = Int32(missing[i])
+    slot[].im_plan = imp_keep_plan(valid)
+
+
+def _im_width(slot: _SlotPtr, rows: Int) -> Int:
+    """The transform's columns: the kept ones, then one indicator column per
+    feature missing at fit (none without add_indicator or without rows)."""
+    var indicator = len(slot[].im_miss) if (slot[].im_indicator and rows != 0) else 0
+    return imp_result_columns(slot[].features, slot[].im_keep_empty, slot[].im_plan, indicator)
+
+
+def _im_fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """`KNNImputer.fit` (bindings/neighbors_local_native_door.mojo
+    `_imp_fit`): the missing number's cells masked into the slot's rows (or
+    X borrowed as the fitted rows), then the column masks. fit_transform:
+    then the transform of the same rows (the door's order)."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    var transformed = call[].fit_output == MEMBER_OP_TRANSFORM
+    if call[].fit_output != 0 and not transformed:
+        member_unsupported(estimator, call[].fit_output)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var rows = call[].x.rows
+    var features = call[].x.cols
+    var count = rows * features
+    var mask = slot[].im_mask and count != 0
+    slot[].fitted = False
+    slot[].fit_rows = List[Float32]()
+    var masked = 0
+    if mask:
+        slot[].fit_rows = List[Float32](length=count, fill=Float32(0.0))
+        masked = Int(slot[].fit_rows.unsafe_ptr())
+    var columns = imp_fit_run(XnDriver(call[].route.entry.call),
+        ImpFitRequest(call[].x.data, masked, rows, features, slot[].im_missing, slot[].im_lean))
+    slot[].rows_addr = masked if mask else call[].x.data
+    slot[].rows = rows
+    slot[].features = features
+    _im_columns(slot, columns.valid, columns.missing)
+    slot[].fitted = True
+    if transformed:
+        _im_transform(slot, call)
+
+
+def _im_transform(slot: _SlotPtr, call: _CallPtr) raises:
+    """`_imp_transform`: mask, impute from the fitted rows, select the kept
+    columns, append the indicator block."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before transform")
+    _whole(call, estimator)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var rows = call[].x.rows
+    var features = call[].x.cols
+    imp_check_features(features, slot[].features)
+    var width = _im_width(slot, rows)
+    _dense(call[].dst, MEMBER_F32, "the transform buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != width:
+        raise Error("ValueError: the transform buffer holds " + String(width) + " columns per row of X")
+    var request = ImpTransformRequest(call[].x.data, slot[].rows_addr, call[].dst.data, rows, slot[].rows, features,
+        slot[].im_k, slot[].im_distance, slot[].im_mask and rows * features != 0, slot[].im_missing,
+        slot[].im_uncompact, slot[].im_old_items, slot[].im_keep_empty)
+    var driver = XnDriver(call[].route.entry.call)
+    if slot[].im_indicator and rows != 0 and len(slot[].im_miss) > 0:
+        imp_transform_run(driver, request, slot[].im_plan, slot[].im_miss)
+    else:
+        imp_transform_run(driver, request, slot[].im_plan, List[Int]())
+
+
+def _im_export(slot: _SlotPtr, call: _CallPtr) raises:
+    """A view of one fitted block (the borrowed rows are copied here once)."""
+    if not slot[].fitted:
+        raise Error("NotFittedError: this KNNImputer member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block >= _IM_BLOCKS:
+            raise Error("member ABI: a KNNImputer member has three fitted blocks")
+        block = IM_BLOCK_ROWS + block
+    if block == IM_BLOCK_ROWS:
+        _lof_own_rows(slot)
+        call[].dst = MemberMatrix(slot[].rows_addr, slot[].rows, slot[].features)
+    elif block == IM_BLOCK_VALID:
+        call[].dst = MemberMatrix(Int(slot[].im_valid.unsafe_ptr()), 1, slot[].features, MEMBER_I32)
+    elif block == IM_BLOCK_MISSING:
+        call[].dst = MemberMatrix(Int(slot[].im_miss32.unsafe_ptr()), 1, len(slot[].im_miss), MEMBER_I32)
+    else:
+        raise Error("member ABI: a KNNImputer member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _IM_BLOCKS
+
+
+def _im_import(slot: _SlotPtr, call: _CallPtr) raises:
+    """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state (the
+    rows and the valid columns are required; no missing block = none)."""
+    var estimator = _name(slot)
+    var block = call[].block
+    var count = call[].x.rows * call[].x.cols
+    if block == IM_BLOCK_ROWS:
+        _dense(call[].x, MEMBER_F32, "_fit_X", estimator)
+        slot[].fitted = False
+        var words = List[Float32](length=max(count, 1), fill=Float32(0.0))
+        if count > 0:
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        slot[].fit_rows = words^
+        slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
+        slot[].rows = call[].x.rows
+        slot[].features = call[].x.cols
+    elif block == IM_BLOCK_VALID or block == IM_BLOCK_MISSING:
+        slot[].fitted = False
+        var words = List[Int](capacity=count)
+        if count > 0:
+            _dense(call[].x, MEMBER_I32, "a column list", estimator)
+            var source = _I32P(unsafe_from_address=call[].x.data)
+            for i in range(count):  # driver-loop: over the feature columns of a fitted column list
+                words.append(Int(source[i]))
+        if block == IM_BLOCK_VALID:
+            slot[].im_valid = List[Int32](length=max(count, 1), fill=Int32(0))
+            for i in range(count):  # driver-loop: over the d feature columns
+                slot[].im_valid[i] = Int32(1) if words[i] != 0 else Int32(0)
+            slot[].classes = count   # the valid-column count, checked at DONE
+        else:
+            slot[].im_miss = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a KNNImputer member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var features = slot[].features
+    if (slot[].rows < 1 or len(slot[].fit_rows) < slot[].rows * features or slot[].classes != features):
+        raise Error("member ABI: a KNNImputer import needs _fit_X and one valid word per feature")
+    var valid = List[Bool](capacity=features)
+    for f in range(features):  # driver-loop: over the d feature columns
+        valid.append(slot[].im_valid[f] != 0)
+    for i in range(len(slot[].im_miss)):  # driver-loop: over the columns missing at fit
+        if slot[].im_miss[i] < 0 or slot[].im_miss[i] >= features:
+            raise Error("member ABI: a KNNImputer missing column is outside the fitted features")
+    var missing = slot[].im_miss.copy()
+    _im_columns(slot, valid, missing)
+    slot[].classes = 0
+    slot[].fitted = True
+
+
 # ------------------------------------------------------------ dispatch
 
 
@@ -1742,7 +1969,8 @@ def _capabilities(slot: _SlotPtr) -> Int:
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         return _OCSVM
     if (slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA or slot[].kind == XNEIGHBORS_KIND_PCS
-            or slot[].kind == XNEIGHBORS_KIND_ACHI2 or slot[].kind == XNEIGHBORS_KIND_SCHI2):
+            or slot[].kind == XNEIGHBORS_KIND_ACHI2 or slot[].kind == XNEIGHBORS_KIND_SCHI2
+            or slot[].kind == XNEIGHBORS_KIND_IMPUTER):
         return _TRANSFORMER
     return _NC_EUCLIDEAN if slot[].euclidean else _NC_MANHATTAN
 
@@ -1787,6 +2015,13 @@ def _new(call: _CallPtr) raises:
         if call[].param_count != 4:
             raise Error("member ABI: a SkewedChi2Sampler member takes four parameters (kind, n_components, "
                 + "skewedness, seed word)")
+    elif kind == XNEIGHBORS_KIND_IMPUTER:
+        if call[].param_count != 10:
+            raise Error("member ABI: a KNNImputer member takes ten parameters (kind, n_neighbors, distance, "
+                + "mask, missing value, keep_empty_features, add_indicator, uncompact, old_items, lean)")
+        local_check_n_neighbors(Int(words[1]))
+    elif kind == XNEIGHBORS_KIND_LABEL_PROPAGATION or kind == XNEIGHBORS_KIND_LABEL_SPREADING:
+        raise Error("member ABI: LabelPropagation and LabelSpreading are not XNeighbors members")
     else:
         if call[].param_count != 7:
             raise Error("member ABI: a LocalOutlierFactor member takes seven parameters (kind, n_neighbors, "
@@ -1842,6 +2077,16 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             call[].classes = 0
             call[].out_cols = xn_achi2_width(call[].x.cols, Int(_F64P(unsafe_from_address=call[].params)[1]))
             return 0
+        if asked == XNEIGHBORS_KIND_IMPUTER:
+            if call[].param_count != 10:
+                raise Error("member ABI: a KNNImputer member takes ten parameters")
+            var asked_words = _F64P(unsafe_from_address=call[].params)
+            if asked_words[5] == 0.0 or asked_words[6] != 0.0:
+                # The kept columns (and the indicator columns) are chosen by the fit.
+                raise Error("member ABI: a KNNImputer member's transform width is chosen by its fit; ask a fitted state")
+            call[].classes = 0
+            call[].out_cols = call[].x.cols
+            return 0
         if asked == XNEIGHBORS_KIND_SCHI2:
             if call[].param_count != 4:
                 raise Error("member ABI: a SkewedChi2Sampler member takes four parameters")
@@ -1876,7 +2121,25 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             call[].classes = 0
             call[].out_cols = slot[].sc_components
             return 0
+        if slot[].kind == XNEIGHBORS_KIND_IMPUTER:
+            if not slot[].fitted and (not slot[].im_keep_empty or slot[].im_indicator):
+                raise Error("member ABI: a KNNImputer member's transform width is chosen by its fit; fit it first")
+            call[].classes = 0
+            call[].out_cols = _im_width(slot, 1) if slot[].fitted else call[].x.cols
+            return 0
         _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
+        return 0
+    if slot[].kind == XNEIGHBORS_KIND_IMPUTER:
+        if operation == MEMBER_OP_FIT:
+            _im_fit(slot, call)
+        elif operation == MEMBER_OP_TRANSFORM:
+            _im_transform(slot, call)
+        elif operation == MEMBER_OP_EXPORT:
+            _im_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _im_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_SCHI2:
         if operation == MEMBER_OP_FIT:

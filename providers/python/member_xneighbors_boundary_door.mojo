@@ -3,7 +3,12 @@
 core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
 LocalOutlierFactor (kind 1), OneClassSVM (kind 2), KernelPCA (kind 3),
 PolynomialCountSketch (kind 4), AdditiveChi2Sampler (kind 5), SkewedChi2Sampler (kind 6).
-Not yet published (admit refuses with the kind): LabelPropagation LabelSpreading KNNImputer SVGP.
+KNNImputer (kind 9). Not yet published (admit refuses with the kind): SVGP.
+NOT MEMBERS: LabelPropagation, LabelSpreading (kinds 7, 8 reserved): their y
+carries the unlabeled marker -1, which the member ABI's class codes cannot
+name (a caller encodes -1 as an ordinary class; the codes-to-labels map
+exists only at the caller's fit). NEEDS ma-core: an "unlabeled code" word
+at FIT.
 
   * `xneighbors_member_admit` (UNPACK): the estimator's own parameter checks
     (bindings/neighbors_local_native_door.mojo `_nc_fit_unpack`), its route
@@ -42,6 +47,11 @@ Not yet published (admit refuses with the kind): LabelPropagation LabelSpreading
     image whose transform takes the FAST lazy-weights path (kfeat bit 4): the
     member serves the eager weights only; pack = `_schi2_fit`'s fields
     (`_random_weights`, `random_offset_`, `n_features_in_`).
+    KNNImputer: admit = `_imp_check` (the door's own refusals, on the shared
+    family context), the door's words, the `family_xn_loc_flags` arms and the
+    image's lean fit probe; an n_neighbors the door refuses only at transform
+    (after its fit) answers False; pack = `_imp_fit`'s fields (`_valid`,
+    `_miss_cols`, `_fit_X` as a new Array, `n_features_in_`).
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
@@ -89,7 +99,9 @@ from core.ocsvm_resident_api import OCSVM_RESIDENT_COUNT
 from svm.svc_ocsvm_native_run import OC_SOLVE_GRAM, OC_SOLVE_RESIDENT, OC_SOLVE_DESCRIPTOR
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from providers.python.x_neighbors_admission_pyapi_door import xn_is_module, xn_capabilities
-from bindings.neighbors_local_native_door import _lof_check
+from bindings.neighbors_local_native_door import (
+    _lof_check, _imp_check, _imp_missing, _truth as _loc_truth, _int_word as _loc_int, _eq as _loc_eq,
+)
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setitem, py_type
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU, device_vendor_code
@@ -102,6 +114,7 @@ from core.xneighbors_member import (
     XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF, XNEIGHBORS_KIND_OCSVM, XNEIGHBORS_KIND_KERNEL_PCA,
     XNEIGHBORS_KIND_PCS, PC_BLOCK_INDEX_HASH, PC_BLOCK_BIT_HASH, PC_BLOCK_FEATURES,
     XNEIGHBORS_KIND_ACHI2, AC_BLOCK_FEATURES, XNEIGHBORS_KIND_SCHI2, SC_BLOCK_WEIGHTS, SC_BLOCK_OFFSET,
+    XNEIGHBORS_KIND_IMPUTER, IM_BLOCK_ROWS, IM_BLOCK_VALID, IM_BLOCK_MISSING,
     KP_BLOCK_ROWS, KP_BLOCK_VALUES, KP_BLOCK_VECTORS, KP_BLOCK_COLUMNS, KP_BLOCK_TOTAL, KP_BLOCK_GAMMA,
     OC_BLOCK_VECTORS, OC_BLOCK_DUAL, OC_BLOCK_SUPPORT, OC_BLOCK_SCALARS, OC_GAMMA_VALUE, OC_GAMMA_SCALE, OC_GAMMA_AUTO,
     NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
@@ -115,6 +128,7 @@ from x_neighbors.descriptor_schema import XN_OPERATION_COUNT
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
+comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]   # was used by _pcs_table without a definition (round 3)
 
 
 def _image_word(module: PythonObject, name: String, b: PythonObject) raises -> PythonObject:
@@ -397,6 +411,38 @@ def _schi2_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     return True
 
 
+def _imputer_admit(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    """`KNNImputer._check` (`_imp_check`) and the words `_imp_fit` /
+    `_imp_transform` read: n_neighbors, weights, the missing number
+    (`_imp_missing`), keep_empty_features, add_indicator, the A/B arms where
+    the door reads them, the image's lean fit entry."""
+    var family = _family_context()
+    _imp_check(fields, family)
+    var k = _loc_int(family_field(fields, "n_neighbors"))
+    if k < 1:
+        # The door's fit takes it and its transform refuses it: keep the door.
+        return False
+    var distance = _loc_eq(family_field(fields, "weights"), PythonObject("distance"))
+    var missing = _imp_missing(fields, 1)
+    var keep_empty = _loc_truth(family_field(fields, "keep_empty_features"))
+    var indicator = _loc_truth(family_field(fields, "add_indicator"))
+    var flags = _loc_flags()
+    var uncompact = _flag_word(flags, "uncompact_impute")
+    var old_items = _flag_word(flags, "old_items")
+    if not _route(model, context, b, owner):
+        return False
+    var lean = False
+    var probe = py_call(b.getattr, xn_module(owner.pins[0]), PythonObject("x_neighbors_nc_fit_lean"), PythonObject(None))
+    if probe is not None:
+        lean = Int(py=py_call(b.int, py_call(probe))) != 0
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_IMPUTER), Float64(k), 1.0 if distance else 0.0,
+        1.0 if missing[0] else 0.0, missing[1], 1.0 if keep_empty else 0.0, 1.0 if indicator else 0.0,
+        uncompact, old_items, 1.0 if lean else 0.0]
+    owner.plan.params = words^
+    return True
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -411,6 +457,8 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         return _achi2_admit(model, fields, context, b, owner)
     if kind == XNEIGHBORS_KIND_SCHI2:
         return _schi2_admit(model, fields, context, b, owner)
+    if kind == XNEIGHBORS_KIND_IMPUTER:
+        return _imputer_admit(model, fields, context, b, owner)
     if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
     if kind == XNEIGHBORS_KIND_LOF:
@@ -914,6 +962,70 @@ def _schi2_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) 
     return call.state
 
 
+def _imputer_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`_imp_fit`'s fields: `_valid` (one bool per feature), `_miss_cols`
+    (ints), `_fit_X` (a new Array: the member's copy of the rows),
+    `n_features_in_`."""
+    var call = MemberCall(plan.route, state)
+    call.block = IM_BLOCK_ROWS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var features = call.dst.cols
+    var rows = _publish_block(call, "<f4", context, 4, False)
+    call.block = IM_BLOCK_VALID
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var valid = Python.list()
+    var words = _I32P(unsafe_from_address=call.dst.data)
+    for f in range(call.dst.cols):  # driver-loop: over the d feature columns (packing the fit's column masks)
+        _ = py_call(valid.append, PythonObject(words[f] != 0))
+    call.block = IM_BLOCK_MISSING
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var miss = Python.list()
+    var missing = _I32P(unsafe_from_address=call.dst.data)
+    for i in range(call.dst.cols):  # driver-loop: over the columns missing at fit (packing)
+        _ = py_call(miss.append, PythonObject(Int(missing[i])))
+    py_setitem(fields, "_valid", valid)
+    py_setitem(fields, "_miss_cols", miss)
+    py_setitem(fields, "_fit_X", rows)
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _imputer_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    """A state from `_fit_X`, `_valid` and `_miss_cols`."""
+    var rows = _f32_block(fields, "_fit_X", 2, context)
+    var valid_source = py_get(fields, PythonObject("_valid"))
+    var miss_source = py_get(fields, PythonObject("_miss_cols"))
+    if valid_source is None or miss_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var valid = List[Int32]()
+    for f in range(len(valid_source)):  # driver-loop: over the d feature columns (the fit's column masks)
+        var item = valid_source[f]
+        valid.append(Int32(1) if _loc_truth(item) else Int32(0))
+    var miss = List[Int32]()
+    for i in range(len(miss_source)):  # driver-loop: over the columns missing at fit
+        var item = miss_source[i]
+        miss.append(Int32(_loc_int(item)))
+    var call = member_new(plan)
+    try:
+        call.block = IM_BLOCK_ROWS
+        call.x = MemberMatrix(Int(py=classical_address(rows)), Int(py=rows.shape[0]), Int(py=rows.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        if len(miss) > 0:
+            call.block = IM_BLOCK_MISSING
+            call.x = MemberMatrix(Int(miss.unsafe_ptr()), 1, len(miss), MEMBER_I32)
+            _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = IM_BLOCK_VALID
+        call.x = MemberMatrix(Int(valid.unsafe_ptr()), 1, len(valid), MEMBER_I32)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = rows
+    _ = valid^
+    _ = miss^
+    return call.state
+
+
 def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -930,6 +1042,8 @@ def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: P
         _achi2_pack(fields, plan, state)
     elif plan.kind == XNEIGHBORS_KIND_SCHI2:
         _schi2_pack(fields, context, plan, state)
+    elif plan.kind == XNEIGHBORS_KIND_IMPUTER:
+        _imputer_pack(fields, context, plan, state)
     else:
         _nc_pack(fields, context, b, plan, state)
 
@@ -950,4 +1064,6 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
         return _achi2_state(fields, b, plan)
     if plan.kind == XNEIGHBORS_KIND_SCHI2:
         return _schi2_state(fields, context, plan)
+    if plan.kind == XNEIGHBORS_KIND_IMPUTER:
+        return _imputer_state(fields, context, plan)
     return _nc_state(fields, context, plan)
