@@ -1451,6 +1451,11 @@ def _ord_split_subsets(
     host_parallelize(place, units)
     _ = len(docs)
     _ = len(zero_at)
+    # the old bins and indices are read by the tasks through `bins_p` /
+    # `idx_p` and assigned just below: named past the joins (lane
+    # fx-gbdt-segv, the freed-before-read of `_split_leaves`)
+    _ = len(s.bins)
+    _ = len(s.indices)
     s.bins = new_bins^
     s.indices = new_indices^
 
