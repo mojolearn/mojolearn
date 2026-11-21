@@ -30,7 +30,21 @@ def cpu_scope_later(context):
         from ._native_labels_bridge import cpu_scope
         cpu_scope(context)
     else:
+        _hold_cpu_connect(context)
         _CPU_LATER.append(context)
+
+
+def _hold_cpu_connect(context):
+    """Give a lazily connected family context `device_cpu_connect`
+    (`connect_cpu`): a device="cpu" estimator restored without construction
+    (unpickle, copy, archive load) admits the CPU device at its first label
+    step or score route through it, once, as construction does
+    (providers/python/device_route_boundary_door.mojo
+    `device_cpu_connect_late`). A CPU-only installation needs none."""
+    # glue: import-time registration, once per family context
+    from . import _backend
+    if _backend._CPU_ONLY is None:
+        context["device_cpu_connect"] = connect_cpu
 
 
 def _connect_cpu(context):
@@ -109,6 +123,8 @@ def shared_context():
         _CONTEXT = context
         if _CPU_WANTED:
             _connect_cpu(context)
+        else:
+            _hold_cpu_connect(context)
         _connect_context_module()
     return _CONTEXT
 
