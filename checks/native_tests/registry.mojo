@@ -269,7 +269,6 @@ from checks.native_tests.labels_driver import register as register_labels_driver
 from checks.native_tests.labels_score_keys import register as register_labels_score_keys
 from checks.native_tests.linear_boundary_contracts import register as register_linear_boundary_contracts
 from checks.native_tests.linear_entry_production import register as register_linear_entry_production
-from checks.native_tests.trees_route import register as register_trees_route
 from checks.native_tests.linear_model_state import register as register_linear_model_state
 from checks.native_tests.lof_plan_contract import register as register_lof_plan_contract
 from checks.native_tests.logistic_config import register as register_logistic_config
@@ -310,6 +309,7 @@ from checks.native_tests.seq_opt_entry import register as register_seq_opt_entry
 from checks.native_tests.sequence_input_plan_check import register as register_sequence_input_plan_check
 from checks.native_tests.spectral_contract import register as register_spectral_contract
 from checks.native_tests.spectral_state import register as register_spectral_state
+from checks.native_tests.forest_door_values import register as register_forest_door_values
 from checks.native_tests.trees_door_run import register as register_trees_door_run
 from checks.native_tests.trees_entry_dart import register as register_trees_entry_dart
 from checks.native_tests.trees_entry_forest import register as register_trees_entry_forest
@@ -853,7 +853,6 @@ def all_checks() -> List[Check]:
     checks.append(register_labels_score_keys())
     checks.append(register_linear_boundary_contracts())
     checks.append(register_linear_entry_production())
-    checks.append(register_trees_route())
     checks.append(register_linear_model_state())
     checks.append(register_lof_plan_contract())
     checks.append(register_logistic_config())
@@ -894,6 +893,7 @@ def all_checks() -> List[Check]:
     checks.append(register_sequence_input_plan_check())
     checks.append(register_spectral_contract())
     checks.append(register_spectral_state())
+    checks.append(register_forest_door_values())
     checks.append(register_trees_door_run())
     checks.append(register_trees_entry_dart())
     checks.append(register_trees_entry_forest())

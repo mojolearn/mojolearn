@@ -38,7 +38,7 @@ from bindings.trees_public_gbdt_door import (
     feature_freq_fit, adapter_decision_function, adapter_predict, adapter_predict_proba,
 )
 from bindings.trees_keys_unpack import trees_keys
-from bindings.trees_route_boundary_door import trees_route_enter, trees_route_leave, trees_route_vendor
+from bindings.trees_route_boundary_door import trees_route_context, trees_route_vendor
 from bindings.native_operation_codes import OP_LEAF_NONE
 from bindings.operation_names_trees import (
     TREES_OPN_TREES_RESIDENT_STATS, TREES_OPN_TREES_GBDT_ADAPTER_CONSTRUCT, TREES_OPN_TREES_GBDT_ADAPTER_PUBLIC_SET_PARAMS,
@@ -73,18 +73,18 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
     text only."""
     if py_unavailable(context):
         raise Error("ImportError: mojolearn: the tree ensembles are not connected")
-    # The estimator's device (bindings/trees_route_boundary_door.mojo): the
+    # A constructor stores the device (checked there) and drops the route:
+    # it runs in the connection context, before any route is read.
+    if operation == TREES_OPN_TREES_FOREST_CONSTRUCT:
+        classical_connect_numpy(context)
+        return forest_construct(model, args, context)
+    if operation == TREES_OPN_TREES_DART_CONSTRUCT:
+        classical_connect_numpy(context)
+        return dart_construct(model, args, context)
+    # The estimator's route (bindings/trees_route_boundary_door.mojo): the
     # context this operation runs in names the device table set or the CPU
-    # table set. Default device: two held-key reads, the same context.
-    var route = trees_route_enter(model, name, context)
-    var result = _trees_operation(model, operation, name, args, route.context)
-    trees_route_leave(route)
-    return result
-
-
-def _trees_operation(model: PythonObject, operation: Int, name: String, args: PythonObject,
-                     var context: PythonObject) raises -> PythonObject:
-    """`trees_public_operation` in the context of the estimator's device."""
+    # table set. One record read; no operation reads the device.
+    context = trees_route_context(model, context)
     # Connect a loaded NumPy's native types (ndarray inputs, pandas
     # storage); outputs stay mojolearn Arrays.
     classical_connect_numpy(context)
@@ -103,10 +103,6 @@ def _trees_operation(model: PythonObject, operation: Int, name: String, args: Py
         return iforest_getstate(model, context)
     if operation == TREES_OPN_TREES_FOREST_GETSTATE or operation == TREES_OPN_TREES_GBDT_GETSTATE:
         return tree_export_state(model, operation == TREES_OPN_TREES_FOREST_GETSTATE)
-    if operation == TREES_OPN_TREES_FOREST_CONSTRUCT:
-        return forest_construct(model, args, context)
-    if operation == TREES_OPN_TREES_DART_CONSTRUCT:
-        return dart_construct(model, args, context)
     if operation < TREES_FIRST_LATE:
         # The public lifecycles and the explainers (groups in chain order).
         if operation < TREES_END_PUBLIC_IFOREST:
@@ -145,7 +141,7 @@ def _trees_operation(model: PythonObject, operation: Int, name: String, args: Py
     if operation >= TREES_FIRST_IFOREST and operation < TREES_END_IFOREST:
         return iforest_operation(model, name, args, context)
     if operation == TREES_OPN_TREES_BAGGING_MEMBERS:
-        return bagging_members(model)
+        return bagging_members(model, context)
     if operation == TREES_OPN_TREES_BAGGING_MEMBERS_SET:
         return bagging_members_set(model, args[0], context)
     if operation >= TREES_FIRST_PUBLIC_BOOST and operation < TREES_END_PUBLIC_BOOST:

@@ -134,3 +134,41 @@ def test_a_closed_cpu_session_refuses_like_any_closed_session():
     s.close()
     with pytest.raises(Exception):
         s.tensor(np.ones((2, 2), dtype=np.float32))
+
+
+# ---------------------------------------------------------------- import_model(device=)
+# An imported program owns a private Session; `device=` is that session's, by the same rule and words.
+
+def _imported_fixture(tmp_path):
+    from mojolearn.tests import _onnx_fixture as fx
+    return fx.write_fixture("linear_layernorm_linear", tmp_path)
+
+
+@pytest.mark.parametrize("bad", ["tpu", "GPU", "", 0])
+def test_import_model_refuses_an_unknown_device_in_the_shared_words(tmp_path, bad):
+    f = _imported_fixture(tmp_path)
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        mojolearn.import_model(f.path, shapes={"x": (4, 6)}, device=bad)
+
+
+def test_import_model_default_device_is_this_installation(tmp_path):
+    f = _imported_fixture(tmp_path)
+    with ops.Session() as s:
+        here = s._b.ops_imported_run
+    assert mojolearn.import_model(f.path, shapes={"x": (4, 6)})._run_native is here
+    assert mojolearn.import_model(f.path, shapes={"x": (4, 6)}, device=None)._run_native is here
+
+
+def test_import_model_on_the_cpu_runs_the_cpu_image_and_matches_the_gpu_bits(tmp_path):
+    f = _imported_fixture(tmp_path)
+    x = np.random.default_rng(11).standard_normal((4, 6), dtype=np.float32)
+    with ops.Session(device="cpu") as s:
+        cpu_run = s._b.ops_imported_run
+    on_cpu = mojolearn.import_model(f.path, shapes={"x": (4, 6)}, numeric_mode="identical", device="cpu")
+    assert on_cpu._run_native is cpu_run
+    y_cpu = np.array(on_cpu.run(x), copy=True)
+    assert y_cpu.shape == (4, 3)
+    if TWO_DEVICES:
+        on_gpu = mojolearn.import_model(f.path, shapes={"x": (4, 6)}, numeric_mode="identical", device="gpu")
+        assert on_gpu._run_native is not cpu_run
+        assert np.array(on_gpu.run(x), copy=True).tobytes() == y_cpu.tobytes()

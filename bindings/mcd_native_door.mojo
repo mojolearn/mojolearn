@@ -29,7 +29,7 @@ from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.decomp_kit_native_door import (
-    DecompDoor, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries, decomp_is_a,
+    DecompDoor, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries, decomp_entries_routed, decomp_kit_device_operation, decomp_is_a,
     decomp_kit_unpack, decomp_kit_publish, decomp_kit_out_shape, decomp_door_borrow, decomp_door_input,
     decomp_door_resident_hit, decomp_door_resident_input,
 )
@@ -49,6 +49,8 @@ from bindings.mcd_keys_unpack import (
     MCD_OPN_DECISION_FUNCTION,
     MCD_OPN_PREDICT,
     MCD_OPN_ELLIPTIC_SCORE,
+    MCD_OPN_DEVICE_SET,
+    MCD_OPN_VENDOR_USED,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -115,7 +117,7 @@ def mcd_fit(model: PythonObject, args: PythonObject, envelope: Bool, predict: Bo
     var fields = py_fields(model)
     var mode = decomp_mode(py_item(fields, nk[].k_numeric_mode), context)
     py_setitem(fields, nk[].k_numeric_mode_, mode)
-    var entries = decomp_entries(mode, context)
+    var entries = decomp_entries_routed(model, fields, mode, context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -184,7 +186,7 @@ def mcd_operation(model: PythonObject, operation: Int, args: PythonObject, envel
                 raise Error("contamination must be in (0, 0.5]")
         return mcd_fit(model, args, envelope, operation == MCD_OPN_FIT_PREDICT, context)
     _check_fitted(model, fields)
-    var entries = decomp_entries(py_get(fields, nk[].k_numeric_mode_), context)
+    var entries = decomp_entries_routed(model, fields, py_get(fields, nk[].k_numeric_mode_), context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -284,7 +286,9 @@ def mcd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var depth = decomp_public_begin(model, method, args, True, True, context)
         var result = PythonObject(None)
         try:
-            if operation == MCD_OPN_ELLIPTIC_SCORE:
+            if operation == MCD_OPN_DEVICE_SET or operation == MCD_OPN_VENDOR_USED:
+                result = decomp_kit_device_operation(model, operation == MCD_OPN_DEVICE_SET, args, context)
+            elif operation == MCD_OPN_ELLIPTIC_SCORE:
                 result = elliptic_score(model, args, envelope, context)
             else:
                 result = mcd_operation(model, operation, args, envelope, context)

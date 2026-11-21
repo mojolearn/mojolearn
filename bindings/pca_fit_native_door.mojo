@@ -19,7 +19,7 @@ from bindings.admitted_input_unpack import admitted_finite_refuse
 from bindings.device_rows_door import door_rows_refuse, door_is_device_rows
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_capture
 from providers.python.pca_fit_model_pyapi_unpack import pca_fit_route, pca_fit_host_only, pca_fit_preflight
-from core.linear_route import LINEAR_DEVICE_CPU
+from core.device_route import DEVICE_CPU
 from providers.python.pca_fit_model_pyapi_pack import pca_fit_fields
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
@@ -97,7 +97,7 @@ def pca_fit_operation(model: PythonObject, args: PythonObject, project: Bool,
     # A `device="cpu"` estimator takes the fold's host rows: the fold entry
     # is the device image's.
     if (pca_mode(connection) == 1 and not project and solver != "randomized"
-            and route.device != LINEAR_DEVICE_CPU and door_is_device_rows(source, context)):
+            and route.device != DEVICE_CPU and door_is_device_rows(source, context)):
         fold_connection = pca_fold_connection(context)
     var fold_ok = fold_connection >= 0
     var x = decomp_admit(source, "PCA", context, device_x=fold_ok, defer_finite=True)

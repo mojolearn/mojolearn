@@ -17,26 +17,36 @@ from bindings.py_lists import py_list_f64
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome, GBDT_ARG_NO_INT, GBDT_ARG_NO_FLOAT
 
 
+@always_inline
+def gbdt_fit_param_py(item: PythonObject, mut ints: List[Int], mut floats: List[Float64],
+                      mut bad: List[UInt8]):
+    """One parameter's two views and flag (UNPACK): an integer where
+    `Int(py=)` succeeds, a float where `Float64(py=)` succeeds, a flag for a
+    reading that failed. The one conversion of a fit parameter: the params
+    list readers below and the forest door's list-free request
+    (bindings/trees_public_forest_door.mojo) both go through it."""
+    var flag = UInt8(0)
+    var iv = 0
+    var fv = Float64(0)
+    try:
+        iv = Int(py=item)
+    except:
+        flag |= UInt8(GBDT_ARG_NO_INT)
+    try:
+        fv = Float64(py=item)
+    except:
+        flag |= UInt8(GBDT_ARG_NO_FLOAT)
+    ints.append(iv)
+    floats.append(fv)
+    bad.append(flag)
+
+
 def gbdt_fit_params_py(params: PythonObject, mut ints: List[Int], mut floats: List[Float64],
                        mut bad: List[UInt8]) raises:
     """The params list's two views and flags (UNPACK)."""
     var n = len(params)
     for k in range(n):  # small-loop(params: 35 fixed slots, the class weights and the short tails): Python parameter list, not row data
-        var item = params[k]
-        var flag = UInt8(0)
-        var iv = 0
-        var fv = Float64(0)
-        try:
-            iv = Int(py=item)
-        except:
-            flag |= UInt8(GBDT_ARG_NO_INT)
-        try:
-            fv = Float64(py=item)
-        except:
-            flag |= UInt8(GBDT_ARG_NO_FLOAT)
-        ints.append(iv)
-        floats.append(fv)
-        bad.append(flag)
+        gbdt_fit_param_py(params[k], ints, floats, bad)
 
 
 def gbdt_fit_strs_py(strs: PythonObject) raises -> List[String]:

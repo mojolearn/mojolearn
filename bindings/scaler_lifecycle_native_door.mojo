@@ -49,8 +49,9 @@ from bindings.scaler_keys_unpack import (
     SCALER_OPN_TRANSFORM, SCALER_OPN_PARTIAL_FIT, SCALER_OPN_FIT_TRANSFORM, SCALER_OPN_SAVE, SCALER_OPN_LOAD,
     SCALER_OPN_VENDOR_USED,
 )
-from providers.python.prep_route_boundary_door import (
-    prep_route_context, prep_route_clear, prep_device_admit, prep_route_vendor_used,
+from bindings.scaler_route_unpack import (
+    scaler_route_context, scaler_route_clear, scaler_device_admit, scaler_route_vendor_used, scaler_selection_held,
+    scaler_selection_keep, scaler_route_refuse_fast,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -73,6 +74,21 @@ def _entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     # The two mode probes run once per binding (prep_entry_cache).
     if not prep_mode_checked(entries, expected):
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
+    return entries
+
+
+def scaler_entries(model: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_entries` of an estimator's operation: the selection its device route
+    holds for `mode` (one record read and pointer compares; no dictionary
+    read, mode probe or String build), or the selection made here by
+    `_entries`' own checks, in its order and words, and kept in the route.
+    `device="cpu"` with the fast mode is refused in the shared words first."""
+    var held = scaler_selection_held(model, mode, context)
+    if held is not None:
+        return held
+    scaler_route_refuse_fast(model, mode, context)
+    var entries = _entries(mode, context)
+    scaler_selection_keep(model, mode, entries, context)
     return entries
 
 
@@ -240,8 +256,8 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     if not _fitted(fields):
         _ = classical_not_fitted_class(context)
         raise Error("NotFittedError: StandardScaler is not fitted")
-    var entries = _entries(py_item(fields, nk[].k_numeric_mode_), context)
-    var calls = scaler_transform_calls(entries, context)
+    var entries = scaler_entries(model, py_item(fields, nk[].k_numeric_mode_), context)
+    var calls = scaler_transform_calls(model, entries, context)
     var snapshot = scaler_operation_input(source, context, input_cache)
     var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
     var values = captured[].values
@@ -366,9 +382,9 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     answer_mode_object(mode, mode_word, MODE_FAMILY_SCALER)
     if Bool(py=py_get(context,nk[].k_scaler_explicit_host,False)) and String(mode) != "identical":
         raise Error("HostStandardScaler runs identical only on the host")
-    var entries = scaler_fit_entries(mode, context)
+    var entries = scaler_fit_entries(model, mode, context)
     var batch = scaler_fit_input(source, weights, context, PythonObject(None))
-    var calls = scaler_door_calls(entries)
+    var calls = scaler_door_calls(model, entries, context)
     var x = batch.x
     var weight = batch.weight
     var weighted = batch.weighted
@@ -444,7 +460,7 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
         # the same words), else the FAST Apple experiment's fused export.
         # Without either (the host column, MOJOLEARN_SCALER_DIRECT=0) the
         # two-step route below runs.
-        var entries = _entries(mode, context)
+        var entries = scaler_entries(model, mode, context)
         var entry = _direct(entries, "standard_fit_transform")
         if entry is None and String(mode) == "fast":
             entry = _direct(entries, "standard_fit_transform_direct")
@@ -603,11 +619,11 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var cls = model if is_class else py_type(model)
         if not is_class and (op == SCALER_OPN_TRANSFORM or op == SCALER_OPN_PARTIAL_FIT or op == SCALER_OPN_FIT_TRANSFORM):
             # A data operation runs in the estimator's route
-            # (providers/python/prep_route_boundary_door.mojo): the process's
+            # (bindings/scaler_route_unpack.mojo): the process's
             # context, the CPU one of `device="cpu"`, or an explicit Host*
             # class's own. One record read and one pointer compare; the
             # route's first resolution reads `device` and the host table.
-            context = prep_route_context(model, root)
+            context = scaler_route_context(model, root)
         else:
             # Parameter, archive and class-level operations compute nothing
             # on a device: the explicit host table by class, as before.
@@ -624,10 +640,10 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             var device = PythonObject(None)
             if len(args) > 4:
                 device = args[4]
-            prep_device_admit(device, cls, root)
+            scaler_device_admit(device, cls, root)
             result = scaler_initialize(model,args)
             py_setitem(py_fields(model), nk[].k_device, device)
-            prep_route_clear(model)
+            scaler_route_clear(model)
         elif op == SCALER_OPN_GET_PARAMS:
             var fields = py_fields(model)
             result = Python.dict(copy=py_item(fields, nk[].k_copy),with_mean=py_item(fields, nk[].k_with_mean),with_std=py_item(fields, nk[].k_with_std),numeric_mode=py_item(fields, nk[].k_numeric_mode))
@@ -645,15 +661,15 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             if len(names):
                 var device = py_get(options,nk[].k_device,py_get(fields, nk[].k_device))
                 # Refused in words before the estimator changes.
-                prep_device_admit(device, cls, root)
+                scaler_device_admit(device, cls, root)
                 var values = Python.tuple(py_get(options,nk[].k_copy,py_item(fields, nk[].k_copy)),py_get(options,nk[].k_with_mean,py_item(fields, nk[].k_with_mean)),py_get(options,nk[].k_with_std,py_item(fields, nk[].k_with_std)),py_get(options,nk[].k_numeric_mode,py_item(fields, nk[].k_numeric_mode)))
                 _ = py_call(fields.clear)
                 _ = scaler_initialize(model,values)
                 py_setitem(fields, nk[].k_device, device)
-                prep_route_clear(model)
+                scaler_route_clear(model)
             result = model
         elif op == SCALER_OPN_VENDOR_USED:
-            result = prep_route_vendor_used(model, root)
+            result = scaler_route_vendor_used(model, root)
         elif op == SCALER_OPN_IS_FITTED:
             result = PythonObject(_fitted(py_fields(model)))
         elif op == SCALER_OPN_TRANSFORM:

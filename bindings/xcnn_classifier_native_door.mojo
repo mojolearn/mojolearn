@@ -430,7 +430,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var fields = _classifier_fields(model, context)
     var x = _contiguous(_images(fields, args[0], context), context)
     # the identical-mode profile check, and `numeric_mode_`
-    _ = xcnn_entries(fields, context)
+    _ = xcnn_entries(model, fields, context)
     # sorted classes and the inverse codes (the sequence owner's label sort,
     # `model_labels` of the x_sequence binding of the model's tier)
     var labels = _engine(fields, context)
@@ -597,7 +597,7 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
     var n = Int(py=x.shape[0])
     var nk = xcnn_keys()
     var k = len(py_item(fields, nk[].k_classes_))
-    _ = xcnn_entries(fields, context)
+    _ = xcnn_entries(model, fields, context)
     var out = _empty(Python.tuple(n), "int32", context) if codes else _empty(Python.tuple(n, k), "float32", context)
     if n == 0:
         return out

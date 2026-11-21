@@ -27,8 +27,7 @@ from bindings.cluster_fit_a_native_door import cluster_fit_a_operation, cluster_
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING
 from bindings.cluster_native_door import cluster_operation, cluster_unknown_operation
 from bindings.mixture_native_door import mixture_operation, mixture_unknown_operation
-from providers.python.device_route_dw_neighbors_cluster_door import family_route_binding
-from core.device_route_dw_neighbors_cluster import FAMILY_ROUTE_X_CLUSTER
+from providers.python.estimator_binding_pyapi_door import estimator_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_constructor_pyapi_pack import cluster_initialize_py
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _target, _refusal
@@ -281,13 +280,12 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, op
     for i in range(2, stop):  # driver-loop: fixed public argument positions
         classical_admit_value(args[i], context)
         _ = py_call(values.append, args[i])
-    # The x_cluster image of the estimator's device route: one record read and
-    # four pointer compares on a hit
-    # (providers/python/device_route_dw_neighbors_cluster_door.mojo). It is the
+    # The x_cluster image of the estimator's binding route (the shared
+    # estimator door): one record read and pointer compares on a hit. It is the
     # owners' first argument, resolved where `estimator_arguments` resolved the
     # per-call `estimator_binding(model, "_mojolearn_x_cluster", ...)` (a second
     # list, its appends, and the registry walk of every public call).
-    py_setitem(values, PythonObject(0), family_route_binding(model, FAMILY_ROUTE_X_CLUSTER, context))
+    py_setitem(values, PythonObject(0), estimator_binding(model, "_mojolearn_x_cluster", context))
     var prepared = py_call(py_type(Python.tuple()), values)
     var outside = estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0

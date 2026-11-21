@@ -35,6 +35,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.admitted_finite_wording import door_rows_refuse
 from bindings.device_rows_door_run import DoorRowsStore
+from core.device_route import DEVICE_CPU
 
 
 def door_is_device_rows(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -98,3 +99,16 @@ def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRo
     if row_bytes % 4 != 0:
         raise Error("TypeError: DeviceRows requires a float32 base")
     return DoorRowsStore(Int(py=ids[0]), Int(py=ids[1]), row_bytes // 4, Int(py=ids[3]), Int(py=ids[4]))
+
+
+def door_rows_store_routed(route_device: Int, value: PythonObject, context: PythonObject) raises -> DoorRowsStore:
+    """`door_rows_store` for an estimator with a device route: a CPU-route
+    estimator (`route_device == DEVICE_CPU`, the device its route RESOLVED
+    to, never the parameter) reads no device store. `DoorRowsStore.none()`
+    sends its door to the host gather (`admit_x`: a parallel gather out of
+    the fold's host base, never a download and never a device launch), so a
+    `device="cpu"` member of a cross-validation on a GPU installation runs
+    its fold on the CPU. A device route keeps the resident store."""
+    if route_device == DEVICE_CPU:
+        return DoorRowsStore.none()
+    return door_rows_store(value, context)

@@ -18,6 +18,8 @@ from bindings.trees_constructor_native_unpack import (
 )
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
+from bindings.trees_route_boundary_door import trees_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 
 
 def tree_constructor_values(model: PythonObject, args: PythonObject, constructors: PythonObject) raises -> PythonObject:
@@ -102,6 +104,10 @@ def forest_construct(model: PythonObject, args: PythonObject, context: PythonObj
     if fields is not prepared[0]:
         raise Error("TypeError: native forest constructor requires stable instance storage")
     var values = prepared[1]
+    # `device` is checked where it is given, before any field is published;
+    # the estimator's route is dropped once the new parameters are stored.
+    trees_device_admit(py_get(values, nk[].k_device), context)
     py_setitem(values, nk[].k__has_constructor_parameters, PythonObject(True))
     tree_store_parameters(fields, values, context, False)
+    device_route_clear(model)
     return PythonObject(None)

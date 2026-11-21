@@ -80,13 +80,8 @@ struct SequentialKeys(Defaultable, Movable):
     var k_loss_names: PythonObject
     var k_lr: PythonObject
     var k_mapping_types: PythonObject
-    var k_model_checkpoint_info: PythonObject
     var k_model_fields: PythonObject
-    var k_model_import_params: PythonObject
-    var k_model_load_checkpoint: PythonObject
-    var k_model_n_params: PythonObject
     var k_model_native_api_v1: PythonObject
-    var k_model_save_checkpoint: PythonObject
     var k_n_features_in_: PythonObject
     var k_n_iter_: PythonObject
     var k_n_iter_no_change: PythonObject
@@ -114,10 +109,6 @@ struct SequentialKeys(Defaultable, Movable):
     var k_uname: PythonObject
     var k_validation_loss_curve_: PythonObject
     var k_vendor: PythonObject
-    var k_verify_digest: PythonObject
-    var k_verify_file_sha256: PythonObject
-    var k_verify_fill: PythonObject
-    var k_verify_model_info: PythonObject
     var k_version: PythonObject
     var k_weight_decay: PythonObject
     var k_x_sequence_numeric_mode: PythonObject
@@ -175,13 +166,8 @@ struct SequentialKeys(Defaultable, Movable):
         self.k_loss_names = PythonObject(None)
         self.k_lr = PythonObject(None)
         self.k_mapping_types = PythonObject(None)
-        self.k_model_checkpoint_info = PythonObject(None)
         self.k_model_fields = PythonObject(None)
-        self.k_model_import_params = PythonObject(None)
-        self.k_model_load_checkpoint = PythonObject(None)
-        self.k_model_n_params = PythonObject(None)
         self.k_model_native_api_v1 = PythonObject(None)
-        self.k_model_save_checkpoint = PythonObject(None)
         self.k_n_features_in_ = PythonObject(None)
         self.k_n_iter_ = PythonObject(None)
         self.k_n_iter_no_change = PythonObject(None)
@@ -209,10 +195,6 @@ struct SequentialKeys(Defaultable, Movable):
         self.k_uname = PythonObject(None)
         self.k_validation_loss_curve_ = PythonObject(None)
         self.k_vendor = PythonObject(None)
-        self.k_verify_digest = PythonObject(None)
-        self.k_verify_file_sha256 = PythonObject(None)
-        self.k_verify_fill = PythonObject(None)
-        self.k_verify_model_info = PythonObject(None)
         self.k_version = PythonObject(None)
         self.k_weight_decay = PythonObject(None)
         self.k_x_sequence_numeric_mode = PythonObject(None)
@@ -274,13 +256,8 @@ def _sequential_keys_fill(nk: UnsafePointer[SequentialKeys, MutUntrackedOrigin])
     nk[].k_loss_names = py_key("loss_names")
     nk[].k_lr = py_key("lr")
     nk[].k_mapping_types = py_key("mapping_types")
-    nk[].k_model_checkpoint_info = py_key("model_checkpoint_info")
     nk[].k_model_fields = py_key("model_fields")
-    nk[].k_model_import_params = py_key("model_import_params")
-    nk[].k_model_load_checkpoint = py_key("model_load_checkpoint")
-    nk[].k_model_n_params = py_key("model_n_params")
     nk[].k_model_native_api_v1 = py_key("model_native_api_v1")
-    nk[].k_model_save_checkpoint = py_key("model_save_checkpoint")
     nk[].k_n_features_in_ = py_key("n_features_in_")
     nk[].k_n_iter_ = py_key("n_iter_")
     nk[].k_n_iter_no_change = py_key("n_iter_no_change")
@@ -308,10 +285,6 @@ def _sequential_keys_fill(nk: UnsafePointer[SequentialKeys, MutUntrackedOrigin])
     nk[].k_uname = py_key("uname")
     nk[].k_validation_loss_curve_ = py_key("validation_loss_curve_")
     nk[].k_vendor = py_key("vendor")
-    nk[].k_verify_digest = py_key("verify_digest")
-    nk[].k_verify_file_sha256 = py_key("verify_file_sha256")
-    nk[].k_verify_fill = py_key("verify_fill")
-    nk[].k_verify_model_info = py_key("verify_model_info")
     nk[].k_version = py_key("version")
     nk[].k_weight_decay = py_key("weight_decay")
     nk[].k_x_sequence_numeric_mode = py_key("x_sequence_numeric_mode")

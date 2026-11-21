@@ -82,6 +82,15 @@ def connect(door, **classes):
     # Every output and working buffer is a mojolearn Array, as `_M.out()` made.
     context.update(output_context=_numpy_free_context(), decomp_bindings=connected, decomp_modules=modules,
                    **classes)
+    # glue: the CPU image of `device="cpu"`, connected once beside the device
+    # set: the same entries form, of the host x_decomp binary (its published
+    # table key is (identical, cpu)). Nothing is loaded in a CPU-only process.
+    if context.get("vendor") not in (None, "cpu"):
+        try:
+            cpu = _entries(_backend.load_host_module("_mojolearn_x_decomp_host"))
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
+            cpu = type(error).__name__ + ": " + str(error)
+        context["decomp_cpu_bindings"] = {"identical": cpu}
     # The shared native label and accuracy steps (EllipticEnvelope.score).
     from ._native_labels_bridge import label_context
     context.update(label_context())

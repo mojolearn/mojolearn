@@ -55,12 +55,7 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.native_array_view_pack import native_array_ndarray_view
 from bindings.svm_mixture_native_door import svm_mixture_operation
-from providers.python.estimator_binding_pyapi_door import _estimator_mode_word
-from providers.python.device_route_dw_neighbors_cluster_door import (
-    family_route_owner, family_route_owner_binding, family_route_binding, family_route_vendor_used,
-    family_route_device_admit, family_route_clear,
-)
-from core.device_route_dw_neighbors_cluster import FAMILY_ROUTE_MIXTURE, FAMILY_ROUTE_X_CLUSTER
+from providers.python.estimator_binding_pyapi_door import estimator_binding, _estimator_mode_word
 from bindings.cluster_side_records_unpack import (
     cluster_is_subclass,
     cluster_refuse_fit_callbacks,
@@ -99,11 +94,11 @@ from bindings.operation_names_mix import (
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE_SAMPLES, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT_PROBA, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT,
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BIC, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_AIC, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE,
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE,
-    MIX_OPN_FAMILY_MIX_VENDOR_USED,
 )
 from bindings.operation_names_svm import SVM_OPN_FAMILY_SVM_GMM_SAMPLE
 from bindings.svm_keys_unpack import svm_keys
 from bindings.py_balanced import py_item
+from providers.python.device_route_boundary_door import device_route_clear
 
 comptime _GMM = "mojolearn GaussianMixture: "
 # The by-name refusals of the options `GmmParams` does not carry
@@ -778,12 +773,16 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     py_setattr(model, "n_iter_", PythonObject(Int(s[1])))
     py_setattr(model, "converged_", PythonObject(s[2] != 0.0))
     py_setattr(model, "lower_bound_", PythonObject(s[0]))
-    # The fit's own state: the x_cluster binding it ran on (its scoring
-    # entry), the full per-component Cholesky block and log constants, and
-    # the state a warm_start refit resumes from.
+    # The fit's own state: the full per-component Cholesky block and log
+    # constants, and the state a warm_start refit resumes from. The x_cluster
+    # image is not state: a query takes it from the estimator's binding route
+    # (its device and mode), so a fitted model handed to an estimator on the
+    # other device is scored by that estimator's own image, and the state
+    # holds arrays and scalars only (round 2, lane dw-neighbors-cluster: it
+    # stored the module, validated it against a retained-module list on every
+    # admission and kept that list alive in the import context).
     var ext = Python.dict()
     ext[nk[].k_key] = key
-    ext[nk[].k_binding] = xc_binding
     ext[nk[].k_pchol] = _pack_f(f[3], [k, d, d], context)
     ext[nk[].k_consts] = _pack_f(f[8], [k], context)
     var order: List[Int] = [11, 4, -1, 6, 1, 7, 2, 3]
@@ -808,10 +807,8 @@ def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) 
     var nk = svm_keys()
     var aux = _aux(Python.list(_any_f32(means, "aux", context), _any_f32(py_item(ext, nk[].k_pchol), "aux", context),
                                _any_f32(py_item(ext, nk[].k_consts), "aux", context)))
-    # The image of the estimator's route (its device and mode), not the one
-    # the fit stored in `_ext`: a model handed to an estimator on the other
-    # device (`model.check`) is scored by that estimator's own image.
-    return _bgmm_score_call(family_route_binding(model, FAMILY_ROUTE_X_CLUSTER, context), x, aux, n, d, k, 3)
+    # The image of the estimator's binding route (its device and mode).
+    return _bgmm_score_call(estimator_binding(model, "_mojolearn_x_cluster", context), x, aux, n, d, k, 3)
 
 
 def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObject,
@@ -1108,10 +1105,6 @@ def mixture_operation(model: PythonObject, operation: Int, args: PythonObject,
     classical_check_x; the BayesianGaussianMixture queries use it as is.
     `operation` is the leaf code of bindings/operation_names_mix.mojo
     (lane bw2-svm; the public block is last: one range test)."""
-    if operation == MIX_OPN_FAMILY_MIX_VENDOR_USED:
-        # `vendor_used()` of either mixture class: the estimator's own route
-        # (fitted or not), `cpu` for the CPU images. No array is read.
-        return family_route_vendor_used(model, context)
     classical_connect_numpy(context)
     if operation >= MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT:
         return _gmm_public_operation(model, operation, args, context)
@@ -1184,13 +1177,16 @@ def _gmm_public_initialize(model: PythonObject, values: PythonObject, context: P
     var fields = py_fields(model)
     # `device` is the constructor's last value. It is not one of the
     # parameters every operation admits again (`gmm_public_parameters`): an
-    # instance without the field runs this installation's device.
+    # instance without the field runs this installation's device. Its check
+    # (unknown value, 'gpu' without a GPU set, 'cpu' for a class that has no
+    # routed CPU form) is the shared constructor door's: the public
+    # constructor of this class is the full-reset native constructor
+    # (bindings/full_reset_constructor_native_door.mojo), which admits the
+    # device before any field changes and drops the estimator's route.
     var count = len(names)
     if len(values) != count + 1:
         raise Error("TypeError: GaussianMixture constructor metadata differs")
     var device = values[count]
-    # Refused in words before any field changes.
-    family_route_device_admit(device, context)
     var replacements = Python.list()
     for i in range(len(names)):  # driver-loop: fixed public constructor parameter schema
         if py_type(names[i]) is not b.str:
@@ -1204,7 +1200,7 @@ def _gmm_public_initialize(model: PythonObject, values: PythonObject, context: P
     for i in range(len(names)):  # driver-loop: publish only after every replaced owner passed admission
         py_setitem(fields, names[i], replacements[i])
     py_setitem(fields, PythonObject("device"), device)
-    family_route_clear(model)
+    device_route_clear(model)
     return PythonObject(None)
 
 
@@ -1219,26 +1215,10 @@ def _gmm_public_ext(ext: PythonObject, context: PythonObject, releasing: Bool) r
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: GaussianMixture state keys require exact strings")
     var nk = svm_keys()
-    var binding = py_item(ext, nk[].k_binding)
-    var connections = py_item(py_item(context, nk[].k_family_binding_connections), nk[].k__mojolearn_x_cluster)
-    var connected = False
-    for mode in ["identical", "fast"]:  # driver-loop: the two import-connected provider identities
-        var record = connections[mode]
-        connected = connected or binding is record[0]
-    var retained = py_item(context, nk[].k_gmm_retained_cluster_bindings)
-    if py_type(retained) is not b.list:
-        raise Error("TypeError: GaussianMixture requires its native retained-provider list")
-    for i in range(len(retained)):  # driver-loop: native modules previously selected for this family's extended solver
-        connected = connected or binding is retained[i]
-    if not connected or py_type(binding) is not py_type(b):
-        raise Error("TypeError: GaussianMixture state requires its retained compiled cluster provider")
-    # The connection keeps this exact module alive when an old state dictionary
-    # is replaced. All other retained owners require ordinary release admission.
     for i in range(len(keys)):  # driver-loop: native scalar and buffer state, never an arbitrary input protocol
-        if String(keys[i]) != "binding":
-            classical_admit_value(ext[keys[i]], context)
-            if releasing:
-                native_release_admit(ext[keys[i]], context)
+        classical_admit_value(ext[keys[i]], context)
+        if releasing:
+            native_release_admit(ext[keys[i]], context)
     var key = py_item(ext, nk[].k_key)
     if py_type(key) is not b.tuple or len(key) != 3:
         raise Error("TypeError: GaussianMixture extension key requires its native scalar tuple")
@@ -1372,14 +1352,13 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
         # A fit replaces the fitted state: release the old records now.
         cluster_record_drop(_GMM_ADMIT_SLOT, model)
         cluster_record_drop(_GMM_OPERANDS_SLOT, model)
-    # The estimator's device route: one record read and four pointer compares
-    # on a hit (providers/python/device_route_dw_neighbors_cluster_door.mojo).
+    # The estimator's binding route (the shared estimator door, slot
+    # `device_bindings_v1`): one record read and pointer compares on a hit.
     # Removed here: the per-call `estimator_binding(model, "_mojolearn_mixture", ...)`
     # and `estimator_binding(model, "_mojolearn_x_cluster", ...)` of this door
     # (mode String, offerings and connections reads, the process `_CPU_ONLY`
     # question, the live registry read) run once per estimator, at resolution.
-    var route = family_route_owner(model, context)
-    var binding = family_route_owner_binding(route, FAMILY_ROUTE_MIXTURE, False)
+    var binding = estimator_binding(model, "_mojolearn_mixture", context, False)
     if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING:
         _check_mode(binding, model, context)
         return binding
@@ -1405,21 +1384,10 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
         estimator_feature_check(model, fields, source, context)
     var prepared = PythonObject(None)
     if fitting:
-        var cluster_binding = family_route_owner_binding(route, FAMILY_ROUTE_X_CLUSTER)
+        var cluster_binding = estimator_binding(model, "_mojolearn_x_cluster", context)
         # The admission probe names the entry the fit calls (the typed BGMM
         # transport; the door no longer calls x_cluster_call).
         _ = neural_descriptor_entry(cluster_binding, "bgmm_native_api_v1")
-        var retained = py_item(context, nk[].k_gmm_retained_cluster_bindings)
-        if py_type(retained) is not py_type(Python.list()):
-            raise Error("TypeError: GaussianMixture requires its native retained-provider list")
-        var held = False
-        for i in range(len(retained)):  # driver-loop: pin each selected native image once across legitimate provider replacement
-            held = held or retained[i] is cluster_binding
-        if not held:
-            # Extended fitted state stores this exact module. Retaining it at
-            # import-context lifetime also prevents its destruction while a
-            # later fit replaces the old extension-state dictionary.
-            _ = py_call(retained.append, cluster_binding)
         prepared = Python.tuple(binding, cluster_binding, x)
     else:
         prepared = Python.tuple(binding, x)
