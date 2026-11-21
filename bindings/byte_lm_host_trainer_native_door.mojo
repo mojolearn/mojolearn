@@ -18,7 +18,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.native_array_storage_door import native_array_zeros
-from bindings.byte_lm_trainer_native_door import _validated_state
+from bindings.byte_lm_trainer_native_door import _validated_state, _tier_process
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
 from providers.python.byte_lm_json_checkpoint_pyapi_door import byte_json_payload, byte_json_arrays, byte_json_read
 from bindings.linalg_ops_native_unpack import linalg_ops_operation
@@ -295,7 +295,7 @@ def byte_lm_host_inference_checkpoint(mut mods: NativeModules, cls: PythonObject
     # integrity, mode/profile, tensor registry, optimizer, cursor and schedule.
     var state_context = context["byte_lm_checkpoint_context"]
     classical_connect_numpy(state_context)
-    var state = _validated_state(mods, source, state_context)
+    var state = _validated_state(mods, source, state_context, _tier_process(mods, state_context))
     var shape = _host_shape_from_state(state, context)
     mods.released()
     var result = native_storage_allocate(cls)
