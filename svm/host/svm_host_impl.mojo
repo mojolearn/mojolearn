@@ -50,7 +50,7 @@ from svm.impl.svm_parameter import (
     check_rung1_scope,
 )
 from svm.host.finite_scan import check_finite_ptr
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -519,11 +519,15 @@ struct IForestHostEntry(Movable):
 
 
 struct _IForestHostStore(Defaultable, Movable):
+    var synchronization: List[Int64]
+    """[0] the store's lock word (lane ma-pub-trees unit 3): the native
+    iforest entry runs with the GIL released."""
     var entries: List[IForestHostEntry]
     var next: Int
     var nonce: Int
 
     def __init__(out self):
+        self.synchronization = List[Int64](length=1, fill=0)
         self.entries = List[IForestHostEntry]()
         self.next = 0
         self.nonce = 0
@@ -531,28 +535,41 @@ struct _IForestHostStore(Defaultable, Movable):
 
 comptime _IF_HOST_RESIDENT_SLOT = "MojolearnIForestHostResidentIdenticalV1" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojolearnIForestHostResidentOtherV1"
 
-comptime IF_HOST_RESIDENT_STORE = SharedSlot[_IForestHostStore, _IF_HOST_RESIDENT_SLOT]
+# Version 2: the lock word joined the layout.
+comptime IF_HOST_RESIDENT_STORE = SharedSlot[_IForestHostStore, _IF_HOST_RESIDENT_SLOT, 2]
+
+
+@always_inline
+def _if_host_store_lock(p: UnsafePointer[_IForestHostStore, MutUntrackedOrigin]) -> MutPointer[Int64, MutUntrackedOrigin]:
+    return rebind[MutPointer[Int64, MutUntrackedOrigin]](p[].synchronization.unsafe_ptr())
 
 
 def if_host_resident_new_token() raises -> Int:
     """`if_resident_new_token`'s rule on the host store: never 0, below 2^51
-    (exact in the float64 `info` slot), a per-process nonce. Call under the
-    GIL."""
+    (exact in the float64 `info` slot), a per-process nonce. Holds the
+    store's lock."""
     var p = IF_HOST_RESIDENT_STORE.get_or_create_ptr()
+    var lock = _if_host_store_lock(p)
+    shared_slot_lock(lock)
     if p[].nonce == 0:
         p[].nonce = ((Int(perf_counter_ns()) & 0x3FFFFFF) + 1) << 24
     p[].next = (p[].next % 0xFFFFFF) + 1
-    return p[].nonce + p[].next
+    var token = p[].nonce + p[].next
+    shared_slot_unlock(lock)
+    return token
 
 
 def if_host_resident_take(token: Int, key: IFResidentKey) raises -> List[IForestHostEntry]:
     """The entry `token` names, REMOVED from the store, as a list of one;
     empty when there is none or its key differs (a stale entry under that
-    token is dropped). Call under the GIL."""
+    token is dropped after the lock). Holds the store's lock."""
     var held = List[IForestHostEntry]()
     if token == 0:
         return held^
+    var stale = List[IForestHostEntry]()
     var p = IF_HOST_RESIDENT_STORE.get_or_create_ptr()
+    var lock = _if_host_store_lock(p)
+    shared_slot_lock(lock)
     var found = -1
     for i in range(len(p[].entries)):  # small-loop(p[].entries: resident forests held): a token lookup over live entries
         if p[].entries[i].token == token:
@@ -563,35 +580,45 @@ def if_host_resident_take(token: Int, key: IFResidentKey) raises -> List[IForest
         if entry.key.same(key):
             held.append(entry^)
         else:
-            _ = entry^
+            stale.append(entry^)
+    shared_slot_unlock(lock)
+    _ = stale^
     return held^
 
 
 def if_host_resident_put(mut held: List[IForestHostEntry]) raises:
     """Return a taken (or freshly fitted) entry to the store, dropping the
-    oldest past `IF_RESIDENT_CAP`. Call under the GIL."""
+    oldest past `IF_RESIDENT_CAP` after the lock. Holds the store's lock."""
     if len(held) == 0:
         return
+    var evicted = List[IForestHostEntry]()
     var p = IF_HOST_RESIDENT_STORE.get_or_create_ptr()
+    var lock = _if_host_store_lock(p)
+    shared_slot_lock(lock)
     while len(p[].entries) >= IF_RESIDENT_CAP:  # small-loop(p[].entries): evict past the cap
-        var oldest = p[].entries.pop(0)
-        _ = oldest^
+        evicted.append(p[].entries.pop(0))
     p[].entries.append(held.pop())
+    shared_slot_unlock(lock)
+    _ = evicted^
 
 
 def if_host_resident_release(token: Int) raises:
-    """Drop the resident forest `token` names, if any. Call under the GIL."""
+    """Drop the resident forest `token` names, if any. Holds the store's lock."""
     if token == 0:
         return
+    var dropped = List[IForestHostEntry]()
     var p = IF_HOST_RESIDENT_STORE.get_or_create_ptr()
+    var lock = _if_host_store_lock(p)
+    shared_slot_lock(lock)
     var found = -1
     for i in range(len(p[].entries)):  # small-loop(p[].entries: resident forests held): a token lookup over live entries
         if p[].entries[i].token == token:
             found = i
             break
     if found >= 0:
-        var entry = p[].entries.pop(found)
-        _ = entry^
+        dropped.append(p[].entries.pop(found))
+    shared_slot_unlock(lock)
+    _ = dropped^
 
 
 def iforest_run_host_resident(
