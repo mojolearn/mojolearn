@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Complete AutoARIMA construction and forecast operation boundaries. Search and
 # fitting remain separate owners; this provider never calls their Python methods.
-from bindings.mode_answer_door import answer_mode_object
-from core.mode_answer import MODE_FAMILY_TSA
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -27,6 +26,11 @@ from bindings.tsa_arima_resident_pack import (
 from arima.tsa_arima_resident_run import arima_resident_words
 from bindings.tsa_keys_unpack import tsa_keys
 from bindings.py_balanced import py_item
+from bindings.tsa_arima_route_unpack import arima_device_admit, autoarima_route
+from bindings.tsa_hw_route_unpack import TsaHwCall, tsa_hw_resident_handle
+from core.arima_run import arima_forecast_run, arima_predict_run
+from core.device_route import DeviceRoute, DEVICE_INSTALL
+from providers.python.device_route_boundary_door import device_route_clear
 
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _REFUSE_DOUBLE = "TypeError: AutoARIMA: float64 is refused; pass float32 (no float64 on the device)"
@@ -114,6 +118,10 @@ def _series_buffer(value: PythonObject, name: String, refusal: String, context: 
 def autoarima_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = tsa_keys()
     var fields = _fields(model, py_item(context, nk[].k_autoarima_class))
+    # `device` is checked before any field changes (an unknown value, or an
+    # explicit "gpu" on a CPU-only installation, is refused in words); it is
+    # read into the route owner at the estimator's first operation.
+    arima_device_admit(args[1], context, native_loaded_module("builtins"))
     var source_pin = ArrayPin()
     var source = _series_buffer(args[0], "endog", _REFUSE_DOUBLE, context, source_pin)
     var rank = len(source.shape)
@@ -143,6 +151,9 @@ def autoarima_initialize(model: PythonObject, args: PythonObject, context: Pytho
     py_setitem(updates, nk[].k_batch_size, rows)
     py_setitem(updates, nk[].k_n_obs, cols)
     py_setitem(updates, nk[].k_models, Python.list())
+    py_setitem(updates, nk[].k_device, args[1])
+    # The route of an estimator constructed again is forgotten.
+    device_route_clear(model)
     forecast_commit(fields, updates, py_item(context, nk[].k_tsa_owner_context))
     _ = source
     _ = source_pin^
@@ -182,6 +193,11 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         raise Error("ValueError: AutoARIMA batch_size must be positive")
     var out = classical_typed(Python.tuple(batch, steps), "<f4", context)
     var output_address = Int(py=classical_address(out))
+    # The AutoARIMA's one route (its device, the default numeric mode its
+    # per-group models carry), resolved where the former per-group entry
+    # selection first ran and reused by every group.
+    var call = TsaHwCall(DeviceRoute(DEVICE_INSTALL), PythonObject(None))
+    var routed = False
     for group in range(len(fitted)):  # driver-loop: over selected order groups, one compiled forecast each
         if fitted[group] is None:
             raise Error("RuntimeError: AutoARIMA: call fit() first")
@@ -203,7 +219,6 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         var y = _packed(py_item(state, nk[].k__y), "endog", context, y_pin)
         var params = _packed(py_item(state, nk[].k_params_), "params", context, params_pin)
         var ids = _packed(ids_all[group], "group indices", context, ids_pin, True)
-        var words = Python.list(rows, n_obs, start, end) if prediction else Python.list(rows, n_obs, steps)
         var complexity = k + 1
         var order_words = List[Int]()
         for axis in range(3):  # small-loop(ARIMA order tuple)
@@ -212,7 +227,6 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
                 raise Error("ValueError: AutoARIMA order must be nonnegative")
             if axis != 1:
                 complexity += word
-            _ = py_call(words.append, word)
             order_words.append(word)
         for axis in range(4):  # small-loop(seasonal order tuple)
             var word = _integer(seasonal[axis], context)
@@ -220,27 +234,12 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
                 raise Error("ValueError: AutoARIMA seasonal order must be nonnegative")
             if axis == 0 or axis == 2:
                 complexity += word
-            _ = py_call(words.append, word)
             order_words.append(word)
         if y.count != rows * n_obs or params.count != rows * complexity or ids.count != rows:
             raise Error("ValueError: AutoARIMA fitted buffer dimensions disagree")
-        _ = py_call(words.extend, Python.tuple(k, 0) if prediction else Python.tuple(k, 0, 0))
-        var mode = py_get(state, nk[].k_numeric_mode)
-        if mode is None:
-            mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-        if py_type(mode) is not py_type(PythonObject("")):
-            raise Error("TypeError: numeric_mode must be an exact string")
-        mode = py_call(py_call(mode.strip).lower)
-        var mode_word = String(mode)
-        if mode_word != "identical" and mode_word != "fast":
-            raise Error("ValueError: numeric_mode must be identical or fast")
-        answer_mode_object(mode, mode_word, MODE_FAMILY_TSA)
-        var entries = py_item(context, nk[].k_arima_bindings)[mode]
-        if py_type(entries) is py_type(PythonObject("")):
-            raise Error(String(entries))
-        var got = Int(py=py_call_typed(py_item(entries, nk[].k_arima_numeric_mode)))
-        if got != (1 if String(mode) == "identical" else 0):
-            raise Error("RuntimeError: ARIMA binary numeric mode disagrees with its selected tier")
+        if not routed:
+            call = autoarima_route(model, fields, context, native_loaded_module("builtins"))
+            routed = True
         var part = classical_typed(Python.tuple(rows, steps), "<f4", context)
         var part_address = Int(py=classical_address(part))
         # The group model's resident fitted state (lane ne1-a-decomp-tsa,
@@ -253,20 +252,33 @@ def autoarima_forecast(model: PythonObject, args: PythonObject, context: PythonO
         var record = prepared_get(resident_mods, ARIMA_RESIDENT_SLOT, member)
         var handle = -1
         if record is not None:
-            handle = arima_resident_hit(record, state, entries, resident_words)
+            handle = arima_resident_hit(record, state, call, resident_words)
         if handle < 0:
-            record = arima_resident_mint(member, state, entries, resident_words, y.source.addr, y.source.addr,
+            record = arima_resident_mint(member, state, call, resident_words, y.source.addr, y.source.addr,
                                          params.source.addr)
             if record is not None:
-                handle = Int(py=record[5])
+                handle = tsa_hw_resident_handle(record[3])
         if handle >= 0:
             # n_exog is zero: the output supplies a live unused future pointer.
-            arima_resident_call(entries, handle, part_address, part, start, end, steps, not prediction)
+            arima_resident_call(call, handle, part_address, part_address, start, end, steps, not prediction)
         else:
             # n_exog is zero: y supplies a live unused pointer for the two exog slots.
-            _ = py_call_typed(entries["arima_predict" if prediction else "arima_forecast"], y.source.addr, y.source.addr,
-                              y.source.addr, params.source.addr, part_address, words)
-        _ = record  # the record (and its capsule) outlive the query
+            var route = call.route
+            var y_address = y.source.addr
+            var params_address = params.source.addr
+            var py = Python()
+            try:
+                with GILReleased(py):
+                    if prediction:
+                        _ = arima_predict_run(route, y_address, y_address, y_address, params_address, part_address,
+                                              rows, n_obs, start, end, order_words, k, 0)
+                    else:
+                        _ = arima_forecast_run(route, y_address, y_address, y_address, params_address, part_address,
+                                               rows, n_obs, steps, order_words, k, 0)
+            finally:
+                _ = part
+                _ = call.owner  # the route owner pins the image through the call
+        _ = record  # the record (and its lifetime owner) outlive the query
         # The connected base scatter owns bounds validation and finished-result
         # assembly on its compiled target; no Python indexing or data loops.
         _ = py_call_typed(py_item(context, nk[].k_base_scatter_rows_bytes), part_address, ids.source.addr, rows,
