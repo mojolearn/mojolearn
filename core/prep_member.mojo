@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """The Prep family as MEMBERS (core/member_abi.mojo): RobustScaler (kind 0),
-MaxAbsScaler (kind 1), Binarizer (kind 2) and Normalizer (kind 3) so far;
-the family's other classes are not published yet.
+MaxAbsScaler (kind 1), Binarizer (kind 2), Normalizer (kind 3),
+PolynomialFeatures (kind 4), QuantileTransformer (kind 5) and
+PowerTransformer (kind 6); the encoders, imputers, KBinsDiscretizer and
+SplineTransformer are not published (their RUN is the encode door's).
 
 One entry, `prep_member_v2`, published by each preprocessing image beside
 the scaler member (`prep_member_publish`, bindings/_mojolearn_preprocessing.mojo
@@ -16,11 +18,19 @@ scratch and output region the door (bindings/robust_native_pack.mojo
 touched. MaxAbsScaler runs its door's x_prep programs the same way
 (x_prep/maxabs_native_run.mojo `_maxabs_fit_program`, the affine stage 3;
 door bindings/maxabs_native_door.mojo `maxabs_fit` / `_maxabs_apply`). No
-score, no inverse_transform (no published class has one). Binarizer and
+score; no inverse_transform for kinds 0 to 4 (their classes have none). Binarizer and
 Normalizer are stateless: their fit records X's width only (X is not
 uploaded), their transform is the door's one-stage program
 (bindings/prep_stateless_native_door.mojo `_transform` binarizer branch,
 bindings/prep_normalizer_lifecycle_pack.mojo `_normalizer_apply`).
+PolynomialFeatures, QuantileTransformer and PowerTransformer run the stateless
+door's programs (bindings/prep_stateless_native_door.mojo `_fit` / `_transform`
+polynomial branch, `_quantile_fit` / `_quantile_apply`, `_power_fit` /
+`_power_apply`; programs in x_prep/prep_stateless_native_run.mojo) with the
+same layouts, inputs and stages. PolynomialFeatures writes the caller's
+row-major dst: `order='F'` changes only the public array's memory order, so
+the member runs no p2m_transpose stage (the values are the door's).
+QuantileTransformer and PowerTransformer publish inverse_transform.
 
 Route slots read: `second` the x_prep transport entry; `flags`
 PREP_ROUTE_OUT (x_prep_run_out), PREP_ROUTE_SCRATCH (x_prep_run_scratch),
@@ -46,6 +56,19 @@ MEMBER_OP_NEW parameters, Binarizer (Float64 words, 2): [0] kind 2,
 [1] threshold (rounded to float32 at transform, as the door).
 MEMBER_OP_NEW parameters, Normalizer (Float64 words, 2): [0] kind 3,
 [1] norm: 0 'l1', 1 'l2', 2 'max'.
+MEMBER_OP_NEW parameters, PolynomialFeatures (Float64 words, 5): [0] kind 4,
+[1] min_degree, [2] max_degree, [3] interaction_only 0 / 1,
+[4] include_bias 0 / 1 (order is checked at admission; see above).
+MEMBER_OP_NEW parameters, QuantileTransformer (Float64 words, 8): [0] kind 5,
+[1] output_distribution: 0 'uniform', 1 'normal', [2] n_quantiles,
+[3] subsample (-1: None), [4] seed low 32 bits, [5] seed high 32 bits
+(random_state, None = 0), [6] the identical binding's family word
+(`x_prep_idn_fam`, 0 on another tier), [7] R3 work region 0 / 1.
+MEMBER_OP_NEW parameters, PowerTransformer (Float64 words, 8): [0] kind 6,
+[1] method: 0 'yeo-johnson', 1 'box-cox', [2] standardize 0 / 1, [3] the
+family word (as QuantileTransformer [6]), [4] the fast binding's
+`x_prep_ptimpute_flags` (0 on another tier), [5] host-column binding 0 / 1,
+[6] identical tier 0 / 1, [7] R3 work region 0 / 1.
 
 The Apple fast direct fit entry (`x_prep_maxabs_fit_direct`, opt-in
 PREP3_MAXABS) is not a member route: the admit answers False there and the
@@ -67,6 +90,22 @@ MaxAbsScaler:
   1 `PREP_BLOCK_MAX_ABS` (= PREP_BLOCK_CENTER) float32 1 x features (max_abs_)
   2 `PREP_BLOCK_SCALE` float32 1 x features (scale_)
 Binarizer, Normalizer: 0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_] only.
+PolynomialFeatures:
+  0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, n_output_features_]
+  1 `PREP_BLOCK_POLY_INDEX` (= PREP_BLOCK_CENTER) float32 term feature indices (`_poly_index`)
+  2 `PREP_BLOCK_POLY_START` (= PREP_BLOCK_SCALE) float32 term starts (`_poly_start`)
+QuantileTransformer:
+  0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, n_quantiles_]
+  1 `PREP_BLOCK_QUANTILES` (= PREP_BLOCK_CENTER) float32 features x n_quantiles_ (`_q`)
+  2 `PREP_BLOCK_REFERENCES` (= PREP_BLOCK_SCALE) float32 n_quantiles_ (references_)
+  3 `PREP_BLOCK_EXTRA` float32 n_quantiles_ x features (quantiles_)
+PowerTransformer:
+  0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_]
+  1 `PREP_BLOCK_CENTER` float32 features (`_mean`; 1 x 0 without standardize)
+  2 `PREP_BLOCK_SCALE` float32 features (`_scale`; 1 x 0 without standardize)
+  3 `PREP_BLOCK_EXTRA` float32 features (lambdas_)
+  4 `PREP_BLOCK_ANCHOR` float32 features (`_pt_anchor`; 1 x 0 when not kept)
+  5 `PREP_BLOCK_ANCHOR_KIND` float32 features (`_pt_anchor_kind`; 1 x 0 when not kept)
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's store): a slot never moves once minted, the lock covers only
@@ -79,13 +118,17 @@ from bindings.x_prep_native_owner_run import XprepRunInput, XprepRoute, xprep_ex
 from x_prep.robust_native_run import _robust_fit_program as robust_fit_program
 from x_prep.maxabs_native_run import _maxabs_fit_program as maxabs_fit_program
 from core.scaler_fit_impl import scaler_refuse_infinite
-from x_prep.prep_stateless_native_run import OP_BINARIZE, OP_NORMALIZE, OUT_MIN_WORDS
+from x_prep.prep_stateless_native_run import (
+    OP_BINARIZE, OP_NORMALIZE, OP_POLY, OP_QT_APPLY, OP_QT_INVERSE, OP_RGATHER, OP_PERM_ROWS,
+    OP_PT_APPLY, OP_PT_INVERSE, OUT_MIN_WORDS, PrepLayout, _place_scratch, _poly_terms,
+    _quantile_program, _power_program,
+)
 from core.preprocessing_program import prep_program_stage as _stage
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
-    MEMBER_OP_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
-    MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
+    MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
+    MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_INVERSE_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -101,11 +144,25 @@ comptime PREP_MAXABS_PARAM_COUNT = 3
 comptime PREP_KIND_BINARIZER = 2
 comptime PREP_KIND_NORMALIZER = 3
 comptime PREP_STATELESS_PARAM_COUNT = 2
+comptime PREP_KIND_POLYNOMIAL = 4
+comptime PREP_KIND_QUANTILE = 5
+comptime PREP_KIND_POWER = 6
+comptime PREP_POLY_PARAM_COUNT = 5
+comptime PREP_QUANTILE_PARAM_COUNT = 8
+comptime PREP_POWER_PARAM_COUNT = 8
 
 comptime PREP_BLOCK_CENTER = MEMBER_BLOCK_FAMILY
 comptime PREP_BLOCK_SCALE = MEMBER_BLOCK_FAMILY + 1
 #: MaxAbsScaler's max_abs_ sits in the block RobustScaler's center_ uses.
 comptime PREP_BLOCK_MAX_ABS = PREP_BLOCK_CENTER
+comptime PREP_BLOCK_EXTRA = MEMBER_BLOCK_FAMILY + 2
+comptime PREP_BLOCK_ANCHOR = MEMBER_BLOCK_FAMILY + 3
+comptime PREP_BLOCK_ANCHOR_KIND = MEMBER_BLOCK_FAMILY + 4
+#: PolynomialFeatures' term table, QuantileTransformer's fitted quantiles.
+comptime PREP_BLOCK_POLY_INDEX = PREP_BLOCK_CENTER
+comptime PREP_BLOCK_POLY_START = PREP_BLOCK_SCALE
+comptime PREP_BLOCK_QUANTILES = PREP_BLOCK_CENTER
+comptime PREP_BLOCK_REFERENCES = PREP_BLOCK_SCALE
 
 comptime PREP_ROUTE_OUT = 1
 comptime PREP_ROUTE_SCRATCH = 2
@@ -131,6 +188,9 @@ struct PrepMemberSlot(Copyable, Movable, Defaultable):
     var center: List[Float32]
     var scale: List[Float32]
     var scalars: List[Float64]
+    var extra: List[Float32]
+    var anchor: List[Float32]
+    var anchor_kind: List[Float32]
 
     def __init__(out self):
         self.generation = 0
@@ -141,6 +201,9 @@ struct PrepMemberSlot(Copyable, Movable, Defaultable):
         self.center = List[Float32]()
         self.scale = List[Float32]()
         self.scalars = List[Float64]()
+        self.extra = List[Float32]()
+        self.anchor = List[Float32]()
+        self.anchor_kind = List[Float32]()
 
     def kind(self) -> Int:
         return Int(self.words[0])
@@ -151,6 +214,9 @@ struct PrepMemberSlot(Copyable, Movable, Defaultable):
         self.center = List[Float32]()
         self.scale = List[Float32]()
         self.scalars = List[Float64]()
+        self.extra = List[Float32]()
+        self.anchor = List[Float32]()
+        self.anchor_kind = List[Float32]()
 
 
 struct PrepMemberStore(Defaultable, Movable):
@@ -236,11 +302,34 @@ def _kind_name(kind: Int) -> String:
         return String("Binarizer")
     if kind == PREP_KIND_NORMALIZER:
         return String("Normalizer")
+    if kind == PREP_KIND_POLYNOMIAL:
+        return String("PolynomialFeatures")
+    if kind == PREP_KIND_QUANTILE:
+        return String("QuantileTransformer")
+    if kind == PREP_KIND_POWER:
+        return String("PowerTransformer")
     return String("RobustScaler")
 
 
-def _stateless(slot: _Slot) -> Bool:
-    return slot[].kind() == PREP_KIND_BINARIZER or slot[].kind() == PREP_KIND_NORMALIZER
+def _block_count(kind: Int) -> Int:
+    # Fitted blocks, the scalars block included (the docstring's table).
+    if kind == PREP_KIND_BINARIZER or kind == PREP_KIND_NORMALIZER:
+        return 1
+    if kind == PREP_KIND_QUANTILE:
+        return 4
+    if kind == PREP_KIND_POWER:
+        return 6
+    return 3
+
+
+def _scalar_count(kind: Int) -> Int:
+    if kind == PREP_KIND_MAXABS or kind == PREP_KIND_POLYNOMIAL or kind == PREP_KIND_QUANTILE:
+        return 2
+    return 1
+
+
+def _invertible(kind: Int) -> Bool:
+    return kind == PREP_KIND_QUANTILE or kind == PREP_KIND_POWER
 
 
 def _name(slot: _Slot) -> String:
@@ -568,45 +657,346 @@ def _transform_stateless(slot: _Slot, call: _Call) raises:
     _ = arena^
 
 
+def _fit_begin(slot: _Slot, call: _Call) raises:
+    # The checks every fit shares: whole dense host X, no weights, the one
+    # fit output a transformer has.
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member takes no sample_weight")
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
+        member_unsupported(estimator, call[].fit_output)
+
+
+def _apply_begin(slot: _Slot, call: _Call, out_cols: Int) raises:
+    # The checks every transform shares (the stateless door's words).
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("RuntimeError: mojolearn: this " + estimator + " instance is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    _dense(call[].dst, "the output buffer", estimator)
+    var d = slot[].features
+    if call[].x.cols != d:
+        raise Error("mojolearn: X has " + String(call[].x.cols) + " features, " + estimator + " was fitted with "
+                    + String(d))
+    if call[].dst.rows != call[].x.rows or call[].dst.cols != out_cols:
+        raise Error("ValueError: the output buffer holds " + String(out_cols) + " values per row of X")
+
+
+def _run_layout(call: _Call, mut program: List[Int32], layout: PrepLayout,
+    inputs: List[XprepRunInput]) raises -> List[Float32]:
+    """The door's `_run_layout`: scratch words placed past the host words,
+    device scratch when the image has it; returns the arena."""
+    if layout.host + layout.scratch > _INT32_BOUND:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    _place_scratch(program, layout.host)
+    var device_scratch = layout.scratch > 0 and (call[].route.flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0
+    var arena = List[Float32](length=max(layout.host + (0 if device_scratch else layout.scratch), 1), fill=Float32(0))
+    _execute(call, arena, layout.host, layout.scratch, 0, 0, program, inputs)
+    return arena^
+
+
+def _take(arena: List[Float32], offset: Int, count: Int) -> List[Float32]:
+    var words = List[Float32](length=count, fill=Float32(0))
+    if count > 0:
+        unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + offset,
+            count=count)
+    return words^
+
+
+def _poly_table(words: List[Float64], d: Int, mut index: List[Int], mut start: List[Int]):
+    # The door's `_fit` term table from the parameter words.
+    _poly_terms(d, Int(words[1]), Int(words[2]), words[3] == 0.0, words[4] != 0.0, index, start)
+
+
+def _fit_poly(slot: _Slot, call: _Call) raises:
+    """The door's `_fit` polynomial branch: the term table of X's width, as
+    float32 index words (`_words`: count max(len, 1), exact below 2^24)."""
+    _fit_begin(slot, call)
+    var d = call[].x.cols
+    var index = List[Int]()
+    var start = List[Int]()
+    _poly_table(slot[].words, d, index, start)
+    var nout = len(start) - 1
+    slot[].clear()
+    slot[].center = List[Float32](length=max(len(index), 1), fill=Float32(0))
+    for i in range(len(index)):  # driver-loop: over polynomial term table words (feature metadata)
+        slot[].center[i] = Float32(index[i])
+    slot[].scale = List[Float32](length=max(len(start), 1), fill=Float32(0))
+    for i in range(len(start)):  # driver-loop: over polynomial term starts (feature metadata)
+        slot[].scale[i] = Float32(start[i])
+    slot[].features = d
+    slot[].scalars = [Float64(d), Float64(nout)]
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _transform_poly(slot, call)
+
+
+def _transform_poly(slot: _Slot, call: _Call) raises:
+    """The door's `_transform` polynomial branch (X, the term indices, the
+    term starts, the products) into the caller's row-major dst."""
+    var nout = Int(slot[].scalars[1]) if slot[].fitted else 0
+    _apply_begin(slot, call, nout)
+    var n = call[].x.rows
+    var d = slot[].features
+    if len(slot[].scale) != nout + 1:
+        raise Error("RuntimeError: PolynomialFeatures term table does not match n_output_features_")
+    var words = n * nout
+    if words == 0:
+        return
+    var io = n * d
+    var so = io + len(slot[].center)
+    var out = so + len(slot[].scale)
+    var host = out + words
+    if host > _INT32_BOUND:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    var inputs = List[XprepRunInput](capacity=3)
+    inputs.append(_x_input(call, n * d))
+    inputs.append(XprepRunInput(io, len(slot[].center), Int(slot[].center.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+    inputs.append(XprepRunInput(so, len(slot[].scale), Int(slot[].scale.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+    var program = List[Int32]()
+    _stage(program, OP_POLY, words, 0, n, d, io, so, nout, out)
+    var arena = List[Float32](length=host, fill=Float32(0))
+    _execute(call, arena, host, 0, 0, 0, program, inputs)
+    unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+        src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=words)
+    _ = arena^
+
+
+def _fit_quantile(slot: _Slot, call: _Call) raises:
+    """The door's `_quantile_fit`: the optional keyed row subsample
+    (f2_perm_rows, p2m_rgather), then `_quantile_program`."""
+    _fit_begin(slot, call)
+    var n_all = call[].x.rows
+    var d = call[].x.cols
+    var n = n_all
+    var subsample = Int(slot[].words[3])
+    var permute = subsample >= 0 and n_all > subsample
+    if permute:
+        n = subsample
+    var nq = max(1, min(Int(slot[].words[2]), n))
+    var layout = PrepLayout(n_all * d, slot[].words[7] != 0.0)
+    var program = List[Int32]()
+    var inputs = List[XprepRunInput](capacity=3)
+    inputs.append(_x_input(call, n_all * d))
+    var xo = 0
+    # The uint64 seed's (low, high) 32-bit words (`_seed_words`).
+    var seed_words = List[Float32](length=2, fill=Float32(0))
+    if permute:
+        var rows = layout.alloc(n)
+        var sample = layout.alloc(n * d)
+        var so = layout.alloc(2)
+        var bits = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(seed_words.unsafe_ptr()))
+        bits[0] = UInt32(Int(slot[].words[4]))
+        bits[1] = UInt32(Int(slot[].words[5]))
+        inputs.append(XprepRunInput(so, 2, Int(seed_words.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+        _stage(program, OP_PERM_ROWS, n, so, n_all, rows)
+        _stage(program, OP_RGATHER, n * d, xo, d, rows, sample)
+        xo = sample
+    var placed = _quantile_program(program, layout, Int(slot[].words[6]), xo, n, d, nq)
+    var grid = placed[0]
+    var nb = placed[1]
+    var qo = placed[2]
+    var qt = placed[3]
+    var level: List[Float32] = [Float32(nq - 1)]
+    inputs.append(XprepRunInput(nb, 1, Int(level.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+    var arena = _run_layout(call, program, layout, inputs)
+    _ = seed_words^
+    _ = level^
+    slot[].clear()
+    slot[].center = _take(arena, qo, nq * d)
+    slot[].scale = _take(arena, grid, nq)
+    slot[].extra = _take(arena, qt, nq * d)
+    _ = arena^
+    slot[].features = d
+    slot[].scalars = [Float64(d), Float64(nq)]
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _apply_quantile(slot, call, False)
+
+
+def _apply_quantile(slot: _Slot, call: _Call, inverse: Bool) raises:
+    """The door's `_quantile_apply`: one qt_apply / qt_inverse stage."""
+    _apply_begin(slot, call, slot[].features)
+    var n = call[].x.rows
+    var d = slot[].features
+    var nq = Int(slot[].scalars[1])
+    if len(slot[].center) != nq * d or len(slot[].scale) != nq:
+        raise Error("RuntimeError: QuantileTransformer fitted quantiles do not match n_quantiles_")
+    var normal = slot[].words[1] != 0.0
+    var words = n * d
+    var qo = words
+    var ro = qo + nq * d
+    var out = ro + nq
+    var dev_out = words >= OUT_MIN_WORDS and (call[].route.flags & PREP_ROUTE_OUT) != 0
+    var host = out + (0 if dev_out else words)
+    if host + (words if dev_out else 0) > _INT32_BOUND:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    var inputs = List[XprepRunInput](capacity=3)
+    inputs.append(_x_input(call, words))
+    inputs.append(XprepRunInput(qo, nq * d, Int(slot[].center.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+    inputs.append(XprepRunInput(ro, nq, Int(slot[].scale.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+    var program = List[Int32]()
+    _stage(program, OP_QT_INVERSE if inverse else OP_QT_APPLY, words, 0, n, d, qo, nq, ro, 1 if normal else 0, out)
+    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    # A large output comes back through the image's output region straight
+    # into the caller's buffer (the door's output store).
+    _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
+    if not dev_out:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+            src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=words)
+    _ = arena^
+
+
+def _fit_power(slot: _Slot, call: _Call) raises:
+    """The door's `_power_fit`: `_power_program` with the words its door
+    reads per fit (family word, fast flags, host-column binding, tier),
+    then the Box-Cox refusal on the column minima, in the door's words."""
+    _fit_begin(slot, call)
+    var n = call[].x.rows
+    var d = call[].x.cols
+    var method = Int(slot[].words[1])
+    var standardize = slot[].words[2] != 0.0
+    var layout = PrepLayout(n * d, slot[].words[7] != 0.0)
+    var program = List[Int32]()
+    var placed = _power_program(program, layout, Int(slot[].words[3]), Int(slot[].words[4]), slot[].words[5] != 0.0,
+        slot[].words[6] != 0.0, n, d, method, standardize)
+    var st = placed[0]
+    var lam = placed[1]
+    var anchor = placed[2]
+    var anchor_kind = placed[3]
+    var mean = placed[4]
+    var scale = placed[5]
+    var centered = placed[6]
+    var inputs = List[XprepRunInput](capacity=1)
+    inputs.append(_x_input(call, n * d))
+    var arena = _run_layout(call, program, layout, inputs)
+    if method == 1:
+        var base = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+        for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
+            if base[st + 3 * d + j] <= 0:
+                raise Error("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
+    slot[].clear()
+    slot[].extra = _take(arena, lam, d)
+    if centered and standardize:
+        slot[].anchor = _take(arena, anchor, d)
+        slot[].anchor_kind = _take(arena, anchor_kind, d)
+    if standardize:
+        slot[].center = _take(arena, mean, d)
+        slot[].scale = _take(arena, scale, d)
+    _ = arena^
+    slot[].features = d
+    slot[].scalars = [Float64(d)]
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _apply_power(slot, call, False)
+
+
+def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
+    """The door's `_power_apply`: one pt_apply / pt_inverse stage over the
+    fitted lambdas, standardization and anchors, in the door's layout."""
+    _apply_begin(slot, call, slot[].features)
+    var n = call[].x.rows
+    var d = slot[].features
+    var standardize = len(slot[].center) > 0
+    var anchored = len(slot[].anchor) > 0
+    var words = n * d
+    var inputs = List[XprepRunInput](capacity=6)
+    inputs.append(_x_input(call, words))
+    var host = words
+    var lo = host
+    host += d
+    inputs.append(XprepRunInput(lo, d, Int(slot[].extra.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+    var mo = -1
+    var so = -1
+    if standardize:
+        mo = host
+        host += d
+        so = host
+        host += d
+        inputs.append(XprepRunInput(mo, d, Int(slot[].center.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+        inputs.append(XprepRunInput(so, d, Int(slot[].scale.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+    var dev_out = words >= OUT_MIN_WORDS and (call[].route.flags & PREP_ROUTE_OUT) != 0
+    var out = host
+    if not dev_out:
+        host += words
+    var ao = -1
+    var ko = -1
+    if anchored:
+        ao = host
+        host += d
+        ko = host
+        host += d
+        inputs.append(XprepRunInput(ao, d, Int(slot[].anchor.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+        inputs.append(XprepRunInput(ko, d, Int(slot[].anchor_kind.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
+    if host + (words if dev_out else 0) > _INT32_BOUND:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    if dev_out:
+        out = host
+    var program = List[Int32]()
+    _stage(program, OP_PT_INVERSE if inverse else OP_PT_APPLY, words, 0, n, d, lo, Int(slot[].words[1]), mo, so, out,
+        ao, ko)
+    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
+    if not dev_out:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+            src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=words)
+    _ = arena^
+
+
+def _block_view(slot: _Slot, block: Int) raises -> MemberMatrix:
+    if block == PREP_BLOCK_CENTER:
+        return MemberMatrix(Int(slot[].center.unsafe_ptr()), 1, len(slot[].center))
+    if block == PREP_BLOCK_SCALE:
+        return MemberMatrix(Int(slot[].scale.unsafe_ptr()), 1, len(slot[].scale))
+    if block == PREP_BLOCK_EXTRA:
+        return MemberMatrix(Int(slot[].extra.unsafe_ptr()), 1, len(slot[].extra))
+    if block == PREP_BLOCK_ANCHOR:
+        return MemberMatrix(Int(slot[].anchor.unsafe_ptr()), 1, len(slot[].anchor))
+    return MemberMatrix(Int(slot[].anchor_kind.unsafe_ptr()), 1, len(slot[].anchor_kind))
+
+
 def _export(slot: _Slot, call: _Call) raises:
     """A view of one fitted block. The slot owns the words; they stay valid
     until this state's next fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this " + _name(slot) + " member is not fitted yet")
+    var count = _block_count(slot[].kind())
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
-        if block < 0 or block > (0 if _stateless(slot) else 2):
+        if block < 0 or block >= count:
             raise Error("member ABI: a " + _name(slot) + " member has no fitted block index " + String(block))
-        block = MEMBER_BLOCK_SCALARS if block == 0 else (PREP_BLOCK_CENTER if block == 1 else PREP_BLOCK_SCALE)
+        block = MEMBER_BLOCK_SCALARS if block == 0 else PREP_BLOCK_CENTER + block - 1
     if block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
-    elif _stateless(slot):
-        raise Error("member ABI: a " + _name(slot) + " member has no fitted block " + String(block))
-    elif block == PREP_BLOCK_CENTER:
-        call[].dst = MemberMatrix(Int(slot[].center.unsafe_ptr()), 1, len(slot[].center))
-    elif block == PREP_BLOCK_SCALE:
-        call[].dst = MemberMatrix(Int(slot[].scale.unsafe_ptr()), 1, len(slot[].scale))
+    elif block >= PREP_BLOCK_CENTER and block < PREP_BLOCK_CENTER + count - 1:
+        call[].dst = _block_view(slot, block)
     else:
         raise Error("member ABI: a " + _name(slot) + " member has no fitted block " + String(block))
     call[].block = block
-    call[].out_cols = 1 if _stateless(slot) else 3
+    call[].out_cols = count
 
 
 def _import(slot: _Slot, call: _Call) raises:
     """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state."""
     var estimator = _name(slot)
+    var kind = slot[].kind()
     var block = call[].block
     if slot[].fitted:
         slot[].clear()
+    var count = _block_count(kind)
     if block == MEMBER_BLOCK_SCALARS:
-        var count = 2 if slot[].kind() == PREP_KIND_MAXABS else 1
-        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != count:
-            raise Error("member ABI: the " + estimator + " scalars block is " + String(count) + " host float64 words")
+        var scalar_count = _scalar_count(kind)
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != scalar_count:
+            raise Error("member ABI: the " + estimator + " scalars block is " + String(scalar_count)
+                        + " host float64 words")
         var given = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
-        slot[].scalars = List[Float64](length=count, fill=0.0)
-        for index in range(count):  # driver-loop: one or two scalar words
+        slot[].scalars = List[Float64](length=scalar_count, fill=0.0)
+        for index in range(scalar_count):  # driver-loop: one or two scalar words
             slot[].scalars[index] = given[index]
-    elif (block == PREP_BLOCK_CENTER or block == PREP_BLOCK_SCALE) and not _stateless(slot):
+    elif block >= PREP_BLOCK_CENTER and block < PREP_BLOCK_CENTER + count - 1:
         var size = call[].x.rows * call[].x.cols
         var words = List[Float32](length=size, fill=Float32(0))
         if size > 0:
@@ -614,68 +1004,126 @@ def _import(slot: _Slot, call: _Call) raises:
             unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=size)
         if block == PREP_BLOCK_CENTER:
             slot[].center = words^
-        else:
+        elif block == PREP_BLOCK_SCALE:
             slot[].scale = words^
+        elif block == PREP_BLOCK_EXTRA:
+            slot[].extra = words^
+        elif block == PREP_BLOCK_ANCHOR:
+            slot[].anchor = words^
+        else:
+            slot[].anchor_kind = words^
     elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         raise Error("member ABI: a " + estimator + " member has no fitted block " + String(block))
     if (call[].flags & MEMBER_IMPORT_DONE) == 0:
         return
-    var maxabs = slot[].kind() == PREP_KIND_MAXABS
-    if len(slot[].scalars) != (2 if maxabs else 1):
+    if len(slot[].scalars) != _scalar_count(kind):
         raise Error("member ABI: a fitted " + estimator + " state needs its scalars block")
     var d = Int(slot[].scalars[0])
-    if maxabs and (len(slot[].center) != d or len(slot[].scale) != d):
-        raise Error("member ABI: a fitted MaxAbsScaler state needs max_abs_ and scale_, one value per feature")
-    if (d < 1 or (len(slot[].center) != 0 and len(slot[].center) != d)
-            or (len(slot[].scale) != 0 and len(slot[].scale) != d)):
+    var complete = d >= 1
+    if kind == PREP_KIND_MAXABS:
+        complete = complete and len(slot[].center) == d and len(slot[].scale) == d
+    elif kind == PREP_KIND_POLYNOMIAL:
+        var nout = Int(slot[].scalars[1])
+        complete = complete and nout >= 0 and len(slot[].scale) == nout + 1 and len(slot[].center) >= 1
+    elif kind == PREP_KIND_QUANTILE:
+        var nq = Int(slot[].scalars[1])
+        complete = (complete and nq >= 1 and len(slot[].center) == nq * d and len(slot[].scale) == nq
+                    and len(slot[].extra) == nq * d)
+    elif kind == PREP_KIND_POWER:
+        complete = (complete and len(slot[].extra) == d and len(slot[].center) == len(slot[].scale)
+                    and (len(slot[].center) == 0 or len(slot[].center) == d)
+                    and len(slot[].anchor) == len(slot[].anchor_kind)
+                    and (len(slot[].anchor) == 0 or len(slot[].anchor) == d))
+    else:
+        complete = (complete and (len(slot[].center) == 0 or len(slot[].center) == d)
+                    and (len(slot[].scale) == 0 or len(slot[].scale) == d))
+    if not complete:
         raise Error("member ABI: a fitted " + estimator + " state needs every fitted block, of the fitted sizes")
     slot[].features = d
     slot[].fitted = True
 
 
 def _outputs(call: _Call) raises:
-    """`call.out_cols` of transform: the fitted feature count (X's width)."""
+    """`call.out_cols` of transform (and inverse_transform where the kind has
+    it): X's width, or PolynomialFeatures' term count."""
     call[].classes = 0
     if call[].state == 0:
-        # Asked before any state (`member_outputs`): a scaler keeps X's width.
-        if call[].flags != MEMBER_OP_TRANSFORM:
-            var kind = PREP_KIND_ROBUST
-            if call[].param_count >= 1 and call[].params:
-                kind = Int(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)[])
+        # Asked before any state (`member_outputs`): answered from the words.
+        var kind = PREP_KIND_ROBUST
+        var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+        if call[].param_count >= 1 and call[].params:
+            kind = Int(source[0])
+        if call[].flags != MEMBER_OP_TRANSFORM and not (call[].flags == MEMBER_OP_INVERSE_TRANSFORM and _invertible(kind)):
             member_unsupported(_kind_name(kind), call[].flags)
+        if kind == PREP_KIND_POLYNOMIAL:
+            if call[].param_count != PREP_POLY_PARAM_COUNT:
+                raise Error("member ABI: a PolynomialFeatures member takes five parameters")
+            var words = List[Float64](length=PREP_POLY_PARAM_COUNT, fill=0.0)
+            for w in range(PREP_POLY_PARAM_COUNT):  # driver-loop: the parameter words
+                words[w] = source[w]
+            var index = List[Int]()
+            var start = List[Int]()
+            _poly_table(words, call[].x.cols, index, start)
+            call[].out_cols = len(start) - 1
+            return
         call[].out_cols = call[].x.cols
         return
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
-    if call[].flags != MEMBER_OP_TRANSFORM:
+    if call[].flags != MEMBER_OP_TRANSFORM and not (call[].flags == MEMBER_OP_INVERSE_TRANSFORM
+                                                    and _invertible(slot[].kind())):
         member_unsupported(_name(slot), call[].flags)
     if not slot[].fitted:
         raise Error("NotFittedError: this " + _name(slot) + " member's output width is known after its fit")
+    if slot[].kind() == PREP_KIND_POLYNOMIAL and call[].flags == MEMBER_OP_TRANSFORM:
+        call[].out_cols = Int(slot[].scalars[1])
+        return
     call[].out_cols = slot[].features
+
+
+def _new_count(kind: Int) raises -> Int:
+    if kind == PREP_KIND_ROBUST:
+        return PREP_ROBUST_PARAM_COUNT
+    if kind == PREP_KIND_MAXABS:
+        return PREP_MAXABS_PARAM_COUNT
+    if kind == PREP_KIND_BINARIZER or kind == PREP_KIND_NORMALIZER:
+        return PREP_STATELESS_PARAM_COUNT
+    if kind == PREP_KIND_POLYNOMIAL:
+        return PREP_POLY_PARAM_COUNT
+    if kind == PREP_KIND_QUANTILE:
+        return PREP_QUANTILE_PARAM_COUNT
+    if kind == PREP_KIND_POWER:
+        return PREP_POWER_PARAM_COUNT
+    raise Error("member ABI: unknown or unpublished Prep member kind")
 
 
 def _prep_member(operation: Int, address: Int) raises -> Int:
     var call = _Call(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
-        # Kind-exact as well: RobustScaler and MaxAbsScaler honor the same
-        # operations (no inverse_transform, no weights, no index views).
-        return MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        var mask = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+        if call[].state == 0:
+            return mask | MEMBER_CAN_INVERSE_TRANSFORM  # the family's union
+        # Kind-exact: only QuantileTransformer and PowerTransformer invert;
+        # no kind reads weights or index views.
+        var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
+        if _invertible(held[].kind()):
+            mask |= MEMBER_CAN_INVERSE_TRANSFORM
+        return mask
     if operation == MEMBER_OP_NEW:
         if call[].param_count < 1 or not call[].params:
             raise Error("member ABI: a Prep member takes its parameter words")
         var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
-        if source[0] == Float64(PREP_KIND_ROBUST):
-            if call[].param_count != PREP_ROBUST_PARAM_COUNT:
-                raise Error("member ABI: a RobustScaler member takes nine parameters")
-        elif source[0] == Float64(PREP_KIND_MAXABS):
-            if call[].param_count != PREP_MAXABS_PARAM_COUNT:
-                raise Error("member ABI: a MaxAbsScaler member takes three parameters")
-        elif source[0] == Float64(PREP_KIND_BINARIZER) or source[0] == Float64(PREP_KIND_NORMALIZER):
-            if call[].param_count != PREP_STATELESS_PARAM_COUNT:
-                raise Error("member ABI: a " + _kind_name(Int(source[0])) + " member takes two parameters")
-            if source[0] == Float64(PREP_KIND_NORMALIZER) and source[1] != 0.0 and source[1] != 1.0 and source[1] != 2.0:
-                raise Error("member ABI: unknown Normalizer norm code")
-        else:
-            raise Error("member ABI: unknown or unpublished Prep member kind")
+        var kind = Int(source[0])
+        if Float64(kind) != source[0] or call[].param_count != _new_count(kind):
+            raise Error("member ABI: a " + _kind_name(kind) + " member takes " + String(_new_count(kind))
+                        + " parameter words")
+        if kind == PREP_KIND_NORMALIZER and source[1] != 0.0 and source[1] != 1.0 and source[1] != 2.0:
+            raise Error("member ABI: unknown Normalizer norm code")
+        if kind == PREP_KIND_POLYNOMIAL and (source[1] < 0.0 or source[1] > source[2]):
+            raise Error("member ABI: invalid PolynomialFeatures degree words")
+        if kind == PREP_KIND_QUANTILE and (source[2] < 1.0 or (source[1] != 0.0 and source[1] != 1.0)):
+            raise Error("member ABI: invalid QuantileTransformer parameter words")
+        if kind == PREP_KIND_POWER and source[1] != 0.0 and source[1] != 1.0:
+            raise Error("member ABI: unknown PowerTransformer method code")
         var words = List[Float64](length=call[].param_count, fill=0.0)
         for index in range(call[].param_count):  # driver-loop: the parameter words
             words[index] = source[index]
@@ -689,20 +1137,37 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         _outputs(call)
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
+    var kind = slot[].kind()
     if operation == MEMBER_OP_FIT:
-        if _stateless(slot):
+        if kind == PREP_KIND_BINARIZER or kind == PREP_KIND_NORMALIZER:
             _fit_stateless(slot, call)
-        elif slot[].kind() == PREP_KIND_MAXABS:
+        elif kind == PREP_KIND_MAXABS:
             _fit_maxabs(slot, call)
+        elif kind == PREP_KIND_POLYNOMIAL:
+            _fit_poly(slot, call)
+        elif kind == PREP_KIND_QUANTILE:
+            _fit_quantile(slot, call)
+        elif kind == PREP_KIND_POWER:
+            _fit_power(slot, call)
         else:
             _fit_robust(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
-        if _stateless(slot):
+        if kind == PREP_KIND_BINARIZER or kind == PREP_KIND_NORMALIZER:
             _transform_stateless(slot, call)
-        elif slot[].kind() == PREP_KIND_MAXABS:
+        elif kind == PREP_KIND_MAXABS:
             _transform_maxabs(slot, call)
+        elif kind == PREP_KIND_POLYNOMIAL:
+            _transform_poly(slot, call)
+        elif kind == PREP_KIND_QUANTILE:
+            _apply_quantile(slot, call, False)
+        elif kind == PREP_KIND_POWER:
+            _apply_power(slot, call, False)
         else:
             _transform_robust(slot, call)
+    elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_QUANTILE:
+        _apply_quantile(slot, call, True)
+    elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_POWER:
+        _apply_power(slot, call, True)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

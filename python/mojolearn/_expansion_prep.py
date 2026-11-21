@@ -1709,6 +1709,10 @@ class QuantileTransformer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 5): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 5)
 
     def __init__(self, *, n_quantiles=1000, output_distribution="uniform", ignore_implicit_zeros=False,
                  subsample=10_000, random_state=None, copy=True, device=None):
@@ -1781,6 +1785,10 @@ class PowerTransformer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 6): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 6)
 
     def __init__(self, method="yeo-johnson", *, standardize=True, copy=True, device=None):
         self.method = method
@@ -1905,6 +1913,10 @@ class PolynomialFeatures(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 4): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 4)
 
     def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C", device=None):
         self.degree = degree
