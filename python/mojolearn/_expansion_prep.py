@@ -2379,13 +2379,16 @@ class IterativeImputer(_PrepBase):
     _mojolearn_native_public = True
     _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
                    "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
-                   "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
+                   "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, estimator=None, *, missing_values=float("nan"), sample_posterior=False, max_iter=10,
                  tol=1e-3, n_nearest_features=None, initial_strategy="mean", fill_value=None,
                  imputation_order="ascending", skip_complete=False, min_value=-float("inf"),
                  max_value=float("inf"), verbose=0, random_state=None, add_indicator=False,
-                 keep_empty_features=False):
+                 keep_empty_features=False, device=None):
         self.estimator = estimator
         self.missing_values = missing_values
         self.sample_posterior = sample_posterior
@@ -2402,6 +2405,18 @@ class IterativeImputer(_PrepBase):
         self.random_state = random_state
         self.add_indicator = add_indicator
         self.keep_empty_features = keep_empty_features
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to ``X``, then impute it.
@@ -2682,11 +2697,26 @@ class SelectKBest(_SelectorMixin):
     >>> y = (X[:, 3] > 0.5).astype(np.int64)
     >>> Xt = mojolearn.SelectKBest(mojolearn.f_classif, k=5).fit_transform(X, y)
     """
-    _parameters = ("score_func", "k")
+    _parameters = ("score_func", "k", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, score_func=f_classif, *, k=10):
+    def __init__(self, score_func=f_classif, *, k=10, device=None):
         self.score_func = score_func
         self.k = k
+        self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)

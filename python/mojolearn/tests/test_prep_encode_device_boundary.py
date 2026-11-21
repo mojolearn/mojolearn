@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""`device=None` (default), `device="gpu"` and `device="cpu"` on the encoders, imputer, discretizer, spline and label
-transformers, at the Python boundary.
+"""`device=None` (default), `device="gpu"` and `device="cpu"` on the encoders, imputers, discretizer, spline, label
+transformers and the score selector, at the Python boundary.
 
-SimpleImputer, KBinsDiscretizer, OrdinalEncoder, OneHotEncoder, TargetEncoder, SplineTransformer, LabelEncoder,
-LabelBinarizer and MultiLabelBinarizer take the device as a constructor parameter, with the rule and the words of the
+SimpleImputer, IterativeImputer, KBinsDiscretizer, OrdinalEncoder, OneHotEncoder, TargetEncoder, SplineTransformer,
+SelectKBest, LabelEncoder, LabelBinarizer and MultiLabelBinarizer take the device as a constructor parameter, with the rule and the words of the
 scalers (test_scaler_device_boundary.py). None is this installation's device. An unknown value, and an explicit
 `device="gpu"` on a CPU-only installation, are refused in words where they are given; `device="cpu"` always runs. The
 device is read once, by the estimator's first data operation; `get_params`, `set_params`, clone and pickle carry it.
@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 
 import mojolearn
-from mojolearn import (KBinsDiscretizer, LabelBinarizer, LabelEncoder, MultiLabelBinarizer, OneHotEncoder,
-                       OrdinalEncoder, SimpleImputer, SplineTransformer, TargetEncoder)
+from mojolearn import (IterativeImputer, KBinsDiscretizer, LabelBinarizer, LabelEncoder, MultiLabelBinarizer,
+                       OneHotEncoder, OrdinalEncoder, SelectKBest, SimpleImputer, SplineTransformer, TargetEncoder)
 
 TWO_DEVICES = mojolearn.vendor() != "cpu"
 two_devices = pytest.mark.skipif(not TWO_DEVICES, reason="a CPU-only installation has one device")
@@ -62,6 +62,19 @@ CASES = [
     ("label-encoder", LabelEncoder, dict(), lambda: (_labels(),), True),
     ("label-binarizer", LabelBinarizer, dict(), lambda: (_labels(),), True),
     ("multilabel", MultiLabelBinarizer, dict(), lambda: (_label_rows(),), False),
+    # the score selector: one row per score program (class statistics, Pearson, chi2 with its column statistics,
+    # and the mutual-information scores, which the fit takes through the family entry in its own context)
+    ("kbest-f-classif", SelectKBest, dict(score_func=mojolearn.f_classif, k=2),
+     lambda: (_continuous(), _labels()), False),
+    ("kbest-chi2", SelectKBest, dict(score_func=mojolearn.chi2, k=2), lambda: (_categories(), _labels()), False),
+    ("kbest-f-regression", SelectKBest, dict(score_func=mojolearn.f_regression, k=2),
+     lambda: (_continuous(), _continuous(cols=1, seed=9)[:, 0]), False),
+    ("kbest-r-regression", SelectKBest, dict(score_func=mojolearn.r_regression, k=2),
+     lambda: (_continuous(), _continuous(cols=1, seed=9)[:, 0]), False),
+    ("kbest-mutual-info", SelectKBest, dict(score_func=mojolearn.mutual_info_classif, k=2),
+     lambda: (_continuous(), _labels()), False),
+    # the round imputer with its built-in regression; its initial SimpleImputer takes its device
+    ("iterative-imputer", IterativeImputer, dict(max_iter=3, random_state=0), lambda: (_with_nan(),), False),
 ]
 case = pytest.mark.parametrize("spec", CASES, ids=[row[0] for row in CASES])
 
@@ -180,10 +193,35 @@ def test_an_instance_without_the_parameter_runs_this_installations_device(spec):
     assert same_bits(model.fit(*args).transform(args[0]), build(spec).fit(*args).transform(args[0]))
 
 
-def test_select_k_best_does_not_take_device_yet():
-    # Its transform is the selector door's, which has no device route yet.
+def test_rfe_does_not_take_device():
+    # A meta-estimator over a member: the member carries its own device.
     with pytest.raises(TypeError):
-        mojolearn.SelectKBest(device="cpu")
+        mojolearn.RFE(mojolearn.Ridge(), device="cpu")
+
+
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_iterative_imputer_hands_its_device_to_its_initial_imputer(device):
+    x = _with_nan()
+    model = IterativeImputer(max_iter=2, random_state=0, device=device).fit(x)
+    initial = model.initial_imputer_
+    assert initial.get_params()["device"] == device
+    assert initial.vendor_used() == model.vendor_used()
+    # the initial imputer on its own, then the owner again: each resolves its own route
+    assert same_bits(initial.transform(x), SimpleImputer(device=device).fit(x).transform(x))
+    assert same_bits(model.transform(x), IterativeImputer(max_iter=2, random_state=0, device=device).fit_transform(x))
+
+
+@pytest.mark.parametrize("device", [None, "cpu"])
+def test_select_k_best_fit_and_transform_run_on_one_device(device):
+    # fit is the encode owner's call and transform the selector door's: both resolve the estimator's device
+    x, y = _continuous(), _labels()
+    model = SelectKBest(mojolearn.f_classif, k=2, device=device).fit(x, y)
+    expected = "cpu" if device == "cpu" else mojolearn.vendor()
+    assert model.vendor_used() == expected
+    kept = model.transform(x)
+    assert same_bits(kept, np.asarray(x)[:, np.asarray(model.get_support())])
+    assert model.vendor_used() == expected
+    assert same_bits(kept, SelectKBest(mojolearn.f_classif, k=2, device=device).fit_transform(x, y))
 
 
 @two_devices
