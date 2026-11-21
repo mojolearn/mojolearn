@@ -43,7 +43,8 @@ from bindings.native_transport_door import (
 )
 from bindings.native_transport_run import transport_terminate, transport_clock
 from bindings.native_process_wire_door import (
-    WireOutgoing, wire_send, wire_receive, wire_send_fd, wire_receive_fd, wire_unpack, wire_text,
+    WireOutgoing, WireReply, wire_send, wire_receive, wire_send_fd, wire_receive_fd, wire_receive_typed_fd,
+    wire_reply_pack, wire_unpack, wire_text,
 )
 from core.parallel_worker_frame import WIRE_REQUEST, WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
@@ -573,13 +574,24 @@ def process_pool_start(pool: PythonObject) raises:
 def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[List[Int64]]) raises -> PythonObject:
     """Ordered request waves over the pool's workers: request `i` of a wave
     goes to worker `i` as one typed frame (its request words `words[i]` and
-    the record UNPACKed from `inputs[i]`), then the replies are read in
-    request order. Every worker of a wave has its request before the first
-    reply is awaited, so the workers compute at the same time."""
+    the record of `inputs[i]`), then the replies are read in request order.
+    Every worker of a wave has its request before the first reply is
+    awaited, so the workers compute at the same time.
+
+    UNPACK is whole before the first frame is written: every request's
+    record, once per map. A wave then writes typed frames and collects typed
+    replies (`WireReply`: the record and the stores its tensors were read
+    into); PACK builds the wave's Python values once, after its last reply.
+    Until 2026-11-21 each request was UNPACKed between two sends of its wave
+    and each reply PACKed (its Arrays, its containers, the list append)
+    before the next worker's reply was read."""
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
     var total = len(inputs)
     if len(words) != total:
         raise Error("process: typed request words differ from their payloads")
+    var outgoing = List[WireOutgoing](capacity=total)
+    for i in range(total):  # driver-loop: over the requests of one map (UNPACK, before any worker is addressed)
+        outgoing.append(wire_unpack(inputs[i]))
     process_pool_start(pool)
     var nk = native_keys()
     var record = py_item(pool, nk[].k_record)
@@ -594,15 +606,15 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
         while offset < total:  # driver-loop: over logical request waves across physical worker groups
             var width = pool_wave_width(len(fds), total - offset)
             for i in range(width):  # driver-loop: over independent requests launched before consuming wave results
-                var outgoing = wire_unpack(inputs[offset + i])
-                wire_send_fd(fds[i], -1.0, WIRE_REQUEST, sequence + i, words[offset + i], outgoing)
+                wire_send_fd(fds[i], -1.0, WIRE_REQUEST, sequence + i, words[offset + i], outgoing[offset + i])
             var failure = String()
+            var replies = List[WireReply](capacity=width)
             for i in range(width):  # driver-loop: over worker replies in fixed logical request order
                 try:
-                    var reply = wire_receive_fd(fds[i], -1.0)
+                    var reply = wire_receive_typed_fd(fds[i], -1.0)
                     if pool_reply_failed(reply.kind, reply.sequence, sequence + i, False):
-                        raise Error("RuntimeError: native model worker failed: " + String(reply.value))
-                    _ = py_call(result.append, reply.value)
+                        raise Error("RuntimeError: native model worker failed: " + reply.text())
+                    replies.append(reply^)
                 except error:
                     if String(error).startswith("InterruptedError:"):
                         raise error  # Cancel instead of draining unbounded peer replies.
@@ -610,6 +622,9 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
                         failure = String(error)
             if failure != "":
                 raise Error(failure)
+            # PACK of the wave, once: no worker of it is still to be read.
+            for i in range(width):  # driver-loop: over the collected replies of one wave
+                _ = py_call(result.append, wire_reply_pack(replies[i]))
             offset += width
             sequence += width
             rec[].native.sequence = sequence
@@ -619,6 +634,7 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
     # The mirror's sequence, once per map (the record has it per wave).
     py_setitem(pool, nk[].k_sequence, PythonObject(sequence))
     _ = record
+    _ = outgoing^
     return result
 
 

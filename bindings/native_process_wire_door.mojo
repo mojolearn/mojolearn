@@ -21,7 +21,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_setitem, py_type
 from bindings.native_codec_door import CODEC_BOUNDARY, _codec_keys, _codec_packed_class, _codec_packed_fields, _codec_dtype, _codec_code
 from bindings.native_array_snapshot_door import native_array_snapshot, native_array_slots
-from bindings.native_array_storage_door import native_array_zeros, native_array_unfilled
+from bindings.native_array_storage_door import native_array_unfilled
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_instance_item_pack import native_instance_item
 from bindings.native_transport_door import _transport_state
@@ -30,7 +30,7 @@ from bindings.native_posix_transport_run import PosixBytes
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from core.parallel_worker_frame import (
     WireRecord, WireTensor, WireFrame, wire_frame_words, wire_frame_header, wire_frame_body,
-    wire_dtype_word, wire_dtype_name, WIRE_FRAME_HEADER_WORDS, WIRE_RECORD_MAX_DEPTH,
+    wire_dtype_word, wire_dtype_name, wire_dtype_itemsize, WIRE_FRAME_HEADER_WORDS, WIRE_RECORD_MAX_DEPTH,
     WIRE_NONE, WIRE_BOOL, WIRE_INT, WIRE_FLOAT, WIRE_TEXT, WIRE_TENSOR, WIRE_BF16, WIRE_INT8,
     WIRE_LIST, WIRE_TUPLE, WIRE_MAP, WIRE_BYTES, WIRE_BYTEARRAY, WIRE_U1,
 )
@@ -215,20 +215,28 @@ def wire_send_fd(fd: Int, timeout: Float64, kind: Int, sequence: Int, request: L
         pin.release()
 
 
-def _wire_array(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonObject:
-    """PACK of one tensor: a native Array whose store receives the bytes."""
-    var c = CODEC_BOUNDARY.get_or_create_ptr()
-    var bi = c[].bi
-    var dtype = wire_dtype_name(tensor.dtype)
-    var code = _codec_code(dtype)
-    var probe = native_array_zeros(code, 0)
-    var itemsize = Int(py=probe.itemsize)
-    var count = tensor.byte_count // itemsize
+def _wire_store(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonObject:
+    """The destination of one received tensor: an unfilled native store
+    (one allocation, no Array object) that receives the tensor's bytes from
+    the socket. `_wire_array` wraps it at PACK."""
+    var code = _codec_code(wire_dtype_name(tensor.dtype))
+    var count = tensor.byte_count // wire_dtype_itemsize(tensor.dtype)
     # lane fix-output-zero-fill (2026-11-14): unfilled; posix_transfer writes the tensor's bytes
     # (a short read raises before the store escapes).
     var store = native_array_unfilled(code, count)
     if count > 0:
         posix_transfer(fd, PosixBytes(unsafe_from_address=native_buffer_address(store)), tensor.byte_count, timeout, False)
+    return store
+
+
+def _wire_array(store: PythonObject, tensor: WireTensor) raises -> PythonObject:
+    """PACK of one tensor: the native Array over the store that received its
+    bytes (`_wire_store`)."""
+    var c = CODEC_BOUNDARY.get_or_create_ptr()
+    var bi = c[].bi
+    var dtype = wire_dtype_name(tensor.dtype)
+    var itemsize = wire_dtype_itemsize(tensor.dtype)
+    var count = tensor.byte_count // itemsize
     var shape = bi.list()
     for axis in range(len(tensor.shape)):  # small-loop(tensor rank)
         _ = py_call(shape.append, PythonObject(tensor.shape[axis]))
@@ -387,9 +395,37 @@ def wire_receive(socket: PythonObject) raises -> WireMessage:
     return message^
 
 
-def wire_receive_fd(fd: Int, timeout: Float64) raises -> WireMessage:
-    """One typed frame: header, descriptor words, then each tensor's bytes
-    into its own Array store; PACK of the record once."""
+struct WireReply(Movable):
+    """A received frame before PACK: kind, sequence, the request words (empty
+    for a reply), the typed record and, per tensor descriptor, the store that
+    received its bytes (an unfilled native array store, or a bytearray for a
+    byte-string node). The stores are the destinations of the socket reads
+    and nothing else: no Array object, no Python container and no record
+    value exists until `wire_reply_pack`."""
+    var kind: Int
+    var sequence: Int
+    var request: List[Int64]
+    var record: WireRecord
+    var stores: List[PythonObject]
+
+    def __init__(out self, kind: Int, sequence: Int):
+        self.kind = kind
+        self.sequence = sequence
+        self.request = List[Int64]()
+        self.record = WireRecord()
+        self.stores = List[PythonObject]()
+
+    def text(self) raises -> String:
+        """The text of an error reply ("" when the record is not one text)."""
+        if self.record.node_count() == 1 and self.record.tag(0) == WIRE_TEXT:
+            return self.record.text_value(0)
+        return String()
+
+
+def wire_receive_typed_fd(fd: Int, timeout: Float64) raises -> WireReply:
+    """One typed frame, not PACKed: header, descriptor words, then each
+    tensor's bytes into its own store. A wave collects these and PACKs them
+    once (`wire_reply_pack`), after its last reply."""
     if fd < 0:
         raise Error("transport: socket is closed")
     var head = List[Int64](length=WIRE_FRAME_HEADER_WORDS, fill=0)
@@ -400,23 +436,50 @@ def wire_receive_fd(fd: Int, timeout: Float64) raises -> WireMessage:
         posix_transfer(fd, PosixBytes(unsafe_from_address=Int(body.unsafe_ptr())), len(body) * 8, timeout, False)
     var frame = wire_frame_body(header, body)
     _ = body^
-    var tensors = List[PythonObject]()
-    var byte_strings = _wire_byte_strings(frame.record)
-    for i in range(len(frame.record.tensors)):  # driver-loop: over the tensors of one frame, in descriptor order
+    var reply = WireReply(frame.kind, frame.sequence)
+    # The frame's words and record change owner (no copy); the frame keeps empty ones.
+    swap(reply.request, frame.request)
+    swap(reply.record, frame.record)
+    var byte_strings = _wire_byte_strings(reply.record)
+    for i in range(len(reply.record.tensors)):  # driver-loop: over the tensors of one frame, in descriptor order
         if byte_strings[i]:
-            tensors.append(_wire_bytes(fd, timeout, frame.record.tensors[i]))
+            reply.stores.append(_wire_bytes(fd, timeout, reply.record.tensors[i]))
         else:
-            tensors.append(_wire_array(fd, timeout, frame.record.tensors[i]))
+            reply.stores.append(_wire_store(fd, timeout, reply.record.tensors[i]))
+    return reply^
+
+
+def wire_reply_pack(reply: WireReply) raises -> PythonObject:
+    """PACK of one received record, once: each tensor store becomes its
+    native Array (a byte-string store is handed on as it is), then the record
+    tree becomes Python values."""
+    var byte_strings = _wire_byte_strings(reply.record)
+    var tensors = List[PythonObject](capacity=len(reply.stores))
+    for i in range(len(reply.stores)):  # driver-loop: over the tensors of one frame, in descriptor order
+        if byte_strings[i]:
+            tensors.append(reply.stores[i])
+        else:
+            tensors.append(_wire_array(reply.stores[i], reply.record.tensors[i]))
     var value = PythonObject(None)
-    if frame.record.node_count() > 0:
+    if reply.record.node_count() > 0:
         var cursor = 0
         var next_tensor = 0
-        value = _wire_pack(frame.record, cursor, tensors, next_tensor, 0)
-        if cursor != frame.record.node_count() or next_tensor != len(tensors):
+        value = _wire_pack(reply.record, cursor, tensors, next_tensor, 0)
+        if cursor != reply.record.node_count() or next_tensor != len(tensors):
             raise Error("parallel wire: unclaimed nodes or tensors at the end of the record")
     elif len(tensors) != 0:
         raise Error("parallel wire: tensors without a record")
-    return WireMessage(frame.kind, frame.sequence, frame.request.copy(), value)
+    return value
+
+
+def wire_receive_fd(fd: Int, timeout: Float64) raises -> WireMessage:
+    """One typed frame and the PACK of its record (one addressed request's
+    reply, a worker's next request)."""
+    var reply = wire_receive_typed_fd(fd, timeout)
+    var value = wire_reply_pack(reply)
+    var words = List[Int64]()
+    swap(words, reply.request)
+    return WireMessage(reply.kind, reply.sequence, words^, value)
 
 
 def wire_append(value: PythonObject, mut outgoing: WireOutgoing) raises:
