@@ -30,7 +30,7 @@ def test_owner_has_no_instance_callables():
     # The session operations are typed RUN (no Python object, no Python
     # import); the owner door only unpacks, calls them and packs.
     run = (ROOT / "bindings/parallel_byte_native_run.mojo").read_text(encoding="utf-8")
-    assert "native_descriptor_leased_call(" in run
+    assert "neural_descriptor_record_execute(" in run
     assert "PythonObject" not in run and "std.python" not in run
     assert "parallel_session_step_begin(" in owner
     assert "neural_descriptor_execute(" not in owner

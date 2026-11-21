@@ -15,7 +15,8 @@ Five independent fixtures, run across the host's cores.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+from core.native_descriptor_abi import NativeDescriptorError
+from core.neural_descriptor_run import NeuralDescriptorRecord
 from core.native_descriptor_call import native_descriptor_report
 from bindings.parallel_byte_native_run import (
     ParallelByteSession, PARALLEL_SCHEDULE_OPERATIONS, PARALLEL_REPLICA, PARALLEL_MODEL_POOL,
@@ -135,19 +136,25 @@ def stand_in() -> List[Int]:
     return words^
 
 
-def session(calls: Int, schedule: Int, devices: Int, pool_optimizer: Bool, connected: Bool) -> ParallelByteSession:
+def provider() -> List[NeuralDescriptorRecord]:
+    """The stand-in table's typed provider record (one element, so its
+    address is the provider id for as long as the list lives)."""
+    var records = List[NeuralDescriptorRecord]()
+    records.append(NeuralDescriptorRecord(String("stand-in.schedule"), entry, PARALLEL_SCHEDULE_OPERATIONS))
+    return records^
+
+
+def session(provider_id: Int, schedule: Int, devices: Int, pool_optimizer: Bool) -> ParallelByteSession:
     """A session as the door's constructor builds it: `devices` device
-    indices, SHARDS logical shards, DIMS shape words, step STEP_AT_OPEN."""
-    var table = List[NativeDescriptorCall]()
-    if connected:
-        table.append(entry)
+    indices, SHARDS logical shards, DIMS shape words, step STEP_AT_OPEN.
+    `provider_id` 0: a binding without the cooperative table."""
     var selected = List[Int]()
     for d in range(devices):  # small-loop(device indices of the fixture)
         selected.append(d)
     var dims = List[Int](length=DIMS, fill=2)
     var scalars = List[Float64](length=PARALLEL_SCALAR_COUNT, fill=0.0)
     scalars[PARALLEL_SCALAR_LR] = 0.125
-    return ParallelByteSession(table^, 0, calls, PARALLEL_SCHEDULE_OPERATIONS, schedule, pool_optimizer, selected^,
+    return ParallelByteSession(provider_id, schedule, pool_optimizer, selected^,
                                SHARDS, dims^, 64, 12, STEP_AT_OPEN, 2, False, scalars^)
 
 
@@ -170,8 +177,9 @@ def fixture_open_close() raises:
     and a closed trainer is refused."""
     var words = stand_in()
     var handle = Int(words.unsafe_ptr())
-    var calls = List[Int](length=PARALLEL_SCHEDULE_OPERATIONS, fill=0)
-    var trainer = session(Int(calls.unsafe_ptr()), PARALLEL_REPLICA, 2, True, True)
+    var records = provider()
+    var table = Int(records.unsafe_ptr())
+    var trainer = session(table, PARALLEL_REPLICA, 2, True)
     require(parallel_session_schedule_name(trainer) == "parallel", "replica schedule is named parallel")
     require(parallel_session_openable(trainer), "a new trainer needs its session opened")
     var message = String()
@@ -202,7 +210,7 @@ def fixture_open_close() raises:
     # [completed, kind, nesterov, pool, n_dims] + dims + [shards, n_devices] + devices
     require(words[W_LAST_ADDRESSES] == 5 and words[W_LAST_INTS] == 5 + DIMS + 2 + 2, "open request words")
     require(not parallel_session_openable(trainer), "an open trainer is not opened twice")
-    require(calls[PARALLEL_OP_OPEN] == 2 and calls[PARALLEL_OP_CLOSE] == 1 and calls[PARALLEL_OP_EXPORT] == 0,
+    require(records[0].calls[PARALLEL_OP_OPEN] == 2 and records[0].calls[PARALLEL_OP_CLOSE] == 1 and records[0].calls[PARALLEL_OP_EXPORT] == 0,
             "every admitted call is counted under its operation; a refused one is not")
     message = String()
     try:
@@ -223,7 +231,7 @@ def fixture_open_close() raises:
         message = text_of(problem)
     require(refused(message, "closed or lost"), "a closed trainer is refused")
     _ = words  # the stand-in's words outlive every call through the handle
-    _ = calls
+    _ = records  # the provider record outlives every session that holds its id
 
 
 def fixture_step() raises:
@@ -232,8 +240,9 @@ def fixture_step() raises:
     rollback that answers another step marks the trainer lost."""
     var words = stand_in()
     var handle = Int(words.unsafe_ptr())
-    var calls = List[Int](length=PARALLEL_SCHEDULE_OPERATIONS, fill=0)
-    var trainer = session(Int(calls.unsafe_ptr()), PARALLEL_REPLICA, 2, True, True)
+    var records = provider()
+    var table = Int(records.unsafe_ptr())
+    var trainer = session(table, PARALLEL_REPLICA, 2, True)
     opened(trainer, handle)
     var ids = List[Int32](length=SHARDS, fill=0)
     var shards = List[Int]()
@@ -255,7 +264,7 @@ def fixture_step() raises:
         _ = parallel_session_step_begin(trainer, shards, short)
     except problem:
         message = text_of(problem)
-    require(refused(message, "shard count mismatch") and calls[PARALLEL_OP_STEP] == 2,
+    require(refused(message, "shard count mismatch") and records[0].calls[PARALLEL_OP_STEP] == 2,
             "a loss buffer of another length is refused before the call")
     # The table answers one loss too many: rolled back to the committed step, not lost.
     words[W_SKEW_OP] = PARALLEL_OP_STEP
@@ -277,7 +286,7 @@ def fixture_step() raises:
         message = text_of(problem)
     require(refused(message, "closed or lost"), "a lost trainer is refused")
     # A rollback the table refuses also marks the trainer lost.
-    var other = session(Int(calls.unsafe_ptr()), PARALLEL_REPLICA, 2, True, True)
+    var other = session(table, PARALLEL_REPLICA, 2, True)
     words[W_SKEW_OP] = -1
     words[W_STEP] = STEP_AT_OPEN
     opened(other, handle)
@@ -286,7 +295,7 @@ def fixture_step() raises:
     require(other.lost, "a refused rollback marks the trainer lost")
     _ = ids
     _ = words
-    _ = calls
+    _ = records  # the provider record outlives every session that holds its id
 
 
 def fixture_set_lr() raises:
@@ -295,23 +304,24 @@ def fixture_set_lr() raises:
     session that stored other bits."""
     var words = stand_in()
     var handle = Int(words.unsafe_ptr())
-    var calls = List[Int](length=PARALLEL_SCHEDULE_OPERATIONS, fill=0)
-    var trainer = session(Int(calls.unsafe_ptr()), PARALLEL_REPLICA, 1, False, True)
+    var records = provider()
+    var table = Int(records.unsafe_ptr())
+    var trainer = session(table, PARALLEL_REPLICA, 1, False)
     # Before open: the rate is kept for the open, no call is made.
     parallel_session_set_lr(trainer, Float32(0.5))
-    require(trainer.scalars[PARALLEL_SCALAR_LR] == 0.5 and trainer.lr_stale and calls[PARALLEL_OP_SET_LR] == 0,
+    require(trainer.scalars[PARALLEL_SCALAR_LR] == 0.5 and trainer.lr_stale and records[0].calls[PARALLEL_OP_SET_LR] == 0,
             "a rate set before open is kept without a call")
     opened(trainer, handle)
     trainer.lr_stale = False
     parallel_session_set_lr(trainer, Float32(0.1))
     require(trainer.scalars[PARALLEL_SCALAR_LR] == Float64(Float32(0.1)) and trainer.lr_stale
-            and calls[PARALLEL_OP_SET_LR] == 1, "the stored rate is the float32 the session stored")
+            and records[0].calls[PARALLEL_OP_SET_LR] == 1, "the stored rate is the float32 the session stored")
     var message = String()
     try:
         parallel_session_set_lr(trainer, Float32(0.0))
     except problem:
         message = text_of(problem)
-    require(refused(message, "lr > 0") and calls[PARALLEL_OP_SET_LR] == 1, "a non-positive rate is refused before the call")
+    require(refused(message, "lr > 0") and records[0].calls[PARALLEL_OP_SET_LR] == 1, "a non-positive rate is refused before the call")
     words[W_SKEW_OP] = PARALLEL_OP_SET_LR
     message = String()
     try:
@@ -321,7 +331,7 @@ def fixture_set_lr() raises:
     require(refused(message, "different float32 bits") and trainer.scalars[PARALLEL_SCALAR_LR] == Float64(Float32(0.1)),
             "a session that stored other bits is refused and the rate is unchanged")
     words[W_SKEW_OP] = -1
-    var pool = session(Int(calls.unsafe_ptr()), PARALLEL_MODEL_POOL, 2, True, True)
+    var pool = session(table, PARALLEL_MODEL_POOL, 2, True)
     require(parallel_session_schedule_name(pool) == "model_pool", "the pool schedule's name")
     opened(pool, handle)
     message = String()
@@ -331,31 +341,31 @@ def fixture_set_lr() raises:
         message = text_of(problem)
     require(refused(message, "lacks set_lr"), "set_lr on another schedule's open session is refused")
     _ = words
-    _ = calls
+    _ = records  # the provider record outlives every session that holds its id
 
 
 def fixture_require_split() raises:
     """The split entries need the replica schedule, one device, no pool
     optimizer and a connected table."""
-    var calls = List[Int](length=PARALLEL_SCHEDULE_OPERATIONS, fill=0)
-    var base = Int(calls.unsafe_ptr())
-    var good = session(base, PARALLEL_REPLICA, 1, False, True)
+    var records = provider()
+    var table = Int(records.unsafe_ptr())
+    var good = session(table, PARALLEL_REPLICA, 1, False)
     parallel_session_require_split(good, "shard_gradient")
     var cases = List[String]()
     try:
-        parallel_session_require_split(session(base, PARALLEL_MODEL_POOL, 1, False, True), "shard_gradient")
+        parallel_session_require_split(session(table, PARALLEL_MODEL_POOL, 1, False), "shard_gradient")
     except problem:
         cases.append(text_of(problem))
     try:
-        parallel_session_require_split(session(base, PARALLEL_REPLICA, 2, False, True), "shard_gradient")
+        parallel_session_require_split(session(table, PARALLEL_REPLICA, 2, False), "shard_gradient")
     except problem:
         cases.append(text_of(problem))
     try:
-        parallel_session_require_split(session(base, PARALLEL_REPLICA, 1, True, True), "shard_gradient")
+        parallel_session_require_split(session(table, PARALLEL_REPLICA, 1, True), "shard_gradient")
     except problem:
         cases.append(text_of(problem))
     try:
-        parallel_session_require_split(session(base, PARALLEL_REPLICA, 1, False, False), "shard_gradient")
+        parallel_session_require_split(session(0, PARALLEL_REPLICA, 1, False), "shard_gradient")
     except problem:
         cases.append(text_of(problem))
     require(len(cases) == 4, "each of the four conditions refuses")
@@ -364,10 +374,10 @@ def fixture_require_split() raises:
             "more than one device or the pool optimizer is refused")
     require(refused(cases[3], "binding lacks shard_gradient"), "an unconnected table is refused")
     require(parallel_session_ownership_width(good) == 5
-            and parallel_session_ownership_width(session(base, PARALLEL_MODEL_POOL, 1, False, True)) == 7,
+            and parallel_session_ownership_width(session(table, PARALLEL_MODEL_POOL, 1, False)) == 7,
             "ownership rows are five words for replicas, seven otherwise")
     require(parallel_session_ownership_capacity(good) == 5 * (2 + 2 + 1), "ownership capacity from layers and devices")
-    _ = calls
+    _ = records  # the provider record outlives every session that holds its id
 
 
 def fixture_gradients() raises:
@@ -376,8 +386,9 @@ def fixture_gradients() raises:
     ownership checks."""
     var words = stand_in()
     var handle = Int(words.unsafe_ptr())
-    var calls = List[Int](length=PARALLEL_SCHEDULE_OPERATIONS, fill=0)
-    var trainer = session(Int(calls.unsafe_ptr()), PARALLEL_REPLICA, 1, False, True)
+    var records = provider()
+    var table = Int(records.unsafe_ptr())
+    var trainer = session(table, PARALLEL_REPLICA, 1, False)
     opened(trainer, handle)
     var cells = List[Float32](length=8, fill=0.0)
     var address = Int(cells.unsafe_ptr())
@@ -386,23 +397,23 @@ def fixture_gradients() raises:
             "a shard gradient sends ids, the gradient target and the loss cell at the committed step")
     require(parallel_session_shard_gradient(trainer, address, 0, True) == 2.5 and words[W_LAST_ADDRESSES] == 3,
             "a folded shard gradient sends no gradient target")
-    require(calls[PARALLEL_OP_SHARD_GRADIENT] == 1 and calls[PARALLEL_OP_SHARD_GRADIENT_FOLD] == 1,
+    require(records[0].calls[PARALLEL_OP_SHARD_GRADIENT] == 1 and records[0].calls[PARALLEL_OP_SHARD_GRADIENT_FOLD] == 1,
             "the two shard gradient operations are counted apart")
     parallel_session_fold(trainer, False, 0)
-    require(words[W_LAST_ADDRESSES] == 1 and calls[PARALLEL_OP_FOLD_RESET] == 1, "an empty fold reset sends the handle only")
+    require(words[W_LAST_ADDRESSES] == 1 and records[0].calls[PARALLEL_OP_FOLD_RESET] == 1, "an empty fold reset sends the handle only")
     parallel_session_fold(trainer, False, address)
     parallel_session_fold(trainer, True, address)
-    require(words[W_LAST_ADDRESSES] == 2 and calls[PARALLEL_OP_FOLD_RESET] == 2 and calls[PARALLEL_OP_FOLD_ADD] == 1,
+    require(words[W_LAST_ADDRESSES] == 2 and records[0].calls[PARALLEL_OP_FOLD_RESET] == 2 and records[0].calls[PARALLEL_OP_FOLD_ADD] == 1,
             "a fold reset to a prefix and a fold add send one gradient")
     var message = String()
     try:
         parallel_session_fold(trainer, True, 0)
     except problem:
         message = text_of(problem)
-    require(refused(message, "fold_add requires a gradient") and calls[PARALLEL_OP_FOLD_ADD] == 1,
+    require(refused(message, "fold_add requires a gradient") and records[0].calls[PARALLEL_OP_FOLD_ADD] == 1,
             "a fold add without a gradient is refused before the call")
     parallel_session_fold_export(trainer, address)
-    require(calls[PARALLEL_OP_FOLD_EXPORT] == 1, "the fold export is one call")
+    require(records[0].calls[PARALLEL_OP_FOLD_EXPORT] == 1, "the fold export is one call")
     require(parallel_session_apply_gradient(trainer, address) == STEP_AT_OPEN + 1
             and trainer.completed == STEP_AT_OPEN + 1 and not trainer.lost, "apply commits the step it returns")
     var targets: List[Int] = [address]
@@ -437,7 +448,7 @@ def fixture_gradients() raises:
             and trainer.completed == STEP_AT_OPEN + 1, "a wrong apply step commits nothing and marks the trainer lost")
     _ = cells
     _ = words
-    _ = calls
+    _ = records  # the provider record outlives every session that holds its id
 
 
 def fixture(unit: Int) raises:
