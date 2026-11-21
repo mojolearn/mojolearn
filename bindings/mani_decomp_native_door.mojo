@@ -59,7 +59,6 @@ from bindings.mani_decomp_run import (
 from bindings.mani_keys_unpack import mani_keys
 from bindings.py_balanced import py_item
 
-comptime _LLE_ITER_MIN_N = 200
 comptime _LLE_ITER_MAX_K = 10
 
 
@@ -312,11 +311,11 @@ def _mds_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
 
 
 # ---------------------------------------------------------------- Isomap
-def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
-    """`Isomap.fit(X)`; returns embedding_."""
-    classical_connect_numpy(context)
-    var fields = settings.values
-    var mode = settings.mode
+def mani_iso_plan(fields: PythonObject, context: PythonObject) raises -> IsoPlan:
+    """UNPACK `Isomap.fit`'s data-independent checks, in its words, and its
+    plan words. Shared by the fit door and the member admit
+    (providers/python/member_xdecomp_boundary_door.mojo), so both refuse the
+    same settings the same way."""
     var nk = mani_keys()
     var neighbors = mani_field(fields, nk[].k_n_neighbors, "n_neighbors")
     var radius = mani_field(fields, nk[].k_radius, "radius")
@@ -337,19 +336,32 @@ def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
     var plan = IsoPlan()
     plan.kind = spec[0]
     plan.pw = spec[1]
+    if not (radius is None):
+        plan.use_radius = True
+        plan.radius = _mani_f32(_mani_float(radius, context))
+    else:
+        plan.nn = _mani_int(neighbors, context)
+    plan.topk = _mani_in(solver, Python.tuple(PythonObject("auto"), PythonObject("arpack")), context)
+    plan.nc = _mani_int(mani_field(fields, nk[].k_n_components, "n_components"), context)
+    return plan^
+
+
+def _iso_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+    """`Isomap.fit(X)`; returns embedding_."""
+    classical_connect_numpy(context)
+    var fields = settings.values
+    var mode = settings.mode
+    var nk = mani_keys()
+    # The plan words are read before X is admitted (lane ma-pub-transform
+    # round 9: one plan function for the door and the member admit); they
+    # were read after it, so a bad n_neighbors / n_components beside a bad X
+    # now names the parameter first.
+    var plan = mani_iso_plan(fields, context)
     var run = MRun()
     try:
         var k = _mani_kit(run, mode, args[0], context)
         var m = _mani_x(run, k, x)
-        var nn_out = PythonObject(None)
-        if not (radius is None):
-            plan.use_radius = True
-            plan.radius = _mani_f32(_mani_float(radius, context))
-        else:
-            plan.nn = _mani_int(mani_field(fields, nk[].k_n_neighbors, "n_neighbors"), context)
-            nn_out = PythonObject(plan.nn)
-        plan.topk = _mani_in(solver, Python.tuple(PythonObject("auto"), PythonObject("arpack")), context)
-        plan.nc = _mani_int(mani_field(fields, nk[].k_n_components, "n_components"), context)
+        var nn_out = PythonObject(None) if plan.use_radius else PythonObject(plan.nn)
         var fit = IsoFit()
         with GILReleased(Python()):
             fit = iso_fit_run(run, k, m, plan)
@@ -478,12 +490,13 @@ def _iso_reconstruction_error(model: PythonObject, settings: ManifoldSettings, a
 
 
 # ---------------------------------------------------------------- LocallyLinearEmbedding
-def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
-    """`LocallyLinearEmbedding.fit(X)`; returns embedding_."""
-    classical_connect_numpy(context)
+def mani_lle_plan(fields: PythonObject, context: PythonObject) raises -> LlePlan:
+    """UNPACK `LocallyLinearEmbedding.fit`'s data-independent checks, in its
+    words, and its plan words. Shared by the fit door and the member admit
+    (providers/python/member_xdecomp_boundary_door.mojo). The n-dependent
+    refusals (n_neighbors against n_samples, hessian, modified) stay after X
+    in each caller, in the same words."""
     var b = native_loaded_module("builtins")
-    var fields = settings.values
-    var mode = settings.mode
     var nk = mani_keys()
     var method = mani_field(fields, nk[].k_method, "method")
     if not _mani_in(method, Python.tuple(PythonObject("standard"), PythonObject("hessian"), PythonObject("modified"),
@@ -500,14 +513,41 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
         plan.method = LLE_HESSIAN
     else:
         plan.method = LLE_MODIFIED
+    plan.nn = _mani_int(mani_field(fields, nk[].k_n_neighbors, "n_neighbors"), context)
+    plan.nc = _mani_int(mani_field(fields, nk[].k_n_components, "n_components"), context)
+    if plan.method == LLE_STANDARD:
+        plan.reg = Float64(py=py_call(b.float, mani_field(fields, nk[].k_reg, "reg")))
+    elif plan.method == LLE_HESSIAN:
+        plan.tol = _mani_float(mani_field(fields, nk[].k_hessian_tol, "hessian_tol"), context)
+    elif plan.method == LLE_MODIFIED:
+        plan.tol = _mani_float(mani_field(fields, nk[].k_modified_tol, "modified_tol"), context)
+    plan.auto_solver = _mani_eq(solver, "auto", context)
+    # max_iter / random_state are read where the subspace iteration can run
+    # (standard, auto, nc + 1 below its cap); lle_fit_run adds the n test.
+    # They were read only when n also passed (lane ma-pub-transform round 9:
+    # an invalid max_iter is now refused for a small X too).
+    if plan.method == LLE_STANDARD and plan.auto_solver and plan.nc + 1 < _LLE_ITER_MAX_K:
+        plan.max_iter = _mani_int(mani_field(fields, nk[].k_max_iter, "max_iter"), context)
+        plan.seed = mk_seed_word(_mani_seed(mani_field(fields, nk[].k_random_state, "random_state")))
+    return plan^
+
+
+def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject, x: ArrayMetadata, context: PythonObject) raises -> PythonObject:
+    """`LocallyLinearEmbedding.fit(X)`; returns embedding_."""
+    classical_connect_numpy(context)
+    var b = native_loaded_module("builtins")
+    var fields = settings.values
+    var mode = settings.mode
+    var nk = mani_keys()
+    # The plan words are read before X is admitted (one plan function for the
+    # door and the member admit, lane ma-pub-transform round 9).
+    var plan = mani_lle_plan(fields, context)
     var run = MRun()
     try:
         var k = _mani_kit(run, mode, args[0], context)
         var hk = mk_image(run, String(settings.default_mode), args[1], context)
         var m = _mani_x(run, k, x)
         var n = run.r(m)
-        plan.nn = _mani_int(mani_field(fields, nk[].k_n_neighbors, "n_neighbors"), context)
-        plan.nc = _mani_int(mani_field(fields, nk[].k_n_components, "n_components"), context)
         var nn = plan.nn
         var nc = plan.nc
         if nn >= n:
@@ -518,16 +558,6 @@ def _lle_fit(model: PythonObject, settings: ManifoldSettings, args: PythonObject
                         + "[n_components * (n_components + 3) / 2]")
         if plan.method == LLE_MODIFIED and nn < nc:
             raise Error("modified LLE requires n_neighbors >= n_components")
-        if plan.method == LLE_STANDARD:
-            plan.reg = Float64(py=py_call(b.float, mani_field(fields, nk[].k_reg, "reg")))
-        elif plan.method == LLE_HESSIAN:
-            plan.tol = _mani_float(mani_field(fields, nk[].k_hessian_tol, "hessian_tol"), context)
-        elif plan.method == LLE_MODIFIED:
-            plan.tol = _mani_float(mani_field(fields, nk[].k_modified_tol, "modified_tol"), context)
-        plan.auto_solver = _mani_eq(solver, "auto", context)
-        if plan.method == LLE_STANDARD and plan.auto_solver and n > _LLE_ITER_MIN_N and nc + 1 < _LLE_ITER_MAX_K:
-            plan.max_iter = _mani_int(mani_field(fields, nk[].k_max_iter, "max_iter"), context)
-            plan.seed = mk_seed_word(_mani_seed(mani_field(fields, nk[].k_random_state, "random_state")))
         var fit = LleFit()
         with GILReleased(Python()):
             fit = lle_fit_run(run, k, hk, m, plan)

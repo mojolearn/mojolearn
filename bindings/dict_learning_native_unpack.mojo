@@ -285,12 +285,18 @@ def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, con
         door.keep_alive()  # the borrowed owners outlive every RUN read
 
 
-def _coder_dictionary(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+def _coder_check(fields: PythonObject) raises:
     var nk = dict_keys()
-    # SparseCoder's parameter check, then its dictionary as float32.
+    # SparseCoder's parameter check.
     var transform = py_item(fields, nk[].k_transform_algorithm)
     if _algo_index(transform) < 0:
         raise Error("transform_algorithm must be one of " + String(XD_SPARSE_ALGOS))
+
+
+def _coder_dictionary(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = dict_keys()
+    # SparseCoder's parameter check, then its dictionary as float32.
+    _coder_check(fields)
     return decomp_input(py_item(fields, nk[].k_dictionary), "dictionary", context)
 
 

@@ -2572,6 +2572,7 @@ class Isomap(_Base):
     # Takes `device=`: every image of an operation comes from the estimator's
     # binding route (bindings/mani_decomp_native_door.mojo `_mani_arguments`).
     _mojolearn_device = True
+    _mojolearn_member = (32, 16)
 
     def __init__(self, *, n_neighbors=5, radius=None, n_components=2, eigen_solver="auto", tol=0, max_iter=None,
                  path_method="auto", neighbors_algorithm="auto", n_jobs=None, metric="minkowski", p=2,
@@ -2934,6 +2935,7 @@ class LocallyLinearEmbedding(_Base):
     # Takes `device=`: every image of an operation comes from the estimator's
     # binding route (bindings/mani_decomp_native_door.mojo `_mani_arguments`).
     _mojolearn_device = True
+    _mojolearn_member = (32, 17)
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
                  method="standard", hessian_tol=1e-4, modified_tol=1e-12, neighbors_algorithm="auto",
