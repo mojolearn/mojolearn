@@ -3065,8 +3065,8 @@ FAMILIES = (
         exports=(
             "resample_host_numeric_mode", "resample_host_vendor", "resample_host_column",
             "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
-            "bootstrap", "permutation_test", "monte_carlo_integrate",
-            "bootstrap_unpaired", "permutation_samples", "resample_indices",
+            # lane dw-decomp (2026-11-21): the six by-name operation entries are one typed table
+            "resample_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
