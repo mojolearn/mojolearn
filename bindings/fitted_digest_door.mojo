@@ -19,8 +19,10 @@
 #      before it writes. Nothing is written.
 #   2. Any other class: its public fitted attributes, the rule `is_fitted`
 #      reads (instance fields whose name ends in "_" and does not start with
-#      "_", value not None), plus the private fields its class names in
-#      `digest_extra` (python/mojolearn/_digest_fields.py), each described by
+#      "_", value not None, name not in `digest_skip`: the few public names
+#      that record how a call ran, not what was fitted), plus the private
+#      fields its class names in `digest_extra`
+#      (python/mojolearn/_digest_fields.py), each described by
 #      the npz codec's `_npz_value` (dtype, shape, C-order bytes).
 #      A list, tuple or dict that is not one flat run of scalars is entered:
 #      `name[i]`, `name{key}` and `name.len`. An integer wider than 64 bits
@@ -160,10 +162,14 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
         var work_names = List[String]()
         var work_values = List[PythonObject]()
         var work_depths = List[Int]()
+        var skip = py_get(context, "digest_skip")
         var keys = py_call(b.list, fields.keys())
         for i in range(len(keys)):  # driver-loop: over the model's stored field names
             var name = String(py=keys[i])
             if name.endswith("_") and not name.startswith("_"):
+                # A record of how a call ran (was the input copied), not fitted state.
+                if skip is not None and py_contains(skip, keys[i]):
+                    continue
                 var value = fields[keys[i]]
                 if value is not None:
                     work_names.append(name)
