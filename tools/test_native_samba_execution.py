@@ -31,13 +31,10 @@ def test_public_boundary_uses_native_model_and_preserves_partial_publication():
     assert 'samba_provider_forward(' not in public  # lane x6: no provider tier
     assert '_samba_program_call(model, fields, config, key, ids, state, context)' in public
     # lane restore-samba-resident-forward: the stateless device forward is the
-    # resident forward (op 16) unless the B-arm define selects the program.
+    # resident forward (op 16), unconditionally: the program B arm's switch
+    # was deleted by lane fx-verdicts7 (A/B abn9).
     route=public.split('if samba_program_arm(fields, key):')[1]
-    # The B-arm switch is the IDN_ define (expdel2-02-base 59c24bdf40, restored af19840a85).
-    import re
-    switch=re.search(r'comptime if not \w*SAMBA_PROGRAM_FORWARD:', route)
-    assert switch is not None
-    assert switch.start() < route.index('samba_resident_native_forward(')
+    assert 'comptime if' not in route.split('samba_resident_native_forward(')[0]
     assert route.index('samba_resident_native_forward(') < route.index('_samba_program_call(')
 
 

@@ -170,8 +170,8 @@ def test_stateless_forward_leaves_block_reports_untouched():
 def test_device_stateless_forward_takes_the_resident_route():
     # lane restore-samba-resident-forward (2026-11-13): on a device build the
     # stateless forward runs the resident session's forward (descriptor op
-    # 16), the measured samba-forward winner; the stack program is its B arm
-    # (-D MOJOLEARN_SAMBA_PROGRAM_FORWARD) and serves a dropout stack. The
+    # 16), the measured samba-forward winner; the stack program
+    # serves a dropout stack. The
     # door records the arm it ran; the host route (CPU builds) records none.
     _, model = _models(["mamba3", "attention"])
     ids = np.array([[1, 2, 3], [4, 5, 6]], dtype="i4")
