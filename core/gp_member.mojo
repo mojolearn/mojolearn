@@ -1127,17 +1127,12 @@ def _gpc(slot: _Slot) -> Bool:
 # entry's status word or here (`_query`, `_gpc_query`). Codes are integers.
 comptime _CAN_COMMON = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
     | MEMBER_CAN_TEST_ROWS)
-<<<<<<< HEAD
-comptime _CAN_GPR = _CAN_COMMON | MEMBER_CAN_PREDICT_STD | MEMBER_CAN_NOTICES
-comptime _CAN_GPC = _CAN_COMMON | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER
-=======
 # MEMBER_BORROWS_FIT (both kinds): the fitted state reads the caller's fit X
 # (and the regressor's y without normalize_y) at every query, and its export
 # hands those words back themselves; only MEMBER_EXPORT_OWN (`_own_views`) or
 # an import makes the state own them (LIFETIME in the module docstring).
-comptime _CAN_GPR = _CAN_COMMON | MEMBER_CAN_PREDICT_STD | MEMBER_BORROWS_FIT
+comptime _CAN_GPR = _CAN_COMMON | MEMBER_CAN_PREDICT_STD | MEMBER_BORROWS_FIT | MEMBER_CAN_NOTICES
 comptime _CAN_GPC = _CAN_COMMON | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_CLASSIFIER | MEMBER_BORROWS_FIT
->>>>>>> origin/preinteg/wave2-20261113
 
 
 def _gp_outputs(call: _Call, classifier: Bool, classes: Int) raises:

@@ -270,12 +270,6 @@ struct MselMemberRun(Movable):
     var pin: Int
     var index_all: Bool
     var taken: List[Int]
-<<<<<<< HEAD
-    # Per unit, the FIT NOTICES of its fitted state (core/member_notices.mojo;
-    # empty: none), taken on the unit's worker after its fit, kept or freed,
-    # and raised in unit order once publication is done (GIL held).
-    var notices: List[List[Float64]]
-=======
     # THE LIFETIME RULE (MEMBER-ABI-V2.md item 34): a buffer handed to FIT
     # stays valid until its state is freed or has been exported. A KEPT unit
     # (`keep`) whose train side was gathered therefore gathers into these
@@ -288,12 +282,10 @@ struct MselMemberRun(Movable):
     var borrows: Bool
     var held_x: List[List[Float32]]
     var held_y: List[List[Float32]]
-    # Per unit, a RandomForest / DecisionTree fit's notice word
-    # (`ensemble/rf_notices.mojo` bits; 0: none) when the unit freed its
-    # state, raised as UserWarnings at PACK after the join (lane fx-audit,
-    # audit-trees F1). A kept state's notices are raised by the family PACK.
-    var notices: List[Int]
->>>>>>> origin/preinteg/wave2-20261113
+    # Per unit, the FIT NOTICES of its fitted state (core/member_notices.mojo;
+    # empty: none), taken on the unit's worker after its fit, kept or freed,
+    # and raised in unit order once publication is done (GIL held).
+    var notices: List[List[Float64]]
 
     def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
         return_train: Bool, keep: Bool):
@@ -309,14 +301,10 @@ struct MselMemberRun(Movable):
         self.pin = 0
         self.index_all = False
         self.taken = List[Int](length=n_units, fill=0)
-<<<<<<< HEAD
-        self.notices = List[List[Float64]](length=n_units, fill=List[Float64]())
-=======
         self.borrows = False
         self.held_x = List[List[Float32]]()
         self.held_y = List[List[Float32]]()
-        self.notices = List[Int](length=n_units, fill=0)
->>>>>>> origin/preinteg/wave2-20261113
+        self.notices = List[List[Float64]](length=n_units, fill=List[Float64]())
         self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.plans = List[MemberPlan]()
         self.folds = List[Int]()

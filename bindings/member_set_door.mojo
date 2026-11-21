@@ -162,11 +162,6 @@ struct MemberSetRun(Movable):
     # (0: none; the worker writes 0 when the member's cache took it).
     var scope: Int
     var pin_tokens: List[Int]
-<<<<<<< HEAD
-    # Per member, the fit notices `member_set_pack` took from its state
-    # (empty: none), raised by `member_set_notices`.
-    var notices: List[List[Float64]]
-=======
     # THE LIFETIME RULE (MEMBER-ABI-V2.md item 34): every buffer handed to a
     # member's FIT stays valid until its state is freed or has been exported.
     # Every state of a set waits for PACK, so the drawn block a worker gathers
@@ -179,7 +174,9 @@ struct MemberSetRun(Movable):
     var part_x: List[List[Float32]]
     var part_y: List[List[Int32]]
     var part_w: List[List[Float32]]
->>>>>>> origin/preinteg/wave2-20261113
+    # Per member, the fit notices `member_set_pack` took from its state
+    # (empty: none), raised by `member_set_notices`.
+    var notices: List[List[Float64]]
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -203,9 +200,7 @@ struct MemberSetRun(Movable):
         self.tests = List[UInt8]()
         self.scope = MEMBER_SCOPE_NONE
         self.pin_tokens = List[Int]()
-<<<<<<< HEAD
         self.notices = List[List[Float64]]()
-=======
         self.borrows = List[UInt8]()
         self.part_x = List[List[Float32]]()
         self.part_y = List[List[Int32]]()
@@ -218,7 +213,6 @@ struct MemberSetRun(Movable):
             self.part_x[u] = List[Float32]()
             self.part_y[u] = List[Int32]()
             self.part_w[u] = List[Float32]()
->>>>>>> origin/preinteg/wave2-20261113
 
 
 struct MemberSet(Movable):
@@ -347,14 +341,11 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     set.run.errors.append(String(""))
     set.run.uncovered.append(UInt8(0))
     set.run.pin_tokens.append(0)
-<<<<<<< HEAD
     set.run.notices.append(List[Float64]())
-=======
     set.run.borrows.append(borrows)
     set.run.part_x.append(List[Float32]())
     set.run.part_y.append(List[Int32]())
     set.run.part_w.append(List[Float32]())
->>>>>>> origin/preinteg/wave2-20261113
     _ = py_call(set.sources.append, PythonObject(None))
     _ = py_call(set.estimators.append, estimator)
     _ = py_call(set.contexts.append, member_context)

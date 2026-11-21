@@ -184,7 +184,7 @@ comptime MEMBER_CAN_DEVICE_PLAN = 33554432   # splits over call.devices as its p
 #: the public thread, in the door's words and category, whether or not it packs
 #: the unit (core/member_notices.mojo, bindings/member_fit_notices_pack.mojo).
 #: A family without the bit is never asked: one mask test per unit.
-comptime MEMBER_CAN_NOTICES = 67108864
+comptime MEMBER_CAN_NOTICES = 134217728      # 2^27 (2^26 is MEMBER_BORROWS_FIT)
 
 #: KIND-EXACT (answered with `call.state != 0`; the family's union with 0).
 #: A fitted state of this kind keeps a pointer into a buffer its FIT was
