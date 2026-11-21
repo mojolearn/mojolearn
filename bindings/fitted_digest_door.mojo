@@ -23,7 +23,8 @@
 #      `digest_extra` (python/mojolearn/_digest_fields.py), each described by
 #      the npz codec's `_npz_value` (dtype, shape, C-order bytes).
 #      A list, tuple or dict that is not one flat run of scalars is entered:
-#      `name[i]`, `name{key}` and `name.len`. A member estimator contributes
+#      `name[i]`, `name{key}` and `name.len`. An integer wider than 64 bits
+#      is hashed as its decimal text under `name.bigint`. A member estimator contributes
 #      its own digest, as text, in member order.
 #   3. A class named in `digest_refused` has no digest yet: the read raises
 #      AttributeError with the reason in words.
@@ -191,6 +192,13 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
                 leaf_values.append(PythonObject(True))
                 continue
             var kind = py_type(value)
+            if kind is b.int and Int(py=py_call(value.bit_length)) > 63:
+                # A stored integer wider than a signed 64-bit word (a 64-bit
+                # generator state) has no 8-byte form: its decimal text.
+                # `bit_length` and `str` of an exact int run no Python hook.
+                leaf_names.append(name + ".bigint")
+                leaf_values.append(py_call(b.str, value))
+                continue
             var leaf = classical_is_array(value, context) or _digest_scalar(value, b, bytes_type) != 0
             if not leaf and ndarray is not None and kind is ndarray:
                 leaf = True

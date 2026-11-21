@@ -21,7 +21,37 @@ when a model is fitted, and the read itself is one native call.
 """
 #: class name -> the private instance fields that are fitted state (they
 #: decide the model's answers and no public attribute carries them).
-EXTRA_BY_NAME = {}
+#: A name the model does not hold is passed over, so a base class may list
+#: the union of its subclasses' fields. Listed here: state `fit` writes that
+#: `predict` / `transform` reads. Not listed: device handles, pins, lifecycle
+#: flags and caches written by a later call (they are not fitted state, and a
+#: handle differs per device).
+EXTRA_BY_NAME = {
+    # preprocessing: encoders, imputers, discretizers (bindings/prep_encode_native_door.mojo)
+    "SimpleImputer": ("_fill", "_keep", "_indicator"),
+    "KBinsDiscretizer": ("_edges", "_ne", "_stride"),
+    "OrdinalEncoder": ("_missing", "_infrequent", "_grouping"),
+    "OneHotEncoder": ("_infrequent", "_grouping", "_drop_after"),
+    "SplineTransformer": ("_knots", "_lo", "_hi", "_nk", "_k"),
+    "TargetEncoder": ("_T", "_cmax", "_enc", "_meta"),
+    "_SelectorMixin": ("_mask",),
+    # the imputer's generator word and posterior step advance with each sampled transform:
+    # they decide the next transform's answers, so they are state.
+    "IterativeImputer": ("_keep", "_indicator", "_bounds_k", "_posterior", "_rng", "_post_step"),
+    # stateless-fit transformers (bindings/prep_stateless_native_door.mojo)
+    "PolynomialFeatures": ("_poly_index", "_poly_start"),
+    "QuantileTransformer": ("_q",),
+    "PowerTransformer": ("_pt_anchor", "_pt_anchor_kind", "_mean", "_scale", "_method"),
+    # label encoders (bindings/prep_labels_native_door.mojo)
+    "LabelEncoder": ("_classes", "_cats"),
+    "LabelBinarizer": ("_classes", "_cats"),
+    "MultiLabelBinarizer": ("_classes", "_cats", "_given"),
+    # naive Bayes and discriminant analysis (bindings/prep_classify_native_door.mojo)
+    "GaussianNB": ("_const", "_raw_var"),
+    "_DiscreteNB": ("_w", "_bias", "_cc", "_flp", "_cmax"),
+    "LinearDiscriminantAnalysis": ("_coef", "_inter", "_rank", "_scal_full", "_max_components"),
+    "QuadraticDiscriminantAnalysis": ("_rot", "_logc"),
+}
 
 #: class name -> why it has no digest yet, in words a user reads.
 REFUSED_BY_NAME = {
