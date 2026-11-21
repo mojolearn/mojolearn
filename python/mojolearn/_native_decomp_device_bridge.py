@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Import-time connection of the CPU images `device="cpu"` runs on, for the
+"""Connection of the CPU images `device="cpu"` runs on (at the first
+device="cpu" admission, never at import), for the
 decomposition estimators (the family-local form of
 `_native_classical_bridge.connect_cpu_device`)."""
 
@@ -9,8 +10,24 @@ ESTIMATORS_HOST = "_mojolearn_estimators_host"
 
 
 def connect_cpu_device(context, basename, tables):
-    """Connect the CPU descriptor factories of `device="cpu"` once, at import,
-    beside the device factories already in `context`.
+    """Register the CPU descriptor factories of `device="cpu"` beside the
+    device factories already in `context`: the host image loads at the first
+    device="cpu" admission beside a GPU set (fx-host-import,
+    `_native_family_bridge.cpu_load_later`), never at import; an estimator
+    restored without construction connects it at its first CPU route
+    (bindings/decomp_device_route_door.mojo `decomp_cpu_table`). Nothing is
+    registered in a CPU-only process."""
+    # glue: import-time registration, once per family context
+    if context.get("vendor") == "cpu" or "vendor" not in context:
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: load_cpu_device(context, basename, tables))
+
+
+def load_cpu_device(context, basename, tables):
+    """Connect the CPU descriptor factories of `device="cpu"` once, now,
+    beside the device factories already in `context` (the deferred load of
+    `connect_cpu_device`, or a caller already inside the one CPU connect).
 
     `tables` maps a factory's exported name in the host binary `basename` to
     the context key the compiled owner reads it under; each key receives
@@ -26,6 +43,8 @@ def connect_cpu_device(context, basename, tables):
     from types import BuiltinFunctionType
     from . import _backend
     if context.get("vendor") == "cpu" or "vendor" not in context:
+        return
+    if all(key in context for key in tables.values()):  # glue: fixed context keys, once
         return
     try:
         module = _backend.load_host_module(basename)

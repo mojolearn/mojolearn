@@ -47,7 +47,7 @@ from x_decomp.tsvd_descriptor_boundary_run import tsvd_capabilities, tsvd_qfix, 
 from core.pca_native_api import pca_vendor_name
 from core.device_route import DEVICE_CPU
 from bindings.decomp_device_route_door import (
-    decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
+    decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image, decomp_cpu_table,
     decomp_route_expected_vendor, DecompRoute,
 )
 from bindings.tsvd_owner_boundary_unpack import tsvd_owner_drop, tsvd_owner_lease, TSVDLeasePin
@@ -188,7 +188,9 @@ def _route_tables(route: DecompRoute, context: PythonObject) raises -> Bool:
     `tsvd_cpu_decomp`: a `cpu` route of a GPU installation, identical only)."""
     var cpu_image = decomp_route_on_cpu_image(route.device, context)
     if cpu_image:
-        if py_get(context, "tsvd_cpu_bindings") is None or py_get(context, "tsvd_cpu_decomp") is None:
+        # Both tables load together (one `connect_cpu`); the late connect
+        # runs at most once, on the first missing one.
+        if decomp_cpu_table(context, PythonObject("tsvd_cpu_bindings")) is None or py_get(context, "tsvd_cpu_decomp") is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
     return cpu_image
 

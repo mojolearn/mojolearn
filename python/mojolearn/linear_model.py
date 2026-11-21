@@ -1206,8 +1206,9 @@ _native_classical_bridge.connect_cpu_device(_CLASSICAL)
 from ._native_qn_bridge import connect as _connect_qn  # noqa: E402
 _QN_CALL, _QN_CONTEXT = _connect_qn(QNRegressor._LOSSES)
 _QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_intercept', 'l1_strength', 'l2_strength', 'max_iter', 'tol', 'delta', 'linesearch_max_iter', 'lbfgs_memory', 'warm_start', 'penalty_normalized', 'numeric_mode', 'device'))
-# The CPU QN entry of `device="cpu"`, connected once at import beside the
-# device image: an estimator's route picks one of the two, once.
+# The CPU QN entry of `device="cpu"`, registered at import beside the device
+# image and loaded at the first device="cpu" admission (fx-host-import): an
+# estimator's route picks one of the two, once.
 from ._native_qn_bridge import connect_cpu_device as _connect_qn_cpu  # noqa: E402
 _connect_qn_cpu(_QN_CONTEXT)
 
@@ -1218,7 +1219,8 @@ _connect_qn_cpu(_QN_CONTEXT)
 from ._native_logistic_bridge import connect as _connect_logistic  # noqa: E402
 from ._native_logistic_bridge import connect_cpu_device as _connect_logistic_cpu_device  # noqa: E402
 _LR_CALL, _LR_CONTEXT = _connect_logistic()
-# The CPU entries of `device="cpu"`, connected once at import beside the device
-# entries: on a GPU installation both exist in the process and an estimator's
-# route picks one, once.
+# The CPU entries of `device="cpu"`, registered at import beside the device
+# entries and loaded at the first device="cpu" admission (fx-host-import): on a
+# GPU installation both exist in the process then and an estimator's route
+# picks one, once.
 _connect_logistic_cpu_device(_LR_CONTEXT)

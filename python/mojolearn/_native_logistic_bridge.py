@@ -103,8 +103,22 @@ _CPU_DEVICE_HOSTS = ("_mojolearn_estimators_host", "_mojolearn_x_trees_host")
 
 
 def connect_cpu_device(context):
-    """Connect the CPU entries of `device="cpu"` once, at import, beside the
-    device entries (`context["lr_bindings"]`).
+    """Register the CPU entries of `device="cpu"` beside the device entries:
+    they load at the first device="cpu" admission beside a GPU set
+    (fx-host-import, `_native_family_bridge.cpu_load_later`), never at
+    import; an estimator restored without construction connects them at its
+    first CPU route (providers/python/logistic_route_boundary_door.mojo).
+    Nothing is registered in a CPU-only process."""
+    # glue: import-time registration, once
+    if context["vendor"] == "cpu":
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_device(context))
+
+
+def _load_cpu_device(context):
+    """Connect the CPU entries of `device="cpu"` once, beside the device
+    entries (`context["lr_bindings"]`).
 
     The compiled owner resolves an estimator's route against the device
     entries or these, once per estimator. In a CPU-only process the selected
@@ -115,7 +129,7 @@ def connect_cpu_device(context):
     # glue: load the CPU images once and retain their compiled entries
     from types import BuiltinFunctionType
     from . import _backend
-    if context["vendor"] == "cpu":
+    if "lr_cpu_bindings" in context:
         return
     errors = (ImportError, AttributeError, TypeError, ValueError, RuntimeError)
     estimators, x_trees = _CPU_DEVICE_HOSTS

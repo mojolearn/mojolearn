@@ -135,15 +135,27 @@ def _native_key(module, connected):
 
 def _connect_cpu_device(context):
     # glue: `device="cpu"` beside a GPU set: the CPU identical image of the
-    # x_cnn binding, loaded once at import; a layer's route holds its entries
-    # (bindings/xcnn_common_door.mojo `xcnn_entries`). A CPU-only
-    # installation has no second set: its one set is the CPU's. An image
-    # that does not load records why, and the layer that asks for it says so.
-    # The route table is the manifest's (`host_surface.routed_modules()`, read
-    # once here): `_backend._HOST_MODULES` is read only by the CPU-only
-    # selector (tools/test_lane_select_narrowing.py).
-    from . import _backend, host_surface
+    # x_cnn binding, registered at import and loaded at the first
+    # device="cpu" admission (fx-host-import,
+    # `_native_family_bridge.cpu_load_later`); a layer restored without
+    # construction connects it at its route resolution
+    # (bindings/xcnn_common_door.mojo `_xcnn_route_build`). A CPU-only
+    # installation has no second set: its one set is the CPU's.
+    from . import _backend
     if _backend._CPU_ONLY is not None:
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_device(context))
+
+
+def _load_cpu_device(context):
+    # glue: once, at the first device="cpu" admission beside a GPU set. An
+    # image that does not load records why, and the layer that asks for it
+    # says so. The route table is the manifest's
+    # (`host_surface.routed_modules()`, read once here): `_backend._HOST_MODULES`
+    # is read only by the CPU-only selector (tools/test_lane_select_narrowing.py).
+    from . import _backend, host_surface
+    if "xcnn_cpu_bindings" in context:
         return
     bindings = {}
     try:
@@ -250,18 +262,32 @@ def connect_classifier():
             labels[mode] = type(error).__name__ + ": " + str(error)
     if _backend._CPU_ONLY is None:
         # glue: `device="cpu"` beside a GPU set: the CPU identical sequence
-        # image's label provider (the image `_native_xseq_bridge` also loads;
-        # one load per process), held by a CPU-route classifier's route.
-        try:
-            module = _backend.load_host_module(host_surface.routed_modules()["_mojolearn_x_sequence"])  # import-time: the CPU image
-            entry = getattr(module, "model_labels")
-            provider = getattr(module, "model_native_api_v1")
-            if not isinstance(entry, BuiltinFunctionType) or not isinstance(provider, BuiltinFunctionType):
-                raise TypeError("CNNClassifier requires the compiled label provider")
-            cpu_labels = {"identical": {"model_labels": entry, "model_native_api_v1": provider}}
-        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError) as error:
-            cpu_labels = {"identical": type(error).__name__ + ": " + str(error)}
-        context.update(xcnn_cpu_label_bindings=cpu_labels)
+        # image's label provider, registered now and loaded at the first
+        # device="cpu" admission (fx-host-import), held by a CPU-route
+        # classifier's route.
+        from ._native_family_bridge import cpu_load_later
+        cpu_load_later(context, lambda: _load_cpu_labels(context))
     context.update(xcnn_label_bindings=labels, os_urandom=os.urandom,
                    xseq_base={"uniform_init_f32": _native("uniform_init_f32")})
 
+
+def _load_cpu_labels(context):
+    # glue: once, at the first device="cpu" admission beside a GPU set: the
+    # CPU identical sequence image's label provider (the image
+    # `_native_xseq_bridge` also loads; one load per process). Written before
+    # the layer table's load runs or after it: the route reads it only after
+    # `xcnn_cpu_bindings`, and both load inside the one `connect_cpu`.
+    from types import BuiltinFunctionType
+    from . import _backend, host_surface
+    if "xcnn_cpu_label_bindings" in context:
+        return
+    try:
+        module = _backend.load_host_module(host_surface.routed_modules()["_mojolearn_x_sequence"])
+        entry = getattr(module, "model_labels")
+        provider = getattr(module, "model_native_api_v1")
+        if not isinstance(entry, BuiltinFunctionType) or not isinstance(provider, BuiltinFunctionType):
+            raise TypeError("CNNClassifier requires the compiled label provider")
+        cpu_labels = {"identical": {"model_labels": entry, "model_native_api_v1": provider}}
+    except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError) as error:
+        cpu_labels = {"identical": type(error).__name__ + ": " + str(error)}
+    context.update(xcnn_cpu_label_bindings=cpu_labels)

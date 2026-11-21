@@ -55,13 +55,26 @@ def _metrics_image(module):
 
 def _connect_cpu_device(context):
     # glue: `device="cpu"` beside a GPU set: the CPU identical images of the
-    # sequence and metrics bindings, loaded once at import; a recurrent or
-    # MLP estimator's route holds them (bindings/xseq_native_common_door.mojo
+    # sequence and metrics bindings, registered at import and loaded at the
+    # first device="cpu" admission (fx-host-import,
+    # `_native_family_bridge.cpu_load_later`); a recurrent or MLP
+    # estimator's route holds them, and one restored without construction
+    # connects them at its route resolution (bindings/xseq_native_common_door.mojo
     # `xseq_route`). A CPU-only installation has no second set: its one set
-    # is the CPU's. An image that does not load records why, and the
-    # estimator that asks for it says so.
-    from . import _backend, host_surface
+    # is the CPU's.
+    from . import _backend
     if _backend._CPU_ONLY is not None:
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_device(context))
+
+
+def _load_cpu_device(context):
+    # glue: once, at the first device="cpu" admission beside a GPU set. An
+    # image that does not load records why, and the estimator that asks for
+    # it says so.
+    from . import _backend, host_surface
+    if "xseq_cpu_bindings" in context:
         return
     errors = (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError)
     # The manifest's route table, read once here: `_backend._HOST_MODULES` is
@@ -71,13 +84,13 @@ def _connect_cpu_device(context):
     keys = {}
     metrics = {}
     try:
-        module = _backend.load_host_module(routed["_mojolearn_x_sequence"])  # import-time: the CPU image
+        module = _backend.load_host_module(routed["_mojolearn_x_sequence"])  # first CPU admission: the CPU image
         bindings["identical"], keys["identical"] = _sequence_image(module)
     except errors as error:
         bindings["identical"] = keys["identical"] = type(error).__name__ + ": " + str(error)
     try:
         metrics["identical"] = _metrics_image(
-            _backend.load_host_module(routed["_mojolearn_metrics"]))  # import-time: the CPU image
+            _backend.load_host_module(routed["_mojolearn_metrics"]))  # first CPU admission: the CPU image
     except errors as error:
         metrics["identical"] = type(error).__name__ + ": " + str(error)
     context.update(xseq_cpu_bindings=bindings, xseq_cpu_native_keys=keys, xseq_cpu_metrics=metrics)

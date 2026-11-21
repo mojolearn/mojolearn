@@ -125,8 +125,29 @@ _CPU_DEVICE_BINDINGS = ("_mojolearn_x_linear", "_mojolearn_solver", "_mojolearn_
 
 
 def _connect_cpu_device(context, with_solver):
-    """Connect the CPU images of `device="cpu"` once, at import, beside the
-    device images (`context["xl_bindings"]`, `context["cd_solver"]`).
+    """Register the CPU images of `device="cpu"` beside the device images:
+    they load at the first device="cpu" admission beside a GPU set
+    (fx-host-import, `_native_family_bridge.cpu_load_later`), never at
+    import; an estimator restored without construction (and an explicit
+    host inference class) connects them at its first CPU route
+    (bindings/x_linear_route_unpack.mojo `_xl_cpu_table`). Nothing is
+    registered in a CPU-only process."""
+    # glue: import-time registration, once
+    from . import _backend
+    if context["vendor"] == "cpu" or _backend._CPU_ONLY is not None:
+        # A CPU-only process: its own images are the CPU ones. The text (not
+        # a missing key) tells the explicit host class's route
+        # (`xl_route_host`, once per operation) to run in this context
+        # without a late-connect probe.
+        context["xl_cpu_scope"] = "ImportError: this installation is CPU only; its own images are the CPU ones"
+        return
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(context, lambda: _load_cpu_device(context, with_solver))
+
+
+def _load_cpu_device(context, with_solver):
+    """Connect the CPU images of `device="cpu"` once, beside the device
+    images (`context["xl_bindings"]`, `context["cd_solver"]`).
 
     Each host binary publishes its native operations table when it
     initializes; the compiled owner resolves an estimator's route against
@@ -140,7 +161,7 @@ def _connect_cpu_device(context, with_solver):
     # glue: load the CPU images once and retain their tables; nothing here runs per call
     from types import BuiltinFunctionType
     from . import _backend, host_surface
-    if context["vendor"] == "cpu" or _backend._CPU_ONLY is not None:
+    if "xl_cpu_scope" in context:
         return
     errors = (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError, KeyError)
     # The manifest's route table, read once here (as _native_trees_bridge does):

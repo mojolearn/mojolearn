@@ -19,7 +19,7 @@ from x_decomp.ipca_descriptor_boundary_run import (
 from bindings.py_provider_pins import ProviderPins, provider_word
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.decomp_device_route_door import (
-    decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
+    decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image, decomp_cpu_table,
     decomp_route_expected_vendor, decomp_route_mode, DecompRoute,
 )
 from bindings.decomp_owner_common_unpack import decomp_attr
@@ -65,7 +65,7 @@ def _ipca_route(model: PythonObject, mode: PythonObject, fields: PythonObject, c
     var device = decomp_route_resolve_device(fields, 1 if name == "identical" else 0, context)
     var table = PythonObject(None)
     if decomp_route_on_cpu_image(device, context):
-        table = py_get(context, "ipca_cpu_bindings")
+        table = decomp_cpu_table(context, PythonObject("ipca_cpu_bindings"))
         if table is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
     else:
