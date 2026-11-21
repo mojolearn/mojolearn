@@ -1896,8 +1896,11 @@ def _run_snapshot(mut mods: NativeModules, snapshot: GenerationOperationSnapshot
 def causal_lm_forward_binding(mut mods: NativeModules, model: PythonObject, value: PythonObject, supplied_state: PythonObject, step: PythonObject) raises -> PythonObject:
     # Lane dw-causal (2026-11-21): forward and step as UNPACK / RUN / PACK.
     #   UNPACK: the model's native owner (one read of the capture; its typed
-    #     words decide the route and check the state: no model field or entry
-    #     registry word is read by name below), the ids, the state.
+    #     words decide the route and check the state: the decision reads no
+    #     model field and no entry registry word by name), the ids, the state.
+    #     Still read from the capture inside each route's own UNPACK and
+    #     PACK: the weights, the layer states and the resident session lease
+    #     (owner stages S2 and S3 of the lane's design).
     #   RUN, typed on every local route (`_run`): the engine's
     #     `NativeGenerationModel.forward_to`, the resident program's one
     #     session-table call, or per layer `_causal_layer_request_run` between
