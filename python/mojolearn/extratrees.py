@@ -182,6 +182,12 @@ _native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (
     ("classes", "classes", "classes_"),
     ("forest_engine", _MODEL_FORMAT),
 ))
+# `digest_` hashes the members that decide the answers (_digest_fields.forest_steps,
+# the steps the CPU twin HostForest is hashed by): the fit settings `meta` also
+# records (`depth_cap_bound_`, `max_depth_resolved_`, `max_features_`) are not
+# among them, since no prediction reads them (fx-audit 32, 33).
+from . import _digest_fields  # noqa: E402
+_digest_fields.schema(_ExtraTreesBase, _digest_fields.forest_steps(_MODEL_FORMAT, ("forest_engine", _MODEL_FORMAT)))
 
 
 @_forest_estimator("classifier")

@@ -122,7 +122,18 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
     var hashed_name = class_name
     var canonical = py_get(context, "digest_canonical")
     if canonical is not None and py_contains(canonical, cls):
-        hashed_name = String(py=py_item(canonical, cls))
+        var named = py_item(canonical, cls)
+        if py_type(named) is py_type(PythonObject("")):
+            hashed_name = String(py=named)
+        else:
+            # A twin of several public classes (HostForest, HostGBDT;
+            # `_digest_fields.twin_field`): a one-element tuple naming the
+            # instance field that holds the public class name the file was
+            # written by (`estimator`).
+            var held = py_get(_fields(model), named[0])
+            if held is None or py_type(held) is not py_type(PythonObject("")):
+                raise _digest_unfitted(class_name)
+            hashed_name = String(py=held)
     var refused = py_get(context, "digest_refused")
     if refused is not None:
         var reason = archive_schema_lookup(cls, refused)
