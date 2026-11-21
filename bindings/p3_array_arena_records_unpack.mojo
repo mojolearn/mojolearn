@@ -40,16 +40,16 @@ from bindings.p3_array_arena_records_run import P3NumpyClasses, P3DictRecords
 
 # Admission kinds: one per distinct check, so one class can carry several.
 comptime P3_ARRAY_LAYOUT = 1          # arena_materialize_native._array_layout
-comptime P3_RESIDENT_LAYOUT = 2       # arena_materialize_native._resident_fields (class half)
-comptime P3_CACHE_LAYOUT = 3          # x_prep_native_owner._cache_layout
-comptime P3_ROWS_LAYOUT = 4           # DeviceRows class (x_prep_native_inputs / arena_rows_native)
-comptime P3_RESIDENT_NATIVE = 5       # arena_resident_native class admission
-comptime P3_CACHE_KEY_LAYOUT = 6      # arena_cache_get.arena_cache_key model class
+# Kind 2 retired (lane arena, 2026-11-21): the resident class-layout record; its state is native.
+# Kind 3 retired (lane arena, 2026-11-21): the x_prep second cache's class-layout record; the cache state is native.
+# Kind 4 retired (lane arena, 2026-11-21): the DeviceRows class-layout record; its state is native.
+# Kind 5 retired (lane arena, 2026-11-21): the resident class admission; its state is native.
+# Kind 6 retired (lane arena, 2026-11-21): the DeviceCache `_key` callback admission; the key is admitted natively and no callback exists.
 # Kind 7 retired: the former from-buffer-only check did not stamp slot values.
 comptime P3_ARRAY_DOOR_LAYOUT = 8     # array_native._admit
-comptime P3_STATS_LAYOUT = 9          # arena_cache_stats class walks
-comptime P3_ROWS_EXACT_LAYOUT = 10    # x_prep_native_inputs._rows_fields (exact DeviceRows class)
-comptime P3_SETATTR_LAYOUT = 11       # arena_cache_upload._counter_next setter hooks
+comptime P3_STATS_LAYOUT = 9          # arena_cache_stats_pack._attribute class walks (a cache SOURCE's buffer metadata, a binding's entries)
+# Kind 10 retired (lane arena, 2026-11-21): the exact DeviceRows class admission; its state is native.
+# Kind 11 retired (lane arena, 2026-11-21): the DeviceCache counter setter admission; the counters are native integers.
 comptime P3_NATIVE_ARRAY_STORAGE_LAYOUT = 12  # shared native Array storage/slot admission
 
 
@@ -166,11 +166,11 @@ def p3_numpy_dtype_class(factory: PythonObject, cls: PythonObject) raises -> Boo
 # different rules never vouch for each other. Python 3.10 / 3.11 walk on
 # every call, exactly as before.
 
-comptime P3_DICT_ENTRY_TUPLE_INTS = 1   # x_prep resident cache entries: (int, int) keys
-comptime P3_DICT_BINDING_IDS = 2        # x_prep scope caches: (int, str) keys
+# Dict kind 1 retired (lane arena, 2026-11-21): the x_prep resident cache entries dictionary; the entries are native.
+# Dict kind 2 retired (lane arena, 2026-11-21): the scope's caches dictionary; the scope state is native.
 comptime P3_DICT_INT_IDS = 3            # model-selection resident entries: int keys
 comptime P3_DICT_STR_INT = 4            # numpy sctypeDict: str or int keys
-comptime P3_DICT_CACHE_KEYS = 5         # DeviceCache entries: arena_cache_stats._admit_entry_keys
+# Dict kind 5 retired (lane arena, 2026-11-21): the DeviceCache entries dictionary; the entries are native.
 comptime P3_DICT_ARRAY_STORAGE = 6      # complete native Array member descriptor inventory
 comptime P3_DICT_NATIVE_STRING_KEYS = 7 # exact dictionary with only exact native string keys
 

@@ -11,10 +11,10 @@ each class). `context` is the sequence family's context (the
     sequence resolver (`xseq_route`: a hit is one record read), the model and
     output-helper entries with their providers' retained workspaces in the
     route's first two slots, the R^2 entry of the route's metrics image in
-    the third, and the NEW words of core/mlp_member.mojo. The seed word is
-    the estimator's seeded stream (`XseqStream`): `random_state`, or ONE
-    OS-entropy draw per admitted member when it is None (every state made
-    from this plan then starts from that seed).
+    the third, and the NEW words of core/mlp_member.mojo. The seed words are
+    the estimator's seeded stream (`XseqStream`) of an integer
+    `random_state`; when it is None the fresh-seed word is set and the member
+    draws OS entropy at every fit, as the estimator's own fit does.
   * `mlp_member_pack` (PACK): the fitted attributes the estimator's own fit
     writes (`coefs_`, `intercepts_`, the curve and the counters), from the
     member state's blocks; `classes_` is the caller's PACK.
@@ -84,7 +84,11 @@ def mlp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
     var batch = 0
     if not Bool(py=requested == PythonObject("auto")):
         batch = max(1, xseq_int(requested))
-    var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
+    var random_state = py_get(fields, nk[].k_random_state)
+    var fresh = random_state is None
+    var seed = UInt64(0)
+    if not fresh:
+        seed = XseqStream(random_state, context).seed
     var words: List[Float64] = [
         Float64(kind), Float64(activation), Float64(solver), Float64(rate),
         _opt_real(py_item(fields, nk[].k_learning_rate_init)), _opt_real(py_item(fields, nk[].k_beta_1)),
@@ -95,7 +99,8 @@ def mlp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, conte
         1.0 if xseq_truth(py_item(fields, nk[].k_shuffle)) else 0.0,
         Float64(batch), Float64(xseq_int(py_item(fields, nk[].k_max_iter))),
         Float64(xseq_int(py_item(fields, nk[].k_n_iter_no_change))),
-        Float64(Int(stream.seed & 0xFFFFFFFF)), Float64(Int(stream.seed >> 32)), Float64(len(hidden)),
+        Float64(Int(seed & 0xFFFFFFFF)), Float64(Int(seed >> 32)), Float64(len(hidden)),
+        1.0 if fresh else 0.0,
     ]
     for l in range(len(hidden)):  # driver-loop: over hidden layer widths
         words.append(Float64(hidden[l]))

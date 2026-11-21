@@ -1,0 +1,291 @@
+# SPDX-License-Identifier: Apache-2.0
+"""RUN of `DeviceCache` and the `resident()` scope (lane arena, 2026-11-21).
+
+Typed find / put / publish / free sequences on the native cache and scope
+states of `core/arena_state.mojo` (`ARENA_CACHES`, `ARENA_SCOPES`) and the
+x_prep transport entry (`core/prep_entry_table.mojo`: `XP_DEV_PUT`,
+`XP_DEV_FREE`, `XP_DEV_LIVE`). No Python import (tools/python_free_dirs.sh):
+a door resolves the handle word and the entry once per public operation
+(UNPACK), calls these with the interpreter lock released, and unpins the
+returned pin tokens afterwards (PACK).
+
+Order kept from the dictionary version: an entry is unlinked BEFORE its
+device free, every independent free is attempted, the first failure is the
+one reported, and a failed entry is linked again for a retry.
+
+Serial by nature: the frees of one close go to one binding store on one
+device context, which serializes them (each is a slot bookkeeping update,
+not work); there is nothing to split across cores.
+"""
+from core.arena_state import (
+    ARENA_CACHES, ARENA_SCOPES, ARENA_HANDLE_NONE, ArenaStoreEntry, ArenaScopeState,
+    DeviceCacheState, arena_handle, arena_handle_word,
+)
+from core.entry_table import EntryRef, entry_ref_mode, entry_ref_vendor
+from core.prep_entry_table import PrepEntryKey, xp_transport_ref, xp_transport_call
+from x_prep.transport_abi import XP_DEV_PUT, XP_DEV_FREE, XP_DEV_LIVE
+
+
+def arena_cache_route(store: EntryRef) -> Int:
+    """The route word of a resolved x_prep transport entry: its mode and
+    vendor words. Two caches with one route share one device store."""
+    return (entry_ref_mode(store) << 8) | entry_ref_vendor(store)
+
+
+def arena_cache_store(route: Int) raises -> EntryRef:
+    """The transport entry a route word names (resolved once per scope
+    close; a cache owner object holds its own)."""
+    return xp_transport_ref(PrepEntryKey((route >> 8) & 0xFF, route & 0xFF))
+
+
+def arena_cache_new(store: EntryRef, prefix: String) raises -> Int:
+    """A fresh cache state on `store`; its handle word."""
+    return arena_handle_word(ARENA_CACHES.insert(DeviceCacheState(arena_cache_route(store), prefix)))
+
+
+def arena_cache_put(store: EntryRef, address: Int, words: Int) raises -> Int:
+    var source: List[Int] = [address]
+    var counts: List[Int] = [words]
+    return xp_transport_call(store, XP_DEV_PUT, source, counts)
+
+
+def arena_cache_free(store: EntryRef, store_id: Int) raises:
+    var ids: List[Int] = [store_id]
+    _ = xp_transport_call(store, XP_DEV_FREE, List[Int](), ids)
+
+
+def arena_cache_live(store: EntryRef) raises -> Int:
+    """Live slots of the binding store (every cache on it)."""
+    return xp_transport_call(store, XP_DEV_LIVE, List[Int](), List[Int]())
+
+
+@fieldwise_init
+struct ArenaCachePut(ImplicitlyCopyable, Movable):
+    """The id of a buffer's resident copy after an upload, and whether the
+    cache kept the caller's pin (False: another thread published the same
+    buffer first; the caller drops its pin)."""
+    var store_id: Int
+    var pinned: Bool
+
+
+def arena_cache_upload(word: Int, store: EntryRef, address: Int, words: Int, pin: Int) raises -> ArenaCachePut:
+    """Put (`address`, `words`) and publish it in the cache `word`. The put
+    runs outside the cache lock. A lost publication race, or a cache released
+    while the put ran, frees this call's own id."""
+    var store_id = arena_cache_put(store, address, words)
+    var kept = store_id
+    try:
+        # Acquire after the put: a cache released meanwhile refuses here.
+        var lease = ARENA_CACHES.acquire(arena_handle(word))
+        kept = lease[].publish(address, words, store_id, pin)
+    except error:
+        try:
+            arena_cache_free(store, store_id)
+        except cleanup_error:
+            raise Error("RuntimeError: DeviceCache publication failed: " + String(error) + "; cleanup of the unpublished slot "
+                        + String(store_id) + " also failed: " + String(cleanup_error))
+        raise error^
+    if kept != store_id:
+        arena_cache_free(store, store_id)
+        return ArenaCachePut(kept, False)
+    return ArenaCachePut(store_id, True)
+
+
+def arena_cache_find_or_put(word: Int, store: EntryRef, address: Int, words: Int, pin: Int) raises -> ArenaCachePut:
+    """`id_of` for a native caller: the resident id (counted as a hit), else
+    an upload."""
+    var lease = ARENA_CACHES.acquire(arena_handle(word))
+    var found = lease[].find(address, words, True)
+    if found >= 0:
+        return ArenaCachePut(found, False)
+    return arena_cache_upload(word, store, address, words, pin)
+
+
+struct ArenaCacheReleased(Movable):
+    """What a release, drop or close returns to the boundary: the pin tokens
+    of the entries that left the cache (to unpin after every free and
+    publication) and the first failure's text (empty: none)."""
+    var pins: List[Int]
+    var failure: String
+
+    def __init__(out self):
+        self.pins = List[Int]()
+        self.failure = String("")
+
+    def keep(mut self, text: String):
+        if self.failure.byte_length() == 0:
+            self.failure = text
+
+
+def _free_or_restore(lease: ArcPointer[DeviceCacheState], store: EntryRef, entry: ArenaStoreEntry,
+                     mut released: ArenaCacheReleased) raises:
+    # One unlinked entry: free it; a failed free links it again for a retry
+    # (its pin stays with the cache).
+    try:
+        arena_cache_free(store, entry.store_id)
+        released.pins.append(entry.pin)
+    except error:
+        released.keep(String(error))
+        var linked = False
+        try:
+            linked = lease[].restore(entry)
+        except restore_error:
+            released.keep(String(restore_error))
+        if not linked:
+            released.pins.append(entry.pin)
+
+
+def arena_cache_close(word: Int, store: EntryRef) raises -> ArenaCacheReleased:
+    """Free every entry of the cache `word` (`close`, context exit)."""
+    var lease = ARENA_CACHES.acquire(arena_handle(word))
+    # Unlink everything first: no other thread finds an entry being freed.
+    var drained = lease[].drain()
+    var released = ArenaCacheReleased()
+    for i in range(len(drained)):  # driver-loop: attempt every independent release (one store bookkeeping free each)
+        _free_or_restore(lease, store, drained[i], released)
+    return released^
+
+
+def arena_cache_release(word: Int, store: EntryRef, address: Int, words: Int) raises -> ArenaCacheReleased:
+    """Free the entry of one buffer (`release`); nothing when it is absent."""
+    var lease = ARENA_CACHES.acquire(arena_handle(word))
+    var released = ArenaCacheReleased()
+    var removed = lease[].remove(address, words)
+    if removed.store_id >= 0:
+        _free_or_restore(lease, store, removed, released)
+    return released^
+
+
+def arena_cache_drop(word: Int, store: EntryRef, addresses: List[Int], words: List[Int]) raises -> ArenaCacheReleased:
+    """Drop the resident copies of a run's in-out inputs: a stage rewrote
+    their host words, so the copies are stale. Unpublish first, then free: a
+    failed free never leaves a stale entry behind (the slot is reported)."""
+    var lease = ARENA_CACHES.acquire(arena_handle(word))
+    var released = ArenaCacheReleased()
+    for i in range(len(addresses)):  # driver-loop: over the run's in-out inputs
+        var removed = lease[].remove(addresses[i], words[i])
+        if removed.store_id < 0:
+            continue
+        released.pins.append(removed.pin)
+        try:
+            arena_cache_free(store, removed.store_id)
+        except error:
+            released.failure += (("" if released.failure.byte_length() == 0 else "; ") + "slot "
+                                 + String(removed.store_id) + ": " + String(error))
+    return released^
+
+
+def arena_cache_finalize(word: Int, store: EntryRef) -> List[Int]:
+    """Best-effort end of a cache state (an owner's destructor, a scope's
+    end): free what it holds, release the state, return every pin."""
+    var pins = List[Int]()
+    try:
+        var handle = arena_handle(word)
+        var lease = ARENA_CACHES.acquire(handle)
+        var drained = lease[].drain()
+        for i in range(len(drained)):  # driver-loop: over the entries the cache still holds
+            pins.append(drained[i].pin)
+            try:
+                arena_cache_free(store, drained[i].store_id)
+            except error:
+                pass
+        ARENA_CACHES.release(handle)
+    except error:
+        pass
+    return pins^
+
+
+# ---------------------------------------------------------------- scope
+
+
+def arena_scope_new(min_words: Int) raises -> Int:
+    """A fresh `resident()` scope state with its size floor; its handle word."""
+    return arena_handle_word(ARENA_SCOPES.insert(ArenaScopeState(min_words)))
+
+
+def arena_scope_floor(scope: Int) raises -> Int:
+    var lease = ARENA_SCOPES.acquire(arena_handle(scope))
+    return lease[].min_words
+
+
+def arena_scope_cache(scope: Int, store: EntryRef, prefix: String) raises -> Int:
+    """The scope's cache on `store` for the binding family `prefix`, created
+    on first use. Called once per program run that keeps an input resident."""
+    var lease = ARENA_SCOPES.acquire(arena_handle(scope))
+    var route = arena_cache_route(store)
+    var cache = lease[].cache_of(prefix, route)
+    if cache == ARENA_HANDLE_NONE:
+        cache = arena_cache_new(store, prefix)
+        lease[].add_cache(prefix, route, cache)
+    return cache
+
+
+def arena_scope_cache_found(scope: Int, store: EntryRef, prefix: String) raises -> Int:
+    """The scope's cache on `store`, or `ARENA_HANDLE_NONE` when no run made
+    one (nothing is created)."""
+    var lease = ARENA_SCOPES.acquire(arena_handle(scope))
+    return lease[].cache_of(prefix, arena_cache_route(store))
+
+
+def arena_scope_close(scope: Int) raises -> ArenaCacheReleased:
+    """Close every cache of the scope and release the caches' states (the
+    scope's own state lives until its owner object is freed). A cache with a
+    failed free stays in the scope, with the failed entries, for a retry."""
+    var lease = ARENA_SCOPES.acquire(arena_handle(scope))
+    var taken = lease[].take_caches()
+    var released = ArenaCacheReleased()
+    for i in range(len(taken)):  # driver-loop: close every independent cache of the scope (one per family and mode)
+        var failed = False
+        try:
+            var closed = arena_cache_close(taken[i].cache, arena_cache_store(taken[i].route))
+            for j in range(len(closed.pins)):  # driver-loop: over the freed entries' pins
+                released.pins.append(closed.pins[j])
+            if closed.failure.byte_length() > 0:
+                released.keep(closed.failure)
+                failed = True
+            else:
+                ARENA_CACHES.release(arena_handle(taken[i].cache))
+        except error:
+            released.keep(String(error))
+            failed = True
+        if failed:
+            lease[].add_cache(taken[i].prefix, taken[i].route, taken[i].cache)
+    return released^
+
+
+def arena_scope_finalize(scope: Int) -> List[Int]:
+    """Best-effort end of a scope state (its owner's destructor): finalize
+    each cache it lists, release the state, return every pin."""
+    var pins = List[Int]()
+    try:
+        var handle = arena_handle(scope)
+        var lease = ARENA_SCOPES.acquire(handle)
+        var taken = lease[].take_caches()
+        for i in range(len(taken)):  # driver-loop: over the caches the scope still lists
+            try:
+                var dropped = arena_cache_finalize(taken[i].cache, arena_cache_store(taken[i].route))
+                for j in range(len(dropped)):  # driver-loop: over the freed entries' pins
+                    pins.append(dropped[j])
+            except error:
+                pass
+        ARENA_SCOPES.release(handle)
+    except error:
+        pass
+    return pins^
+
+
+@fieldwise_init
+struct ArenaCacheCounts(Copyable, Movable):
+    """One cache's counters for `resident.stats()`."""
+    var prefix: String
+    var uploads: Int
+    var hits: Int
+
+
+def arena_scope_stats(scope: Int) raises -> List[ArenaCacheCounts]:
+    var lease = ARENA_SCOPES.acquire(arena_handle(scope))
+    var counts = List[ArenaCacheCounts]()
+    for i in range(len(lease[].caches)):  # driver-loop: over the scope's caches, in creation order
+        var cache = ARENA_CACHES.acquire(arena_handle(lease[].caches[i].cache))
+        counts.append(ArenaCacheCounts(lease[].caches[i].prefix, cache[].uploads, cache[].hits))
+    return counts^

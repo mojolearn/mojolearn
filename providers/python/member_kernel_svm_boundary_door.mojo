@@ -8,7 +8,7 @@ SVR (`_mojolearn_member = (MEMBER_FAMILY_KERNEL_SVM, kind)` on each class).
     own parameter checks (`svm_settings_unpack`: its refusals and the
     `_hp_*` working values), its binding through the estimator's binding
     route (device='cpu' beside a GPU set answers the host image), that
-    binding's SVC tables (and the SVR table for kind 1) in the route's
+    binding's SVC tables (and the SVR table for kind 1 or a GPU binding) in the route's
     slots, and the 17 parameter words of core/kernel_svm_member.mojo.
     kernel='precomputed' and an SVC class_weight are not published: admit
     returns False and the caller keeps the estimator's own doors.
@@ -94,7 +94,9 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         route.second = EntryRef(drivers.device, entry_ref_word(mode, vendor, SVC_DEVICE_COUNT))
         route.has_second = True
     var svr_owner = PythonObject(None)
-    if not classifier:
+    # The SVR table: SVR's own entries, and on a GPU binding the lease of the
+    # state's device copies for SVC too (core/kernel_svm_member.mojo `_lease`).
+    if not classifier or drivers.has_device:
         var svr = svr_connection(binding)
         route.third = EntryRef(svr.driver.entry, entry_ref_word(mode, vendor, SVR_NATIVE_COUNT))
         route.has_third = True

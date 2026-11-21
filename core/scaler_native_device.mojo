@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Adapters to existing scaler kernels, preserving the provider image."""
-from core.scaler_native_api import ScalerNativeKernels, ScalerFitRequest, ScalerTransformRequest, MinMaxFitRequest, MinMaxTransformRequest
+from core.scaler_native_api import ScalerNativeKernels, ScalerFitRequest, ScalerTransformRequest, MinMaxFitRequest, MinMaxTransformRequest, ScalerFitTransformRequest
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from preprocessing.estimator import validate_standard, standard_fit_direct, standard_fit_refusing, standard_transform_direct, standard_transform_refusing
 from preprocessing.estimator import validate_dimensions, minmax_fit_direct, minmax_fit_refusing, minmax_transform_direct, minmax_transform_refusing
+from preprocessing.estimator import standard_fit_transform_direct, minmax_fit_transform_direct
 from core.hostptr import f32_ptr
 
 struct ScalerDeviceKernels(ScalerNativeKernels):
@@ -61,3 +62,16 @@ struct ScalerDeviceKernels(ScalerNativeKernels):
             return minmax_transform_direct(x, scale, offset, dst, r.rows, r.features, Int(r.inverse), Int(r.clip), r.lower, r.upper)
         minmax_transform_refusing(x, scale, offset, dst, r.rows, r.features, Int(r.inverse), Int(r.clip), r.lower, r.upper)
         return 1
+
+    # The combined fit_transform (one upload of X): the bodies of the device
+    # binding's `standard_fit_transform` / `minmax_fit_transform`, the same
+    # kernels on the same words; 1 / 0 / -1 as those return.
+    @staticmethod
+    def standard_fit_transform(r: ScalerFitTransformRequest) raises -> Int:
+        return standard_fit_transform_direct(f32_ptr(r.source), r.rows, r.features, Int(r.with_mean),
+                                             Int(r.with_std), f32_ptr(r.stats), f32_ptr(r.dst))
+
+    @staticmethod
+    def minmax_fit_transform(r: ScalerFitTransformRequest) raises -> Int:
+        return minmax_fit_transform_direct(f32_ptr(r.source), r.rows, r.features, r.lower, r.upper, Int(r.clip),
+                                           f32_ptr(r.stats), f32_ptr(r.dst))

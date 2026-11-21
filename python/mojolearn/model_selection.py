@@ -87,6 +87,10 @@ class _Resident:
     `release` frees one entry. The caller must not write into a buffer it
     has handed here while the entry lives."""
 
+    # The one native owner object of the resident state; freeing it releases
+    # whatever `close` did not.
+    __slots__ = ('_owner',)
+
     def __init__(self):
         return _RESIDENT_CALL(self, 'msel_resident_init', (), _RESIDENT_CONTEXT)
 

@@ -1,157 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # Whole public DeviceCache.id_of. Constructor/release/close remain separate.
+#
+# Lane arena (2026-11-21): UNPACK is the owner slot read and the buffer-key
+# admission; RUN is the typed find (a hit, counted natively) or the put with
+# the interpreter lock released and the publication
+# (`bindings/arena_cache_run.mojo` `arena_cache_upload`; a lost publication
+# race frees its own id and returns the id published first); PACK is the id.
+# The instance dictionary, the Python counters (`PyNumber_InPlaceAdd`, the
+# arbitrary-precision binary increment), the put / free builtins called with
+# `PyObject_Call` and the double-failure exception wrapper are gone: the
+# counters are native integers and a failed cleanup is reported in words.
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.arena_cache_stats_unpack import _mapping, _admit_entry_keys
-from bindings.arena_cache_stats_pack import _attribute
-from bindings.arena_cache_get_door import arena_cache_key
-from bindings.arena_cache_upload_run import _counter_binary_increment
-from bindings.optimizer_public_words_unpack import stash_python_error, PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
-from bindings.p3_array_arena_records_unpack import (
-    P3_SETATTR_LAYOUT, p3_layout_admitted, p3_layout_admit, P3_DICT_CACHE_KEYS, p3_dict_admitted, p3_dict_admit,
-)
-
-
-def _entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var entries = _attribute(model,"_entries",PythonObject(None),True,context)
-    if py_type(entries) is not context["arena_native_types"]["dict"]:
-        raise Error("TypeError: DeviceCache entries require a native dictionary")
-    # Refuse application hashing/equality before a native dictionary lookup.
-    _admit_entry_keys(entries,context)
-    return entries
-
-
-def _increment(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Cache counters are ordinary integers, with no machine-width bound.
-    # Read the exact builtin's binary representation, perform the addition
-    # in Mojo, and parse the already-computed result with the fixed native
-    # integer constructor. No NumPy arithmetic/conversion or Python __add__.
-    var b = context["arena_native_types"]
-    if py_type(value) is not b["int"] and py_type(value) is not b["bool"]:
-        # Preserve the incumbent native float/complex counter forms and
-        # ordinary builtin error text. Exact retained builtin slots cannot
-        # invoke application numeric hooks; NumPy arithmetic is not admitted.
-        var types = context["cache_counter_types"]
-        var admitted = False
-        for i in range(len(types)):  # driver-loop: fixed native counter/value-error identities
-            admitted = admitted or py_type(value) is types[i]
-        if not admitted:
-            raise Error("TypeError: DeviceCache counters require native builtin values without Python arithmetic hooks")
-        ref cpy = Python().cpython()
-        var one = PythonObject(1)
-        var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_InPlaceAdd")(value._obj_ptr,one._obj_ptr)
-        _ = one^
-        if not pointer:
-            var failure = stash_python_error()
-            raise failure^
-        return PythonObject(from_owned=pointer)
-    # An exact builtin int/bool counter that fits a machine word (every real
-    # hit/upload count) is incremented natively in one step; only a counter
-    # outside the Int range takes the arbitrary-precision binary walk below.
-    var small = 0
-    var fits = False
-    try:
-        small = Int(py=value)
-        fits = small < Int.MAX
-    except:
-        fits = False
-    if fits:
-        return PythonObject(small + 1)
-    ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_ToBase")(value._obj_ptr,Int32(2))
-    if not pointer:
-        var failure = stash_python_error()
-        raise failure^
-    var encoded = PythonObject(from_owned=pointer)
-    var text = String(encoded)
-    var result = _counter_binary_increment(text)
-    return py_call(b["int"],PythonObject(result),2)
-
-
-def _counter_next(model: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    # Validate setters as well as readers before any cache mutation. Native
-    # member descriptors and ordinary instance dictionaries retain their
-    # normal behavior; application descriptors/setattr hooks cannot execute.
-    # p3-array-arena: admitted once per class state (type watcher).
-    var cls = py_type(model)
-    if not p3_layout_admitted(P3_SETATTR_LAYOUT, cls, context["cache_object_setattr"]):
-        var ancestry = py_call(context["cache_type_mro"],cls)
-        for i in range(len(ancestry)):  # driver-loop: fixed native attribute-write surface
-            var mapping = _mapping(ancestry[i],context)
-            var hook = py_get(mapping,"__setattr__")
-            if hook is not None and hook is not context["cache_object_setattr"]:
-                raise Error("TypeError: DeviceCache counters cannot invoke a custom attribute setter")
-        p3_layout_admit(P3_SETATTR_LAYOUT, cls, context["cache_object_setattr"])
-    return _increment(_attribute(model,name,PythonObject(None),True,context),context)
-
-
-def _counter_set(model: PythonObject, name: String, value: PythonObject) raises:
-    ref cpy = Python().cpython()
-    var key = PythonObject(name)
-    var status = cpy.lib.get_function[Int32]("PyObject_GenericSetAttr")(model._obj_ptr,key._obj_ptr,value._obj_ptr)
-    _ = key^
-    if status != 0:
-        var failure = stash_python_error()
-        raise failure^
-
-
-def _hit(model: PythonObject, key: PythonObject, context: PythonObject) raises -> PythonObject:
-    var entries = _entries(model,context)
-    var hit = py_get(entries,key)
-    if hit is None:
-        return PythonObject(None)
-    # Match the established order: increment before indexing the hit. A
-    # malformed empty entry still increments the hit counter then raises.
-    var next_hits = _counter_next(model,"hits",context)
-    var types = context["cache_entry_types"]
-    var admitted = False
-    for i in range(len(types)):  # driver-loop: native indexing and ordinary non-subscriptable error slots
-        admitted = admitted or py_type(hit) is types[i]
-    if not admitted:
-        raise Error("TypeError: DeviceCache entries require native indexing without Python hooks")
-    if py_type(hit) is context["arena_native_types"]["dict"]:
-        # Native dictionary indexing cannot compare foreign keys.
-        _admit_entry_keys(hit,context)
-    _counter_set(model,"hits",next_hits)
-    ref cpy = Python().cpython()
-    var zero = PythonObject(0)
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(hit._obj_ptr,zero._obj_ptr)
-    _ = zero^
-    if not pointer:
-        var failure = stash_python_error()
-        raise failure^
-    # A separate hit flag preserves a legitimate None-valued stored slot.
-    return Python.tuple(PythonObject(from_owned=pointer))
-
-
-def _route(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var put = _attribute(model,"_put",PythonObject(None),True,context)
-    var free = _attribute(model,"_free",PythonObject(None),True,context)
-    var routes = context["cache_store_routes"]
-    for i in range(len(routes)):  # driver-loop: exact import-connected native put/free pairs only
-        var pair = routes[i]
-        if put is pair[0] and free is pair[1]:
-            return pair
-    raise Error("TypeError: DeviceCache upload requires a connected native x_prep or x_metrics store; Python callbacks cannot execute")
-
-
-def _prepare(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    # All app-owned instance dictionaries/entries/counter temporaries die in
-    # this scope before the put entry releases the GIL. Only fixed native
-    # functions and caller-owned key/source/model arguments cross that call.
-    _ = _counter_next(model,"uploads",context)
-    return _route(model,context)
-
-
-def _native_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
-    ref cpy = Python().cpython()
-    var result = cpy.PyObject_Call(entry._obj_ptr,args._obj_ptr,PyObjectPtr())
-    _ = args
-    if not result:
-        var failure = stash_python_error()
-        raise failure^
-    return PythonObject(from_owned=result)
+from bindings.arena_cache_get_door import arena_cache_key, arena_cache_view
+from bindings.arena_scope_door import arena_cache_slot
+from bindings.optimizer_public_words_unpack import PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
+from core.arena_state import ARENA_CACHES, arena_handle
 
 
 struct CachePendingError(Movable):
@@ -205,123 +68,12 @@ def _restore_pending(mut saved: CachePendingError) raises:
         saved.traceback = 0
 
 
-def _pending_reference(address: Int) raises -> PythonObject:
-    if address == 0:
-        return PythonObject(None)
-    # Py_NewRef is public on every supported CPython (3.10+). It only owns a
-    # reference; no exception normalization, repr or user conversion runs.
-    ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("Py_NewRef")(address)
-    return PythonObject(from_owned=pointer)
-
-
-def _pending_state(saved: CachePendingError, error: Error) raises -> PythonObject:
-    if saved.kind:
-        return Python.tuple(_pending_reference(saved.kind), _pending_reference(saved.value),
-                            _pending_reference(saved.traceback))
-    return Python.tuple(PythonObject(None), PythonObject(String(error)), PythonObject(None))
-
-
-def _cleanup_failure(mut primary: CachePendingError, mut cleanup: CachePendingError,
-                     error: Error, cleanup_error: Error, slot: PythonObject,
-                     context: PythonObject) raises -> Error:
-    # A double failure is explicit and keeps inspectable native error states.
-    # Never stringify caller exceptions merely to report failed cleanup. For
-    # CPython errors each attribute is its original (type, value, traceback);
-    # a Mojo-origin error is represented by (None, native message, None).
-    try:
-        ref cpy = Python().cpython()
-        var cls = context["cache_runtime_error"]
-        var message = PythonObject("DeviceCache publication failed and cleanup of the unpublished native slot also failed")
-        # `cls(message)` through PyObject_Call with a one-item tuple (the
-        # py_balanced.py_call form, without its error fetch so the pending
-        # exception still reaches stash_python_error): PyObject_CallOneArg is
-        # a header inline before CPython 3.11, so its dlsym missed on 3.10 and
-        # Mojo's ffi aborted the process (fx-user-crash-scorer, 2026-11-19).
-        # Once per double failure, never on a loop.
-        var envelope = cpy.PyTuple_New(1)
-        if not envelope:
-            var failure = stash_python_error()
-            raise failure^
-        _ = cpy.PyTuple_SetItem(envelope, 0, cpy.Py_NewRef(message._obj_ptr))
-        var pointer = cpy.PyObject_Call(cls._obj_ptr, envelope, PyObjectPtr())
-        cpy.Py_DecRef(envelope)
-        if not pointer:
-            var failure = stash_python_error()
-            raise failure^
-        var wrapper = PythonObject(from_owned=pointer)
-        _counter_set(wrapper,"publication_error_state",_pending_state(primary,error))
-        _counter_set(wrapper,"cleanup_error_state",_pending_state(cleanup,cleanup_error))
-        _counter_set(wrapper,"unpublished_slot",slot)
-        cpy.lib.get_function[NoneType]("PyErr_SetObject")(cls._obj_ptr,wrapper._obj_ptr)
-        var failure = stash_python_error()
-        _drop_pending(primary)
-        _drop_pending(cleanup)
-        return failure^
-    except failure:
-        # The native report itself can fail to allocate. Its error remains
-        # visible and both original owned triples are still released once.
-        _drop_pending(primary)
-        _drop_pending(cleanup)
-        raise failure^
-
-
-def _publish(model: PythonObject, source: PythonObject, key: PythonObject,
-             slot: PythonObject, route: PythonObject, context: PythonObject,
-             mut published: Bool) raises:
-    # A put may release the GIL. Re-read the actual current cache instead of
-    # publishing into a stale dictionary retained across another thread's
-    # close/reinitialization. Never overwrite a concurrently published owner.
-    var current = _route(model,context)
-    if current[0] is not route[0] or current[1] is not route[1]:
-        raise Error("RuntimeError: DeviceCache native store changed during upload")
-    var entries = _entries(model,context)
-    if py_get(entries,key) is not None:
-        raise Error("RuntimeError: DeviceCache entry was published concurrently during upload")
-    var next_uploads = _counter_next(model,"uploads",context)
-    var entry = Python.tuple(slot,source)
-    var admitted = p3_dict_admitted(P3_DICT_CACHE_KEYS, entries)
-    py_setitem(entries,key,entry)
-    published = True
-    var nt = context["arena_native_types"]
-    if admitted and py_type(key) is nt["tuple"] and len(key) == 2 and py_type(key[0]) is nt["int"] and py_type(key[1]) is nt["int"]:
-        # Only this owner's own exact (int, int) key went in since the walk.
-        p3_dict_admit(P3_DICT_CACHE_KEYS, entries)
-    # The published entry now owns the resource. If a native setter fails,
-    # the entry remains visible and must not point at a freed slot.
-    _counter_set(model,"uploads",next_uploads)
-
-
 def arena_cache_id_of(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var source = args[0]
-    var key = arena_cache_key(model,source,context)
-    var hit = _hit(model,key,context)
-    if hit is not None:
-        return hit[0]
-    _ = hit^
-    # Native exact integer ordering avoids imposing a machine-word limit
-    # before the already-established ABI performs its own range admission.
-    if Bool(py=key[1] < PythonObject(1)):
+    var view = arena_cache_view(model, context)
+    var key = arena_cache_key(source, context)
+    if key.words < 1:
+        # No entry of an empty buffer can exist: the upload refuses it.
         raise Error("ValueError: DeviceCache: an empty buffer has no device copy")
-    var route = _prepare(model,context)
-    var slot = _native_call(route[0],key)
-    var published = False
-    try:
-        _publish(model,source,key,slot,route,context,published)
-    except error:
-        if not published:
-            # Cleanup releases the GIL. The primary exception must be owned
-            # locally, not left in the shared native boundary's pending slot
-            # where an unrelated thread's operation could overwrite it.
-            var primary = _take_pending(error)
-            try:
-                # Use the originally admitted free entry, even if the
-                # cache was reinitialized while upload released the GIL.
-                _ = _native_call(route[1],Python.tuple(slot))
-            except cleanup_error:
-                var cleanup = _take_pending(cleanup_error)
-                var failure = _cleanup_failure(primary,cleanup,error,cleanup_error,slot,context)
-                raise failure^
-            _restore_pending(primary)
-        raise error^
-    return slot
+    var lease = ARENA_CACHES.acquire(arena_handle(view.word))
+    return PythonObject(arena_cache_slot(lease, view.word, view.store, source, key.address, key.words))

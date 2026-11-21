@@ -52,6 +52,23 @@ struct MinMaxTransformRequest(Copyable, Movable):
     var direct: Bool
 
 @fieldwise_init
+struct ScalerFitTransformRequest(Copyable, Movable):
+    """fit then transform on ONE upload of X (both scalers): `stats` the
+    fitted rows (StandardScaler 3 x d, MinMaxScaler the kernel's 5 x d),
+    `dst` the n x d transform. StandardScaler reads with_mean / with_std,
+    MinMaxScaler clip / lower / upper."""
+    var source: Int
+    var stats: Int
+    var dst: Int
+    var rows: Int
+    var features: Int
+    var with_mean: Bool
+    var with_std: Bool
+    var clip: Bool
+    var lower: Float32
+    var upper: Float32
+
+@fieldwise_init
 struct PrepProgramRequest(Copyable, Movable):
     var arena: Int
     var words: Int
@@ -71,7 +88,16 @@ comptime SCALER_OP_FIT = 2
 comptime SCALER_OP_TRANSFORM = 3
 comptime SCALER_OP_MINMAX_FIT = 4
 comptime SCALER_OP_MINMAX_TRANSFORM = 5
-comptime SCALER_OP_COUNT = 6
+# 6 and 7 (lane ma-pub-transform, 2026-11-21): the combined fit_transform
+# exports the preprocessing image already had as Python bindings
+# (`standard_fit_transform`, `minmax_fit_transform`), on the typed entry so a
+# member fit that wants the transform makes the door's ONE call (one upload
+# of X). Value 1 both written, 0 nothing written (X nonfinite: the caller's
+# two-step route; always 0 on the host column, which has no direct route),
+# -1 the rows written and the transform overflowed.
+comptime SCALER_OP_STANDARD_FIT_TRANSFORM = 6
+comptime SCALER_OP_MINMAX_FIT_TRANSFORM = 7
+comptime SCALER_OP_COUNT = 8
 
 trait ScalerNativeKernels:
     @staticmethod
@@ -86,6 +112,10 @@ trait ScalerNativeKernels:
     def minmax_fit(request: MinMaxFitRequest) raises -> Int: ...
     @staticmethod
     def minmax_transform(request: MinMaxTransformRequest) raises -> Int: ...
+    @staticmethod
+    def standard_fit_transform(request: ScalerFitTransformRequest) raises -> Int: ...
+    @staticmethod
+    def minmax_fit_transform(request: ScalerFitTransformRequest) raises -> Int: ...
 
 trait PrepProgramKernels:
     @staticmethod
@@ -148,7 +178,8 @@ def scaler_native_v1[K: ScalerNativeKernels](operation: Int,
     aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int, result: Int,
     context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     try:
-        var floats = 2 if operation == SCALER_OP_MINMAX_FIT or operation == SCALER_OP_MINMAX_TRANSFORM else 0
+        var floats = 2 if (operation == SCALER_OP_MINMAX_FIT or operation == SCALER_OP_MINMAX_TRANSFORM
+                           or operation == SCALER_OP_MINMAX_FIT_TRANSFORM) else 0
         if result == 0 or nf != floats or (floats != 0 and ff == 0):
             raise Error("scaler native ABI: invalid result or scalar envelope")
         var value = 0
@@ -183,6 +214,21 @@ def scaler_native_v1[K: ScalerNativeKernels](operation: Int,
             var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
             value = K.minmax_transform(MinMaxTransformRequest(a[0], a[1], a[2], a[3], p[0], p[1], p[2] != 0, p[3] != 0,
                                                               Float32(f[0]), Float32(f[1]), p[4] != 0))
+        elif operation == SCALER_OP_STANDARD_FIT_TRANSFORM:
+            if na != 3 or np != 4 or aa == 0 or pp == 0:
+                raise Error("scaler native ABI: invalid fit_transform envelope")
+            var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
+            var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
+            value = K.standard_fit_transform(ScalerFitTransformRequest(a[0], a[1], a[2], p[0], p[1], p[2] != 0,
+                                                                       p[3] != 0, False, Float32(0), Float32(1)))
+        elif operation == SCALER_OP_MINMAX_FIT_TRANSFORM:
+            if na != 3 or np != 3 or aa == 0 or pp == 0:
+                raise Error("scaler native ABI: invalid minmax fit_transform envelope")
+            var a = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=aa)
+            var p = Pointer[Int, ImmUntrackedOrigin](unsafe_from_address=pp)
+            var f = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=ff)
+            value = K.minmax_fit_transform(ScalerFitTransformRequest(a[0], a[1], a[2], p[0], p[1], True, True,
+                                                                     p[2] != 0, Float32(f[0]), Float32(f[1])))
         else:
             raise Error("scaler native ABI: unknown operation")
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value

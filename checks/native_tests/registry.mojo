@@ -232,6 +232,7 @@ from checks.native_tests.training_small_mlp_relations import register as registe
 from checks.native_tests.affinity_preference_plan import register as register_affinity_preference_plan
 from checks.native_tests.agglo_contract import register as register_agglo_contract
 from checks.native_tests.agglo_state import register as register_agglo_state
+from checks.native_tests.arena_state import register as register_arena_state
 from checks.native_tests.transport_frame import register as register_transport_frame
 from checks.native_tests.member_abi import register as register_member_abi
 from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
@@ -468,6 +469,7 @@ from checks.soft_f64_check import register as register_soft_f64_check
 from checks.sym_arms_check import register as register_sym_arms_check
 from checks.tensor_sync_state_check import register as register_tensor_sync_state_check
 from checks.train_api_check import register as register_train_api_check
+from checks.combination_code_device_check import register as register_combination_code_device_check
 from checks.tree_ctr_device_check import register as register_tree_ctr_device_check
 from checks.tree_ctr_slice_check import register as register_tree_ctr_slice_check
 # lane fx-checks-orphans (2026-11-18): the family standalone main() checks nothing ran; each suite stays in
@@ -827,6 +829,7 @@ def all_checks() -> List[Check]:
     checks.append(register_affinity_preference_plan())
     checks.append(register_agglo_contract())
     checks.append(register_agglo_state())
+    checks.append(register_arena_state())
     checks.append(register_transport_frame())
     checks.append(register_member_abi())
     checks.append(register_base_helpers_entry())
@@ -1063,6 +1066,7 @@ def all_checks() -> List[Check]:
     checks.append(register_sym_arms_check())
     checks.append(register_tensor_sync_state_check())
     checks.append(register_train_api_check())
+    checks.append(register_combination_code_device_check())
     checks.append(register_tree_ctr_device_check())
     checks.append(register_tree_ctr_slice_check())
     checks.append(register_arima_fit_check())

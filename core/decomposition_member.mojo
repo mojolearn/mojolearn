@@ -17,7 +17,9 @@ DECOMP_ROUTE_FUSED (entry has the fused fit), DECOMP_ROUTE_TSQR (the x_decomp
 image takes the TSQR fit: its qfix bit and TSVD_CAP_TSQR), DECOMP_ROUTE_TSQR_MISSING
 (qfix asks for the TSQR fit and the image does not export it: refused as the
 door refuses), DECOMP_ROUTE_RANDOMIZED (the x_decomp image has the randomized
-fit). No score is published (neither class has one).
+fit), DECOMP_ROUTE_RESIDENT (the entry keeps components resident: the state
+opens one lease at its first transform and every transform / inverse reads
+that device copy, as the door's lease does; closed at refit, import, free). No score is published (neither class has one).
 
 MEMBER_OP_NEW parameters (Float64 words, 9):
   [0] kind: 0 PCA, 1 TruncatedSVD
@@ -77,6 +79,7 @@ from core.member_abi import (
 )
 from core.member_families import MEMBER_FAMILY_DECOMPOSITION
 from core.native_descriptor_abi import NativeDescriptorError
+from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
@@ -94,6 +97,10 @@ comptime DECOMP_ROUTE_FUSED = 1
 comptime DECOMP_ROUTE_TSQR = 2
 comptime DECOMP_ROUTE_TSQR_MISSING = 4
 comptime DECOMP_ROUTE_RANDOMIZED = 8
+#: The TruncatedSVD entry keeps components resident under a lease
+#: (TSVD_CAP_RESIDENT): the member's transforms read the lease's device copy,
+#: as the door's (bindings/tsvd_native_door.mojo `_resident_lease`).
+comptime DECOMP_ROUTE_RESIDENT = 16
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N: the widest X the TSQR takes (the
 #: TruncatedSVD door's `_tsqr_connection` rule, a kernel width limit).
@@ -118,8 +125,14 @@ struct DecompositionMemberSlot(Copyable, Movable, Defaultable):
     var ratio: List[Float32]
     var singular: List[Float32]
     var scalars: List[Float64]
+    # TruncatedSVD: the resident lease of this state's components (0 none)
+    # and the entry that opened it (the one that closes it).
+    var lease: Int
+    var lease_entry: EntryRef
 
     def __init__(out self):
+        self.lease = 0
+        self.lease_entry = entry_ref_unresolved()
         self.generation = 0
         self.live = False
         self.words = List[Float64]()
@@ -208,23 +221,61 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
     another store or a made-up integer is refused: never a stale read."""
     var store = _STORE.get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    var address = 0
+    var lease = 0
+    var lease_entry = entry_ref_unresolved()
     shared_slot_lock(lock)
     try:
         var index = handle % _INDEX_SPAN - 1
         if handle <= 0 or index < 0 or index >= store[].count:
             raise Error("NotFittedError: this member state was released or never created")
-        var address = _slot_address(index)
+        address = _slot_address(index)
         var slot = _Slot(unsafe_from_address=address)
         if not slot[].live or slot[].generation != handle // _INDEX_SPAN:
             raise Error("NotFittedError: this member state was released or never created")
         if release:
+            # The lease is taken out under the lock and closed after it: the
+            # close is the kernel store's, never under this store's lock.
+            lease = slot[].lease
+            lease_entry = slot[].lease_entry
+            slot[].lease = 0
+            slot[].lease_entry = entry_ref_unresolved()
             slot[].live = False
             slot[].clear()
             slot[].words = List[Float64]()
             store[].free.append(index)
-        return address
     finally:
         shared_slot_unlock(lock)
+    if lease != 0:
+        TSVDNativeDriver(lease_entry.call).close(lease)
+    return address
+
+
+def _drop_lease(slot: _Slot) raises:
+    """Close this state's resident lease before its components change (a
+    refit, an import): the resident copy is keyed by the components' address
+    and size, which a new list may reuse."""
+    if slot[].lease == 0:
+        return
+    var lease = slot[].lease
+    slot[].lease = 0
+    var entry = slot[].lease_entry
+    slot[].lease_entry = entry_ref_unresolved()
+    TSVDNativeDriver(entry.call).close(lease)
+
+
+def _lease(slot: _Slot, call: _Call) raises -> Int:
+    """The resident lease of this state's components (opened at its first
+    transform, as the door opens its lease at the first transform of a fitted
+    model), 0 when the entry keeps no resident copy (the per-call route)."""
+    if slot[].lease != 0 or (call[].route.flags & DECOMP_ROUTE_RESIDENT) == 0:
+        return slot[].lease
+    var entry = call[].route.entry
+    var lease = TSVDNativeDriver(entry.call).open()
+    if lease > 0:
+        slot[].lease = lease
+        slot[].lease_entry = entry
+    return slot[].lease
 
 
 def _name(slot: _Slot) -> String:
@@ -353,6 +404,7 @@ def _fit_tsvd(slot: _Slot, call: _Call) raises:
         _dense(call[].dst, "the projection buffer", estimator)
         if call[].dst.rows != rows or call[].dst.cols != nc:
             raise Error("ValueError: the projection buffer holds n_components values per row of X")
+    _drop_lease(slot)
     slot[].clear()
     slot[].components = List[Float32](length=nc * cols, fill=0.0)
     slot[].variance = List[Float32](length=nc, fill=0.0)
@@ -445,8 +497,11 @@ def _query(slot: _Slot, call: _Call, inverse: Bool) raises:
             var status = driver.query(request)
             admitted_finite_refuse(status.finite, estimator)
     else:
+        # The door's resident route: components_ read from the lease's device
+        # copy (uploaded once per fitted state), never uploaded per call.
+        var lease = _lease(slot, call)
         var request = TSVDQueryRequest(call[].x.data, Int(slot[].components.unsafe_ptr()), call[].dst.data,
-            rows, slot[].features, slot[].keep, inverse, not inverse, False, 0)
+            rows, slot[].features, slot[].keep, inverse, not inverse, lease > 0, lease)
         var status = TSVDNativeDriver(call[].route.entry.call).query(request)
         if not inverse:
             admitted_finite_refuse(status, estimator)
@@ -508,6 +563,7 @@ def _import(slot: _Slot, call: _Call) raises:
     var estimator = _name(slot)
     var pca = slot[].kind() == DECOMP_KIND_PCA
     var block = call[].block
+    _drop_lease(slot)
     if block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
         slot[].fitted = False
     if block == MEMBER_BLOCK_SCALARS:

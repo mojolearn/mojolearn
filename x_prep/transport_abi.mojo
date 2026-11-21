@@ -6,13 +6,13 @@ One `abi("C")` entry per x_prep image (`x_prep/transport_device.mojo`,
 `x_prep/transport_host.mojo`, published in `core/prep_entry_table.mojo`)
 runs every transport operation below on plain words: the bodies of the
 Python entries `x_prep_run`, `x_prep_run_scratch`, `x_prep_run_out`,
-`x_prep_run_ranges`, `x_prep_dev_put`, `x_prep_dev_free` and
-`x_prep_dev_take_rows` with the same checks and the same typed calls.
+`x_prep_run_ranges`, `x_prep_dev_put`, `x_prep_dev_free`,
+`x_prep_dev_take_rows` and `x_prep_dev_live` with the same checks and the same typed calls.
 The caller (`bindings/x_prep_native_owner.mojo`) owns every buffer until the
 synchronous call returns and releases the GIL around it, as the entries did.
 """
 
-comptime XP_TRANSPORT_ABI = "mojolearn.x_prep.transport.v1"
+comptime XP_TRANSPORT_ABI = "mojolearn.x_prep.transport.v2"
 
 comptime XP_RUN = 0            # a: [arena, prog]                  i: [arena_len, stages]
 comptime XP_RUN_SCRATCH = 1    # a: [arena, prog]                  i: [arena_len, scratch_len, stages]
@@ -21,7 +21,8 @@ comptime XP_RUN_RANGES = 3     # a: [arena, prog, out, ins, outs]  i: [arena_len
 comptime XP_DEV_PUT = 4        # a: [src]                          i: [n_words]            -> slot id
 comptime XP_DEV_FREE = 5       # i: [id]
 comptime XP_DEV_TAKE_ROWS = 6  # a: [idx]                          i: [src_id, row_words, n_idx]  -> slot id
-comptime XP_OP_COUNT = 7
+comptime XP_DEV_LIVE = 7       # (none)                                                    -> live slot count of the store
+comptime XP_OP_COUNT = 8
 
 
 def xp_schema(op: Int) raises -> Tuple[Int, Int]:
@@ -40,6 +41,8 @@ def xp_schema(op: Int) raises -> Tuple[Int, Int]:
         return (0, 1)
     if op == XP_DEV_TAKE_ROWS:
         return (1, 3)
+    if op == XP_DEV_LIVE:
+        return (0, 0)
     raise Error("x_prep transport ABI: unknown operation " + String(op))
 
 
