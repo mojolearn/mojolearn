@@ -135,6 +135,7 @@ struct ClassicalKeys(Defaultable, Movable):
     var k_owner_mmap_class: PythonObject
     var k_r2_score: PythonObject
     var k_r2_score_weighted: PythonObject
+    var k_metrics_mode_verified: PythonObject
     var k_read: PythonObject
     var k_readable: PythonObject
     var k_readinto: PythonObject
@@ -317,6 +318,7 @@ struct ClassicalKeys(Defaultable, Movable):
         self.k_owner_mmap_class = PythonObject(None)
         self.k_r2_score = PythonObject(None)
         self.k_r2_score_weighted = PythonObject(None)
+        self.k_metrics_mode_verified = PythonObject(None)
         self.k_read = PythonObject(None)
         self.k_readable = PythonObject(None)
         self.k_readinto = PythonObject(None)
@@ -503,6 +505,7 @@ def _classical_keys_fill(nk: UnsafePointer[ClassicalKeys, MutUntrackedOrigin]) r
     nk[].k_owner_mmap_class = py_key("owner_mmap_class")
     nk[].k_r2_score = py_key("r2_score")
     nk[].k_r2_score_weighted = py_key("r2_score_weighted")
+    nk[].k_metrics_mode_verified = py_key("_metrics_mode_verified")
     nk[].k_read = py_key("read")
     nk[].k_readable = py_key("readable")
     nk[].k_readinto = py_key("readinto")

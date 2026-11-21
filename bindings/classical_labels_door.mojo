@@ -1278,17 +1278,24 @@ def labels_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyt
                     + "y_pred has " + String(yh.rows) + "; they must be the same length")
     var selected = _metrics_mode(mode, context)
     var metrics = labels_table(context, selected, "_mojolearn_metrics")
-    var read_mode = labels_entry(metrics, "metrics_numeric_mode")
-    if read_mode is None:
-        read_mode = labels_entry(metrics, "umap_numeric_mode")
-    if read_mode is not None:
-        var code = Int(py=py_call_typed(read_mode))
-        var actual = String("fast") if code == 0 else (String("identical") if code == 1 else String("None"))
-        if actual != selected:
-            raise Error("RuntimeError: mojolearn metrics: requested " + selected + ", binary reports "
-                        + actual + "; rebuild it")
-    var result = PythonObject(None)
     var nk = classical_keys()
+    # The metrics binary's numeric-mode probe runs once per scope and table
+    # (lane fx-audit, audit-classical minor 1): the scope (a long-lived
+    # context, `_xl_scope`) holds the table it verified; a later score on the
+    # same table is one dict read and one identity compare, never a call
+    # into the binary. A table for another mode is verified again.
+    if py_get(context, nk[].k_metrics_mode_verified) is not metrics:
+        var read_mode = labels_entry(metrics, "metrics_numeric_mode")
+        if read_mode is None:
+            read_mode = labels_entry(metrics, "umap_numeric_mode")
+        if read_mode is not None:
+            var code = Int(py=py_call_typed(read_mode))
+            var actual = String("fast") if code == 0 else (String("identical") if code == 1 else String("None"))
+            if actual != selected:
+                raise Error("RuntimeError: mojolearn metrics: requested " + selected + ", binary reports "
+                            + actual + "; rebuild it")
+        py_setitem(context, nk[].k_metrics_mode_verified, metrics)
+    var result = PythonObject(None)
     if sample_weight is not None:
         var w = labels_sample_weight_f32(sample_weight, y.rows, "r2_score", context)
         result = py_call_typed(py_item(metrics, nk[].k_r2_score_weighted), PythonObject(y.address), PythonObject(yh.address),
