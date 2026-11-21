@@ -606,7 +606,24 @@ def _outputs(call: _Call) raises:
     transform width is known only for an integer n_components."""
     call[].classes = 0
     if call[].state == 0:
-        raise Error("member ABI: an XDecomp member's output width needs its state")
+        # Asked before any state (`member_outputs`): from the parameter words.
+        if call[].param_count < 2 or not call[].params:
+            raise Error("member ABI: an XDecomp member's output width needs its parameter words")
+        var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].params)
+        var kind = Int(words[0])
+        var asked_first = call[].flags
+        if asked_first == MEMBER_OP_INVERSE_TRANSFORM:
+            call[].out_cols = call[].x.cols
+            return
+        if asked_first != MEMBER_OP_TRANSFORM:
+            member_unsupported(String("NMF") if kind == XDECOMP_KIND_NMF else String("IncrementalPCA"), asked_first)
+        if words[1] >= 0.0:
+            call[].out_cols = Int(words[1])
+            return
+        if kind == XDECOMP_KIND_NMF:
+            call[].out_cols = call[].x.cols
+            return
+        raise Error("NotFittedError: an IncrementalPCA member with n_components=None knows its output width after its fit")
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     var asked = call[].flags
     if asked != MEMBER_OP_TRANSFORM and asked != MEMBER_OP_INVERSE_TRANSFORM:

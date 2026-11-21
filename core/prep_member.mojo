@@ -416,7 +416,11 @@ def _outputs(call: _Call) raises:
     """`call.out_cols` of transform: the fitted feature count (X's width)."""
     call[].classes = 0
     if call[].state == 0:
-        raise Error("member ABI: a Prep member's output width needs its state")
+        # Asked before any state (`member_outputs`): a scaler keeps X's width.
+        if call[].flags != MEMBER_OP_TRANSFORM:
+            member_unsupported(String("RobustScaler"), call[].flags)
+        call[].out_cols = call[].x.cols
+        return
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
     if call[].flags != MEMBER_OP_TRANSFORM:
         member_unsupported(_name(slot), call[].flags)
