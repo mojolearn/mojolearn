@@ -6,7 +6,7 @@
 # maps their `<Class>: ` error prefixes and restores a stashed Python
 # exception unchanged.
 from providers.python.estimator_binding_pyapi_door import estimator_arguments
-from providers.python.cluster_public_lifecycle_pyapi_door import cluster_public_operation
+from providers.python.cluster_public_lifecycle_pyapi_pack import cluster_public_operation
 from std.python import PythonObject
 from bindings.py_balanced import py_type, py_get
 from bindings.family_common_pack import family_call

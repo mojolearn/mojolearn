@@ -545,7 +545,7 @@ DEBT = {
     'providers/python/byte_lm_metadata_pyapi_door.mojo': {'cpython': 1, 'native_loaded_module': 3},
     'providers/python/classical_family_admission_pyapi_unpack.mojo': {'native_loaded_module': 1},
     'providers/python/cluster_constructor_pyapi_pack.mojo': {'native_loaded_module': 1},
-    'providers/python/cluster_public_lifecycle_pyapi_door.mojo': {'native_loaded_module': 4},
+    'providers/python/cluster_public_lifecycle_pyapi_unpack.mojo': {'native_loaded_module': 4},
     'providers/python/density_public_lifecycle_pyapi_pack.mojo': {'native_loaded_module': 2},
     'providers/python/density_public_lifecycle_pyapi_unpack.mojo': {'native_loaded_module': 2},
     'providers/python/estimator_lifecycle_pyapi_unpack.mojo': {'native_loaded_module': 2},
