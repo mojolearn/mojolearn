@@ -1210,6 +1210,13 @@ def _ridge_multi_entry(model: PythonObject, est: PythonObject, sample_weight: Py
         _ = prep_estimator_call(est, "validate_params", Python.tuple(), context)
     if sample_weight is not None or not plain or _truthy(_attr(est, nk[].k_normalize, PythonObject(False))):
         return PythonObject(None)
+    # The one-program ridge runs on the process's device table. A member
+    # constructed with device="cpu" keeps its own route: each output is then
+    # fitted by the member's fit, through the classical owner's CPU table
+    # (lane pilot-ridge-device; read once per fit, never per row).
+    var member_device = _attr(est, PythonObject("device"), PythonObject(None))
+    if member_device is not None and String(member_device) == "cpu":
+        return PythonObject(None)
     try:
         var table = trees_table(context, _mode(py_fields(est), context), "_mojolearn_estimators")
         if not ridge_multi_available(_estimators_key(table)):

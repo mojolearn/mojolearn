@@ -76,7 +76,7 @@ from core.tsvd_native_host import TSVD_HOST_API
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
 from glm.host.center_host import col_sums_on_cpu, center_on_cpu, scale_rows_on_cpu
-from glm.impl.lm_finish import lm_intercept, lm_means_finish
+from glm.impl.lm_finish import lm_means_finish
 from std.math import isfinite
 from std.os import abort
 from std.python import Python, PythonObject
@@ -130,9 +130,6 @@ from decomposition.host.pca_full_oracle import (
 )
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
-from glm.host.ols_prep_host import ols_prep_host
-from glm.host.gram_solve_host import host_linear_gram_fit
-from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_predict_task_count
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE
@@ -468,25 +465,8 @@ def tsvd_fit_explained_binding(
     return PythonObject(status)
 
 
-def lm_classical_stats_binding() raises -> PythonObject:
-    # TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at d61f68e1ea.
-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-01-base.patch
-    return PythonObject(0)
-
-
-def lm_col_sums_pair_binding(x: PythonObject, y: PythonObject, sx: PythonObject, sy: PythonObject, params: PythonObject) raises -> PythonObject:
-    if len(params) != 2:
-        raise Error("lm_col_sums_pair: params must contain rows, cols")
-    var xa = Int(py=x)
-    var ya = Int(py=y)
-    var sxa = Int(py=sx)
-    var sya = Int(py=sy)
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    with GILReleased(Python()):
-        col_sums_on_cpu(xa, sxa, rows, cols)
-        col_sums_on_cpu(ya, sya, rows, 1)
-    return PythonObject(0)
+# TOMBSTONE: MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR (unmeasured opt-in arm) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at d61f68e1ea.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR.expdel2-01-base.patch
 
 
 def lm_col_sums_binding(x_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -524,21 +504,6 @@ def lm_means_finish_binding(
     lm_means_finish(f64_ptr(Int(py=sums_addr)), f64_ptr(Int(py=mean64_addr)), f32_ptr(Int(py=mean32_addr)),
                     nc, nr, weighted, t)
     return PythonObject(0)
-
-
-def lm_intercept_binding(
-    xmean_addr: PythonObject, coef_addr: PythonObject, params: PythonObject, y_mean: PythonObject,
-) raises -> PythonObject:
-    """Lane py-runtime: y_mean - math.fsum(xmean_j * coef_j) over float32
-    xmean and coef (glm/impl/lm_finish.mojo; it was Python's
-    `_set_intercept`). params: cols. Returns the binary64 intercept."""
-    if len(params) != 1:
-        raise Error("lm_intercept: params must contain cols")
-    var nc = Int(py=params[0])
-    var ym = Float64(py=y_mean)
-    if nc <= 0:
-        return PythonObject(ym - 0.0)
-    return PythonObject(lm_intercept(f32_ptr(Int(py=xmean_addr)), f32_ptr(Int(py=coef_addr)), nc, ym))
 
 
 # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
@@ -641,32 +606,6 @@ def pca_fit_randomized_binding(
     return PythonObject(noise)
 
 
-def lm_ols_prep_binding(addresses: PythonObject, params: PythonObject) raises -> PythonObject:
-    """LinearRegression / Ridge general-route preparation in one call:
-    addresses = [x, y, w (0: none), work_x, work_y, xmean64, xmean32,
-    ymean64, ymean32]; params = [rows, cols, intercept, means_mode (0
-    separate, 1 paired, 2 weighted)]. work_x / work_y receive X and y
-    centered by their means (with intercept) and row-scaled by sqrt(w)
-    (with weights); the means are written with intercept. Returns 0."""
-    # ne2-g-linear (N403): one crossing for what was up to fourteen.
-    if len(addresses) != 9 or len(params) != 4:
-        raise Error("lm_ols_prep: 9 addresses (x, y, w, work_x, work_y, xm64, xm32, ym64, ym32) and "
-                    "params rows, cols, intercept, means_mode required")
-    var a = List[Int](capacity=9)
-    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
-        a.append(Int(py=addresses[i]))
-    var rows = Int(py=params[0])
-    var cols = Int(py=params[1])
-    var intercept = Int(py=params[2]) != 0
-    var mode = Int(py=params[3])
-    for i in range(9):  # driver-loop: over the nine fixed address slots of the call
-        if a[i] == 0 and i != 2 and (intercept or i < 5):
-            raise Error("lm_ols_prep: null buffer address")
-    with GILReleased(Python()):
-        ols_prep_host(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], rows, cols, intercept, mode)
-    return PythonObject(0)
-
-
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     """Lane hr-small-passes: out = x - mu per column in float32 on the
     CPU column, subnormals flushed. params: rows, cols. Returns 0."""
@@ -741,52 +680,9 @@ def ridge_fit_binding(
     return PythonObject(0)
 
 
-def linear_gram_solve_default_binding() raises -> PythonObject:
-    """The GPU binding's flag (MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE): the
-    host column takes the same route when it is on."""
-    return PythonObject(LINEAR_GRAM_SOLVE)
+# TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
+# Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
 
-
-def linear_gram_fit_binding(
-    x_addr: PythonObject,
-    y_addr: PythonObject,
-    coef_addr: PythonObject,
-    mu_addr: PythonObject,
-    ymean_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """The CPU column of the GPU binding's `linear_gram_fit`
-    (glm/host/gram_solve_host.mojo): params `n_rows, n_features, alpha,
-    center`; returns 0 (coef, and with center mu and ymean, written) or 1
-    (nothing written; the caller's incumbent route)."""
-    # TOMBSTONE: MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF (old path; the Gram solve is the recorded winner, EXP:2015) deleted 2026-11-15 by lane/expdel2-01-base; code recoverable at 501c279651.
-    # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_LINEAR_GRAM_SOLVE_OFF.expdel2-01-base.patch
-    comptime if not LINEAR_GRAM_SOLVE:
-        raise Error("linear_gram_fit: this build lacks the route (FAST)")
-    if len(params) != 4:
-        raise Error("linear_gram_fit: params must contain n_rows, n_features, alpha, center")
-    var x_address = _index(x_addr)
-    var y_address = _index(y_addr)
-    var wp = f32_ptr(_index(coef_addr))
-    var mp = f32_ptr(_index(mu_addr))
-    var ymp = f64_ptr(_index(ymean_addr))
-    var nr = _index(params[0])
-    var nf = _index(params[1])
-    var alpha = Float32(Float64(py=params[2]))
-    var center = _index(params[3]) != 0
-    # The null-address refusal read_f32 made before the in-place read.
-    _ = f32_ptr(x_address)
-    _ = f32_ptr(y_address)
-    var status = 1
-    with GILReleased(Python()):
-        _positive(nr, "n_rows")
-        _positive(nf, "n_features")
-        if alpha > Float32(0.0) and nf == 1:
-            status = 1
-        else:
-            # ne2-g-linear (N406): X and y read in place (no owned copies).
-            status = host_linear_gram_fit(x_address, y_address, nr, nf, alpha, center, wp, mp, ymp)
-    return PythonObject(status)
 
 def dbscan_fit_binding(
     x_addr: PythonObject,
@@ -945,22 +841,6 @@ def ols_predict_binding(
     var dst = f32_ptr(_index(out_addr))
     var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
         _index(params[0]), _index(params[1]), Float64(py=params[2]), False)
-    with GILReleased(Python()):
-        _ = linear_predict_host(request)
-    return PythonObject(0)
-
-
-def ols_predict_wide_binding(
-    x_addr: PythonObject, coef_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """Legacy address door; shares the typed prediction implementation."""
-    if len(params) != 3:
-        raise Error("ols_predict_wide: params must contain n_rows, n_features, intercept")
-    var xp = f32_ptr(_index(x_addr))
-    var cp = f32_ptr(_index(coef_addr))
-    var dst = f64_ptr(_index(out_addr))
-    var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
-        _index(params[0]), _index(params[1]), Float64(py=params[2]), True)
     with GILReleased(Python()):
         _ = linear_predict_host(request)
     return PythonObject(0)
@@ -1519,20 +1399,16 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[tsvd_fit_explained_binding]("tsvd_fit_explained")
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[lm_col_sums_binding]("lm_col_sums")
-        module.def_function[lm_classical_stats_binding]("lm_classical_stats")
-        module.def_function[lm_col_sums_pair_binding]("lm_col_sums_pair")
+        # TOMBSTONE: dead Python exports linear_gram_fit, linear_gram_solve_default, lm_classical_stats, lm_col_sums_pair, lm_intercept, lm_ols_prep, ols_predict_wide (no caller: the linear owner reaches these routes through the published native entry table, core/linear_entry_table.mojo; their last retention, the classical connection cells, went with lane pilot-ridge-device) deleted 2026-11-20 by lane pilot-ridge-device; code recoverable at 7051aa1897.
+        # Restore: git apply experiments/removed/dead_entries_estimators_linear_cells.patch
         module.def_function[lm_means_finish_binding]("lm_means_finish")
-        module.def_function[lm_intercept_binding]("lm_intercept")
         # TOMBSTONE: estimators_py2mojo_cluster, pca_rank_finish, pca_fast_pool_on (dead native entries: constant probes nothing reads; pca_rank_finish runs inside the PCA owners) deleted 2026-10-26 by 65f812332; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_estimators.patch
         module.def_function[pca_fit_owned_binding]("pca_fit_owned")
         module.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         module.def_function[lm_center_binding]("lm_center")
         module.def_function[lm_scale_rows_binding]("lm_scale_rows")
-        module.def_function[lm_ols_prep_binding]("lm_ols_prep")
         module.def_function[ridge_fit_binding]("ridge_fit")
-        module.def_function[linear_gram_fit_binding]("linear_gram_fit")
-        module.def_function[linear_gram_solve_default_binding]("linear_gram_solve_default")
         module.def_function[dbscan_fit_binding]("dbscan_fit")
         module.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
         module.def_function[dbscan_core_arrays_host_binding]("dbscan_core_arrays")
@@ -1549,7 +1425,6 @@ def build__mojolearn_estimators_host() -> PythonObject:
         module.def_function[linear_fit_native_api_v1_binding]("linear_fit_native_api_v1")
         module.def_function[ols_predict_binding]("ols_predict")
         module.def_function[qn_proba_binding]("qn_proba")
-        module.def_function[ols_predict_wide_binding]("ols_predict_wide")
         module.def_function[tsvd_transform_binding]("tsvd_transform")
         module.def_function[pca_transform_binding]("pca_transform")
         module.def_function[pca_whiten_transform_binding]("pca_whiten_transform")

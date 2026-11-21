@@ -40,27 +40,14 @@ def connect_host(host_ridge_class, host_linear_class, helpers):
     # glue: connect the existing explicit Host* CPU ABI once at setup;
     # `helpers` is the CPU (decomposition, x_linear) binary pair
     # `_classical_host._host_fit_helpers` loads.
-    from types import BuiltinFunctionType
-
     entry, context = connect(host_ridge_class, host_linear_class)
     owner = object.__new__(host_ridge_class)
     object.__setattr__(owner, "numeric_mode", "identical")
     module = host_ridge_class._bind(owner, "_mojolearn_estimators")
+    # TOMBSTONE: the retained Python-callable CPU cells (`ols_predict`, `ols_fit`, `ridge_fit`, the `lm_*` helpers,
+    # `py2mojo_rows` and ten optional ones; no reader: the owner calls the published native table through the
+    # connection owner below) deleted 2026-11-20 by lane pilot-ridge-device; code recoverable at bc0418b70a.
     cpu = _native_table_cells(module, "estimators")
-    names = ("estimators_vendor", "estimators_numeric_mode", "ols_predict",
-             "ols_fit", "ridge_fit", "lm_col_sums", "lm_means_finish",
-             "lm_center", "lm_intercept", "lm_scale_rows", "py2mojo_rows")
-    optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
-                "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
-                "ols_fit_resident", "ols_normal_eq_default", "ols_predict_wide",
-                "lm_ols_prep")
-    for name in names + optional:  # glue: retain verified compiled CPU symbols at connection
-        function = getattr(module, name, None)
-        if function is None and name in optional:
-            continue
-        if not isinstance(function, BuiltinFunctionType):
-            raise TypeError(f"explicit host model requires compiled {name}")
-        cpu[name] = function
     if module.estimators_vendor() != "cpu" or module.estimators_numeric_mode() != 1:
         raise RuntimeError("explicit host model requires the CPU identical binary")
     # The TSQR and x_linear helpers are the CPU binaries too: the device
@@ -228,25 +215,11 @@ def connect(ridge_class, linear_class=None):
         try:
             estimator = _backend.binding("_mojolearn_estimators", mode)
             linear = _backend.binding("_mojolearn_x_linear", mode)
+            # TOMBSTONE: the retained Python-callable cells of the estimators binding (`ridge_fit`, `ols_fit`,
+            # `ols_predict`, the `lm_*` helpers, `py2mojo_rows` and ten optional ones; no reader: fit, predict and
+            # score call the published native table through the connection owner, resolved once per estimator)
+            # deleted 2026-11-20 by lane pilot-ridge-device; code recoverable at bc0418b70a.
             entries = _native_table_cells(estimator, "estimators")
-            required = ("estimators_vendor", "estimators_numeric_mode", "lm_col_sums",
-                        "lm_means_finish", "lm_center", "lm_intercept", "ridge_fit", "ols_predict")
-            optional = ("linear_gram_fit", "linear_gram_solve_default", "ridge_fit_resident",
-                        "ridge_resident_default", "lm_classical_stats", "lm_col_sums_pair",
-                        "ols_fit_resident", "ols_normal_eq_default", "ols_predict_wide",
-                "lm_ols_prep")
-            if linear_class is not None:
-                required += ("ols_fit", "lm_scale_rows", "py2mojo_rows")
-            for name in required + optional:  # glue: retain raw native symbols at setup only
-                try:
-                    entry = getattr(estimator, name)
-                except (AttributeError, ImportError):
-                    if name in required:
-                        raise
-                    continue
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"classical owner requires compiled {name}")
-                entries[name] = entry
             weighted = _native_table_cells(linear, "x_linear")
             entries["_native_weighted_connection"] = weighted["_native_entry_connection"]
             if linear_class is not None:
@@ -277,11 +250,47 @@ def connect(ridge_class, linear_class=None):
                    ridge_name=ridge_class.__name__, linear_name="LinearRegression" if linear_class is None else linear_class.__name__,
                    ridge_saved_names=tuple(cls.__name__ for cls in ridge_class.__mro__),  # glue: preserve the declared saved-estimator ancestry
                    linear_saved_names=() if linear_class is None else tuple(cls.__name__ for cls in linear_class.__mro__),  # glue: preserve the declared saved-estimator ancestry
-                   classical_fields=("numeric_mode", "fit_intercept", "alpha", "solver", "normalize",
+                   classical_fields=("numeric_mode", "device", "fit_intercept", "alpha", "solver", "normalize",
                                      "coef_", "intercept_", "n_features_in_",
                                      "_mojolearn_fitted", "_mojolearn_fitting"))
     _ERROR_ENTRY, _ERROR_CONTEXT = _binding()._module.classical_native_call, context
     return _ERROR_ENTRY, context
+
+
+#: The CPU binaries `device="cpu"` runs on a GPU installation: the estimators
+#: host (fit and predict entries), the x_linear host (Ridge's weighted solve)
+#: and the decomposition host (LinearRegression's TSQR).
+_CPU_DEVICE_HOSTS = ("_mojolearn_estimators_host", "_mojolearn_x_linear_host", "_mojolearn_x_decomp_host")
+
+
+def connect_cpu_device(context):
+    """Connect the CPU entry family of `device="cpu"` once, at import, beside
+    the device family (`context["classical_bindings"]`).
+
+    Each host binary publishes its native entry table when it initializes;
+    the compiled owner resolves an estimator's route against the device
+    table or this one, once per estimator
+    (providers/python/linear_route_boundary_door.mojo). In a CPU-only process
+    the selected family already is the CPU family and nothing is loaded.
+    A host binary that is not built is kept as its refusal text, said when a
+    `device="cpu"` estimator first runs."""
+    # glue: load the CPU images once and retain their canonical connection owners
+    from . import _backend
+    if "classical_bindings" not in context or context["vendor"] == "cpu":
+        return
+    errors = (ImportError, AttributeError, TypeError, ValueError, RuntimeError)
+    estimators, linear, decomp = _CPU_DEVICE_HOSTS
+    try:
+        cpu = _native_table_cells(_backend.load_host_module(estimators), "estimators")
+        weighted = _native_table_cells(_backend.load_host_module(linear), "x_linear")
+        cpu["_native_weighted_connection"] = weighted["_native_entry_connection"]
+        try:
+            cpu["decomp"] = _decomp_cells(_backend.load_host_module(decomp))
+        except errors as error:
+            cpu["decomp"] = type(error).__name__ + ": " + str(error)
+    except errors as error:
+        cpu = type(error).__name__ + ": " + str(error)
+    context["classical_cpu_bindings"] = {"identical": cpu}
 
 
 def _layout(cls, attribute_descriptor):

@@ -7,22 +7,19 @@ from providers.python.linear_metadata_boundary_door import classical_fit_replace
 from bindings.admitted_input_run import admitted_finite_entry_refuse
 from bindings.admitted_input_unpack import admit_x_unrecorded
 from bindings.classical_validate_unpack import classical_check_y, classical_check_weights_input, classical_estimator_name
-from bindings.native_loaded_module_door import native_loaded_module
-from bindings.py_balanced import py_get, py_type, py_setitem
+from bindings.py_balanced import py_setitem
 from bindings.sequential_description_unpack import sequential_fields
-from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT, LinearFitRequest, LinearFitResult, LinearOlsPlan
+from core.linear_fit_types import LinearFitRequest, LinearFitResult, LinearOlsPlan
 from core.admitted_refusals import admitted_finite_refuse
 from core.host_finite_scan import host_all_finite_f32
 from core.linear_ols_run import linear_ols_plan, linear_ols_run, linear_ols_one_entry
-from core.native_descriptor_call import native_descriptor_call
+from core.linear_route import LinearRoute
 from providers.python.linear_state_boundary_door import linear_state_publish
-from providers.python.linear_entry_boundary_door import linear_entry_connection
-from core.linear_entry_table import LINEAR_TABLE_ESTIMATORS, LINEAR_TABLE_DECOMP, linear_table_entry
-from x_decomp.descriptor_schema import XD_ABI_NAME, XD_OPERATION_COUNT, xd_vendor_code
+from providers.python.linear_route_boundary_door import linear_route_decomp_refuse
 
 
 def classical_ols_fit(model: PythonObject, args: PythonObject,
-    entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    route: LinearRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     classical_fit_replacements_admit(fields, False, context)
     var intercept = Bool(py=fields["fit_intercept"])
@@ -47,41 +44,34 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
                 and not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=admitted_x.address), rows * cols)):
             admitted_finite_refuse(1, est, "X")
         raise Error(message)
-    var connection = linear_entry_connection(entries)
-    var key = connection.key.copy()
-    var entry = linear_table_entry[LINEAR_TABLE_ESTIMATORS](key, 0, String(LINEAR_FIT_ABI), LINEAR_FIT_OPERATION_COUNT)
+    # The estimator's resolved entries (core/linear_route.mojo): the device
+    # table's or the CPU table's, read once per estimator. This fit admits no
+    # connection owner and reads no table slot.
+    var entry = route.fit.call
     var plan = LinearOlsPlan(0, False, 0)
     var py = Python()
     try:
         with GILReleased(py):
             plan = linear_ols_plan(entry, rows, cols, est)
     finally:
-        _ = entries
-        _ = connection
+        _ = pins
     var weights = classical_check_weights_input(args[2], rows, context, admitted=True)
     var coef = classical_array(cols, 0, context)
     var mean = classical_array(cols, 0, context)
-    var decomp_pins = PythonObject(None)
     var decomp_entry = entry
     if plan.tsqr:
-        var decomp = py_get(entries, "decomp")
-        if py_type(decomp) is not native_loaded_module("builtins").dict:
-            raise Error("ImportError: native LinearRegression TSQR entries unavailable: " + String(decomp))
-        decomp_pins = decomp
-        var decomp_connection = linear_entry_connection(decomp, LINEAR_TABLE_DECOMP)
-        var decomp_key = decomp_connection.key.copy()
-        decomp_pins = decomp_connection.images
-        if decomp_key.mode != key.mode or decomp_key.vendor != key.vendor:
-            raise Error("native LinearRegression TSQR execution key differs")
-        decomp_entry = linear_table_entry[LINEAR_TABLE_DECOMP](decomp_key, 0, String(XD_ABI_NAME), XD_OPERATION_COUNT)
+        if not route.has_decomp:
+            # The route's own words: the TSQR table is unbuilt, or it belongs
+            # to another tier or vendor than the fit entry.
+            linear_route_decomp_refuse(pins)
+        decomp_entry = route.decomp.call
     var entry_tests_x = plan.tsqr and intercept and weights is None
     if entry_tests_x:
         try:
             with GILReleased(py):
                 entry_tests_x = linear_ols_one_entry(plan, decomp_entry, intercept, False)
         finally:
-            _ = entries
-            _ = decomp_pins
+            _ = pins
     plan.one_entry = entry_tests_x
     if not admitted_x.finite and not entry_tests_x:
         # parallel: finiteness scan across host cores (core/host_finite_scan.mojo)
@@ -90,7 +80,11 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
     var request = LinearFitRequest(admitted_x.address, Int(py=classical_address(y)),
         0 if weights is None else Int(py=classical_address(weights)),
         Int(py=classical_address(coef)), Int(py=classical_address(mean)), rows, cols, intercept, 0.0)
-    var vendor = xd_vendor_code(String(context["vendor"]))
+    # The vendor word the route's fit entry reports (0 CPU, 1 Metal, 2 CUDA,
+    # 3 HIP: the x_decomp vendor codes). It was the process's vendor string,
+    # read and compared here per fit; a `device="cpu"` estimator on a GPU
+    # installation runs the CPU plan.
+    var vendor = route.vendor
     var result = LinearFitResult()
     try:
         with GILReleased(py):
@@ -106,9 +100,7 @@ def classical_ols_fit(model: PythonObject, args: PythonObject,
         _ = weights
         _ = coef
         _ = mean
-        _ = entries
-        _ = connection
-        _ = decomp_pins
+        _ = pins
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", result.intercept)
     py_setitem(fields, "_x_mean", mean)

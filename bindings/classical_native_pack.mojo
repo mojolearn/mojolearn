@@ -26,15 +26,12 @@ from bindings.classical_pandas_door import classical_admit_value, classical_admi
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_validate_unpack import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
-from bindings.classical_host_owner_unpack import classical_host_entries
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_caller_unpack import classical_caller_outside
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.admitted_call_door import AdmittedCall
-from core.linear_fit_types import LF_MODE, LF_VENDOR
-from core.linear_metadata import linear_mode_name, linear_vendor_code, linear_vendor_name
-from providers.python.linear_execution_boundary_unpack import linear_execution_word
-from providers.python.linear_entry_boundary_door import linear_entry_identity
+from core.linear_metadata import linear_vendor_name, linear_constructor_check, linear_constructor_device
+from providers.python.linear_route_boundary_door import linear_route_call, linear_route_clear, linear_device_admit
 from bindings.classical_keys_unpack import classical_keys
 from bindings.operation_names_classical import (
     CLASSICAL_TREES_FIRST, CLASSICAL_LEAF_TREES_DOOR, CLASSICAL_LEAF_FAMILY_DOOR,
@@ -50,55 +47,10 @@ from bindings.operation_names_classical import (
 from bindings.py_balanced import py_item
 
 
-def classical_entries(mut call: AdmittedCall, model: PythonObject, context: PythonObject) raises -> PythonObject:
-    # The door's admission record supplies the model fields and builtins it
-    # already admitted (ne1-e-admitted-call); the resolved entry family is
-    # kept on the record as this call's binding.
-    var nk = classical_keys()
-    if Bool(py=py_get(context, nk[].k_classical_explicit_cpu, False)):
-        return classical_host_entries(model, context)
-    if not call.fields_admitted:
-        call.admit_fields(sequential_fields(model))
-    var mode = py_get(call.fields, nk[].k_numeric_mode)
-    if mode is None:
-        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    var b = call.builtins()
-    if py_type(mode) is not b.str:
-        raise Error("numeric_mode must be fast, identical or None")
-    var mode_name = linear_mode_name(String(mode))
-    mode = PythonObject(mode_name)
-    var entries = py_item(context, nk[].k_classical_bindings)[mode]
-    if py_type(entries) is b.str:
-        raise Error("ImportError: " + String(entries))
-    # The vendor and mode of a connected entry family are fixed when its
-    # binding module loads. Check them once per (entry family, selected
-    # vendor) identity and keep the verdict in the long-lived connection
-    # context; a reconnection installs new entry dictionaries (or a new
-    # vendor object), so the identities differ and the check runs again.
-    var vendor = py_item(context, nk[].k_vendor)
-    var verdicts = py_get(context, nk[].k_classical_entries_admitted)
-    if verdicts is not None:
-        var seen = py_get(verdicts, mode)
-        # perf-audit-3 (pattern 1): the cached verdict compares the entry
-        # dictionary's connection owner by identity with one dictionary read;
-        # the owner stored with the verdict was admitted by
-        # `linear_entry_identity` (exact type, family) when it was recorded, so
-        # the full admission runs only on a miss (it ran on every call).
-        if (seen is not None and len(seen) == 3 and seen[0] is entries and seen[1] is vendor
-                and seen[2] is py_get(entries, nk[].k__native_entry_connection)):
-            call.remember_binding("classical", mode_name, True, entries)
-            return entries
-    var connection_identity = linear_entry_identity(entries)
-    if linear_execution_word(entries, LF_VENDOR) != linear_vendor_code(String(vendor)):
-        raise Error("RuntimeError: classical native vendor differs from selected execution")
-    if linear_execution_word(entries, LF_MODE) != (1 if mode_name == "identical" else 0):
-        raise Error("RuntimeError: classical native mode differs from selected execution")
-    if verdicts is None:
-        verdicts = Python.dict()
-        py_setitem(context, nk[].k_classical_entries_admitted, verdicts)
-    py_setitem(verdicts, mode, Python.tuple(entries, vendor, connection_identity))
-    call.remember_binding("classical", mode_name, True, entries)
-    return entries
+# TOMBSTONE: `classical_entries` (the per-call entry-family selection: the mode String, the bindings and
+# verdict dictionary reads, the vendor and tier questions; replaced by the estimator's route owner, resolved once,
+# providers/python/linear_route_boundary_door.mojo `linear_route_call`) deleted 2026-11-20 by lane
+# pilot-ridge-device; code recoverable at bc0418b70a.
 
 
 def operation_code_names() raises -> PythonObject:
@@ -284,7 +236,22 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         classical_admit_fields(call.modules, call.fields, py_item(context, nk[].k_classical_fields), context)
         var result = PythonObject(None)
         if operation == CLASSICAL_OPN_INITIALIZE:
+            # `device` is checked where it is given: an unknown value, and an
+            # explicit 'gpu' in a CPU-only process, are refused in words
+            # before any field is published. The default None (this
+            # installation's device) is one identity compare. It is stored
+            # verbatim like every constructor parameter and read once, by the
+            # estimator's first operation, into its route owner
+            # (providers/python/linear_route_boundary_door.mojo). A default
+            # construction costs, more than before: that compare and one
+            # lookup of the estimator's address in the model record table
+            # (the route clear below). No owner is allocated here.
+            linear_constructor_check(len(args), ridge)
+            linear_device_admit(args[linear_constructor_device(ridge)], context, b)
             result = classical_initialize(model, args, ridge, context)
+            # A constructor run again on a live estimator: its next operation
+            # reads the device and the mode again.
+            linear_route_clear(model)
             return result.steal_data()
         if operation == CLASSICAL_OPN_VALIDATE_PARAMS:
             if not ridge:
@@ -295,7 +262,15 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             result = classical_get_params(model, ridge)
             return result.steal_data()
         if operation == CLASSICAL_OPN_SET_PARAMS:
+            if py_type(args[0]) is b.dict:
+                # A new device is refused in words before the estimator changes.
+                var device_key = PythonObject("device")
+                if py_contains(args[0], device_key):
+                    linear_device_admit(py_item(args[0], device_key), context, b)
             result = classical_set_params(model, args[0], ridge, context)
+            # The device or the numeric mode may have changed: the next
+            # operation resolves the route again.
+            linear_route_clear(model)
             return result.steal_data()
         if operation == CLASSICAL_OPN_IS_FITTED:
             result = classical_is_fitted(model)
@@ -310,34 +285,40 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return result.steal_data()
         if operation == CLASSICAL_OPN_PREDICT_PUBLIC or operation == CLASSICAL_OPN_PREDICT_SCORE or operation == CLASSICAL_OPN_SCORE_PUBLIC:
             classical_require_fitted(model, ridge, "score" if operation == CLASSICAL_OPN_SCORE_PUBLIC else "predict", context)
-        var entries = classical_entries(call, model, context)
+        # The estimator's device route: resolved once per estimator (its
+        # `device` and numeric mode, the device table or the CPU table), read
+        # here as one record and three pointer compares. The operations below
+        # call through its entries; none of them tests the device.
+        var routed = linear_route_call(model, call.fields, ridge, context, b)
+        var route = routed.route
         if operation == CLASSICAL_OPN_RIDGE_FIT:
             if not ridge:
                 raise Error("TypeError: ridge_fit requires Ridge")
-            result = classical_ridge_fit(model, args, entries, context)
+            result = classical_ridge_fit(model, args, route, routed.owner, context)
         elif operation == CLASSICAL_OPN_OLS_FIT:
             if not linear:
                 raise Error("TypeError: ols_fit requires LinearRegression")
-            result = classical_ols_fit(model, args, entries, context)
+            result = classical_ols_fit(model, args, route, routed.owner, context)
         elif operation == CLASSICAL_OPN_PREDICT or operation == CLASSICAL_OPN_PREDICT_SCORE:
             # Native scorers consume the same float32 kernel result that
             # historical package-internal callers received, without relying
             # on a Python frame to distinguish them from public predict.
-            result = classical_linear_predict(model, args[0], entries, context)
+            result = classical_linear_predict(model, args[0], route, routed.owner, context)
         elif operation == CLASSICAL_OPN_PREDICT_PUBLIC:
             # A caller outside the package gets scikit-learn's float64
             # regression output; mojolearn's own code (and its identity
             # harness) keeps the float32 prediction the kernels produce.
             if classical_caller_outside(context):
-                result = classical_linear_predict_public(model, args[0], entries, context)
+                result = classical_linear_predict_public(model, args[0], route, routed.owner, context)
             else:
-                result = classical_linear_predict(model, args[0], entries, context)
+                result = classical_linear_predict(model, args[0], route, routed.owner, context)
         elif operation == CLASSICAL_OPN_SCORE or operation == CLASSICAL_OPN_SCORE_PUBLIC:
-            result = classical_linear_score(model, args, entries, context)
+            result = classical_linear_score(model, args, route, routed.owner, context)
         elif operation == CLASSICAL_OPN_NUMERIC_MODE_USED:
-            result = PythonObject("identical" if linear_execution_word(entries, LF_MODE) == 1 else "fast")
+            # The words the route's compiled fit entry reported when it was resolved.
+            result = PythonObject("identical" if route.mode == 1 else "fast")
         elif operation == CLASSICAL_OPN_VENDOR_USED:
-            result = PythonObject(linear_vendor_name(linear_execution_word(entries, LF_VENDOR)))
+            result = PythonObject(linear_vendor_name(route.vendor))
         else:
             raise Error("unknown private classical operation")
         return result.steal_data()

@@ -1498,8 +1498,6 @@ _MAMBA_SESSION = ("bindings/mamba_public_native_door.mojo composes `<kind> + \"_
                   "mamba_native_call 'session_open', 'session_step', 'session_sync', 'session_load')")
 _SAMBA_OWNER = ("the native Samba owner (bindings/samba_*_native.mojo) is handed the entry at import "
                 "(_native_samba_bridge.connect) and calls it by name")
-_FAST_LINEAR = "fast tier only (Apple): registered for OLS_FAST_NORMAL_EQ / RIDGE_FAST_RESIDENT, which " \
-               "need numeric_mode fast on an Apple GPU; the verifier refuses a fast process"
 _HOST_SLOT = ("no live caller on a CPU install: the optimizer door moves its slots through its own "
               "kernels; the separate close wrapper is live and annotated below. SambaStack opens no slot on "
               "the host binding, which exports no optimizer_resident_step (_samba_open_optimizer)")
@@ -1567,10 +1565,6 @@ ANNOTATIONS = {
                                    "when the optimizer maximizes (or holds device parameters); the lane "
                                    "sets optimizer.maximize on a stack with dropout, so the resident Samba "
                                    "step does not take it"),
-    "linear_gram_fit": ("covered", ["ridge", "ridge-no-intercept"],
-                        "the native classical owner (bindings/classical_ridge.mojo) is handed it at connect "
-                        "(_native_classical_bridge); Ridge.fit on more than one column without weights "
-                        "takes it whenever linear_gram_solve_default (LINEAR_GRAM_SOLVE, on in identical)"),
     "ols_predict": ("covered", ["ols", "ridge", "ols-no-intercept", "ridge-no-intercept"],
                     "the native classical owner's classical_linear_predict calls it for every "
                     "LinearRegression and Ridge predict (_native_classical_bridge connect)"),
@@ -1578,8 +1572,6 @@ ANNOTATIONS = {
                             "the native classical owner (bindings/classical_ols.mojo) calls it through the "
                             "connected decomp entries for an unweighted LinearRegression.fit with an "
                             "intercept and at most 511 columns"),
-    "ols_fit_resident": ("n/a", [], _FAST_LINEAR),
-    "ridge_fit_resident": ("n/a", [], _FAST_LINEAR),
 }
 
 #: (entry, binding source) -> (status, lanes, why): a row whose answer
