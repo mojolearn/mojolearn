@@ -12,6 +12,8 @@ from bindings.py_keys import py_key, py_op_add
 comptime MODE_OPN_IS_FITTED = 0
 comptime MODE_OPN_NUMERIC_MODE_USED = 1
 comptime MODE_OPN_VENDOR_USED = 2
+# `device` checked where the shared constructor wrapper is given one (python/mojolearn/_mode.py).
+comptime MODE_OPN_DEVICE_ADMIT = 3
 
 
 struct ModeKeys(Defaultable, Movable):
@@ -100,6 +102,7 @@ def _mode_keys_fill(nk: UnsafePointer[ModeKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "is_fitted", MODE_OPN_IS_FITTED)
     py_op_add(ops, "numeric_mode_used", MODE_OPN_NUMERIC_MODE_USED)
     py_op_add(ops, "vendor_used", MODE_OPN_VENDOR_USED)
+    py_op_add(ops, "device_admit", MODE_OPN_DEVICE_ADMIT)
     nk[].ops = ops
     nk[].ready = True
 

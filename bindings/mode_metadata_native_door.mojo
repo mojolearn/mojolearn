@@ -12,7 +12,11 @@ from bindings.native_error_class import error_without_class
 from bindings.native_class_admission_door import class_record, class_admit, class_watch_ready
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, _is_exact_dict
 from bindings.optimizer_public_words_unpack import stash_python_error, optimizer_python_error, PYTHON_ERROR_PENDING
-from bindings.mode_keys_unpack import mode_keys, MODE_OPN_IS_FITTED, MODE_OPN_NUMERIC_MODE_USED, MODE_OPN_VENDOR_USED
+from bindings.mode_keys_unpack import (
+    mode_keys, MODE_OPN_IS_FITTED, MODE_OPN_NUMERIC_MODE_USED, MODE_OPN_VENDOR_USED, MODE_OPN_DEVICE_ADMIT,
+)
+from core.device_route import DEVICE_CPU
+from providers.python.device_route_boundary_door import device_admit_class, device_request
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
@@ -363,6 +367,16 @@ def _readback(model: PythonObject, operation: Int, context: PythonObject) raises
     var nk = mode_keys()
     var requested = _configuration_value(mods, model, fields, nk[].k_numeric_mode, "numeric_mode")
     var route = String(py_item(plan, nk[].k_route))
+    if route != "host" and route != "host_gp":
+        # An estimator constructed with device="cpu" on a GPU installation
+        # runs the CPU identical modules its binding route resolves
+        # (providers/python/estimator_binding_pyapi_door.mojo); the class's
+        # read-back plan below names the device modules. The constructor
+        # admitted the value (only for a class whose operations take their
+        # modules from the route), so the answer is the route's.
+        if (py_get(py_item(context, nk[].k_backend_fields), "_CPU_ONLY") is None
+                and device_request(fields, b) == DEVICE_CPU):
+            return PythonObject("identical" if operation == MODE_OPN_NUMERIC_MODE_USED else "cpu")
     var selected = String()
     if route == "host" or route == "host_gp":
         if requested is not None and (py_type(requested) is not b.str or String(requested) != "identical"):
@@ -427,12 +441,25 @@ def _readback(model: PythonObject, operation: Int, context: PythonObject) raises
 def mode_metadata_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var args = PythonObject(from_borrowed=args_ptr)
-        if len(args) != 3 or py_type(args[1]) is not py_type(PythonObject("")):
+        if (len(args) != 3 and len(args) != 4) or py_type(args[1]) is not py_type(PythonObject("")):
             raise Error("TypeError: mode metadata expects model, operation and native context")
         var nk = mode_keys()
         var operation = py_op_code(nk[].ops, args[1])
         var result = PythonObject(None)
-        if operation == MODE_OPN_IS_FITTED:
+        if operation == MODE_OPN_DEVICE_ADMIT:
+            # `device` of a class whose constructor is the shared wrapper:
+            # refused in words before the constructor body runs. The fourth
+            # argument is the value; the context holds the ONE table of the
+            # classes that run device="cpu" beside a device set.
+            if len(args) != 4:
+                raise Error("TypeError: device admission expects model, operation, native context and the device")
+            var admit_context = args[2]
+            var cpu_only = py_get(py_item(admit_context, nk[].k_backend_fields), "_CPU_ONLY") is not None
+            device_admit_class(args[0], args[3], cpu_only, py_get(admit_context, "device_cpu"),
+                               native_loaded_module("builtins"))
+        elif len(args) != 3:
+            raise Error("TypeError: mode metadata expects model, operation and native context")
+        elif operation == MODE_OPN_IS_FITTED:
             result = _fitted(args[0])
         elif operation == MODE_OPN_NUMERIC_MODE_USED or operation == MODE_OPN_VENDOR_USED:
             result = _readback(args[0], operation, args[2])

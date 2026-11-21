@@ -138,7 +138,7 @@ def build__mojolearn_runtime_classical_host() -> PythonObject:
         # The ONE per-estimator device route owner (device=None | "gpu" | "cpu") of every family: allocated by
         # classical_native_call here, by logistic_native_call and qn_native_call (the runtime linear host) and by
         # the shared estimator door in every runtime host that compiles it. Those register no types: this
-        # module is loaded first (the tokenizer's `_binding()` at package import) and owns the type object.
+        # module is loaded first and owns the type object.
         register_device_route_owner(module)
         module.def_py_c_function(linear_entry_connect_c, "linear_entry_connection_v1")
         module.def_function[runtime_classical_host_numeric_mode_binding]("runtime_classical_host_numeric_mode")
