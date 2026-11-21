@@ -91,9 +91,9 @@ Fitted-state blocks, the discrete kinds:
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's store): a slot never moves once minted, the lock covers only
 mint, free and the handle lookup. Serial by nature here: the store's
-bookkeeping, and the two label passes of an indexed or int64 `y` (one word
-per row, beside a program that reads every word of X); the programs are the
-family's and run on the route's device.
+bookkeeping. The label / weight takes of an indexed or int64 `y`, the int32
+widen of a row index and of int64 output codes run in row tasks across the
+host's cores; the programs are the family's and run on the route's device.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
@@ -115,7 +115,8 @@ from core.member_families import MEMBER_FAMILY_NAIVE_BAYES
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
-from core.host_parallel import host_widen_index_i64
+from core.host_parallel import host_widen_index_i64, host_parallelize
+from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 
 comptime NB_KIND_GAUSSIAN = 0
 comptime NB_KIND_MULTINOMIAL = 1  # the scoring program's CLS_KIND_MNB
@@ -435,6 +436,43 @@ struct _FitViews(Movable):
         return len(self.codes) + len(self.taken)
 
 
+def _take_codes(src: Int, wide: Bool, index: Int, dst: Int, n: Int):
+    """`dst[i]` (int32) = the class code of row `index[i]` (row i when `index`
+    is 0) of `src` (int32, or int64 narrowed: codes are class indices, exact),
+    in row tasks across the host's cores (lane fx-audit 30: was a serial loop
+    over rows). The door hands the kernels int32 codes its label encode wrote
+    and gathers a fold's rows with the fold (no separate pass)."""
+    var tasks = host_predict_task_count_work(n, n)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def task(unit: Int) {imm src, imm wide, imm index, imm dst, imm n, imm chunk}:
+        var out = _I32P(unsafe_from_address=dst)
+        var rows = _I64P(unsafe_from_address=index)
+        var narrow = _I32P(unsafe_from_address=src)
+        var codes64 = _I64P(unsafe_from_address=src)
+        for i in range(unit * chunk, min((unit + 1) * chunk, n)):  # native data loop (one host task's rows)
+            var r = Int(rows[i]) if index != 0 else i
+            out[i] = Int32(codes64[r]) if wide else narrow[r]
+
+    host_parallelize(task, tasks)
+
+
+def _take_weights(src: Int, index: Int, dst: Int, n: Int):
+    """`dst[i]` = the float32 weight of row `index[i]` of `src`, in row tasks
+    across the host's cores (lane fx-audit 30)."""
+    var tasks = host_predict_task_count_work(n, n)
+    var chunk = host_predict_chunk(n, tasks)
+
+    def task(unit: Int) {imm src, imm index, imm dst, imm n, imm chunk}:
+        var out = _F32P(unsafe_from_address=dst)
+        var rows = _I64P(unsafe_from_address=index)
+        var given = _F32P(unsafe_from_address=src)
+        for i in range(unit * chunk, min((unit + 1) * chunk, n)):  # native data loop (one host task's rows)
+            out[i] = given[Int(rows[i])]
+
+    host_parallelize(task, tasks)
+
+
 def _fit_views(call: _Call, rows: _Rows, estimator: String) raises -> _FitViews:
     """The view checks of y and the weights (every kind's fit), and their
     words in row order: read in place, or narrowed / taken through the row
@@ -453,25 +491,14 @@ def _fit_views(call: _Call, rows: _Rows, estimator: String) raises -> _FitViews:
     var codes = List[Int32]()
     var codes_address = call[].y.data
     if rows.index != 0 or label_dtype == MEMBER_I64:
-        codes = List[Int32](length=n, fill=Int32(0))
-        var index = _I64P(unsafe_from_address=rows.index if rows.index != 0 else call[].y.data)
-        if label_dtype == MEMBER_I64:
-            var wide = _I64P(unsafe_from_address=call[].y.data)
-            for i in range(n):  # driver-loop: one label word per row (see the module docstring)
-                codes[i] = Int32(wide[Int(index[i]) if rows.index != 0 else i])
-        else:
-            var narrow = _I32P(unsafe_from_address=call[].y.data)
-            for i in range(n):  # driver-loop: one label word per row (see the module docstring)
-                codes[i] = narrow[Int(index[i])]
+        codes = List[Int32](unsafe_uninit_length=max(n, 1))
+        _take_codes(call[].y.data, label_dtype == MEMBER_I64, rows.index, Int(codes.unsafe_ptr()), n)
         codes_address = Int(codes.unsafe_ptr())
     var taken = List[Float32]()
     var weights_address = call[].weights.data
     if weighted and rows.index != 0:
-        taken = List[Float32](length=n, fill=Float32(0))
-        var index = _I64P(unsafe_from_address=rows.index)
-        var given = _F32P(unsafe_from_address=call[].weights.data)
-        for i in range(n):  # driver-loop: one weight word per row (see the module docstring)
-            taken[i] = given[Int(index[i])]
+        taken = List[Float32](unsafe_uninit_length=max(n, 1))
+        _take_weights(call[].weights.data, rows.index, Int(taken.unsafe_ptr()), n)
         weights_address = Int(taken.unsafe_ptr())
     return _FitViews(codes^, taken^, codes_address, weights_address, weighted, label_dtype)
 
@@ -665,9 +692,8 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
     if call[].dst.dtype == MEMBER_I32:
         unsafe_memcpy(dest=_I32P(unsafe_from_address=call[].dst.data), src=found, count=n)
         return
-    var wide = _I64P(unsafe_from_address=call[].dst.data)
-    for i in range(n):  # driver-loop: one class code per row, widened for an int64 buffer
-        wide[i] = Int64(found[i])
+    # int64 output: the codes widened in chunks across the host's cores.
+    host_widen_index_i64(Int(found), call[].dst.data, n)
 
 
 def _block_count(kind: Int) -> Int:
