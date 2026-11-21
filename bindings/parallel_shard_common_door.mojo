@@ -41,9 +41,11 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_process_pool_door import (
-    process_pool_create, process_pool_map_typed, process_pool_close, process_pool_closed, process_pool_pids, PROCESS_BOUNDARY,
+    process_pool_create, process_pool_map_typed, process_pool_map_replies, process_pool_close, process_pool_closed, process_pool_pids, PROCESS_BOUNDARY,
     process_pool_trace, process_pool_trace_set,
 )
+from bindings.native_process_wire_door import wire_reply_pack, wire_record_pack
+from core.parallel_worker_frame import WireRecord
 from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
 from bindings.tsa_hw_native_door import tsa_array
 from core.shared_slot import SharedSlot
@@ -133,15 +135,16 @@ struct ShardTrace(Defaultable, Movable):
     # The fault counter is typed RUN state (bindings/parallel_shard_common_run.mojo).
     # The records are typed too (lane pools-frame, 2026-11-21: they were a
     # Python list of dictionaries, one new dictionary per served request).
-    # `inventories[i]` is the boundary pin of record i: the identity replies
-    # of its workers, Python values `shard_trace_take` hands back as they came.
+    # `inventories[i]` holds the identity replies of record i's workers as
+    # the typed records their frames carried (it was a pinned Python list of
+    # the PACKed replies); `shard_trace_take` PACKs them for the receipt.
     var records: List[ShardTraceRecord]
-    var inventories: List[PythonObject]
+    var inventories: List[List[WireRecord]]
     var next_id: Int
 
     def __init__(out self):
         self.records = List[ShardTraceRecord]()
-        self.inventories = List[PythonObject]()
+        self.inventories = List[List[WireRecord]]()
         self.next_id = 1
 
 
@@ -149,12 +152,44 @@ struct ShardTrace(Defaultable, Movable):
 #: `shard_trace_take`: its devices and its workers' own driver inventories
 #: (the record the verifier's two-device witness reads,
 #: python/mojolearn/_verify_par.py). Bounded: the oldest records go first.
-comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV4", 4]
+comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV5", 5]
+
+
+struct ShardIdlePool(Movable):
+    """One started pool between two `shard_run` calls, or the pool a call
+    holds: its key (child module, device indices), the process that owns its
+    workers and two boundary pins, the pool and the parent environment
+    mapping snapshot it was spawned under (compared whole, by one mapping
+    comparison, when the pool is taken again)."""
+    var child: String
+    var devices: List[Int]
+    var pid: Int
+    var pool: PythonObject
+    var environ: PythonObject
+
+    def __init__(out self, var child: String, var devices: List[Int], pid: Int, pool: PythonObject,
+                 environ: PythonObject):
+        self.child = child^
+        self.devices = devices^
+        self.pid = pid
+        self.pool = pool
+        self.environ = environ
+
+    def keyed(self, child: String, devices: List[Int]) -> Bool:
+        if self.child != child or len(self.devices) != len(devices):
+            return False
+        for i in range(len(devices)):  # small-loop(a pool's device indices)
+            if self.devices[i] != devices[i]:
+                return False
+        return True
 
 
 struct ShardIdle(Defaultable, Movable):
-    #: {(child module, devices tuple): [pool, parent environment snapshot, owner pid]}
-    var pools: PythonObject
+    # The idle pools, typed (lane pools-frame, 2026-11-21: it was a Python
+    # dict {(child module, devices tuple): [pool, environment snapshot, pid]},
+    # a key tuple built and hashed per call). At most one entry per key; a
+    # process holds a few.
+    var pools: List[ShardIdlePool]
     # A WORKER's stored call operands (`shard_store`), typed (lane pools-frame,
     # 2026-11-21: it was a Python dict {token: payload tuple}). One entry per
     # call in flight on this worker, so the token scan is over one entry in
@@ -167,10 +202,17 @@ struct ShardIdle(Defaultable, Movable):
     var stored_models: List[PythonObject]
 
     def __init__(out self):
-        self.pools = PythonObject(None)
+        self.pools = List[ShardIdlePool]()
         self.stored_tokens = List[String]()
         self.stored_payloads = List[PythonObject]()
         self.stored_models = List[PythonObject]()
+
+    def take(self, child: String, devices: List[Int]) -> Int:
+        """The idle entry of this key, or -1."""
+        for i in range(len(self.pools)):  # small-loop(the idle pools of this process: a few)
+            if self.pools[i].keyed(child, devices):
+                return i
+        return -1
 
     def find(self, token: String) -> Int:
         """The store entry of `token`, or -1."""
@@ -298,7 +340,7 @@ def _is_stored_ref(item: PythonObject) raises -> Bool:
 #: does. A failed call closes its pool and nothing is kept. Workers held
 #: here end when the parent process ends (their socket closes).
 #: V3: the worker store is typed (tokens, payload pins, models).
-comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV3", 3]
+comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV4", 4]
 
 
 def shard_identity() raises -> PythonObject:
@@ -327,7 +369,17 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
     var asks = shard_wave()
     for i in range(len(devices)):  # driver-loop: one identity request per worker
         asks.add_plain(PARALLEL_SHARD_WORKER_OPN_IDENTITY)
-    var identities = process_pool_map_typed(pool, asks.words, asks.payloads)
+    # The identity replies stay typed for the trace; their PACK here is the
+    # inventory check's only.
+    var replies = process_pool_map_replies(pool, asks.words, asks.payloads)
+    var identities = b.list()
+    var kept = List[WireRecord](capacity=len(replies))
+    for i in range(len(replies)):  # driver-loop: over the workers' identity replies
+        _ = py_call(identities.append, wire_reply_pack(replies[i]))
+        # The record changes owner (no copy); the reply keeps an empty one.
+        var record = WireRecord()
+        swap(record, replies[i].record)
+        kept.append(record^)
     var pids = b.list()
     var pid_words = process_pool_pids(pool)
     for i in range(len(pid_words)):  # driver-loop: over the spawned workers
@@ -345,7 +397,7 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
     var id = t[].next_id
     t[].next_id = id + 1
     t[].records.append(ShardTraceRecord(id, device_words^))
-    t[].inventories.append(identities)
+    t[].inventories.append(kept^)
     process_pool_trace_set(pool, id)
     if len(t[].records) > SHARD_TRACE_RECORDS:
         _ = t[].records.pop(0)
@@ -373,7 +425,10 @@ def shard_trace_take() raises -> PythonObject:
             py_setitem(call, nk[].k_operation, PythonObject(shard_worker_op_name(t[].records[r].operations[i])))
             _ = py_call(calls.append, call)
         py_setitem(record, nk[].k_devices, devices)
-        py_setitem(record, nk[].k_inventory, t[].inventories[r])
+        var inventory = b.list()
+        for i in range(len(t[].inventories[r])):  # driver-loop: over one pool's workers (PACK of their identity records)
+            _ = py_call(inventory.append, wire_record_pack(t[].inventories[r][i]))
+        py_setitem(record, nk[].k_inventory, inventory)
         py_setitem(record, nk[].k_calls, calls)
         _ = py_call(out.append, record)
     t[].records.clear()
@@ -422,25 +477,27 @@ def shard_map(pool: PythonObject, wave: ShardWave) raises -> PythonObject:
     return results
 
 
-def _shard_acquire(devices: PythonObject, child: String) raises -> PythonObject:
+def _shard_acquire(devices: PythonObject, child: String) raises -> ShardIdlePool:
     """`shard_run`'s pool: the idle pool kept for this child, devices and
-    environment, re-admitted, or a fresh one. Returns [pool, key, environ,
-    pid] for `_shard_keep`."""
+    environment, re-admitted, or a fresh one. The returned entry is the
+    call's own; `_shard_keep` puts it back."""
     var b = shard_b()
-    var idle = SHARD_IDLE.get_or_create_ptr()
-    if idle[].pools is None:
-        idle[].pools = b.dict()
-    var key = Python.tuple(PythonObject(child), py_call(b.tuple, devices))
+    var selected = py_call(b.tuple, devices)
+    var indices = List[Int](capacity=len(selected))
+    for i in range(len(selected)):  # small-loop(the call's admitted device indices)
+        indices.append(Int(py=selected[i]))
     var environ = py_call(b.dict, PROCESS_BOUNDARY.get_or_create_ptr()[].environ)
     var pid = Int(external_call["getpid", Int32]())
     var reused = PythonObject(None)
-    var held = py_call(idle[].pools.pop, key, PythonObject(None))
-    var nk = parallel_keys()
-    if held is not None:
-        var owned = Int(py=held[2]) == pid
-        var action = shard_idle_action(Int(py=held[2]), pid, owned and Bool(py=held[1] == environ),
-                                       owned and process_pool_closed(held[0]),
-                                       len(process_pool_pids(held[0])) if owned else 0, len(devices))
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    var at = idle[].take(child, indices)
+    if at >= 0:
+        # The entry leaves the idle list before any pool call.
+        var held = idle[].pools.pop(at)
+        var owned = held.pid == pid
+        var action = shard_idle_action(held.pid, pid, owned and Bool(py=held.environ == environ),
+                                       owned and process_pool_closed(held.pool),
+                                       len(process_pool_pids(held.pool)) if owned else 0, len(indices))
         if action == SHARD_IDLE_FORGET:
             # Inherited across os.fork: the pool's workers and sockets belong
             # to the parent process. Drop the record without closing (a close
@@ -448,35 +505,34 @@ def _shard_acquire(devices: PythonObject, child: String) raises -> PythonObject:
             pass
         elif action == SHARD_IDLE_REUSE:
             try:
-                reused = _shard_admit(held[0], devices)
+                reused = _shard_admit(held.pool, devices)
             except:
                 # a worker that died while idle: the identity round closed
                 # the pool; a fresh one is opened below
                 reused = PythonObject(None)
         else:
             try:
-                process_pool_close(held[0])
+                process_pool_close(held.pool)
             except:
                 pass
     if reused is None:
-        var pool = shard_open(devices, child)
-        reused = pool
-    return Python.list(reused, key, environ, PythonObject(pid))
+        reused = shard_open(devices, child)
+    return ShardIdlePool(child.copy(), indices^, pid, reused, environ)
 
 
-def _shard_keep(acquired: PythonObject) raises:
+def _shard_keep(var acquired: ShardIdlePool) raises:
     """Keep a pool whose call succeeded idle for the next call (`SHARD_IDLE`)."""
     var idle = SHARD_IDLE.get_or_create_ptr()
-    var key = acquired[1]
-    var pid = Int(py=acquired[3])
-    var other = py_call(idle[].pools.pop, key, PythonObject(None))
-    if other is not None and Int(py=other[2]) == pid:  # another thread kept a pool under this key meanwhile
-        try:
-            process_pool_close(other[0])
-        except:
-            pass
-    # [pool, parent environment snapshot, owning process id]
-    py_setitem(idle[].pools, key, Python.list(acquired[0], acquired[2], PythonObject(pid)))
+    var at = idle[].take(acquired.child, acquired.devices)
+    if at >= 0:
+        var other = idle[].pools.pop(at)
+        if other.pid == acquired.pid:  # another thread kept a pool under this key meanwhile
+            try:
+                process_pool_close(other.pool)
+            except:
+                pass
+        idle = SHARD_IDLE.get_or_create_ptr()
+    idle[].pools.append(acquired^)
 
 
 def shard_run(requests: ShardWave, devices: PythonObject, child: String) raises -> PythonObject:
@@ -485,7 +541,7 @@ def shard_run(requests: ShardWave, devices: PythonObject, child: String) raises 
     next call with the same child, devices and environment (`SHARD_IDLE`);
     a failed call closes it."""
     var acquired = _shard_acquire(devices, child)
-    var reused = acquired[0]
+    var reused = acquired.pool
     var results = PythonObject(None)
     try:
         results = shard_map(reused, requests)
@@ -495,7 +551,7 @@ def shard_run(requests: ShardWave, devices: PythonObject, child: String) raises 
     if len(results) != requests.count():
         process_pool_close(reused)
     shard_batch_admit(len(results), requests.count())
-    _shard_keep(acquired)
+    _shard_keep(acquired^)
     return results
 
 
@@ -523,7 +579,7 @@ def shard_run_stored(payload: PythonObject, token: String, requests: ShardWave, 
     ends its workers and their stores."""
     var b = shard_b()
     var acquired = _shard_acquire(devices, child)
-    var pool = acquired[0]
+    var pool = acquired.pool
     var nk = parallel_keys()
     var workers = len(process_pool_pids(pool))
     var results = PythonObject(None)
@@ -542,7 +598,7 @@ def shard_run_stored(payload: PythonObject, token: String, requests: ShardWave, 
     except error:
         process_pool_close(pool)
         raise error^
-    _shard_keep(acquired)
+    _shard_keep(acquired^)
     return results
 
 def shard_dtype(value: PythonObject) raises -> String:

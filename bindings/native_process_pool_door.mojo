@@ -590,7 +590,7 @@ def process_pool_start(pool: PythonObject) raises:
     _ = record
 
 
-def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[List[Int64]]) raises -> PythonObject:
+def process_pool_map_replies(pool: PythonObject, words: List[List[Int64]], inputs: PythonObject) raises -> List[WireReply]:
     """Ordered request waves over the pool's workers: request `i` of a wave
     goes to worker `i` as one typed frame (its request words `words[i]` and
     the record of `inputs[i]`), then the replies are read in request order.
@@ -600,11 +600,14 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
     UNPACK is whole before the first frame is written: every request's
     record, once per map. A wave then writes typed frames and collects typed
     replies (`WireReply`: the record and the stores its tensors were read
-    into); PACK builds the wave's Python values once, after its last reply.
-    Until 2026-11-21 each request was UNPACKed between two sends of its wave
+    into), which are returned as they are: PACK is the caller's, once, after
+    the last reply of the map (`process_pool_map_typed`), or never for a
+    caller that keeps the records typed (the shard trace's inventories).
+    `inputs` is an exact list. Until 2026-11-21 each request was UNPACKed between two sends of its wave
     and each reply PACKed (its Arrays, its containers, the list append)
     before the next worker's reply was read."""
-    var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
+    if py_type(inputs) is not PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list:
+        raise Error("process: typed request payloads require an exact list")
     var total = len(inputs)
     if len(words) != total:
         raise Error("process: typed request words differ from their payloads")
@@ -622,7 +625,7 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
     # record is held across a socket wait.
     var fds = rec[].native.fds.copy()
     var sequence = rec[].native.sequence
-    var result = bi.list()
+    var replies = List[WireReply](capacity=total)
     var offset = 0
     try:
         while offset < total:  # driver-loop: over logical request waves across physical worker groups
@@ -630,7 +633,6 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
             for i in range(width):  # driver-loop: over independent requests launched before consuming wave results
                 wire_send_fd(fds[i], -1.0, WIRE_REQUEST, sequence + i, words[offset + i], outgoing[offset + i])
             var failure = String()
-            var replies = List[WireReply](capacity=width)
             for i in range(width):  # driver-loop: over worker replies in fixed logical request order
                 try:
                     var reply = wire_receive_typed_fd(fds[i], -1.0)
@@ -644,9 +646,6 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
                         failure = String(error)
             if failure != "":
                 raise Error(failure)
-            # PACK of the wave, once: no worker of it is still to be read.
-            for i in range(width):  # driver-loop: over the collected replies of one wave
-                _ = py_call(result.append, wire_reply_pack(replies[i]))
             offset += width
             sequence += width
             rec[].native.sequence = sequence
@@ -655,7 +654,7 @@ def _process_pool_wave(pool: PythonObject, inputs: PythonObject, words: List[Lis
         raise error
     _ = record
     _ = outgoing^
-    return result
+    return replies^
 
 
 # Removed (lane pools-frame, 2026-11-21): the untyped `process_pool_map`
@@ -669,9 +668,12 @@ def process_pool_map_typed(pool: PythonObject, words: List[List[Int64]], payload
     """One reply per request, in request order: `words[i]` is one encoded
     `WorkerRequest` (core/parallel_worker_request.mojo) and `payloads[i]` the
     value that rides with it (None for none). `payloads` is an exact list."""
-    if py_type(payloads) is not PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list:
-        raise Error("process: typed request payloads require an exact list")
-    return _process_pool_wave(pool, payloads, words)
+    var replies = process_pool_map_replies(pool, words, payloads)
+    # PACK of the map, once: every reply is read and no worker is waited on.
+    var result = PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list()
+    for i in range(len(replies)):  # driver-loop: over the collected replies of one map (PACK)
+        _ = py_call(result.append, wire_reply_pack(replies[i]))
+    return result
 
 
 def process_pool_request(pool: PythonObject, worker_index: Int, request: List[Int64], outgoing: WireOutgoing) raises -> PythonObject:

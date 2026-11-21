@@ -472,6 +472,22 @@ def wire_reply_pack(reply: WireReply) raises -> PythonObject:
     return value
 
 
+def wire_record_pack(record: WireRecord) raises -> PythonObject:
+    """PACK of a record kept typed after its frame (a worker's identity
+    reply in the shard trace). Such a record names no tensor."""
+    if len(record.tensors) != 0:
+        raise Error("parallel wire: a kept record names no tensor")
+    var value = PythonObject(None)
+    if record.node_count() > 0:
+        var tensors = List[PythonObject]()
+        var cursor = 0
+        var next_tensor = 0
+        value = _wire_pack(record, cursor, tensors, next_tensor, 0)
+        if cursor != record.node_count():
+            raise Error("parallel wire: unclaimed nodes at the end of the record")
+    return value
+
+
 def wire_receive_fd(fd: Int, timeout: Float64) raises -> WireMessage:
     """One typed frame and the PACK of its record (one addressed request's
     reply, a worker's next request)."""
