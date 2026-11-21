@@ -63,6 +63,18 @@ EXTRA_BY_NAME = {
     "KernelRidge": ("_kernel_params", "_squeeze"),
     "Nystroem": ("_kernel_params",),
     "RBFSampler": ("_params",),
+    # decomposition and manifold (bindings/ica_native_unpack.mojo, rp_native_door.mojo, pls_boundary_pack.mojo,
+    # lda_native_door.mojo, mani_decomp_native_door.mojo, mcd_native_door.mojo)
+    "FastICA": ("_whiten",),
+    "_RandomProjection": ("_rp_components",),
+    "_PLS": ("_x_mean", "_x_std", "_y_mean", "_y_std", "_x_scores", "_y_scores", "_predict_1d"),
+    # the draw counter advances with each fit / partial_fit and seeds the next transform
+    "LatentDirichletAllocation": ("_seed", "_draw"),
+    "Isomap": ("_kind", "_pw", "_k_col", "_k_all", "_fit_X", "_knn", "_iso_v_m_"),
+    "LocallyLinearEmbedding": ("_fit_X", "_knn"),
+    "MDS": ("_norm",),
+    "ClassicalMDS": ("_norm",),
+    "MinCovDet": ("_precision", "_seed", "_draws"),
 }
 
 #: Public names (ending in "_") that record how a call ran, not what was
