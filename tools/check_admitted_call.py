@@ -499,7 +499,8 @@ DEBT = {
     'bindings/user_object_flatten_door.mojo': {'cpython': 5},
     'bindings/user_objects_native_door.mojo': {'cpython': 5, 'native_loaded_module': 5},
     'bindings/x_linear_common_unpack.mojo': {'native_loaded_module': 2},
-    'bindings/x_linear_native_door.mojo': {'native_loaded_module': 4},
+    'bindings/x_linear_cv_unpack.mojo': {'native_loaded_module': 1},
+    'bindings/x_linear_native_door.mojo': {'native_loaded_module': 3},
     # cpython 1: the Huber outlier mask's bool list (moved with `_xl_huber_mask` from the door, lane dw-xlinear).
     'bindings/x_linear_regressors_pack.mojo': {'cpython': 1},
     'bindings/x_linear_route_unpack.mojo': {'native_loaded_module': 2},

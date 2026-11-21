@@ -22,8 +22,8 @@ from mojolearn import QNRegressor
 from mojolearn.kernel_methods import KernelRidge
 from mojolearn.svm import SVC, SVR, LinearSVC, LinearSVR
 from mojolearn import (
-    BayesianRidge, HuberRegressor, LogisticRegressionCV, PoissonRegressor, QNRegressor, QuantileRegressor, RidgeCV,
-    RidgeClassifier, SGDClassifier, SGDRegressor,
+    BayesianRidge, ElasticNetCV, HuberRegressor, IsotonicRegression, LassoCV, LogisticRegressionCV, Perceptron,
+    PoissonRegressor, QNRegressor, QuantileRegressor, RidgeCV, RidgeClassifier, SGDClassifier, SGDRegressor,
 )
 
 TWO_DEVICES = mojolearn.vendor() != "cpu"
@@ -46,6 +46,22 @@ def classification(rows=200, cols=6, seed=3):
     x, y = regression(rows, cols, seed)
     return x, (y > np.median(y)).astype(np.int32)
 
+
+def monotone(rows=200, cols=1, seed=3):
+    # one feature whatever `cols` says (IsotonicRegression): a noisy increasing target
+    rng = np.random.default_rng(seed)
+    x = np.sort(rng.random(rows, dtype=np.float32))
+    y = (x + np.float32(0.05) * rng.random(rows, dtype=np.float32)).astype(np.float32)
+    return x, y
+
+
+# RidgeCV's split path: explicit (train, test) index pairs over the 200 rows of `regression` (two halves, and a
+# third split whose sides overlap neither; no splitter object, no callback).
+RIDGE_SPLITS = [
+    (np.arange(100, 200, dtype=np.int64), np.arange(0, 100, dtype=np.int64)),
+    (np.arange(0, 100, dtype=np.int64), np.arange(100, 200, dtype=np.int64)),
+    (np.arange(0, 150, dtype=np.int64), np.arange(150, 200, dtype=np.int64)),
+]
 
 # (id, class, constructor keywords, data, the fitted arrays compared bit for bit, the methods compared bit for bit)
 CASES = [
@@ -77,6 +93,25 @@ CASES = [
      ("coef_", "intercept_"), ("predict", "decision_function")),
     ("xl-logistic-cv", LogisticRegressionCV, dict(Cs=3, cv=3, max_iter=50), classification,
      ("coef_", "intercept_"), ("predict", "decision_function")),
+    # lane dw-xlinear, the door split's last group: every path of the cross-validated fits (RidgeCV's k-fold and
+    # split paths with their typed fold R^2, the coordinate-descent paths) and the class-weight step that the fit's
+    # RUN makes (SGD: float parameters; RidgeClassifier and LogisticRegressionCV: row weights), and the isotonic fit
+    ("xl-ridge-cv-kfold", RidgeCV, dict(alphas=(0.1, 1.0, 10.0), cv=5), regression,
+     ("coef_", "intercept_"), ("predict",)),
+    ("xl-ridge-cv-splits", RidgeCV, dict(alphas=(0.1, 1.0, 10.0), cv=RIDGE_SPLITS), regression,
+     ("coef_", "intercept_"), ("predict",)),
+    ("xl-lasso-cv", LassoCV, dict(cv=3, max_iter=200), regression, ("coef_", "intercept_"), ("predict",)),
+    ("xl-elastic-net-cv", ElasticNetCV, dict(cv=3, l1_ratio=[0.5, 0.9], max_iter=200), regression,
+     ("coef_", "intercept_"), ("predict",)),
+    ("xl-sgd-classifier-balanced", SGDClassifier, dict(max_iter=20, random_state=0, class_weight="balanced"),
+     classification, ("coef_", "intercept_"), ("predict", "decision_function")),
+    ("xl-perceptron-class-weight", Perceptron, dict(max_iter=20, random_state=0, class_weight={0: 1.0, 1: 2.0}),
+     classification, ("coef_", "intercept_"), ("predict", "decision_function")),
+    ("xl-ridge-classifier-balanced", RidgeClassifier, dict(class_weight="balanced"), classification,
+     ("coef_", "intercept_"), ("predict", "decision_function")),
+    ("xl-logistic-cv-balanced", LogisticRegressionCV, dict(Cs=3, cv=3, max_iter=50, class_weight="balanced"),
+     classification, ("coef_", "intercept_"), ("predict", "decision_function")),
+    ("xl-isotonic", IsotonicRegression, dict(), monotone, (), ("predict",)),
 ]
 IDS = [case[0] for case in CASES]
 case = pytest.mark.parametrize("spec", CASES, ids=IDS)

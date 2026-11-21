@@ -18,22 +18,10 @@
 # (no second conversion); IsotonicRegression.fit_transform transforms the
 # column the fit converted; a classifier's score scores the prediction the
 # same call decoded; Lasso / ElasticNet score the prediction buffer as it is.
-from std.math import isinf
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from core.linear_entry_table_ext import XL_OP_DECISION_ROWS, XL_OP_BEST_ALPHA
-from x_linear.door_run import (
-    ALGO_RIDGE, ALGO_ENETCV, ALGO_LOGCV, ALGO_RIDGE_KFOLD, LINK_IDENTITY, xl_run_parts, xl_parts_total,
-    xl_lbfgs_work, XlSplitWords, xl_cv_fold_ids_run, xl_cv_roles_limit, xl_cv_roles_run,
-)
-from bindings.x_linear_route_unpack import (
-    XLinearOps, xl_route, xl_route_host, xl_ops_require, xl_device_admit, xl_route_drop,
-)
-from bindings.x_linear_common_unpack import (
-    _b, _truth, _float, _int, _lt, _eq, _isinstance, _is_int, _name, _attr, _xl_scope, _xl_call, _xl_word,
-    _xl_float, _xl_count, _xl_slice, _xl_matrix, _xl_vector, _xl_decision, _xl_run, _xl_with_weights, _xl_owned,
-    _xl_reals, _xl_class_prep,
-)
+from bindings.x_linear_route_unpack import XLinearOps, xl_route, xl_route_host, xl_device_admit, xl_route_drop
+from bindings.x_linear_common_unpack import _b, _truth, _name, _xl_scope
 from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
 from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
 from bindings.x_linear_cd_pack import xl_cd_fit_pack, xl_cd_predict_pack
@@ -55,24 +43,31 @@ from bindings.x_linear_regressors_unpack import (
     xl_fit_quantile_unpack,
 )
 from bindings.x_linear_regressors_pack import (
-    xl_fit_glm_pack, xl_fit_huber_pack, xl_fit_bayes_pack, xl_fit_ard_pack, xl_fit_lars_pack,
-    xl_fit_quantile_pack, _xl_set_linear,
+    xl_fit_glm_pack, xl_fit_huber_pack, xl_fit_bayes_pack, xl_fit_ard_pack, xl_fit_lars_pack, xl_fit_quantile_pack,
 )
 from bindings.x_linear_sgd_unpack import (
     xl_fit_sgd_regressor_unpack, xl_fit_one_class_unpack, xl_fit_sgd_classifier_unpack,
-    xl_fit_ridge_classifier_unpack, _xl_class_codes,
+    xl_fit_ridge_classifier_unpack,
 )
 from bindings.x_linear_sgd_pack import (
     xl_fit_sgd_regressor_pack, xl_fit_one_class_pack, xl_fit_sgd_classifier_pack, xl_fit_ridge_classifier_pack,
 )
+from x_linear.door_run import (
+    xl_logcv_fit_run, xl_ridge_cv_plain_run, xl_ridge_cv_kfold_run, xl_ridge_cv_fold_run, xl_ridge_cv_choose_run,
+)
+from bindings.x_linear_sgd_unpack import xl_class_fit_released
+from bindings.x_linear_cv_unpack import (
+    XL_RIDGE_CV_PLAIN, XL_RIDGE_CV_KFOLD, xl_fit_ridge_cv_unpack, xl_ridge_cv_fold_unpack, xl_fit_lasso_cv_unpack,
+    xl_fit_elastic_net_cv_unpack, xl_fit_logistic_cv_unpack,
+)
+from bindings.x_linear_cv_pack import (
+    xl_ridge_singular_refuse, xl_fit_ridge_cv_pack, xl_fit_ridge_cv_kfold_pack, xl_fit_ridge_cv_splits_pack,
+    xl_fit_lasso_cv_pack, xl_fit_elastic_net_cv_pack, xl_fit_logistic_cv_pack,
+)
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.base_helpers_key_unpack import base_helpers_key
-from bindings.base_helpers_released_unpack import base_row_means_f64, base_reduce_stat_int
-from bindings.py_attr import py_attr
-from bindings.py_typed_call import py_call_typed
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_attributes_door import _type_mro
 from bindings.mode_metadata_native_door import _class_fields
@@ -83,65 +78,29 @@ from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.classical_arrays_door import classical_address
 from bindings.native_array_view_pack import native_array_ndarray_view
 from providers.python.array_metadata_pyapi_door import array_slot_once
-from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
-from bindings.classical_arrays_door import classical_wrap_array
-from providers.python.linear_score_boundary_pack import classical_r2_score
-from bindings.classical_warnings_unpack import classical_warning
-from bindings.prep_native_estimator_door import prep_native_context, prep_native_split
-from bindings.msel_inputs_unpack import msel_admit
-from bindings.admitted_input_unpack import (
-    AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, admitted_storage,
-    admit_ids,
+from providers.python.estimator_lifecycle_pyapi_unpack import (
+    estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete,
 )
+from providers.python.linear_score_boundary_pack import classical_r2_score
+from bindings.admitted_input_unpack import admit_f32, admitted_storage
 from bindings.admitted_input_run import admitted_finite_entry_refuse
-from bindings.py_optional import py_or_none, py_present
 from bindings.x_linear_keys_unpack import (
-    x_linear_keys,
-    X_LINEAR_OPN_CD_FIT,
-    X_LINEAR_OPN_CD_PREDICT,
-    X_LINEAR_OPN_CD_SCORE,
-    X_LINEAR_OPN_CLASSIFIER_PREDICT,
-    X_LINEAR_OPN_CLASSIFIER_SCORE,
-    X_LINEAR_OPN_DECISION_FUNCTION,
-    X_LINEAR_OPN_FIT_ARD,
-    X_LINEAR_OPN_FIT_BAYES,
-    X_LINEAR_OPN_FIT_ELASTIC_NET_CV,
-    X_LINEAR_OPN_FIT_GLM,
-    X_LINEAR_OPN_FIT_HUBER,
-    X_LINEAR_OPN_FIT_LARS,
-    X_LINEAR_OPN_FIT_LASSO_CV,
-    X_LINEAR_OPN_FIT_LASSO_LARS,
-    X_LINEAR_OPN_FIT_LOGISTIC_CV,
-    X_LINEAR_OPN_FIT_ONE_CLASS,
-    X_LINEAR_OPN_FIT_PA_CLASSIFIER,
-    X_LINEAR_OPN_FIT_PA_REGRESSOR,
-    X_LINEAR_OPN_FIT_PERCEPTRON,
-    X_LINEAR_OPN_FIT_QUANTILE,
-    X_LINEAR_OPN_FIT_RIDGE_CLASSIFIER,
-    X_LINEAR_OPN_FIT_RIDGE_CV,
-    X_LINEAR_OPN_FIT_SGD_CLASSIFIER,
-    X_LINEAR_OPN_FIT_SGD_REGRESSOR,
-    X_LINEAR_OPN_ISOTONIC_FIT,
-    X_LINEAR_OPN_ISOTONIC_FIT_TRANSFORM,
-    X_LINEAR_OPN_ISOTONIC_PREDICT,
-    X_LINEAR_OPN_ISOTONIC_SCORE,
-    X_LINEAR_OPN_ISOTONIC_TRANSFORM,
-    X_LINEAR_OPN_LRCV_PREDICT_PROBA,
-    X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION,
-    X_LINEAR_OPN_ONE_CLASS_PREDICT,
-    X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES,
-    X_LINEAR_OPN_REGRESSOR_PREDICT,
-    X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE,
-    X_LINEAR_OPN_REGRESSOR_SCORE,
-    X_LINEAR_OPN_DEVICE_ADMIT,
-    X_LINEAR_OPN_SGD_PREDICT_PROBA,
+    x_linear_keys, X_LINEAR_OPN_CD_FIT, X_LINEAR_OPN_CD_PREDICT, X_LINEAR_OPN_CD_SCORE,
+    X_LINEAR_OPN_CLASSIFIER_PREDICT, X_LINEAR_OPN_CLASSIFIER_SCORE, X_LINEAR_OPN_DECISION_FUNCTION,
+    X_LINEAR_OPN_FIT_ARD, X_LINEAR_OPN_FIT_BAYES, X_LINEAR_OPN_FIT_ELASTIC_NET_CV, X_LINEAR_OPN_FIT_GLM,
+    X_LINEAR_OPN_FIT_HUBER, X_LINEAR_OPN_FIT_LARS, X_LINEAR_OPN_FIT_LASSO_CV, X_LINEAR_OPN_FIT_LASSO_LARS,
+    X_LINEAR_OPN_FIT_LOGISTIC_CV, X_LINEAR_OPN_FIT_ONE_CLASS, X_LINEAR_OPN_FIT_PA_CLASSIFIER,
+    X_LINEAR_OPN_FIT_PA_REGRESSOR, X_LINEAR_OPN_FIT_PERCEPTRON, X_LINEAR_OPN_FIT_QUANTILE,
+    X_LINEAR_OPN_FIT_RIDGE_CLASSIFIER, X_LINEAR_OPN_FIT_RIDGE_CV, X_LINEAR_OPN_FIT_SGD_CLASSIFIER,
+    X_LINEAR_OPN_FIT_SGD_REGRESSOR, X_LINEAR_OPN_ISOTONIC_FIT, X_LINEAR_OPN_ISOTONIC_FIT_TRANSFORM,
+    X_LINEAR_OPN_ISOTONIC_PREDICT, X_LINEAR_OPN_ISOTONIC_SCORE, X_LINEAR_OPN_ISOTONIC_TRANSFORM,
+    X_LINEAR_OPN_LRCV_PREDICT_PROBA, X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION, X_LINEAR_OPN_ONE_CLASS_PREDICT,
+    X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES, X_LINEAR_OPN_REGRESSOR_PREDICT, X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE,
+    X_LINEAR_OPN_REGRESSOR_SCORE, X_LINEAR_OPN_DEVICE_ADMIT, X_LINEAR_OPN_SGD_PREDICT_PROBA,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
-from bindings.classical_labels_door import (
-    labels_full_f32, labels_address, labels_cast, classical_accuracy, labels_r2, labels_real_type,
-    labels_integral_type,
-)
+from bindings.classical_labels_door import labels_cast, classical_accuracy, labels_r2
 
 # x_linear/dispatch.mojo algorithm codes (`_expansion_linear.ALGO_*`).
 # The public method an operation serves (`_xl_method`).
@@ -348,7 +307,7 @@ def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, operation: In
     over the class codes."""
     var fields = py_fields(model)
     var call = xl_fit_sgd_classifier_unpack(model, fields, args, operation, entries, context)
-    xl_fit_released(call.fit, model)
+    xl_class_fit_released(call, model)
     return xl_fit_sgd_classifier_pack(model, fields, call, context)
 
 
@@ -358,7 +317,7 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, entries: XL
     stays on the device."""
     var fields = py_fields(model)
     var call = xl_fit_ridge_classifier_unpack(model, fields, args, entries, context)
-    xl_fit_released(call.fit, model)
+    xl_class_fit_released(call, model)
     return xl_fit_ridge_classifier_pack(model, fields, call, context)
 
 
@@ -462,789 +421,76 @@ def xl_cd_score(model: PythonObject, args: PythonObject, entries: XLinearOps, co
 
 
 
-# ------------------------------------------------------------ cv helpers
-# RidgeCV, LassoCV, ElasticNetCV and LogisticRegressionCV. An int (or None)
-# cv takes the same integer fold ids the Python assigned (the base binding's
-# `fold_ids` / `select_fold_i64`, or the binding's own StratifiedKFold ids);
-# a user splitter object is the user-API boundary: its `split(X, y)` is
-# called once, as the Python did, and its (train, test) index arrays are
-# read natively.
-
-
-
-def _xl_helper(context: PythonObject, name: String) raises -> PythonObject:
-    """A base binding helper (`_buffer._native(name)`) connected at import,
-    or the refusal recorded then."""
-    var nk = x_linear_keys()
-    var entry = py_get(py_item(context, nk[].k_xl_helpers), PythonObject(name))
-    if entry is None:
-        raise Error("ImportError: mojolearn: the base binding has no `" + name + "`")
-    if py_type(entry) is _b().str:
-        raise Error(String(py=entry))
-    return entry
-
-
-def _xl_is_int_cv(cv: PythonObject, context: PythonObject) raises -> Bool:
-    """`_is_int_cv`: an exact native integer that is not a bool (identity,
-    never the numbers.Integral ABC hook)."""
-    return labels_integral_type(py_type(cv), context)
-
-
-def _xl_index_i64(values: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`as_index_i64(values, name=name)`: row indices as a 1-D int64 Array
-    (a list, tuple or range through `array('q', ...)` in C; a buffer through
-    the native cast)."""
-    var nk = x_linear_keys()
-    var b = _b()
-    var cls = py_type(values)
-    if cls is b.list or cls is b.tuple or cls is b.range:
-        var store = py_call(py_item(context, nk[].k_array_type), PythonObject("q"), values)
-        return classical_wrap_array(store, Python.tuple(len(store)), "<i8", "C", context)
-    # The one integer admission (bindings/admitted_input_unpack.mojo admit_ids):
-    # one parallel read of the exporter's strides into fresh int64 words.
-    return admit_ids(values, name, context)
-
-
-def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObject,
-                  context: PythonObject) raises -> PythonObject:
-    """`_cv_splits(cv, X, y)`: a list of (train, test) int64 Arrays from a
-    splitter's `split(X, y)` (called once) or an iterable of pairs."""
-    var nk = x_linear_keys()
-    var b = _b()
-    var pairs = PythonObject(None)
-    if py_type(py_type(cv)) is b.type and py_contains(py_item(prep_native_context(context), nk[].k_family_msel_splitter_layouts), py_type(cv)):
-        pairs = prep_native_split(cv, x_source, y_source, context)
-    elif py_type(cv) is b.list or py_type(cv) is b.tuple:
-        msel_admit(cv, prep_native_context(context))
-        pairs = cv
-    else:
-        raise Error("TypeError: native linear CV requires a native splitter or list of index pairs; Python callbacks cannot execute")
-    var listed = py_call(b.list, pairs)
-    var splits = Python.list()
-    for k in range(len(listed)):  # driver-loop: over the cv splits
-        var pair = py_call(b.tuple, listed[k])
-        if len(pair) != 2:
-            if len(pair) > 2:
-                raise Error("too many values to unpack (expected 2, got " + String(len(pair)) + ")")
-            raise Error("not enough values to unpack (expected 2, got " + String(len(pair)) + ")")
-        _ = py_call(splits.append, Python.tuple(_xl_index_i64(pair[0], "train", context),
-                                                _xl_index_i64(pair[1], "test", context)))
-    if len(splits) == 0:
-        raise Error("mojolearn: cv produced no (train, test) split")
-    return splits
-
-
-def _xl_default_folds(n: Int, k: Int, context: PythonObject) raises -> PythonObject:
-    """`KFold(n_splits=k).split(...)` unshuffled: contiguous folds by the
-    core helpers (`fold_ids` with no codes, `select_fold_i64`)."""
-    var fold_store = admitted_vector(n, "<i4", context)
-    var fold_counts = admitted_vector(k, "<i8", context)
-    var class_counts = admitted_vector(1, "<i8", context)
-    _ = py_call_typed(_xl_helper(context, "fold_ids"), PythonObject(0), PythonObject(n), PythonObject(0), PythonObject(k),
-                      PythonObject(labels_address(class_counts)), PythonObject(labels_address(fold_store)),
-                      PythonObject(labels_address(fold_counts)))
-    _ = class_counts  # keep the Python object alive through the native call above
-    _ = fold_store  # keep the Python object alive through the native call above
-    _ = fold_counts  # keep the Python object alive through the native call above
-    var select = _xl_helper(context, "select_fold_i64")
-    var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=labels_address(fold_counts))
-    _ = fold_counts  # keep the Python object alive through the native call above
-    var out = Python.list()
-    for fold in range(k):  # driver-loop: over the cv folds
-        var size = Int(counts[fold])
-        _ = fold_counts  # keep the Python object alive through the native call above
-        var test = admitted_vector(size, "<i8", context)
-        var train = admitted_vector(n - size, "<i8", context)
-        var scratch = admitted_vector(n, "<i8", context)
-        var got = _int(py_call_typed(select, PythonObject(labels_address(fold_store)), PythonObject(n), PythonObject(fold),
-                                     PythonObject(labels_address(test) if size > 0 else labels_address(scratch)),
-                                     PythonObject(labels_address(train) if n - size > 0 else labels_address(scratch))))
-        _ = fold_store  # keep the Python object alive through the native call above
-        _ = test  # keep the Python object alive through the native call above
-        _ = scratch  # keep the Python object alive through the native call above
-        _ = train  # keep the Python object alive through the native call above
-        if got != size:
-            raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
-        _ = scratch  # keep the Python object alive through the native calls above
-        _ = train  # keep the Python object alive through the native calls above
-        _ = test  # keep the Python object alive through the native calls above
-        _ = fold_store  # keep the Python object alive through the native calls above
-        _ = py_call(out.append, Python.tuple(train, test))
-    return out
-
-
-def _xl_kfold_ids_f32(n: Int, k: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_kfold_ids_f32(n, k)`: KFold's contiguous fold ids as float32."""
-    if not _is_int(k) or _lt(k, PythonObject(2)):
-        raise Error("mojolearn: cv must be None or an int in [2, n_samples]")
-    var folds = _int(k)
-    if folds > n:
-        raise Error("Cannot have number of splits n_splits=" + String(folds) + " greater than the "
-                    + "number of samples: n_samples=" + String(n) + ".")
-    var ids = admitted_vector(n, "<i4", context)
-    var counts = admitted_vector(folds, "<i8", context)
-    _ = py_call_typed(_xl_helper(context, "fold_ids"), PythonObject(0), PythonObject(n), PythonObject(0),
-                      PythonObject(folds), PythonObject(0), PythonObject(labels_address(ids)),
-                      PythonObject(labels_address(counts)))
-    _ = ids  # keep the Python object alive through the native call above
-    _ = counts  # keep the Python object alive through the native call above
-    var out = admitted_vector(n, "<f4", context)
-    labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
-    _ = out  # keep the Python object alive through the native call above
-    _ = ids  # keep the Python object alive through the native call above
-    return out
-
-
-def _xl_split_words(splits: PythonObject) raises -> XlSplitWords:
-    """UNPACK of the cv splits: each side's int64 index address (0 when
-    empty) and count. The caller keeps `splits` alive through RUN."""
-    var words = XlSplitWords(List[Int](), List[Int](), List[Int](), List[Int]())
-    for k in range(len(splits)):  # driver-loop: over the cv splits
-        var tr = splits[k][0]
-        var te = splits[k][1]
-        var tr_size = Int(py=tr.size)
-        var te_size = Int(py=te.size)
-        words.train.append(labels_address(tr) if tr_size > 0 else 0)
-        words.train_sizes.append(tr_size)
-        words.test.append(labels_address(te) if te_size > 0 else 0)
-        words.test_sizes.append(te_size)
-    return words^
-
-
-def _xl_full_i32(n: Int, value: Int, context: PythonObject) raises -> PythonObject:
-    """`full((n,), value, '<i4')`: the store repeated in C."""
-    var nk = x_linear_keys()
-    var one = py_call(py_item(context, nk[].k_array_type), PythonObject("i"), Python.list(PythonObject(value)))
-    var store = py_call(py_attr(one, "__mul__"), PythonObject(n))
-    return classical_wrap_array(store, Python.tuple(n), "<i4", "C", context)
-
-
-def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
-                        context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
-    """`_cv_fold_ids_f32(splits, n, name)`: (fold ids, None) for a
-    partition, else (the -(n + 1) words, the per-split roles).
-
-    `_cv_fold_ids(splits, n)`: the int32 fold of every row when the test
-    sides partition the rows and every train side is the complement of its
-    test side (RUN: x_linear/door_run.mojo, on the base helper table).
-    The split words and the helper key are read once for both RUNs, and
-    both RUNs run with the GIL released: the former `assign_fold_i64`,
-    `check_indices_i64`, `count_fold_hits_i64` and `mark_split_roles_f32`
-    exports released it around their work (lane perf-audit-2-a)."""
-    var nk = x_linear_keys()
-    var key = base_helpers_key(py_item(context, nk[].k_xl_helpers))
-    var words = _xl_split_words(splits)
-    var ids = _xl_full_i32(n, -1, context)
-    var ids_addr = labels_address(ids)
-    var partition = False
-    var py = Python()
-    with GILReleased(py):
-        partition = xl_cv_fold_ids_run(key, words, n, ids_addr)
-    _ = ids  # keep the Python object alive through the native calls above
-    _ = splits  # keep the index Arrays alive through the native calls above
-    if partition:
-        var out = admitted_vector(n, "<f4", context)
-        labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
-        _ = out  # keep the Python object alive through the native call above
-        _ = ids  # keep the Python object alive through the native call above
-        return (out, PythonObject(None))
-    # `_cv_roles_f32`: per-split roles (x_linear/cv_roles.mojo)
-    xl_cv_roles_limit(n, name)
-    var roles = admitted_vector(len(splits) * n, "<f4", context)
-    var roles_addr = labels_address(roles)
-    with GILReleased(py):
-        xl_cv_roles_run(key, words, n, roles_addr, name)
-    _ = words^
-    _ = splits  # keep the index Arrays alive through the native calls above
-    return (labels_full_f32(n, -Float64(n + 1), context), roles)
-
-
-def _xl_parts(addrs: List[Int], counts: List[Int], context: PythonObject) raises -> PythonObject:
-    """`_concat_f32_parts(parts)`: the parts' 32-bit words in order, one
-    float32 vector (one byte copy per part)."""
-    var out = admitted_vector(xl_parts_total(counts), "<f4", context)
-    xl_run_parts(labels_address(out), addrs, counts)
-    return out
-
-
-# ------------------------------------------------------------------ RidgeCV
-
-
-def _xl_ridge(model: PythonObject, entries: XLinearOps, x_addr: Int, n: Int, d: Int, y: AdmittedX,
-              alphas: List[Float64], sample_weight: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_ridge_run(est, a, n, d, Y, 1, alphas, sample_weight)`: one target,
-    the alphas' Gram solves; refused when X'X + alpha I does not factor even
-    in float-float."""
-    var nk = x_linear_keys()
-    var A = len(alphas)
-    var has_sw = 0
-    var yy = _xl_with_weights(y, sample_weight, n, has_sw, context)
-    var ip: List[Int] = [1, 1 if _truth(py_item(py_fields(model), nk[].k_fit_intercept)) else 0, A, has_sw]
-    var out = _xl_run(entries, ALGO_RIDGE, x_addr, n * d, n, d, yy.address, yy.rows, ip, alphas,
-                      d + 1 + 2 + A + 1, 3 * d * d + 3 * d + 1 + d + 2 * n, 1, context)
-    _ = yy  # keep the Python object alive through the native call above
-    if _xl_word(out, d + 1 + 2 + A) == 2.0:
-        raise Error("mojolearn " + _name(model) + ": X'X + alpha I is singular even in float-float (alpha="
-                    + String(py=py_call(_b().format, _xl_float(out, d + 1), PythonObject("g")))
-                    + "); rescale X or use a larger alpha")
-        _ = yy  # keep the Python object alive through the native call above
-    _ = yy  # keep the Python object alive through the native calls above
-    _ = yy^
-    return out
-
-
-def _xl_gather(src: Int, rows: PythonObject, n: Int, width: Int, context: PythonObject) raises -> PythonObject:
-    """`take(src, idx, width)`: rows idx of src (width float32 words a row)."""
-    var count = Int(py=rows.size)
-    var shape = Python.tuple(count, width) if width > 1 else Python.tuple(count)
-    var out = admitted_array(shape, "<f4", context)
-    _ = py_call_typed(_xl_helper(context, "gather_rows_bytes"), PythonObject(src), PythonObject(labels_address(out)),
-                      PythonObject(labels_address(rows)), PythonObject(n), PythonObject(count), PythonObject(4 * width))
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _xl_undefined_warning(message: String, context: PythonObject) raises:
-    """`_expansion_metrics._undefined_warning(message)`: scikit-learn's
-    UndefinedMetricWarning when sklearn.exceptions is loaded, else
-    mojolearn's, at the public method's frame."""
-    var nk = x_linear_keys()
-    var category = py_item(context, nk[].k_xl_undefined_warning)
-    var sk = py_get(py_item(context, nk[].k_modules), "sklearn.exceptions")
-    if sk is not None:
-        category = py_call(_b().getattr, sk, PythonObject("UndefinedMetricWarning"), category)
-    var frame = py_call(native_loaded_module("sys")._getframe, PythonObject(0))
-    var module = py_get(frame.f_globals, nk[].k___name__, "")
-    classical_warning(message, category, context, Python.tuple(frame.f_code.co_filename, frame.f_lineno, module),
-                      "UndefinedMetricWarning")
+# ------------------------------------------------------- cross-validated
+# RidgeCV, LassoCV, ElasticNetCV and LogisticRegressionCV: each fit is UNPACK
+# (bindings/x_linear_cv_unpack.mojo: the refusals, the admission, the folds,
+# the typed requests), RUN (x_linear/door_run.mojo, GIL released, no Python
+# object) and PACK (bindings/x_linear_cv_pack.mojo).
 
 
 def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """RidgeCV.fit(X, y, sample_weight)."""
-    var nk = x_linear_keys()
+    """RidgeCV.fit(X, y, sample_weight). cv=None and the k-fold path are one
+    RUN each. The split path runs one RUN per cv split (that split's alpha
+    grid: fit, prediction and R^2 per alpha, all typed calls) and one for
+    the choice and the refit; the splits are driven here because a split's
+    rows are gathered by the base binding's Python-callable entry
+    (`xl_ridge_cv_fold_unpack`)."""
     var fields = py_fields(model)
-    var b = _b()
-    if py_item(fields, nk[].k_scoring) is not None or _truth(py_item(fields, nk[].k_alpha_per_target)):
-        raise Error("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
-    var given = py_item(fields, nk[].k_alphas)
-    var listed = given if Bool(py=py_call(b.hasattr, given, PythonObject("__len__"))) else Python.list(given)
-    var floats = py_call(b.list, py_call(b.map, b.float, listed))
-    var alphas = List[Float64]()
-    for i in range(len(floats)):  # driver-loop: over the alpha grid
-        alphas.append(Float64(py=floats[i]))
-    var refuse = len(alphas) == 0
-    for i in range(len(alphas)):  # driver-loop: over the alpha grid
-        refuse = refuse or not (alphas[i] > 0)
-    if refuse:
-        raise Error("mojolearn RidgeCV: alphas must be positive")
-    xl_ops_require(entries)
-    var score_scope = _xl_scope(entries, context)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    var y = _xl_vector(args[1], n, context)
-    var sample_weight = args[2]
-    var cv = py_item(fields, nk[].k_cv)
-    var A = len(alphas)
-    if cv is None:
-        var out = _xl_ridge(model, entries, x.address, n, d, y, alphas, sample_weight, context)
-        _ = x  # keep the Python object alive through the native call above
-        _xl_set_linear(fields, out, d, context)
-        _ = x  # keep the Python object alive through the native call above
-        py_setitem(fields, nk[].k_alpha_, _xl_float(out, d + 1))
-        _ = x  # keep the Python object alive through the native call above
-        py_setitem(fields, nk[].k_best_score_, _xl_float(out, d + 2))
-        _ = x  # keep the Python object alive through the native call above
-        if _truth(py_item(fields, nk[].k_store_cv_results)):
-            py_setitem(fields, nk[].k_cv_results_, _xl_slice(out, d + 3, A, Python.tuple(A), context))
-            _ = x  # keep the Python object alive through the native call above
-        py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-        _ = x^
-        _ = y^
-        return model
-    var int_cv = _xl_is_int_cv(cv, context)
-    if int_cv and sample_weight is None and _int(cv) >= 2 and n // _int(cv) >= 2:
-        # `_fit_kfold`: the k-fold scores on the binding, the first best
-        # finite score chosen in Mojo
-        var folds = _int(cv)
-        if not (2 <= folds and folds <= n):
-            raise Error("mojolearn RidgeCV: cv must be in [2, n_samples]")
-        if _truth(py_item(fields, nk[].k_store_cv_results)):
-            raise Error("cv!=None and store_cv_results=True are incompatible")
-        var n_fw = 2 * d * d + 3 * d + 1 + A * (d + 2) + A * (n // folds + 1)
-        var ip: List[Int] = [folds, 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, A]
-        var scores = _xl_run(entries, ALGO_RIDGE_KFOLD, x.address, n * d, n, d, y.address, y.rows, ip,
-                             alphas, A, n_fw, 1, context)
-        var best = _xl_call(entries, XL_OP_BEST_ALPHA, [labels_address(scores)], [A], List[Float64]())
-        _ = scores  # keep the Python object alive through the native call above
-        if best < 0:
-            raise Error("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
-                        + "(rescale X, or use larger alphas)")
-        _ = scores  # keep the Python object alive through the native calls above
-        var one: List[Float64] = [alphas[best]]
-        _ = scores  # keep the Python object alive through the native call above
-        var out = _xl_ridge(model, entries, x.address, n, d, y, one, PythonObject(None), context)
-        _xl_set_linear(fields, out, d, context)
-        py_setitem(fields, nk[].k_alpha_, PythonObject(alphas[best]))
-        _ = scores  # keep the Python object alive through the native call above
-        py_setitem(fields, nk[].k_best_score_, _xl_float(scores, best))
-        py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-        _ = x^
-        _ = y^
-        return model
-    # `_fit_splits`: a native fit, predict and r2_score per split and alpha
-    if _truth(py_item(fields, nk[].k_store_cv_results)):
-        raise Error("cv!=None and store_cv_results=True are incompatible")
-    var splits = PythonObject(None)
-    var yv = _xl_owned(y, context)
-    if int_cv:
-        var folds = _int(cv)
-        if not (2 <= folds and folds <= n):
-            raise Error("mojolearn RidgeCV: cv must be in [2, n_samples]")
-        splits = _xl_default_folds(n, folds, context)
-    else:
-        splits = _xl_cv_splits(cv, args[0], args[1], context)
-    var w_keep = PythonObject(None)
-    var w_addr = 0
-    if sample_weight is not None:
-        var w = admit_weight_words(sample_weight, n, context)
-        w_keep = _xl_owned(w, context)
-        w_addr = labels_address(w_keep)
-        _ = w_keep  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    var rows = Python.list()
-    for i in range(A):  # driver-loop: over the alpha grid
-        _ = py_call(rows.append, Python.list())
+    var call = xl_fit_ridge_cv_unpack(model, fields, args, entries, context)
+    var py = Python()
+    var best = 0
+    if call.path == XL_RIDGE_CV_PLAIN:
+        with GILReleased(py):
+            xl_ridge_cv_plain_run(call.request)
+        return xl_fit_ridge_cv_pack(model, fields, call, context)
+    if call.path == XL_RIDGE_CV_KFOLD:
+        with GILReleased(py):
+            best = xl_ridge_cv_kfold_run(call.request)
+        return xl_fit_ridge_cv_kfold_pack(model, fields, call, best, context)
+    var name = _name(model)
     var undefined = False
-    for s in range(len(splits)):  # driver-loop: over the cv splits
-        var tr = splits[s][0]
-        var te = splits[s][1]
-        var n_tr = Int(py=tr.size)
-        var n_te = Int(py=te.size)
-        if n_tr == 0 or n_te == 0:
-            raise Error("mojolearn RidgeCV: every cv split needs training and test rows")
-        if n_te < 2:
-            # scikit-learn's r2_score: NaN, with its warning, for fewer than
-            # two test rows; every alpha's mean is then NaN (the first wins)
-            _xl_undefined_warning("R^2 score is not well-defined with less than two samples.", context)
+    for s in range(call.request.k):  # driver-loop: over the cv splits (rows gathered at the boundary, split by split)
+        var fold = xl_ridge_cv_fold_unpack(call, s, context)
+        if not fold.scored:
             undefined = True
             continue
-        var xtr = _xl_gather(x.address, tr, n, d, context)
-        var ytr = _xl_gather(labels_address(yv), tr, n, 1, context)
-        _ = yv  # keep the Python object alive through the native call above
-        var xte = _xl_gather(x.address, te, n, d, context)
-        var yte = _xl_gather(labels_address(yv), te, n, 1, context)
-        _ = yv  # keep the Python object alive through the native call above
-        var wtr = PythonObject(None)
-        var wte = PythonObject(None)
-        if w_addr != 0:
-            wtr = _xl_gather(w_addr, tr, n, 1, context)
-            wte = _xl_gather(w_addr, te, n, 1, context)
-        var ytr_m = admitted_words(ytr, labels_address(ytr), n_tr, 1)
-        _ = ytr  # keep the Python object alive through the native call above
-        _ = yv  # keep the Python object alive through the native call above
-        var xte_m = admitted_words(xte, labels_address(xte), n_te, d)
-        _ = xte  # keep the Python object alive through the native call above
-        for i in range(A):  # driver-loop: over the alpha grid
-            var one: List[Float64] = [alphas[i]]
-            var out = _xl_ridge(model, entries, labels_address(xtr), n_tr, d, ytr_m, one, wtr, context)
-            _ = ytr  # keep the Python object alive through the native call above
-            _ = xtr  # keep the Python object alive through the native call above
-            _ = yv  # keep the Python object alive through the native call above
-            var coef = _xl_slice(out, 0, d, Python.tuple(d), context)
-            _ = xtr  # keep the Python object alive through the native call above
-            var pred = _xl_decision(model, xte_m.view(), coef, _xl_float(out, d), LINK_IDENTITY, True, entries, context)
-            _ = xte  # keep the Python object alive through the native call above
-            _ = xtr  # keep the Python object alive through the native call above
-            var score = labels_r2(yte, pred, wte, PythonObject(None), score_scope)
-            _ = yv  # keep the Python object alive through the native call above
-            _ = py_call(rows[i].append, PythonObject(score))
-        _ = xtr^
-        _ = xte^
-    var best = 0
-    var best_score = py_call(b.float, PythonObject("nan"))
-    if not undefined:
-        # `_row_means(rows)`: fsum / len per alpha (`row_means_f64`), the
-        # first best by `reduce_stat`
-        var k = len(rows[0])
-        # UNPACK: the alpha grid's Python score rows into one native float64
-        # (A, k) table (it was an array('d') extended per row and read back
-        # through buffer_info).
-        var flat = admitted_vector(max(A * k, 1), "<f8", context)
-        var flat_words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=labels_address(flat))
-        for i in range(A):  # driver-loop: over the alpha grid
-            var row = rows[i]
-            if len(row) != k:
-                raise Error("ValueError: every alpha needs one score per split")
-            for j in range(k):  # driver-loop: over the splits of one alpha (UNPACK of its Python floats)
-                flat_words[i * k + j] = Float64(py=row[j])
-        var means = admitted_vector(max(A, 1), "<f8", context)
-        var bkey = base_helpers_key(py_item(context, nk[].k_xl_helpers))
-        if A > 0 and k > 0:
-            if base_row_means_f64(bkey, labels_address(flat), A, k, labels_address(means)) != 0:
-                raise Error("-inf + inf in fsum")
-        best = base_reduce_stat_int(bkey, labels_address(means), 1, A, 3)
-        _ = flat  # keep the score table alive through the native calls above
-        _ = means  # keep the Python object alive through the native call above
-        best_score = PythonObject(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=labels_address(means))[best])
-        _ = means  # keep the Python object alive through the native call above
-        _ = flat^
-        _ = means^
-    var one: List[Float64] = [alphas[best]]
-    var w_final = PythonObject(None) if w_addr == 0 else w_keep
-    var out = _xl_ridge(model, entries, x.address, n, d, y, one, w_final, context)
-    _xl_set_linear(fields, out, d, context)
-    py_setitem(fields, nk[].k_alpha_, PythonObject(alphas[best]))
-    py_setitem(fields, nk[].k_best_score_, best_score)
-    _ = w_keep^
-    _ = yv^
-    _ = x^
-    _ = y^
-    return model
-
-
-# ------------------------------------------------------ LassoCV / ElasticNetCV
-
-
-def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1_ratios: PythonObject,
-               entries: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """`_enetcv_fit(est, X, y, l1_ratios, sample_weight)`: the alpha grid,
-    the folds and the path on the binding; returns the l1_ratios entry
-    nearest the best one."""
-    var nk = x_linear_keys()
-    var name = _name(model)
-    var b = _b()
-    if not _eq(py_item(fields, nk[].k_selection), PythonObject("cyclic")):
-        raise Error("mojolearn " + name + ": selection='random' is not implemented")
-    var L = len(l1_ratios)
-    for i in range(L):  # driver-loop: over the l1_ratio grid
-        var r = Float64(py=l1_ratios[i])
-        if not (r > 0 and r <= 1):
-            raise Error("mojolearn " + name + ": l1_ratio must be in (0, 1]")
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    var y = _xl_vector(args[1], n, context)
-    var cv = py_item(fields, nk[].k_cv)
-    var ids = PythonObject(None)
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var roles = Optional[PythonObject]()
-    var folds = 0
-    if cv is None or _xl_is_int_cv(cv, context):
-        var k = PythonObject(5) if cv is None else py_call(b.int, cv)
-        ids = _xl_kfold_ids_f32(n, k, context)
-        folds = _int(k)
-    else:
-        var splits = _xl_cv_splits(cv, args[0], args[1], context)
-        folds = len(splits)
-        var got = _xl_cv_fold_ids_f32(splits, n, name, context)
-        ids = got[0]
-        roles = py_present(got[1])
-    var alphas = py_item(fields, nk[].k_alphas)
-    var n_alphas = _attr(model, "n_alphas", PythonObject(None))
-    var explicit = False
-    var grid = 0
-    var values = Python.list()
-    if _is_int(alphas):
-        grid = _int(alphas)
-    elif alphas is None or py_contains(Python.tuple("warn", "deprecated"), alphas):
-        grid = _int(n_alphas) if _is_int_plain(n_alphas) else 100
-    else:
-        explicit = True
-        values = py_call(b.sorted, py_call(b.map, b.float, alphas), reverse=PythonObject(True))
-        grid = len(values)
-    if grid < 1:
-        raise Error("mojolearn " + name + ": at least one alpha is required")
-    var sample_weight = args[2]
-    # A plain number is no weight vector (the former numbers.Number test,
-    # by exact native type identity).
-    if labels_real_type(py_type(sample_weight), context) or py_type(sample_weight) is _b().complex:
-        sample_weight = PythonObject(None)
-    var addrs = List[Int]()
-    var counts = List[Int]()
-    addrs.append(y.address)
-    _ = y  # keep the Python object alive through the native call above
-    counts.append(n)
-    addrs.append(labels_address(ids))
-    _ = ids  # keep the Python object alive through the native call above
-    counts.append(n)
-    var weighted = 0
-    var w_keep = PythonObject(None)
-    if Bool(roles):
-        # per-split roles ride the weighted arm, after the weights
-        if sample_weight is None:
-            w_keep = labels_full_f32(n, 1.0, context)
-        else:
-            w_keep = _xl_owned(admit_weight_words(sample_weight, n, context), context)
-        addrs.append(labels_address(w_keep))
-        _ = w_keep  # keep the Python object alive through the native call above
-        counts.append(n)
-        addrs.append(labels_address(roles.value()))
-        _ = roles  # keep the Python object alive through the native call above
-        counts.append(Int(py=roles.value().size))
-        weighted = 1
-    elif sample_weight is not None:
-        w_keep = _xl_owned(admit_weight_words(sample_weight, n, context), context)
-        addrs.append(labels_address(w_keep))
-        _ = w_keep  # keep the Python object alive through the native call above
-        counts.append(n)
-        weighted = 1
-    var yy = _xl_parts(addrs, counts, context)
-    var fp = List[Float64]()
-    fp.append(_float(py_item(fields, nk[].k_eps)))
-    fp.append(_float(py_item(fields, nk[].k_tol)))
-    for i in range(L):  # driver-loop: over the l1_ratio grid
-        fp.append(Float64(py=l1_ratios[i]))
-    if explicit:
-        for i in range(grid):  # driver-loop: over the user alpha grid
-            fp.append(Float64(py=values[i]))
-    var ip: List[Int] = [_int(py_item(fields, nk[].k_max_iter)), 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, grid, folds, L,
-                         1 if explicit else 0, 1 if _truth(py_item(fields, nk[].k_positive)) else 0, weighted]
-    var out = _xl_run(entries, ALGO_ENETCV, x.address, n * d, n, d, labels_address(yy), Int(py=yy.size), ip,
-                      fp, d + 4 + L * grid + L * grid * folds, d * d + 4 * d + 3 + grid * (d + 2), 1, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _xl_set_linear(fields, out, d, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_alpha_, _xl_float(out, d + 1))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var l1_best = Float64(_xl_word(out, d + 2))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(out, d + 3)))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var off = d + 4
-    if L == 1:
-        py_setitem(fields, nk[].k_alphas_, _xl_slice(out, off, grid, Python.tuple(grid), context))
-        _ = yy  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        py_setitem(fields, nk[].k_mse_path_, _xl_slice(out, off + grid, grid * folds, Python.tuple(grid, folds), context))
-        _ = yy  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-    else:
-        py_setitem(fields, nk[].k_alphas_, _xl_slice(out, off, L * grid, Python.tuple(L, grid), context))
-        _ = yy  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-        py_setitem(fields, nk[].k_mse_path_, _xl_slice(out, off + L * grid, L * grid * folds, Python.tuple(L, grid, folds), context))
-        _ = yy  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    # the user's own value (the kernel carried it as float32): the first
-    # entry nearest the returned one
-    var pick = 0
-    var gap = abs(Float64(py=l1_ratios[0]) - l1_best)
-    for i in range(1, L):  # driver-loop: over the l1_ratio grid
-        var g = abs(Float64(py=l1_ratios[i]) - l1_best)
-        if g < gap:
-            gap = g
-            pick = i
-    _ = yy^
-    _ = w_keep^
-    _ = ids^
-    _ = roles^
-    _ = x^
-    _ = y^
-    return l1_ratios[pick]
-
-
-def _is_int_plain(value: PythonObject) raises -> Bool:
-    """`isinstance(value, int)` (bools included, as the Python test was)."""
-    return _isinstance(value, _b().int)
+        var singular = -1
+        with GILReleased(py):
+            singular = xl_ridge_cv_fold_run(call.request, fold.request, name)
+        _ = fold.pins  # keep the gathered rows alive through the native calls above
+        if singular >= 0:
+            xl_ridge_singular_refuse(model, call.fit_words, call.request.d)
+    with GILReleased(py):
+        best = xl_ridge_cv_choose_run(call.request, undefined)
+    return xl_fit_ridge_cv_splits_pack(model, fields, call, best, undefined, context)
 
 
 def xl_fit_lasso_cv(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """LassoCV.fit(X, y, sample_weight): the l1_ratio grid [1.0]."""
     var fields = py_fields(model)
-    _ = _xl_enetcv(model, fields, args, Python.list(PythonObject(1.0)), entries, context)
-    return model
+    var call = xl_fit_lasso_cv_unpack(model, fields, args, entries, context)
+    xl_fit_released(call.fit, model)
+    return xl_fit_lasso_cv_pack(model, fields, call, context)
 
 
 def xl_fit_elastic_net_cv(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """ElasticNetCV.fit(X, y, sample_weight): l1_ratio_ is the grid entry
     nearest the best one."""
-    var nk = x_linear_keys()
     var fields = py_fields(model)
-    var b = _b()
-    var given = py_item(fields, nk[].k_l1_ratio)
-    var ratios = py_call(b.list, given) if Bool(py=py_call(b.hasattr, given, PythonObject("__len__"))) else Python.list(given)
-    var floats = py_call(b.list, py_call(b.map, b.float, ratios))
-    py_setitem(fields, nk[].k_l1_ratio_, _xl_enetcv(model, fields, args, floats, entries, context))
-    return model
-
-
-# ---------------------------------------------------- LogisticRegressionCV
-
-
-def _xl_cs_grid(cs: PythonObject, context: PythonObject) raises -> List[Float64]:
-    """The Cs grid: `np.logspace(-4, 4, m)` through `_pm.powr` (10 ** y by
-    the decimal module at 50 digits, one correctly rounded conversion), or
-    the user's values."""
-    var nk = x_linear_keys()
-    var grid = List[Float64]()
-    if _is_int(cs):
-        var m = _int(cs)
-        if m <= 1:
-            grid.append(1e-4)
-            return grid^
-        var ten = py_call(py_item(context, nk[].k_xl_decimal), PythonObject(10.0))
-        var ctx = py_item(context, nk[].k_xl_pow_context)
-        for i in range(m):  # driver-loop: over the Cs grid
-            var exponent = -4.0 + Float64(8 * i) / Float64(m - 1)
-            var value = Float64(py=py_call(_b().float, py_call(ctx.power, ten, py_call(py_item(context, nk[].k_xl_decimal), PythonObject(exponent)))))
-            if isinf(value):
-                raise Error("OverflowError: math range error")
-            grid.append(value)
-        return grid^
-    var floats = py_call(_b().list, py_call(_b().map, _b().float, cs))
-    for i in range(len(floats)):  # driver-loop: over the user Cs grid
-        grid.append(Float64(py=floats[i]))
-    return grid^
+    var call = xl_fit_elastic_net_cv_unpack(model, fields, args, entries, context)
+    xl_fit_released(call.fit, model)
+    return xl_fit_elastic_net_cv_pack(model, fields, call, context)
 
 
 def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """LogisticRegressionCV.fit(X, y, sample_weight)."""
-    var nk = x_linear_keys()
+    """LogisticRegressionCV.fit(X, y, sample_weight): the class-weight step,
+    the stratified fold check and the fit are one RUN (`xl_logcv_fit_run`)."""
     var fields = py_fields(model)
-    var b = _b()
-    if not _eq(py_item(fields, nk[].k_penalty), PythonObject("l2")) or _truth(py_item(fields, nk[].k_dual)) or py_item(fields, nk[].k_l1_ratios) is not None:
-        raise Error("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
-    if py_item(fields, nk[].k_scoring) is not None or not _truth(py_item(fields, nk[].k_refit)):
-        raise Error("mojolearn LogisticRegressionCV: scoring and refit=False are not implemented")
-    if not py_contains(Python.tuple("lbfgs", "newton-cg", "newton-cholesky"), py_item(fields, nk[].k_solver)):
-        raise Error("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    var labels = _xl_class_codes(model, args[1], n, context)
-    var K = len(labels.classes)
-    var kp = 1 if K == 2 else K
-    var Cs = _xl_cs_grid(py_item(fields, nk[].k_Cs), context)
-    var cv = py_item(fields, nk[].k_cv)
-    var explicit = not (cv is None or _xl_is_int_cv(cv, context))
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var roles = Optional[PythonObject]()
-    var fold_ids = PythonObject(None)
-    var folds = 0
-    if explicit:
-        var splits = _xl_cv_splits(cv, args[0], args[1], context)
-        folds = len(splits)
-        var got = _xl_cv_fold_ids_f32(splits, n, "LogisticRegressionCV", context)
-        fold_ids = got[0]
-        roles = py_present(got[1])
-    else:
-        folds = 5 if cv is None else _int(cv)
-    var sample_weight = args[2]
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var raw = Optional[PythonObject]()
-    if sample_weight is not None:
-        raw = _xl_owned(admit_weight_words(sample_weight, n, context), context)
-    var class_weight = py_item(fields, nk[].k_class_weight)
-    var weigh = sample_weight is not None or class_weight is not None or Bool(roles)
-    var prep = _xl_class_prep(model, entries, class_weight, labels.classes, labels.codes,
-                              0 if not raw else labels_address(raw.value()), True, class_weight is not None, context)
-    _ = raw  # keep the Python object alive through the native call above
-    var fitw = prep[1]
-    _ = raw  # keep the Python object alive through the native call above
-    var largest = prep[2]
-    _ = raw  # keep the Python object alive through the native call above
-    if not explicit:
-        # `_check_stratified_folds(largest, folds)`
-        if folds < 2 or folds > largest:
-            raise Error("mojolearn: cv must be None or an int in [2, the largest class size]")
-    var codes = admitted_vector(n, "<f4", context)
-    labels_cast(labels_address(labels.codes), "<i4", labels_address(codes), "<f4", n, context)
-    _ = codes  # keep the Python object alive through the native call above
-    var zeros = admitted_vector(n, "<f4", context)
-    var addrs = List[Int]()
-    var counts = List[Int]()
-    addrs.append(labels_address(codes))
-    _ = codes  # keep the Python object alive through the native call above
-    counts.append(n)
-    addrs.append(labels_address(fold_ids) if explicit else labels_address(zeros))
-    _ = zeros  # keep the Python object alive through the native call above
-    _ = fold_ids  # keep the Python object alive through the native call above
-    counts.append(n)
-    var has_sw = 0
-    if weigh:
-        if not raw:
-            raw = labels_full_f32(n, 1.0, context)
-        addrs.append(labels_address(raw.value()) if fitw is None else labels_address(fitw))
-        _ = fitw  # keep the Python object alive through the native call above
-        _ = raw  # keep the Python object alive through the native call above
-        counts.append(n)
-        addrs.append(labels_address(py_or_none(raw)))
-        _ = raw  # keep the Python object alive through the native call above
-        counts.append(n)
-        has_sw = 1
-    if Bool(roles):
-        addrs.append(labels_address(roles.value()))
-        _ = roles  # keep the Python object alive through the native call above
-        counts.append(Int(py=roles.value().size))
-    var yy = _xl_parts(addrs, counts, context)
-    var p = kp * (d + 1)
-    var nc = len(Cs)
-    var ip: List[Int] = [_int(py_item(fields, nk[].k_max_iter)), 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, kp, nc, folds, has_sw]
-    if explicit:
-        ip.append(1)
-    var fp = List[Float64]()
-    fp.append(_float(py_item(fields, nk[].k_tol)))
-    for i in range(nc):  # driver-loop: over the Cs grid
-        fp.append(Cs[i])
-    var out = _xl_run(entries, ALGO_LOGCV, x.address, n * d, n, d, labels_address(yy), Int(py=yy.size), ip,
-                      fp, kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + xl_lbfgs_work(p), 5, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_classes_, labels.classes)
-    py_setitem(fields, nk[].k_coef_, _xl_slice(out, 0, kp * d, Python.tuple(kp, d), context))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_intercept_, _xl_slice(out, kp * d, kp, Python.tuple(kp), context))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    # the grid entry nearest the returned best C (the first on a tie)
-    var best_word = Float64(_xl_word(out, kp * d + kp))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var pick = 0
-    var gap = abs(Cs[0] - best_word)
-    for i in range(1, nc):  # driver-loop: over the Cs grid
-        var g = abs(Cs[i] - best_word)
-        if g < gap:
-            gap = g
-            pick = i
-    var cs_list = _xl_reals(Cs)
-    py_setitem(fields, nk[].k_Cs_, cs_list)
-    var chosen = Python.list()
-    for c in range(kp):  # driver-loop: over the fitted problems (model structure)
-        _ = py_call(chosen.append, PythonObject(Cs[pick]))
-    py_setitem(fields, nk[].k_C_, chosen)
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(out, kp * d + kp + 1)))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var off = kp * d + kp + 2
-    var names = py_call(b.list, labels.classes)
-    var scores = Python.dict()
-    var first = 1 if kp == 1 else 0
-    for c in range(first, len(names)):  # driver-loop: over the class labels (one score table each)
-        py_setitem(scores, names[c], _xl_slice(out, off, folds * nc, Python.tuple(folds, nc), context))
-        _ = yy  # keep the Python object alive through the native call above
-        _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_scores_, scores)
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    _ = yy^
-    _ = codes^
-    _ = zeros^
-    _ = raw^
-    _ = fitw^
-    _ = fold_ids^
-    _ = roles^
-    _ = x^
-    return model
+    var call = xl_fit_logistic_cv_unpack(model, fields, args, entries, context)
+    var py = Python()
+    with GILReleased(py):
+        xl_logcv_fit_run(call.fit.request, call.prep, call.stratified, call.folds)
+    return xl_fit_logistic_cv_pack(model, fields, call, context)
 
 
 # ------------------------------------------------------------------ door
