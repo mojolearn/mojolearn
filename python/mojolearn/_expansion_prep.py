@@ -1601,16 +1601,20 @@ class QuantileTransformer(_PrepBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
-                   "copy")
+                   "copy", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, n_quantiles=1000, output_distribution="uniform", ignore_implicit_zeros=False,
-                 subsample=10_000, random_state=None, copy=True):
+                 subsample=10_000, random_state=None, copy=True, device=None):
         self.n_quantiles = n_quantiles
         self.output_distribution = output_distribution
         self.ignore_implicit_zeros = ignore_implicit_zeros
         self.subsample = subsample
         self.random_state = random_state
         self.copy = copy
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -1669,12 +1673,16 @@ class PowerTransformer(_PrepBase):
     _mojolearn_native_public = True
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("method", "standardize", "copy")
+    _parameters = ("method", "standardize", "copy", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
+    def __init__(self, method="yeo-johnson", *, standardize=True, copy=True, device=None):
         self.method = method
         self.standardize = standardize
         self.copy = copy
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -1781,13 +1789,17 @@ class PolynomialFeatures(_PrepBase):
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
-    _parameters = ("degree", "interaction_only", "include_bias", "order")
+    _parameters = ("degree", "interaction_only", "include_bias", "order", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
+    def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C", device=None):
         self.degree = degree
         self.interaction_only = interaction_only
         self.include_bias = include_bias
         self.order = order
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -1920,11 +1932,15 @@ class Binarizer(_PrepBase):
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
-    _parameters = ("threshold", "copy")
+    _parameters = ("threshold", "copy", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, *, threshold=0.0, copy=True):
+    def __init__(self, *, threshold=0.0, copy=True, device=None):
         self.threshold = threshold
         self.copy = copy
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -2317,10 +2333,14 @@ class VarianceThreshold(_SelectorMixin):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _sklearn_input_tags = {"allow_nan": True}
-    _parameters = ("threshold",)
+    _parameters = ("threshold", "device")
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, threshold=0.0):
+    def __init__(self, threshold=0.0, device=None):
         self.threshold = threshold
+        self.device = device
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
