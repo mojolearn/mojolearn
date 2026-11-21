@@ -296,12 +296,12 @@ def lab_binarize(mut prog: EncProgram, var codes: Int, n: Int, K: Int, W: Int, n
     return out
 
 
-def lab_binarize_buffer_stage(mut prog: EncProgram, w: LabelWords, cats: LabelCats, W: Int, neg: Int, pos: Int,
+def lab_binarize_buffer_stage(mut prog: EncProgram, w: LabelWords, cats: LabelCats, K: Int, W: Int, neg: Int, pos: Int,
                               region: Bool) raises -> Int:
     # LabelBinarizer.transform of a numeric label buffer (two classes or
     # more): the codes and the dense output in one program.
     var codes = lab_buffer_codes(prog, w, cats)
-    return lab_binarize(prog, codes, w.n, cats.size, W, neg, pos, region)
+    return lab_binarize(prog, codes, w.n, K, W, neg, pos, region)
 
 
 def lab_binarize_codes_stage(mut prog: EncProgram, source: LabelCodes, K: Int, W: Int, neg: Int, pos: Int,
