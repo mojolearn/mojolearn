@@ -52,10 +52,26 @@ only when the answer is the one its Python units give:
 
 WHEN IT RUNS (`msel_member_units` answers `ran == False` otherwise and the
 caller keeps its Python units): the member's class carries a member mark and
-its family's admit fills it; default scoring (the estimator's own score);
-`error_score='raise'`; a host float32 C-order X with a target; the member answers fit and score and reads dense
-host views. Device fold sets, the slice route and learning_curve's test
-reuse keep their own route (the caller tests those before calling).
+its family's admit fills it; a host float32 C-order X with a target; the
+member's KIND answers fit and every operation the request asks (its score,
+or the responses below) and reads dense host views. Device fold sets, the
+slice route and learning_curve's test reuse keep their own route (the caller
+tests those before calling).
+
+RESPONSES (`responses` not empty: a named scorer, or cross_val_predict). A
+unit then fits and, instead of the member's own score, writes
+`MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` of its test rows (and of its
+train rows when train scores are asked) into buffers placed at UNPACK: one
+float32 Array per (unit, side, response), sized from `member_outputs` before
+any state exists, which the unit's worker fills with the GIL released (no
+copy afterwards); a classifier's predict writes int32 codes into the unit's
+own typed list and PACK decodes them to labels with the classes of the one
+encode (`labels_decode_i32_codes`). `scores.outputs[(unit * sides + side) *
+len(responses) + k]` is the prediction object (side 0 test, 1 train). The
+CALLER runs its metric over them (bindings/msel_cv_door.mojo): this file
+knows no scorer. Served only where the width is the plain one: predict one
+column, predict_proba one column per class; anything else takes the Python
+units.
 
 FITTED ESTIMATORS ASKED BACK (`return_estimator`; `keep` True). A unit then
 leaves its fitted state alive; PACK (GIL held, after the units joined) makes
@@ -78,17 +94,20 @@ from bindings.classical_validate_unpack import classical_check_y, classical_esti
 from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
 from bindings.member_held_door import member_held_adopt
 from bindings.classifier_public_lifecycle_door import _public_labels
+from bindings.classical_labels_door import labels_decode_i32_codes
+from bindings.family_common_pack import family_array
 from bindings.msel_common_door import msel_is_array, msel_addr, msel_index_i64, msel_encode
 from bindings.msel_cv_run import msel_seconds
 from bindings.msel_estimator_native_door import (
     msel_estimator_plan, msel_native_clone, msel_native_set_params, msel_clone_parameter,
 )
 from bindings.native_unit_os_threads_run import native_unit_cores
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
-    MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT,
+    MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs,
+    MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
 )
 
@@ -107,10 +126,20 @@ struct MselMemberScores(Movable):
     var score_time: List[Float64]
     # One fitted Python estimator per unit when they were asked back, else None.
     var estimators: PythonObject
+    # RESPONSES (module note): the prediction objects, index
+    # (unit * sides + side) * responses + k; an empty list without responses.
+    var outputs: PythonObject
+    var sides: Int
+    # Per candidate: the estimator its units were admitted from (the caller's
+    # metric reads its device once per scorer template).
+    var members: PythonObject
 
     def __init__(out self):
         self.ran = False
         self.estimators = PythonObject(None)
+        self.outputs = Python.list()
+        self.sides = 1
+        self.members = Python.list()
         self.test = List[Float64]()
         self.train = List[Float64]()
         self.fit_time = List[Float64]()
@@ -150,9 +179,26 @@ struct MselMemberRun(Movable):
     var score_time: List[Float64]
     var failed: List[UInt8]
     var errors: List[String]
+    # RESPONSES (module note): the operations each unit writes instead of the
+    # member's score, each one's columns per row and its 4-byte word type, and
+    # the placed buffer of every (unit, side, response): index
+    # (unit * sides + side) * len(ops) + k. `codes` owns a classifier's
+    # predict words (the other slots are empty lists).
+    var ops: List[Int]
+    var widths: List[Int]
+    var words: List[Int]
+    var sides: Int
+    var dst: List[Int]
+    var codes: List[List[Int32]]
 
     def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
         return_train: Bool, keep: Bool):
+        self.ops = List[Int]()
+        self.widths = List[Int]()
+        self.words = List[Int]()
+        self.sides = 2 if return_train else 1
+        self.dst = List[Int]()
+        self.codes = List[List[Int32]]()
         self.plans = List[MemberPlan]()
         self.folds = List[Int]()
         self.starts = List[Int](length=2 * n_folds, fill=-1)
@@ -285,6 +331,20 @@ def _side_set(run: MutPointer[MselMemberRun, MutUntrackedOrigin], mode: Int, sta
         call.y = MemberMatrix(gathered_y, count, 1, y_dtype)
 
 
+def _respond(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int, side: Int, count: Int,
+    mut call: MemberCall) raises:
+    """Write every asked response of the side the call points at into the
+    unit's placed buffers (RESPONSES, module note). The fitted state reads
+    x (and row_index) as `_side_set` left them."""
+    var n_ops = len(run[].ops)
+    var c = u // run[].n_folds
+    var at = (u * run[].sides + side) * n_ops
+    for k in range(n_ops):  # driver-loop: over the request's responses (at most two)
+        call.dst = MemberMatrix(run[].dst[at + k], count, run[].widths[k], run[].words[k])
+        _ = member_call(run[].plans[c].member, run[].ops[k], call)
+    call.dst = MemberMatrix()
+
+
 def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int) raises:
     var c = u // run[].n_folds
     var f = u - c * run[].n_folds
@@ -322,15 +382,22 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
                   Int(y_train.unsafe_ptr()), call)
         _ = member_call(run[].plans[c].member, MEMBER_OP_FIT, call)
         var t1 = msel_seconds()
+        var n_ops = len(run[].ops)
         _side_set(run, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
                   Int(y_test.unsafe_ptr()), call)
-        _ = member_call(run[].plans[c].member, MEMBER_OP_SCORE, call)
-        run[].test[u] = call.value
+        if n_ops == 0:
+            _ = member_call(run[].plans[c].member, MEMBER_OP_SCORE, call)
+            run[].test[u] = call.value
+        else:
+            _respond(run, u, 0, test_rows, call)
         if run[].return_train:
             _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, Int(x_train.unsafe_ptr()),
                       Int(y_train.unsafe_ptr()), call)
-            _ = member_call(run[].plans[c].member, MEMBER_OP_SCORE, call)
-            run[].train[u] = call.value
+            if n_ops == 0:
+                _ = member_call(run[].plans[c].member, MEMBER_OP_SCORE, call)
+                run[].train[u] = call.value
+            else:
+                _respond(run, u, 1, train_rows, call)
         run[].fit_time[u] = t1 - t0
         run[].score_time[u] = msel_seconds() - t1
         if run[].keep:
@@ -387,12 +454,15 @@ def _whole_classes(classes: PythonObject, b: PythonObject) raises -> Bool:
 
 def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObject, x: PythonObject,
     folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
-    b: PythonObject) raises -> MselMemberScores:
+    b: PythonObject, responses: List[Int]) raises -> MselMemberScores:
     """Run every (candidate, fold) unit over native members, or answer
     `ran == False` having changed nothing when this member, data or request
     is not one this route runs (module note). `keep`: one fitted estimator
     per unit is asked back (`scores.estimators`). `context` is model selection's
-    context, `b` the builtins module, `workers_in` the caller's worker bound."""
+    context, `b` the builtins module, `workers_in` the caller's worker bound.
+    `responses`: empty = the member's own score per unit; else the
+    `MEMBER_OP_PREDICT` / `MEMBER_OP_PREDICT_PROBA` outputs the caller scores
+    or returns (`scores.outputs`)."""
     var scores = MselMemberScores()
     var plan = msel_estimator_plan(base, context)
     if py_get(plan, "member") is None or y is None:
@@ -418,7 +488,18 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
     # Per candidate: its estimator and its admission's pins (PACK reads them).
     var members = Python.list()
     var member_pins = Python.list()
-    var needs = MEMBER_CAN_FIT | MEMBER_CAN_SCORE
+    var n_ops = len(responses)
+    var asked = MEMBER_CAN_FIT
+    if n_ops == 0:
+        asked = asked | MEMBER_CAN_SCORE
+    for k in range(n_ops):  # driver-loop: over the request's responses (at most two)
+        if responses[k] == MEMBER_OP_PREDICT:
+            asked = asked | MEMBER_CAN_PREDICT
+        elif responses[k] == MEMBER_OP_PREDICT_PROBA:
+            asked = asked | MEMBER_CAN_PREDICT_PROBA
+        else:
+            return scores^
+    var needs = asked
     if keep:
         needs = needs | MEMBER_CAN_EXPORT
     for c in range(n_candidates):  # driver-loop: over candidates (admission with Python objects; once each)
@@ -443,7 +524,7 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
                 kind_mask = member_kind_capabilities(owner.plan)
             except:
                 return scores^
-            if (kind_mask & MEMBER_CAN_FIT) == 0 or (kind_mask & MEMBER_CAN_SCORE) == 0:
+            if (kind_mask & asked) != asked:
                 return scores^
             classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
         run.plans.append(owner.plan.copy())
@@ -455,6 +536,7 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
     # route's: the Python units admit or refuse it with the member's own words.
     var target = PythonObject(None)
     var labels = PythonObject(None)
+    var classes = PythonObject(None)
     if classifier:
         # THE LABELS, ONCE PER OPERATION (module note, CLASSIFIER MEMBERS): the
         # int32 codes every unit reads through views, row numbers or gathers,
@@ -469,6 +551,7 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
             if n_classes < 2 or not _whole_classes(encoded[0], b):
                 return scores^
             target = encoded[1]
+            classes = encoded[0]
             if keep:
                 # The labels as the estimator's own fit publishes them.
                 labels = _public_labels(encoded[0], member_context)
@@ -497,6 +580,43 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
         run.folds.append(Int(py=train.size))
         run.folds.append(msel_addr(test))
         run.folds.append(Int(py=test.size))
+    # RESPONSES: every unit's output buffers, placed once (module note). The
+    # widths are asked before any state exists; a width other than the plain
+    # one (or a family that cannot say it before a fit) is the Python units'.
+    var outputs = Python.list()
+    if n_ops > 0:
+        try:
+            for k in range(n_ops):  # driver-loop: over the request's responses (at most two)
+                var width = member_outputs(run.plans[0], responses[k], cols, 1)
+                var coded = classifier and responses[k] == MEMBER_OP_PREDICT
+                if responses[k] == MEMBER_OP_PREDICT_PROBA and (not classifier or width != run.classes):
+                    return scores^
+                if responses[k] == MEMBER_OP_PREDICT and width != 1:
+                    return scores^
+                run.ops.append(responses[k])
+                run.widths.append(width)
+                run.words.append(MEMBER_I32 if coded else MEMBER_F32)
+            for u in range(n_units):  # driver-loop: over units (their placed buffers, allocated once each)
+                var f = u - (u // n_folds) * n_folds
+                for side in range(run.sides):  # driver-loop: test side, then train side when asked
+                    var count = run.folds[4 * f + 3] if side == 0 else run.folds[4 * f + 1]
+                    for k in range(n_ops):  # driver-loop: over the request's responses
+                        if run.words[k] == MEMBER_I32:
+                            run.codes.append(List[Int32](length=count, fill=Int32(0)))
+                            _ = py_call(outputs.append, PythonObject(None))
+                            run.dst.append(0)
+                        else:
+                            run.codes.append(List[Int32]())
+                            var shape = Python.tuple(count) if run.widths[k] == 1 else Python.tuple(count, run.widths[k])
+                            var placed = family_array(shape, "<f4", context)
+                            _ = py_call(outputs.append, placed)
+                            run.dst.append(msel_addr(placed) if count > 0 else 0)
+            # The code lists' words are addressed once every list is in place.
+            for i in range(len(run.codes)):  # driver-loop: over the placed buffers (one address each)
+                if len(run.codes[i]) > 0:
+                    run.dst[i] = Int(run.codes[i].unsafe_ptr())
+        except:
+            return scores^
     var address = Int(UnsafePointer(to=run))
     var lanes = workers
 
@@ -526,6 +646,7 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
         _ = pins
         _ = members
         _ = member_pins
+        _ = outputs
         _ = x
         _ = y
     # A unit the member refused or failed: nothing is published from this
@@ -561,6 +682,21 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
             _free_kept(run)
             return scores^
         scores.estimators = estimators
+    if n_ops > 0 and classifier:
+        # PACK: a classifier's predicted codes as labels, one decode per
+        # (unit, side) with the classes of the one encode (code c is the
+        # estimator's own `classes_[c]`). SERIAL BY NATURE: Python labels,
+        # GIL held; the estimator's own predict made the same decode per unit.
+        try:
+            for i in range(len(run.codes)):  # driver-loop: over the placed code buffers
+                if run.words[i - (i // n_ops) * n_ops] == MEMBER_I32:
+                    py_setitem(outputs, PythonObject(i), labels_decode_i32_codes(classes, run.codes[i], member_context))
+        except:
+            _free_kept(run)
+            return scores^
+    scores.outputs = outputs
+    scores.sides = run.sides
+    scores.members = members
     scores.ran = True
     scores.test = run.test.copy()
     scores.train = run.train.copy()
