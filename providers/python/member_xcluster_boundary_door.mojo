@@ -66,7 +66,7 @@ from core.hostptr import f32_ptr
 from core.kmeans_variants_api import VARIANTS_MODE, KMEANS_VARIANTS_COUNT
 from core.bgmm_native_api import BGMM_NATIVE_COUNT
 from bindings.boundary_read_door import read_int_like, read_float_like, read_bool
-from bindings.mixture_public_native_unpack import _bgmm_connection, _any_f32
+from bindings.mixture_public_native_unpack import _bgmm_connection, _any_f32, bgmm_score_words
 from mixture.mixture_door_run import bgmm_count_at_least_one, mixture_by_type_shape
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
@@ -365,7 +365,8 @@ def _bgmm_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, mut
     _set(model, "weights_", _f32_shaped(call.dst, Python.tuple(k), context))
     _set(model, "means_", means)
     _export(plan, call, _BLOCK_BGMM + 3)
-    _set(model, "_full_pchol", _f32_shaped(call.dst, Python.tuple(k, d, d), context))
+    var pchol = _f32_shaped(call.dst, Python.tuple(k, d, d), context)
+    _set(model, "_full_pchol", pchol)
     _export(plan, call, _BLOCK_BGMM + 13)
     _set(model, "covariances_", _f32_shaped(call.dst, _shape(mixture_by_type_shape(ct, k, d)), context))
     _export(plan, call, _BLOCK_BGMM + 14)
@@ -385,7 +386,10 @@ def _bgmm_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, mut
     else:
         _set(model, "degrees_of_freedom_", _f32_shaped(call.dst, Python.tuple(k), context))
     _export(plan, call, _BLOCK_BGMM + 8)
-    _set(model, "_log_consts", _f32_shaped(call.dst, Python.tuple(k), context))
+    var consts = _f32_shaped(call.dst, Python.tuple(k), context)
+    _set(model, "_log_consts", consts)
+    # the class's score door reads these words (laid out once per state)
+    _set(model, "_score_words", bgmm_score_words(means, pchol, consts, context))
     _export(plan, call, _BLOCK_BGMM + 9)
     _set(model, "mean_prior_", _f32_shaped(call.dst, Python.tuple(d), context))
     _export(plan, call, _BLOCK_BGMM + 15)

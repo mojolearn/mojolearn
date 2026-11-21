@@ -301,6 +301,9 @@ class SpectralClustering(ParamsMixin):
     #: The binding `predict` asks; a host subclass answers the metrics host
     #: binding, which ships in the inference wheel.
     _BINDING = "_mojolearn_metrics"
+    #: Member ABI family 30 (Spectral), kind 0 (core/spectral_member.mojo):
+    #: the affinity='nearest_neighbors', prediction_data=True form.
+    _mojolearn_member = (30, 0)
 
     def fit(self, X, y=None):
         """Cluster ``X``.

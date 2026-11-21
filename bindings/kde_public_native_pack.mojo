@@ -181,8 +181,13 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         # this copy is also the fit's finite test (DEVIATION 604 at fit, as
         # scikit-learn refuses; a cast X was refused by its cast).
         x = _kde_copy_finite(x, context)
-    elif immutable:
-        x = _kde_copy(x, context)
+    # TOMBSTONE: the immutable-image second copy of a converted X
+    # (`elif immutable: x = _kde_copy(x, context)`) deleted 2026-11-21 by lane
+    # ma-pub-cluster; code recoverable at b8b6a8edda. A converted X (cast,
+    # strided export, list, sparse) is already a fresh buffer nobody else
+    # holds; frozen below it is the one owned snapshot the fitted state needs
+    # (the caller may free or mutate its own X after fit). Every fit now keeps
+    # exactly ONE copy of X: the finite-copy of a borrowed X, or the conversion.
     if immutable:
         py_setitem(fields, "input_copied_", PythonObject(True))
     # The fitted set is read-only (bindings/p3nc_fitted_freeze.mojo).
@@ -195,10 +200,18 @@ def _kde_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         # scikit-learn's _check_sample_weight (shape, finite, >= 0, not all
         # zero, its wording) by the base binding's reductions
         var w_pin = ArrayPin()
-        _ = admit_family_weights(sample_weight, Int(py=x.shape[0]), False, context, w_pin)
+        var w_meta = admit_family_weights(sample_weight, Int(py=x.shape[0]), False, context, w_pin)
         var w = w_pin.keep
-        # Always an owned snapshot (the resident key holds its address).
-        w = _kde_copy(w, context)
+        # An owned snapshot (the resident key holds its address; the caller
+        # may free or mutate its weights after fit): ONE copy of borrowed
+        # float32 C-order weights. A cast (`w_meta.copied`) or an int/float
+        # fill is already a fresh buffer nobody else holds: kept as is (the
+        # door copied it a second time on every fit; deleted 2026-11-21 by
+        # lane ma-pub-cluster, recoverable at b8b6a8edda).
+        var builtins = native_loaded_module("builtins")
+        var filled = py_type(sample_weight) is builtins.int or py_type(sample_weight) is builtins.float
+        if not w_meta.copied and not filled:
+            w = _kde_copy(w, context)
         _ = fitted_freeze(w, context)
         py_setitem(fields, "_w", w)
     else:
