@@ -22,8 +22,8 @@ native owner's admission (`_view`, the batch and shape refusals in
 
 `device=` is read once, at construction or restore, into the trainer's route
 (the compiled program and training entries of that device); no method reads
-it again. The CPU identical images are connected beside a GPU set at import
-(`_connect_cpu_device`).
+it again. The CPU identical images are connected beside a GPU set at the
+first device="cpu" admission, never at import (`_connect_cpu_device`).
 """
 import os
 
@@ -237,12 +237,28 @@ def _image_entries(mode, training, sequence):
 
 def _connect_cpu_device():
     # glue: `device="cpu"` beside a GPU set: the CPU identical training and
-    # sequence images, loaded once at import; a trainer's route holds their
-    # entries (bindings/small_mlp_native_door.mojo `_route_build`). A CPU-only
-    # installation has no second set: its one set is the CPU's. An image that
-    # does not load records why, and the trainer that asks for it says so.
+    # sequence images, registered at import and loaded at the first
+    # device="cpu" admission (fx-host-import,
+    # `_native_family_bridge.cpu_load_later`) into the one table returned
+    # here, filled in place; a trainer's route holds their entries, and a
+    # trainer restored without construction connects them at its route
+    # resolution through the table's `device_cpu_connect`
+    # (bindings/small_mlp_native_door.mojo `_route_build`). A CPU-only
+    # installation has no second set: its one set is the CPU's (None).
     if _backend._CPU_ONLY is not None:
         return None
+    from ._native_family_bridge import cpu_load_later
+    holder = {}
+    cpu_load_later(holder, lambda: _load_cpu_device(holder))
+    return holder
+
+
+def _load_cpu_device(holder):
+    # glue: once, at the first device="cpu" admission beside a GPU set. An
+    # image that does not load records why, and the trainer that asks for it
+    # says so.
+    if 'identical' in holder:
+        return
     # The route table is the manifest's (`host_surface.routed_modules()`, read
     # once here): `_backend._HOST_MODULES` is read only by the CPU-only
     # selector (tools/test_lane_select_narrowing.py).
@@ -251,11 +267,11 @@ def _connect_cpu_device():
     try:
         entries = _image_entries(
             'identical',
-            lambda: _backend.load_host_module(routed['_mojolearn_training']),  # import-time: the CPU image
-            lambda: _backend.load_host_module(routed['_mojolearn_x_sequence']))  # import-time: the CPU image
+            lambda: _backend.load_host_module(routed['_mojolearn_training']),  # first CPU admission: the CPU image
+            lambda: _backend.load_host_module(routed['_mojolearn_x_sequence']))  # first CPU admission: the CPU image
     except Exception as error:
         entries = type(error).__name__ + ': ' + str(error)
-    return {'identical': entries}
+    holder['identical'] = entries
 
 
 def _connect():

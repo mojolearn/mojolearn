@@ -72,7 +72,7 @@ from core.neural_entry_table import NeuralEntryKey, neural_entry_vendor, neural_
 from core.device_route import DEVICE_INSTALL, device_mode_code, device_mode_word, device_route_plan, device_route_admit
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_admit, device_request, device_unpack, device_route_clear, device_route_held,
-    device_route_keep,
+    device_route_keep, device_cpu_connect_late,
 )
 from bindings.small_mlp_native_run import (
     SMALL_MLP_RUN_FORWARD,
@@ -133,8 +133,10 @@ struct SmallMlpBoundary(Defaultable, Movable):
     var locks: PythonObject
     var modes: PythonObject
     # `device="cpu"` beside a GPU set: the mode -> entries (or connection
-    # error) table of the CPU identical training image, connected at import;
-    # None on a CPU-only installation (its one table is the CPU's).
+    # error) table of the CPU identical training image, filled in place at
+    # the first device="cpu" admission (fx-host-import; it holds
+    # `device_cpu_connect` until then); None on a CPU-only installation (its
+    # one table is the CPU's).
     var modes_cpu: PythonObject
     var cpu_only: Bool
     var backend: PythonObject
@@ -248,10 +250,14 @@ def _route_build(requested: Int, mode: PythonObject) raises -> DeviceRouteOwner:
     var entries = PythonObject(None)
     if plan.cpu_table:
         # A GPU installation running `device="cpu"`: the CPU identical images
-        # loaded beside the device images at import (python/mojolearn/_mlp_impl.py).
+        # loaded beside the device images at the first device="cpu"
+        # admission (python/mojolearn/_mlp_impl.py, no longer at import); a
+        # trainer restored without construction connects them here, once.
         if b[].modes_cpu is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
         entries = py_get(b[].modes_cpu, mode)
+        if entries is None and device_cpu_connect_late(b[].modes_cpu):
+            entries = py_get(b[].modes_cpu, mode)
         if entries is None:
             raise Error("ImportError: device='cpu' is not connected in this installation")
         if py_type(entries) is b[].bi.str:
