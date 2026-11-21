@@ -81,6 +81,18 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
     if operation == TREES_OPN_TREES_DART_CONSTRUCT:
         classical_connect_numpy(context)
         return dart_construct(model, args, context)
+    if operation == TREES_OPN_TREES_GBDT_ADAPTER_CONSTRUCT:
+        classical_connect_numpy(context)
+        return gbdt_adapter_construct(model, args, context)
+    if (operation == TREES_OPN_TREES_GBDT_INIT or operation == TREES_OPN_TREES_GBDT_ORDERED_INIT
+            or operation == TREES_OPN_TREES_GBDT_FEATURE_FREQ_INIT):
+        # The three gradient-boosting constructors, as the two above. A
+        # fixed-owner context (never handed to a constructor today) keeps the
+        # late route below, with its field admission.
+        var held = trees_keys()
+        if py_get(context, held[].k_cv_fixed_owner) is None:
+            classical_connect_numpy(context)
+            return _gbdt_operation(model, operation, name, args, context)
     # The estimator's route (bindings/trees_route_boundary_door.mojo): the
     # context this operation runs in names the device table set or the CPU
     # table set. One record read; no operation reads the device.
@@ -93,8 +105,6 @@ def trees_public_operation(model: PythonObject, operation: Int, name: String, ar
     if operation == TREES_OPN_TREES_RESIDENT_STATS:
         # (snapshots kept, bytes kept, uploads so far): tools/ checks only.
         return trees_resident_stats()
-    if operation == TREES_OPN_TREES_GBDT_ADAPTER_CONSTRUCT:
-        return gbdt_adapter_construct(model, args, context)
     if operation == TREES_OPN_TREES_GBDT_ADAPTER_PUBLIC_SET_PARAMS:
         return gbdt_adapter_set_params(model, args[0], context)
     if operation == TREES_OPN_TREES_IFOREST_GETSTATE:
