@@ -67,7 +67,14 @@ _native_family_bridge.tables(family_cfb_sc_affinities=_CLUSTER_AFFINITIES,
                              family_cfb_predict_affinities=_AFFINITIES,
                              family_cfb_assign_labels=_ASSIGN_LABELS,
                              family_cfb_default_eigen_tol=DEFAULT_EIGEN_TOL,
-                             family_spectral_umap_bindings=_native_spectral_umap_bridge.connect())
+                             family_spectral_umap_bindings=_native_spectral_umap_bridge.connect(),
+                             # the one mode object of the base image, held so an
+                             # estimator's route compares it by identity
+                             family_cfb_identical="identical")
+# An estimator's operation takes its four modules from its own binding route
+# (its device); these are their import-time connections, the CPU ones beside.
+_native_family_bridge.connect_bindings("_mojolearn_metrics", "_mojolearn_x_decomp", "_mojolearn",
+                                       "_mojolearn_x_cluster")
 
 
 def _coo_triples(A, who="SpectralClustering"):
@@ -247,6 +254,10 @@ class SpectralClustering(ParamsMixin):
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
     _mojolearn_native_public = True
+
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(
         self,
@@ -573,6 +584,10 @@ class SpectralEmbedding(ParamsMixin):
     _mojolearn_native_public = True
     _drop_first = True
     _norm_laplacian = True
+
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(
         self,

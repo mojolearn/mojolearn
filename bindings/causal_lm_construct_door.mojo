@@ -940,9 +940,13 @@ def causal_model_init_binding(mut mods: NativeModules, model: PythonObject, inpu
     return _causal_model_init(mods, model, input_plan, plan, input_weights, input_options, context)
 
 
-def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan: PythonObject, plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
+def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan: PythonObject, plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject, unpacked: Bool = False) raises -> PythonObject:
     # `plan` is model_plan_snapshot(input_plan), taken once by the caller
     # (row N203: CausalLM.load passes the snapshot it already holds).
+    # `unpacked` (the device twin, `causal_model_twin_binding`): the layer
+    # records are another model's admitted float32 tensors, already unpacked
+    # from the model's weight format; each block is told that format and
+    # nothing is packed or unpacked again.
     causal_public_connect(context)
     var live = _causal_model_fields(mods, model)
     var captured = Python.dict()
@@ -959,7 +963,9 @@ def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan:
     for i in range(len(layers)):  # driver-loop: over the model layer definitions
         var block = _model_block(mods, layers[i], plan, profile, route, bindings, context)
         var fields = neural_block_fields(mods, block, context)
-        if String(py_item(fields, nk[].k_weight_format)) != format:
+        if unpacked:
+            py_setitem(fields, nk[].k_weight_format, options[0])
+        elif String(py_item(fields, nk[].k_weight_format)) != format:
             raise Error("CausalLM: layer reports a different weight_format than requested")
         _ = py_call(py_item(captured, nk[].k__blocks).append, block)
         _model_construction_set(mods, live, captured, "_blocks", py_item(captured, nk[].k__blocks))
@@ -1115,6 +1121,74 @@ def causal_model_load_binding(mut mods: NativeModules, cls: PythonObject, path_v
     return model
 
 
+def causal_model_twin_binding(mut mods: NativeModules, model: PythonObject, device: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `model.check` (python/mojolearn/_check_both.py `on_device`, the class
+    # hook `_mojolearn_device_twin`): the same CausalLM on `device`, built in
+    # this process from this model's own tensors. A CausalLM keeps neither its
+    # constructor's weight record nor a checkpoint path, so the record is put
+    # together again here from what construction admitted and the model
+    # holds: the top-level arrays and each block's weight slots, by the
+    # block's own slot names. The twin reads the SAME host tensors (views,
+    # no copy); both sides answer from one set of weights.
+    # UNPACK and PACK only (construction work, once per check): the loops
+    # run over layers and weight slot names, never over values.
+    causal_public_connect(context)
+    var bi = mods.module("builtins")
+    if py_type(device) is not bi.str:
+        raise Error("TypeError: CausalLM device requires an ordinary route name")
+    var fields = _causal_model_fields(mods, model)
+    neural_string_keys(mods, fields)
+    var nk = causal_keys()
+    var blocks = py_get(fields, nk[].k__blocks)
+    var input_plan = py_get(fields, nk[].k_plan)
+    if blocks is None or input_plan is None or py_get(fields, nk[].k__embed) is None:
+        raise Error("CausalLM: the model was not constructed")
+    var plan = model_plan_snapshot(mods, input_plan)
+    var optional_names = py_item(context, nk[].k_optional_names)
+    var layers = bi.list()
+    for i in range(len(blocks)):  # driver-loop: over the model's layers
+        var block_fields = neural_block_fields(mods, blocks[i], context)
+        var names = neural_block_weight_names(mods, blocks[i])
+        var held = py_item(block_fields, nk[].k__w)
+        var record = bi.dict()
+        for j in range(len(names)):  # driver-loop: over the block's fixed weight slots
+            var slot = held[j]
+            if slot is not None:
+                py_setitem(record, names[j], slot)
+        var extra = py_get(block_fields, nk[].k__wopt)
+        if extra is not None:
+            for j in range(len(extra)):  # driver-loop: over the optional tensor slots
+                var optional_slot = extra[j]
+                if optional_slot is not None:
+                    py_setitem(record, optional_names[j], optional_slot)
+        _ = py_call(layers.append, record)
+    var weights = bi.dict()
+    py_setitem(weights, nk[].k_embed, py_item(fields, nk[].k__embed))
+    if py_item(plan, nk[].k_norm_name) is not None:
+        py_setitem(weights, nk[].k_norm, py_item(fields, nk[].k__norm))
+    if py_item(plan, nk[].k_head_name) is not None:
+        py_setitem(weights, nk[].k_head, py_item(fields, nk[].k__head))
+    py_setitem(weights, nk[].k_layers, layers)
+    var unused = py_get(fields, "unused_names")
+    py_setitem(weights, nk[].k_unused, bi.tuple() if unused is None else py_call(bi.tuple, unused))
+    var options = Python.tuple(py_item(fields, nk[].k_weight_format), py_item(fields, nk[].k_max_positions),
+                               device, py_item(fields, nk[].k_numeric_profile))
+    var twin = py_call(bi.object.__new__, py_type(model))
+    _ = _causal_model_init(mods, twin, input_plan, plan, weights, options, context, True)
+    return twin
+
+
+def causal_model_vendor_binding(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
+    # What the block image admitted at construction reported
+    # (`causal_lm_admit_binding` publishes it): one stored word, no device
+    # question at the call.
+    var fields = _causal_model_fields(mods, model)
+    var vendor = py_get(fields, "_native_vendor")
+    if vendor is None:
+        raise Error("CausalLM: the model was not constructed")
+    return vendor
+
+
 def causal_model_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var mods = NativeModules()
     var args = PythonObject(from_borrowed=args_ptr)
@@ -1124,8 +1198,12 @@ def causal_model_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = causal_model_init_binding(mods, args[0], args[1], args[2], args[3], args[4])
         elif operation == 1:
             result = causal_model_load_binding(mods, args[0], args[1], args[2], args[3])
-        else:
+        elif operation == 2:
             result = causal_model_read_weights_binding(mods, args[0], args[1], args[2], _model_route(mods, PythonObject("auto"), args[3]), args[3])
+        elif operation == 3:
+            result = causal_model_twin_binding(mods, args[0], args[1], args[2])
+        else:
+            result = causal_model_vendor_binding(mods, args[0])
         return result.steal_data()
     except error:
         var message = String(error)
@@ -1138,7 +1216,7 @@ def causal_model_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
         if message.startswith("UnsupportedModel:"):
             try:
                 ref cpy = Python().cpython()
-                var context = cpy.PyTuple_GetItem(args_ptr, 4 if operation == 0 else 3)
+                var context = cpy.PyTuple_GetItem(args_ptr, 4 if operation == 0 else (2 if operation == 3 else 3))
                 var config = causal_borrowed_item(context, "config_context")
                 var cls = causal_borrowed_item(config, "unsupported_class")
                 return causal_set_exception(error_without_class(error, "UnsupportedModel"), cls)

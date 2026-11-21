@@ -523,6 +523,34 @@ class ExponentialSmoothing:
     #: subclass answers the forecast inference binding for it instead.
     _BINDING = "_mojolearn_tsa"
 
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    #: The Holt-Winters fit ships in the CPU binding, so both sides fit.
+    _mojolearn_device = True
+
+    #: The constructor's arguments, as stored on the instance.
+    _DEVICE_SETTINGS = ("seasonal", "seasonal_periods", "start_periods", "ts_num", "eps",
+                        "initialization_method")
+
+    def _mojolearn_device_twin(self, device):
+        # The series is constructor data and there is no `get_params`: the
+        # twin is built from the stored constructor arguments.
+        fields = object.__getattribute__(self, "__dict__")
+        settings = {name: fields[name] for name in self._DEVICE_SETTINGS}
+        return type(self)(fields["endog"], device=device, **settings)
+
+    def _mojolearn_device_state(self, twin, device):
+        # Everything the fit published goes to the twin as it is, the fitted
+        # flag included (the twin's constructor wrote its own, False). The
+        # resident copy of the components is a record of the estimator, not
+        # an instance field, so each side keeps its own.
+        state = object.__getattribute__(self, "__dict__")
+        target = object.__getattribute__(twin, "__dict__")
+        kept = ("endog", "device") + self._DEVICE_SETTINGS
+        for key, value in state.items():
+            if key not in kept:
+                target[key] = value
+
     def _bind(self, name=None):
         """The binding for this estimator's tier, as `NumericModeMixin._bind`
         resolves it: the process default until a loaded model restores the

@@ -13,20 +13,20 @@ from bindings.native_loaded_module_door import native_loaded_module
 from core.samba_ids_impl import samba_inference_ids_into, samba_copy_row_prefixes
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_array_unfilled, generation_address, generation_weight_address, py_ints
-from bindings.samba_state_native_door import samba_fields, samba_entries, samba_entry_key, samba_primitive
+from bindings.samba_state_native_door import samba_fields, samba_primitive
+from bindings.samba_route_unpack import samba_route
 from core.entry_table import EntryRef, entry_ref_call
 from core.mamba_state_entry_table import Mamba3StateRoute, MAMBA3_STATE_FORWARD, MAMBA3_STATE_DECODE
 from core.neural_entry_table import NEURAL_MAMBA3_OWNED_STATE
 from providers.python.mamba3_prefill_session_pyapi_door import mamba3_prefill_session_serves, mamba3_prefill_session_run
 from core.samba_entry_table import (
-    samba_ref,
-    SambaEntryKey, SAMBA_TABLE_TRAINING, SAMBA_TABLE_NEURAL_HOST, SAMBA_PRIM_EMBEDDING_FORWARD,
+    SambaEntryKey, SAMBA_PRIM_EMBEDDING_FORWARD,
     SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_LINEAR_FORWARD, SAMBA_PRIM_CE_LOSS,
 )
 from bindings.samba_training_native_door import samba_ids
 from std.python._cpython import GILReleased
 from core.samba_entry_table_programs import (
-    samba_programs_ref, samba_programs_call, samba_programs_available,
+    samba_programs_ref, samba_programs_call,
     SAMBA_PROGRAM_OPEN, SAMBA_PROGRAM_STATUS, SAMBA_PROGRAM_FORWARD,
 )
 from core.samba_program_handle import SambaProgramHandle
@@ -38,7 +38,7 @@ from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_typ
 from bindings.byte_perf_helpers_unpack import byte_view_bytes
 from bindings.samba_admission_door import samba_admit_model_fields
 # RUN (lane rs-neural): typed pieces, no Python import.
-from training.samba_inference_run import _m3_shapes, _m3_names, _samba_host_ref
+from training.samba_inference_run import _m3_shapes, _m3_names
 # The stateless forward's route (lane restore-samba-resident-forward): the
 # resident forward by default, the stack program under the B-arm define.
 from providers.python.samba_resident_pyapi_door import samba_resident_native_forward
@@ -205,17 +205,6 @@ def _m3_state_forward(block: PythonObject, x: PythonObject, state: PythonObject,
 
 # TOMBSTONE: SAMBA_THREE_TIER_FORWARD _samba_resident_forward + the provider tier (samba_provider_forward) + the device per-layer walk of samba_forward (the three-tier driver; one program now: SambaStackProgram, training/samba_program.mojo) deleted 2026-11-09 by lane/x6-samba-on-executor; code recoverable at 5b5490960d.
 # Restore: git apply experiments/removed/SAMBA_THREE_TIER_FORWARD.patch
-
-
-def samba_program_arm(fields: PythonObject, key: SambaEntryKey) raises -> Bool:
-    """Whether this stack runs on the Samba stack program: its GPU training
-    image published the program entry (core/samba_entry_table_programs.mojo)
-    and it is not the CPU inference route. Otherwise the host per-layer route
-    below runs (CPU builds). Lane samba-sessions-native (2026-11-12): the key
-    decides, not `hasattr` on a Python module."""
-    if Bool(py=py_get(fields, "_native_cpu_inference", PythonObject(False))):
-        return False
-    return samba_programs_available(key)
 
 
 def samba_program_words(fields: PythonObject, config: PythonObject, b: Int, smax: Int) raises -> Tuple[List[Int], Float64]:
@@ -512,18 +501,16 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
                     + "caller's arrays are stale); call sync_state() or close() on the session first")
     var fields = samba_fields(model)
     var config = samba_fields(fields["config"])
-    var cpu_inference = Bool(py=py_get(fields, "_native_cpu_inference", PythonObject(False)))
-    # UNPACK: the Samba table key of the primitives this model runs on (the
-    # identical `_mojolearn_neural_host` image for the CPU inference model).
-    # The binding reads below load and admit the image that publishes the
-    # key's entries; RUN reaches them through the tables only.
-    var key = SambaEntryKey(1, 0)
-    var entries = PythonObject(None)
-    if cpu_inference:
-        _ = _model_bindings(PythonObject("cpu"), "mamba3", context["neural"], PythonObject("identical"))["primitives"]
-    else:
-        entries = samba_entries(context, fields["numeric_mode"])
-        key = samba_entry_key(context, fields["numeric_mode"])
+    # UNPACK: the model's one route (bindings/samba_route_unpack.mojo): the
+    # Samba table key of the primitives it runs on (the identical
+    # `_mojolearn_neural_host` image for the CPU inference model), the
+    # connected entries and whether the stack program serves it. Resolved
+    # once with the model, where the image that publishes the key's entries
+    # was loaded and admitted; RUN reaches them through the tables only.
+    var model_route = samba_route(model, fields, context)
+    var cpu_inference = model_route.cpu_inference()
+    var key = model_route.key.copy()
+    var entries = model_route.entries
     var d = Int(py=config["d_model"])
     var v = Int(py=config["vocab"])
     var admitted = _samba_inference_ids(inputs, v, step, lengths, context)
@@ -531,7 +518,7 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     var b = Int(py=ids.shape[0])
     var l = Int(py=ids.shape[1])
     var output = PythonObject(None)
-    if samba_program_arm(fields, key):
+    if model_route.program():
         # A device build. The stateless forward runs the resident session's
         # forward (`samba_resident_forward`, descriptor op 16 on the stack's
         # primitive image; training/samba_resident.mojo), the measured winner
@@ -563,7 +550,7 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
     else:
         # The host route (CPU builds and the CPU inference model): the
         # installed CPU kernels layer by layer. Device builds never come
-        # here (samba_program_arm).
+        # here (the route's program word).
         # lane perf-neural-sessions: the door admits only the fields every
         # route reads (bindings/samba_admission_door.mojo
         # _samba_admit_read_only); this route also reads the registry views
@@ -578,7 +565,7 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
             states = slots["layers"]
         var arrays = fields["arrays"]
         var hidden = generation_array([b, l, d])
-        var prim = _samba_host_ref(cpu_inference, key)
+        var prim = model_route.primitives()
         _samba_host_primitive(prim, SAMBA_PRIM_EMBEDDING_FORWARD,
             [Int(py=hidden._addr), Int(py=arrays["embed.weight"]._addr), Int(py=ids._addr)], [b * l, v, d], [])
         _ = hidden  # keep the Python object alive through the native call above
@@ -640,12 +627,14 @@ def samba_loss(model: PythonObject, inputs: PythonObject, targets: PythonObject,
     var rows = Int(py=logits.shape[0]) * Int(py=logits.shape[1])
     if Int(py=y.size) != rows:
         raise Error("SambaStack.loss: targets must contain one class index per logit row")
-    _ = samba_entries(context, fields["numeric_mode"])  # mode/vendor admission of the connected binding
+    # The stack's route (the forward above resolved or hit it): the loss
+    # primitive of its image.
+    var loss_entry = samba_route(model, fields, context).primitives()
     var loss = generation_array([1])
     var row_loss = generation_array([rows])
     var unused_gradient = generation_array([1])
     # ce_loss words: [n_rows, vocab, ignore_index, reduction (2 mean), num_items, want_grad], [label_smoothing].
-    _ = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, fields["numeric_mode"])), SAMBA_PRIM_CE_LOSS,
+    _ = samba_primitive(loss_entry, SAMBA_PRIM_CE_LOSS,
         [Int(py=loss._addr), Int(py=row_loss._addr), Int(py=unused_gradient._addr), Int(py=logits._addr), Int(py=y._addr)],
         [rows, v, -100, 2, 0, 0], [0.0])
     _ = unused_gradient  # keep the Python object alive through the native call above

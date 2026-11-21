@@ -62,6 +62,42 @@ def test_unknown_device_is_refused_in_words_at_construction_and_by_set_params(cl
     assert model.get_params()["device"] is None               # refused before anything changed
 
 
+# PCA, TruncatedSVD, KernelPCA and PolynomialCountSketch are built by the shared full-reset constructor door, which
+# adds `device` (keyword-only, last, default None) and checks it in compiled code at construction and at set_params
+# for every class whose own constructor does not name it (python/mojolearn/_native_full_reset_params.py `_install`,
+# plan['device_admit']). Their constructors therefore do not name `device`: a class that names it itself is left
+# without that check and would refuse a bad value only at its first operation.
+SHARED_DOOR = ["PCA", "TruncatedSVD", "KernelPCA", "PolynomialCountSketch"]
+
+
+@pytest.mark.parametrize("name", SHARED_DOOR)
+def test_shared_door_class_leaves_device_to_the_constructor_door(name):
+    import inspect
+
+    from mojolearn import _native_full_reset_params as door
+
+    cls = getattr(mojolearn, name)
+    assert all(event[0] != "device" for event in door._EVENTS[name])       # the door adds the write, last
+    parameter = inspect.signature(cls).parameters["device"]
+    assert parameter.kind is parameter.KEYWORD_ONLY and parameter.default is None
+    assert door._CONTEXT["plans"][cls]["device_admit"] is True
+    assert cls._mojolearn_device is True                                   # explicit 'cpu' beside a GPU set is admitted
+
+
+@pytest.mark.parametrize("name", SHARED_DOOR)
+@pytest.mark.parametrize("bad", ["tpu", "GPU", " cpu", "", 0, False, b"cpu"])
+def test_shared_door_class_refuses_an_unknown_device_at_construction_and_by_set_params(name, bad):
+    cls = getattr(mojolearn, name)
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        cls(device=bad)
+    model = cls()
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        model.set_params(device=bad)
+    assert model.get_params()["device"] is None               # refused before anything changed
+    assert cls(device="cpu").get_params()["device"] == "cpu"
+    assert model.set_params(device="cpu").get_params()["device"] == "cpu"
+
+
 @pytest.mark.parametrize("cls", CLASSES)
 def test_a_carried_bad_device_is_refused_when_the_route_is_resolved(cls):
     # an instance that carries a bad value without its constructor's check (a direct assignment is not a supported

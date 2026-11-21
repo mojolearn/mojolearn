@@ -389,8 +389,10 @@ def _samba_remember(value: PythonObject, admission: PythonObject, nk: UnsafePoin
 # walk loses no refusal. Callers that read another field admit it at the read
 # (samba_admit_model_fields).
 def _samba_forward_fields() -> List[String]:
-    return [String("config"), String("numeric_mode"), String("n_total"), String("flat"),
-            String("_native_cpu_inference")]
+    # `_native_cpu_inference` left the list with the stack's device route
+    # (bindings/samba_route_unpack.mojo): a forward reads it only on a route
+    # miss, where the route admits it at the read.
+    return [String("config"), String("numeric_mode"), String("n_total"), String("flat")]
 
 
 def _samba_model_record(value: PythonObject, admission: PythonObject, nk: UnsafePointer[SambaKeys, MutUntrackedOrigin]) raises -> PythonObject:
@@ -476,7 +478,7 @@ def samba_admit(operation: Int, values: PythonObject, context: PythonObject) rai
     if operation == SAMBA_OPN_CONSTRUCT:
         # The public wrapper creates exact tuples; check this before indexing
         # so a direct C-boundary call cannot execute an arbitrary __getitem__.
-        if py_type(values) is not bi.tuple or len(values) != 2 or py_type(values[1]) is not bi.tuple or len(values[1]) != 11:
+        if py_type(values) is not bi.tuple or len(values) != 2 or py_type(values[1]) is not bi.tuple or len(values[1]) != 12:
             raise Error("TypeError: Samba constructor requires its native argument tuple")
         samba_admit_schedule(values[1][7], admission, nk)
     if operation == SAMBA_OPN_FORWARD or operation == SAMBA_OPN_STEP or operation == SAMBA_OPN_LOSS:
@@ -488,7 +490,7 @@ def samba_admit(operation: Int, values: PythonObject, context: PythonObject) rai
     if operation == SAMBA_OPN_INITIALIZE or operation == SAMBA_OPN_FROM_DICT:
         _samba_metadata_with_types(values[1], admission, nk, bi)
     elif operation == SAMBA_OPN_CONSTRUCT:
-        for i in [3, 4, 5, 6, 8, 9, 10]:  # driver-loop: over scalar constructor metadata slots
+        for i in [3, 4, 5, 6, 8, 9, 10, 11]:  # driver-loop: over scalar constructor metadata slots
             _samba_metadata_with_types(values[1][i], admission, nk, bi)
     elif operation == SAMBA_OPN_ALLOCATE_STATE or operation == SAMBA_OPN_STATE_CONSTRUCT:
         _samba_metadata_with_types(values[1], admission, nk, bi)
@@ -503,7 +505,10 @@ def samba_admit(operation: Int, values: PythonObject, context: PythonObject) rai
     elif operation == SAMBA_OPN_SNAPSHOT:
         _samba_metadata_with_types(values[1], admission, nk, bi)
     elif operation == SAMBA_OPN_CHECKPOINT_LOAD:
+        if len(values) != 4:
+            raise Error("TypeError: Samba checkpoint load requires its native argument tuple")
         _samba_metadata_with_types(values[2], admission, nk, bi)
+        _samba_metadata_with_types(values[3], admission, nk, bi)
     elif operation == SAMBA_OPN_GRADIENTS:
         _samba_metadata_with_types(values[3], admission, nk, bi)
         _samba_metadata_with_types(values[4], admission, nk, bi)

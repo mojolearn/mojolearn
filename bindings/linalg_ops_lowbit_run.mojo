@@ -2,13 +2,10 @@
 """RUN piece of the linalg low-bit owner (bindings/linalg_ops_lowbit_door.mojo):
 the native provider's operation code of each linalg binding entry. Typed Mojo
 only, no Python import (tools/python_free_dirs.sh). The codes are the
-provider's ABI (unchanged); each `lin_call` site passes its entry's code
+provider's ABI (unchanged); each `lin_call` site passes its operation's code
 (lane bw2-linalg, 2026-11-20: `lin_op_code`, up to fifteen String compares
 per call, is deleted)."""
 
-# An entry the native provider does not serve (`gemm_fused`): the binding's
-# own door runs it.
-comptime LIN_OP_NONE = -1
 comptime LIN_OP_GEMM = 0
 comptime LIN_OP_GEMM_BF16 = 1
 comptime LIN_OP_GEMM_INT8 = 2
@@ -24,3 +21,10 @@ comptime LIN_OP_LINALG_NUMERIC_MODE = 11
 comptime LIN_OP_LINALG_PROFILE_VERSION = 12
 comptime LIN_OP_LOWBIT_PROFILE_VERSION = 13
 comptime LIN_OP_INT15_PROFILE_VERSION = 14
+# lane dw-decomp (2026-11-21): `gemm_fused` is operation 15 of the table (it was
+# LIN_OP_NONE = -1, run by a Python entry of the binding through the door's
+# boxed-list fallback, which is deleted).
+comptime LIN_OP_GEMM_FUSED = 15
+# The operation count the door admits (gemm/linalg_dispatch.mojo
+# LINALG_NATIVE_OPERATION_COUNT).
+comptime LIN_OPERATION_COUNT = 16

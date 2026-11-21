@@ -6940,133 +6940,126 @@
           "value": {
             "parameter": "n_components"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "kernel",
           "value": {
             "parameter": "kernel"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "gamma",
           "value": {
             "parameter": "gamma"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "degree",
           "value": {
             "parameter": "degree"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "coef0",
           "value": {
             "parameter": "coef0"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "kernel_params",
           "value": {
             "parameter": "kernel_params"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "alpha",
           "value": {
             "parameter": "alpha"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "fit_inverse_transform",
           "value": {
             "parameter": "fit_inverse_transform"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "eigen_solver",
           "value": {
             "parameter": "eigen_solver"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "iterated_power",
           "value": {
             "parameter": "iterated_power"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "remove_zero_eig",
           "value": {
             "parameter": "remove_zero_eig"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "copy_X",
           "value": {
             "parameter": "copy_X"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "n_jobs",
           "value": {
             "parameter": "n_jobs"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
-        },
-        {
-          "field": "device",
-          "value": {
-            "parameter": "device"
-          },
-          "source": "python/mojolearn/_expansion_neighbors.py:1060"
+          "source": "python/mojolearn/_expansion_neighbors.py:865"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_neighbors.py:1060"
+        "python/mojolearn/_expansion_neighbors.py:865"
       ],
-      "constructor": "python/mojolearn/_expansion_neighbors.py:1060",
-      "signature_source": "def __init__(self, n_components=None, *, kernel='linear', gamma=None, degree=3, coef0=1, kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver='auto', tol=0, max_iter=None, iterated_power='auto', remove_zero_eig=False, random_state=None, copy_X=True, n_jobs=None, numeric_mode=None, device=None)",
+      "constructor": "python/mojolearn/_expansion_neighbors.py:865",
+      "signature_source": "def __init__(self, n_components=None, *, kernel='linear', gamma=None, degree=3, coef0=1, kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver='auto', tol=0, max_iter=None, iterated_power='auto', remove_zero_eig=False, random_state=None, copy_X=True, n_jobs=None, numeric_mode=None)",
       "parameters": [
         "n_components",
         "kernel",
@@ -7084,10 +7077,9 @@
         "random_state",
         "copy_X",
         "n_jobs",
-        "numeric_mode",
-        "device"
+        "numeric_mode"
       ],
-      "constructor_ast_sha256": "c7cf48ce6a89a68ea6825afc390e0f2d8df6ef42f3eff9988c12f88d8c339a1a",
+      "constructor_ast_sha256": "6cd7c045b82b5aa0a52ddb83e59ce3724b71591f4df953c5d90f7df48b68f2b5",
       "field_order": [
         "n_components",
         "kernel",
@@ -7105,8 +7097,7 @@
         "random_state",
         "copy_X",
         "n_jobs",
-        "numeric_mode",
-        "device"
+        "numeric_mode"
       ],
       "final_fields": {
         "n_components": {
@@ -7159,9 +7150,6 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
-        },
-        "device": {
-          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -7181,8 +7169,7 @@
         "random_state": "None",
         "copy_X": "True",
         "n_jobs": "None",
-        "numeric_mode": "None",
-        "device": "None"
+        "numeric_mode": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._expansion_neighbors",
@@ -7191,8 +7178,8 @@
         {
           "path": "python/mojolearn/_expansion_neighbors.py",
           "name": "__init__",
-          "line": 1060,
-          "ast_sha256": "c7cf48ce6a89a68ea6825afc390e0f2d8df6ef42f3eff9988c12f88d8c339a1a"
+          "line": 865,
+          "ast_sha256": "6cd7c045b82b5aa0a52ddb83e59ce3724b71591f4df953c5d90f7df48b68f2b5"
         }
       ],
       "constructor_ancestry": [
@@ -12236,84 +12223,77 @@
           "value": {
             "parameter": "n_components"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "copy",
           "value": {
             "parameter": "copy"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "whiten",
           "value": {
             "parameter": "whiten"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "svd_solver",
           "value": {
             "parameter": "svd_solver"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "iterated_power",
           "value": {
             "parameter": "iterated_power"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "n_oversamples",
           "value": {
             "parameter": "n_oversamples"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "power_iteration_normalizer",
           "value": {
             "parameter": "power_iteration_normalizer"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/decomposition.py:202"
-        },
-        {
-          "field": "device",
-          "value": {
-            "parameter": "device"
-          },
-          "source": "python/mojolearn/decomposition.py:202"
+          "source": "python/mojolearn/decomposition.py:182"
         }
       ],
       "trace": [
-        "python/mojolearn/decomposition.py:202"
+        "python/mojolearn/decomposition.py:182"
       ],
-      "constructor": "python/mojolearn/decomposition.py:202",
-      "signature_source": "def __init__(self, n_components=None, *, copy=True, whiten=False, svd_solver='auto', tol=0.0, iterated_power='auto', n_oversamples=10, power_iteration_normalizer='auto', random_state=None, numeric_mode=None, device=None)",
+      "constructor": "python/mojolearn/decomposition.py:182",
+      "signature_source": "def __init__(self, n_components=None, *, copy=True, whiten=False, svd_solver='auto', tol=0.0, iterated_power='auto', n_oversamples=10, power_iteration_normalizer='auto', random_state=None, numeric_mode=None)",
       "parameters": [
         "n_components",
         "copy",
@@ -12324,10 +12304,9 @@
         "n_oversamples",
         "power_iteration_normalizer",
         "random_state",
-        "numeric_mode",
-        "device"
+        "numeric_mode"
       ],
-      "constructor_ast_sha256": "af84760cd87ef90e5d456b4849cbfe7e7b5b3c36386b8330e1750b0b44493621",
+      "constructor_ast_sha256": "14037949c9160681c8aac0de4186758eae782d9479a52ae7c4ebedeb01ce127f",
       "field_order": [
         "n_components",
         "copy",
@@ -12338,8 +12317,7 @@
         "n_oversamples",
         "power_iteration_normalizer",
         "random_state",
-        "numeric_mode",
-        "device"
+        "numeric_mode"
       ],
       "final_fields": {
         "n_components": {
@@ -12371,9 +12349,6 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
-        },
-        "device": {
-          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -12386,8 +12361,7 @@
         "n_oversamples": "10",
         "power_iteration_normalizer": "'auto'",
         "random_state": "None",
-        "numeric_mode": "None",
-        "device": "None"
+        "numeric_mode": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.decomposition",
@@ -12396,8 +12370,8 @@
         {
           "path": "python/mojolearn/decomposition.py",
           "name": "__init__",
-          "line": 202,
-          "ast_sha256": "af84760cd87ef90e5d456b4849cbfe7e7b5b3c36386b8330e1750b0b44493621"
+          "line": 182,
+          "ast_sha256": "14037949c9160681c8aac0de4186758eae782d9479a52ae7c4ebedeb01ce127f"
         }
       ],
       "audit_correction": "PCA declares _mojolearn_native_public=True and takes numeric_mode explicitly; no NumericModeMixin constructor wrapper is installed.",
@@ -12662,72 +12636,63 @@
           "value": {
             "parameter": "gamma"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1241"
+          "source": "python/mojolearn/_expansion_neighbors.py:1021"
         },
         {
           "field": "degree",
           "value": {
             "parameter": "degree"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1241"
+          "source": "python/mojolearn/_expansion_neighbors.py:1021"
         },
         {
           "field": "coef0",
           "value": {
             "parameter": "coef0"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1241"
+          "source": "python/mojolearn/_expansion_neighbors.py:1021"
         },
         {
           "field": "n_components",
           "value": {
             "parameter": "n_components"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1241"
+          "source": "python/mojolearn/_expansion_neighbors.py:1021"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_expansion_neighbors.py:1241"
-        },
-        {
-          "field": "device",
-          "value": {
-            "parameter": "device"
-          },
-          "source": "python/mojolearn/_expansion_neighbors.py:1241"
+          "source": "python/mojolearn/_expansion_neighbors.py:1021"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "NumericModeMixin after python/mojolearn/_expansion_neighbors.py:1241"
+          "source": "NumericModeMixin after python/mojolearn/_expansion_neighbors.py:1021"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_neighbors.py:1241"
+        "python/mojolearn/_expansion_neighbors.py:1021"
       ],
-      "constructor": "python/mojolearn/_expansion_neighbors.py:1241",
-      "signature_source": "def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None, device=None)",
+      "constructor": "python/mojolearn/_expansion_neighbors.py:1021",
+      "signature_source": "def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None)",
       "parameters": [
         "gamma",
         "degree",
         "coef0",
         "n_components",
-        "random_state",
-        "device"
+        "random_state"
       ],
-      "constructor_ast_sha256": "1ca17b9ac54c06b12b4d54dd1ee4f98f3cf81ce224a532e8ac4b8d9d2bbf818c",
+      "constructor_ast_sha256": "614ed70aa6a58cecd37e82b0bd4f133b9e20d801efc9edb94d432ddfdb292edd",
       "field_order": [
         "gamma",
         "degree",
         "coef0",
         "n_components",
         "random_state",
-        "device",
         "numeric_mode"
       ],
       "final_fields": {
@@ -12746,9 +12711,6 @@
         "random_state": {
           "parameter": "random_state"
         },
-        "device": {
-          "parameter": "device"
-        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         }
@@ -12758,8 +12720,7 @@
         "degree": "2",
         "coef0": "0",
         "n_components": "100",
-        "random_state": "None",
-        "device": "None"
+        "random_state": "None"
       },
       "numeric_mode_injection": true,
       "module": "mojolearn._expansion_neighbors",
@@ -12768,8 +12729,8 @@
         {
           "path": "python/mojolearn/_expansion_neighbors.py",
           "name": "__init__",
-          "line": 1241,
-          "ast_sha256": "1ca17b9ac54c06b12b4d54dd1ee4f98f3cf81ce224a532e8ac4b8d9d2bbf818c"
+          "line": 1021,
+          "ast_sha256": "614ed70aa6a58cecd37e82b0bd4f133b9e20d801efc9edb94d432ddfdb292edd"
         }
       ],
       "constructor_ancestry": [
@@ -16233,70 +16194,63 @@
           "value": {
             "parameter": "n_components"
           },
-          "source": "python/mojolearn/decomposition.py:429"
+          "source": "python/mojolearn/decomposition.py:431"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/decomposition.py:429"
+          "source": "python/mojolearn/decomposition.py:431"
         },
         {
           "field": "algorithm",
           "value": {
             "parameter": "algorithm"
           },
-          "source": "python/mojolearn/decomposition.py:429"
+          "source": "python/mojolearn/decomposition.py:431"
         },
         {
           "field": "n_iter",
           "value": {
             "parameter": "n_iter"
           },
-          "source": "python/mojolearn/decomposition.py:429"
+          "source": "python/mojolearn/decomposition.py:431"
         },
         {
           "field": "n_oversamples",
           "value": {
             "parameter": "n_oversamples"
           },
-          "source": "python/mojolearn/decomposition.py:429"
+          "source": "python/mojolearn/decomposition.py:431"
         },
         {
           "field": "power_iteration_normalizer",
           "value": {
             "parameter": "power_iteration_normalizer"
           },
-          "source": "python/mojolearn/decomposition.py:429"
+          "source": "python/mojolearn/decomposition.py:431"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/decomposition.py:429"
+          "source": "python/mojolearn/decomposition.py:431"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/decomposition.py:429"
-        },
-        {
-          "field": "device",
-          "value": {
-            "parameter": "device"
-          },
-          "source": "python/mojolearn/decomposition.py:429"
+          "source": "python/mojolearn/decomposition.py:431"
         }
       ],
       "trace": [
-        "python/mojolearn/decomposition.py:429"
+        "python/mojolearn/decomposition.py:431"
       ],
-      "constructor": "python/mojolearn/decomposition.py:429",
-      "signature_source": "def __init__(self, n_components=2, *, algorithm='covariance_eigh', n_iter=5, n_oversamples=10, power_iteration_normalizer='auto', random_state=None, tol=0.0, numeric_mode=None, device=None)",
+      "constructor": "python/mojolearn/decomposition.py:431",
+      "signature_source": "def __init__(self, n_components=2, *, algorithm='covariance_eigh', n_iter=5, n_oversamples=10, power_iteration_normalizer='auto', random_state=None, tol=0.0, numeric_mode=None)",
       "parameters": [
         "n_components",
         "algorithm",
@@ -16305,10 +16259,9 @@
         "power_iteration_normalizer",
         "random_state",
         "tol",
-        "numeric_mode",
-        "device"
+        "numeric_mode"
       ],
-      "constructor_ast_sha256": "e75a38237c6dbe517cd05f9b58baec363936a9c88f2e4b7f7611c70daf60b21d",
+      "constructor_ast_sha256": "b23ffa99b9a3d859882fcbb3a904f4d566641c94ad3a12fb510c2259317001f7",
       "field_order": [
         "n_components",
         "tol",
@@ -16317,8 +16270,7 @@
         "n_oversamples",
         "power_iteration_normalizer",
         "random_state",
-        "numeric_mode",
-        "device"
+        "numeric_mode"
       ],
       "final_fields": {
         "n_components": {
@@ -16344,9 +16296,6 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
-        },
-        "device": {
-          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -16357,8 +16306,7 @@
         "power_iteration_normalizer": "'auto'",
         "random_state": "None",
         "tol": "0.0",
-        "numeric_mode": "None",
-        "device": "None"
+        "numeric_mode": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.decomposition",
@@ -16367,8 +16315,8 @@
         {
           "path": "python/mojolearn/decomposition.py",
           "name": "__init__",
-          "line": 429,
-          "ast_sha256": "e75a38237c6dbe517cd05f9b58baec363936a9c88f2e4b7f7611c70daf60b21d"
+          "line": 431,
+          "ast_sha256": "b23ffa99b9a3d859882fcbb3a904f4d566641c94ad3a12fb510c2259317001f7"
         }
       ],
       "constructor_ancestry": [

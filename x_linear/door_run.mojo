@@ -10,7 +10,11 @@ Same operands in the same order, so the bits are unchanged."""
 from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
-from core.linear_entry_table_ext import XL_OP_FIT, XL_OP_FIT_FOLD
+from core.linear_entry_table_ext import (
+    XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_SPEARMAN,
+    XL_OP_HUBER_OUT,
+)
+from core.solver_entry_table import solver_cd_fit_call, solver_cd_predict_call
 from core.admitted_refusals import admitted_finite_refuse
 from core.entry_table import EntryRef
 from core.base_helpers_calls import (
@@ -233,3 +237,262 @@ def xl_cv_roles_run(key: EntryRef, splits: XlSplitWords, n: Int, roles: Int, nam
                 raise Error("mojolearn " + name + ": a cv split repeats a row, or puts a row on both sides")
         if splits.train_sizes[k] == 0 or splits.test_sizes[k] == 0:
             raise Error("mojolearn " + name + ": every cv split needs training and test rows")
+
+
+# ------------------------------------------------- Lasso / ElasticNet (cd)
+# RUN of the coordinate-descent pair's operations (UNPACK:
+# bindings/x_linear_cd_unpack.mojo, PACK: bindings/x_linear_cd_pack.mojo).
+# A request is addresses and plain words; the boundary keeps every
+# addressed buffer alive and releases the GIL around the run.
+
+
+struct XlCdFitRequest(Movable):
+    """`cd_fit` of one design: `entry` is the solver operations entry of
+    the estimator's route; `x` addresses n_rows x n_cols float32 words
+    (C order when `row_major`, else F order), `y` n_rows targets, `coef`
+    the n_cols result words, `info` one result word (the intercept),
+    `sample_weight` n_rows weights or 0."""
+    var entry: NativeDescriptorCall
+    var x: Int
+    var y: Int
+    var coef: Int
+    var info: Int
+    var sample_weight: Int
+    var n_rows: Int
+    var n_cols: Int
+    var fit_intercept: Bool
+    var epochs: Int
+    var shuffle: Bool
+    var row_major: Bool
+    var alpha: Float64
+    var l1_ratio: Float64
+    var tol: Float64
+
+    def __init__(out self, entry: NativeDescriptorCall, x: Int, y: Int, coef: Int, info: Int, sample_weight: Int,
+                 n_rows: Int, n_cols: Int, fit_intercept: Bool, epochs: Int, shuffle: Bool, row_major: Bool,
+                 alpha: Float64, l1_ratio: Float64, tol: Float64):
+        self.entry = entry
+        self.x = x
+        self.y = y
+        self.coef = coef
+        self.info = info
+        self.sample_weight = sample_weight
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.fit_intercept = fit_intercept
+        self.epochs = epochs
+        self.shuffle = shuffle
+        self.row_major = row_major
+        self.alpha = alpha
+        self.l1_ratio = l1_ratio
+        self.tol = tol
+
+
+def xl_cd_fit_run(request: XlCdFitRequest) raises -> Int:
+    """ElasticNet.fit / Lasso.fit: one `cd_fit` call; n_iter. The
+    coefficients are in `request.coef`, the intercept in `request.info`."""
+    return solver_cd_fit_call(request.entry, request.x, request.y, request.coef, request.info,
+                              request.sample_weight, request.n_rows, request.n_cols, request.fit_intercept,
+                              request.epochs, request.shuffle, request.row_major, request.alpha, request.l1_ratio,
+                              request.tol)
+
+
+struct XlCdPredictRequest(Movable):
+    """`cd_predict`: `x` addresses n_rows x n_cols F-order float32 words,
+    `coef` n_cols words, `dst` the n_rows result words."""
+    var entry: NativeDescriptorCall
+    var x: Int
+    var coef: Int
+    var dst: Int
+    var n_rows: Int
+    var n_cols: Int
+    var intercept: Float64
+
+    def __init__(out self, entry: NativeDescriptorCall, x: Int, coef: Int, dst: Int, n_rows: Int, n_cols: Int,
+                 intercept: Float64):
+        self.entry = entry
+        self.x = x
+        self.coef = coef
+        self.dst = dst
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.intercept = intercept
+
+
+def xl_cd_predict_run(request: XlCdPredictRequest) raises:
+    """ElasticNet.predict / Lasso.predict: one `cd_predict` call into
+    `request.dst`."""
+    solver_cd_predict_call(request.entry, request.x, request.coef, request.dst, request.n_rows, request.n_cols,
+                           request.intercept)
+
+
+# ------------------------------------------------------------ decisions
+# RUN of the inference operations (predict, decision_function,
+# predict_proba, the one-class scores; UNPACK:
+# bindings/x_linear_infer_unpack.mojo, PACK: bindings/x_linear_infer_pack.mojo).
+
+# core/py2mojo_rows.mojo row modes of XL_OP_DECISION_ROWS.
+comptime ROWS_SGD_PROBA = 2
+comptime ROWS_LRCV_PROBA = 3
+
+
+struct XlDecisionRequest(Movable):
+    """One decision call of the x_linear operations entry. `operation` is
+    XL_OP_DECISION (link(X @ W^T + b), float32 scores), XL_OP_DECISION_CODES
+    (each row's int32 class code; `strict`, `below`, `above`) or
+    XL_OP_DECISION_ROWS (the decision and the row link `rows_mode` in one
+    call). `x` addresses rows x cols float32 words, `block` k rows of
+    [coef | intercept], `dst` the result words; `status` is the deferred
+    finite status word of X (0: X was tested at admission)."""
+    var entry: NativeDescriptorCall
+    var operation: Int
+    var x: Int
+    var block: Int
+    var dst: Int
+    var rows: Int
+    var cols: Int
+    var k: Int
+    var link: Int
+    var strict: Bool
+    var below: Int
+    var above: Int
+    var rows_mode: Int
+    var status: Int
+
+    def __init__(out self, entry: NativeDescriptorCall, operation: Int, x: Int, block: Int, dst: Int, rows: Int,
+                 cols: Int, k: Int, link: Int, strict: Bool, below: Int, above: Int, rows_mode: Int, status: Int):
+        self.entry = entry
+        self.operation = operation
+        self.x = x
+        self.block = block
+        self.dst = dst
+        self.rows = rows
+        self.cols = cols
+        self.k = k
+        self.link = link
+        self.strict = strict
+        self.below = below
+        self.above = above
+        self.rows_mode = rows_mode
+        self.status = status
+
+
+def xl_decision_run(request: XlDecisionRequest) raises:
+    """One decision call into `request.dst` (the same operands, in the same
+    order, each operation always took)."""
+    var addresses: List[Int] = [request.x, request.block, request.dst]
+    var ints: List[Int] = [request.rows, request.cols, request.k]
+    if request.operation == XL_OP_DECISION_CODES:
+        ints.append(LINK_IDENTITY)
+        ints.append(1 if request.strict else 0)
+        ints.append(request.below)
+        ints.append(request.above)
+    elif request.operation == XL_OP_DECISION_ROWS:
+        ints.append(request.link)
+        ints.append(request.rows_mode)
+    else:
+        ints.append(request.link)
+    ints.append(request.status)
+    _ = native_descriptor_call(request.entry, request.operation, addresses, ints, List[Float64]())
+
+
+# ------------------------------------------------------------------ fits
+# RUN of the fit operations: one typed request per XL_OP_FIT /
+# XL_OP_FIT_FOLD call (UNPACK: bindings/x_linear_common_unpack.mojo
+# `xl_fit_build` and each group's bindings/x_linear_<group>_unpack.mojo).
+
+
+struct XlFitRequest(Movable):
+    """One fit call of the x_linear operations entry: the route `algo`, X
+    as `x_size` float32 words at `x` (n rows of d), the `y_size` 32-bit
+    target words at `y`, the route's integer and float hyperparameters and
+    the `n_out` float32 result words at `dst` (`n_fw` / `n_iw`: the float
+    and int work words). `fold`: X is a model-selection fold resident on
+    the device (`base_id`, `base_rows`, `index_id`; no host words)."""
+    var entry: NativeDescriptorCall
+    var algo: Int
+    var x: Int
+    var x_size: Int
+    var n: Int
+    var d: Int
+    var y: Int
+    var y_size: Int
+    var ip: List[Int]
+    var fp: List[Float64]
+    var n_out: Int
+    var n_fw: Int
+    var n_iw: Int
+    var dst: Int
+    var fold: Bool
+    var base_id: Int
+    var base_rows: Int
+    var index_id: Int
+
+    def __init__(out self, entry: NativeDescriptorCall, algo: Int, x: Int, x_size: Int, n: Int, d: Int, y: Int,
+                 y_size: Int, var ip: List[Int], var fp: List[Float64], n_out: Int, n_fw: Int, n_iw: Int, dst: Int,
+                 fold: Bool, base_id: Int, base_rows: Int, index_id: Int):
+        self.entry = entry
+        self.algo = algo
+        self.x = x
+        self.x_size = x_size
+        self.n = n
+        self.d = d
+        self.y = y
+        self.y_size = y_size
+        self.ip = ip^
+        self.fp = fp^
+        self.n_out = n_out
+        self.n_fw = n_fw
+        self.n_iw = n_iw
+        self.dst = dst
+        self.fold = fold
+        self.base_id = base_id
+        self.base_rows = base_rows
+        self.index_id = index_id
+
+
+def xl_fit_run(request: XlFitRequest) raises -> Tuple[Int, Int]:
+    """One fit call into `request.dst`. Returns a device fold's (finite,
+    range) status words, (0, 0) for a fit from host words."""
+    if request.fold:
+        return xl_run_fit_fold(request.entry, request.algo, request.base_id, request.base_rows, request.index_id,
+                               request.n, request.d, request.y, request.y_size, request.ip, request.fp,
+                               request.n_out, request.n_fw, request.n_iw, request.dst)
+    _ = xl_run_fit(request.entry, request.algo, request.x, request.x_size, request.n, request.d, request.y,
+                   request.y_size, request.ip, request.fp, request.n_out, request.n_fw, request.n_iw, request.dst)
+    return (0, 0)
+
+
+def xl_isotonic_fit_run(request: XlFitRequest, auto: Bool, targets: Int) raises -> Bool:
+    """IsotonicRegression.fit: the direction, then the one fit call. With
+    increasing='auto' the direction is the sign of Spearman's rho of the
+    column at `request.x` and the `request.n` targets at `targets`, exact,
+    on the binding (XL_OP_SPEARMAN); it is the fit's first Int word.
+    Returns True for increasing."""
+    if not auto:
+        _ = xl_fit_run(request)
+        return request.ip[0] != 0
+    var columns: List[Int] = [request.x, targets]
+    var count: List[Int] = [request.n]
+    var sign = native_descriptor_call(request.entry, XL_OP_SPEARMAN, columns, count, List[Float64]())
+    var ip = request.ip.copy()
+    ip[0] = 1 if sign >= 0 else 0
+    _ = xl_run_fit(request.entry, request.algo, request.x, request.x_size, request.n, request.d, request.y,
+                   request.y_size, ip, request.fp, request.n_out, request.n_fw, request.n_iw, request.dst)
+    return sign >= 0
+
+
+def xl_huber_fit_run(request: XlFitRequest, targets: Int, flags: Int, link: Int, epsilon: Float64) raises:
+    """HuberRegressor.fit: the fit, then the outlier flag of each training
+    row (one byte at `flags`; |y - prediction| > scale * epsilon) from the
+    X the fit read, in one device session (XL_OP_HUBER_OUT). The fit's
+    first d + 1 result words are [coef | intercept], the one-row
+    coefficient block the flags call reads as it is; `scale` is the word
+    after them (`float(scale_) * epsilon`, one binary64 product)."""
+    _ = xl_fit_run(request)
+    var d = request.d
+    var thr = Float64(xl_run_word(request.dst, d + 1)) * epsilon
+    var addresses: List[Int] = [request.x, request.dst, targets, flags]
+    var ints: List[Int] = [request.n, d, link]
+    var floats: List[Float64] = [thr]
+    _ = native_descriptor_call(request.entry, XL_OP_HUBER_OUT, addresses, ints, floats)

@@ -23,7 +23,23 @@ comptime OPT_NATIVE_DEVICE_AVAILABLE = 11
 comptime OPT_NATIVE_ALLOCATE_DEVICE = 12
 comptime OPT_NATIVE_UPLOAD_DEVICE = 13
 comptime OPT_NATIVE_DOWNLOAD_DEVICE = 14
-comptime OPT_NATIVE_COUNT = 15
+# lane dw-autograd-seq (2026-11-21): the public training functions that were
+# Python entries of the training image (`training_vendor`, `residual_dropout`,
+# `residual_dropout_backward`, their `_dev` forms, `chunked_lm_head_v2_loss`,
+# `chunked_lm_head_v2_train`, `mlp_sessions`) are operations of this table.
+# They are served by each image's own file before the shared dispatch below
+# (training/optimizer_native_extra_gpu.mojo, training/host/optimizer_native_extra.mojo;
+# word layouts in training/optimizer_native_extra.mojo). The tier
+# (`training_numeric_mode`) was already OPT_NATIVE_MODE.
+comptime OPT_NATIVE_VENDOR = 15
+comptime OPT_NATIVE_RESIDUAL_DROPOUT = 16
+comptime OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD = 17
+comptime OPT_NATIVE_RESIDUAL_DROPOUT_DEV = 18
+comptime OPT_NATIVE_RESIDUAL_DROPOUT_BACKWARD_DEV = 19
+comptime OPT_NATIVE_LM_HEAD_LOSS = 20
+comptime OPT_NATIVE_LM_HEAD_TRAIN = 21
+comptime OPT_NATIVE_MLP_SESSIONS = 22
+comptime OPT_NATIVE_COUNT = 23
 
 
 struct OptimizerStepCall(Movable):
@@ -69,7 +85,7 @@ struct OptimizerAccumulateCall(Movable):
 
 def optimizer_native_spans(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int) raises:
-    if operation < 0 or operation >= OPT_NATIVE_COUNT or result == 0:
+    if operation < 0 or operation >= OPT_NATIVE_VENDOR or result == 0:
         raise Error("native optimizer: unknown operation or missing result storage")
     var addresses = 1 if operation <= OPT_NATIVE_ACCUMULATE else 0
     var integers = 4 if operation == OPT_NATIVE_DOWNLOAD or operation == OPT_NATIVE_UPLOAD else (

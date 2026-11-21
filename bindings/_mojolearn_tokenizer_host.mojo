@@ -1172,6 +1172,8 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_init")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_load")
         module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_read_weights")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_twin")
+        module.def_py_c_function(runtime_classical_unavailable_c, "causal_model_vendor_used")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         # The Transformer block session owner (core/transformer_block_session.mojo)
         # the neural doors keep on a block; it replaces the generation session

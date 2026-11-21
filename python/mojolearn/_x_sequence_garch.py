@@ -49,6 +49,10 @@ class GARCH(ParamsMixin):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -84,9 +88,12 @@ class GARCH(ParamsMixin):
     # guard (the native forecast refuses an unfitted model itself), so no
     # `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
-    def __init__(self, p=1, o=0, q=1, mean="Constant", dist="normal", power=2.0, numeric_mode=None):
-        _XSEQ(self, "garch_initialize", (p, o, q, mean, dist, power, numeric_mode), _XSEQ_CONTEXT)
+    def __init__(self, p=1, o=0, q=1, mean="Constant", dist="normal", power=2.0, numeric_mode=None, device=None):
+        _XSEQ(self, "garch_initialize", (p, o, q, mean, dist, power, numeric_mode, device), _XSEQ_CONTEXT)
 
     def fit(self, y, horizon=1):
         """Fit the model to one series or a batch of series.

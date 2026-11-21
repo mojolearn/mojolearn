@@ -11,10 +11,11 @@ from core.samba_count_impl import samba_target_count
 from providers.python.samba_execution_pyapi_door import samba_provider_gradients
 from std.memory import unsafe_memcpy
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
-from bindings.samba_state_native_door import samba_fields, samba_entries, samba_from_state, samba_entry_key, samba_primitive
+from bindings.samba_state_native_door import samba_fields, samba_from_state, samba_primitive
+from bindings.samba_route_unpack import samba_route
 from core.entry_table import EntryRef
 from core.samba_entry_table import (
-    samba_ref, SAMBA_TABLE_TRAINING, SAMBA_PRIM_EMBEDDING_FORWARD, SAMBA_PRIM_EMBEDDING_BACKWARD,
+    SAMBA_PRIM_EMBEDDING_FORWARD, SAMBA_PRIM_EMBEDDING_BACKWARD,
     SAMBA_PRIM_RMS_NORM_FORWARD, SAMBA_PRIM_RMS_NORM_BACKWARD, SAMBA_PRIM_LINEAR_FORWARD,
     SAMBA_PRIM_LINEAR_BACKWARD, SAMBA_PRIM_NEURAL_RNG, SAMBA_PRIM_HEAD_LOSS, SAMBA_PRIM_CE_LOSS,
     SAMBA_PRIM_ACCUMULATE, SAMBA_PRIM_CHUNKED_HEAD_TRAIN,
@@ -118,14 +119,14 @@ def _samba_gradients(model: PythonObject, inputs: PythonObject, targets: PythonO
     var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
     var config = samba_fields(py_item(fields, nk[].k_config))
-    var entries = samba_entries(context, py_item(fields, nk[].k_numeric_mode))
-    # The training image's primitive entry, resolved once per operation at
-    # UNPACK (core/samba_entry_table.mojo); every primitive below that was a
-    # Python attribute fetch of `entries` called through CPython is one
-    # native call through it (lane entangled-native-modules, 2026-11-12).
-    # `entries` stays for the provider route, the caps record and the AFN
-    # entries, which the table does not carry.
-    var primitives = samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, py_item(fields, nk[].k_numeric_mode)))
+    # The stack's one route (bindings/samba_route_unpack.mojo): the training
+    # image's primitive entry was resolved once, with the route; every
+    # primitive below is one native call through it. `entries` stays for the
+    # provider route, the caps record and the AFN entries, which the table
+    # does not carry.
+    var route = samba_route(model, fields, context)
+    var entries = route.entries
+    var primitives = route.primitives()
     var native = py_get(fields, nk[].k__native_primitives)
     if native is not None and not neural_descriptor_matches(native, py_call(bi.getattr, entries, "canonical", entries)):
         native = PythonObject(None)

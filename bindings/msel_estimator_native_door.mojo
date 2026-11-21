@@ -19,6 +19,8 @@ from bindings.py_model_records import bump_model_generation
 from bindings.mode_metadata_native_door import instance_protocol_override
 from bindings.mode_answer_door import answer_mode_python
 from core.mode_answer import MODE_FAMILY_MSEL
+from core.device_route import device_cpu_fast
+from bindings.msel_member_device_unpack import msel_member_host_folds
 
 
 def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -178,6 +180,13 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
     # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
     # The mode's presence is the read-once flag.
     var read_mode = Optional[PythonObject]()
+    # The member's device, read with its mode (same once-per-call read, same
+    # dictionary): a member that says device="cpu" beside a GPU set is handed
+    # the CPU identical module of the binding name, connected at import
+    # (`family_msel_bindings_cpu`), never the process's GPU module. Only the
+    # recipes that name a binding read it (the GP / kernel-ridge and KNN
+    # members); every other member's own door routes by its estimator.
+    var host = False
     for k in range(len(recipe)):  # driver-loop: fixed native ABI arguments
         var item = recipe[k]
         var kind = String(item[0])
@@ -199,11 +208,21 @@ def _msel_admitted_dispatch(model: PythonObject, method: String, args: PythonObj
                 # MSEL), picks the identical row of the binding table.
                 answer_mode_python(stored, MODE_FAMILY_MSEL)
                 read_mode = stored
+                host = msel_member_host_folds(fields, b, context)
+                if host and String(stored) != "identical":
+                    device_cpu_fast()
             var mode = read_mode.value()
-            var modes = context["family_msel_bindings"][item[1]]
-            value = py_get(modes, mode)
-            if value is None:
-                raise Error("ImportError: native estimator binding is unavailable for " + String(mode))
+            if host:
+                var cpu = py_get(context, "family_msel_bindings_cpu")
+                value = PythonObject(None) if cpu is None else py_get(cpu, item[1])
+                if value is None:
+                    raise Error("ImportError: device='cpu' is not connected for " + String(item[1])
+                                + " in this installation")
+            else:
+                var modes = context["family_msel_bindings"][item[1]]
+                value = py_get(modes, mode)
+                if value is None:
+                    raise Error("ImportError: native estimator binding is unavailable for " + String(mode))
             if py_type(value) is b.str:
                 raise Error(String(value))
         _ = py_call(values.append, value)

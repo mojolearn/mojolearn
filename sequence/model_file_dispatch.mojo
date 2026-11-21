@@ -55,14 +55,14 @@ from sequence.exec_trait import Exec
 from sequence.neural_model_dispatch import (
     MODEL_SAVE_CHECKPOINT, MODEL_CHECKPOINT_INFO, MODEL_LOAD_CHECKPOINT, MODEL_VERIFY_DIGEST,
     MODEL_VERIFY_FILL, MODEL_VERIFY_FILE_SHA256, MODEL_VERIFY_MODEL_INFO, MODEL_N_PARAMS,
-    MODEL_IMPORT_PARAMS, MODEL_OPERATION_COUNT,
+    MODEL_IMPORT_PARAMS,
 )
 
 
 def model_file_operation(op: Int) -> Bool:
     """True for the eight operations `model_file_execute` serves (every
     model-file operation but the weight import, which takes an executor)."""
-    return op >= MODEL_SAVE_CHECKPOINT and op < MODEL_OPERATION_COUNT and op != MODEL_IMPORT_PARAMS
+    return op >= MODEL_SAVE_CHECKPOINT and op < MODEL_IMPORT_PARAMS
 
 
 def _file_floats(ff: Int, nf: Int) raises -> List[Float64]:

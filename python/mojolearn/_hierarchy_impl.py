@@ -209,6 +209,20 @@ class AgglomerativeClustering(ParamsMixin):
     #: training-only family; the prediction entry lives in the estimators
     #: family, whose host binding ships in the inference wheel.
     _BINDING = "_mojolearn_estimators"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    def _mojolearn_device_state(self, twin, device):
+        # The fitted attributes go to the twin as they are. The resident
+        # holder does not: it keeps the reference copy of the image that
+        # minted it, so the twin mints its own on its own device.
+        state = object.__getattribute__(self, "__dict__")
+        target = object.__getattribute__(twin, "__dict__")
+        parameters = self.get_params(deep=False)
+        for key, value in state.items():
+            if key not in parameters and key != "_resident_holder":
+                target[key] = value
 
     def __init__(self, n_clusters=2, *, metric="euclidean",
                  connectivity=None, linkage="single", c=15,
