@@ -296,6 +296,22 @@ struct MemberCall(Movable):
     # bindings/arena_cache_run.mojo `arena_cache_find_or_put` takes), 0 when
     # the caller pins nothing. Only a member with MEMBER_CAN_SCOPE reads
     # them, and only with `pin != 0` may it keep `x` resident past the call.
+    # THE PIN RULE (round 6; MEMBER-ABI-V2.md item 27). A nonzero `pin` is ONE
+    # reference the caller took on that object for this call (with the
+    # interpreter held, at UNPACK) and offers to the member's cache; `x.data`
+    # is then inside that object's words, which cannot move or be freed while
+    # the reference lives. With `pin == 0` a member neither looks `x` up in a
+    # resident cache nor keeps it (the address of an unpinned buffer can be
+    # reused by a later one). A member whose cache PUBLISHED an entry holding
+    # the token writes `call.pin = 0` at that moment, before anything after it
+    # can raise: the reference is the cache's, dropped by whoever closes or
+    # drops the entry (the scope's own boundary, interpreter held). On every
+    # other outcome (a hit, a lost publication race, no scope, under the
+    # scope's floor, a refusal) the member leaves `pin` as given and the
+    # reference stays the caller's. The caller reads `pin` after every call
+    # that offered one, raised or not (`member_pin_settle`), and at PACK
+    # returns each reference no cache took. A member never drops or takes a
+    # reference itself: it holds no interpreter lock.
     var scope: Int
     var pin: Int
     # The member's device plan, resolved on the PUBLIC thread by the family's
@@ -453,6 +469,19 @@ def member_new(plan: MemberPlan) raises -> MemberCall:
     var call = member_call_of(plan)
     _ = member_call(plan.member, MEMBER_OP_NEW, call)
     return call^
+
+
+def member_pin_settle(offered: Int, mut call: MemberCall) -> Int:
+    """After a call that offered the pin token `offered` in `call.pin` (THE
+    PIN RULE at `MemberCall.pin`): 1 when the member's cache took that call's
+    reference (the member wrote `call.pin = 0`), else 0. Read it after the
+    call whether it returned or raised. The call then offers nothing; a
+    caller that makes another call over the same pinned X writes the token
+    again, backed by another reference it took at UNPACK (one reference per
+    offering call: a member may take each one)."""
+    var taken = 1 if offered != 0 and call.pin == 0 else 0
+    call.pin = 0
+    return taken
 
 
 def member_kind_capabilities(plan: MemberPlan) raises -> Int:
