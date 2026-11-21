@@ -11,6 +11,8 @@ from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from core.logistic_native_api import (
     QnNativeDriver, QnFoldDriver, QnFitRequest, QnQueryRequest, QnLinkRequest, QnFoldStore,
 )
+from core.linear_route import LINEAR_DEVICE_CPU, LINEAR_DEVICE_GPU
+from core.logistic_route import LogisticRoute, logistic_route_admit, logistic_fit_run, logistic_query_run
 
 
 def _require(ok: Bool, message: String) raises:
@@ -229,3 +231,72 @@ def logistic_concurrent_fixture(unit: Int) raises:
     _require(native_descriptor_call_fixed(_fixed_entry, 3, a, p, f) == 3 * token + 3,
         "concurrent/nested callers must retain private request and output storage")
     _require(a[0] == token and p[0] == token + 1 and f[0] == Float64(token + 2), "concurrent request owners")
+
+
+comptime LOGISTIC_ROUTE_FIXTURES = 12
+
+
+def _route_refusal(device: Int, compiled_mode: Int, compiled_host: Bool, expected_mode: Int,
+                   process_vendor: Int, cpu_table: Bool, explicit_host: Bool) raises -> String:
+    var message = String()
+    try:
+        _ = logistic_route_admit(device, QnNativeDriver(_dense_entry), compiled_mode, compiled_host, True,
+            expected_mode, process_vendor, cpu_table, explicit_host, True)
+    except problem:
+        message = String(problem)
+    return message
+
+
+def logistic_route_fixture(unit: Int) raises:
+    """The device route of one estimator (core/logistic_route.mojo): which
+    image a route admits, the words it holds, and RUN through it. The vendor
+    words (2 CUDA, 3 HIP) and the image answers are fixture inputs."""
+    var token = 3001 + unit * 13
+    var driver = QnNativeDriver(_dense_entry)
+    if unit == 0 or unit == 1:
+        # A device route of the identical tier: the fold entry is used when it is published.
+        var route = logistic_route_admit(LINEAR_DEVICE_GPU, driver, 1, False, True, 1, 2, False, False, unit == 0)
+        _require(route.device == LINEAR_DEVICE_GPU and route.vendor == 2 and route.mode == 1, "device route words")
+        _require(route.multiclass and route.fold == (unit == 0), "device route argmax and fold answers")
+        _require(logistic_fit_run(route, _fit_request(token)) == token + 97, "fit iterations cross the route")
+    elif unit == 2:
+        # The fast tier never reads a resident fold.
+        var route = logistic_route_admit(LINEAR_DEVICE_GPU, driver, 0, False, True, 0, 1, False, False, True)
+        _require(route.mode == 0 and route.vendor == 1 and not route.fold, "fast device route has no fold")
+    elif unit == 3:
+        # device="cpu" beside a device set: the CPU image, vendor word 0, no fold.
+        var route = logistic_route_admit(LINEAR_DEVICE_CPU, driver, 1, True, False, 1, 3, True, False, True)
+        _require(route.device == LINEAR_DEVICE_CPU and route.vendor == 0 and not route.fold and not route.multiclass,
+            "cpu route words")
+        logistic_query_run(route, 1, QnQueryRequest(token, token + 2, token + 3, token + 5, 17, 19, 3, True, True))
+    elif unit == 4:
+        _require(_route_refusal(LINEAR_DEVICE_CPU, 1, False, 1, 2, True, False)
+            == "RuntimeError: device='cpu' requires the CPU identical binding", "cpu table must be the CPU image")
+    elif unit == 5:
+        _require(_route_refusal(LINEAR_DEVICE_CPU, 1, False, 1, 2, False, True)
+            == "RuntimeError: the explicit host model requires its CPU identical binding",
+            "explicit host class must be the CPU image")
+    elif unit == 6:
+        var route = logistic_route_admit(LINEAR_DEVICE_CPU, driver, 1, True, False, 1, 2, False, True, True)
+        _require(route.vendor == 0 and not route.fold, "explicit host route words")
+    elif unit == 7:
+        _require(_route_refusal(LINEAR_DEVICE_GPU, 1, True, 1, 2, False, False)
+            == "RuntimeError: LogisticRegression native vendor differs from selected execution",
+            "a device route must not hold the CPU image")
+    elif unit == 8:
+        # A CPU-only process: its own image, whatever that image says of itself.
+        var route = logistic_route_admit(LINEAR_DEVICE_CPU, driver, 1, False, False, 1, 0, False, False, False)
+        _require(route.device == LINEAR_DEVICE_CPU and route.vendor == 0 and not route.fold, "cpu-only route words")
+    elif unit == 9:
+        _require(_route_refusal(LINEAR_DEVICE_GPU, 0, False, 1, 2, False, False)
+            == "RuntimeError: mojolearn: _mojolearn_estimators was compiled for fast, but this call requested "
+               + "identical; rebuild the identical binding", "tier refusal names both tiers")
+    elif unit == 10:
+        _require(_route_refusal(LINEAR_DEVICE_GPU, 1, False, 0, 2, False, False)
+            == "RuntimeError: mojolearn: _mojolearn_estimators was compiled for identical, but this call requested "
+               + "fast; rebuild the fast binding", "tier refusal names both tiers")
+    else:
+        # A copy of a route calls the same image (the door passes routes by value).
+        var route = logistic_route_admit(LINEAR_DEVICE_GPU, driver, 1, False, True, 1, 2, False, False, True)
+        var copied = route.copy()
+        _require(logistic_fit_run(copied, _fit_request(token)) == token + 97, "a copied route keeps its entry")

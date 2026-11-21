@@ -743,12 +743,45 @@ class LogisticRegression(_NumericModeMixin):
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
 
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+
+    # `device` (None: this installation's device; "gpu"; "cpu") is checked
+    # here when it is given (an unknown value, and 'gpu' on an installation
+    # without a GPU set, are refused in words) and read once, at the
+    # estimator's first operation, into its native route owner. Its docstring
+    # entry is added when the family's first GPU run has passed.
     def __init__(self, *, penalty="l2", tol=1e-4, C=1.0, fit_intercept=True,
                  class_weight=None, max_iter=1000, linesearch_max_iter=50,
-                 l1_ratio=None, solver="qn", numeric_mode=None):
+                 l1_ratio=None, solver="qn", numeric_mode=None, device=None):
         return _LR_CALL(self, "initialize", (penalty, tol, C, fit_intercept, class_weight,
                                              max_iter, linesearch_max_iter, l1_ratio, solver,
-                                             numeric_mode), _LR_CONTEXT)
+                                             numeric_mode, device), _LR_CONTEXT)
+
+    # The words the estimator's resolved image reports: the route owner
+    # answers, so a `device="cpu"` estimator on a GPU installation says "cpu".
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _LR_CALL(self, "vendor_used", (), _LR_CONTEXT)
+
+    def numeric_mode_used(self):
+        """The numeric mode this estimator runs in.
+
+        Returns
+        -------
+        str
+            ``'identical'`` or ``'fast'``, read from the compiled binary
+            the estimator uses, not from the argument it was given.
+        """
+        return _LR_CALL(self, "numeric_mode_used", (), _LR_CONTEXT)
 
     def get_params(self, deep=True):
         """Return the constructor parameter values."""
@@ -1136,4 +1169,9 @@ _QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_inte
 # decision_function, predict, predict_proba, predict_log_proba and score are
 # one call each into it (bindings/logistic_native_door.mojo).
 from ._native_logistic_bridge import connect as _connect_logistic  # noqa: E402
+from ._native_logistic_bridge import connect_cpu_device as _connect_logistic_cpu_device  # noqa: E402
 _LR_CALL, _LR_CONTEXT = _connect_logistic()
+# The CPU entries of `device="cpu"`, connected once at import beside the device
+# entries: on a GPU installation both exist in the process and an estimator's
+# route picks one, once.
+_connect_logistic_cpu_device(_LR_CONTEXT)
