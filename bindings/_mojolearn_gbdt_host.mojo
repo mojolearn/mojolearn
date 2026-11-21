@@ -102,6 +102,16 @@ from gbdt.mojolearn_gbdt_host_run import (
     gbdt_predict_multi_run,
 )
 from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, GbdtImage
+from core.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
+
+
+struct _GbdtMemberHostImage(GbdtMemberImage):
+    """The host image holds no resident model (XG_CAP_RESIDENT clear), so a
+    Gbdt member state here never holds a handle to release."""
+
+    @staticmethod
+    def release(handle: Int) raises:
+        raise Error("RuntimeError: mojolearn: the host gbdt image holds no resident model")
 from core.native_descriptor_abi import NativeDescriptorError
 # The typed bodies (lane thin-trees-metrics, 2026-10-21): the model text
 # reader, the predict walks and links, the binary transforms, and the scans
@@ -432,6 +442,8 @@ def build__mojolearn_gbdt_host() -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_gbdt_host")
         # The native gbdt entry (core/gbdt_entry_table.mojo) under the cpu key.
         gbdt_entry_publish["MojolearnGbdtEntryOwnerHostV1"]("cpu", gbdt_host_entry_v1)
+        # The Gbdt member (core/gbdt_member.mojo), after the gbdt entry.
+        gbdt_member_publish_image[_GbdtMemberHostImage]("cpu")
         module.def_function[gbdt_host_numeric_mode_binding]("gbdt_host_numeric_mode")
         module.def_function[gbdt_host_vendor_binding]("gbdt_host_vendor")
         module.def_function[gbdt_host_column_binding]("gbdt_host_column")
