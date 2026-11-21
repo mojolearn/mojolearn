@@ -406,12 +406,13 @@ def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
         "these were decided; a note still reading OPEN would misreport the decision")
     assert notes["tsa"].startswith("Ships:"), "tsa ships since lane/ship-cpu-host-families"
 
-    # resample ships, and its binding registers the three entries and no fit.
+    # resample ships, and its binding registers its typed operations table (the
+    # three functions and their option arms are operations of it) and no fit.
     resample = host_surface.family("resample")
     assert resample["ships_in_wheel"], "resample must ship; its functions train no model"
     assert "_mojolearn_resample_host" in host_surface.wheel_bindings()
     exported = _exports_in_source("resample")
-    for name in ("bootstrap", "permutation_test", "monte_carlo_integrate"):
+    for name in ("resample_native_api_v1", "resample_numeric_mode"):
         assert name in exported, f"the resample binding does not register {name}"
     assert [e for e in exported if e.endswith("_fit")] == [], "the resample binding registers a fit"
 

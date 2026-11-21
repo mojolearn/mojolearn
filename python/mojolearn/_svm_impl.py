@@ -1262,7 +1262,7 @@ def _svc_base_helpers():
 
 def _svc_warm_helpers():
     # glue: once at import, fill `_buffer._NATIVE` with the five base helpers the
-    # native SVM owner reads (bindings/svc_common_door.mojo `svc_base` callers:
+    # native SVM owner reads (bindings/svc_common_unpack.mojo `svc_base` callers:
     # gather_i64, threshold_labels_i64, argmax_rows_f32/_f64, class_ratio_f64).
     # Census d95f805cce: the first SVC.fit / predict of a process resolved them
     # inside the call (host_helper_scope, binding, load_host_module: 12 frames).

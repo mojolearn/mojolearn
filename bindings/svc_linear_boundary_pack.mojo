@@ -17,7 +17,8 @@ from bindings.linear_svc_boundary_unpack import LinearSvcPrediction
 from bindings.svc_linear_boundary_unpack import LinearSvrFitUnpacked, LinearSvcFitUnpacked
 from core.linear_svc_native_api import LinearSvcFitPlan, linear_svc_pack
 from core.qn_single_fit import QnSingleFitPlan
-from bindings.svc_common_door import svc_decode, svc_r2_sums
+from bindings.svc_common_pack import svc_decode
+from bindings.svc_common_door import svc_r2_sums
 from bindings.svc_score_boundary_door import svc_decode_score, svc_accuracy_native
 from bindings.svm_keys_unpack import svm_keys
 

@@ -51,14 +51,19 @@ from bindings.byte_perf_helpers_pack import byte_int_list_from_i64
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from bindings.py_model_records import records_get, records_put, RECORDS_PREPARED
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
-from core.byte_lm_entry_table_sessions import byte_lm_sessions_published, byte_lm_resident_run
+from core.byte_lm_entry_table_sessions import byte_lm_sessions_published
+from bindings.byte_lm_trainer_native_run import ByteLmPlan, byte_lm_run_resident, byte_lm_run_table
 from bindings.byte_lm_session_owner_pack import byte_lm_session_owner_new
 from training.byte_lm_session_owner_run import ByteLmSessionOwner
 from core.entry_table import EntryRef
+from core.device_route import device_route_plan, device_mode_code
+from providers.python.device_route_boundary_door import (
+    DeviceRouteOwner, device_admit, device_request, device_unpack, device_route_held, device_route_keep, device_route_clear,
+)
 from training.byte_lm_glue_abi import (
     BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_ABSENT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX,
     BG_CONFIG_PROFILE, BG_ATTENTION_ARM, BG_MEMORY_PROFILE, BG_STEP_GLUE_ARM,
-    byte_lm_trainer_ref, byte_lm_glue_ref, byte_lm_trainer_call, byte_lm_glue_read_text, byte_lm_glue_read_int, byte_lm_session_new, byte_lm_session_free,
+    byte_lm_trainer_ref, byte_lm_glue_ref, byte_lm_glue_read_text, byte_lm_glue_read_int, byte_lm_session_new, byte_lm_session_free,
 )
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -228,15 +233,96 @@ def _mode(mut mods: NativeModules, context: PythonObject) raises -> PythonObject
     return mode
 
 
-def _native_key(mode: PythonObject, context: PythonObject) raises -> ByteLmEntryKey:
-    """The trainer table key (core/byte_lm_entry_table.mojo) of the image
-    this tier connected: the first admitted vendor (the import context's
-    `byte_lm_vendors`) whose table is published for the mode. The table's
-    glue entry answers what the binding's Python metadata entries answered
-    (lane calltable-byte-lm); an unpublished table refuses as the profile
-    check did."""
-    var word = 1 if String(py=mode) == "identical" else 0
+# ---------------------------------------------------------------- the device route
+#
+# A trainer's device (`device=None | "gpu" | "cpu"`) and the process tier are
+# resolved ONCE into the one `DeviceRouteOwner`
+# (providers/python/device_route_boundary_door.mojo) with the rule and words
+# of core/device_route.mojo. The owner pins `images` = the mode -> image table
+# of the route's device (the process set, or the CPU identical image loaded
+# beside a GPU set at import: python/mojolearn/_byte_lm_impl.py
+# `_connect_trainer`) and `scope` = the vendor names an image of that device
+# may report. No operation reads or compares the device: a hit is the mode
+# read, one record read and three pointer compares.
+
+@fieldwise_init
+struct _ByteTier(Movable):
+    """The images one operation selects from: `mode` the admitted tier word,
+    `bindings` the mode -> image (or connection error) table of the route's
+    device, `vendors` the vendor names such an image may report."""
+    var mode: PythonObject
+    var bindings: PythonObject
+    var vendors: PythonObject
+
+
+def _process_vendor(context: PythonObject) raises -> Int:
+    """This process's selected vendor word for the device rule: 0 on a
+    CPU-only installation (its admitted vendor names are `('cpu',)`)."""
     var vendors = context["byte_lm_vendors"]
+    return 0 if (len(vendors) == 1 and String(py=vendors[0]) == "cpu") else 1
+
+
+def _tier_process(mut mods: NativeModules, context: PythonObject) raises -> _ByteTier:
+    """The process tier: what an operation without a trainer selects from
+    (the "binding" read of tools, a state validated for the host model)."""
+    return _ByteTier(_mode(mods, context), context["byte_lm_bindings"], context["byte_lm_vendors"])
+
+
+def _tier_build(mut mods: NativeModules, requested: Int, mode: PythonObject, context: PythonObject) raises -> DeviceRouteOwner:
+    """Resolve a trainer's images once (its first operation after
+    construction or restore). A metadata step with no independent units to
+    split."""
+    var owner = DeviceRouteOwner(requested)
+    var mode_code = device_mode_code(String(py=mode))
+    var plan = device_route_plan(requested, _process_vendor(context), mode_code)
+    if plan.cpu_table:
+        # A GPU installation running `device="cpu"`: the CPU identical image
+        # connected beside the device images at import.
+        var cpu = py_get(context, "byte_lm_cpu_bindings")
+        var cpu_vendors = py_get(context, "byte_lm_cpu_vendors")
+        if cpu is None or cpu_vendors is None:
+            raise Error("ImportError: device='cpu' is not connected in this installation")
+        owner.images = cpu
+        owner.scope = cpu_vendors
+    else:
+        owner.images = context["byte_lm_bindings"]
+        owner.scope = context["byte_lm_vendors"]
+    owner.route.device = plan.device
+    owner.route.mode = mode_code
+    owner.route.vendor = plan.expected_vendor
+    owner.route.flags = 1 if plan.cpu_table else 0
+    owner.mode = mode
+    owner.default_mode = mode
+    owner.context = context
+    owner.resolved = True
+    return owner^
+
+
+def _tier(mut mods: NativeModules, trainer: PythonObject, context: PythonObject) raises -> _ByteTier:
+    """The trainer's tier for this operation. The device is read only on a
+    miss (first operation, a changed process mode object, a constructor run
+    again)."""
+    var mode = context["backend"]["_DEFAULT_MODE"]
+    var owner = device_route_held(trainer, mode, mode, context)
+    if owner is None:
+        mode = _mode(mods, context)
+        var requested = device_request(py_fields(trainer), _b(mods))
+        owner = device_route_keep(trainer, _tier_build(mods, requested, mode, context))
+    var native = owner.downcast_value_ptr[DeviceRouteOwner]()
+    var bindings = native[].images
+    var vendors = native[].scope
+    _ = owner  # the owner pins both tables through the reads above
+    return _ByteTier(mode, bindings, vendors)
+
+
+def _native_key(mode: PythonObject, vendors: PythonObject) raises -> ByteLmEntryKey:
+    """The trainer table key (core/byte_lm_entry_table.mojo) of the image
+    the route's device connected: the first of its admitted vendor names
+    whose table is published for the mode. The table's glue entry answers
+    what the binding's Python metadata entries answered (lane
+    calltable-byte-lm); an unpublished table refuses as the profile check
+    did."""
+    var word = 1 if String(py=mode) == "identical" else 0
     for i in range(len(vendors)):  # small-loop(the admitted vendor names)
         var vendor = byte_lm_vendor_text_word(String(py=vendors[i]))
         if vendor < 0:
@@ -275,20 +361,21 @@ def _glue_text(gl: EntryRef, op: Int) raises -> String:
     return _glue_text_words(gl, op, List[Int]())
 
 
-def _load_snapshot(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises -> Tuple[PythonObject, PythonObject, String, PythonObject, ByteLmEntryKey]:
-    """`_load(shape)`: the byte LM binding of the process tier, its profile,
-    mode and vendor read back through the image's native glue entry."""
-    var mode = _mode(mods, context)
-    var binding = context["byte_lm_bindings"][mode]
+def _load_snapshot(mut mods: NativeModules, shape: _Shape, context: PythonObject, tier: _ByteTier) raises -> Tuple[PythonObject, PythonObject, String, PythonObject, ByteLmEntryKey]:
+    """`_load(shape)`: the byte LM binding of `tier` (the trainer's route, or
+    the process tier), its profile, mode and vendor read back through the
+    image's native glue entry."""
+    var mode = tier.mode
+    var binding = tier.bindings[mode]
     if py_type(binding) is _b(mods).str:
         raise Error(String(py=binding))
-    var key = _native_key(mode, context)
+    var key = _native_key(mode, tier.vendors)
     var gl = byte_lm_glue_ref(key)  # resolved once for the admission reads below
     var suffix = _glue_text(gl, BG_SUFFIX)
     var code = byte_lm_glue_read_int(gl, BG_NUMERIC_MODE, List[Int]())
     var expected = 1 if String(py=mode) == "identical" else 0
     var vendor = _glue_text(gl, BG_VENDOR)
-    var vendors = context["byte_lm_vendors"]
+    var vendors = tier.vendors
     var vendor_ok = False
     for i in range(len(vendors)):  # small-loop(the admitted vendor names)
         vendor_ok = vendor_ok or String(py=vendors[i]) == vendor
@@ -310,28 +397,21 @@ def _load_snapshot(mut mods: NativeModules, shape: _Shape, context: PythonObject
 
 
 def _load(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises -> PythonObject:
-    var snapshot = _load_snapshot(mods, shape, context)
+    var tier = _tier_process(mods, context)
+    var snapshot = _load_snapshot(mods, shape, context, tier)
     return snapshot[0]
 
 
 def _native_plan(shape: _Shape, state: PythonObject, train: Bool, batch: Int = 0,
-                 length: Int = 0, release: Bool = False) raises -> Tuple[List[Int], List[Float64]]:
+                 length: Int = 0, release: Bool = False) raises -> ByteLmPlan:
+    """UNPACK: the state's step counter and optimizer scalars read into the
+    typed plan RUN takes (bindings/byte_lm_trainer_native_run.mojo)."""
     var cfg = state["config"]
-    var ints = List[Int]()
-    for i in range(9):  # driver-loop: over the admitted model shape
-        ints.append(shape.d[i])
-    ints.append(Int(shape.chunked))
-    ints.append(Int(train))
-    ints.append(Int(py=state["completed_steps"]))
-    ints.append(Int(py=cfg["kind"]))
-    ints.append(Int(py=cfg["nesterov"]))
-    ints.append(batch)
-    ints.append(length)
-    ints.append(Int(release))
-    var floats = List[Float64]()
+    var scalars = List[Float64](capacity=8)
     for key in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:  # driver-loop: over the eight optimizer scalars
-        floats.append(Float64(py=cfg[key]))
-    return (ints^, floats^)
+        scalars.append(Float64(py=cfg[key]))
+    return ByteLmPlan(_shape_words(shape), train, Int(py=state["completed_steps"]), Int(py=cfg["kind"]),
+                      Int(py=cfg["nesterov"]), batch, length, release, scalars^)
 
 
 def _session_call(session: PythonObject, operation: Int, addresses: List[Int], ints: List[Int],
@@ -344,16 +424,13 @@ def _session_call(session: PythonObject, operation: Int, addresses: List[Int], i
     releases the GIL as the provider route did; callers that ran with it
     held keep `release_gil=False`."""
     var native = session.downcast_value_ptr[ByteLmSessionOwner]()
-    var entry = native[].entry  # resolved once, at the owner's construction
-    var handle = native[].handle()
     var result = 0
-    # The owner's request buffer is reused across steps (one session is
-    # stepped by one caller at a time, as its native state requires).
+    # RUN: typed values only (bindings/byte_lm_trainer_native_run.mojo).
     if release_gil:
         with GILReleased(Python()):
-            result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats, native[].words)
+            result = byte_lm_run_resident(native[], operation, addresses, ints, floats)
     else:
-        result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats, native[].words)
+        result = byte_lm_run_resident(native[], operation, addresses, ints, floats)
     _ = session  # the owner (and so the handle) is live through the synchronous native call
     return result
 
@@ -361,7 +438,7 @@ def _session_call(session: PythonObject, operation: Int, addresses: List[Int], i
 def _native_execute(fields: PythonObject, operation: Int, addresses: List[Int], shape: _Shape, state: PythonObject,
                     train: Bool, batch: Int = 0, length: Int = 0, release: Bool = False) raises -> Int:
     var plan = _native_plan(shape, state, train, batch, length, release)
-    return _session_call(fields["_native_session"], operation, addresses, plan[0], plan[1])
+    return _session_call(fields["_native_session"], operation, addresses, plan.ints, plan.floats)
 
 
 def _session_ensure(fields: PythonObject) raises:
@@ -379,11 +456,12 @@ def _table_execute(trainer: EntryRef, operation: Int, addresses: List[Int], ints
     provider object): computation releases the GIL as the provider did;
     session finalization keeps it."""
     var result = 0
+    # RUN: typed values only (bindings/byte_lm_trainer_native_run.mojo).
     if release_gil:
         with GILReleased(Python()):
-            result = byte_lm_trainer_call(trainer, operation, addresses, ints, floats)
+            result = byte_lm_run_table(trainer, operation, addresses, ints, floats)
     else:
-        result = byte_lm_trainer_call(trainer, operation, addresses, ints, floats)
+        result = byte_lm_run_table(trainer, operation, addresses, ints, floats)
     return result
 
 
@@ -467,22 +545,23 @@ def _suspend(mut mods: NativeModules, fields: PythonObject, shape: _Shape, conte
         _ = session
 
 
-def _binding(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
+def _binding(mut mods: NativeModules, trainer: PythonObject, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
     """`_binding()`: a binding change suspends the open session first; the
     run metadata is then computed on its next read (`run_metadata`)."""
     # A compiled binding's profile, vendor and numeric-mode answers are fixed
     # for the module object. Once this trainer admitted the same binding for
     # the same mode and shape profile, reuse that admission instead of five
     # native queries per train step / generated token.
-    var mode = _mode(mods, context)
-    var selected = context["byte_lm_bindings"][mode]
+    var tier = _tier(mods, trainer, context)
+    var mode = tier.mode
+    var selected = tier.bindings[mode]
     var shape_profile = shape.profile(String(py=context["byte_lm_profile"]))
     var key = py_get(fields, "_admitted_binding_key")
     if (key is not None and selected is fields["_runtime_binding"] and key[0] is selected
             and String(py=key[1]) == String(py=mode) and String(py=key[2]) == shape_profile
             and py_get(fields, "_admitted_binding_metadata") is not None):
         return selected
-    var admitted = _load_snapshot(mods, shape, context)
+    var admitted = _load_snapshot(mods, shape, context, tier)
     var binding = admitted[0]
     py_setitem(fields, "_admitted_binding_metadata", admitted[3])
     py_setitem(fields, "_native_key", Python.tuple(admitted[4].mode, admitted[4].vendor))
@@ -672,7 +751,7 @@ def _run_stateless(mut mods: NativeModules, fields: PythonObject, tokens: Python
     var completed = PythonObject(None)
     try:
         descriptors[0] = session
-        completed = PythonObject(_table_execute(trainer, 8, descriptors, plan[0], plan[1]))
+        completed = PythonObject(_table_execute(trainer, 8, descriptors, plan.ints, plan.floats))
         if locked_teardown:
             var finalize: List[Int] = [session]
             _ = _table_execute(trainer, 9, finalize, List[Int](), List[Float64](), False)
@@ -832,6 +911,9 @@ def byte_lm_construct(mut mods: NativeModules, trainer: PythonObject, args: Pyth
     if py_type(trainer) is not context["byte_lm_trainer_class"]:
         raise Error("TypeError: Byte-LM requires its native trainer class without Python subclass hooks")
     _require_training_profile(mods, context)
+    # The device is checked where it is given, in the shared words, before
+    # any field of the trainer changes; the route is resolved below, once.
+    device_admit(args[9], _process_vendor(context), bi)
     # Every external value is admitted before scalar, buffer or JSON protocols.
     for i in range(6):  # small-loop(parameter data, schedule and five optimizer arguments)
         classical_admit_value(args[i], context)
@@ -848,7 +930,10 @@ def byte_lm_construct(mut mods: NativeModules, trainer: PythonObject, args: Pyth
     var shape = _shape_of(shape_state)
     # The selected native binding validates configured dimensions before any
     # allocation; a host-only glue binary must not impose its own numeric mode.
-    var loaded = _load_snapshot(mods, shape, context)
+    py_setitem(py_fields(trainer), "device", args[9])
+    device_route_clear(trainer)
+    var tier = _tier(mods, trainer, context)
+    var loaded = _load_snapshot(mods, shape, context, tier)
     var names = shape.names()
     var shapes = shape.shapes()
     var total = shape.n_total()
@@ -929,7 +1014,7 @@ def _state_step(mut mods: NativeModules, value: PythonObject) raises -> Int:
     return step
 
 
-def _validated_state(mut mods: NativeModules, source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _validated_state(mut mods: NativeModules, source: PythonObject, context: PythonObject, tier: _ByteTier) raises -> PythonObject:
     # Admission and every copy complete before the current trainer/session is
     # touched. Stable metadata is captured once; native buffers validate values.
     classical_admit_value(source, context)
@@ -948,10 +1033,15 @@ def _validated_state(mut mods: NativeModules, source: PythonObject, context: Pyt
     var mode = source["numeric_mode"]
     if py_type(mode) is not bi.str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
         raise Error("ValueError: Byte-LM state profile/registry/mode mismatch")
-    var binding = context["byte_lm_bindings"][mode]
+    # The state's own tier word selects among the images of the route's device.
+    var binding = py_get(tier.bindings, mode)
+    if binding is None:
+        # the route's device has no image of the state's tier (a `fast`
+        # state on a CPU route)
+        raise Error("ValueError: Byte-LM state profile/registry/mode mismatch")
     if py_type(binding) is bi.str:
         raise Error("ImportError: " + String(py=binding))
-    var suffix = _glue_text(byte_lm_glue_ref(_native_key(mode, context)), BG_SUFFIX)
+    var suffix = _glue_text(byte_lm_glue_ref(_native_key(mode, tier.vendors)), BG_SUFFIX)
     var expected_profile = shape.profile(String(py=context["byte_lm_profile"])) + suffix
     var registry = _registry(mods, shape)
     var names = Python.list()
@@ -1029,8 +1119,8 @@ def byte_lm_load_state(mut mods: NativeModules, trainer: PythonObject, args: Pyt
     _ = py_call(lock.acquire)
     mods.released()
     try:
-        var replacement = _validated_state(mods, args[0], context)
-        _ = _mode(mods, context)
+        var tier = _tier(mods, trainer, context)
+        var replacement = _validated_state(mods, args[0], context, tier)
         var session = fields["_native_session"]
         _forget(mods, fields, context)
         if session is not None:
@@ -1055,6 +1145,9 @@ def byte_lm_checkpoint(mut mods: NativeModules, trainer: PythonObject, operation
     if operation == "from_checkpoint_binary" or operation == "from_checkpoint" or operation == "from_checkpoint_bytes":
         if trainer is not context["byte_lm_trainer_class"]:
             raise Error("TypeError: checkpoint restoration requires the connected native trainer class")
+        # `device=` is checked where it is given, in the shared words, before
+        # the file is read.
+        device_admit(args[2], _process_vendor(context), _b(mods))
         var source = PythonObject(None)
         if operation == "from_checkpoint_binary":
             source = byte_checkpoint_load(args[0], io_error)
@@ -1068,7 +1161,13 @@ def byte_lm_checkpoint(mut mods: NativeModules, trainer: PythonObject, operation
             training_byte_shape_validate(described.d, described.chunked)
             byte_json_arrays(source, described.n_total(), described.n_tensors())
             mods.released()
-        var state = _validated_state(mods, source, context)
+        # The restored trainer's device selects the images its state is
+        # validated against; the trainer's own route is resolved at its
+        # first operation, from the `device` field written below.
+        var route_mode = _mode(mods, context)
+        var route = _tier_build(mods, device_unpack(args[2], _b(mods)), route_mode, context)
+        var tier = _ByteTier(route_mode, route.images, route.scope)
+        var state = _validated_state(mods, source, context, tier)
         var shape = _shape_of(state)
         _require_training_profile(mods, context)
         var resident = args[1]
@@ -1076,8 +1175,9 @@ def byte_lm_checkpoint(mut mods: NativeModules, trainer: PythonObject, operation
         _schedule_vocabulary(mods, state["data_schedule"], shape)
         # Preserve constructor binding/profile admission without constructing
         # temporary parameter arrays or invoking a Python class constructor.
-        _ = _load_snapshot(mods, shape, context)
+        _ = _load_snapshot(mods, shape, context, tier)
         var restored = native_storage_allocate(trainer)
+        py_setitem(py_fields(restored), "device", args[2])
         _initialize_state_fields(mods, restored, state, resident, step_result, context)
         return restored
     if operation != "export_checkpoint_binary" and operation != "export_checkpoint":
@@ -1123,7 +1223,7 @@ def byte_lm_train_step(mut mods: NativeModules, trainer: PythonObject, args: Pyt
         byte_state_admit(mods, trainer, fields["_state"], context)
         var shape = _admitted_shape(mods, trainer, fields["_state"])
         var tokens = _ids(mods, args[0], shape, context)
-        var binding = _binding(mods, fields, shape, context)
+        var binding = _binding(mods, trainer, fields, shape, context)
         try:
             if _is_resident(fields):
                 result = _run_resident(mods, fields, tokens, shape, binding, context, train)
@@ -1277,7 +1377,7 @@ def byte_lm_train_steps(mut mods: NativeModules, trainer: PythonObject, args: Py
         var admitted = _ids_steps(mods, args[0], shape, context)
         var stack = admitted[0]
         var n_steps = admitted[1]
-        var binding = _binding(mods, fields, shape, context)
+        var binding = _binding(mods, trainer, fields, shape, context)
         try:
             result = _run_steps(mods, fields, stack, n_steps, shape, binding, context)
         except error:
@@ -1568,7 +1668,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
         var tokens = admitted[0]
         var batch = admitted[1]
         var length = admitted[2]
-        var binding = _binding(mods, fields, shape, context)
+        var binding = _binding(mods, trainer, fields, shape, context)
         var resident = _is_resident(fields)
         # The greedy pick runs on the device for a ragged batch too (plan row
         # N091): operation 6 takes the row lengths as a seventh descriptor.
@@ -1612,7 +1712,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
             # Operation 7 (stateless logits) takes no session: the image's
             # table entry runs it with plain words, no provider object.
             var plan = _native_plan(shape, state, False, batch, length)
-            written = _table_execute(byte_lm_trainer_ref(_key(fields)), 7, addresses, plan[0], plan[1])
+            written = _table_execute(byte_lm_trainer_ref(_key(fields)), 7, addresses, plan.ints, plan.floats)
             mods.released()
         _ = tokens
         _ = row_lengths  # keep the Python object alive through the native call above
@@ -1703,8 +1803,8 @@ def _export_snapshot(mut mods: NativeModules, fields: PythonObject, shape: _Shap
     return _snapshot_metadata(mods, exported, shape)
 
 
-def _runtime_metadata(mut mods: NativeModules, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
-    var binding = _binding(mods, fields, shape, context)
+def _runtime_metadata(mut mods: NativeModules, trainer: PythonObject, fields: PythonObject, shape: _Shape, context: PythonObject) raises -> PythonObject:
+    var binding = _binding(mods, trainer, fields, shape, context)
     var runtime = fields["_runtime"]
     if runtime is None:
         runtime = py_call(_b(mods).dict, fields["_admitted_binding_metadata"])
@@ -1890,7 +1990,7 @@ def byte_lm_consume(mut mods: NativeModules, trainer: PythonObject, operation: S
         elif operation == "attention_stage_report":
             result = _attention_stage_report(mods, fields, shape)
         elif operation == "run_metadata":
-            result = _runtime_metadata(mods, fields, shape, context)
+            result = _runtime_metadata(mods, trainer, fields, shape, context)
         elif operation == "export_state":
             result = _export_snapshot(mods, fields, shape, context)
         elif operation == "parameters":

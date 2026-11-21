@@ -21,11 +21,12 @@ from bindings.xcnn_bn_native_door import xcnn_bn_layers
 from bindings.xcnn_conv_native_door import xcnn_conv_layers
 from bindings.xcnn_graph_native_door import xcnn_graph_layers
 from bindings.xcnn_classifier_native_door import cnnclf_fit, cnnclf_predict, cnnclf_predict_proba, cnnclf_initialize, cnnclf_weights
+from bindings.xcnn_classifier_native_door import cnnclf_adopt
 from bindings.xcnn_keys_unpack import (
     xcnn_keys, XCNN_OPN_TENSOR_FINALIZE, XCNN_OPN_TENSOR_RESHAPE, XCNN_OPN_DEV_FINALIZE, XCNN_OPN_BLOCK_INIT,
     XCNN_OPN_CONV_TRANSFORM, XCNN_OPN_GCN_INIT, XCNN_OPN_RELU_BACKWARD, XCNN_OPN_BN_INIT, XCNN_OPN_BN_FIT,
     XCNN_OPN_CNNCLF_INIT, XCNN_OPN_CNNCLF_WEIGHTS, XCNN_OPN_CNNCLF_FIT, XCNN_OPN_CNNCLF_PREDICT,
-    XCNN_OPN_CNNCLF_PREDICT_PROBA,
+    XCNN_OPN_CNNCLF_PREDICT_PROBA, XCNN_OPN_CNNCLF_ADOPT,
 )
 from bindings.py_keys import py_op_code
 
@@ -156,6 +157,8 @@ def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return xcnn_graph_layers(owner, operation, name, args, context).steal_data()
         if owner_group == _XCNN_BN:
             return xcnn_bn_layers(owner, operation, args, context).steal_data()
+        if operation == XCNN_OPN_CNNCLF_ADOPT:
+            return cnnclf_adopt(owner, args, context).steal_data()
         return xcnn_pool_layers(owner, operation, name, args, context).steal_data()
     except error:
         var text = String(error)

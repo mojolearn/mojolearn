@@ -77,6 +77,8 @@ def build__mojolearn_runtime_neural_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
+        module.def_py_c_function(causal_model_c[3], "causal_model_twin")
+        module.def_py_c_function(causal_model_c[4], "causal_model_vendor_used")
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
         module.def_py_c_function(causal_public_c[2], "causal_lm_reset")
         module.def_py_c_function(causal_public_c[3], "causal_lm_forward")

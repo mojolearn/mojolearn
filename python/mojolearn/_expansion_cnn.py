@@ -14,7 +14,7 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-from . import _native_xcnn_bridge
+from . import _device_table, _native_xcnn_bridge
 # `check(X)` (the GPU-versus-CPU check as a call): the one shared method every
 # other estimator inherits through _mode.PublicOutputsMixin. _mode is core
 # (loaded with the package), so this import loads nothing new.
@@ -32,9 +32,15 @@ _BINDING = "_mojolearn_x_cnn"
 
 
 class _Layer:
-    """A layer on `_mojolearn_x_cnn` (the GPU binding, or its CPU host twin
-    on a CPU-only install / MOJOLEARN_VENDOR=cpu)."""
+    """A layer on `_mojolearn_x_cnn`. `device` is None (this installation's
+    device), "gpu" or "cpu"; a layer built by another layer runs on that
+    layer's device."""
     numeric_mode = None
+    device = None
+    #: Every layer takes `device=None | "gpu" | "cpu"`: read once into the
+    #: layer's native route owner (bindings/xcnn_common_door.mojo), checked
+    #: where it is given; the host image runs every layer of the family.
+    _mojolearn_device = True
 
 
 
@@ -241,8 +247,8 @@ class Conv2d(_Layer):
     _PAD_MODES = {"zeros": 0, "reflect": 1, "replicate": 2, "circular": 3}
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1,
-                 bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None):
-        _XCNN(self, "conv_init", (in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, padding_mode, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
+                 bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None, device=None):
+        _XCNN(self, "conv_init", (in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, padding_mode, random_state, input_shape, numeric_mode, device), _XCNN_CONTEXT)
 
     def set_weights(self, weight, bias=None):
         return _XCNN(self, "conv_set_weights", (weight, bias), _XCNN_CONTEXT)
@@ -310,8 +316,8 @@ class Conv1d(Conv2d):
     (padding int, 'same' or 'valid'; every padding_mode; groups)."""
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1,
-                 bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None):
-        _XCNN(self, "conv_init1d", (in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, padding_mode, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
+                 bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None, device=None):
+        _XCNN(self, "conv_init1d", (in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias, padding_mode, random_state, input_shape, numeric_mode, device), _XCNN_CONTEXT)
 
     def set_weights(self, weight, bias=None):
         return _XCNN(self, "conv_set_weights1d", (weight, bias), _XCNN_CONTEXT)
@@ -333,8 +339,8 @@ class _Pool2d(_Layer):
     _device_io = True
 
     def __init__(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
-                 count_include_pad=True, input_shape=None, numeric_mode=None):
-        _XCNN(self, "pool_init", (kernel_size, stride, padding, dilation, ceil_mode, count_include_pad, None, input_shape, numeric_mode, False), _XCNN_CONTEXT)
+                 count_include_pad=True, input_shape=None, numeric_mode=None, device=None):
+        _XCNN(self, "pool_init", (kernel_size, stride, padding, dilation, ceil_mode, count_include_pad, None, input_shape, numeric_mode, False, device), _XCNN_CONTEXT)
 
     def _params(self, shape):
         n, c, h, w = shape
@@ -380,8 +386,8 @@ class AvgPool2d(_Pool2d):
     divisor_override)."""
 
     def __init__(self, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
-                 divisor_override=None, input_shape=None, numeric_mode=None):
-        _XCNN(self, "pool_init", (kernel_size, stride, padding, 1, ceil_mode, count_include_pad, divisor_override, input_shape, numeric_mode, False), _XCNN_CONTEXT)
+                 divisor_override=None, input_shape=None, numeric_mode=None, device=None):
+        _XCNN(self, "pool_init", (kernel_size, stride, padding, 1, ceil_mode, count_include_pad, divisor_override, input_shape, numeric_mode, False, device), _XCNN_CONTEXT)
 
     def forward(self, x):
         return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
@@ -402,21 +408,21 @@ class MaxPool1d(_Pool1dMixin, MaxPool2d):
     """PyTorch `nn.MaxPool1d`: MaxPool2d over (N, C, 1, L)."""
 
     def __init__(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
-                 input_shape=None, numeric_mode=None):
-        _XCNN(self, "pool_init", (kernel_size, stride, padding, dilation, ceil_mode, True, None, input_shape, numeric_mode, True), _XCNN_CONTEXT)
+                 input_shape=None, numeric_mode=None, device=None):
+        _XCNN(self, "pool_init", (kernel_size, stride, padding, dilation, ceil_mode, True, None, input_shape, numeric_mode, True, device), _XCNN_CONTEXT)
 
 
 class AvgPool1d(_Pool1dMixin, AvgPool2d):
     """PyTorch `nn.AvgPool1d`: AvgPool2d over (N, C, 1, L)."""
 
     def __init__(self, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
-                 input_shape=None, numeric_mode=None):
-        _XCNN(self, "pool_init", (kernel_size, stride, padding, 1, ceil_mode, count_include_pad, None, input_shape, numeric_mode, True), _XCNN_CONTEXT)
+                 input_shape=None, numeric_mode=None, device=None):
+        _XCNN(self, "pool_init", (kernel_size, stride, padding, 1, ceil_mode, count_include_pad, None, input_shape, numeric_mode, True, device), _XCNN_CONTEXT)
 
 
 class _ReLU(_Layer):
-    def __init__(self, numeric_mode=None):
-        _XCNN(self, "relu_init", (numeric_mode,), _XCNN_CONTEXT)
+    def __init__(self, numeric_mode=None, device=None):
+        _XCNN(self, "relu_init", (numeric_mode, device), _XCNN_CONTEXT)
 
     def forward(self, x):
         return _XCNN(self, "relu_forward", (x,), _XCNN_CONTEXT)
@@ -428,8 +434,8 @@ class _ReLU(_Layer):
 class _Linear(_Layer):
     """y = x W^T + b on the pinned GEMM (PyTorch nn.Linear, default init)."""
 
-    def __init__(self, in_features, out_features, random_state=0, numeric_mode=None):
-        _XCNN(self, "linear_init", (in_features, out_features, random_state, numeric_mode), _XCNN_CONTEXT)
+    def __init__(self, in_features, out_features, random_state=0, numeric_mode=None, device=None):
+        _XCNN(self, "linear_init", (in_features, out_features, random_state, numeric_mode, device), _XCNN_CONTEXT)
 
     def forward(self, x):
         return _XCNN(self, "linear_forward", (x,), _XCNN_CONTEXT)
@@ -456,13 +462,31 @@ class CNNClassifier(_Layer, _CheckMixin):
     (torch.optim.Adam / AdamW: betas, eps, weight_decay). The whole fit runs
     as one compiled program on the GPU (or the CPU). X is (n, C*H*W) rows
     with `input_shape=(C, H, W)`, or (n, C, H, W). After `fit`, `losses_`
-    holds every minibatch's loss and `loss_curve_` each epoch's mean loss."""
+    holds every minibatch's loss and `loss_curve_` each epoch's mean loss.
+    `device` is None (this installation's device), "gpu" or "cpu"."""
 
     def __init__(self, input_shape, conv_channels=(8,), kernel_size=3, pool_size=2, learning_rate=0.01,
                  momentum=0.9, weight_decay=0.0, batch_size=32, max_iter=10, shuffle=True, random_state=0,
-                 numeric_mode=None, optimizer="sgd", dampening=0.0, nesterov=False, betas=(0.9, 0.999), eps=1e-8):
-        return _XCNN(self, "cnnclf_init", (input_shape, conv_channels, kernel_size, pool_size, learning_rate, momentum, weight_decay, batch_size, max_iter, shuffle, random_state, numeric_mode, optimizer, dampening, nesterov, betas, eps), _XCNN_CONTEXT)
+                 numeric_mode=None, optimizer="sgd", dampening=0.0, nesterov=False, betas=(0.9, 0.999), eps=1e-8, device=None):
+        return _XCNN(self, "cnnclf_init", (input_shape, conv_channels, kernel_size, pool_size, learning_rate, momentum, weight_decay, batch_size, max_iter, shuffle, random_state, numeric_mode, optimizer, dampening, nesterov, betas, eps, device), _XCNN_CONTEXT)
 
+    # `model.check` (mojolearn/_check_both.py `on_device`): the classifier
+    # has no `get_params`, so it builds its own unfitted twin from the
+    # settings its constructor stored, and its fitted state is handed over
+    # natively (the layer stack built again on the twin's device around the
+    # same learned arrays). Check tooling; no operation calls these.
+    def _mojolearn_device_twin(self, device):
+        f = vars(self)
+        return CNNClassifier(
+            f["input_shape"], conv_channels=f["conv_channels"], kernel_size=f["kernel_size"],
+            pool_size=f["pool_size"], learning_rate=f["learning_rate"], momentum=f["momentum"],
+            weight_decay=f["weight_decay"], batch_size=f["batch_size"], max_iter=f["max_iter"],
+            shuffle=f["shuffle"], random_state=f["random_state"], numeric_mode=f["numeric_mode"],
+            optimizer=f["optimizer"], dampening=f["dampening"], nesterov=f["nesterov"], betas=f["betas"],
+            eps=f["eps"], device=device)
+
+    def _mojolearn_device_state(self, twin, device):
+        return _XCNN(twin, "cnnclf_adopt", (self,), _XCNN_CONTEXT)
 
     def fit(self, X, y):
         """Train the classifier on images X and labels y; returns self."""
@@ -498,8 +522,8 @@ class BatchNorm2d(_Layer):
     _device_io = True
 
     def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True,
-                 input_shape=None, numeric_mode=None):
-        return _XCNN(self, "bn_init", (num_features, eps, momentum, affine, track_running_stats, input_shape, numeric_mode), _XCNN_CONTEXT)
+                 input_shape=None, numeric_mode=None, device=None):
+        return _XCNN(self, "bn_init", (num_features, eps, momentum, affine, track_running_stats, input_shape, numeric_mode, device), _XCNN_CONTEXT)
 
     def train(self, mode=True):
         return _XCNN(self, "bn_train", (mode,), _XCNN_CONTEXT)
@@ -575,8 +599,8 @@ class Dropout2d(_Layer):
     # BatchNorm2d above. No bit moves.
     _device_io = True
 
-    def __init__(self, p=0.5, random_state=0, input_shape=None, numeric_mode=None):
-        _XCNN(self, "dropout_init", (p, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
+    def __init__(self, p=0.5, random_state=0, input_shape=None, numeric_mode=None, device=None):
+        _XCNN(self, "dropout_init", (p, random_state, input_shape, numeric_mode, device), _XCNN_CONTEXT)
 
     def train(self, mode=True):
         return _XCNN(self, "dropout_train", (mode,), _XCNN_CONTEXT)
@@ -618,8 +642,8 @@ class _AdaptivePool(_Layer):
     kernel."""
     _max = False
 
-    def __init__(self, output_size=1, input_shape=None, numeric_mode=None):
-        _XCNN(self, "adaptive_init", (output_size, input_shape, numeric_mode), _XCNN_CONTEXT)
+    def __init__(self, output_size=1, input_shape=None, numeric_mode=None, device=None):
+        _XCNN(self, "adaptive_init", (output_size, input_shape, numeric_mode, device), _XCNN_CONTEXT)
 
     # lane cnn-resident-glue (G3): with CNN resident grads on (the default),
     # callers (the board harness among them) hand x and dy over as
@@ -671,8 +695,8 @@ class BasicBlock(_Layer):
     _device_io = True
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, random_state=0, input_shape=None,
-                 numeric_mode=None):
-        _XCNN(self, "block_init", (inplanes, planes, stride, downsample, random_state, input_shape, numeric_mode), _XCNN_CONTEXT)
+                 numeric_mode=None, device=None):
+        _XCNN(self, "block_init", (inplanes, planes, stride, downsample, random_state, input_shape, numeric_mode, device), _XCNN_CONTEXT)
 
 
     def train(self, mode=True):
@@ -737,8 +761,8 @@ class GCNConv(_Layer):
     """
 
     def __init__(self, in_channels, out_channels, improved=False, add_self_loops=True, normalize=True, bias=True,
-                 random_state=0, numeric_mode=None, cached=False):
-        _XCNN(self, "gcn_init", (in_channels, out_channels, improved, add_self_loops, normalize, bias, random_state, numeric_mode, cached), _XCNN_CONTEXT)
+                 random_state=0, numeric_mode=None, cached=False, device=None):
+        _XCNN(self, "gcn_init", (in_channels, out_channels, improved, add_self_loops, normalize, bias, random_state, numeric_mode, cached, device), _XCNN_CONTEXT)
 
     _device_io = True
 
@@ -806,8 +830,8 @@ class SAGEConv(_Layer):
     """
 
     def __init__(self, in_channels, out_channels, aggr="mean", normalize=False, root_weight=True, bias=True,
-                 project=False, random_state=0, numeric_mode=None, cached=False):
-        _XCNN(self, "sage_init", (in_channels, out_channels, aggr, normalize, root_weight, bias, project, random_state, numeric_mode, cached), _XCNN_CONTEXT)
+                 project=False, random_state=0, numeric_mode=None, cached=False, device=None):
+        _XCNN(self, "sage_init", (in_channels, out_channels, aggr, normalize, root_weight, bias, project, random_state, numeric_mode, cached, device), _XCNN_CONTEXT)
 
     _device_io = True
 
@@ -849,5 +873,12 @@ _native_xcnn_bridge.register(
     xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_conv1d_class=Conv1d,
     xcnn_device_io_off=_DEVICE_IO_OFF,
     xcnn_conv2d_class=Conv2d, xcnn_relu_class=_ReLU, xcnn_linear_class=_Linear,
+    # glue: the family's rows of the device="cpu" answer, generated by the
+    # one rule (_device_table.answer) at import; the compiled constructor
+    # check reads them (bindings/xcnn_common_door.mojo `xcnn_device_init`).
+    xcnn_device_cpu={cls: _device_table.answer(cls) for cls in (
+        Conv2d, Conv1d, MaxPool2d, AvgPool2d, MaxPool1d, AvgPool1d, _Pool2d, _ReLU, _Linear, CNNClassifier,
+        BatchNorm2d, BatchNorm1d, Dropout2d, _AdaptivePool, AdaptiveAvgPool2d, AdaptiveMaxPool2d, BasicBlock,
+        GCNConv, SAGEConv)},
 )
 _native_xcnn_bridge.connect_classifier()

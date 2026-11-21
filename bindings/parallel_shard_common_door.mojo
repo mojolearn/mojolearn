@@ -23,9 +23,14 @@ true start is above 0 READS one position early while its block is still
 PLACED at the true offset. Inert at one device.
 
 No floating-point value is computed here: copies only.
+
+UNPACK and PACK only: the partition, the device-index admission, the idle
+pool rule, the batch checks, the transport negative control's decision and
+the block copies of the join are typed, in
+bindings/parallel_shard_common_run.mojo. The pool, its requests and the
+trace records are Python values of the process pool door (codec frames).
 """
 from std.ffi import external_call
-from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_attr import py_attr
@@ -36,14 +41,16 @@ from bindings.native_worker_inventory_door import native_worker_inventory, nativ
 from bindings.tsa_hw_native_door import tsa_array
 from core.shared_slot import SharedSlot
 from bindings.parallel_shard_common_run import (
-    shard_fault_mark,
     shard_read_shift,
     shard_faults_take,
-    shard_transport_fault,
     SHARD_FAULT_NONE,
     SHARD_FAULT_DROP_RESULT,
     shard_store_token,
     shard_item,
+    SHARD_DEVICE_NOT_AN_INDEX, SHARD_TRACE_RECORDS, SHARD_IDLE_FORGET, SHARD_IDLE_REUSE,
+    shard_width_admit, shard_bounds, shard_indices_admit, shard_stored_index_admit, shard_idle_action,
+    shard_batch_admit, shard_stores_admit, shard_fault_action, shard_rows_admit, shard_block_copy,
+    shard_join_block, shard_join_complete,
 )
 from bindings.parallel_keys_unpack import (
     parallel_keys,
@@ -62,18 +69,9 @@ def shard_ranges(count: Int, width: PythonObject, name: String, empty_message: S
     """The shard bounds [lo0, hi0, lo1, hi1, ...] of `range(0, count, width)`
     with `min(start + width, count)` ends; `width` must be a positive int
     (`name` names it in the refusal)."""
-    if py_type(width) is not shard_b().int or Int(py=width) < 1:
-        raise Error("ValueError: " + name + " must be a positive integer")
-    if count < 1 and empty_message != "":
-        raise Error("ValueError: " + empty_message)
-    var w = Int(py=width)
-    var out = List[Int]()
-    var i = 0
-    while i < count:  # driver-loop: over the shard boundaries for the device pool
-        out.append(i)
-        out.append(min(i + w, count))
-        i += w
-    return out^
+    var exact = py_type(width) is shard_b().int
+    shard_width_admit(exact, Int(py=width) if exact else 0, name)
+    return shard_bounds(count, Int(py=width), empty_message)
 
 
 def shard_devices(devices: PythonObject) raises -> Int:
@@ -83,14 +81,10 @@ def shard_devices(devices: PythonObject) raises -> Int:
     if py_type(devices) is not b.tuple and py_type(devices) is not b.list and py_type(devices) is not b.range:
         raise Error("TypeError: devices requires a native tuple, list or range; Python iteration hooks are unsupported")
     var selected = py_call(b.tuple, devices)
-    var seen = b.set()
-    if len(selected) == 0:
-        raise Error("ValueError: devices must be distinct nonnegative integer indices")
+    var indices = List[Int](capacity=len(selected))
     for i in range(len(selected)):  # driver-loop: over the admitted device indices
-        if (py_type(selected[i]) is not b.int or Int(py=selected[i]) < 0
-                or Bool(py=py_call(py_attr(seen, "__contains__"), selected[i]))):
-            raise Error("ValueError: devices must be distinct nonnegative integer indices")
-        _ = py_call(seen.add, selected[i])
+        indices.append(Int(py=selected[i]) if py_type(selected[i]) is b.int else SHARD_DEVICE_NOT_AN_INDEX)
+    shard_indices_admit(indices)
     return len(selected)
 
 struct ShardTrace(Defaultable, Movable):
@@ -162,8 +156,7 @@ def shard_resolve_stored(value: PythonObject) raises -> PythonObject:
             if payload is None:
                 raise Error("parallel shards: no stored operands for this call on this worker")
             var k = Int(py=item[2])
-            if k < 0 or k >= len(payload):
-                raise Error("parallel shards: a stored operand index is out of range")
+            shard_stored_index_admit(k, len(payload))
             _ = py_call(out.append, payload[k])
         else:
             _ = py_call(out.append, item)
@@ -237,7 +230,7 @@ def _shard_admit(pool: PythonObject, devices: PythonObject) raises -> PythonObje
     py_setitem(record, nk[].k_calls, b.list())
     py_setitem(pool, nk[].k_trace_record, record)
     _ = py_call(t[].records.append, record)
-    if len(t[].records) > 256:
+    if len(t[].records) > SHARD_TRACE_RECORDS:
         _ = py_call(t[].records.pop, 0)
     return pool
 
@@ -289,15 +282,15 @@ def shard_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject
             py_setitem(call, nk[].k_pid, py_item(workers[i % len(workers)], nk[].k_pid))
             py_setitem(call, nk[].k_operation, _operation(requests[i]))
             _ = py_call(py_item(record, nk[].k_calls).append, call)
-    if len(results) > 1 and len(requests) > 0 and _numerical(requests[0], nk):
-        var fault = shard_transport_fault()
-        if fault != SHARD_FAULT_NONE and shard_fault_mark():
-            var altered = py_call(b.list, results)
-            if fault == SHARD_FAULT_DROP_RESULT:
-                _ = py_call(altered.pop)
-            else:
-                _ = py_call(altered.reverse)
-            return altered
+    var fault = shard_fault_action(len(results), len(requests),
+                                   len(results) > 1 and len(requests) > 0 and _numerical(requests[0], nk))
+    if fault != SHARD_FAULT_NONE:
+        var altered = py_call(b.list, results)
+        if fault == SHARD_FAULT_DROP_RESULT:
+            _ = py_call(altered.pop)
+        else:
+            _ = py_call(altered.reverse)
+        return altered
     return results
 
 
@@ -316,13 +309,16 @@ def _shard_acquire(devices: PythonObject, child: String) raises -> PythonObject:
     var held = py_call(idle[].pools.pop, key, PythonObject(None))
     var nk = parallel_keys()
     if held is not None:
-        if Int(py=held[2]) != pid:
+        var owned = Int(py=held[2]) == pid
+        var action = shard_idle_action(Int(py=held[2]), pid, owned and Bool(py=held[1] == environ),
+                                       owned and Bool(py=py_item(held[0], nk[].k_closed)),
+                                       len(py_item(held[0], nk[].k_workers)) if owned else 0, len(devices))
+        if action == SHARD_IDLE_FORGET:
             # Inherited across os.fork: the pool's workers and sockets belong
             # to the parent process. Drop the record without closing (a close
             # here would end the parent's workers on the shared sockets).
             pass
-        elif (Bool(py=held[1] == environ) and not Bool(py=py_item(held[0], nk[].k_closed))
-                and len(py_item(held[0], nk[].k_workers)) == len(devices)):
+        elif action == SHARD_IDLE_REUSE:
             try:
                 reused = _shard_admit(held[0], devices)
             except:
@@ -370,7 +366,7 @@ def shard_run(requests: PythonObject, devices: PythonObject, child: String) rais
         raise error^
     if len(results) != len(requests):
         process_pool_close(reused)
-        raise Error("ValueError: shard workers returned an incomplete batch")
+    shard_batch_admit(len(results), len(requests))
     _shard_keep(acquired)
     return results
 
@@ -410,11 +406,9 @@ def shard_run_stored(payload: PythonObject, token: String, requests: PythonObjec
             _ = py_call(stores.append, Python.tuple(nk[].k_shard_store, PythonObject(token), payload))
             _ = py_call(releases.append, Python.tuple(nk[].k_shard_release, PythonObject(token), PythonObject(None)))
         var stored = process_pool_map(pool, stores)
-        if len(stored) != workers:
-            raise Error("ValueError: shard workers did not store the call's operands")
+        shard_stores_admit(len(stored), workers)
         results = shard_map(pool, requests)
-        if len(results) != len(requests):
-            raise Error("ValueError: shard workers returned an incomplete batch")
+        shard_batch_admit(len(results), len(requests))
         _ = process_pool_map(pool, releases)
     except error:
         process_pool_close(pool)
@@ -445,8 +439,7 @@ def shard_rows(source: PythonObject, lo: Int, hi: Int, context: PythonObject) ra
     var b = shard_b()
     var shape = py_call(b.list, source.shape)
     var rows = Int(py=shape[0])
-    if lo < 0 or hi > rows or hi < lo:
-        raise Error("ValueError: shard rows outside the source")
+    shard_rows_admit(lo, hi, rows)
     var inner = 1
     for k in range(1, len(shape)):  # small-loop(the source's trailing dimensions)
         inner *= Int(py=shape[k])
@@ -456,10 +449,7 @@ def shard_rows(source: PythonObject, lo: Int, hi: Int, context: PythonObject) ra
     var out = shard_array(dtype, py_call(b.tuple, shape), (hi - lo) * inner, context)
     var bytes = (hi - lo) * inner * item[1]
     if bytes > 0:
-        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
-               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
-               + lo * inner * item[1],
-               count=bytes)
+        shard_block_copy(Int(py=classical_address(out)), Int(py=classical_address(source)) + lo * inner * item[1], bytes)
         _ = out  # keep the Python object alive through the native call above
         _ = source  # keep the Python object alive through the native call above
     return out
@@ -473,10 +463,8 @@ def shard_row_vector(source: PythonObject, row: Int, context: PythonObject) rais
     var item = shard_item(dtype)
     var out = shard_array(dtype, Python.tuple(width), width, context)
     if width > 0:
-        unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
-               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
-               + row * width * item[1],
-               count=width * item[1])
+        shard_block_copy(Int(py=classical_address(out)), Int(py=classical_address(source)) + row * width * item[1],
+                         width * item[1])
         _ = out  # keep the Python object alive through the native call above
         _ = source  # keep the Python object alive through the native call above
     _ = b
@@ -510,22 +498,16 @@ def shard_join_rows(arrays: PythonObject, total: Int, context: PythonObject) rai
     var cursor = 0
     for p in range(len(arrays)):  # driver-loop: one block copy per device shard
         var value = arrays[p]
-        if shard_dtype(value) != dtype:
-            raise Error("ValueError: shard workers returned different dtypes")
-        var rows = Int(py=value.shape[0])
+        var same = shard_dtype(value) == dtype
+        var rows = Int(py=value.shape[0]) if same else 0
+        shard_join_block(same, cursor, rows, total)
         var bytes = rows * inner * item[1]
-        if cursor + rows > total:
-            raise Error("ValueError: shard workers returned too many rows")
         if bytes > 0:
-            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
-                   + cursor * inner * item[1],
-                   src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
-                   count=bytes)
+            shard_block_copy(Int(py=classical_address(out)) + cursor * inner * item[1], Int(py=classical_address(value)), bytes)
             _ = out  # keep the Python object alive through the native call above
             _ = value  # keep the Python object alive through the native call above
         cursor += rows
-    if cursor != total:
-        raise Error("ValueError: shard workers returned an incomplete result")
+    shard_join_complete(cursor, total)
     return out
 
 

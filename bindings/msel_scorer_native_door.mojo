@@ -19,6 +19,8 @@ from bindings.metrics_native_support_door import metric_is_real, metric_float
 from bindings.msel_inputs_unpack import msel_input, msel_admit
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.msel_estimator_native_door import msel_estimator_call, msel_estimator_plan, msel_planned_call
+from bindings.msel_member_device_unpack import msel_member_host_folds
+from core.device_route import device_cpu_fast
 
 
 def msel_metric_plan(function: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -200,7 +202,14 @@ struct MselMetricPrepared(Movable):
     # One scorer's metadata-only template within a CV operation. Public scorer
     # admission still runs each score; options/schema/module identities are
     # checked after prediction, since native execution may have released GIL.
-    # No estimator, fit state, y, prediction or result is retained here.
+    # No fit state, y, prediction or result is retained here. The scored
+    # estimator is pinned by identity only (`scored`): the metric module is
+    # the one of ITS device (`host`: it says device="cpu" beside a GPU set,
+    # so its metric runs on the CPU metrics module connected at import,
+    # `family_msel_metric_bindings_cpu`). That one read of the member's
+    # device is made when the template is prepared (once per scorer of one
+    # cross-validation unit; a unit's clone can take its device from a
+    # candidate), never on a template hit.
     var reusable: Bool
     var ready: Bool
     var function: PythonObject
@@ -219,6 +228,8 @@ struct MselMetricPrepared(Movable):
     var binding_values: List[PythonObject]
     var uses_default_mode: Bool
     var default_mode: PythonObject
+    var scored: PythonObject
+    var host: Bool
 
     def __init__(out self, reusable: Bool = False):
         self.reusable = reusable
@@ -239,10 +250,14 @@ struct MselMetricPrepared(Movable):
         self.binding_values = List[PythonObject]()
         self.uses_default_mode = False
         self.default_mode = PythonObject(None)
+        self.scored = PythonObject(None)
+        self.host = False
 
     def same(self, function: PythonObject, plan: PythonObject, keywords: PythonObject,
-             context: PythonObject) raises -> Bool:
+             context: PythonObject, estimator: PythonObject) raises -> Bool:
         if not self.ready or function is not self.function or plan is not self.plan:
+            return False
+        if estimator is not self.scored:
             return False
         if (plan["recipe"] is not self.recipe or plan["inputs"] is not self.inputs
                 or plan["allowed"] is not self.allowed or plan["entry"] is not self.entry
@@ -252,6 +267,11 @@ struct MselMetricPrepared(Movable):
             return False
         if self.uses_default_mode and context["family_msel_backend_fields"]["_DEFAULT_MODE"] is not self.default_mode:
             return False
+        if self.host:
+            for i in range(len(self.binding_values)):  # driver-loop: the CPU metric module remains current
+                if py_get(context, "family_msel_metric_bindings_cpu") is not self.binding_values[i]:
+                    return False
+            return True
         for i in range(len(self.binding_keys)):  # driver-loop: selected native binding owners remain current
             if context["family_msel_metric_bindings"][self.binding_keys[i]] is not self.binding_values[i]:
                 return False
@@ -259,8 +279,11 @@ struct MselMetricPrepared(Movable):
 
     def prepare(mut self, function: PythonObject, plan: PythonObject, y: PythonObject,
                 predicted: PythonObject, keywords: PythonObject, context: PythonObject,
-                b: PythonObject) raises:
+                b: PythonObject, estimator: PythonObject, estimator_plan: PythonObject) raises:
         self.ready = False
+        self.scored = estimator
+        self.host = False
+        var asked = estimator is None
         self.function = function
         self.plan = plan
         self.recipe = plan["recipe"]
@@ -309,7 +332,23 @@ struct MselMetricPrepared(Movable):
                 if clean_word != "identical" and clean_word != "fast":
                     raise Error("ValueError: numeric_mode must be 'fast' or 'identical'")
                 answer_mode_object(clean, clean_word, MODE_FAMILY_MSEL)
-                value = context["family_msel_metric_bindings"][clean]
+                if not asked:
+                    # The scored estimator's device, read once per template
+                    # (the first binding item), after the mode refusals above.
+                    asked = True
+                    self.host = msel_member_host_folds(
+                        py_call(estimator_plan["fields_get"], estimator, py_type(estimator)), b, context)
+                if self.host:
+                    # The CPU metrics module is the identical one (the shared
+                    # refusal of device="cpu" with the fast mode).
+                    if clean_word != "identical":
+                        device_cpu_fast()
+                    var cpu = py_get(context, "family_msel_metric_bindings_cpu")
+                    if cpu is None:
+                        raise Error("ImportError: device='cpu' is not connected in this installation")
+                    value = cpu
+                else:
+                    value = context["family_msel_metric_bindings"][clean]
                 if py_type(value) is b.str:
                     raise Error(String(value))
                 self.binding_keys.append(clean)
@@ -324,7 +363,10 @@ struct MselMetricPrepared(Movable):
             and self.keywords.capture(keywords, b.dict, b.str))
 
     def call(mut self, function: PythonObject, y: PythonObject, predicted: PythonObject,
-             keywords: PythonObject, context: PythonObject) raises -> PythonObject:
+             keywords: PythonObject, context: PythonObject, estimator: PythonObject,
+             estimator_plan: PythonObject) raises -> PythonObject:
+        # `estimator` (with its checked plan) is the estimator whose output is
+        # scored, or None for a metric called without one: the process's set.
         var b = native_loaded_module("builtins")
         var plan = msel_metric_plan(function, context)
         var entry = plan["entry"]
@@ -333,8 +375,8 @@ struct MselMetricPrepared(Movable):
         if py_type(keywords) is not b.dict:
             raise Error("TypeError: native metric keywords must be an exact dict")
         msel_admit(keywords, context)
-        if not self.same(function, plan, keywords, context):
-            self.prepare(function, plan, y, predicted, keywords, context, b)
+        if not self.same(function, plan, keywords, context, estimator):
+            self.prepare(function, plan, y, predicted, keywords, context, b, estimator, estimator_plan)
         # Fresh immutable call arguments: no tuple retained by an entry can be
         # mutated by a later phase, and dynamic y/predicted never enter template.
         # N067: the standard library's tuple builders (the cpython_table
@@ -356,7 +398,7 @@ struct MselMetricPrepared(Movable):
 def msel_metric_call(function: PythonObject, y: PythonObject, predicted: PythonObject,
                      keywords: PythonObject, context: PythonObject) raises -> PythonObject:
     var prepared = MselMetricPrepared()
-    return prepared.call(function, y, predicted, keywords, context)
+    return prepared.call(function, y, predicted, keywords, context, PythonObject(None), PythonObject(None))
 
 
 def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -433,7 +475,7 @@ def msel_scorer_value(scorer: PythonObject, estimator: PythonObject, x: PythonOb
     if sample_weight is not None:
         keywords = py_call(b.dict, keywords)
         py_setitem(keywords, "sample_weight", sample_weight)
-    var result = prepared.call(fields["_score_func"], y, predicted, keywords, context)
+    var result = prepared.call(fields["_score_func"], y, predicted, keywords, context, estimator, model)
     classical_connect_numpy(context)
     if not metric_is_real(result, context):
         raise Error("TypeError: scoring must return a real scalar")

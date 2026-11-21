@@ -86,9 +86,6 @@ struct SequenceKeys(Defaultable, Movable):
     var k_input_context: PythonObject
     var k_int_types: PythonObject
     var k_itemsize: PythonObject
-    var k_layer_norm: PythonObject
-    var k_layer_norm_dev: PythonObject
-    var k_layer_norm_dev_alloc: PythonObject
     var k_legacy: PythonObject
     var k_line: PythonObject
     var k_lineno: PythonObject
@@ -103,18 +100,14 @@ struct SequenceKeys(Defaultable, Movable):
     var k_module: PythonObject
     var k_module_type: PythonObject
     var k_modules: PythonObject
-    var k_moe_backward: PythonObject
-    var k_moe_forward: PythonObject
-    var k_moe_forward_dev: PythonObject
-    var k_moe_forward_dev_alloc: PythonObject
-    var k_moe_weights_free: PythonObject
-    var k_moe_weights_put: PythonObject
     var k_momentum_decay: PythonObject
     var k_n_total: PythonObject
     var k_names: PythonObject
+    var k_model_native_api_v1: PythonObject
     var k_native_key: PythonObject
     var k_native_mmap_private: PythonObject
     var k_native_mmap_type: PythonObject
+    var k_native_model_provider: PythonObject
     var k_ndarray: PythonObject
     var k_norm_topk_prob: PythonObject
     var k_normalized_shape: PythonObject
@@ -133,6 +126,7 @@ struct SequenceKeys(Defaultable, Movable):
     var k_seq_tensor_download: PythonObject
     var k_seq_tensor_free: PythonObject
     var k_seq_tensor_upload: PythonObject
+    var k_sequence_ops_route: PythonObject
     var k_seqln_class_device_io_off: PythonObject
     var k_seqln_keep_stats_off: PythonObject
     var k_seqln_layout: PythonObject
@@ -262,9 +256,6 @@ struct SequenceKeys(Defaultable, Movable):
         self.k_input_context = PythonObject(None)
         self.k_int_types = PythonObject(None)
         self.k_itemsize = PythonObject(None)
-        self.k_layer_norm = PythonObject(None)
-        self.k_layer_norm_dev = PythonObject(None)
-        self.k_layer_norm_dev_alloc = PythonObject(None)
         self.k_legacy = PythonObject(None)
         self.k_line = PythonObject(None)
         self.k_lineno = PythonObject(None)
@@ -279,18 +270,14 @@ struct SequenceKeys(Defaultable, Movable):
         self.k_module = PythonObject(None)
         self.k_module_type = PythonObject(None)
         self.k_modules = PythonObject(None)
-        self.k_moe_backward = PythonObject(None)
-        self.k_moe_forward = PythonObject(None)
-        self.k_moe_forward_dev = PythonObject(None)
-        self.k_moe_forward_dev_alloc = PythonObject(None)
-        self.k_moe_weights_free = PythonObject(None)
-        self.k_moe_weights_put = PythonObject(None)
         self.k_momentum_decay = PythonObject(None)
         self.k_n_total = PythonObject(None)
         self.k_names = PythonObject(None)
+        self.k_model_native_api_v1 = PythonObject(None)
         self.k_native_key = PythonObject(None)
         self.k_native_mmap_private = PythonObject(None)
         self.k_native_mmap_type = PythonObject(None)
+        self.k_native_model_provider = PythonObject(None)
         self.k_ndarray = PythonObject(None)
         self.k_norm_topk_prob = PythonObject(None)
         self.k_normalized_shape = PythonObject(None)
@@ -309,6 +296,7 @@ struct SequenceKeys(Defaultable, Movable):
         self.k_seq_tensor_download = PythonObject(None)
         self.k_seq_tensor_free = PythonObject(None)
         self.k_seq_tensor_upload = PythonObject(None)
+        self.k_sequence_ops_route = PythonObject(None)
         self.k_seqln_class_device_io_off = PythonObject(None)
         self.k_seqln_keep_stats_off = PythonObject(None)
         self.k_seqln_layout = PythonObject(None)
@@ -442,9 +430,6 @@ def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) rai
     nk[].k_input_context = py_key("input_context")
     nk[].k_int_types = py_key("int_types")
     nk[].k_itemsize = py_key("itemsize")
-    nk[].k_layer_norm = py_key("layer_norm")
-    nk[].k_layer_norm_dev = py_key("layer_norm_dev")
-    nk[].k_layer_norm_dev_alloc = py_key("layer_norm_dev_alloc")
     nk[].k_legacy = py_key("legacy")
     nk[].k_line = py_key("line")
     nk[].k_lineno = py_key("lineno")
@@ -459,18 +444,14 @@ def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) rai
     nk[].k_module = py_key("module")
     nk[].k_module_type = py_key("module_type")
     nk[].k_modules = py_key("modules")
-    nk[].k_moe_backward = py_key("moe_backward")
-    nk[].k_moe_forward = py_key("moe_forward")
-    nk[].k_moe_forward_dev = py_key("moe_forward_dev")
-    nk[].k_moe_forward_dev_alloc = py_key("moe_forward_dev_alloc")
-    nk[].k_moe_weights_free = py_key("moe_weights_free")
-    nk[].k_moe_weights_put = py_key("moe_weights_put")
     nk[].k_momentum_decay = py_key("momentum_decay")
     nk[].k_n_total = py_key("n_total")
     nk[].k_names = py_key("names")
+    nk[].k_model_native_api_v1 = py_key("model_native_api_v1")
     nk[].k_native_key = py_key("native_key")
     nk[].k_native_mmap_private = py_key("native_mmap_private")
     nk[].k_native_mmap_type = py_key("native_mmap_type")
+    nk[].k_native_model_provider = py_key("native_model_provider")
     nk[].k_ndarray = py_key("ndarray")
     nk[].k_norm_topk_prob = py_key("norm_topk_prob")
     nk[].k_normalized_shape = py_key("normalized_shape")
@@ -489,6 +470,7 @@ def _sequence_keys_fill(nk: UnsafePointer[SequenceKeys, MutUntrackedOrigin]) rai
     nk[].k_seq_tensor_download = py_key("seq_tensor_download")
     nk[].k_seq_tensor_free = py_key("seq_tensor_free")
     nk[].k_seq_tensor_upload = py_key("seq_tensor_upload")
+    nk[].k_sequence_ops_route = py_key("sequence_ops_route")
     nk[].k_seqln_class_device_io_off = py_key("seqln_class_device_io_off")
     nk[].k_seqln_keep_stats_off = py_key("seqln_keep_stats_off")
     nk[].k_seqln_layout = py_key("seqln_layout")

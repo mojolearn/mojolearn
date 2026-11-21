@@ -64,6 +64,10 @@ class STL(ParamsMixin):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Raises
     ------
@@ -87,11 +91,14 @@ class STL(ParamsMixin):
     # guard (the native forecast refuses an unfitted model itself), so no
     # `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, endog, period=None, seasonal=7, trend=None, low_pass=None, seasonal_deg=1,
                  trend_deg=1, low_pass_deg=1, robust=False, seasonal_jump=1, trend_jump=1,
-                 low_pass_jump=1, numeric_mode=None):
-        return _XSEQ(self, "stl_initialize", (endog, period, seasonal, trend, low_pass, seasonal_deg, trend_deg, low_pass_deg, robust, seasonal_jump, trend_jump, low_pass_jump, numeric_mode), _XSEQ_CONTEXT)
+                 low_pass_jump=1, numeric_mode=None, device=None):
+        return _XSEQ(self, "stl_initialize", (endog, period, seasonal, trend, low_pass, seasonal_deg, trend_deg, low_pass_deg, robust, seasonal_jump, trend_jump, low_pass_jump, numeric_mode, device), _XSEQ_CONTEXT)
 
     @property
     def config(self):

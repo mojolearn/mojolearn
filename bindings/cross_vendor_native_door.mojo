@@ -1,16 +1,35 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native byte admission, identity folds and state hashes for live training."""
+"""Cross-vendor replicated training at the Python boundary (UNPACK / PACK).
+
+Every public operation of `mojolearn.cross_vendor` enters here. This file
+reads the Python objects (exact classes only, no hooks), keeps each owner's
+typed state in a native record stored once on the instance as `_native`
+(Coordinator, Worker, BatchFeed, LearningRateTable and the readiness event)
+and packs rows and events. The work is typed and lives in
+`bindings/cross_vendor_native_run.mojo`: frames over descriptors, the
+trainer through its `ParallelByteSession`, the fold and the digests.
+
+The instance attributes written at construction (`port`, `shards`,
+`trainer`, `log_path`, ...) are read-only mirrors for callers; operations
+read the record. Three are still read from the instance, once per call, as
+they always were: a Worker's collaborators (`trainer`, `batches`,
+`lr_for_step`, `on_commit`, re-admitted at each run), a Coordinator's
+`peers` list and both owners' `_events` list.
+
+GIL: released around every socket transfer and the host fold, held around
+the trainer's session calls, exactly as before the split.
+"""
+from std.ffi import c_int, external_call
 from std.math import isfinite
-from std.memory import unsafe_memcpy, bitcast
+from std.memory import unsafe_memcpy
+from core.native_string import unsafe_string_from_utf8_cstr
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
+from std.python._cpython import PyObjectPtr, GILReleased
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_transport_door import (
     transport_initialize,
-    transport_send,
     transport_receive,
-    transport_receive_owned,
     transport_listen,
     transport_accept,
     transport_close,
@@ -19,14 +38,16 @@ from bindings.native_transport_door import (
     transport_port,
     transport_address,
     transport_timeout,
+    transport_unpack,
     _transport_json,
 )
 from bindings.native_transport_run import transport_clock, transport_hostname
 from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
-from bindings.parallel_byte_native_door import parallel_byte_call, parallel_byte_init, _parallel_array, _parallel_int, _parallel_float
-from bindings.parallel_keys_unpack import (
-    PARALLEL_BYTE_OPN_ADMITTED_STATE, PARALLEL_BYTE_OPN_APPLY_GRADIENT, PARALLEL_BYTE_OPN_EXPORT_RAW, PARALLEL_BYTE_OPN_FOLD_ADD, PARALLEL_BYTE_OPN_FOLD_EXPORT, PARALLEL_BYTE_OPN_FOLD_RESET, PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD, PARALLEL_BYTE_OPN_SET_LR, PARALLEL_BYTE_OPN_SHARD_GRADIENT, PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD, PARALLEL_BYTE_OPN_STEP,
+from bindings.parallel_byte_native_door import (
+    parallel_byte_call, parallel_byte_init, _parallel_array, _parallel_int, _parallel_float, _parallel_record,
+    ParallelByteOwner,
 )
+from bindings.parallel_keys_unpack import PARALLEL_BYTE_OPN_ADMITTED_STATE, PARALLEL_BYTE_OPN_EXPORT_RAW
 from bindings.generation_buffers_door import generation_array
 from bindings.cross_vendor_admission_unpack import (
     cv_types_initialize,
@@ -43,14 +64,23 @@ from bindings.cross_vendor_admission_pack import (
     cv_path,
 )
 from bindings.byte_checkpoint_native_door import byte_checkpoint_initialize, byte_checkpoint_save, byte_checkpoint_load
+from bindings.byte_checkpoint_native_run import byte_checkpoint_write, ByteCheckpointWriteFailure
 from bindings.byte_checkpoint_io_unpack import ByteCheckpointIOError
-from bindings.native_json_door import native_json_parse
-from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
-from core.sha256 import Sha256, sha256_hex_addr, sha256_sliced8_hex
+from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
+from core.sha256 import Sha256
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
 from core.shared_slot import SharedSlot
 from core.parallel_entry_table import ParallelEntryKey, parallel_ref, parallel_fold_pair_f32, PARALLEL_TABLE_BASE
-from std.python._cpython import GILReleased
+from bindings.cross_vendor_native_run import (
+    CROSS_SCHEME_V1, CROSS_SCHEME_SLICED, CROSS_COMMIT, CROSS_DONE, CROSS_HOST_FOLD,
+    CROSS_DEFECT_NONE, CROSS_DEFECT_NAME, CROSS_DEFECT_IDS, CROSS_DEFECT_ID,
+    CrossFeed, CrossRates, CrossCoordinatorState, CrossWorkerState,
+    cross_feed_address, cross_rate, cross_ready_wait, cross_scheme_name,
+    cross_coordinator_clear, cross_coordinator_refuse, cross_coordinator_admit, cross_coordinator_step,
+    cross_coordinator_done,
+    cross_worker_begin, cross_worker_end, cross_worker_receive, cross_worker_hello, cross_worker_reply,
+    cross_worker_host_fold, cross_worker_command,
+)
 
 
 struct CrossVendorBoundary(Defaultable, Movable):
@@ -167,44 +197,143 @@ def cross_vendor_fold(gradients: PythonObject, prefix: PythonObject) raises -> P
     return result
 
 
-# pass 3 (N110): the witness digests read the admitted buffer in place under
-# one read-only buffer export (the same pin cross_vendor_fold uses); the
-# sha256_door route copied every hashed buffer into a new array('B') first,
-# three n_total state copies plus the gradient per step. Same bytes, same
-# order, same digests.
-def _cv_pinned_hash(value: PythonObject, kind: Int, mut hasher: Sha256) raises -> String:
-    # kind 0: update `hasher`; 1: one-shot hex digest; 2: the v2 sliced digest.
-    var view = cross_vendor_bytes(value)
-    var pin = AdmittedBorrowedBuffer(view)
-    var digest = String("")
-    try:
-        var layout = pin.layout.value().copy()
-        if not layout.contiguous():
-            raise Error("cross_vendor: hashed buffers must be contiguous")
-        var count = layout.count * layout.itemsize
-        if kind == 0:
-            hasher.update(layout.address, count)
-        elif kind == 1:
-            digest = sha256_hex_addr(layout.address, count)
-        else:
-            digest = sha256_sliced8_hex(layout.address, count)
-    finally:
-        pin.release()  # the export pins the hashed bytes through the digest above
-    _ = view^
-    return digest
-
-
-def cross_vendor_hexdigest(value: PythonObject) raises -> PythonObject:
-    var unused = Sha256()
-    return PythonObject(_cv_pinned_hash(value, 1, unused))
-
 
 def cross_vendor_state_hash(state: PythonObject) raises -> PythonObject:
+    """SHA-256 over a caller's state dictionary, each of the four buffers
+    read in place under one read-only buffer export."""
     cv_state(state)
     var hasher = Sha256()
     for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys): one digest update per named state field
-        _ = _cv_pinned_hash(state[key], 0, hasher)
+        var view = cross_vendor_bytes(state[key])
+        var pin = AdmittedBorrowedBuffer(view)
+        try:
+            var layout = pin.layout.value().copy()
+            if not layout.contiguous():
+                raise Error("cross_vendor: hashed buffers must be contiguous")
+            hasher.update(layout.address, layout.count * layout.itemsize)
+        finally:
+            pin.release()  # the export pins the hashed bytes through the digest above
+        _ = view^
     return PythonObject(hasher.hexdigest())
+
+
+# ------------------------------------------------------------ native owners
+struct CrossReadyOwner(Movable, Writable):
+    """The readiness event: one word (0 clear, 1 set) at a stable address."""
+    var cell: List[Int]
+
+    def __init__(out self):
+        self.cell = List[Int](length=1, fill=0)
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CrossReadyOwner(set=", self.cell[0] != 0, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+struct CrossRateOwner(Movable, Writable):
+    var rates: CrossRates
+
+    def __init__(out self, var rates: CrossRates):
+        self.rates = rates^
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CrossRateOwner(rates=", len(self.rates.values), ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+struct CrossFeedOwner(Movable, Writable):
+    """`data` pins the admitted int32 copy that `feed.address` points into."""
+    var feed: CrossFeed
+    var data: PythonObject
+
+    def __init__(out self, var feed: CrossFeed, data: PythonObject):
+        self.feed = feed^
+        self.data = data
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CrossFeedOwner(steps=", self.feed.steps, ", shards=", self.feed.shards, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+struct CrossWorkerOwner(Movable, Writable):
+    """`log_path` and `checkpoint_dir` are boundary pins PACK reads."""
+    var owner_id: Int
+    var native: CrossWorkerState
+    var log_path: PythonObject
+    var checkpoint_dir: PythonObject
+
+    def __init__(out self, owner_id: Int, var native: CrossWorkerState, log_path: PythonObject, checkpoint_dir: PythonObject):
+        self.owner_id = owner_id
+        self.native = native^
+        self.log_path = log_path
+        self.checkpoint_dir = checkpoint_dir
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CrossWorkerOwner(shards=", len(self.native.shards), ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+struct CrossCoordinatorOwner(Movable, Writable):
+    """`ready` pins the readiness event object whose record this sets."""
+    var owner_id: Int
+    var native: CrossCoordinatorState
+    var log_path: PythonObject
+    var ready: PythonObject
+
+    def __init__(out self, owner_id: Int, var native: CrossCoordinatorState, log_path: PythonObject, ready: PythonObject):
+        self.owner_id = owner_id
+        self.native = native^
+        self.log_path = log_path
+        self.ready = ready
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CrossCoordinatorOwner(workers=", self.native.workers, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+def _cross_native(owner: PythonObject, cls: PythonObject, refusal: String) raises -> PythonObject:
+    """The native record of an exact owner instance."""
+    if py_type(owner) is not cls:
+        raise Error(refusal)
+    var record = py_get(py_fields(owner), "_native")
+    if record is None:
+        raise Error("cross_vendor: owner is not initialized")
+    return record
+
+
+def _cross_worker(owner: PythonObject) raises -> PythonObject:
+    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
+    var record = _cross_native(owner, c[].worker_cls, "cross_vendor: worker owner must be an exact Worker")
+    if record.downcast_value_ptr[CrossWorkerOwner]()[].owner_id != Int(py=py_call(c[].bi.id, owner)):
+        raise Error("cross_vendor: native storage does not belong to this owner")
+    return record
+
+
+def _cross_coordinator(owner: PythonObject) raises -> PythonObject:
+    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
+    var record = _cross_native(owner, c[].coordinator_cls, "cross_vendor: coordinator owner must be an exact Coordinator")
+    if record.downcast_value_ptr[CrossCoordinatorOwner]()[].owner_id != Int(py=py_call(c[].bi.id, owner)):
+        raise Error("cross_vendor: native storage does not belong to this owner")
+    if py_get(py_fields(owner), "on_step") is not None:
+        raise Error("cross_vendor: on_step callbacks are not accepted; use drain_events or log_path")
+    return record
+
+
+def _cross_events(owner: PythonObject) raises -> PythonObject:
+    var events = py_get(py_fields(owner), "_events")
+    if py_type(events) is not CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi.list:
+        raise Error("cross_vendor: peer and event storage must be native lists")
+    return events
 
 
 def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
@@ -234,7 +363,7 @@ def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteC
     elif operation == "worker_run":
         return cross_vendor_worker_run(args[0], io_error)
     elif operation == "trainer_hash":
-        return cross_vendor_state_hash(_cross_vendor_trainer(args[0], PARALLEL_BYTE_OPN_EXPORT_RAW, c[].bi.list()))
+        return cross_vendor_state_hash(_cross_vendor_trainer(args[0], PARALLEL_BYTE_OPN_EXPORT_RAW))
     elif operation == "feed_init":
         return cross_vendor_feed_init(args)
     elif operation == "feed_batch":
@@ -296,6 +425,47 @@ def cross_vendor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
 
 
+# ------------------------------------------------------------ readiness event
+def _cross_ready_attach(event: PythonObject) raises:
+    py_setattr(event, "_native", PythonObject(alloc=CrossReadyOwner()))
+
+
+def cross_vendor_event(operation: String, args: PythonObject) raises -> PythonObject:
+    var event = args[0]
+    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
+    if py_type(event) is not c[].ready_cls:
+        raise Error("cross_vendor: readiness requires the native event owner")
+    if operation == "event_init":
+        _cross_ready_attach(event)
+        return PythonObject(None)
+    var record = _cross_native(event, c[].ready_cls, "cross_vendor: readiness requires the native event owner")
+    var rec = record.downcast_value_ptr[CrossReadyOwner]()
+    if operation == "event_clear":
+        rec[].cell[0] = 0
+    elif operation == "event_set":
+        rec[].cell[0] = 1
+    elif operation == "event_is_set":
+        return PythonObject(rec[].cell[0] != 0)
+    elif operation == "event_wait":
+        # UNPACK
+        var unlimited = args[1] is None
+        var timeout = Float64(0) if unlimited else cv_float(args[1], "readiness timeout")
+        if not unlimited and not isfinite(timeout):
+            raise Error("readiness timeout must be finite or None")
+        var address = Int(rec[].cell.unsafe_ptr())
+        # RUN: the wait holds no Python state; the caller's argument tuple
+        # keeps the event, and so the word, alive.
+        var signalled = False
+        var py = Python()
+        with GILReleased(py):
+            signalled = cross_ready_wait(address, unlimited, timeout)
+        _ = record
+        return PythonObject(signalled)
+    _ = record
+    return PythonObject(None)
+
+
+# ------------------------------------------------------------ coordinator
 def cross_vendor_coordinator_init(args: PythonObject) raises -> PythonObject:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     var owner = args[0]
@@ -303,17 +473,33 @@ def cross_vendor_coordinator_init(args: PythonObject) raises -> PythonObject:
         raise Error("cross_vendor: Coordinator subclasses and Python attribute hooks are not accepted")
     if args[6] is not None:
         raise Error("cross_vendor: on_step callbacks are not accepted; use drain_events or log_path")
-    var workers = cv_int(args[2], "workers")
-    var shards = cv_int(args[3], "logical_shards")
-    if workers < 1 or shards < workers:
+    # UNPACK: every value leaves its Python object here, once.
+    var state = CrossCoordinatorState()
+    state.workers = cv_int(args[2], "workers")
+    state.shards = cv_int(args[3], "logical_shards")
+    if state.workers < 1 or state.shards < state.workers:
         raise Error("need 1 <= workers <= logical_shards")
-    var port = cv_int(args[1], "port")
-    if port < 0 or port > 65535 or cv_int(args[4], "steps") < 0:
+    state.port = cv_int(args[1], "port")
+    state.steps = cv_int(args[4], "steps")
+    if state.port < 0 or state.port > 65535 or state.steps < 0:
         raise Error("coordinator requires port in [0,65535] and nonnegative steps")
-    _ = cv_text(args[5], "host")
-    if cv_float(args[7], "timeout") <= 0 or cv_float(args[8], "accept_timeout") <= 0 or cv_int(args[9], "max_gradient_bytes") < 0:
+    state.host = cv_text(args[5], "host")
+    state.timeout = cv_float(args[7], "timeout")
+    state.accept_timeout = cv_float(args[8], "accept_timeout")
+    state.max_bytes = cv_int(args[9], "max_gradient_bytes")
+    if state.timeout <= 0 or state.accept_timeout <= 0 or state.max_bytes < 0:
         raise Error("coordinator timeouts must be positive and byte limit nonnegative")
-    _ = cv_bool(args[10], "chained")
+    state.chained = cv_bool(args[10], "chained")
+    state.fold_mode = c[].fold_mode
+    state.fold_vendor = c[].fold_vendor
+    var log_path = PythonObject(None) if args[12] is None else cv_path(args[12])
+    var ready = py_call(c[].bi.object.__new__, args[11])
+    _cross_ready_attach(ready)
+    var workers = state.workers
+    var shards = state.shards
+    var record = PythonObject(alloc=CrossCoordinatorOwner(Int(py=py_call(c[].bi.id, owner)), state^, log_path, ready))
+    # PACK: the record, then the read-only mirrors.
+    py_setattr(owner, "_native", record)
     py_setattr(owner, "port", args[1])
     py_setattr(owner, "n_workers", PythonObject(workers))
     py_setattr(owner, "K", PythonObject(shards))
@@ -326,258 +512,201 @@ def cross_vendor_coordinator_init(args: PythonObject) raises -> PythonObject:
     py_setattr(owner, "chained", py_call(c[].bi.bool, args[10]))
     py_setattr(owner, "peers", c[].bi.list())
     py_setattr(owner, "_events", c[].bi.list())
-    py_setattr(owner, "log_path", PythonObject(None) if args[12] is None else cv_path(args[12]))
+    py_setattr(owner, "log_path", log_path)
     py_setattr(owner, "bound_port", PythonObject(None))
-    var ready = py_call(c[].bi.object.__new__, args[11])
-    py_setattr(ready, "_set", PythonObject(False))
     py_setattr(owner, "ready", ready)
     return PythonObject(None)
 
 
-def cross_vendor_event(operation: String, args: PythonObject) raises -> PythonObject:
-    var event = args[0]
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    if py_type(event) is not c[].ready_cls:
-        raise Error("cross_vendor: readiness requires the native event owner")
-    if operation == "event_init" or operation == "event_clear":
-        py_setattr(event, "_set", PythonObject(False))
-    elif operation == "event_set":
-        py_setattr(event, "_set", PythonObject(True))
-    elif operation == "event_is_set":
-        return event._set
-    elif operation == "event_wait":
-        var unlimited = args[1] is None
-        var timeout = Float64(0) if unlimited else cv_float(args[1], "readiness timeout")
-        if not unlimited and not isfinite(timeout):
-            raise Error("readiness timeout must be finite or None")
-        var start = transport_clock()
-        while not cv_bool(event._set, "readiness state"):  # driver-loop: over native readiness wait notifications
-            if not unlimited and transport_clock() - start >= timeout:
-                return PythonObject(False)
-            transport_sleep(0.001)
-        return PythonObject(True)
-    return PythonObject(None)
+def _cross_peers(owner: PythonObject) raises -> PythonObject:
+    var peers = py_get(py_fields(owner), "peers")
+    if py_type(peers) is not CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi.list:
+        raise Error("cross_vendor: peer and event storage must be native lists")
+    return peers
+
+
+def _cross_unpack_peers(peers: PythonObject, mut state: CrossCoordinatorState, declarations: Bool) raises:
+    """UNPACK the connected group: each peer's descriptor and timeout and,
+    with `declarations`, what it declared in its hello. A value of the wrong
+    Python type is recorded as that peer's defect, so RUN refuses it in the
+    same order as before, after telling every worker."""
+    var bi = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi
+    cross_coordinator_clear(state)
+    state.n_total = -1
+    state.completed = -1
+    for i in range(len(peers)):  # driver-loop: over worker protocol and shard ownership declarations
+        var peer = peers[i]
+        var fd = -1
+        var timeout = Float64(-1)
+        try:
+            var pair = transport_unpack(py_get(peer, "sock"))
+            fd = pair[0]
+            timeout = pair[1]
+        except:
+            pass
+        state.fds.append(fd)
+        state.timeouts.append(timeout)
+        if not declarations:
+            continue
+        var defect = CROSS_DEFECT_NONE
+        var name = py_get(peer, "name")
+        if py_type(name) is bi.str:
+            state.names.append(String(name))
+        else:
+            state.names.append(String(""))
+            defect = CROSS_DEFECT_NAME
+        state.protocols.append(String(py_get(peer, "protocol")))
+        var ids = py_get(peer, "shards")
+        if py_type(ids) is not bi.list or len(ids) == 0:
+            if defect == CROSS_DEFECT_NONE:
+                defect = CROSS_DEFECT_IDS
+        else:
+            for k in range(len(ids)):  # driver-loop: over one worker's declared shard IDs
+                if py_type(ids[k]) is not bi.int:
+                    if defect == CROSS_DEFECT_NONE:
+                        defect = CROSS_DEFECT_ID
+                    break
+                state.ids.append(Int(py=ids[k]))
+        state.starts.append(len(state.ids))
+        var same = 0
+        if Bool(py=py_get(peer, "state") == py_get(peers[0], "state")):
+            same |= 1
+        if Bool(py=py_get(peer, "completed") == py_get(peers[0], "completed")):
+            same |= 2
+        if Bool(py=py_get(peer, "n_total") == py_get(peers[0], "n_total")):
+            same |= 4
+        state.same.append(same)
+        state.defects.append(defect)
+        state.peer_chained.append(Bool(py=py_get(peer, "chained", PythonObject(False))))
+    if declarations and len(peers) != 0:
+        var total = py_get(peers[0], "n_total")
+        if py_type(total) is bi.int:
+            state.n_total = Int(py=total)
+        var completed = py_get(peers[0], "completed")
+        if py_type(completed) is bi.int:
+            state.completed = Int(py=completed)
 
 
 def cross_vendor_refuse(owner: PythonObject, reason: String) raises:
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    var header = c[].bi.dict()
-    py_setitem(header, "cmd", PythonObject("refuse"))
-    py_setitem(header, "reason", PythonObject(reason))
-    for i in range(len(owner.peers)):  # driver-loop: over connected worker refusal notices
-        try:
-            transport_send(owner.peers[i]["sock"], header, PythonObject(None))
-        except:
-            pass
-    raise Error("CrossVendorMismatch: " + reason)
+    var record = _cross_coordinator(owner)
+    var rec = record.downcast_value_ptr[CrossCoordinatorOwner]()
+    _cross_unpack_peers(_cross_peers(owner), rec[].native, False)
+    var py = Python()
+    with GILReleased(py):
+        cross_coordinator_refuse(rec[].native, reason)
+    _ = record
 
 
-def _cross_vendor_elapsed(start: Float64) raises -> PythonObject:
-    return py_call(CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi.round, PythonObject(transport_clock() - start), 3)
+def _cross_row(state: CrossCoordinatorState, peers: PythonObject, step: Int) raises -> PythonObject:
+    """PACK one agreed step."""
+    var bi = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi
+    var row = bi.dict()
+    py_setitem(row, "step", PythonObject(step + 1))
+    var losses = bi.list()
+    for k in range(len(state.row_losses)):  # driver-loop: over logical shard losses in fixed order
+        _ = py_call(losses.append, PythonObject(state.row_losses[k]))
+    py_setitem(row, "losses", losses)
+    py_setitem(row, "state", PythonObject(state.row_agreed))
+    var hashes = bi.dict()
+    var vendors = bi.dict()
+    for i in range(len(state.row_states)):  # driver-loop: over committed worker state witnesses
+        var peer = peers[i]
+        py_setitem(hashes, peer["name"], PythonObject(state.row_states[i]))
+        py_setitem(vendors, peer["name"], py_get(peer, "vendor"))
+    py_setitem(row, "workers", hashes)
+    py_setitem(row, "vendors", vendors)
+    py_setitem(row, "total_sha256", PythonObject(state.row_total_hash))
+    py_setitem(row, "protocol", PythonObject("chained" if state.chained else "gathered"))
+    var timing = bi.dict()
+    for i in range(len(state.timing_keys)):  # small-loop(timing marks of one step)
+        py_setitem(timing, state.timing_keys[i], py_call(bi.round, PythonObject(state.timing_values[i]), 3))
+    py_setitem(row, "timing", timing)
+    return row
 
 
 def cross_vendor_drive(owner: PythonObject) raises -> PythonObject:
-    cross_vendor_coordinator_admit(owner)
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    var bi = c[].bi
-    var peers = owner.peers
-    var count = len(peers)
-    var shards = Int(py=owner.K)
-    var chained = Bool(py=owner.chained)
-    if count != Int(py=owner.n_workers):
-        cross_vendor_refuse(owner, "worker count differs from the admitted group")
-    var names = bi.set()
-    var owned = bi.list()
-    for i in range(count):  # driver-loop: over worker protocol and shard ownership declarations
-        var peer = peers[i]
-        var name = py_get(peer, "name")
-        if py_type(name) is not bi.str or py_contains(names, name):
-            cross_vendor_refuse(owner, "workers require distinct string names")
-        _ = py_call(names.add, name)
-        if String(py_get(peer, "protocol")) != "mojolearn.cross-vendor.v1":
-            cross_vendor_refuse(owner, "protocol mismatch: " + String(name))
-        var ids = py_get(peer, "shards")
-        if py_type(ids) is not bi.list or len(ids) == 0:
-            cross_vendor_refuse(owner, "workers require nonempty shard lists")
-        for k in range(len(ids)):  # driver-loop: over one worker's declared shard IDs
-            if py_type(ids[k]) is not bi.int:
-                cross_vendor_refuse(owner, "shard IDs must be integers")
-            _ = py_call(owned.append, ids[k])
-        for key in [String("state"), String("completed"), String("n_total")]:  # small-loop(three start fields): state, completed, n_total
-            if not Bool(py=peer[key] == peers[0][key]):
-                cross_vendor_refuse(owner, "workers start from different " + key)
-    owned = py_call(bi.sorted, owned)
-    if len(owned) != shards:
-        cross_vendor_refuse(owner, "workers must own every logical shard exactly once")
-    for k in range(shards):  # driver-loop: over logical shards (ownership check)
-        if Int(py=owned[k]) != k:
-            cross_vendor_refuse(owner, "workers must own shards 0.." + String(shards - 1) + " exactly once")
-    var total_elements = Int(py=peers[0]["n_total"])
-    var maximum = Int(py=owner.max_bytes)
-    if total_elements < 0 or maximum < 0 or total_elements > maximum // 4:
-        cross_vendor_refuse(owner, "gradient exceeds the coordinator byte bound")
-    var total_bytes = total_elements * 4
-    if chained:
-        # Stable insertion by the first integer shard; no Python sort key.
-        for i in range(1, count):  # driver-loop: over worker blocks in immutable shard order
-            var peer = peers[i]
-            var j = i
-            while j > 0 and Int(py=peers[j - 1]["shards"][0]) > Int(py=peer["shards"][0]):  # driver-loop: over worker blocks in immutable shard order
-                py_setitem(peers, j, peers[j - 1])
-                j -= 1
-            py_setitem(peers, j, peer)
-        for i in range(count):  # driver-loop: over workers (contiguous block check)
-            var ids = peers[i]["shards"]
-            for k in range(len(ids)):  # driver-loop: over one worker's declared shard IDs
-                if Int(py=ids[k]) != Int(py=ids[0]) + k:
-                    cross_vendor_refuse(owner, "chained fold: worker must own a contiguous block")
-            if not Bool(py=py_get(peers[i], "chained", PythonObject(False))):
-                cross_vendor_refuse(owner, "chained fold: every worker must start with chained=True")
+    var record = _cross_coordinator(owner)
+    var rec = record.downcast_value_ptr[CrossCoordinatorOwner]()
+    var bi = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi
+    # UNPACK
+    var peers = _cross_peers(owner)
+    var events = _cross_events(owner)
+    _cross_unpack_peers(peers, rec[].native, True)
+    # RUN: the group is admitted, or every worker is told why not.
+    var py = Python()
+    with GILReleased(py):
+        cross_coordinator_admit(rec[].native)
+    if rec[].native.completed < 0:
+        raise Error("cross_vendor: worker hello requires an integer completed step")
+    if rec[].native.chained:
+        # PACK: `peers` takes the order the steps use (by first shard).
+        var ordered = bi.list()
+        for i in range(len(peers)):  # driver-loop: over worker blocks in immutable shard order
+            _ = py_call(ordered.append, peers[rec[].native.order[i]])
+        for i in range(len(peers)):  # driver-loop: over worker blocks in immutable shard order
+            py_setitem(peers, i, ordered[i])
     var rows = bi.list()
-    var completed = Int(py=peers[0]["completed"])
-    for step in range(completed, Int(py=owner.steps)):  # driver-loop: over requested lockstep training rounds
-        var started = transport_clock()
-        var timing = bi.dict()
-        for i in range(count):  # driver-loop: over worker step requests
-            var head = bi.dict()
-            py_setitem(head, "cmd", PythonObject("step"))
-            py_setitem(head, "step", PythonObject(step))
-            py_setitem(head, "chained", PythonObject(chained))
-            py_setitem(head, "first", PythonObject(chained and i == 0))
-            transport_send(peers[i]["sock"], head, PythonObject(None))
-        var gradients = bi.dict()
-        var losses = bi.dict()
-        for i in range(count):  # driver-loop: over worker gradient replies
-            var peer = peers[i]
-            var n = len(peer["shards"])
-            if not chained and total_bytes != 0 and n > maximum // total_bytes:
-                cross_vendor_refuse(owner, "worker gradient payload exceeds coordinator byte bound")
-            # The payload stays the received bytearray (no bytes copy of it).
-            var response = transport_receive_owned(peer["sock"], 0 if chained else n * total_bytes)
-            var head = response[0]
-            var payload = response[1]
-            if not Bool(py=py_get(head, "step") == PythonObject(step)) or not Bool(py=py_get(head, "shards") == peer["shards"]):
-                cross_vendor_refuse(owner, String(peer["name"]) + " answered the wrong step or shards")
-            if len(head["losses"]) != n or (not chained and len(payload) != n * total_bytes):
-                cross_vendor_refuse(owner, String(peer["name"]) + " sent a wrong gradient or loss count")
-            # pass 3 (N111): shard spans are views of the received payload
-            # (ordered_fold reads them in place); slicing the bytes copied
-            # every shard gradient.
-            var received = py_call(bi.memoryview, payload)
-            for k in range(n):  # driver-loop: over one worker's logical shard replies
-                var id = peer["shards"][k]
-                py_setitem(losses, id, head["losses"][k])
-                if not chained:
-                    py_setitem(gradients, id, received[py_call(bi.slice, k * total_bytes, (k + 1) * total_bytes)])
-            if chained:
-                py_setitem(timing, "gradients_" + String(peer["name"]), _cross_vendor_elapsed(started))
-        var total = bi.bytes()
-        if chained:
-            for i in range(count):  # driver-loop: over chained prefix handoffs in fixed shard order
-                var head = bi.dict()
-                py_setitem(head, "cmd", PythonObject("fold"))
-                py_setitem(head, "step", PythonObject(step))
-                var folded_at = transport_clock()
-                transport_send(peers[i]["sock"], head, total)
-                var response = transport_receive(peers[i]["sock"], total_bytes)
-                total = response[1]
-                if not Bool(py=py_get(response[0], "step") == PythonObject(step)) or len(total) != total_bytes:
-                    cross_vendor_refuse(owner, String(peers[i]["name"]) + " returned a wrong fold")
-                py_setitem(timing, "fold_" + String(peers[i]["name"]), _cross_vendor_elapsed(folded_at))
-        else:
-            var parts = bi.list()
-            for k in range(shards):  # driver-loop: over logical shard gradients in fixed order
-                _ = py_call(parts.append, gradients[k])
-            total = cross_vendor_fold(parts, PythonObject(None))
-        var all_losses = bi.list()
-        for k in range(shards):  # driver-loop: over logical shard losses in fixed order
-            _ = py_call(all_losses.append, losses[k])
-        var total_hash = cross_vendor_hexdigest(total)
-        var apply = bi.dict()
-        py_setitem(apply, "cmd", PythonObject("apply"))
-        py_setitem(apply, "step", PythonObject(step))
-        py_setitem(apply, "total_sha256", total_hash)
-        py_setitem(apply, "losses", all_losses)
-        for i in range(count):  # driver-loop: over identical optimizer commit requests
-            transport_send(peers[i]["sock"], apply, bi.bytes() if chained and i == count - 1 else total)
-        py_setitem(timing, "apply_sent", _cross_vendor_elapsed(started))
-        var hashes = bi.dict()
-        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-        var agreed = Optional[PythonObject]()
-        var vendors = bi.dict()
-        for i in range(count):  # driver-loop: over committed worker state witnesses
-            var peer = peers[i]
-            var response = transport_receive(peer["sock"], 0)
-            var head = response[0]
-            if not Bool(py=py_get(head, "completed") == PythonObject(step + 1)):
-                cross_vendor_refuse(owner, String(peer["name"]) + " did not commit step " + String(step + 1))
-            py_setitem(hashes, peer["name"], head["state"])
-            py_setitem(vendors, peer["name"], py_get(peer, "vendor"))
-            if not agreed:
-                agreed = head["state"]
-            elif not Bool(py=head["state"] == agreed.value()):
-                cross_vendor_refuse(owner, "replicas disagree after step " + String(step + 1))
-            py_setitem(timing, "applied_" + String(peer["name"]), _cross_vendor_elapsed(started))
-        py_setitem(timing, "step_seconds", _cross_vendor_elapsed(started))
-        var row = bi.dict()
-        py_setitem(row, "step", PythonObject(step + 1))
-        py_setitem(row, "losses", all_losses)
-        var agreed_state = PythonObject(None)
-        if agreed:
-            agreed_state = agreed.value()
-        py_setitem(row, "state", agreed_state)
-        py_setitem(row, "workers", hashes)
-        py_setitem(row, "vendors", vendors)
-        py_setitem(row, "total_sha256", total_hash)
-        py_setitem(row, "protocol", PythonObject("chained" if chained else "gathered"))
-        py_setitem(row, "timing", timing)
+    for step in range(rec[].native.completed, rec[].native.steps):  # driver-loop: over requested lockstep training rounds
+        # RUN: one whole step, no Python object, the GIL released.
+        with GILReleased(py):
+            cross_coordinator_step(rec[].native, step)
+        # PACK
+        var row = _cross_row(rec[].native, peers, step)
         _ = py_call(rows.append, row)
-        _ = py_call(owner._events.append, row)
-        cross_vendor_log(owner.log_path, row)
-    var done = bi.dict()
-    py_setitem(done, "cmd", PythonObject("done"))
-    for i in range(count):  # driver-loop: over group completion notices
-        transport_send(peers[i]["sock"], done, PythonObject(None))
+        _ = py_call(events.append, row)
+        cross_vendor_log(rec[].log_path, row)
+    with GILReleased(py):
+        cross_coordinator_done(rec[].native)
+    # The peers' socket objects own the descriptors RUN used.
+    _ = peers
+    _ = record
     return rows
 
 
-def _cross_vendor_close_peers(owner: PythonObject) raises:
-    for i in range(len(owner.peers)):  # driver-loop: over native socket cleanup
+def _cross_vendor_close_peers(peers: PythonObject) raises:
+    for i in range(len(peers)):  # driver-loop: over native socket cleanup
         try:
-            transport_close(owner.peers[i]["sock"])
+            transport_close(peers[i]["sock"])
         except:
             pass
 
 
 def cross_vendor_coordinator_run(owner: PythonObject) raises -> PythonObject:
-    cross_vendor_coordinator_admit(owner)
+    var record = _cross_coordinator(owner)
+    var rec = record.downcast_value_ptr[CrossCoordinatorOwner]()
     var bi = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi
-    var server = transport_listen(String(owner.host), Int(py=owner.port), Float64(py=owner.accept_timeout))
+    var peers = _cross_peers(owner)
+    var server = transport_listen(rec[].native.host, rec[].native.port, rec[].native.accept_timeout)
     py_setattr(owner, "bound_port", transport_port(server))
-    py_setattr(owner.ready, "_set", PythonObject(True))
+    var ready = _cross_native(rec[].ready, py_type(rec[].ready), "cross_vendor: readiness requires the native event owner")
+    ready.downcast_value_ptr[CrossReadyOwner]()[].cell[0] = 1
     var rows = PythonObject(None)
     try:
-        while len(owner.peers) < Int(py=owner.n_workers):  # driver-loop: over admitted worker connections
-            var socket = transport_accept(server, Float64(py=owner.timeout))
+        # UNPACK, once per connection: the worker's hello is admitted through
+        # the boundary reader into `peers`, as it always was.
+        while len(peers) < rec[].native.workers:  # driver-loop: over admitted worker connections
+            var socket = transport_accept(server, rec[].native.timeout)
             try:
                 var response = transport_receive(socket, 0)
                 var peer = py_call(bi.dict, response[0])
                 py_setitem(peer, "sock", socket)
                 py_setitem(peer, "where", transport_address(socket, True))
-                _ = py_call(owner.peers.append, peer)
+                _ = py_call(peers.append, peer)
             except error:
                 transport_close(socket)
                 raise error
         rows = cross_vendor_drive(owner)
     except error:
-        _cross_vendor_close_peers(owner)
+        _cross_vendor_close_peers(peers)
         transport_close(server)
         raise error
-    _cross_vendor_close_peers(owner)
+    _cross_vendor_close_peers(peers)
     transport_close(server)
+    _ = record
     return rows
 
 
+# ------------------------------------------------------------ feed and rates
 def cross_vendor_feed_init(args: PythonObject) raises -> PythonObject:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     var owner = args[0]
@@ -592,27 +721,31 @@ def cross_vendor_feed_init(args: PythonObject) raises -> PythonObject:
     for i in range(4):  # small-loop(four batch-feed dimensions): steps, shards, batch, length + 1
         dims.append(_parallel_int(shape[i], 0 if i == 0 else 1, 2147483647, "batch feed dimension", False))
     _ = cv_int(args[2], "start_step")
-    py_setattr(owner, "_start", PythonObject(_parallel_int(args[2], 0, 999999, "start_step", False)))
-    py_setattr(owner, "_data", _parallel_array(value, dims, True))
+    var feed = CrossFeed()
+    feed.start = _parallel_int(args[2], 0, 999999, "start_step", False)
+    feed.steps = dims[0]
+    feed.shards = dims[1]
+    feed.batch = dims[2]
+    feed.width = dims[3]
+    var data = _parallel_array(value, dims, True)
+    feed.address = Int(py=data._addr)
+    py_setattr(owner, "_native", PythonObject(alloc=CrossFeedOwner(feed^, data)))
     return PythonObject(None)
 
 
 def cross_vendor_feed_batch(owner: PythonObject, step: Int, shard: Int) raises -> PythonObject:
-    if py_type(owner) is not CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].feed_cls:
-        raise Error("cross_vendor: batch owner must be an exact BatchFeed")
-    var data = owner._data
-    var local = step - Int(py=owner._start)
-    var k = Int(py=data.shape[1])
-    if local < 0 or local >= Int(py=data.shape[0]) or shard < 0 or shard >= k:
-        raise Error("BatchFeed step or shard falls outside its retained data")
-    var batch = Int(py=data.shape[2])
-    var width = Int(py=data.shape[3])
-    var n = batch * width
+    var record = _cross_native(owner, CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].feed_cls,
+                               "cross_vendor: batch owner must be an exact BatchFeed")
+    var rec = record.downcast_value_ptr[CrossFeedOwner]()
+    var address = cross_feed_address(rec[].feed, step, shard)
+    var batch = rec[].feed.batch
+    var width = rec[].feed.width
+    # PACK: the caller gets an owned copy; a Worker reads the block in place.
     var output = generation_array([batch, width], "i")
-    var source = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(py=data._addr))
+    var source = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=address)
     var target = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
-    unsafe_memcpy(dest=target, src=source + (local * k + shard) * n, count=n)
-    _ = data^
+    unsafe_memcpy(dest=target, src=source, count=batch * width)
+    _ = record
     return output
 
 
@@ -620,51 +753,43 @@ def cross_vendor_rates_init(args: PythonObject) raises -> PythonObject:
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     if py_type(args[0]) is not c[].rate_cls:
         raise Error("LearningRateTable subclasses and Python attribute hooks are not accepted")
-    var rates = cv_sequence(args[1], "rates")
-    if len(rates) == 0:
+    var values = cv_sequence(args[1], "rates")
+    if len(values) == 0:
         raise Error("LearningRateTable requires at least one rate")
-    var values = c[].bi.list()
-    for i in range(len(rates)):  # driver-loop: over the declared learning-rate schedule
-        _ = cv_float(rates[i], "learning rate")
-        var value = _parallel_float(rates[i], "learning rate")
+    var rates = CrossRates()
+    for i in range(len(values)):  # driver-loop: over the declared learning-rate schedule
+        _ = cv_float(values[i], "learning rate")
+        var value = _parallel_float(values[i], "learning rate")
         if value <= 0:
             raise Error("learning rates must be positive")
-        _ = py_call(values.append, PythonObject(Float64(value)))
-    py_setattr(args[0], "_values", values)
+        rates.values.append(value)
     _ = cv_int(args[2], "start_step")
-    py_setattr(args[0], "_start", PythonObject(_parallel_int(args[2], 0, 999999, "start_step", False)))
+    rates.start = _parallel_int(args[2], 0, 999999, "start_step", False)
+    py_setattr(args[0], "_native", PythonObject(alloc=CrossRateOwner(rates^)))
     return PythonObject(None)
 
 
 def cross_vendor_rate(table: PythonObject, step: Int) raises -> PythonObject:
-    if py_type(table) is not CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].rate_cls:
-        raise Error("cross_vendor: rate owner must be an exact LearningRateTable")
-    var at = step - Int(py=table._start)
-    if at < 0 or at >= len(table._values):
-        raise Error("LearningRateTable step falls outside its retained schedule")
-    return table._values[at]
+    var record = _cross_native(table, CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].rate_cls,
+                               "cross_vendor: rate owner must be an exact LearningRateTable")
+    var value = cross_rate(record.downcast_value_ptr[CrossRateOwner]()[].rates, step)
+    _ = record
+    return PythonObject(Float64(value))
 
 
-def _cross_vendor_trainer(trainer: PythonObject, operation: Int, params: PythonObject) raises -> PythonObject:
+# ------------------------------------------------------------ worker
+def _cross_vendor_trainer(trainer: PythonObject, operation: Int) raises -> PythonObject:
+    """A boundary read of the exact trainer: its raw state export (which
+    opens its session) or a detached copy of its admitted metadata."""
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    if py_type(trainer) is c[].parallel_cls:
-        var args = c[].bi.list()
-        _ = py_call(args.append, trainer)
-        if operation == PARALLEL_BYTE_OPN_EXPORT_RAW:
-            # params: () or (into,), the reused snapshot dict (N110).
-            _ = py_call(args.append, 0)
-            _ = py_call(args.append, params[0] if len(params) == 1 else PythonObject(None))
-        else:
-            for i in range(len(params)):  # driver-loop: over the native trainer operation envelope
-                _ = py_call(args.append, params[i])
-        return parallel_byte_call(operation, PythonObject(None), args)
-    raise Error("cross_vendor: trainer must be an exact ParallelByteLanguageModelTrainer; Python trainer protocols are not accepted")
-
-
-def _cross_vendor_one(value: PythonObject) raises -> PythonObject:
-    var result = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi.list()
-    _ = py_call(result.append, value)
-    return result
+    if py_type(trainer) is not c[].parallel_cls:
+        raise Error("cross_vendor: trainer must be an exact ParallelByteLanguageModelTrainer; Python trainer protocols are not accepted")
+    var args = c[].bi.list()
+    _ = py_call(args.append, trainer)
+    if operation == PARALLEL_BYTE_OPN_EXPORT_RAW:
+        _ = py_call(args.append, 0)
+        _ = py_call(args.append, PythonObject(None))
+    return parallel_byte_call(operation, PythonObject(None), args)
 
 
 def cross_vendor_log(path: PythonObject, row: PythonObject) raises:
@@ -694,197 +819,82 @@ def cross_vendor_worker_arguments(trainer: PythonObject, batches: PythonObject, 
         raise Error("cross_vendor: on_commit callbacks are not accepted; use drain_events or native checkpoint configuration")
 
 
-def cross_vendor_commit_configuration(owner: PythonObject, directory: PythonObject, steps: PythonObject, expected: PythonObject, retain: PythonObject, scheme: PythonObject) raises:
+def cross_vendor_commit_configuration(mut state: CrossWorkerState, directory: PythonObject, steps: PythonObject,
+                                      expected: PythonObject, retain: PythonObject, scheme: PythonObject) raises -> PythonObject:
+    """UNPACK the commit policy into `state`; returns the admitted checkpoint
+    directory (None when there is none)."""
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
     var ids = cv_sequence(steps, "checkpoint_steps")
-    var chosen = c[].bi.set()
     for i in range(len(ids)):  # driver-loop: over explicit native checkpoint steps
         var step = cv_int(ids[i], "checkpoint step")
         if step < 1:
             raise Error("cross_vendor: checkpoint steps must be positive")
-        _ = py_call(chosen.add, step)
-    if len(chosen) != 0 and directory is None:
+        var seen = False
+        for j in range(len(state.checkpoint_steps)):  # small-loop(checkpoint steps admitted so far)
+            seen = seen or state.checkpoint_steps[j] == step
+        if not seen:
+            state.checkpoint_steps.append(step)
+    if len(state.checkpoint_steps) != 0 and directory is None:
         raise Error("cross_vendor: checkpoint_steps requires checkpoint_dir")
-    py_setattr(owner, "checkpoint_dir", PythonObject(None) if directory is None else cv_path(directory))
-    py_setattr(owner, "_checkpoint_steps", chosen)
-    py_setattr(owner, "retain_gradients", PythonObject(cv_bool(retain, "retain_gradients")))
+    var checkpoint_dir = PythonObject(None) if directory is None else cv_path(directory)
+    state.retain = cv_bool(retain, "retain_gradients")
     var hash_scheme = cv_text(scheme, "hash_scheme")
     if hash_scheme != "sha256.v1" and hash_scheme != "sliced-sha256-8.v2":
         raise Error("cross_vendor: unsupported native hash_scheme")
-    py_setattr(owner, "hash_scheme", scheme)
+    state.scheme = CROSS_SCHEME_V1 if hash_scheme == "sha256.v1" else CROSS_SCHEME_SLICED
     var rows = cv_sequence(expected, "expected_commits")
-    var registry = c[].bi.dict()
+    var registered = List[Int]()
     for i in range(len(rows)):  # driver-loop: over explicit expected committed hashes
         var row = rows[i]
         cv_json(row)
         if py_type(row) is not c[].bi.dict or not py_contains(row, "step"):
             raise Error("cross_vendor: expected commits require step and state or total_sha256")
         var step = cv_int(row["step"], "expected step")
-        if step < 1 or py_contains(registry, step):
+        var repeated = False
+        for j in range(len(registered)):  # small-loop(expected steps admitted so far)
+            repeated = repeated or registered[j] == step
+        if step < 1 or repeated:
             raise Error("cross_vendor: expected commit steps must be unique and positive")
-        var keys = py_call(c[].bi.list, row)
+        # Keys ascending: the first differing field is reported in that order.
+        var keys = py_call(c[].bi.sorted, py_call(c[].bi.list, row))
         if len(keys) < 2:
             raise Error("cross_vendor: expected commits require state or total_sha256")
         for j in range(len(keys)):  # small-loop(expected commit fields): the named keys of one configured row
             var key = String(keys[j])
             if key == "step":
                 continue
+            var value = String("")
             if key == "losses_f32_hex":
                 var losses = cv_sequence(row[keys[j]], "expected loss words")
                 for k in range(len(losses)):  # driver-loop: over logical shard loss words of one configured row
-                    if len(PythonObject(cv_text(losses[k], "expected loss word"))) != 8:
+                    var word = cv_text(losses[k], "expected loss word")
+                    if len(PythonObject(word)) != 8:
                         raise Error("cross_vendor: expected loss words must have eight hexadecimal characters")
-                continue
-            if key == "lr_f32_hex":
-                if len(PythonObject(cv_text(row[keys[j]], "expected learning-rate word"))) != 8:
+                    if k != 0:
+                        value += ","
+                    value += word
+            elif key == "lr_f32_hex":
+                value = cv_text(row[keys[j]], "expected learning-rate word")
+                if len(PythonObject(value)) != 8:
                     raise Error("cross_vendor: expected learning-rate word must have eight hexadecimal characters")
-                continue
-            if key == "hash_scheme":
-                _ = cv_text(row[keys[j]], "expected hash scheme")
-                continue
-            if key != "state" and key != "total_sha256" and key != "state_sha256" and key != "gradient_sha256":
-                raise Error("cross_vendor: unknown expected commit field")
-            _ = cv_text(row[keys[j]], "expected hash")
-            if len(row[keys[j]]) != 64:
-                raise Error("cross_vendor: expected hashes must have 64 hexadecimal characters")
-            var raw = py_call(row[keys[j]].encode, "ascii")
-            for k in range(64):  # small-loop(64 hex characters): one configured digest string
-                var ch = Int(py=raw[k])
-                if not (ch >= 48 and ch <= 57) and not (ch >= 97 and ch <= 102):
+            elif key == "hash_scheme":
+                value = cv_text(row[keys[j]], "expected hash scheme")
+            else:
+                if key != "state" and key != "total_sha256" and key != "state_sha256" and key != "gradient_sha256":
+                    raise Error("cross_vendor: unknown expected commit field")
+                value = cv_text(row[keys[j]], "expected hash")
+                if len(row[keys[j]]) != 64:
                     raise Error("cross_vendor: expected hashes must have 64 hexadecimal characters")
-        py_setitem(registry, step, native_json_parse(PythonObject(_transport_json(row))))
-    py_setattr(owner, "_expected_commits", registry)
-
-
-def cross_vendor_sliced_hash(value: PythonObject) raises -> PythonObject:
-    # The eight-slice v2 digest format is computed in core/sha256.mojo
-    # (sha256_sliced8_hex) over the same bytes.
-    var unused = Sha256()
-    return PythonObject(_cv_pinned_hash(value, 2, unused))
-
-
-def cross_vendor_float_word(value: PythonObject) raises -> PythonObject:
-    var word = bitcast[DType.uint32](Float32(cv_float(value, "recorded float32")))
-    return py_call(CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi.format, Int(word), "08x")
-
-
-def cross_vendor_commit(owner: PythonObject, trainer: PythonObject, row: PythonObject, snapshot: PythonObject, started: Float64, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    var event = py_call(c[].bi.dict, row)
-    var hash_start = transport_clock()
-    py_setitem(event, "hash_scheme", owner.hash_scheme)
-    if String(owner.hash_scheme) == "sha256.v1":
-        py_setitem(event, "state_sha256", row["state"])
-        py_setitem(event, "gradient_sha256", row["total_sha256"])
-    else:
-        var digest = Sha256()
-        for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys): one digest update per named state field
-            digest.update_text(String(cross_vendor_sliced_hash(snapshot[key])))
-        py_setitem(event, "state_sha256", PythonObject(digest.hexdigest()))
-        py_setitem(event, "gradient_sha256", cross_vendor_sliced_hash(row["total_bytes"]))
-    # The trainer's admitted state through its native owner: `trainer._state`
-    # is a Python property (parallel_training.py), so reading it ran a Python
-    # frame inside the worker's native run.
-    var admitted = _cross_vendor_trainer(trainer, PARALLEL_BYTE_OPN_ADMITTED_STATE, c[].bi.list())
-    py_setitem(event, "lr_f32_hex", cross_vendor_float_word(admitted["config"]["lr"]))
-    var losses = c[].bi.list()
-    var values = cv_sequence(row["losses"], "committed losses")
-    for i in range(len(values)):  # driver-loop: over logical shard loss metadata
-        _ = py_call(losses.append, cross_vendor_float_word(values[i]))
-    py_setitem(event, "losses_f32_hex", losses)
-    py_setitem(event, "hash_seconds", PythonObject(transport_clock() - hash_start))
-    if not cv_bool(owner.retain_gradients, "retain_gradients"):
-        _ = py_call(event.pop, "total_bytes")
-    var step = Int(py=row["step"])
-    var expected = py_get(owner._expected_commits, step)
-    if expected is not None:
-        var keys = py_call(c[].bi.list, expected)
-        for i in range(len(keys)):  # driver-loop: over configured committed-state checks
-            var key = String(keys[i])
-            if key != "step" and not Bool(py=event[key] == expected[key]):
-                py_setitem(event, "expected_mismatch", PythonObject(key))
-                _ = py_call(owner._events.append, event)
-                cross_vendor_log(owner.log_path, row_without_gradient(event))
-                raise Error("CrossVendorMismatch: committed " + key + " differs from the configured expectation at step " + String(step))
-    if py_contains(owner._checkpoint_steps, step):
-        var checkpoint_start = transport_clock()
-        var state = py_call(c[].bi.dict, admitted)
-        _ = py_call(state.update, snapshot)
-        var filename = PythonObject("ckpt_") + py_call(PythonObject(String(step)).zfill, 8) + PythonObject(".blm")
-        var path = py_call(owner.checkpoint_dir.rstrip, "/") + PythonObject("/") + filename
-        var digest = byte_checkpoint_save(path, state, io_error)
-        py_setitem(event, "checkpoint_path", path)
-        py_setitem(event, "checkpoint_sha256", digest)
-        py_setitem(event, "checkpoint_seconds", PythonObject(transport_clock() - checkpoint_start))
-    py_setitem(event, "seconds", PythonObject(transport_clock() - started))
-    _ = py_call(owner._events.append, event)
-    cross_vendor_log(owner.log_path, row_without_gradient(event))
-    return event
-
-
-def row_without_gradient(row: PythonObject) raises -> PythonObject:
-    var result = py_call(CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi.dict, row)
-    _ = py_call(result.pop, "total_bytes", PythonObject(None))
-    return result
-
-
-def cross_vendor_worker_admit(owner: PythonObject) raises:
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    if py_type(owner) is not c[].worker_cls:
-        raise Error("cross_vendor: worker owner must be an exact Worker")
-    cross_vendor_worker_arguments(owner.trainer, owner.batches, owner.lr_for_step, owner.on_commit)
-    var shards = cv_sequence(owner.shards, "shards")
-    for i in range(len(shards)):  # driver-loop: over admitted native shard metadata
-        _ = cv_int(shards[i], "shard")
-    var address = cv_sequence(owner.address, "address")
-    if len(address) != 2:
-        raise Error("cross_vendor: worker address requires two entries")
-    _ = cv_text(address[0], "host")
-    _ = cv_int(address[1], "port")
-    _ = cv_text(owner.name, "name")
-    _ = cv_float(owner.connect_timeout, "connect_timeout")
-    _ = cv_float(owner.timeout, "timeout")
-    _ = cv_bool(owner.chained, "chained")
-    _ = cv_bool(owner.retain_gradients, "retain_gradients")
-    var scheme = cv_text(owner.hash_scheme, "hash_scheme")
-    if scheme != "sha256.v1" and scheme != "sliced-sha256-8.v2":
-        raise Error("cross_vendor: unsupported native hash_scheme")
-    if owner.checkpoint_dir is not None:
-        _ = cv_path(owner.checkpoint_dir)
-    if py_type(owner._checkpoint_steps) is not c[].bi.set or py_type(owner._expected_commits) is not c[].bi.dict or py_type(owner._events) is not c[].bi.list:
-        raise Error("cross_vendor: policy and event storage must be native containers")
-    var checkpoint_steps = py_call(c[].bi.list, owner._checkpoint_steps)
-    for i in range(len(checkpoint_steps)):  # driver-loop: over explicit native checkpoint steps
-        _ = cv_int(checkpoint_steps[i], "checkpoint step")
-    var expected_steps = py_call(c[].bi.list, owner._expected_commits)
-    for i in range(len(expected_steps)):  # driver-loop: over explicit expected committed hashes
-        _ = cv_int(expected_steps[i], "expected step")
-        cv_json(owner._expected_commits[expected_steps[i]])
-    if owner.log_path is not None:
-        _ = cv_path(owner.log_path)
-
-
-def cross_vendor_coordinator_admit(owner: PythonObject) raises:
-    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    if py_type(owner) is not c[].coordinator_cls:
-        raise Error("cross_vendor: coordinator owner must be an exact Coordinator")
-    if owner.on_step is not None:
-        raise Error("cross_vendor: on_step callbacks are not accepted; use drain_events or log_path")
-    _ = cv_int(owner.port, "port")
-    _ = cv_int(owner.n_workers, "workers")
-    _ = cv_int(owner.K, "logical_shards")
-    _ = cv_int(owner.steps, "steps")
-    _ = cv_int(owner.max_bytes, "max_gradient_bytes")
-    _ = cv_text(owner.host, "host")
-    _ = cv_float(owner.timeout, "timeout")
-    _ = cv_float(owner.accept_timeout, "accept_timeout")
-    _ = cv_bool(owner.chained, "chained")
-    if py_type(owner.peers) is not c[].bi.list or py_type(owner._events) is not c[].bi.list:
-        raise Error("cross_vendor: peer and event storage must be native lists")
-    if py_type(owner.ready) is not c[].ready_cls:
-        raise Error("cross_vendor: readiness requires the native event owner")
-    if owner.log_path is not None:
-        _ = cv_path(owner.log_path)
+                var raw = py_call(row[keys[j]].encode, "ascii")
+                for k in range(64):  # small-loop(64 hex characters): one configured digest string
+                    var ch = Int(py=raw[k])
+                    if not (ch >= 48 and ch <= 57) and not (ch >= 97 and ch <= 102):
+                        raise Error("cross_vendor: expected hashes must have 64 hexadecimal characters")
+            state.expected_step.append(step)
+            state.expected_key.append(key)
+            state.expected_value.append(value)
+        registered.append(step)
+    return checkpoint_dir
 
 
 def cross_vendor_worker_init(args: PythonObject) raises -> PythonObject:
@@ -894,40 +904,67 @@ def cross_vendor_worker_init(args: PythonObject) raises -> PythonObject:
         raise Error("cross_vendor: Worker subclasses and Python attribute hooks are not accepted")
     var trainer = args[7]
     cross_vendor_worker_arguments(trainer, args[3], args[11], args[12])
+    # UNPACK: every value leaves its Python object here, once.
+    var state = CrossWorkerState()
     var shards = cv_sequence(args[2], "shards")
-    var ids = c[].bi.list()
     for i in range(len(shards)):  # driver-loop: over the worker's logical shard ids
         var shard = cv_int(shards[i], "shard")
         if shard < 0:
             raise Error("cross_vendor: shards must be nonnegative")
-        _ = py_call(ids.append, shard)
+        # Kept ascending: a stable insertion of one id.
+        state.shards.append(shard)
+        var at = len(state.shards) - 1
+        while at > 0 and state.shards[at - 1] > state.shards[at]:  # small-loop(ids admitted so far)
+            var moved = state.shards[at - 1]
+            state.shards[at - 1] = state.shards[at]
+            state.shards[at] = moved
+            at -= 1
     var address = cv_sequence(args[4], "address")
     if len(address) != 2:
         raise Error("worker address requires host and port in [1,65535]")
-    _ = cv_text(address[0], "worker host")
-    var port = cv_int(address[1], "worker port")
-    if port < 1 or port > 65535:
+    state.host = cv_text(address[0], "worker host")
+    state.port = cv_int(address[1], "worker port")
+    if state.port < 1 or state.port > 65535:
         raise Error("worker address requires host and port in [1,65535]")
     if args[5] is not None:
         _ = cv_text(args[5], "worker name")
-    if cv_float(args[8], "connect_timeout") <= 0 or cv_float(args[9], "timeout") <= 0:
+    state.connect_timeout = cv_float(args[8], "connect_timeout")
+    state.timeout = cv_float(args[9], "timeout")
+    if state.connect_timeout <= 0 or state.timeout <= 0:
         raise Error("worker timeouts must be positive")
-    _ = cv_bool(args[10], "chained")
+    state.chained = cv_bool(args[10], "chained")
     _ = cv_int(args[6], "device")
     # Admit every optional policy before retaining/copying model state. Invalid
     # callback replacements must not construct even a lazy trainer owner.
-    py_setattr(owner, "log_path", PythonObject(None) if args[13] is None else cv_path(args[13]))
-    cross_vendor_commit_configuration(owner, args[14], args[15], args[16], args[17], args[18])
+    var log_path = PythonObject(None) if args[13] is None else cv_path(args[13])
+    var checkpoint_dir = cross_vendor_commit_configuration(state, args[14], args[15], args[16], args[17], args[18])
     if trainer is None:
         cv_state(args[1])
         trainer = py_call(c[].bi.object.__new__, c[].parallel_cls)
-        var device = _cross_vendor_one(args[6])
+        var device = c[].bi.list()
+        _ = py_call(device.append, args[6])
         _ = parallel_byte_init(trainer, args[1], device, PythonObject(1), PythonObject(False))
+    var name = args[5] if Bool(py=args[5]) else PythonObject(transport_hostname())
+    state.name = String(name)
+    state.vendor = String(c[].vendor)
+    state.fold_mode = c[].fold_mode
+    state.fold_vendor = c[].fold_vendor
+    var ids = c[].bi.list()
+    for i in range(len(state.shards)):  # driver-loop: over the worker's logical shard ids
+        _ = py_call(ids.append, PythonObject(state.shards[i]))
+    var retain = state.retain
+    var record = PythonObject(alloc=CrossWorkerOwner(Int(py=py_call(c[].bi.id, owner)), state^, log_path, checkpoint_dir))
+    # PACK: the record, then the read-only mirrors.
+    py_setattr(owner, "_native", record)
+    py_setattr(owner, "log_path", log_path)
+    py_setattr(owner, "checkpoint_dir", checkpoint_dir)
+    py_setattr(owner, "retain_gradients", PythonObject(retain))
+    py_setattr(owner, "hash_scheme", args[18])
     py_setattr(owner, "trainer", trainer)
-    py_setattr(owner, "shards", py_call(c[].bi.sorted, ids))
+    py_setattr(owner, "shards", ids)
     py_setattr(owner, "batches", args[3])
     py_setattr(owner, "address", py_call(c[].bi.tuple, address))
-    py_setattr(owner, "name", args[5] if Bool(py=args[5]) else PythonObject(transport_hostname()))
+    py_setattr(owner, "name", name)
     py_setattr(owner, "connect_timeout", args[8])
     py_setattr(owner, "timeout", args[9])
     py_setattr(owner, "chained", py_call(c[].bi.bool, args[10]))
@@ -937,13 +974,28 @@ def cross_vendor_worker_init(args: PythonObject) raises -> PythonObject:
     return PythonObject(None)
 
 
+def _cross_collaborators(owner: PythonObject) raises -> PythonObject:
+    """UNPACK at each run, as before: the trainer, the feed, the rate table
+    and the retired callback slot are re-admitted by exact class."""
+    var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
+    var fields = py_fields(owner)
+    var found = c[].bi.list()
+    _ = py_call(found.append, py_get(fields, "trainer"))
+    _ = py_call(found.append, py_get(fields, "batches"))
+    _ = py_call(found.append, py_get(fields, "lr_for_step"))
+    cross_vendor_worker_arguments(found[0], found[1], found[2], py_get(fields, "on_commit"))
+    return found
+
+
 def cross_vendor_worker_connect(owner: PythonObject) raises -> PythonObject:
-    cross_vendor_worker_admit(owner)
-    var deadline = transport_clock() + Float64(py=owner.connect_timeout)
+    var record = _cross_worker(owner)
+    var rec = record.downcast_value_ptr[CrossWorkerOwner]()
+    _ = _cross_collaborators(owner)
+    var deadline = transport_clock() + rec[].native.connect_timeout
     while True:  # driver-loop: over native connection retries within the configured deadline
         try:
-            var socket = transport_connect(String(owner.address[0]), Int(py=owner.address[1]), 30.0)
-            transport_timeout(socket, Float64(py=owner.timeout))
+            var socket = transport_connect(rec[].native.host, rec[].native.port, 30.0)
+            transport_timeout(socket, rec[].native.timeout)
             return socket
         except error:
             if String(error).startswith("InterruptedError:"):
@@ -953,40 +1005,177 @@ def cross_vendor_worker_connect(owner: PythonObject) raises -> PythonObject:
             transport_sleep(2.0)
 
 
-def _cross_vendor_batch(owner: PythonObject, step: Int, shard: PythonObject) raises -> PythonObject:
+def _cross_file_error(mut io_error: ByteCheckpointIOError, failure: ByteCheckpointWriteFailure) raises:
+    """PACK a failed file call as the exact OSError subclass of its errno,
+    with its filename, for the C entry to raise."""
+    var bi = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi
+    var message = unsafe_string_from_utf8_cstr(external_call["strerror", Pointer[Int8, ImmUntrackedOrigin]](c_int(failure.number)))
+    var value = py_call(bi.OSError, failure.number, PythonObject(message), PythonObject(failure.path))
+    io_error.pending = True
+    io_error.has_value = True
+    io_error.has_traceback = False
+    io_error.kind = py_type(value)
+    io_error.value = value
+
+
+def cross_vendor_commit(record: PythonObject, trainer: PythonObject, events: PythonObject,
+                        mut io_error: ByteCheckpointIOError) raises:
+    """PACK the step RUN just committed: the event, the configured
+    expectation's refusal, the checkpoint and the log line."""
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    if py_type(owner.batches) is c[].feed_cls:
-        return cross_vendor_feed_batch(owner.batches, step, Int(py=shard))
-    raise Error("cross_vendor: batches must be an exact BatchFeed; Python batch callbacks are not accepted")
+    var bi = c[].bi
+    var rec = record.downcast_value_ptr[CrossWorkerOwner]()
+    var n = rec[].native.n
+    var step = rec[].native.commit_step
+    var event = bi.dict()
+    py_setitem(event, "step", PythonObject(step))
+    py_setitem(event, "state", PythonObject(rec[].native.commit_state))
+    py_setitem(event, "total_sha256", PythonObject(rec[].native.commit_total_hash) if rec[].native.commit_has_total_hash else PythonObject(None))
+    var losses = bi.list()
+    for i in range(len(rec[].native.commit_losses)):  # driver-loop: over logical shard loss metadata
+        _ = py_call(losses.append, PythonObject(rec[].native.commit_losses[i]))
+    py_setitem(event, "losses", losses)
+    if rec[].native.retain:
+        # One copy of the applied total, only when the caller asked to keep it.
+        var kept = generation_array([n])
+        if n > 0:
+            unsafe_memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=kept._addr)),
+                          src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=rec[].native.applied_address), count=n * 4)
+        py_setitem(event, "total_bytes", py_call(kept._mv.cast, "B").tobytes())
+    py_setitem(event, "hash_scheme", PythonObject(cross_scheme_name(rec[].native.scheme)))
+    py_setitem(event, "state_sha256", PythonObject(rec[].native.commit_state_sha))
+    py_setitem(event, "gradient_sha256", PythonObject(rec[].native.commit_gradient_sha) if rec[].native.commit_has_gradient_sha else PythonObject(None))
+    py_setitem(event, "lr_f32_hex", PythonObject(rec[].native.commit_lr_word))
+    var words = bi.list()
+    for i in range(len(rec[].native.commit_loss_words)):  # driver-loop: over logical shard loss metadata
+        _ = py_call(words.append, PythonObject(rec[].native.commit_loss_words[i]))
+    py_setitem(event, "losses_f32_hex", words)
+    py_setitem(event, "hash_seconds", PythonObject(rec[].native.commit_hash_seconds))
+    if rec[].native.commit_mismatch.byte_length() != 0:
+        var key = rec[].native.commit_mismatch
+        py_setitem(event, "expected_mismatch", PythonObject(key))
+        _ = py_call(events.append, event)
+        cross_vendor_log(rec[].log_path, row_without_gradient(event))
+        raise Error("CrossVendorMismatch: committed " + key + " differs from the configured expectation at step " + String(step))
+    if rec[].native.commit_checkpoint:
+        var checkpoint_start = transport_clock()
+        # UNPACK: the archive's metadata text from the trainer's admitted
+        # state (the four arrays are the witness buffers RUN just wrote).
+        var metadata = py_call(bi.dict, _cross_vendor_trainer(trainer, PARALLEL_BYTE_OPN_ADMITTED_STATE))
+        for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys)
+            _ = py_call(metadata.pop, PythonObject(key), PythonObject(None))
+        var text = _transport_json(metadata)
+        var filename = PythonObject("ckpt_") + py_call(PythonObject(String(step)).zfill, 8) + PythonObject(".blm")
+        var path = py_call(rec[].checkpoint_dir.rstrip, "/") + PythonObject("/") + filename
+        var target = String(cv_path(path))
+        var addresses = rec[].native.snapshot.copy()
+        var counts: List[Int] = [n, n, n, rec[].native.nt]
+        var failure = ByteCheckpointWriteFailure()
+        var digest = String("")
+        # RUN: the typed archive write, the GIL released.
+        var py = Python()
+        try:
+            with GILReleased(py):
+                digest = byte_checkpoint_write(target, Int(text.unsafe_ptr()), text.byte_length(), addresses, counts, failure)
+        except error:
+            if failure.number != 0:
+                _cross_file_error(io_error, failure)
+            raise error
+        _ = text.byte_length()
+        # PACK
+        py_setitem(event, "checkpoint_path", path)
+        py_setitem(event, "checkpoint_sha256", PythonObject(digest))
+        py_setitem(event, "checkpoint_seconds", PythonObject(transport_clock() - checkpoint_start))
+    py_setitem(event, "seconds", PythonObject(transport_clock() - rec[].native.step_started))
+    _ = py_call(events.append, event)
+    cross_vendor_log(rec[].log_path, row_without_gradient(event))
+
+
+def row_without_gradient(row: PythonObject) raises -> PythonObject:
+    var result = py_call(CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi.dict, row)
+    _ = py_call(result.pop, "total_bytes", PythonObject(None))
+    return result
+
+
+def _cross_worker_serve(record: PythonObject, trainer_record: PythonObject, trainer: PythonObject,
+                        events: PythonObject, pins: PythonObject, mut io_error: ByteCheckpointIOError) raises:
+    """The command loop of one connected run. `pins` holds the witness
+    arrays, the feed and the rate table whose storage RUN reads by address."""
+    var rec = record.downcast_value_ptr[CrossWorkerOwner]()
+    var session = trainer_record.downcast_value_ptr[ParallelByteOwner]()
+    var py = Python()
+    var first = True
+    while True:  # driver-loop: over native coordinator commands until completion
+        if first:
+            # The hello already received the first command.
+            first = False
+        else:
+            with GILReleased(py):
+                cross_worker_receive(rec[].native)
+        # RUN: typed command handling on the trainer's session (GIL held, as
+        # every session call was).
+        var code = cross_worker_command(rec[].native, session[].native)
+        if code == CROSS_DONE:
+            break
+        if code == CROSS_HOST_FOLD:
+            with GILReleased(py):
+                cross_worker_host_fold(rec[].native)
+        elif code == CROSS_COMMIT:
+            cross_vendor_commit(record, trainer, events, io_error)
+        with GILReleased(py):
+            cross_worker_reply(rec[].native)
+    _ = len(pins)
 
 
 def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOError) raises -> PythonObject:
-    cross_vendor_worker_admit(owner)
     var c = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()
-    var bi = c[].bi
-    var tr = owner.trainer
-    var empty_args = bi.list()
-    var state = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_EXPORT_RAW, empty_args)
-    var n = len(cross_vendor_bytes(state["parameters"])) // 4
-    var hello = bi.dict()
-    py_setitem(hello, "protocol", PythonObject("mojolearn.cross-vendor.v1"))
-    py_setitem(hello, "name", owner.name)
-    py_setitem(hello, "vendor", c[].vendor)
-    py_setitem(hello, "shards", owner.shards)
-    py_setitem(hello, "completed", _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_STEP, empty_args))
-    py_setitem(hello, "state", cross_vendor_state_hash(state))
-    py_setitem(hello, "n_total", PythonObject(n))
-    py_setitem(hello, "chained", owner.chained)
-    var deadline = transport_clock() + Float64(py=owner.connect_timeout)
+    var record = _cross_worker(owner)
+    var rec = record.downcast_value_ptr[CrossWorkerOwner]()
+    # UNPACK
+    var found = _cross_collaborators(owner)
+    var trainer = found[0]
+    var events = py_get(py_fields(owner), "_events")
+    if py_type(events) is not c[].bi.list:
+        raise Error("cross_vendor: policy and event storage must be native containers")
+    var feed = _cross_native(found[1], c[].feed_cls, "cross_vendor: batches must be an exact BatchFeed; Python batch callbacks are not accepted")
+    var held = feed.downcast_value_ptr[CrossFeedOwner]()
+    rec[].native.feed.address = held[].feed.address
+    rec[].native.feed.steps = held[].feed.steps
+    rec[].native.feed.shards = held[].feed.shards
+    rec[].native.feed.batch = held[].feed.batch
+    rec[].native.feed.width = held[].feed.width
+    rec[].native.feed.start = held[].feed.start
+    rec[].native.has_rates = found[2] is not None
+    if rec[].native.has_rates:
+        var table = _cross_native(found[2], c[].rate_cls, "cross_vendor: lr_for_step must be an exact LearningRateTable; Python schedules are not accepted")
+        rec[].native.rates.values = table.downcast_value_ptr[CrossRateOwner]()[].rates.values.copy()
+        rec[].native.rates.start = table.downcast_value_ptr[CrossRateOwner]()[].rates.start
+    # The raw export opens the trainer's session and makes the four witness
+    # arrays every later step is exported into.
+    var state = _cross_vendor_trainer(trainer, PARALLEL_BYTE_OPN_EXPORT_RAW)
+    var trainer_record = _parallel_record(trainer)
+    var session = trainer_record.downcast_value_ptr[ParallelByteOwner]()
+    var snapshot = List[Int]()
+    for key in [String("parameters"), String("m"), String("v"), String("flags")]:  # small-loop(four state keys)
+        snapshot.append(Int(py=state[key]._addr))
+    cross_worker_begin(rec[].native, session[].native.n_total, session[].native.n_tensors, snapshot^)
+    var pins = c[].bi.list()
+    _ = py_call(pins.append, state)
+    _ = py_call(pins.append, feed)
+    _ = py_call(pins.append, found)
+    var py = Python()
+    var deadline = transport_clock() + rec[].native.connect_timeout
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546): the loop leaves only through a connected attempt.
     var opened = Optional[PythonObject]()
-    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    var response = Optional[PythonObject](PythonObject(None))
     while True:  # driver-loop: over initial tunnel handshakes within the retry deadline
         var attempt = cross_vendor_worker_connect(owner)
         try:
-            transport_send(attempt, hello, PythonObject(None))
-            response = Optional[PythonObject](transport_receive(attempt, n * 4))
+            var pair = transport_unpack(attempt)
+            rec[].native.fd = pair[0]
+            rec[].native.socket_timeout = pair[1]
+            var completed = session[].native.completed
+            with GILReleased(py):
+                cross_worker_hello(rec[].native, completed)
             opened = attempt
             break
         except error:
@@ -997,128 +1186,19 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
                 raise error
             transport_sleep(5.0)
     var socket = opened.value()
-    var committed = 0
-    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    var held = Optional[PythonObject](bi.list())
-    var total = Optional[PythonObject](PythonObject(None))
-    var on_device = False
-    var first = True
-    var chained = Bool(py=owner.chained)
-    var step_started = transport_clock()
     try:
-        while True:  # driver-loop: over native coordinator commands until completion
-            if first:
-                first = False
-            else:
-                response = Optional[PythonObject](transport_receive(socket, n * 4))
-            var head = response.value()[0]
-            var payload = response.value()[1]
-            var command = String(py_get(head, "cmd"))
-            if command == "step":
-                step_started = transport_clock()
-                var step = Int(py=head["step"])
-                if Int(py=_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_STEP, empty_args)) != step:
-                    raise Error("CrossVendorMismatch: worker completed step differs from coordinator")
-                if Bool(py=py_get(head, "chained", PythonObject(False))) != chained:
-                    raise Error("CrossVendorMismatch: coordinator and worker disagree on the protocol")
-                if owner.lr_for_step is not None:
-                    var lr = cross_vendor_rate(owner.lr_for_step, step)
-                    _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_SET_LR, _cross_vendor_one(lr))
-                var losses = bi.list()
-                var parts = bi.list()
-                var device_fold = chained and Bool(py=_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD, empty_args))
-                if device_fold and Bool(py=py_get(head, "first", PythonObject(False))):
-                    _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_RESET, _cross_vendor_one(PythonObject(None)))
-                    for k in range(len(owner.shards)):  # driver-loop: over this worker's immutable logical shards
-                        var batch = _cross_vendor_batch(owner, step, owner.shards[k])
-                        _ = py_call(losses.append, _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD, _cross_vendor_one(batch)))
-                    held = Optional[PythonObject](bi.list())
-                    total = Optional[PythonObject](PythonObject(None))
-                    on_device = True
-                else:
-                    for k in range(len(owner.shards)):  # driver-loop: over this worker's immutable logical shards
-                        var batch = _cross_vendor_batch(owner, step, owner.shards[k])
-                        var result = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_SHARD_GRADIENT, _cross_vendor_one(batch))
-                        _ = py_call(losses.append, result[0])
-                        # pass 3 (N111): the shard's float32[n_total] Array is
-                        # held as is (fold_add and ordered_fold read it in
-                        # place); it was copied to bytes first.
-                        _ = py_call(parts.append, result[1])
-                    on_device = False
-                var reply = bi.dict()
-                py_setitem(reply, "step", PythonObject(step))
-                py_setitem(reply, "shards", owner.shards)
-                py_setitem(reply, "losses", losses)
-                if chained:
-                    if not on_device:
-                        held = Optional[PythonObject](parts)
-                        total = Optional[PythonObject](PythonObject(None))
-                    transport_send(socket, reply, PythonObject(None))
-                else:
-                    # One join of the shards' byte views is the payload copy.
-                    var wire = bi.list()
-                    for k in range(len(parts)):  # driver-loop: over this worker's shard gradients in shard order
-                        _ = py_call(wire.append, cross_vendor_bytes(parts[k]))
-                    transport_send(socket, reply, py_call(bi.bytes().join, wire))
-            elif command == "fold":
-                if not chained or (len(held.value()) == 0 and not on_device):
-                    raise Error("CrossVendorMismatch: worker was asked to fold with nothing held")
-                if on_device:
-                    total = Optional[PythonObject](_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_EXPORT, _cross_vendor_one(PythonObject(None))))
-                elif Bool(py=_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD, empty_args)):
-                    _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_RESET, _cross_vendor_one(payload if len(payload) != 0 else PythonObject(None)))
-                    for k in range(len(held.value())):  # driver-loop: over held logical gradients continuing the prefix
-                        _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_ADD, _cross_vendor_one(held.value()[k]))
-                    total = Optional[PythonObject](_cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_FOLD_EXPORT, _cross_vendor_one(PythonObject(None))))
-                else:
-                    total = Optional[PythonObject](cross_vendor_fold(held.value(), payload if len(payload) != 0 else PythonObject(None)))
-                held = Optional[PythonObject](bi.list())
-                on_device = False
-                var reply = bi.dict()
-                py_setitem(reply, "step", head["step"])
-                transport_send(socket, reply, total.value())
-            elif command == "apply":
-                if len(payload) != 0:
-                    total = Optional[PythonObject](payload)
-                if total.value() is None or len(total.value()) != n * 4:
-                    raise Error("CrossVendorMismatch: summed gradient has the wrong size")
-                var expected_hash = py_get(head, "total_sha256")
-                if expected_hash is not None and not Bool(py=cross_vendor_hexdigest(total.value()) == expected_hash):
-                    raise Error("CrossVendorMismatch: total hash differs from the coordinator")
-                # pass 3 (N111): the received float32 bytes go to the trainer
-                # as is; it reads them in place (no array('f') copy here, no
-                # host copy or host scan in the binding).
-                _ = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_APPLY_GRADIENT, _cross_vendor_one(total.value()))
-                var applied = total.value()
-                total = Optional[PythonObject](PythonObject(None))
-                committed += 1
-                var done = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_STEP, empty_args)
-                # pass 3 (N110): the witness export is written into the same
-                # four buffers every step (export_raw into=), not four new
-                # arrays; the digest below still covers every state byte.
-                var snapshot = _cross_vendor_trainer(tr, PARALLEL_BYTE_OPN_EXPORT_RAW, _cross_vendor_one(state))
-                var digest = cross_vendor_state_hash(snapshot)
-                var row = bi.dict()
-                py_setitem(row, "step", done)
-                py_setitem(row, "state", digest)
-                py_setitem(row, "total_sha256", expected_hash)
-                py_setitem(row, "losses", py_get(head, "losses"))
-                py_setitem(row, "total_bytes", applied)
-                _ = cross_vendor_commit(owner, tr, row, snapshot, step_started, io_error)
-                var reply = bi.dict()
-                py_setitem(reply, "completed", done)
-                py_setitem(reply, "state", digest)
-                transport_send(socket, reply, PythonObject(None))
-            elif command == "done":
-                transport_close(socket)
-                return PythonObject(committed)
-            elif command == "refuse":
-                raise Error("CrossVendorMismatch: coordinator refused: " + String(py_get(head, "reason", PythonObject(""))))
-            else:
-                raise Error("cross_vendor: unknown coordinator command " + command)
+        _cross_worker_serve(record, trainer_record, trainer, events, pins, io_error)
     except error:
         transport_close(socket)
+        cross_worker_end(rec[].native)
         raise error
+    transport_close(socket)
+    var committed = rec[].native.committed
+    cross_worker_end(rec[].native)
+    _ = len(pins)
+    _ = trainer_record
+    _ = record
+    return PythonObject(committed)
 
 
 def cross_vendor_console(text: String) raises:

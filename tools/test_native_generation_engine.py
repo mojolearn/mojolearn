@@ -102,7 +102,9 @@ def test_mamba_engine_keeps_local_forward_route_report_and_counter_semantics():
     assert 'parameters = decode' not in native
     public=text('bindings/causal_lm_public_door.mojo')
     # f6e85dffcb: the route is decided once per forward and the resident verdict is passed down
-    assert 'return _run_engine(mods, model, ids, state, verdict == 0)' in public
+    # dw-causal (2026-11-21): the route decision reads the model owner's typed words
+    assert 'return _run_engine(mods, words, model, ids, state, verdict == 0)' in public
+    assert 'if not causal_engine_candidate(words):' in public
     # 1ce1204524 (row N199): the head writes straight into the caller's result Array
     assert 'owner.native.forward_to(address, length, out_address, owner.native.batch * length * owner.native.vocab)' in public
     assert 'def forward_to(mut self, ids: Int, length: Int, address: Int, count: Int)' in native

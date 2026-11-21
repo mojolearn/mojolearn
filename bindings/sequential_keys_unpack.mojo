@@ -25,6 +25,8 @@ comptime SEQUENTIAL_OPN_TARGETS = 12
 comptime SEQUENTIAL_OPN_LOAD_WEIGHTS = 13
 comptime SEQUENTIAL_OPN_SAVE = 14
 comptime SEQUENTIAL_OPN_LOAD_CHECKPOINT = 15
+# lane dw-autograd-seq (2026-11-21): the vendor of the binary the model's route runs on
+comptime SEQUENTIAL_OPN_VENDOR_USED = 16
 
 
 struct SequentialKeys(Defaultable, Movable):
@@ -306,6 +308,7 @@ def _sequential_keys_fill(nk: UnsafePointer[SequentialKeys, MutUntrackedOrigin])
     py_op_add(ops, "load_weights", SEQUENTIAL_OPN_LOAD_WEIGHTS)
     py_op_add(ops, "save", SEQUENTIAL_OPN_SAVE)
     py_op_add(ops, "load_checkpoint", SEQUENTIAL_OPN_LOAD_CHECKPOINT)
+    py_op_add(ops, "vendor_used", SEQUENTIAL_OPN_VENDOR_USED)
     nk[].ops = ops
     nk[].ready = True
 

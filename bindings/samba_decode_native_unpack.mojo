@@ -27,9 +27,10 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.causal_lm_public_door import _mutable, _writeback
-from bindings.samba_state_native_door import samba_fields, samba_entries, samba_entry_key
+from bindings.samba_state_native_door import samba_fields
+from bindings.samba_route_unpack import samba_route
 from bindings.samba_inference_native_door import (
-    _samba_inference_ids, samba_forward, samba_program_arm, samba_program_words, samba_program_open_owner,
+    _samba_inference_ids, samba_forward, samba_program_words, samba_program_open_owner,
     samba_program_call, samba_state_words, samba_set_cursors, samba_allocate,
 )
 from training.samba_inference_run import _m3_shapes
@@ -131,17 +132,18 @@ def samba_decode_init(session: PythonObject, model: PythonObject, state: PythonO
     var smax = Int(py=py_item(slots, nk[].k_max_tokens))
     if b < 1 or smax < 1:
         raise Error(what + ": the state holds no rows")
-    # Mode/vendor admission of the connected binding; the session then
-    # reaches its program through the table key alone (lane
-    # samba-sessions-native: no `_entries` namespace kept on the session).
-    _ = samba_entries(context, py_item(fields, nk[].k_numeric_mode))
-    var key = samba_entry_key(context, py_item(fields, nk[].k_numeric_mode))
+    # The stack's route (mode/vendor admission of the connected binding,
+    # resolved once with the stack); the session then reaches its program
+    # through the table key alone (lane samba-sessions-native: no `_entries`
+    # namespace kept on the session).
+    var route = samba_route(model, fields, context)
+    var key = route.key.copy()
     py_setitem(values, nk[].k__model, model)
     py_setitem(values, nk[].k__state, state)
     py_setitem(values, nk[].k__rows, PythonObject(b))
     py_setitem(values, nk[].k__vocab, py_item(config, nk[].k_vocab))
     py_setitem(values, nk[].k__handle, PythonObject(None))
-    if samba_program_arm(fields, key):
+    if route.program():
         # The device arm: the session owns one stack program (lane x6),
         # loaded with the registry and the state once here, behind its
         # native handle owner (core/samba_program_handle.mojo).

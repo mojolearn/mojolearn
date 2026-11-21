@@ -11,6 +11,11 @@ def _door(rel):
     """A door's by-name text (bw2-cluster: the cluster doors read held keys)."""
     return plain(rel, (ROOT / rel).read_text())
 
+def _cluster_lifecycle():
+    """The cluster lifecycle's UNPACK and PACK files (one door until the split), by-name."""
+    return ''.join(_door('providers/python/cluster_public_lifecycle_pyapi_%s.mojo' % part) for part in ('unpack', 'pack'))
+
+
 def test_selected_frontdoors_delegate_binding_admission_after_native_entry():
     expected = {
         'svm.py': {'LinearSVC': {'fit','predict','decision_function','score'},
@@ -120,9 +125,9 @@ def test_native_admission_preserves_mode_check_and_live_host_replacement():
 
 
 def test_cluster_native_boundary_refuses_initializer_callbacks_before_array_conversion():
-    source = _door('bindings/cluster_fit_a_native_door.mojo')
+    source = _door('bindings/cluster_fit_public_native_unpack.mojo')
     assert 'def _callable_init(' not in source
-    helper = source.split('def _init_array(', 1)[1].split('def _flag(', 1)[0]
+    helper = source.split('def _init_array(', 1)[1].split('\ndef ', 1)[0]
     assert helper.index('PyCallable_Check') < helper.index('_f32(init,')
     assert 'pass explicit initial centers' in helper
     seed = source.split('def _seed(', 1)[1].split('def _weights(', 1)[0]
@@ -148,7 +153,7 @@ def test_cluster_classes_disable_python_decorators_and_keep_numeric_mode_signatu
 
 
 def test_cluster_lifecycle_keeps_required_checks_and_result_wrapping_native():
-    source = _door('providers/python/cluster_public_lifecycle_pyapi_door.mojo')
+    source = _cluster_lifecycle()
     for required in ('classical_check_x(', 'classical_require_fitted(', 'estimator_feature_check(',
                      'estimator_fit_begin(', 'estimator_fit_end(', 'estimator_fit_complete(',
                      'native_array_ndarray_view(', 'host_inference_scalar('):
@@ -158,14 +163,14 @@ def test_cluster_lifecycle_keeps_required_checks_and_result_wrapping_native():
 
 
 def test_cluster_context_lookup_cannot_enter_module_getattr():
-    source = _door('providers/python/cluster_public_lifecycle_pyapi_door.mojo')
+    source = _cluster_lifecycle()
     assert 'native_loaded_module("mojolearn._native_public_attributes")._CONTEXT' not in source
     assert 'py_get(module_fields, "_CONTEXT")' in source
     assert 'py_type(attributes) is not b.dict' in source
 
 
 def test_cluster_learned_scalars_have_numeric_dtype_admission():
-    source = _door('providers/python/cluster_public_lifecycle_pyapi_door.mojo')
+    source = _cluster_lifecycle()
     learned = source.split('var learned =', 1)[1].split('return fields', 1)[0]
     for name in ('n_features_in_', '_partial_batch', '_partial_init', '_partial_state', 'n_steps_', 'lower_bound_'):
         assert name in learned

@@ -74,7 +74,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 _SELECTION = {"eom": _SELECTION_EOM, "leaf": _SELECTION_LEAF}
 
 # The compiled family owner, connected once at import: `fit` and
-# `fit_predict` are one native call each (bindings/cluster_fit_a_native_door.mojo:
+# `fit_predict` are one native call each (bindings/cluster_fit_public_native_pack.mojo:
 # the parameter refusals, the binary's numeric-mode check, `hdbscan_fit` and,
 # with prediction_data=True, `hdbscan_generate_prediction_data`), handed the
 # binding `_bind` resolves.

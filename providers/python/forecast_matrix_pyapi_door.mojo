@@ -18,6 +18,8 @@ from bindings.admitted_sequence_door import admitted_ndarray_f32
 from core.cast_in import NPY_DOUBLE, NPY_FLOAT, CAST_KIND_FLOAT
 from bindings.forecast_keys_unpack import forecast_keys
 from bindings.py_balanced import py_item
+from bindings.forecast_device_door import forecast_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 
 
 def _state(model: PythonObject, key: String, context: PythonObject) raises -> PythonObject:
@@ -76,6 +78,9 @@ def _mode(value: PythonObject) raises:
 def _var_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = forecast_keys()
     var fields = _state(model, "xseq_var_class", context)
+    # `device` (None, "gpu" or "cpu") is checked first, before any field
+    # changes, in the shared refusal words.
+    forecast_device_admit(args[3], context)
     if args[1] is not None:
         raise Error("NotImplementedError: VAR: exog is not implemented")
     _mode(args[2])
@@ -88,12 +93,15 @@ def _var_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     py_setitem(updates, nk[].k__endog, y.keep)
     py_setitem(updates, nk[].k_neqs, y.shape[1])
     py_setitem(updates, nk[].k_numeric_mode, args[2])
+    py_setitem(updates, "device", args[3])
     forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
+    device_route_clear(model)
     return PythonObject(None)
 
 
 def _var_publish(fields: PythonObject, y: ArimaBuffer, params: ArimaBuffer, sigma: PythonObject,
-                 resid: ArimaBuffer, p: Int, kt: Int, mode: PythonObject, context: PythonObject, originals: PythonObject) raises:
+                 resid: ArimaBuffer, p: Int, kt: Int, mode: PythonObject, device: PythonObject, context: PythonObject,
+                 originals: PythonObject) raises:
     var nk = forecast_keys()
     if len(y.shape) != 2 or len(params.shape) != 2 or len(resid.shape) != 2:
         raise Error("ValueError: VARResults requires endog, params and resid matrices")
@@ -124,6 +132,9 @@ def _var_publish(fields: PythonObject, y: ArimaBuffer, params: ArimaBuffer, sigm
     py_setitem(updates, nk[].k_coefs, coefs)
     py_setitem(updates, nk[].k_fittedvalues, fitted)
     py_setitem(updates, nk[].k__numeric_mode, mode)
+    # The results forecast on the device of the VAR that fitted them: the
+    # sequence route reads this field once, on its first forecast.
+    py_setitem(updates, "device", device)
     forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
 
 
@@ -137,7 +148,9 @@ def _var_results_initialize(model: PythonObject, args: PythonObject, context: Py
     var p = _integer(args[4], lifecycle)
     var kt = _integer(args[5], lifecycle)
     _mode(args[6])
-    _var_publish(fields, y, params, args[2], resid, p, kt, args[6], context, args)
+    forecast_device_admit(args[7], context)
+    _var_publish(fields, y, params, args[2], resid, p, kt, args[6], args[7], context, args)
+    device_route_clear(model)
     return PythonObject(None)
 
 
@@ -179,7 +192,8 @@ def _var_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var result = _new_result("xseq_var_results", context)
     var packed_params = _matrix(params, "native params", context)
     var packed_resid = _matrix(resid, "native resid", context)
-    _var_publish(_fields(result), y, packed_params, sigma, packed_resid, p, kt, mode, context, PythonObject(None))
+    _var_publish(_fields(result), y, packed_params, sigma, packed_resid, p, kt, mode, py_get(fields, "device"), context,
+                 PythonObject(None))
     return result
 
 
@@ -215,6 +229,9 @@ def _stl_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     var nk = forecast_keys()
     var fields = _state(model, "xseq_stl_class", context)
     var lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
+    # `device` (None, "gpu" or "cpu"), the last argument, is checked first,
+    # before any field changes, in the shared refusal words.
+    forecast_device_admit(args[13], context)
     var y = _matrix(args[0], "STL", context)
     var one = len(y.shape) == 1
     var rows = 1 if one else y.shape[0]
@@ -223,7 +240,7 @@ def _stl_initialize(model: PythonObject, args: PythonObject, context: PythonObje
         raise Error("ValueError: STL: endog must be (n_obs,) or (batch_size, n_obs)")
     if args[1] is None:
         raise Error("ValueError: STL: period is required")
-    for i in range(1, len(args)):  # driver-loop: thirteen fixed constructor setting words
+    for i in range(1, 13):  # driver-loop: twelve fixed constructor setting words (device, the last argument, is checked below)
         _scalar(args[i], lifecycle)
     _mode(args[12])
     var period = _integer(args[1], lifecycle)
@@ -258,7 +275,9 @@ def _stl_initialize(model: PythonObject, args: PythonObject, context: PythonObje
     py_setitem(updates, nk[].k_trend_jump, _integer(args[10], lifecycle))
     py_setitem(updates, nk[].k_low_pass_jump, _integer(args[11], lifecycle))
     py_setitem(updates, nk[].k_numeric_mode, args[12])
+    py_setitem(updates, "device", args[13])
     forecast_commit(fields, updates, py_item(context, nk[].k_xseq_forecast_ownership))
+    device_route_clear(model)
     return PythonObject(None)
 
 

@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public parallel output boundary; no Python format/conversion helper.
+# UNPACK and PACK only: the widening rule and the cast are typed, in
+# bindings/parallel_public_result_run.mojo.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_arrays_door import classical_is_array, classical_typed, classical_address
 from bindings.admitted_input_unpack import admit_x
-from bindings.classical_labels_door import labels_cast
+from bindings.parallel_public_result_run import parallel_result_widens, parallel_result_widen
 from bindings.scaler_lifecycle_native_door import _outside
 from bindings.sequential_inputs_door import sequential_input
 
@@ -17,14 +19,15 @@ def _output(value: PythonObject, widen: Bool, context: PythonObject) raises -> P
         if widen and String(value.dtype.kind) == "f" and Int(py=value.dtype.itemsize) < 8:
             var data = admit_x(value, Int(py=value.ndim), "result", context)
             var wide = classical_typed(data.shape, "<f8", context)
-            labels_cast(Int(py=classical_address(data)), "<f4", Int(py=classical_address(wide)), "<f8", Int(py=data.size), context)
+            parallel_result_widen(Int(py=classical_address(data)), Int(py=classical_address(wide)), Int(py=data.size))
+            _ = data  # keep the admitted block alive through the cast
             return wide
         return value
     if classical_is_array(value, context):
         var result = value
         if widen and String(result.dtype) == "<f4":
             var wide = classical_typed(result.shape, "<f8", context)
-            labels_cast(Int(py=classical_address(result)), "<f4", Int(py=classical_address(wide)), "<f8", Int(py=result.size), context)
+            parallel_result_widen(Int(py=classical_address(result)), Int(py=classical_address(wide)), Int(py=result.size))
             _ = result
             result = wide
         return sequential_input(result, context)
@@ -40,7 +43,5 @@ def parallel_public_result(result: PythonObject, method: String, kind: PythonObj
     classical_connect_numpy(context)
     if py_get(context, "ndarray") is None or not _outside(context, 1):
         return result
-    var widen = (kind is not None and String(kind) == "regressor" and method == "predict")
-    widen = widen or (kind is not None and String(kind) == "outlier_detector" and (method == "decision_function" or method == "score_samples"))
-    return _output(result, widen, context)
+    return _output(result, parallel_result_widens(String("") if kind is None else String(kind), method), context)
 

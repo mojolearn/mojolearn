@@ -31,6 +31,7 @@ struct CausalKeys(Defaultable, Movable):
     var k__causal_entries_identity: PythonObject
     var k__causal_entries_owner: PythonObject
     var k__causal_initial_buffers: PythonObject
+    var k__causal_native_model: PythonObject
     var k__causal_initial_layers: PythonObject
     var k__causal_live_fields: PythonObject
     var k__causal_original: PythonObject
@@ -196,6 +197,7 @@ struct CausalKeys(Defaultable, Movable):
         self.k__causal_entries_identity = PythonObject(None)
         self.k__causal_entries_owner = PythonObject(None)
         self.k__causal_initial_buffers = PythonObject(None)
+        self.k__causal_native_model = PythonObject(None)
         self.k__causal_initial_layers = PythonObject(None)
         self.k__causal_live_fields = PythonObject(None)
         self.k__causal_original = PythonObject(None)
@@ -365,6 +367,7 @@ def _causal_keys_fill(nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises:
     nk[].k__causal_entries_identity = py_key("_causal_entries_identity")
     nk[].k__causal_entries_owner = py_key("_causal_entries_owner")
     nk[].k__causal_initial_buffers = py_key("_causal_initial_buffers")
+    nk[].k__causal_native_model = py_key("_causal_native_model")
     nk[].k__causal_initial_layers = py_key("_causal_initial_layers")
     nk[].k__causal_live_fields = py_key("_causal_live_fields")
     nk[].k__causal_original = py_key("_causal_original")

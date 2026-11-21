@@ -22,7 +22,7 @@ from bindings.admitted_input_unpack import classical_view
 from bindings.classical_arrays_door import classical_dtype_str, classical_address
 from bindings.scaler_native_door import _ptr
 from core.preprocessing_program import prep_program_stage as _stage
-from bindings.scaler_lifecycle_native_door import _entries
+from bindings.scaler_lifecycle_native_door import _entries, scaler_entries
 from bindings.x_prep_native_owner_door import xprep_values
 from bindings.user_objects_native_door import user_objects_call
 from bindings.native_array_storage_door import native_array_unfilled
@@ -296,12 +296,11 @@ struct _Draws(Movable):
         return out^
 
 
-def _neighbours(xf: PythonObject, n: Int, dk: Int, mode: PythonObject, js: List[Int], k: Int, rng: UInt64,
+def _neighbours(xf: PythonObject, n: Int, dk: Int, entries: PythonObject, js: List[Int], k: Int, rng: UInt64,
                 context: PythonObject) raises -> List[List[Int]]:
     """`_neighbours_device`: the |corr| matrix on the device and one thread per
     step drawing its k features (f2_wpick, step c takes splitmix64 words
     c*k .. c*k + k - 1 of the stream). Returns each step's ascending picks."""
-    var entries = _entries(mode, context)
     var p = EncProg()
     var fo = p.put(xf, n * dk)
     var mz = p.alloc(n * dk)
@@ -374,19 +373,20 @@ def _with_indicator(model: PythonObject, values: PythonObject, xt: PythonObject,
     return _take2(ran, hc, n, dk + m, context)
 
 
-def _mask_arr(values: PythonObject, keep: List[Int], missing: PythonObject, context: PythonObject) raises -> PythonObject:
+def _mask_arr(values: PythonObject, keep: List[Int], missing: PythonObject, entries: PythonObject,
+              context: PythonObject) raises -> PythonObject:
     """`_mask_arr`: the (n, dk) float32 missing mask (1.0 missing), run in
-    the process mode as the Python ran it."""
+    the process mode as the Python ran it: `entries` is the caller's
+    selection for that mode (selected once per operation)."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var dk = len(keep)
-    var mode = _default_mode(context)
     var p = EncProg()
     var xo = _mark_missing(p, p.put_x(values), n * d, missing, context)
     var mo = p.alloc(n * dk)
     var ko = p.put_floats(_floats_of(keep), context)
     _stage(p.prog.program, OP_NAN_MASK, n * dk, xo, n, d, ko, dk, mo)
-    var ran = p.run(_entries(mode, context), context)
+    var ran = p.run(entries, context)
     return _take2(ran, mo, n, dk, context)
 
 
@@ -414,7 +414,7 @@ def _ii_block(ran: PythonObject, xo: Int, m: Int, nc: Int, context: PythonObject
     return _take2(ran, xo, m, nc, context)
 
 
-def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl: List[Int], mode: PythonObject,
+def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl: List[Int], entries: PythonObject,
              fit: Bool, context: PythonObject) raises -> _Take:
     """`_ii_take`: one program: feature j's missing rows and the estimator's
     predict block Xt[mis][:, nbl] and, with fit, its training blocks
@@ -444,7 +444,7 @@ def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl:
         if nc > 0:
             _stage(p.prog.program, OP_II_GATHER, n * nc, xo, dk, obs[0], obs[1], co, nc, go)
         _stage(p.prog.program, OP_II_GATHER, n, xo, dk, obs[0], obs[1], jo, 1, gy)
-    var ran = p.run(_entries(mode, context), context)
+    var ran = p.run(entries, context)
     var m = Int(_word(ran, mis[1]))
     var x_fit = PythonObject(None)
     var y_fit = PythonObject(None)
@@ -491,7 +491,7 @@ def _truncnorm(mus: PythonObject, sig: PythonObject, lo: Float64, hi: Float64, m
 
 
 def _ii_put(xt: PythonObject, xm: PythonObject, rows: PythonObject, m: Int, n: Int, dk: Int, j: Int,
-            est: PythonObject, posterior: Bool, bounds: List[Float64], mode: PythonObject, mut rng: UInt64,
+            est: PythonObject, posterior: Bool, bounds: List[Float64], entries: PythonObject, mut rng: UInt64,
             context: PythonObject) raises -> PythonObject:
     """`_ii_put`: predict on the missing rows' block, then (one program) the
     clipped float32 store into Xt[rows, j]; sample_posterior's truncated
@@ -515,7 +515,6 @@ def _ii_put(xt: PythonObject, xm: PythonObject, rows: PythonObject, m: Int, n: I
         return xt
     while len(v) > k:  # driver-loop: drops predictions past the missing rows
         _ = v.pop()
-    var entries = _entries(mode, context)
     var p = EncProg()
     var xo = p.put_inout(xt, n * dk)
     var ro = p.put(rows, m)
@@ -529,7 +528,7 @@ def _ii_put(xt: PythonObject, xm: PythonObject, rows: PythonObject, m: Int, n: I
     return _take2(ran, xo, n, dk, context)
 
 
-def _ii_stop(xt: PythonObject, prev: PythonObject, n: Int, dk: Int, tol: Float64, mode: PythonObject,
+def _ii_stop(xt: PythonObject, prev: PythonObject, n: Int, dk: Int, tol: Float64, entries: PythonObject,
              context: PythonObject) raises -> Bool:
     # `_ii_stop`: the round's stop, the inf-norm of Xt - prev below tol.
     var p = EncProg()
@@ -541,7 +540,7 @@ def _ii_stop(xt: PythonObject, prev: PythonObject, n: Int, dk: Int, tol: Float64
     var rowabs = p.alloc(n)
     _stage(p.prog.program, OP_II_ROWABS, n, xo, po, dk, rowabs, flag)
     _stage(p.prog.program, OP_II_CONV, 1, xo, po, n * dk, to, flag, niter, dk, rowabs + 1)
-    var ran = p.run(_entries(mode, context), context)
+    var ran = p.run(entries, context)
     return _word(ran, flag) != 0
 
 
@@ -585,7 +584,11 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
     var b = _b()
     var fields = py_fields(model)
     var mode = _default_mode(context)
-    var entries = _entries(mode, context)
+    # Selected ONCE per operation and passed to every program of the
+    # imputation rounds (was selected again by each take, put and stop of
+    # every round and feature). An estimator whose device route holds the
+    # selection for this context answers from it.
+    var entries = scaler_entries(model, mode, context)
     var values = xprep_values(x, entries, context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -677,12 +680,12 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
             for i in range(len(orders[r])):  # driver-loop: over one round's feature order
                 js.append(orders[r][i])
         if len(js) > 0:
-            draws.lists = _neighbours(xf, n, dk, mode, js, draws.k, rng, context)
+            draws.lists = _neighbours(xf, n, dk, entries, js, draws.k, rng, context)
     var tol = _float(py_item(fields, nk[].k_tol)) * scale
     var estimator = py_item(fields, nk[].k_estimator)
     if estimator is not None:
         # the reference's rounds over copies of the user estimator
-        var mask = _mask_arr(values, keep, missing, context)
+        var mask = _mask_arr(values, keep, missing, entries, context)
         var xt = xf
         var seq = Python.list()
         var done = 0
@@ -693,12 +696,12 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
                 var j = orders[r][i]
                 var nbl = draws.next(rng) if draws.on else _others(dk, j)
                 var est = prep_estimator_clone(estimator, context)
-                var took = _ii_take(xt, mask, n, dk, j, nbl, mode, True, context)
+                var took = _ii_take(xt, mask, n, dk, j, nbl, entries, True, context)
                 _ = prep_estimator_call(est, "fit", Python.tuple(took.xo, took.yo), context)
                 _ = py_call(seq.append, Python.tuple(j, _int_list(nbl), est))
-                xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, est, posterior, bounds, mode, rng, context)
+                xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, est, posterior, bounds, entries, rng, context)
             done = r + 1
-            if check and _ii_stop(xt, prev, n, dk, tol, mode, context):
+            if check and _ii_stop(xt, prev, n, dk, tol, entries, context):
                 break
         py_setitem(fields, nk[].k__rng, _u64_obj(rng))
         py_setitem(fields, nk[].k_n_iter_, PythonObject(done if any_order else min(1, len(orders))))
@@ -811,7 +814,7 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
     if not py_contains(fields, nk[].k_imputation_sequence_):
         raise Error("RuntimeError: mojolearn: this IterativeImputer instance is not fitted yet")
     var mode = py_item(fields, nk[].k_numeric_mode_)
-    var entries = _entries(mode, context)
+    var entries = scaler_entries(model, mode, context)  # once per operation; passed to every round's programs
     var values = xprep_values(x, entries, context)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
@@ -828,13 +831,18 @@ def _transform(model: PythonObject, x: PythonObject, context: PythonObject) rais
     var rng = _u64_of(py_item(fields, nk[].k__rng))
     var sequence = py_item(fields, nk[].k_imputation_sequence_)
     if py_item(fields, nk[].k_estimator) is not None:
-        var mask = _mask_arr(values, keep, py_item(fields, nk[].k_missing_values), context)
+        # The mask runs in the process mode (as the Python ran it): the
+        # operation's selection when that is the fitted mode's object, else
+        # its own selection, once.
+        var mask_mode = _default_mode(context)
+        var mask = _mask_arr(values, keep, py_item(fields, nk[].k_missing_values),
+                             entries if mask_mode is mode else _entries(mask_mode, context), context)
         var xt = xf
         for s in range(len(sequence)):  # api-bound-loop: over the fitted imputation steps; one predict of the user-supplied fitted estimator object's native plan each
             var step = sequence[s]
             var j = Int(py=step[0])
-            var took = _ii_take(xt, mask, n, dk, j, _nbl_of(step[1]), mode, False, context)
-            xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, step[2], posterior, bounds, mode, rng, context)
+            var took = _ii_take(xt, mask, n, dk, j, _nbl_of(step[1]), entries, False, context)
+            xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, step[2], posterior, bounds, entries, rng, context)
         py_setitem(fields, nk[].k__rng, _u64_obj(rng))
         return _with_indicator(model, values, xt, dk, context)
     var p = EncProg()
