@@ -19,7 +19,7 @@ from bindings.xcnn_pool_native_door import xcnn_pool_layers
 # Restore: git apply experiments/removed/MOJOLEARN_XCNN_FAST_TYPED_DOOR.patch; record in docs/TOMBSTONES.md.
 from bindings.xcnn_bn_native_door import xcnn_bn_layers
 from bindings.xcnn_conv_native_door import xcnn_conv_layers, xcnn_layer_state, xcnn_layer_parameters
-from bindings.xcnn_graph_native_door import xcnn_graph_layers, xcnn_graph_state
+from bindings.xcnn_graph_native_door import xcnn_graph_layers, xcnn_graph_state, xcnn_graph_parameters
 from bindings.xcnn_classifier_native_door import cnnclf_fit, cnnclf_predict, cnnclf_predict_proba, cnnclf_initialize, cnnclf_weights
 from bindings.xcnn_classifier_native_door import cnnclf_adopt
 from bindings.xcnn_keys_unpack import (
@@ -28,6 +28,7 @@ from bindings.xcnn_keys_unpack import (
     XCNN_OPN_CNNCLF_INIT, XCNN_OPN_CNNCLF_WEIGHTS, XCNN_OPN_CNNCLF_FIT, XCNN_OPN_CNNCLF_PREDICT,
     XCNN_OPN_CNNCLF_PREDICT_PROBA, XCNN_OPN_CNNCLF_ADOPT, XCNN_OPN_LAYER_STATE_DICT, XCNN_OPN_LAYER_LOAD_STATE_DICT,
     XCNN_OPN_LAYER_PARAMETERS, XCNN_OPN_LAYER_NAMED_PARAMETERS, XCNN_OPN_GRAPH_STATE_DICT, XCNN_OPN_GRAPH_LOAD_STATE_DICT,
+    XCNN_OPN_GRAPH_PARAMETERS, XCNN_OPN_GRAPH_NAMED_PARAMETERS,
 )
 from bindings.py_keys import py_op_code
 
@@ -149,6 +150,9 @@ def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             var sage = Bool(py=args[0])
             var rest = Python.tuple(args[1]) if operation == XCNN_OPN_GRAPH_LOAD_STATE_DICT else Python.tuple()
             return xcnn_graph_state(owner, sage, operation == XCNN_OPN_GRAPH_LOAD_STATE_DICT, rest, context).steal_data()
+        if operation == XCNN_OPN_GRAPH_PARAMETERS or operation == XCNN_OPN_GRAPH_NAMED_PARAMETERS:
+            # args[0] is the SAGE word (True: SAGEConv), as for the state ops.
+            return xcnn_graph_parameters(owner, Bool(py=args[0]), 1 if operation == XCNN_OPN_GRAPH_PARAMETERS else 2, context).steal_data()
         if owner_group == _XCNN_TENSOR:
             return xcnn_tensor_operation(owner, operation, args, context).steal_data()
         if owner_group == _XCNN_CONV:

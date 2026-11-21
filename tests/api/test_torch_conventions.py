@@ -386,6 +386,19 @@ def test_sage_state_dict_uses_pyg_names_and_round_trips():
     assert list(mojolearn.SAGEConv(4, 3, root_weight=False, bias=False, device="cpu").state_dict()) == ["lin_l.weight"]
 
 
+@pytest.mark.parametrize("make", [lambda: mojolearn.GCNConv(4, 3, device="cpu"),
+                                  lambda: mojolearn.SAGEConv(4, 3, project=True, device="cpu")])
+def test_graph_parameters_are_torch_iterators(make):
+    conv = make()
+    sd = conv.state_dict()
+    named = list(conv.named_parameters())
+    assert [name for name, _ in named] == list(sd)
+    assert all(np.asarray(a).tobytes() == np.asarray(sd[n]).tobytes() for n, a in named)
+    arrays = list(conv.parameters())
+    assert len(arrays) == len(sd)
+    assert iter(conv.parameters()) is not None and not isinstance(conv.parameters(), (list, dict))
+
+
 def test_graph_load_state_dict_is_strict_and_all_or_nothing():
     conv = mojolearn.SAGEConv(4, 3, device="cpu")
     before = {k: np.asarray(v).tobytes() for k, v in conv.state_dict().items()}
