@@ -14,12 +14,13 @@ from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description_unpack import sequential_fields
 from core.linear_metadata import (
-    linear_parameter_names, linear_constructor_names, linear_constructor_check,
+    linear_parameter_names, linear_constructor_names, linear_constructor_check, linear_constructor_device,
     linear_parameter_head, linear_parameter_index, linear_parameter_refusal,
     linear_public_fitted_key, linear_fitted_names,
 )
 from core.linear_model_state import LinearModelState, linear_state_is_fitted
 from providers.python.linear_state_boundary_door import linear_state_clear
+from providers.python.linear_route_boundary_door import linear_device_unpack, linear_route_clear
 
 
 def _linear_dict_items(value: PythonObject) raises -> Tuple[List[PythonObject], List[PythonObject]]:
@@ -64,9 +65,14 @@ def classical_parameter_list(ridge: Bool) raises -> PythonObject:
 
 
 def classical_initialize(model: PythonObject, args: PythonObject, ridge: Bool,
-    context: PythonObject) raises -> PythonObject:
+    context: PythonObject, b: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     linear_constructor_check(len(args), ridge)
+    # `device` is checked where it is given: an unknown value is refused in
+    # words before any field is published. It is stored verbatim like every
+    # constructor parameter and read once, by the estimator's first operation,
+    # into its route owner (providers/python/linear_route_boundary_door.mojo).
+    _ = linear_device_unpack(args[linear_constructor_device(ridge)], b)
     var names = linear_constructor_names(ridge)
     for k in range(len(names)):  # driver-loop: admit replaced constructor owners before publishing fields
         var name = PythonObject(names[k])
@@ -77,6 +83,9 @@ def classical_initialize(model: PythonObject, args: PythonObject, ridge: Bool,
         var name = PythonObject(names[k])
         if names[k] != "numeric_mode" or args[k] is not None or not py_contains(fields, name):
             py_setitem(fields, name, args[k])
+    # A constructor run again on a live estimator: its next operation reads
+    # the device and the mode again (no record exists for a new instance).
+    linear_route_clear(model)
     return PythonObject(None)
 
 
@@ -122,6 +131,9 @@ def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool,
             estimator = String(py_type(model).__name__)
             shown = String(py_call(bi.repr, PythonObject(linear_parameter_head(word))))
         linear_parameter_refusal(word, index, shown, estimator, ridge)
+        if names[index] == "device":
+            # Refused in words before the estimator is changed.
+            _ = linear_device_unpack(pairs[1][k], bi)
         py_setitem(values, PythonObject(names[index]), pairs[1][k])
     var fields = sequential_fields(model)
     var old = _linear_dict_items(fields)
@@ -137,6 +149,9 @@ def classical_set_params(model: PythonObject, params: PythonObject, ridge: Bool,
     if cpy.lib.get_function[Int32]("PyDict_Update")(fields._obj_ptr, values._obj_ptr) < 0:
         raise cpy.unsafe_get_error()
     linear_state_clear(model)
+    # The device and the numeric mode may have changed: the next operation
+    # resolves the route again.
+    linear_route_clear(model)
     _ = bump_model_generation(model)
     return model
 

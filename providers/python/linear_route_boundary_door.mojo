@@ -26,7 +26,6 @@ from std.python.bindings import PythonModuleBuilder, lookup_py_type_object
 from bindings.py_type_registry import py_type_absent, py_type_attach
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_pack import borrowed_native_owner
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_item
 from bindings.py_model_records import records_get, records_put, records_drop, RECORDS_PREPARED
 from bindings.classical_keys_unpack import classical_keys
@@ -112,10 +111,10 @@ def register_linear_route_owner_identity(published: PythonObject) raises:
     register_native_owner_type[LinearRouteOwner](published, linear_route_owner_pins)
 
 
-def linear_device_unpack(value: PythonObject) raises -> Int:
+def linear_device_unpack(value: PythonObject, b: PythonObject) raises -> Int:
     """The device code of a constructor value: exact `'gpu'` or `'cpu'`.
-    Anything else is refused in words, before any state changes."""
-    var b = native_loaded_module("builtins")
+    Anything else is refused in words, before any state changes. `b` is the
+    builtins module the calling door already admitted."""
     if py_type(value) is b.str:
         var code = linear_device_code(String(value))
         if code >= 0:
@@ -131,9 +130,8 @@ def linear_route_clear(model: PythonObject) raises:
 
 
 def _linear_route_build(device: Int, ridge: Bool, mode: PythonObject,
-    default_mode: PythonObject, context: PythonObject) raises -> LinearRouteOwner:
+    default_mode: PythonObject, context: PythonObject, b: PythonObject) raises -> LinearRouteOwner:
     var nk = classical_keys()
-    var b = native_loaded_module("builtins")
     var owner = LinearRouteOwner(device)
     var selected = mode
     if mode is None:
@@ -225,10 +223,12 @@ struct LinearRouteCall(Movable):
 
 
 def linear_route_call(model: PythonObject, fields: PythonObject, ridge: Bool,
-    context: PythonObject) raises -> LinearRouteCall:
+    context: PythonObject, b: PythonObject) raises -> LinearRouteCall:
     """The estimator's route for this operation. A hit is one record read and
     three pointer compares; a miss (first operation, a changed numeric mode,
-    an instance built without its constructor) resolves and stores it."""
+    an instance built without its constructor) resolves and stores it. `b`
+    is the builtins module the calling door already admitted (read on a miss
+    only)."""
     var nk = classical_keys()
     var mode = py_get(fields, nk[].k_numeric_mode)
     var default_mode = PythonObject(None)
@@ -245,8 +245,8 @@ def linear_route_call(model: PythonObject, fields: PythonObject, ridge: Bool,
     var device = LINEAR_DEVICE_GPU
     var given = py_get(fields, "device")
     if given is not None:
-        device = linear_device_unpack(given)
-    var fresh = PythonObject(alloc=_linear_route_build(device, ridge, mode, default_mode, context))
+        device = linear_device_unpack(given, b)
+    var fresh = PythonObject(alloc=_linear_route_build(device, ridge, mode, default_mode, context, b))
     # An estimator that takes no weak reference keeps no owner: it resolves
     # at every operation (records_put answers False and stores nothing).
     _ = records_put(RECORDS_PREPARED, model, _LINEAR_ROUTE_SLOT, fresh)
