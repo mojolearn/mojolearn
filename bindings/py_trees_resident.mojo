@@ -74,15 +74,32 @@ def trees_resident_put_native(model_key: Int, generation: Int, kind: Int, native
     not kept: the caller releases it after its call."""
     var kept = trees_run_put(model_key, generation, kind, Int(native._obj_ptr), release_entry, release_op, handle,
                              words^, _words(mirrors), bytes)
-    _drain()
     if kept:
-        var row = List[PythonObject](capacity=len(mirrors) + 1)
-        row.append(native)
-        for i in range(len(mirrors)):  # small-loop(mirrors: the snapshot's public fitted arrays, five or six)
-            row.append(mirrors[i])
-        var pins = _TREES_PINS.get_or_create_ptr()
-        pins[].rows[handle] = row^
+        trees_resident_keep(handle, native, mirrors)
+    else:
+        _drain()
     return kept
+
+
+def trees_resident_ids(objects: List[PythonObject]) -> List[Int]:
+    """The identity words of `objects` (a snapshot's mirrors), as the typed
+    table compares them."""
+    return _words(objects)
+
+
+def trees_resident_keep(handle: Int, native: PythonObject, mirrors: List[PythonObject]) raises:
+    """The Python pins of a snapshot the typed table already lists
+    (`trees_run_put` returned True for `handle`): the minting binding and
+    the mirrored public fitted arrays, held for as long as the handle is
+    listed. A door whose RUN put the snapshot calls this before it launches
+    on the handle."""
+    _drain()
+    var row = List[PythonObject](capacity=len(mirrors) + 1)
+    row.append(native)
+    for i in range(len(mirrors)):  # small-loop(mirrors: the snapshot's public fitted arrays, five or six)
+        row.append(mirrors[i])
+    var pins = _TREES_PINS.get_or_create_ptr()
+    pins[].rows[handle] = row^
 
 
 def trees_resident_pin(handle: Int) raises:

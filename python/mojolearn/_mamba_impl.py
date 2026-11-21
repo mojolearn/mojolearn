@@ -194,6 +194,7 @@ class _MambaBase(NumericModeMixin):
     #: The block takes `device=`; its check runs the same block on the other
     #: device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    _mojolearn_readback_plan = False  # vendor_used / numeric_mode_used answer from the block's device route (_native_mode_metadata.connect_classes builds no plan)
 
     def vendor_used(self):
         """The backend this block runs on.

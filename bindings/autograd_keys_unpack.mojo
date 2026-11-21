@@ -186,6 +186,8 @@ struct AutogradKeys(Defaultable, Movable):
     var k_microbatches: PythonObject
     var k_model_native_api_v1: PythonObject
     var k_modes: PythonObject
+    var k_import_cpu_binding: PythonObject
+    var k_import_cpu_entries: PythonObject
     var k_momentum_buffer: PythonObject
     var k_mro: PythonObject
     var k_mu_product: PythonObject
@@ -431,6 +433,8 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_microbatches = PythonObject(None)
         self.k_model_native_api_v1 = PythonObject(None)
         self.k_modes = PythonObject(None)
+        self.k_import_cpu_binding = PythonObject(None)
+        self.k_import_cpu_entries = PythonObject(None)
         self.k_momentum_buffer = PythonObject(None)
         self.k_mro = PythonObject(None)
         self.k_mu_product = PythonObject(None)
@@ -680,6 +684,8 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_microbatches = py_key("microbatches")
     nk[].k_model_native_api_v1 = py_key("model_native_api_v1")
     nk[].k_modes = py_key("modes")
+    nk[].k_import_cpu_binding = py_key("import_cpu_binding")
+    nk[].k_import_cpu_entries = py_key("import_cpu_entries")
     nk[].k_momentum_buffer = py_key("momentum_buffer")
     nk[].k_mro = py_key("mro")
     nk[].k_mu_product = py_key("mu_product")
