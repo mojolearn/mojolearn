@@ -20,9 +20,9 @@ neither one crashes:
                                          across a grid-policy step and into
                                          a different histogram kernel
 
-    the treatment lost on save           a model that should REFUSE a NaN
-                                         row silently scores it in the
-                                         bottom bin instead
+    the treatment lost on save           a model routes a NaN row to a
+                                         different bin after a save and
+                                         a load than it did before
 
 THE GATES
 
@@ -40,15 +40,27 @@ THE GATES
 3. **THE SENTINEL IS AT THE RIGHT END.** `Min` puts `lowest()` first,
    `Max` puts `max()` last. Read off the model.
 
-4. **`Forbidden` IS WHAT A CLEAN COLUMN RESOLVES TO**, whatever was asked:
-   the treatment is `as_is` and the borders are the same as a fit that
-   never heard of NaN, so no budget is spent on a bin nothing reaches.
+4. **A CLEAN COLUMN SPENDS NO BORDER AND RECORDS THE FIT'S MODE.** Its MODE
+   resolves to `Forbidden` for the border budget, whatever was asked: the
+   borders are the same as a fit under `nan_mode='Forbidden'`, with no
+   sentinel, so no budget is spent on a bin no learn row reaches. Its
+   TREATMENT is the one the fit's `nan_mode` names (`Min` as_false, `Max`
+   as_true, `Forbidden` as_is), recorded for every float column whether
+   or not its learn rows held a NaN (`gbdt/train.mojo`, the float branch of
+   the shared grid builder; since 2026-11-20). Before that date a clean
+   column recorded as_is, as CatBoost does, and this gate asserted it.
 
 5. **A SAVED MODEL ROUTES A NaN THE SAME WAY.** Save, load, predict on rows
    containing NaN, and every prediction must be bit-identical.
 
-6. **A NaN ON A COLUMN THE LEARN POOL HAD NONE IN IS REFUSED**, their
-   `CB_ENSURE(allowNans, "There are NaNs in test dataset ...")`.
+6. **A NaN ON A COLUMN THE LEARN POOL HAD NONE IN FOLLOWS THE FIT'S MODE.**
+   Under `Min` it is scored as a value below every observed one, under
+   `Max` as a value above every one: the prediction is bit-identical to the
+   same row with an ordinary value beyond that end of the column. Only a
+   fit under `nan_mode='Forbidden'` refuses it, their
+   `CB_ENSURE(allowNans, "There are NaNs in test dataset ...")`. CatBoost
+   refuses under every mode; this is a deliberate difference (a boosted
+   model must accept a missing value in a feature that had none at fit).
 
 SABOTAGES:
 
@@ -224,25 +236,68 @@ def check_nan_mode() raises:
         print("  ok   Max: borders[0][-1] is max(), treatment as_true")
 
     print()
-    print("-- gate 4: a clean column resolves to Forbidden --")
-    var clean_ok = True
+    print("-- gate 4: a clean column spends no border and records the fit's mode --")
+    # The reference for "no border spent": the same clean data under
+    # Forbidden, where no column can have a sentinel.
+    var m_forb = _fit(ctx, xc, yc, String("Forbidden"))
+    var treat_ok = True
     for c in range(NM_FEATURES):
-        if m_clean.nan_treatment[c] != NAN_TREATMENT_AS_IS:
-            clean_ok = False
-    # and the NaN fit's OTHER columns, which have no NaNs of their own
+        if m_clean.nan_treatment[c] != NAN_TREATMENT_AS_FALSE:
+            treat_ok = False
+        if m_forb.nan_treatment[c] != NAN_TREATMENT_AS_IS:
+            treat_ok = False
+    # and the NaN fits' OTHER columns, which have no NaNs of their own
     for c in range(1, NM_FEATURES):
-        if m_min.nan_treatment[c] != NAN_TREATMENT_AS_IS:
-            clean_ok = False
-    if not clean_ok:
+        if m_min.nan_treatment[c] != NAN_TREATMENT_AS_FALSE:
+            treat_ok = False
+        if m_max.nan_treatment[c] != NAN_TREATMENT_AS_TRUE:
+            treat_ok = False
+    if not treat_ok:
         print(
-            "  FAIL a column with no NaNs took a treatment other than"
-            " as_is; nan_mode is per FEATURE and data dependent",
+            "  FAIL a column with no NaNs did not record the treatment of"
+            " the fit's nan_mode (Min as_false, Max as_true, Forbidden"
+            " as_is)",
         )
         failures += 1
     else:
         print(
-            "  ok   every column without a NaN is as_is, including in the"
-            " fit whose feature 0 has them",
+            "  ok   every column without a NaN records the fit's mode,"
+            " including in the fits whose feature 0 has NaNs",
+        )
+    # No border spent: a clean column's grid under Min or Max is the grid
+    # of the Forbidden fit, entry for entry, so it holds no sentinel.
+    var grid_ok = True
+    for c in range(NM_FEATURES):
+        if len(m_clean.borders[c]) != len(m_forb.borders[c]):
+            grid_ok = False
+        else:
+            for k in range(len(m_forb.borders[c])):
+                if m_clean.borders[c][k] != m_forb.borders[c][k]:
+                    grid_ok = False
+    for c in range(1, NM_FEATURES):
+        if len(m_min.borders[c]) != len(m_forb.borders[c]):
+            grid_ok = False
+        if len(m_max.borders[c]) != len(m_forb.borders[c]):
+            grid_ok = False
+        if len(m_min.borders[c]) > 0 and m_min.borders[c][0] == lowest:
+            grid_ok = False
+        if (
+            len(m_max.borders[c]) > 0
+            and m_max.borders[c][len(m_max.borders[c]) - 1] == highest
+        ):
+            grid_ok = False
+    if not grid_ok:
+        print(
+            "  FAIL a column with no NaNs has a grid other than the"
+            " Forbidden fit's (a sentinel, or a border spent on a NaN bin"
+            " no learn row reaches); the border budget is per FEATURE and"
+            " data dependent",
+        )
+        failures += 1
+    else:
+        print(
+            "  ok   every column without a NaN has the Forbidden fit's"
+            " grid: no sentinel, no border spent",
         )
 
     print()
@@ -267,23 +322,55 @@ def check_nan_mode() raises:
         )
 
     print()
-    print("-- gate 6: a NaN the learn pool never saw is refused --")
-    # feature 1 has no NaN in learn, so its treatment is as_is
+    print("-- gate 6: a NaN the learn pool never saw follows the fit's mode --")
+    # Feature 1 has no NaN in learn. Its values are in [0, 1), so -1 is
+    # below every observed value and every border, and 2 is above them.
     var probe = x.copy()
     probe[1 * NM_ROWS + 3] = Float32(0.0) / Float32(0.0)
+    var below = x.copy()
+    below[1 * NM_ROWS + 3] = Float32(-1.0)
+    var above = x.copy()
+    above[1 * NM_ROWS + 3] = Float32(2.0)
+
+    var min_nan = predict_floats(ctx, m_min, probe, NM_ROWS)
+    var min_below = predict_floats(ctx, m_min, below, NM_ROWS)
+    var max_nan = predict_floats(ctx, m_max, probe, NM_ROWS)
+    var max_above = predict_floats(ctx, m_max, above, NM_ROWS)
+    var off_side = 0
+    for r in range(NM_ROWS):
+        if min_nan[r] != min_below[r]:
+            off_side += 1
+        if max_nan[r] != max_above[r]:
+            off_side += 1
+    if off_side != 0:
+        print(
+            "  FAIL", off_side, "predictions of a NaN on a column the learn"
+            " pool had none in differ from a value beyond the end the mode"
+            " names (Min: below every value, Max: above every value)",
+        )
+        failures += 1
+    else:
+        print(
+            "  ok   Min scores it as a value below every observed one, Max"
+            " as a value above, bit for bit",
+        )
+
+    # Only a fit that was told a NaN is an error refuses one.
+    var probe_clean = xc.copy()
+    probe_clean[1 * NM_ROWS + 3] = Float32(0.0) / Float32(0.0)
     var refused = False
     try:
-        var _p = predict_floats(ctx, m_min, probe, NM_ROWS)
+        var _p = predict_floats(ctx, m_forb, probe_clean, NM_ROWS)
     except e:
         refused = True
     if not refused:
         print(
-            "  FAIL a NaN on a column the learn pool had none in was"
-            " scored rather than refused",
+            "  FAIL a fit under nan_mode='Forbidden' scored a NaN rather"
+            " than refusing it",
         )
         failures += 1
     else:
-        print("  ok   refused")
+        print("  ok   a fit under Forbidden refuses it")
 
     print()
     print("-- sabotages --")
