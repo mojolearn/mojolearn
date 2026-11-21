@@ -50,6 +50,7 @@ from bindings.xcnn_keys_unpack import xcnn_keys
 from core.device_route import DEVICE_INSTALL, device_route_plan, device_route_admit, device_cpu_absent
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_route_held, device_route_keep, device_request, device_admit_class, device_route_clear,
+    device_cpu_connect_late,
 )
 
 
@@ -463,7 +464,7 @@ def _xcnn_route_build(requested_device: Int, mode: PythonObject, default_mode: P
     against the image of the layer's device (every check and record the
     per-call selection made, in the same order on this installation's
     device). `device="cpu"` beside a GPU set takes the CPU identical image
-    the bridge loaded at import (`xcnn_cpu_bindings`): its entries carry no
+    the bridge loads at the first CPU admission (`xcnn_cpu_bindings`): its entries carry no
     resident glue, so the layer runs the host path by itself and a tensor
     resident on the GPU image is "not on this device" for it and is read
     through its own module. The owner pins the entries (`images`), the mode
@@ -487,6 +488,12 @@ def _xcnn_route_build(requested_device: Int, mode: PythonObject, default_mode: P
         var plan = device_route_plan(requested_device, owner.route.vendor, owner.route.mode)
         if plan.cpu_table:
             var cpu = xcnn_get(context, XK_CPU_BINDINGS)
+            # Loaded at the first device="cpu" admission (fx-host-import:
+            # python/mojolearn/_native_xcnn_bridge.py, no longer at import);
+            # a layer restored without construction connects it here, once
+            # (the label table loads in the same connect).
+            if cpu is None and device_cpu_connect_late(context):
+                cpu = xcnn_get(context, XK_CPU_BINDINGS)
             if cpu is None:
                 device_cpu_absent(String(py_type(layer).__name__),
                                   "its CPU images are not connected in this installation")
