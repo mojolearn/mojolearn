@@ -980,6 +980,15 @@ def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: Pyth
     if native is None:
         prepare = py_present(_km_door(binding, "kernel_ridge_resident_prepare", context))
         if not prepare:
+            # The module this estimator was handed (its binding route) keeps
+            # no resident fit: a host module registers fit / predict /
+            # transform only, and the predict takes the per-call entry of
+            # that same module. A device copy minted by ANOTHER module
+            # (set_params(device=...) on a fitted estimator) is released
+            # here through its minting binding instead of outliving the
+            # route; `_km_resident_hit` never matches it (held[2] is not
+            # this binding).
+            _km_release(model, "kernel_ridge_resident_release")
             return PythonObject(None)
     elif (flags & 1) == 0:
         return PythonObject(None)
