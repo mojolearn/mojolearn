@@ -58,6 +58,94 @@ class BArms(unittest.TestCase):
                 MC.check_b_arms(["run1"], f, {"run1": "X=1"})         # a built arm staged as env
 
 
+class RunEnv(unittest.TestCase):
+    """An arm's run variables come from its owed entry (lane fx-tools-round3, 2026-11-20: gemm-leaf512 was staged
+    twice without MOJOLEARN_EXPERIMENT_GEMM_PROFILE, and its arm lost neural/gemm to the profile admission)."""
+    PROFILE = "MOJOLEARN_EXPERIMENT_GEMM_PROFILE=mojolearn.identical.gemm.fp32.v2-leaf512"
+
+    def owed(self, d, arms, rows=()):
+        f = Path(d) / "owed.json"
+        f.write_text(json.dumps({"b_arms": arms, "rows": list(rows)}))
+        return f
+
+    def test_built_arm_returns_its_run_env_and_others_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = self.owed(d, {"leaf": {"define": "L", "owed": "RUN", "run_env": self.PROFILE},
+                              "plain": {"define": "P", "owed": "RUN"},
+                              "env1": {"define": "", "env": "V=@cgroup_cores", "owed": "RUN"}})
+            got = MC.check_b_arms(["leaf", "plain", "env1"], f, {"leaf": None, "plain": None, "env1": "V=@cgroup_cores"})
+            self.assertEqual(got, {"leaf": self.PROFILE, "plain": None, "env1": "V=@cgroup_cores"})
+            # without the staged forms (older callers) the file's form decides
+            self.assertEqual(MC.check_b_arms(["leaf", "env1"], f)["leaf"], self.PROFILE)
+
+    def test_named_but_unset_env_refused(self):
+        # the leaf512 entry: the status names the variable, no run_env carries it
+        with tempfile.TemporaryDirectory() as d:
+            f = self.owed(d, {"leaf": {"define": "L", "owed": "RUN",
+                                       "status": "stage the arm with env:%s" % self.PROFILE}})
+            with self.assertRaises(SystemExit) as cm:
+                MC.check_b_arms(["leaf"], f, {"leaf": None})
+            self.assertIn("MOJOLEARN_EXPERIMENT_GEMM_PROFILE", str(cm.exception))
+            self.assertIn("run_env", str(cm.exception))
+            # a row naming the arm counts too
+            f = self.owed(d, {"leaf": {"define": "L", "owed": "RUN"}},
+                          [{"id": "r", "b_arms": ["leaf"], "decides": "run with %s" % self.PROFILE}])
+            with self.assertRaises(SystemExit):
+                MC.check_b_arms(["leaf"], f, {"leaf": None})
+            # set: admitted
+            f = self.owed(d, {"leaf": {"define": "L", "owed": "RUN", "run_env": self.PROFILE,
+                                       "status": "needs %s" % self.PROFILE}})
+            self.assertEqual(MC.check_b_arms(["leaf"], f, {"leaf": None}), {"leaf": self.PROFILE})
+
+    def test_env_the_job_cannot_supply_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            for bad in ("lower=1", "A=1 B=2", "A=@host_cores", "A=1,"):
+                f = self.owed(d, {"x": {"define": "X", "owed": "RUN", "run_env": bad}})
+                with self.assertRaises(SystemExit, msg=bad):
+                    MC.check_b_arms(["x"], f, {"x": None})
+            # run_env on an env arm: the env arm's variables are `env`
+            f = self.owed(d, {"e": {"define": "", "env": "V=1", "run_env": "W=2", "owed": "RUN"}})
+            with self.assertRaises(SystemExit):
+                MC.check_b_arms(["e"], f, {"e": "V=1"})
+
+    def test_stage_puts_the_run_env_on_that_arms_line_only(self):
+        import contextlib
+        import io
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            cver = "0.8.67.dev0+aaaaaaaaaaaa"
+            dirs = {}
+            for name, ver in (("cand", cver), ("leaf", "0.8.67.dev0+bbbbbbbbbbbb"), ("plain", "0.8.67.dev0+cccccccccccc")):
+                dirs[name] = os.path.join(d, name)
+                os.makedirs(dirs[name])
+                for dist in ("core", "nvidia"):
+                    Path(dirs[name], "mojolearn_%s-%s-py3-none-any.whl" % (dist, ver)).write_text("w")
+                if name != "cand":
+                    Path(dirs[name], "candidate.json").write_text(json.dumps({"version": ver}))
+            tree = os.path.join(d, "tree")
+            os.makedirs(os.path.join(tree, "bench", "results", "paper_compare"))
+            os.makedirs(os.path.join(tree, "bench", "results", "dataset_store"))
+            Path(tree, "bench", "results", "paper_compare", "recipes-nvidia.json").write_text("{}")
+            Path(tree, "bench", "results", "dataset_store", "manifest.tsv").write_text("")
+            owed = self.owed(d, {"leaf": {"define": "L", "owed": "RUN", "run_env": self.PROFILE},
+                                 "plain": {"define": "P", "owed": "RUN"}})
+            argv = ["stage", "nvidia", "--version", cver, "--source-commit", "a" * 40, "--wheel-dir", dirs["cand"],
+                    "--dry-run", "--state-dir", d, "--tree", tree, "--owed-file", str(owed),
+                    "--b-arm", "leaf=%s@%s" % (dirs["leaf"], "b" * 40),
+                    "--b-arm", "plain=%s@%s" % (dirs["plain"], "c" * 40)]
+            manifest = lambda version, vendor, wheels, commit: {  # noqa: E731
+                "files": [{"file": Path(w).name, "sha256": "0" * 64} for w in wheels]}
+            buf = io.StringIO()
+            with mock.patch.object(MC.C, "build_manifest", manifest), \
+                    mock.patch.object(MC, "dataset_keys", lambda *a, **k: ["k1"]), \
+                    contextlib.redirect_stdout(buf):
+                self.assertEqual(MC.main(argv), 0)
+            self.assertIn("B arm leaf: runs with %s" % self.PROFILE, buf.getvalue())
+            lines = Path(d, "b-arms-aaaaaaaaaaaa-nvidia.txt").read_text().splitlines()
+            self.assertEqual(lines, ["leaf /root/pc-in/aaaaaaaaaaaa/b-leaf/nvidia %s env:%s" % ("b" * 40, self.PROFILE),
+                                     "plain /root/pc-in/aaaaaaaaaaaa/b-plain/nvidia %s" % ("c" * 40)])
+
+
 class Built(unittest.TestCase):
     def test_stage_refuses_a_vendor_the_targets_did_not_build(self):
         with tempfile.TemporaryDirectory() as d:

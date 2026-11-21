@@ -510,7 +510,12 @@ if [ "$OWED" = 1 ] && [ -n "${PC_B_ARMS:-}" ]; then
         fi
         a=$(wheel_set_args "$name" "$dir" "$commit") || continue
         add_arm "$name" $a; B_NAMES+=("$name")
-        if [ -n "${xenv:-}" ]; then ARM_XENV[$name]=${xenv#env:}; say "wheel arm $name runs with ${ARM_XENV[$name]}"; fi
+        if [ -n "${xenv:-}" ]; then
+            ARM_XENV[$name]=${xenv#env:}
+            # the same box value as an env arm's (measure_candidate.py stage passes an owed run_env as written)
+            [[ "${ARM_XENV[$name]}" == *@cgroup_cores* ]] && ARM_XENV[$name]=${ARM_XENV[$name]//@cgroup_cores/$(alloc_cores)}
+            say "wheel arm $name runs with ${ARM_XENV[$name]}"
+        fi
     done < "$PC_B_ARMS"
 fi
 B_CSV=$(IFS=,; echo "${B_NAMES[*]:-}")
@@ -1031,6 +1036,10 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                     $PY tools/paper_compare.py pass-ids --full-ids "$ids" "${SJT[@]}" --out "$ids.pass" \
                         > "$RES/logs/pass-ids-tg-ab-$arm.log" 2>&1
                     use="$ids.pass"
+                    # a race the candidate's smoke failed leaves the unit on both sides: name it here, with its
+                    # reason, as the prior arms' pass lists do (lane fx-tools-round3, 2026-11-20)
+                    grep -m 20 '^PAPER-PASS-IDS-FAILED' "$RES/logs/pass-ids-tg-ab-$arm.log" | cut -c1-300 \
+                        | sed "s/^/owed $arm $rows: /"
                 else
                     abrows=$rows                 # a neighbouring shape: no smoke gate (as the owed part)
                 fi
@@ -1072,6 +1081,11 @@ if part tg-install || part tg-prep || part tg-smoke || part tg-board || part tg-
                     fi
                     tg_board "$arm" "$c" "$RES/board-tg-ab-$arm-$rows" "$abrows" "${SJT[@]}" ${cap[@]+"${cap[@]}"}; r=$?; [ $r -gt $rc ] && rc=$r
                 done
+                # rows the arm (or its base) lost, each with its reason: one line, never only a shorter count and an
+                # rc=1 (lane fx-tools-round3, 2026-11-20: gemm-leaf512's arm board held 3 of its base's 4 rows)
+                say "$($PY tools/ops/targeted_rows.py ab-gaps --arm "$arm" --rows "$rows" --ids "$use" \
+                    --base "$RES/board-tg-ab-$arm-base-$rows/board.json" --board "$RES/board-tg-ab-$arm-$rows/board.json" \
+                    2>&1 | tail -n 1 | head -c 1200)"
                 EV_LEFT_MB=$(( EV_LEFT_MB - 2 * $(nlines "$use") * $PC_EVIDENCE_MB_PER_RACE ))
                 if [ "${LAST_UNIT[$arm]}" = "$k" ] && [ -z "${ARM_ENV[$arm]:-}" ]; then
                     if capped; then say "venv $arm kept: the cap guard cut its units (the next submit resumes them)"

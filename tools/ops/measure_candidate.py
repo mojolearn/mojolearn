@@ -26,6 +26,11 @@ Nothing here rents, releases or extends a box. It prints the submit line; the or
 Before any copy it also (fix lane tooling-measure-stage, 2026-11-13, after the measurement of 4c2340386abc):
   * refuses a --b-arm NAME that is not one of the owed file's b_arms (six B sets were staged under invented names and
     the job reported every one "not planned");
+  * reads each staged arm's run variables from its owed entry (lane fx-tools-round3, 2026-11-20): a built B set's
+    `run_env` ("VAR=VALUE[,..]") goes on that arm's PC_B_ARMS line as the 4th field env:..., so only that arm's board
+    units and driver rows run with it; an env arm's `env` as before. It refuses a list the job would not admit, a box
+    value other than @cgroup_cores, and an entry whose own text names a MOJOLEARN_EXPERIMENT_* variable its env does
+    not set (gemm-leaf512 was staged twice without MOJOLEARN_EXPERIMENT_GEMM_PROFILE and lost its gemm row);
   * checks the box's free disk on /root: at least --min-free-gb (40), or the largest results dir already under the
     tree's box-out/ plus 20 GB, and prints what can be pruned (old results dirs, staging tarballs of
     box_persist_run.sh, old /root/pc-in sets, smoke caches); it refuses below that unless --allow-low-disk (the
@@ -181,7 +186,9 @@ def check_b_arms(names, owed_file, envs=None):
     file classifies other than RUN (lane fb8-owed-arms, 2026-11-17: `owed` DECIDED already has its L40S A/B, PAUSED
     belongs to a paused programme, NO-ROW has no board race; lane fb15-ab-verdicts, 2026-11-18: HELD has its A/B and
     waits on a decision, INVALID measured nothing and a RUN arm replaces it; nothing is timed twice), and, with ENVS ({name: the
-    'VAR=VALUE' of an env arm, or None for a built set}), an arm staged in the other form than the file's (`env`)."""
+    'VAR=VALUE' of an env arm, or None for a built set}), an arm staged in the other form than the file's (`env`).
+    Returns {name: the run variables of that arm or None} (check_run_env: a built set's `run_env` goes on its PC_B_ARMS
+    line as the 4th field env:VAR=VALUE, so only that arm's venv runs with it)."""
     arms = PC.load_json(str(owed_file)).get("b_arms") or {}
     known = sorted(arms)
     bad = [n for n in names if n not in known]
@@ -200,6 +207,49 @@ def check_b_arms(names, owed_file, envs=None):
         if (env or None) != (want or None):
             raise SystemExit(f"measure-candidate: --b-arm {n} is " + (f"the env arm {n}=env:{want}" if want else
                              "a built B set NAME=DIR@SHA (tools/release.py candidate --owed-arm), not an env arm"))
+    doc = PC.load_json(str(owed_file))
+    return {n: check_run_env(n, arms[n], doc.get("rows") or [],
+                             built=((envs or {})[n] is None) if n in (envs or {}) else not arms[n].get("env"))
+            for n in names}
+
+
+#: one VAR=VALUE[,VAR=VALUE] list, the form tools/ops/paper_compare_job.sh's b-arms block admits (an env arm's second
+#: field, a wheel arm's 4th field); the only box value the job resolves is @cgroup_cores
+ENV_LIST_RE = re.compile(r"[A-Z_][A-Z0-9_]*=[^,\s]*(?:,[A-Z_][A-Z0-9_]*=[^,\s]*)*")
+BOX_VALUES = ("@cgroup_cores",)
+#: a variable an arm's text says its runs need (the admission switches of an experimental build; lane fx-tools-round3)
+NAMED_ENV_RE = re.compile(r"\b(MOJOLEARN_EXPERIMENT_[A-Z0-9_]+)=")
+
+
+def check_run_env(name, entry, rows, built=True):
+    """The run variables ('VAR=VALUE[,..]' or None) a staged arm's runs need, from its owed entry: `run_env` of a
+    built B set (a wheel arm that runs with variables, the job's 4th PC_B_ARMS field) or `env` of an env arm.
+    Refused (lane fx-tools-round3, 2026-11-20; gemm-leaf512 was staged twice without the
+    MOJOLEARN_EXPERIMENT_GEMM_PROFILE its status named, and its arm lost neural/gemm and its driver cases to the
+    profile admission with no line saying why): a list the job would not admit, a box value other than @cgroup_cores,
+    `run_env` on an env arm, and an entry whose own text (status, evidence, or a row naming the arm) names a
+    MOJOLEARN_EXPERIMENT_* variable that its env / run_env does not set."""
+    if entry.get("run_env") and not built:
+        raise SystemExit(f"measure-candidate: --b-arm {name}: run_env belongs to a built B set; an env arm sets `env`")
+    env = (entry.get("run_env") if built else entry.get("env")) or None
+    if env is not None:
+        if not ENV_LIST_RE.fullmatch(env):
+            raise SystemExit(f"measure-candidate: --b-arm {name}: the owed entry's "
+                             f"{'run_env' if built else 'env'} {env!r} is not VAR=VALUE[,VAR=VALUE] (the job refuses it)")
+        odd = sorted({t for t in re.findall(r"@[A-Za-z_][A-Za-z0-9_]*", env) if t not in BOX_VALUES})
+        if odd:
+            raise SystemExit(f"measure-candidate: --b-arm {name}: {', '.join(odd)} in {env!r} is no value the job "
+                             f"supplies (only {', '.join(BOX_VALUES)})")
+    text = " ".join(str(entry.get(k) or "") for k in ("status", "evidence"))
+    text += " " + " ".join(str(r.get("decides") or "") + " " + str(r.get("note") or "")
+                           for r in rows if name in (r.get("b_arms") or []))
+    have = {kv.split("=", 1)[0] for kv in (env or "").split(",") if kv}
+    need = sorted(set(NAMED_ENV_RE.findall(text)) - have)
+    if need:
+        raise SystemExit(f"measure-candidate: --b-arm {name}: its owed entry names {', '.join(need)} for its runs, and "
+                         f"its {'run_env' if built else 'env'} does not set it; the arm would lose those rows. Add it "
+                         f"to b_arms.{name}.{'run_env' if built else 'env'} in the owed file")
+    return env
 
 
 #: tools/ops/paper_compare_job.sh's parts: its default (the paper job) and the full-board screen's (board-all expands
@@ -500,8 +550,8 @@ def cmd_stage(a):
     src = source_tree(wdir, commit, a.source_tree)
     owed_file = Path(a.owed_file).expanduser() if a.owed_file else results_file(f"paper_compare/{OWED_NAME}", tree, src)
     specs = [parse_b_arm(spec) for spec in a.b_arm]
-    check_b_arms([n for n, _, _ in specs], owed_file,
-                 {n: (str(d)[4:] if sha is None else None) for n, d, sha in specs})
+    run_envs = check_b_arms([n for n, _, _ in specs], owed_file,
+                            {n: (str(d)[4:] if sha is None else None) for n, d, sha in specs}) or {}
     if any(sha is None for _, _, sha in specs) and not a.rows:
         raise SystemExit("measure-candidate: an env arm (NAME=env:VAR=VALUE) runs in the targeted job only (--rows)")
     recipes = results_file(f"paper_compare/recipes-{vendor}.json", tree, src)
@@ -569,7 +619,12 @@ def cmd_stage(a):
         bw = pick_wheels(bdir, vendor, bver)
         C.build_manifest(bver, vendor, bw, bsha)
         uploads += [(w, f"{indir}/b-{name}/{vendor}/{w.name}", False) for w in bw]
-        b_lines.append(f"{name} {indir}/b-{name}/{vendor} {bsha}\n")
+        # the owed entry's run_env rides on this arm's line only (the job's 4th field; its board units and driver rows
+        # run with it, the base and the other arms without it)
+        xenv = run_envs.get(name)
+        if xenv:
+            print(f"B arm {name}: runs with {xenv} (owed run_env)")
+        b_lines.append(f"{name} {indir}/b-{name}/{vendor} {bsha}" + (f" env:{xenv}" if xenv else "") + "\n")
     p_lines = []
     for name, pdir, psha in pw_specs:
         # our own earlier built wheel: validated and staged exactly as a B set (no owed entry), its own dir p-<name>
