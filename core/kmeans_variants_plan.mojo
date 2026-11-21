@@ -15,12 +15,23 @@ struct MiniBatchStreamState(Copyable, Movable):
 
 
 struct VariantsAuxiliary(Movable):
+    """The entry's auxiliary words end to end. Several parts are copied into
+    one owned buffer (`copy_parts`); a single part is BORROWED (`borrowed`):
+    the entry reads that part's own words, which the boundary's pins keep
+    alive through the call (the entry only reads them)."""
     var values: List[Float32]
+    var borrowed: VariantsSpan
 
     def __init__(out self, count: Int) raises:
         if count < 0 or count > 9223372036854775807 // 4:
             raise Error("ValueError: cluster auxiliary size exceeds native storage")
         self.values = List[Float32](length=count, fill=0)
+        self.borrowed = VariantsSpan(0, 0)
+
+    def __init__(out self, *, borrowed: VariantsSpan):
+        # One part: no allocation, no copy.
+        self.values = List[Float32]()
+        self.borrowed = borrowed
 
     def copy_parts(mut self, parts: List[VariantsSpan]) raises:
         var offsets = List[Int]()
@@ -45,4 +56,6 @@ struct VariantsAuxiliary(Movable):
         _ = self.values
 
     def span(self) -> VariantsSpan:
+        if self.borrowed.count > 0:
+            return self.borrowed
         return VariantsSpan(Int(self.values.unsafe_ptr()) if len(self.values) else 0, len(self.values))
