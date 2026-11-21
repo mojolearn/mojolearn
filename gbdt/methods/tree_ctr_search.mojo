@@ -74,11 +74,19 @@ from gbdt.ctrs.ctr_binarization import uniform_borders_from_range
 from gbdt.ctrs.fast_prep import HIST_BLOCK, _read_counts_wide, code_histogram_kernel
 from gbdt.ctrs.tree_ctr import (
     TreeCtrPlan,
-    TreeCtrSplit,
     TreeCtrTensor,
     tree_ctr_check_configs,
     tree_ctr_median_from_words,
     tree_ctr_median_words,
+)
+from gbdt.ctrs.tree_ctr_chosen import (
+    TreeCtrAccepted,
+    TreeCtrMapEntry,
+    TreeCtrModelSection,
+    tree_ctr_assemble,
+    tree_ctr_find_accepted,
+    tree_ctr_find_map,
+    tree_ctr_members,
 )
 from gbdt.ctrs.tree_ctr_device import (
     TreeMedianScratch,
@@ -107,11 +115,7 @@ from gbdt.methods.greedy_subsets_searcher.greedy_search_helper import (
 from gbdt.models.combination_map import (
     TCombinationCtrs,
     TCombinationMap,
-    TCombinationMember,
-    combination_cat_member,
     combination_ctr_tables_from_counts,
-    combination_float_member,
-    combination_one_hot_member,
 )
 from gbdt.models.kernel.combination_code import (
     ResidentCombinationPlan,
@@ -124,99 +128,6 @@ from gbdt.models.oblivious_model import (
     TAdditiveModel,
     TBinarySplit,
 )
-
-
-struct TreeCtrMapEntry(Copyable, Movable):
-    """One combination the trees chose: its members as the fit added them
-    (the base tensor's categorical features, then its splits, then the
-    candidate's categorical feature), its map, and the learn pool's counts
-    per group (and per group and target class when a Borders config
-    exists)."""
-
-    var cats: List[Int]
-    var splits: List[TreeCtrSplit]
-    var candidate: Int
-    var cmap: TCombinationMap
-    var counts: List[Int]
-    var histogram: List[Int]
-
-    def __init__(
-        out self,
-        var cats: List[Int],
-        var splits: List[TreeCtrSplit],
-        candidate: Int,
-        var cmap: TCombinationMap,
-        var counts: List[Int],
-        var histogram: List[Int],
-    ):
-        self.cats = cats^
-        self.splits = splits^
-        self.candidate = candidate
-        self.cmap = cmap^
-        self.counts = counts^
-        self.histogram = histogram^
-
-    def has_members(self, base: TreeCtrTensor, candidate: Int) -> Bool:
-        if self.candidate != candidate:
-            return False
-        if len(self.cats) != len(base.cats):
-            return False
-        if len(self.splits) != len(base.splits):
-            return False
-        for i in range(len(self.cats)):  # small-loop(cats: members of one combination): compares member ids
-            if self.cats[i] != base.cats[i]:
-                return False
-        for i in range(len(self.splits)):  # small-loop(splits: members of one combination): compares member ids
-            ref a = self.splits[i]
-            ref b = base.splits[i]
-            if a.feature != b.feature or a.bin != b.bin or (
-                a.take_bin != b.take_bin
-            ):
-                return False
-        return True
-
-
-struct TreeCtrAccepted(Copyable, Movable):
-    """One tree-CTR model column: a map, a config, the estimation order its
-    training column was taken in (0 for a permutation-independent config)
-    and the borders it won under."""
-
-    var map_ordinal: Int
-    var config: Int
-    var order: Int
-    var borders: List[Float32]
-
-    def __init__(
-        out self,
-        map_ordinal: Int,
-        config: Int,
-        order: Int,
-        var borders: List[Float32],
-    ):
-        self.map_ordinal = map_ordinal
-        self.config = config
-        self.order = order
-        self.borders = borders^
-
-
-struct TreeCtrModelSection(Movable):
-    """What `TreeCtrFit.assemble` hands `train`: the model's tree-CTR
-    section, the borders of its columns in column order, and each accepted
-    entry's model column."""
-
-    var ctrs: TCombinationCtrs
-    var borders: List[List[Float32]]
-    var column_of: List[Int]
-
-    def __init__(
-        out self,
-        var ctrs: TCombinationCtrs,
-        var borders: List[List[Float32]],
-        var column_of: List[Int],
-    ):
-        self.ctrs = ctrs^
-        self.borders = borders^
-        self.column_of = column_of^
 
 
 struct TreeCtrFit(Movable):
@@ -657,9 +568,9 @@ struct TreeCtrFit(Movable):
         rows grouped by its members, the group count, every group's member
         tuple and the learn pool's counts, read home once."""
         var feature = self.plan.cat_features[k]
-        for m in range(len(self.maps)):  # small-loop(maps: combinations the trees chose): finds one combination
-            if self.maps[m].has_members(self.level_base, feature):
-                return m
+        var found = tree_ctr_find_map(self.maps, self.level_base, feature)
+        if found >= 0:
+            return found
         var codes = List[DeviceBuffer[DType.uint32]]()
         var cards = List[Int]()
         self._member_handles(self.level_base, codes, cards)
@@ -722,29 +633,11 @@ struct TreeCtrFit(Movable):
         _ = d_hist^
         _ = len(codes)
 
-        var members = List[TCombinationMember]()
-        # driver-loop: over the tensor's categorical members
-        for i in range(len(self.level_base.cats)):
-            members.append(combination_cat_member(self.level_base.cats[i]))
-        # driver-loop: over the tensor's split members
-        for i in range(len(self.level_base.splits)):
-            var split = self.level_base.splits[i]
-            var column = split.feature
-            var raw = self.column_raw[column]
-            if raw < 0:
-                raise Error("tree CTR fit: a split member on a CTR column")
-            if split.take_bin:
-                members.append(combination_one_hot_member(raw, split.bin))
-            else:
-                if split.bin < 0 or split.bin >= len(self.column_borders[column]):
-                    raise Error("tree CTR fit: a split member past its borders")
-                members.append(
-                    combination_float_member(
-                        raw, self.column_borders[column][split.bin],
-                        self.column_nan_side[column],
-                    )
-                )
-        members.append(combination_cat_member(feature))
+        # the one statement of the member list, shared with the host column
+        var members = tree_ctr_members(
+            self.level_base, feature, self.column_raw, self.column_borders,
+            self.column_nan_side,
+        )
         var cmap = TCombinationMap(members^, tuples^)
         self.maps.append(
             TreeCtrMapEntry(
@@ -835,12 +728,7 @@ struct TreeCtrFit(Movable):
         var order = self.order_of(learn_p) if dependent else 0
 
         var m = self._map_for(ctx, k)
-        var a = -1
-        for i in range(len(self.accepted)):  # small-loop(accepted: tree-CTR model columns): finds one column
-            ref e = self.accepted[i]
-            if e.map_ordinal == m and e.config == c and e.order == order:
-                a = i
-                break
+        var a = tree_ctr_find_accepted(self.accepted, m, c, order)
         if a < 0:
             self.accepted.append(
                 TreeCtrAccepted(m, c, order, self.slot_borders[slot].copy())
@@ -928,33 +816,10 @@ struct TreeCtrFit(Movable):
         """The model's tree-CTR section: the maps in the order they were
         first chosen, each followed by its columns, which fill the model's
         columns from `n_base` on."""
-        var ctrs = TCombinationCtrs()
-        var borders = List[List[Float32]]()
-        var column_of = List[Int](length=len(self.accepted), fill=-1)
-        var next = self.n_base
-        # driver-loop: over the combinations the trees chose (model structure)
-        for m in range(len(self.maps)):
-            var cfgs = List[TCtrConfig]()
-            var which = List[Int]()
-            for a in range(len(self.accepted)):  # small-loop(accepted: tree-CTR model columns): groups the columns by map
-                if self.accepted[a].map_ordinal == m:
-                    cfgs.append(self.configs[self.accepted[a].config])
-                    which.append(a)
-            if len(which) == 0:
-                raise Error("tree CTR fit: a combination without a column")
-            ref entry = self.maps[m]
-            var tables = combination_ctr_tables_from_counts(
-                entry.counts, entry.histogram, entry.cmap.groups(), cfgs,
-                self.target_classes_count, m, next, self.n_rows,
-            )
-            if len(tables) != len(which):
-                raise Error("tree CTR fit: one table per chosen column")
-            for i in range(len(which)):  # small-loop(which: columns of one map): records each column's place
-                column_of[which[i]] = next + i
-                borders.append(self.accepted[which[i]].borders.copy())
-            next += len(which)
-            ctrs.add(entry.cmap.copy(), tables^)
-        return TreeCtrModelSection(ctrs^, borders^, column_of^)
+        return tree_ctr_assemble(
+            self.maps, self.accepted, self.configs, self.n_base,
+            self.target_classes_count, self.n_rows,
+        )
 
     def rewrite_model(
         self, mut model: TAdditiveModel, column_of: List[Int]
