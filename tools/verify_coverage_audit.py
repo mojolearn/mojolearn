@@ -1446,8 +1446,8 @@ _ARM_DECISIONS_20261024 = [
     "`resample_gather_narrow` out (RESAMPLE_GPU_GATHER is fast or the opt-in C11 define, the narrow gather fast), so "
     "the entries return their not-taken flag and no identical lane can move; the resample fit's arithmetic carries "
     "`coverage-core-resample_impl`. The patch and manifest row are removed; the entries are fault n/a.",
-    "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (bindings/svc_kernel_native_door.mojo "
-    "`_resolve_gamma`), but flipping limb 0's lowest bit is 2^-149 of S1, below the once-rounded gamma. The fault now "
+    "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (svm/svc_kernel_fit_run.mojo "
+    "`svc_gamma_run`), but flipping limb 0's lowest bit is 2^-149 of S1, below the once-rounded gamma. The fault now "
     "feeds a wrong cell to the exact sums (cell 0 replaced by cell 1 on the device, counted twice on the host). "
     "The re-proof was MISSED again: svc uses the package default gamma='auto'. New lane `svc-gamma-scale` "
     "(SVC and SVR with gamma='scale', the path above) is the arm's expected lane; the arm builds the svm bindings only.",
