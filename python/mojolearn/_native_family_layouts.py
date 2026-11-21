@@ -12,11 +12,14 @@ def _descriptor(value):
                for base in type.__dict__['__mro__'].__get__(type(value)))  # glue: import-time descriptor metadata
 
 
-def connect(package):
-    """Retain final built-in layouts once; later imports only add new classes."""
-    classes = set()
+def connect(package, only=None):
+    """Retain final built-in layouts once; later imports only add new classes.
+    `only`: connect just these classes (a module loaded on first touch, whose
+    own classes are final when it finishes; other modules may still be
+    mid-import then, so they are not snapshotted early)."""
+    classes = set(only or ())
     prefix = package.__name__ + '.'
-    for name, module in tuple(sys.modules.items()):  # glue: loaded package declarations only
+    for name, module in (() if only else tuple(sys.modules.items())):  # glue: loaded package declarations only
         if type(module) is not ModuleType or not (name == package.__name__ or name.startswith(prefix)):
             continue
         if '.tests' in name:

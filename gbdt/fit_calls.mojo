@@ -8,7 +8,7 @@ and every call is one indirect call through the `EntryRef` (lane
 entry-table-zero-alloc); a refusal of the fit comes back in the words the
 fit raised.
 """
-from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_op, entry_ref_word
 from core.trees_entry_table import TreesEntryKey
 from core.gbdt_entry_table import gbdt_table_entry
 from gbdt.fit_request import (
@@ -32,13 +32,13 @@ def _none_f() -> List[Float64]:
 def xg_row_major(entry: EntryRef) raises -> Bool:
     """The former `gbdt_fit_row_major_available` probe (absent = False)."""
     var none = List[Int]()
-    return (entry_ref_call(entry, XG_CAPS, none, none, _none_f()) & XG_CAP_ROW_MAJOR) != 0
+    return (entry_ref_call(entry, entry_ref_op(entry, XG_CAPS), none, none, _none_f()) & XG_CAP_ROW_MAJOR) != 0
 
 
 def xg_numeric_mode(entry: EntryRef) raises -> Int:
     """The image's compiled tier (the former `gbdt_numeric_mode`)."""
     var none = List[Int]()
-    return entry_ref_call(entry, XG_NUMERIC_MODE, none, none, _none_f())
+    return entry_ref_call(entry, entry_ref_op(entry, XG_NUMERIC_MODE), none, none, _none_f())
 
 
 def xg_model_dim(entry: EntryRef, text: String) raises -> Int:
@@ -46,7 +46,7 @@ def xg_model_dim(entry: EntryRef, text: String) raises -> Int:
     var addrs: List[Int] = [Int(text.unsafe_ptr())]
     var ints: List[Int] = [text.byte_length()]
     var floats: List[Float64] = [Float64(text.byte_length())]
-    var dim = entry_ref_call(entry, XG_MODEL_DIM, addrs, ints, floats)
+    var dim = entry_ref_call(entry, entry_ref_op(entry, XG_MODEL_DIM), addrs, ints, floats)
     _ = text
     return dim
 
@@ -62,7 +62,7 @@ def xg_resident(entry: EntryRef) raises -> Bool:
     """Whether the image holds device-resident parsed models (the former
     `gbdt_resident_prepare` attribute probe)."""
     var none = List[Int]()
-    return (entry_ref_call(entry, XG_CAPS, none, none, _none_f()) & XG_CAP_RESIDENT) != 0
+    return (entry_ref_call(entry, entry_ref_op(entry, XG_CAPS), none, none, _none_f()) & XG_CAP_RESIDENT) != 0
 
 
 def xg_predict(entry: EntryRef, text: Int, text_bytes: Int, x: Int, n_rows: Int, dst: Int) raises -> Int:
@@ -70,7 +70,7 @@ def xg_predict(entry: EntryRef, text: Int, text_bytes: Int, x: Int, n_rows: Int,
     var a: Array[Int, 3] = [text, x, dst]
     var p: Array[Int, 2] = [text_bytes, n_rows]
     var f: Array[Float64, 2] = [0.0, 0.0]
-    return entry_ref_call(entry, XG_PREDICT, a, p, f)
+    return entry_ref_call(entry, entry_ref_op(entry, XG_PREDICT), a, p, f)
 
 
 def xg_predict_multi(entry: EntryRef, text: Int, text_bytes: Int, x: Int, n_rows: Int, dst: Int,
@@ -79,7 +79,7 @@ def xg_predict_multi(entry: EntryRef, text: Int, text_bytes: Int, x: Int, n_rows
     var a: Array[Int, 3] = [text, x, dst]
     var p: Array[Int, 3] = [text_bytes, n_rows, mode]
     var f: Array[Float64, 3] = [0.0, 0.0, 0.0]
-    return entry_ref_call(entry, XG_PREDICT_MULTI, a, p, f)
+    return entry_ref_call(entry, entry_ref_op(entry, XG_PREDICT_MULTI), a, p, f)
 
 
 def xg_binary(entry: EntryRef, probabilities: Bool, raw: Int, dst: Int, n: Int) raises -> Int:
@@ -88,7 +88,7 @@ def xg_binary(entry: EntryRef, probabilities: Bool, raw: Int, dst: Int, n: Int) 
     var a: Array[Int, 2] = [raw, dst]
     var p: Array[Int, 2] = [n, 1 if probabilities else 0]
     var f: Array[Float64, 2] = [0.0, 0.0]
-    return entry_ref_call(entry, XG_BINARY, a, p, f)
+    return entry_ref_call(entry, entry_ref_op(entry, XG_BINARY), a, p, f)
 
 
 def xg_sigmoid_pair(entry: EntryRef, raw: Int, dst: Int, n: Int) raises -> Int:
@@ -96,7 +96,7 @@ def xg_sigmoid_pair(entry: EntryRef, raw: Int, dst: Int, n: Int) raises -> Int:
     var a: Array[Int, 2] = [raw, dst]
     var p: Array[Int, 1] = [n]
     var f: Array[Float64, 1] = [0.0]
-    return entry_ref_call(entry, XG_SIGMOID_PAIR, a, p, f)
+    return entry_ref_call(entry, entry_ref_op(entry, XG_SIGMOID_PAIR), a, p, f)
 
 
 def xg_resident_prepare(entry: EntryRef, text: Int, text_bytes: Int) raises -> Int:
@@ -104,7 +104,7 @@ def xg_resident_prepare(entry: EntryRef, text: Int, text_bytes: Int) raises -> I
     var a: Array[Int, 1] = [text]
     var p: Array[Int, 1] = [text_bytes]
     var f: Array[Float64, 1] = [0.0]
-    return entry_ref_call(entry, XG_RESIDENT_PREPARE, a, p, f)
+    return entry_ref_call(entry, entry_ref_op(entry, XG_RESIDENT_PREPARE), a, p, f)
 
 
 def xg_resident_predict(entry: EntryRef, handle: Int, x: Int, n_rows: Int, dst: Int, mode: Int,
@@ -113,7 +113,7 @@ def xg_resident_predict(entry: EntryRef, handle: Int, x: Int, n_rows: Int, dst: 
     var a: Array[Int, 2] = [x, dst]
     var p: Array[Int, 4] = [handle, n_rows, mode, 1 if row_major else 0]
     var f: Array[Float64, 4] = [0.0, 0.0, 0.0, 0.0]
-    return entry_ref_call(entry, XG_RESIDENT_PREDICT, a, p, f)
+    return entry_ref_call(entry, entry_ref_op(entry, XG_RESIDENT_PREDICT), a, p, f)
 
 
 def _xg_outcome_text(entry: EntryRef, handle: Int) raises -> String:
@@ -123,11 +123,11 @@ def _xg_outcome_text(entry: EntryRef, handle: Int) raises -> String:
     var outcome_addrs: List[Int] = [handle, Int(sizes.unsafe_ptr())]
     var none = List[Int]()
     try:
-        _ = entry_ref_call(entry, XG_OUTCOME_SIZES, outcome_addrs, none, _none_f())
+        _ = entry_ref_call(entry, entry_ref_op(entry, XG_OUTCOME_SIZES), outcome_addrs, none, _none_f())
         return gbdt_string_at(sizes[5], sizes[0])
     finally:
         var free_addrs: List[Int] = [handle]
-        _ = entry_ref_call(entry, XG_OUTCOME_FREE, free_addrs, none, _none_f())
+        _ = entry_ref_call(entry, entry_ref_op(entry, XG_OUTCOME_FREE), free_addrs, none, _none_f())
         _ = sizes
 
 
@@ -139,7 +139,7 @@ def xg_ordered_fit(entry: EntryRef, x: Int, y: Int, weights: Int, permutation: I
     var a: Array[Int, 4] = [x, y, weights, permutation]
     var p: Array[Int, 9] = [n_rows, n_features, n_weights, n_rows, n_estimators, max_depth, border_count, 0, 0]
     var f: Array[Float64, 9] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, learning_rate, l2_leaf_reg]
-    return _xg_outcome_text(entry, entry_ref_call(entry, XG_ORDERED_FIT, a, p, f))
+    return _xg_outcome_text(entry, entry_ref_call(entry, entry_ref_op(entry, XG_ORDERED_FIT), a, p, f))
 
 
 def xg_feature_freq_fit(entry: EntryRef, x: Int, y: Int, weights: Int, sources: Int, n_rows: Int, n_features: Int,
@@ -150,7 +150,7 @@ def xg_feature_freq_fit(entry: EntryRef, x: Int, y: Int, weights: Int, sources: 
     var a: Array[Int, 4] = [x, y, weights, sources]
     var p: Array[Int, 7] = [n_rows, n_features, n_weights, n_sources, 0, 0, random_seed]
     var f: Array[Float64, 7] = [0.0, 0.0, 0.0, 0.0, learning_rate, l2_leaf_reg, 0.0]
-    return _xg_outcome_text(entry, entry_ref_call(entry, XG_FEATURE_FREQ_FIT, a, p, f))
+    return _xg_outcome_text(entry, entry_ref_call(entry, entry_ref_op(entry, XG_FEATURE_FREQ_FIT), a, p, f))
 
 
 def xg_fit(entry: EntryRef, row_major: Bool, args: GbdtFitArgs) raises -> GbdtFitOutcome:
@@ -161,14 +161,14 @@ def xg_fit(entry: EntryRef, row_major: Bool, args: GbdtFitArgs) raises -> GbdtFi
     for k in range(len(args.strs)):  # small-loop(strs: four to eight option names)
         addrs.append(Int(args.strs[k].unsafe_ptr()))
         addrs.append(args.strs[k].byte_length())
-    var handle = entry_ref_call(entry, XG_FIT_ROWMAJOR if row_major else XG_FIT, addrs, args.ints,
+    var handle = entry_ref_call(entry, entry_ref_op(entry, XG_FIT_ROWMAJOR if row_major else XG_FIT), addrs, args.ints,
                                         args.floats)
     _ = args  # the strings, views and flags stay alive through the call above
     var sizes: List[Int] = [0, 0, 0, 0, 0, 0]
     var outcome_addrs: List[Int] = [handle, Int(sizes.unsafe_ptr())]
     var none = List[Int]()
     try:
-        _ = entry_ref_call(entry, XG_OUTCOME_SIZES, outcome_addrs, none, _none_f())
+        _ = entry_ref_call(entry, entry_ref_op(entry, XG_OUTCOME_SIZES), outcome_addrs, none, _none_f())
         # The model text is copied ONCE, straight from the image's outcome
         # String (sizes[5], valid until XG_OUTCOME_FREE below) into ours; the
         # former path copied it into a byte List here, then into a second
@@ -178,9 +178,9 @@ def xg_fit(entry: EntryRef, row_major: Bool, args: GbdtFitArgs) raises -> GbdtFi
         var learn = List[Float64](length=sizes[3], fill=0.0)
         var test = List[Float64](length=sizes[4], fill=0.0)
         var copy_addrs: List[Int] = [handle, 0, Int(learn.unsafe_ptr()), Int(test.unsafe_ptr())]
-        _ = entry_ref_call(entry, XG_OUTCOME_COPY, copy_addrs, none, _none_f())
+        _ = entry_ref_call(entry, entry_ref_op(entry, XG_OUTCOME_COPY), copy_addrs, none, _none_f())
         return GbdtFitOutcome(text^, sizes[1], sizes[2] != 0, learn^, test^)
     finally:
         var free_addrs: List[Int] = [handle]
-        _ = entry_ref_call(entry, XG_OUTCOME_FREE, free_addrs, none, _none_f())
+        _ = entry_ref_call(entry, entry_ref_op(entry, XG_OUTCOME_FREE), free_addrs, none, _none_f())
         _ = sizes

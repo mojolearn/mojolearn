@@ -12,6 +12,7 @@ work to split.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
+from core.entry_table import entry_op_plain, entry_op_gil_free
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.trees_entry_table import TreesEntryKey
@@ -39,8 +40,10 @@ trait GbdtImage:
         ...
 
     # The predict operations (lane dw-trees-boost, 2026-11-21). Addresses are
-    # the caller's buffers as plain words; each method releases the GIL
-    # around its own work.
+    # the caller's buffers as plain words. No method touches the GIL (lane
+    # fx-gil, 2026-11-21): the image's entry releases it around the whole
+    # operation for a caller that holds it (`gbdt_entry_releases`), and a
+    # member's worker, which holds none, runs the same methods.
     @staticmethod
     def predict(text: String, x: Int, n_rows: Int, dst: Int) raises -> Int:
         ...
@@ -201,18 +204,35 @@ def _run[I: GbdtImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) rai
     raise Error("gbdt entry: unknown operation " + String(op))
 
 
+def gbdt_entry_releases(operation: Int) -> Bool:
+    """True for the operations an image's entry releases the GIL around when
+    its caller holds it (the fits, the predicts and transforms, the resident
+    prepare and predict): the ones that launch kernels or walk rows. The
+    capability, tier, model-dimension and outcome reads are a few words and
+    keep the GIL. False for an operation carrying `ENTRY_OP_GIL_FREE`: that
+    caller holds no GIL to release."""
+    if entry_op_gil_free(operation):
+        return False
+    return ((operation >= XG_PREDICT and operation <= XG_RESIDENT_PREDICT) or operation == XG_ORDERED_FIT
+            or operation == XG_FEATURE_FREQ_FIT or operation == XG_FIT or operation == XG_FIT_ROWMAJOR)
+
+
 def gbdt_entry_dispatch[I: GbdtImage](operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) -> Int:
     """The body of a gbdt image's `abi("C")` entry: span admission, the
     operation, the count to result, a refusal to sink."""
     try:
-        if operation < 0 or operation >= XG_OP_COUNT:
-            raise Error("gbdt entry: unknown operation " + String(operation))
+        # A member's worker sends ENTRY_OP_GIL_FREE with the operation
+        # (core/entry_table.mojo); the image's entry has read it, this body
+        # never touches the GIL either way.
+        var op = entry_op_plain(operation)
+        if op < 0 or op >= XG_OP_COUNT:
+            raise Error("gbdt entry: unknown operation " + String(op))
         if na < 0 or np < 0 or np != nf or not result:
             raise Error("gbdt entry: invalid request spans")
         if (na > 0 and not aa) or (np > 0 and (not pp or not ff)):
             raise Error("gbdt entry: null request span")
-        var value = _run[I](operation, aa, na, pp, np, ff)
+        var value = _run[I](op, aa, na, pp, np, ff)
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
         return 0
     except problem:

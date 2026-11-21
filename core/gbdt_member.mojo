@@ -55,7 +55,7 @@ from std.sys.info import size_of
 from std.memory import unsafe_memcpy, bitcast
 from std.math import isfinite
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_gil_free
 from core.gbdt_entry_table import gbdt_vendor_word
 from gbdt.fit_request import GbdtFitArgs, gbdt_string_at
 from gbdt.fit_calls import (
@@ -73,7 +73,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
-    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE,
+    MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_HOME_DEVICE, MEMBER_GIL_FREE,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -414,7 +414,7 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
                         + " values for " + String(rows) + " rows")
         w_addr = call[].weights.data
         n_weights = rows
-    var entry = call[].route.entry
+    var entry = entry_ref_gil_free(call[].route.entry)
     var row_major = False
     try:
         row_major = xg_row_major(entry)
@@ -480,7 +480,7 @@ def _apply(slot: _SlotPtr, call: _CallPtr, mode: Int, dst: Int) raises -> Int:
     """One predict in `mode` into `dst`: the resident model (row-major X as
     it is), else the per-call parse of a column-major copy. The width per
     row written."""
-    var entry = call[].route.entry
+    var entry = entry_ref_gil_free(call[].route.entry)
     var rows = call[].x.rows
     var handle = _resident(slot, entry)
     if handle >= 0:
@@ -551,7 +551,7 @@ def _proba(slot: _SlotPtr, call: _CallPtr) raises:
     _dense(call[].dst, MEMBER_F64, "the predict_proba output")
     if call[].dst.rows != rows or call[].dst.cols != 2:
         raise Error("TypeError: a Gbdt member predict_proba writes rows x 2 float64")
-    var entry = call[].route.entry
+    var entry = entry_ref_gil_free(call[].route.entry)
     if _resident(slot, entry) >= 0:
         var width = _apply(slot, call, _PREDICT_SIGMOID_PAIR, call[].dst.data)
         if width != 2:
@@ -657,8 +657,12 @@ def _capabilities(loss: String) -> Int:
     """No `MEMBER_CAN_TEST_ROWS`: the fit tests y here and X only for
     nan_mode='Forbidden' (NaN; infinities reach the kernel), and predict
     does not test X. No MEMBER_BORROWS_FIT: the state owns its text."""
+    # MEMBER_GIL_FREE (THE GIL RULE): every operation of both kinds is traced
+    # (fx-gil-RESULT.md, "gbdt"): the route entry is marked `entry_ref_gil_free`
+    # at every operation, the image's operations never touch the GIL, and the
+    # store (SharedSlot) and the resident registry have their own lock words.
     var mask = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-                | MEMBER_CAN_SAMPLE_WEIGHT)
+                | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_GIL_FREE)
     if _multi_output(loss) or _binary(loss):
         mask |= MEMBER_CAN_PREDICT_PROBA
     return mask

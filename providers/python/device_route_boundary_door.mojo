@@ -208,7 +208,14 @@ def device_admit_class(model: PythonObject, value: PythonObject, cpu_only: Bool,
     admitted CPU branch only, so a process with no device="cpu" estimator
     never loads them; once per process (it returns at a flag after)."""
     var device = device_unpack(value, b)
-    records_drop(RECORDS_PREPARED, model, DEVICE_BINDINGS_SLOT)
+    # Both held routes go (fx-audit 29, 2026-11-21): the entry route
+    # (`device_route_held` checks the mode and the context, never the
+    # device) and the bindings route. Dropping only the bindings route let a
+    # constructor run again on a live estimator (`model.__init__(device=
+    # "cpu")`, the shared wrapper's one admission) keep running on the old
+    # device's entry route. Not reached per operation: construction and
+    # set_params only.
+    device_route_clear(model)
     if device == DEVICE_INSTALL:
         return
     if device == DEVICE_GPU:

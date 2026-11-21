@@ -127,7 +127,8 @@ comptime N_FIT_PARAMS = 22
 same order (that docstring is the contract; slot 20 is `device`, 21 the
 criterion code)."""
 
-comptime ET_HOST_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], "MojolearnETFitExportHostV1"]
+# V2 (lane fx-gil, 2026-11-25): the registry gained its lock word.
+comptime ET_HOST_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], "MojolearnETFitExportHostV2", 2]
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -379,7 +380,21 @@ def _kept_forest_out(handle: Int) raises -> PythonObject:
     # lookup (DictKeyError) and the list build (Error) both raise Error to
     # the caller's try/finally, which cannot mix the two error types.
     var registry = ET_HOST_EXPORTS.get_or_create_ptr()
-    return _forest_out(registry[].entries[handle].model)
+    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # no lock held and put back on every path.
+    var entry = registry[].take(handle)
+    var out = PythonObject(None)
+    var failed = False
+    var words = String("")
+    try:
+        out = _forest_out(entry.model)
+    except problem:
+        failed = True
+        words = String(problem)
+    registry[].put_back(handle, entry^)
+    if failed:
+        raise Error(words)
+    return out
 
 
 def _et_handle_py(handle: Int, export: Bool) raises -> PythonObject:
@@ -434,28 +449,54 @@ def _et_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outp
     var cp = i32_ptr(dst[1])
     var tp = f32_ptr(dst[2])
     var lp = i32_ptr(dst[3])
-    et_export_into(registry[].entries[id].model, op, cp, tp, lp, dst[4], registry[].entries[id].outputs)
+    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # no lock held and put back on every path.
+    var entry = registry[].take(id)
+    var failed = False
+    var words = String("")
+    try:
+        et_export_into(entry.model, op, cp, tp, lp, dst[4], entry.outputs)
+    except problem:
+        failed = True
+        words = String(problem)
+    registry[].put_back(id, entry^)
+    if failed:
+        raise Error(words)
 
 
 def _et_export_verify_native(id: Int, dst: List[Int]) raises -> Int:
     """XF_EXPORT_VERIFY (MOJOLEARN_FOREST_EXPORT=verify): the diagnostic
     lists `forest_export_legacy` returns, against the exported arrays."""
     var registry = ET_HOST_EXPORTS.get_or_create_ptr()
-    if id not in registry[].entries:
-        raise Error("unknown or released fitted forest export handle")
-    ref entry = registry[].entries[id]
-    var legacy = et_legacy_meta(entry.model)
-    if len(legacy) != len(entry.meta):
-        return -1
-    for k in range(len(legacy)):  # small-loop(meta: six export metadata words)
-        if legacy[k] != entry.meta[k]:
-            return -1
+    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # no lock held and put back on every path.
+    var entry = registry[].take(id)
     var offsets = List[Int64]()
     var colid = List[Int64]()
     var quesval = List[Float64]()
     var left_child = List[Int64]()
     var leaves = List[Float64]()
-    et_forest_lists(entry.model, offsets, colid, quesval, left_child, leaves)
+    var same = True
+    var failed = False
+    var words = String("")
+    try:
+        var legacy = et_legacy_meta(entry.model)
+        if len(legacy) != len(entry.meta):
+            same = False
+        else:
+            for k in range(len(legacy)):  # small-loop(meta: six export metadata words)
+                if legacy[k] != entry.meta[k]:
+                    same = False
+        if same:
+            et_forest_lists(entry.model, offsets, colid, quesval, left_child, leaves)
+    except problem:
+        failed = True
+        words = String(problem)
+    registry[].put_back(id, entry^)
+    if failed:
+        raise Error(words)
+    if not same:
+        return -1
     return forest_export_verify_lists(offsets, colid, quesval, left_child, leaves, dst)
 
 
@@ -477,11 +518,7 @@ def et_forest_export_binding(
 
 
 def et_forest_export_legacy_binding(handle: PythonObject) raises -> PythonObject:
-    var registry = ET_HOST_EXPORTS.get_or_create_ptr()
-    var id = _index(handle)
-    if id not in registry[].entries:
-        raise Error("unknown or released fitted forest export handle")
-    return _forest_out(registry[].entries[id].model)
+    return _kept_forest_out(_index(handle))
 
 
 def et_forest_export_release_binding(handle: PythonObject) raises -> PythonObject:
