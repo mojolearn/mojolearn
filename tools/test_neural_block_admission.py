@@ -29,7 +29,7 @@ class NeuralAdmissionSource(unittest.TestCase):
             self.assertNotIn('object.__getattribute__', part)
             self.assertIn("_neural_block_owner_setup(", part if part is not setup else "_neural_block_owner_setup(")
         self.assertIn('"_native_block_fields"', body)
-        self.assertNotIn("SimpleNamespace", typed)
+        self.assertNotIn('module("types")', typed)
         self.assertNotIn("py_setattr", typed)
         self.assertIn("causal_lm_admit(mods, admission,", typed)
         self.assertIn("_neural_block_owner_typed(mods, block, context)", execution)
