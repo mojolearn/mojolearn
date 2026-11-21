@@ -1507,6 +1507,19 @@ from gbdt.metrics.sample_quantile import (
 )
 from checks.numerics import identical_log, identical_pow
 from std.math import sqrt
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import (
+    host_predict_chunk,
+    host_predict_task_count_work,
+)
+from gbdt.host.gbdt_oracle_ctr import (
+    gbdt_ctr_host_model_text_of,
+    gbdt_ctr_host_prelude,
+)
+from gbdt.host.gbdt_oracle_rmse import gbdt_text_with_bias
+from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
+from gbdt.models.combination_map import TCombinationCtrs
+from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.overfitting_detector.overfitting_detector import (
     make_overfitting_detector,
 )
@@ -1711,6 +1724,62 @@ def _add_tree_values(
         cursor[r] = cursor[r] + values[bins[r]]
 
 
+comptime _OrdIntPtr = MutPointer[Int, MutUntrackedOrigin]
+comptime _OrdU32Ptr = MutPointer[UInt32, MutUntrackedOrigin]
+
+
+def _ordered_leaf_bins(
+    cindex: List[UInt32],
+    splits: List[_OrdSplit],
+    word_offset_of: List[Int],
+    shift_of: List[UInt32],
+    mask_of: List[UInt32],
+    n_rows: Int,
+    mut bins: List[Int],
+):
+    """`compute_bins_for_model` (`gbdt/models/add_bin_values.mojo`): every
+    row's leaf of one oblivious tree read off one compressed index, bit
+    `level` set when the row's bin exceeds the level's split bin. A tree
+    without splits sends every row to leaf 0.
+
+    Rows are the independent units, split across the host's workers
+    (`host_parallelize`, the worker count from
+    `host_predict_task_count_work`); the levels of one row are a loop over
+    model structure. `word_offset_of[f]` is feature `f`'s first word for
+    this index's row count; `bins` holds at least `n_rows` entries."""
+    var depth = len(splits)
+    var slots = depth if depth > 0 else 1
+    var offs = List[Int](length=slots, fill=0)
+    var masks = List[UInt32](length=slots, fill=UInt32(0))
+    var values = List[UInt32](length=slots, fill=UInt32(0))
+    for level in range(depth):
+        var fid = splits[level].feature
+        offs[level] = word_offset_of[fid]
+        masks[level] = mask_of[fid] << shift_of[fid]
+        values[level] = UInt32(splits[level].bin) << shift_of[fid]
+    var cp = _OrdU32Ptr(unsafe_from_address=Int(cindex.unsafe_ptr()))
+    var op = _OrdIntPtr(unsafe_from_address=Int(offs.unsafe_ptr()))
+    var mp = _OrdU32Ptr(unsafe_from_address=Int(masks.unsafe_ptr()))
+    var vp = _OrdU32Ptr(unsafe_from_address=Int(values.unsafe_ptr()))
+    var bp = _OrdIntPtr(unsafe_from_address=Int(bins.unsafe_ptr()))
+    var units = max(1, host_predict_task_count_work(n_rows, n_rows * slots))
+    var chunk = host_predict_chunk(n_rows, units)
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm depth, imm cp, imm op, imm mp, imm vp, imm bp}:
+        for r in range(unit * chunk, min((unit + 1) * chunk, n_rows)):
+            var leaf = 0
+            for level in range(depth):
+                if (cp[op[level] + r] & mp[level]) > vp[level]:
+                    leaf += 1 << level
+            bp[r] = leaf
+
+    host_parallelize(rows, units)
+    # the tasks read these through pointers: named again past the join
+    _ = len(offs)
+    _ = len(masks)
+    _ = len(values)
+
+
 def gbdt_ordered_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -1720,11 +1789,24 @@ def gbdt_ordered_host_fit(
     loss: GbdtHostLoss,
     opts: GbdtOrderedHostOptions,
     eval: GbdtOrderedHostEval,
+    flags: List[UInt32],
 ) raises -> GbdtOrderedHostFit:
     """Train `params.n_estimators` trees by Ordered boosting on the host and
     return the model text (bias included), the learn and held-out losses,
     the best iteration and the detector's verdict, as `gbdt_fit` returns
-    them. `eval.n_rows == 0` is no held-out set."""
+    them. `eval.n_rows == 0` is no held-out set.
+
+    `flags` is empty for a float-only fit, else one word per feature (bit 0
+    categorical, bit 1 one-hot, as `gbdt_ctr_column_kinds` reads them). A
+    categorical column above `one_hot_max_size` builds CTR columns as the
+    device's Ordered fit does (`gbdt/train.mojo`, "ORDERED CTRS"): the CTR
+    estimation orders ARE the fold permutations, the prelude
+    (`gbdt_ctr_host_prelude`, shared with the Plain fit) builds one
+    compressed index per permutation, each tree is searched on its learn
+    permutation's index, and every permutation's leaves are read off that
+    permutation's own index (`fit_ordered`'s `dep_bins`). A one-hot column
+    is refused by name: this file's fold searcher scores `bin >` splits
+    only."""
     if n_rows < 4:
         raise Error(
             "Error: pool has just " + String(n_rows) + " groups or docs,"
@@ -1734,13 +1816,52 @@ def gbdt_ordered_host_fit(
     if params.n_estimators < 1 or max_depth < 1 or max_depth > 16:
         raise Error("ordered boosting needs n_estimators >= 1 and depth 1..16")
     # ---- 1. the grid, the layout, the binarize, the helpers ----
-    var grid = gbdt_host_grid(
-        x_colmajor, n_rows, n_features, params.border_count,
-        params.border_build_max_samples, params.random_seed, params.nan_mode,
-        params.border_type,
-    )
+    # `pidx` holds the fit's compressed indexes: one, or one per
+    # permutation when the fit has permutation-dependent CTR columns
+    # (`fit_ordered`'s `pidx`). `n_cols` is the layout's column count: the
+    # input features, or the categorical prelude's columns.
+    var cat_on = len(flags) != 0
+    var n_cols = n_features
+    var grid = GbdtHostGrid(List[List[Float32]](), List[Int](), List[Int]())
+    var pidx = List[List[UInt32]]()
+    var test_cindex = List[UInt32]()
+    var cat_one_hot = List[Bool]()
+    var cat_tables = List[TCtrValueTable]()
+    var cat_tree_state = List[GbdtTreeCtrHost]()
+    var cat_ctr_columns = 0
+    if cat_on:
+        # the estimation permutation is the last (-1), the orders take the
+        # fold permutation block, and tree CTRs are off (complexity 1: the
+        # binding refuses feature combinations under Ordered by name)
+        var shape = gbdt_ctr_host_prelude(
+            x_colmajor, y, n_rows, n_features, params, flags,
+            opts.permutation_count, -1, opts.permutation_block,
+            eval.x_colmajor, eval.n_rows, 1, grid, pidx, test_cindex,
+            cat_one_hot, cat_tables, cat_tree_state,
+        )
+        n_cols = shape.n_columns
+        cat_ctr_columns = shape.ctr_column_count
+        for c in range(len(cat_one_hot)):
+            if cat_one_hot[c]:
+                raise Error(
+                    "boosting_type='Ordered' with a one-hot column"
+                    " (one_hot_features, or a cat_features column with"
+                    " one_hot_max_size categories or fewer) is not"
+                    " implemented on device='cpu': the host fold searcher"
+                    " scores `bin >` splits only; use device='gpu' or"
+                    " boosting_type='Plain'"
+                )
+    else:
+        grid = gbdt_host_grid(
+            x_colmajor, n_rows, n_features, params.border_count,
+            params.border_build_max_samples, params.random_seed,
+            params.nan_mode, params.border_type,
+        )
     var layout = build_layout(grid.fold_counts)
-    var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
+    if not cat_on:
+        pidx.append(
+            _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
+        )
     var blocks = blocks_for(layout, n_rows)
     var helpers = List[_PwHelper]()
     for b in range(len(blocks)):
@@ -1761,10 +1882,10 @@ def gbdt_ordered_host_fit(
             blk.policy, gids^, offs^, firsts^, folds^, hist_line, List[Float32](),
             List[Int](), List[Bool](),
         ))
-    var feat_offset = List[Int](length=n_features, fill=0)
-    var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
-    var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
-    for f in range(n_features):
+    var feat_offset = List[Int](length=n_cols, fill=0)
+    var feat_shift = List[UInt32](length=n_cols, fill=UInt32(0))
+    var feat_mask = List[UInt32](length=n_cols, fill=UInt32(0))
+    for f in range(n_cols):
         feat_offset[f] = Int(layout.features[f].offset) * n_rows
         feat_shift[f] = layout.features[f].shift
         feat_mask[f] = layout.features[f].mask
@@ -1806,6 +1927,18 @@ def gbdt_ordered_host_fit(
         perms.append(one^)
     var est_p = perm_count - 1
     var learn_count = est_p if est_p > 0 else 1
+    # `fit_ordered`'s `dep_on`: one index per permutation. With one index
+    # (no permutation-dependent column) every permutation reads index 0.
+    if len(pidx) > 1 and len(pidx) != perm_count:
+        raise Error(
+            "ordered boosting: " + String(len(pidx)) + " compressed indexes"
+            " for " + String(perm_count) + " permutations"
+        )
+    var dep_on = perm_count > 1 and len(pidx) == perm_count
+    var est_ix = est_p if dep_on else 0
+    #: a learn permutation's leaves under `dep_on` (`dep_bins[p]`), one
+    #: buffer for the fit, rewritten per permutation per tree
+    var lp_bins = List[Int](length=n if dep_on else 1, fill=0)
     var bounds = _ordered_folds(n, opts.fold_len_multiplier, opts.min_fold_size)
     var n_folds = len(bounds) // 2
     var fold_count = 2 * n_folds
@@ -1847,9 +1980,14 @@ def gbdt_ordered_host_fit(
     # the starting point, the detector (`fit_ordered`'s step 8)
     var has_test = eval.n_rows > 0
     var n_eval = eval.n_rows if has_test else 1
-    var test_cindex = List[UInt32]()
-    if has_test:
+    # the categorical prelude already wrote the held-out index (the rows
+    # expanded through the learn pool's final CTR tables)
+    if has_test and not cat_on:
         test_cindex = _binarize_columns(eval.x_colmajor, n_eval, n_features, grid, layout)
+    var test_feat_offset = List[Int](length=n_cols, fill=0)
+    for f in range(n_cols):
+        test_feat_offset[f] = Int(layout.features[f].offset) * n_eval
+    var test_bins = List[Int](length=n_eval, fill=0)
     var test_cursor = List[Float32](length=n_eval, fill=start_value)
     var detector = make_overfitting_detector(
         eval.od_type, False, eval.od_pvalue, eval.od_wait, has_test
@@ -1947,32 +2085,44 @@ def gbdt_ordered_host_fit(
         # gradient plane onto the tree's grid before the search
         _snap_plane(sg, total, scale)
         # ---- the structure ----
+        # the structure is searched on the learn permutation's own index
+        # when the fit has permutation-dependent columns (`search_idx`)
         var splits = _ordered_tree_structure(
-            cindex, helpers, max_depth, sw, sg, doc_ids, part_bounds,
+            pidx[learn_p if dep_on else 0], helpers, max_depth, sw, sg,
+            doc_ids, part_bounds,
             fold_count, fold_bits, scale, l2, feat_offset, feat_shift,
             feat_mask, False, score_std, tree_seed,
         )
+        # the estimation permutation's leaves (the model's), rows across
+        # the workers
         var bins = List[Int](length=n, fill=0)
-        for r in range(n):
-            var leaf = 0
-            for level in range(len(splits)):
-                var fid = splits[level].feature
-                var mask = feat_mask[fid] << feat_shift[fid]
-                var value = UInt32(splits[level].bin) << feat_shift[fid]
-                if (cindex[feat_offset[fid] + r] & mask) > value:
-                    leaf += 1 << level
-            bins[r] = leaf
+        _ordered_leaf_bins(
+            pidx[est_ix], splits, feat_offset, feat_shift, feat_mask, n, bins
+        )
         var n_leaves = 1 << len(splits)
         # ---- the leaves ----
         for lp in range(learn_count):
+            if dep_on:
+                # this learn permutation's leaves from its own index (a
+                # learn permutation is never the estimation one here)
+                _ordered_leaf_bins(
+                    pidx[lp], splits, feat_offset, feat_shift, feat_mask, n,
+                    lp_bins,
+                )
             for f in range(n_folds):
                 var est = bounds[2 * f]
                 comptime if GBDT_ORDERED_SABOTAGE:
                     est = bounds[2 * f + 1]
-                _ = _ordered_task_host(
-                    loss, est, bounds[2 * f + 1], n_leaves, y, perms[lp],
-                    bins, cursors[lp][f], lr, l2,
-                )
+                if dep_on:
+                    _ = _ordered_task_host(
+                        loss, est, bounds[2 * f + 1], n_leaves, y, perms[lp],
+                        lp_bins, cursors[lp][f], lr, l2,
+                    )
+                else:
+                    _ = _ordered_task_host(
+                        loss, est, bounds[2 * f + 1], n_leaves, y, perms[lp],
+                        bins, cursors[lp][f], lr, l2,
+                    )
         var leaves = _ordered_task_host(
             loss, n, n, n_leaves, y, perms[est_p], bins, est_cursor, lr, l2,
         )
@@ -1990,16 +2140,11 @@ def gbdt_ordered_host_fit(
         # tree adds nothing), its loss, the detector ----
         if has_test:
             if len(splits) > 0:
-                var test_bins = List[Int](length=n_eval, fill=0)
-                for r in range(n_eval):
-                    var leaf = 0
-                    for level in range(len(splits)):
-                        var fid = splits[level].feature
-                        var mask = feat_mask[fid] << feat_shift[fid]
-                        var value = UInt32(splits[level].bin) << feat_shift[fid]
-                        if (test_cindex[Int(layout.features[fid].offset) * n_eval + r] & mask) > value:
-                            leaf += 1 << level
-                    test_bins[r] = leaf
+                # one buffer for the fit, every row rewritten per tree
+                _ordered_leaf_bins(
+                    test_cindex, splits, test_feat_offset, feat_shift,
+                    feat_mask, n_eval, test_bins,
+                )
                 var tree_values = List[Float32](capacity=n_leaves)
                 for leaf in range(n_leaves):
                     tree_values.append(identical_mul(leaves[leaf], lr))
@@ -2042,5 +2187,18 @@ def gbdt_ordered_host_fit(
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
         model_leaves^, losses.copy(), best, stopped_early,
     )
-    var text = gbdt_rmse_host_model_text(GbdtRmseHostFit(model^, start))
+    # the model text, then the `bias` record a seeded fit adds
+    # (`gbdt_rmse_host_model_text`'s two steps); a categorical fit's text
+    # is the CTR one (the `ctr_columns` header, the `type ctr` features,
+    # the tables)
+    var base_text = String("")
+    if cat_on:
+        base_text = gbdt_ctr_host_model_text_of(
+            model, cat_one_hot, cat_tables, cat_ctr_columns,
+            TCombinationCtrs(),
+        )
+    else:
+        base_text = gbdt_host_model_text(model)
+    var text = gbdt_text_with_bias(base_text, len(model.losses), start)
+    _ = len(cat_tree_state)
     return GbdtOrderedHostFit(text^, losses^, test_losses^, best, stopped_early)
