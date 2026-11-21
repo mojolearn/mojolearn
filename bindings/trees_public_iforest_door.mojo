@@ -803,3 +803,25 @@ def iforest_operation_with_source(model: PythonObject, operation: String, args: 
 def iforest_operation(model: PythonObject, operation: String, args: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     return iforest_operation_with_source(model, operation, args, context, args[0], False)
+
+
+def iforest_member_words(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> List[Float64]:
+    """UNPACK for the member admit (providers/python/
+    member_isolation_forest_boundary_door.mojo): the estimator's own
+    parameter checks (`iforest_validate`, its words and refusals), then the
+    thirteen NEW words of core/isolation_forest_member.mojo, then two more:
+    the tier and vendor of the svm image the bridge connected for the
+    estimator's tier (its `svm_native_key`)."""
+    iforest_validate(model, fields, context)
+    var r = _request(model, fields, 0, 0, 0, 0, context)
+    var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
+    var key = py_get(svm, trees_keys()[].k_svm_native_key)
+    if key is None:
+        raise Error("ImportError: mojolearn: the svm binding publishes no native iforest entry")
+    var words: List[Float64] = [
+        0.0, Float64(r.n_estimators), Float64(r.max_samples_mode), Float64(r.max_samples_int), r.max_samples_frac,
+        Float64(r.max_depth), Float64(r.max_features_mode), Float64(r.max_features_int), r.max_features_frac,
+        1.0 if r.bootstrap else 0.0, Float64(r.random_state), 1.0 if r.contamination_auto else 0.0,
+        r.contamination, Float64(Int(py=key[0])), Float64(Int(py=key[1])),
+    ]
+    return words^

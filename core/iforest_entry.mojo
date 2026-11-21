@@ -25,6 +25,8 @@ Operations:
   [train, query, out_f32, out_i32, info], ints `IF_P_*`, floats `IF_F_*`.
   Returns `n_query`. `info` takes three float64 (offset_, max_samples_,
   n_features_in_), four on the resident form (the token last).
+- `IF_OP_RELEASE`: ints [token]; drops the resident forest that token names
+  (a token nobody holds is a no-op). The member's FREE.
 
 Publication and lookup are small metadata operations with no independent
 numerical work to split. A layout change takes a new V suffix.
@@ -37,7 +39,8 @@ from core.shared_slot import SharedSlot
 comptime IF_ENTRY_ABI = "mojolearn.iforest_entry.v1"
 comptime IF_OP_CAPS = 0
 comptime IF_OP_RUN = 1
-comptime IF_OP_COUNT = 2
+comptime IF_OP_RELEASE = 2
+comptime IF_OP_COUNT = 3
 
 # Capability bits (IF_OP_CAPS).
 comptime IF_CAP_RESIDENT = 1
@@ -150,6 +153,11 @@ trait IFImage:
         returns `n_query`. Called with the GIL released."""
         ...
 
+    @staticmethod
+    def release(token: Int) raises:
+        """Drop the resident forest `token` names, if any."""
+        ...
+
 
 def if_run_request_at(aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int) raises -> IFRunRequest:
     """UNPACK of the request spans (the image side)."""
@@ -204,6 +212,10 @@ def if_entry_dispatch[I: IFImage](operation: Int, aa: Int, na: Int, pp: Int, np:
             value = I.caps()
         elif operation == IF_OP_RUN:
             value = I.run(if_run_request_at(aa, na, pp, np, ff, nf))
+        elif operation == IF_OP_RELEASE:
+            if np != 1 or na != 0:
+                raise Error("iforest release: needs one integer (the token)")
+            I.release(MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=pp)[0])
         else:
             raise Error("iforest entry: unknown operation " + String(operation))
         MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=result)[] = value
@@ -301,3 +313,11 @@ def if_entry_run(entry: EntryRef, request: IFRunRequest) raises -> Int:
     var f: Array[Float64, IF_RUN_FLOATS] = [request.max_samples_frac, request.max_features_frac,
                                             request.contamination]
     return entry_ref_call(entry, IF_OP_RUN, a, p, f)
+
+
+def if_entry_release(entry: EntryRef, token: Int) raises:
+    """Drop the resident forest `token` names through the resolved entry."""
+    var a: Array[Int, 0] = []
+    var p: Array[Int, 1] = [token]
+    var f: Array[Float64, 0] = []
+    _ = entry_ref_call(entry, IF_OP_RELEASE, a, p, f)

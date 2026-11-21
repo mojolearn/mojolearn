@@ -59,6 +59,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from svm.native_descriptor_dispatch import SVC_NATIVE_API
 from core.kernel_svm_member import kernel_svm_member_publish
+from core.isolation_forest_member import isolation_forest_member_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from svm.svr_native_device import SVR_DEVICE_API
 from svm.svc_native_device import SVC_DEVICE_API
@@ -811,6 +812,10 @@ struct _SvmIForestImage(IFImage):
     def run(request: IFRunRequest) raises -> Int:
         return _iforest_run(request)
 
+    @staticmethod
+    def release(token: Int) raises:
+        if_resident_release(token)
+
 
 def svm_iforest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                          result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
@@ -1108,6 +1113,8 @@ def build__mojolearn_svm() -> PythonObject:
             # The IsolationForest entry (core/iforest_entry.mojo), the doors'
             # only way to the fit-and-score since iforest_run left.
             if_entry_publish["MojolearnSvmIForestEntryOwnerV1"](Int(GLOBAL_NUMERIC_MODE), member_vendor, svm_iforest_entry_v1)
+            # Its member entry (core/isolation_forest_member.mojo), over that entry.
+            isolation_forest_member_publish(Int(GLOBAL_NUMERIC_MODE), member_vendor, Int(SVC_NATIVE_API.get_or_create_ptr()))
             kernel_svm_member_publish(GLOBAL_NUMERIC_MODE, member_vendor, Int(SVC_NATIVE_API.get_or_create_ptr()))
         # The owner identity needs the finalized type object (Mojo 1.2 creates
         # it in finalize(); see bindings/native_owner_registry.mojo).

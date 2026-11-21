@@ -56,6 +56,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from svm.host.native_descriptor_dispatch import SVC_HOST_NATIVE_API
 from core.kernel_svm_member import kernel_svm_member_publish
+from core.isolation_forest_member import isolation_forest_member_publish
 from core.native_descriptor_abi import NativeDescriptorError
 from core.iforest_entry import IFImage, IFRunRequest, IF_CAP_RESIDENT, if_entry_dispatch, if_entry_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
@@ -570,6 +571,10 @@ struct _SvmHostIForestImage(IFImage):
     def run(request: IFRunRequest) raises -> Int:
         return _iforest_run(request)
 
+    @staticmethod
+    def release(token: Int) raises:
+        if_host_resident_release(token)
+
 
 def svm_host_iforest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
                               result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
@@ -774,6 +779,8 @@ def build__mojolearn_svm_host() -> PythonObject:
         kernel_svm_member_publish(GLOBAL_NUMERIC_MODE, 0, Int(SVC_HOST_NATIVE_API.get_or_create_ptr()))
         # The IsolationForest entry (core/iforest_entry.mojo), CPU vendor 0.
         if_entry_publish["MojolearnSvmHostIForestEntryOwnerV1"](Int(GLOBAL_NUMERIC_MODE), 0, svm_host_iforest_entry_v1)
+        # Its member entry (core/isolation_forest_member.mojo), over that entry.
+        isolation_forest_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(SVC_HOST_NATIVE_API.get_or_create_ptr()))
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_svm_host: ", error))
