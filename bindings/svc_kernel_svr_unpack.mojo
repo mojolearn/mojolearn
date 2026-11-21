@@ -21,8 +21,9 @@ from bindings.device_rows_door_run import DoorRowsStore
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.svm_keys_unpack import svm_keys
-from bindings.svc_kernel_rows_unpack import _SVR_RESIDENT_SLOT, _SvmQuery, _addr, svm_device_ok, _svm_fit_admit, _svm_fit_entry, _svm_fit_host_rows, _svm_query, _svm_query_refuse, _svm_x_scan
-from bindings.svc_kernel_params_unpack import _c_rows, _kernel_code, _resolve_gamma, svm_settings_unpack
+from bindings.svc_kernel_rows_unpack import _SVR_RESIDENT_SLOT, _SvmQuery, _addr, svm_device_ok, _svm_fit_admit, _svm_fit_host_rows, _svm_query, _svm_query_refuse, _svm_x_scan
+from bindings.svc_kernel_params_unpack import _kernel_code, svm_settings_unpack, svm_scale_gamma_admit, svm_weights_unpack
+from core.svc_native_api import SvcDrivers
 
 
 # ---------------------------------------------------------------- fit
@@ -32,14 +33,22 @@ struct SvrFitUnpacked(Movable):
     """A fit: the typed request, the provider it runs on, the Mojo-owned
     worst-case result buffers (`plan`), and the Python owners of every
     buffer the request addresses (X through its pin, the admitted targets,
-    the per-row bounds), held until PACK. `device_form`: the entry took X on
+    the sample weights and the bounds buffer in `owners`), held until PACK.
+    `host_gamma`: RUN resolves gamma from the host words (`gamma_kind`,
+    `cells`) before the solve; `sample_weights` (float64, or 0): RUN forms
+    the bounds C * sample_weight at the request's `bounds` first.
+    `device_form`: the entry took X on
     the device and returned its finite and range words and the gamma it
     solved with. `copied` is the `input_copied_` flag PACK publishes."""
     var fields: PythonObject
     var x_pin: ArrayPin
     var x_meta: ArrayMetadata
     var targets: PythonObject
-    var c_rows: PythonObject
+    var owners: PythonObject
+    var sample_weights: Int
+    var host_gamma: Bool
+    var gamma_kind: Int
+    var cells: Int
     var connection: SvrConnection
     var plan: SvrFitPlan
     var request: SvrFitRequest
@@ -49,14 +58,19 @@ struct SvrFitUnpacked(Movable):
     var gamma: Float64
 
     def __init__(out self, fields: PythonObject, var x_pin: ArrayPin, var x_meta: ArrayMetadata,
-                 targets: PythonObject, c_rows: PythonObject, var connection: SvrConnection,
+                 targets: PythonObject, owners: PythonObject, sample_weights: Int, host_gamma: Bool,
+                 gamma_kind: Int, cells: Int, var connection: SvrConnection,
                  var plan: SvrFitPlan, request: SvrFitRequest, fold: DoorRowsStore, device_form: Bool,
                  copied: Bool, gamma: Float64):
         self.fields = fields
         self.x_pin = x_pin^
         self.x_meta = x_meta^
         self.targets = targets
-        self.c_rows = c_rows
+        self.owners = owners
+        self.sample_weights = sample_weights
+        self.host_gamma = host_gamma
+        self.gamma_kind = gamma_kind
+        self.cells = cells
         self.connection = connection^
         self.plan = plan^
         self.request = request.copy()
@@ -67,7 +81,7 @@ struct SvrFitUnpacked(Movable):
 
 
 def svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject,
-                   native: PythonObject) raises -> SvrFitUnpacked:
+                   drivers: SvcDrivers, candidate: Bool) raises -> SvrFitUnpacked:
     """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
     var binding = args[0]
     var fields = py_fields(model)
@@ -75,7 +89,7 @@ def svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObjec
     # Lane a8a: the GPU binding's fit takes X on the device (a fold gathered
     # there, host words copied once; never a host List) and tests it there;
     # every other route tests the host words here. One wording.
-    var entry = _svm_fit_entry(binding, native)
+    var entry = drivers.has_device
     var fold = DoorRowsStore.none()
     var x_pin = ArrayPin()
     var x_meta = _svm_fit_admit(args[1], "SVR", entry, context, fold, x_pin)
@@ -107,21 +121,29 @@ def svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObjec
         scale_gamma = resolved[1]
     else:
         _svm_x_scan(x_meta, "SVR")
-        gamma = _resolve_gamma(hp, binding, x_meta, context, native)
-    var c_rows = _c_rows(binding, hp.c, n_rows, args[3], PythonObject(None),
-                         PythonObject(None), "SVR", context, native)
+        svm_scale_gamma_admit(hp, drivers, x_meta)
+        gamma = hp.gamma
+    var weights = svm_weights_unpack(n_rows, args[3], PythonObject(None), PythonObject(None), PythonObject(None),
+                                     "SVR", context)
+    var owners = weights.owners
+    var bounds_address = 0
+    if weights.weighted:
+        var bounds = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
+        _ = py_call(owners.append, bounds)
+        bounds_address = _addr(bounds)
     var plan = SvrFitPlan(n_rows, n_cols)
-    var bounds_address = 0 if c_rows is None else _addr(c_rows)
     var target_address = _addr(targets)
     var connection = svr_connection(binding)
-    var device_form = device_x and native is None
+    var device_form = device_x and not candidate
     var request = SvrFitRequest(x_meta.source.addr, target_address,
         Int(plan.dual.unsafe_ptr()), Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()),
         Int(plan.info.unsafe_ptr()), bounds_address, n_rows, n_cols, hp.kernel,
         hp.max_iter, hp.nochange_steps, hp.degree,
         fold.base_id, fold.base_rows, fold.index_id, device_form,
-        scale_gamma, native is not None, gamma, hp.c, hp.epsilon, hp.tol, hp.coef0)
-    return SvrFitUnpacked(fields, x_pin^, x_meta^, targets, c_rows, connection^, plan^, request, fold,
+        scale_gamma, candidate, gamma, hp.c, hp.epsilon, hp.tol, hp.coef0)
+    var cells = x_meta.count
+    return SvrFitUnpacked(fields, x_pin^, x_meta^, targets, owners, weights.sample_weights, not device_x,
+                          hp.gamma_kind, cells, connection^, plan^, request, fold,
                           device_form, copied, gamma)
 
 

@@ -14,20 +14,17 @@ from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.label_admission_native_unpack import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_contains, py_setitem, py_item
 from bindings.classical_arrays_door import classical_address
-from bindings.classical_labels_door import classical_encode_labels
-from bindings.family_common_unpack import FAMILY_F64P, FAMILY_I64P, family_repr, family_isinstance
+from bindings.family_common_unpack import FAMILY_F64P, family_repr, family_isinstance
 from bindings.family_common_pack import family_call, family_array
-from core.scale_gamma_exact import scale_gamma_from_limbs
-from bindings.svc_common_unpack import svc_builtins, svc_field, svc_float, svc_int, svc_truthy, svc_base, svc_zero_division, svc_shape_of
+from bindings.svc_common_unpack import svc_builtins, svc_field, svc_float, svc_int, svc_truthy, svc_base, svc_zero_division
 from bindings.svc_common_run import svc_isfinite
-from providers.python.svc_descriptor_pyapi_door import svc_epilogue_execute, svc_descriptor_execute, svc_descriptor_flags
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.svm_keys_unpack import svm_keys
 from svm.operation_metadata import SvcOperationSettings
-from bindings.svc_kernel_rows_unpack import _GLUE_C_ROWS, _addr, _entry
+from core.svc_native_api import SvcDrivers
+from bindings.svc_kernel_rows_unpack import _addr
 
-# `_scale_gamma`: the limb words and the py2mojo switch bit.
-comptime _SG_SLOTS = 28
+# `_scale_gamma`: the py2mojo switch bit.
 comptime _PY2MOJO_SCALE_GAMMA = 1
 comptime _MAX_POLY_DEGREE = 32
 
@@ -228,75 +225,56 @@ def _kernel_code(fields: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=py_item(context, nk[].k_family_svc_kernels)[svc_field(fields, nk[].k__hp_kernel, "_hp_kernel")])
 
 
-def _resolve_gamma(hp: SvmSettings, binding: PythonObject, x_meta: ArrayMetadata, context: PythonObject, native: PythonObject) raises -> Float64:
-    """`SVC._resolve_gamma`: 'auto' 1 / n_cols; 'scale' the exact variance's
-    once-rounded reciprocal (`_scale_gamma.scale_gamma_x`); else the float.
-    The kind and the float are the operation's settings (`hp`), read once."""
-    var n_cols = x_meta.shape[1]
-    if hp.gamma_kind == SVM_GAMMA_AUTO:
-        return 1.0 / Float64(n_cols)
+def svm_scale_gamma_admit(hp: SvmSettings, drivers: SvcDrivers, x_meta: ArrayMetadata) raises:
+    """The refusals of gamma='scale' on host words, before RUN resolves it
+    (svm/svc_kernel_fit_run.mojo svc_gamma_run): the binding has the exact
+    limbs, and X has a cell."""
     if hp.gamma_kind == SVM_GAMMA_SCALE:
-        var bits = 0
-        if native is not None:
-            bits = svc_descriptor_flags(native)
-        else:
-            var flags = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
-            bits = 0 if flags is None else svc_int(family_call(flags))
-        if (bits & _PY2MOJO_SCALE_GAMMA) == 0:
+        if (drivers.flags() & _PY2MOJO_SCALE_GAMMA) == 0:
             raise Error("RuntimeError: mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
                         + "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it")
-        var n = x_meta.count
-        if n == 0:
+        if x_meta.count == 0:
             raise Error("gamma='scale' needs at least one cell of X")
-        var words = family_array(Python.tuple(PythonObject(_SG_SLOTS)), "<i8", context)
-        if native is not None:
-            _ = svc_descriptor_execute(native, 9, [x_meta.source.addr, _addr(words)], [n], [])
-        else:
-            _ = family_call(_entry(binding, "scale_gamma_limbs", context), PythonObject(x_meta.source.addr), PythonObject(n),
-                            classical_address(words))
-        _ = words  # keep the Python object alive through the native call above
-        var limbs = List[Int64](length=_SG_SLOTS, fill=Int64(0))
-        var wp = FAMILY_I64P(unsafe_from_address=_addr(words))
-        _ = words  # keep the Python object alive through the native call above
-        for i in range(_SG_SLOTS):  # small-loop(scale_gamma limbs: 28 fixed words)
-            limbs[i] = wp[i]
-            _ = words  # keep the Python object alive through the native call above
-        _ = words^
-        return scale_gamma_from_limbs(limbs, n, n_cols)
-    return hp.gamma
 
 
-def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight: PythonObject,
-            class_weight: PythonObject, y: PythonObject, who: String, context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`_svm_impl._c_rows`: the per-row bounds `C * class_weight[y_i] *
-    sample_weight_i` from the binding's `svc_pair_epilogue` (C_ROWS), or None
-    when nothing is weighted."""
+struct SvmWeightsUnpacked(Movable):
+    """The operands of the per-row bounds C * class_weight[y_i] *
+    sample_weight_i (svm/svc_kernel_fit_run.mojo svc_bounds_run): the
+    float64 sample weights and the float64 class weights (address 0: that
+    factor is absent), with their owners. `weighted`: any factor present."""
+    var owners: PythonObject
+    var sample_weights: Int
+    var class_weights: Int
+    var weighted: Bool
+
+    def __init__(out self, owners: PythonObject, sample_weights: Int, class_weights: Int, weighted: Bool):
+        self.owners = owners
+        self.sample_weights = sample_weights
+        self.class_weights = class_weights
+        self.weighted = weighted
+
+
+def svm_weights_unpack(n_rows: Int, sample_weight: PythonObject, class_weight: PythonObject, classes: PythonObject,
+                       codes: PythonObject, who: String, context: PythonObject) raises -> SvmWeightsUnpacked:
+    """`_svm_impl._c_rows` up to its launch: sample_weight admitted, then
+    the class-weight vector ('balanced' from the class counts, or the
+    user's dict over 1.0). `classes` and `codes` are the fit's one label
+    encoding (None for SVR, which has no class weights)."""
     var b = svc_builtins()
+    var owners = Python.list()
     if sample_weight is None and class_weight is None:
-        return PythonObject(None)
-    var sw = PythonObject(None)
-    var sw_owner = PythonObject(None)
+        return SvmWeightsUnpacked(owners, 0, 0, False)
     var sw_address = 0
     if sample_weight is not None:
         var weights_pin = ArrayPin()
         var weights = admit_family_weights(sample_weight, n_rows, False, context, weights_pin, True)
-        sw = weights_pin.keep
-        sw_owner = Python.tuple(weights_pin.keep, weights_pin.owner)
+        _ = py_call(owners.append, weights_pin.keep)
+        _ = py_call(owners.append, weights_pin.owner)
         sw_address = weights.source.addr
-    var codes = PythonObject(None)
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var cwa = Optional[PythonObject]()
-    var n_classes = 0
+    var cw_address = 0
     if class_weight is not None:
-        if len(svc_shape_of(y, context)) != 1:
-            raise Error("mojolearn " + who + ": y must be 1-D")
-        var encoded = classical_encode_labels(y, context)
-        var classes = encoded.classes
-        codes = encoded.codes
-        n_classes = len(classes)
-        if Int(py=codes.shape[0]) != n_rows:
-            raise Error("mojolearn " + who + ": y has " + String(Int(py=codes.shape[0])) + " entries, X has "
-                        + String(n_rows) + " rows")
+        var n_classes = len(classes)
+        var cwa = family_array(Python.tuple(PythonObject(n_classes)), "<f8", context)
         if family_isinstance(class_weight, b.str):
             if String(class_weight) != "balanced":
                 raise Error("mojolearn " + who + ": class_weight is a dict, 'balanced' or None, got "
@@ -306,23 +284,16 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
             _ = base_bincount_i64(base_helpers_key(py_item(context, nk[].k_family_svc_base_helpers)),
                                   Int(py=classical_address(codes)), 2, Int(py=codes.shape[0]), n_classes,
                                   Int(py=classical_address(cnt)), False)
-            _ = codes  # keep the Python object alive through the native call above
-            _ = cnt  # keep the Python object alive through the native call above
-            cwa = family_array(Python.tuple(PythonObject(n_classes)), "<f8", context)
             if n_classes > 0 and Int(py=family_call(svc_base("class_ratio_f64", context), classical_address(cnt),
                                                      PythonObject(n_classes), PythonObject(n_rows), PythonObject(0),
-                                                     classical_address(cwa.value()))) != 0:
+                                                     classical_address(cwa))) != 0:
                 svc_zero_division(False)
             _ = cnt  # keep the Python object alive through the native calls above
-            _ = cwa  # keep the Python object alive through the native calls above
-            _ = cnt^
+            _ = codes
         else:
-            cwa = family_array(Python.tuple(PythonObject(n_classes)), "<f8", context)
-            var cp = FAMILY_F64P(unsafe_from_address=_addr(cwa.value()))
-            _ = cwa  # keep the Python object alive through the native call above
+            var cp = FAMILY_F64P(unsafe_from_address=_addr(cwa))
             for i in range(n_classes):  # driver-loop: over the classes (the default weight 1.0)
                 cp[i] = 1.0
-                _ = cwa  # keep the Python object alive through the native call above
             var items = family_call(b.list, family_call(family_call(b.dict, class_weight).items))
             for i in range(len(items)):  # driver-loop: over the user's class_weight entries
                 var key = items[i][0]
@@ -330,25 +301,9 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
                     raise Error("mojolearn " + who + ": class_weight names the label " + family_repr(key)
                                 + ", which is not in y's classes " + family_repr(classes))
                 cp[Int(py=family_call(classes.index, key))] = svc_float(items[i][1])
-                _ = cwa  # keep the Python object alive through the native call above
-    var out = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
-    if n_rows > 0:
-        _ = svc_epilogue_execute(binding, native,
-                        PythonObject(sw_address),
-                        PythonObject(0) if not cwa else classical_address(codes),
-                        PythonObject(0) if not cwa else classical_address(cwa.value()),
-                        classical_address(out),
-                        Python.list(PythonObject(_GLUE_C_ROWS), PythonObject(n_rows), PythonObject(n_classes),
-                                    PythonObject(c_value), PythonObject(0)))
-        _ = sw  # keep the Python object alive through the native call above
-        _ = codes  # keep the Python object alive through the native call above
-        _ = cwa  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-    _ = sw^
-    _ = sw_owner
-    _ = codes^
-    _ = cwa^
-    return out
+        _ = py_call(owners.append, cwa)
+        cw_address = _addr(cwa)
+    return SvmWeightsUnpacked(owners, sw_address, cw_address, True)
 
 
 # ---------------------------------------------------------------- the settings record
