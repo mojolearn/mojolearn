@@ -40,22 +40,12 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.metrics_native_support_door import metric_warn
 from bindings.native_torch_admission_door import native_torch_exact
 from bindings.msel_helpers_key_unpack import msel_helpers_key
-from core.entry_table import EntryRef
-from bindings.msel_split_run import (
-    MselCounterRng, msel_split_mix64, msel_split_signed32, MSEL_SPLIT_FOLD_ROWS_BOUND, MSEL_SPLIT_GOLDEN,
-)
-from bindings.msel_helpers_released_unpack import (
-    msel_arange_i64, msel_count_mask_u8, msel_select_mask_u8_i64, msel_mask_from_indices_u8, msel_fold_ids,
-    msel_select_fold_i64, msel_select_folds_i64, msel_gather_i32,
-)
+from bindings.msel_split_run import MselCounterRng, msel_split_signed32
+from bindings.msel_split_plan_run import msel_seed_refusal
+from bindings.msel_helpers_released_unpack import msel_arange_i64
 
-comptime MSEL_NONE = -1
 comptime MSEL_U8P = MutPointer[UInt8, MutUntrackedOrigin]
 comptime MSEL_U32P = MutPointer[UInt32, MutUntrackedOrigin]
-# The draw words and the fold-table bound live once, in the typed split
-# programs (bindings/msel_split_run.mojo, lane py-msel-prep-cnn).
-comptime MSEL_FOLD_ROWS_BOUND = MSEL_SPLIT_FOLD_ROWS_BOUND
-comptime MSEL_GOLDEN: UInt64 = MSEL_SPLIT_GOLDEN
 
 
 # ---------------------------------------------------------------- calls
@@ -558,30 +548,6 @@ def msel_range_index(lo: Int, hi: Int, context: PythonObject) raises -> PythonOb
     return msel_arange(lo, max(hi - lo, 0), context)
 
 
-def msel_split_mask(mask: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_split_mask`: (train, test), the ascending rows whose mask byte is 0
-    / nonzero, by `count_mask_u8` and `select_mask_u8_i64`."""
-    var key = msel_helpers_key(context)
-    var maddr = msel_addr(mask)
-    var n_test = msel_count_mask_u8(key, maddr, n)
-    var test = msel_new(n_test, "<i8", context)
-    var train = msel_new(n - n_test, "<i8", context)
-    _ = msel_select_mask_u8_i64(key, maddr, n, msel_addr(test) if n_test else 0,
-                                msel_addr(train) if n - n_test else 0)
-    _ = mask  # keep the Python object alive through the native calls above
-    _ = train  # keep the Python object alive through the native call above
-    _ = test  # keep the Python object alive through the native call above
-    return Python.tuple(train, test)
-
-
-def msel_split_indices(iaddr: Int, k: Int, n: Int, context: PythonObject) raises -> PythonObject:
-    """`_split_indices`: (train, test) from k int64 test rows at `iaddr`."""
-    var mask = msel_new(n, "<u1", context)
-    _ = msel_mask_from_indices_u8(msel_helpers_key(context), iaddr if k else 0, k, n, msel_addr(mask))
-    _ = mask  # keep the Python object alive through the native call above
-    return msel_split_mask(mask, n, context)
-
-
 def msel_index_copy(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_index_copy(value)`: an int64 / int32 1-D buffer widened to an
     owned int64 Array; anything else `_as_index(flatten_labels(value))`."""
@@ -616,25 +582,20 @@ def msel_as_index(values: PythonObject, context: PythonObject) raises -> PythonO
 
 
 struct MselGroups(Movable):
-    """`_GroupCodes`: groups (or labels) under the order rule as int32 codes
-    with their per-code row counts."""
+    """`_GroupCodes`: groups (or labels) under the order rule as int32 codes.
+    The splitters read their groups through the typed
+    `bindings/msel_split_unpack.mojo` `msel_label_codes`; this owner serves
+    the resampling of the searches (codes and class count only: the
+    per-class counts, the fold selections and the split plan it carried
+    were the splitters' and moved to bindings/msel_split_plan_run.mojo)."""
     var codes: PythonObject
     var classes: PythonObject
     var m: Int
     var n: Int
-    var counts: List[Int]
-    var scratch: PythonObject
-    # This group plan belongs to one native public operation. Keep the
-    # constructor's admitted entries and private storage addresses through
-    # all group/fold calls; a later operation constructs a fresh plan.
-    var key: EntryRef
-    var codes_address: Int
-    var scratch_address: Int
 
     def __init__(out self, values: PythonObject, n: Int, name: String, context: PythonObject) raises:
         if values is None:
             _ = msel_labels_list(values, name, context)
-        var key = msel_helpers_key(context)
         var got = msel_encode(values, context)
         var classes = got[0]
         var codes = got[1]
@@ -650,148 +611,13 @@ struct MselGroups(Movable):
             _ = codes  # keep the Python object alive through the native call above
             _ = narrow  # keep the Python object alive through the native call above
             codes = narrow
-        var m = len(classes)
-        var counts = List[Int](length=m, fill=0)
-        if m > 0:
-            var class_counts = msel_new(m, "<i8", context)
-            var fold_store = msel_new(n, "<i4", context)
-            var fold_counts = msel_new(2, "<i8", context)
-            _ = msel_fold_ids(key, msel_addr(codes), n, m, 2, msel_addr(class_counts), msel_addr(fold_store),
-                              msel_addr(fold_counts))
-            _ = codes  # keep the Python object alive through the native call above
-            _ = fold_store  # keep the Python object alive through the native call above
-            _ = class_counts  # keep the Python object alive through the native call above
-            _ = fold_counts  # keep the Python object alive through the native call above
-            counts = msel_read_i64(class_counts)
-        self.counts = counts^
         self.codes = codes
         self.classes = classes
-        self.m = m
+        self.m = len(classes)
         self.n = n
-        self.scratch = PythonObject(None)
-        self.key = key^
-        self.codes_address = msel_addr(codes)
-        self.scratch_address = 0
-
-    def mapped(self, table: List[Int], context: PythonObject) raises -> PythonObject:
-        """Each row's `table[code]` as int32 words."""
-        var tbl = msel_i32_list(table, context)
-        var _keep_ret_tbl_r412 = self.mapped_words(tbl, context)
-        _ = tbl  # keep the Python object alive through the native call above
-        var _keep_ret_tbl = _keep_ret_tbl_r412^
-        _ = tbl  # keep the Python object alive through the native call above
-        return _keep_ret_tbl^
-
-    def mapped_words(self, tbl: PythonObject, context: PythonObject) raises -> PythonObject:
-        var dst = msel_new(self.n, "<i4", context)
-        _ = msel_gather_i32(self.key, msel_addr(tbl), Int(py=tbl.size), self.codes_address, self.n, msel_addr(dst))
-        _ = self.codes  # keep the captured private code storage through the gather
-        _ = tbl
-        _ = dst  # keep the Python object alive through the native call above
-        return dst
-
-    def rows(self, words: PythonObject, want: Int, size: Int, context: PythonObject) raises -> PythonObject:
-        """(train, test): the ascending rows whose word is `want` (test) and
-        every other row (train)."""
-        var address = self.codes_address if words is self.codes else msel_addr(words)
-        var result = self._rows_at(address, want, size, context)
-        _ = words
-        return result
-
-    def _rows_at(self, words_address: Int, want: Int, size: Int, context: PythonObject) raises -> PythonObject:
-        # Caller retains the words owner through the complete selection.
-        var test = msel_new(size, "<i8", context)
-        var train = msel_new(self.n - size, "<i8", context)
-        var got = msel_select_fold_i64(self.key, words_address, self.n, want, msel_addr(test), msel_addr(train))
-        _ = test  # keep the Python object alive through the native call above
-        _ = train  # keep the Python object alive through the native call above
-        if got != size:
-            raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
-        _ = train  # keep the Python object alive through the native calls above
-        _ = test  # keep the Python object alive through the native calls above
-        return Python.tuple(train, test)
-
-    def only(mut self, words: PythonObject, want: Int, size: Int, context: PythonObject) raises -> PythonObject:
-        """The ascending rows whose word is `want` (the rest discarded)."""
-        if self.scratch is None:
-            var scratch = msel_new(self.n, "<i8", context)
-            var address = msel_addr(scratch)
-            # Publish the owner/address pair only after capture succeeds.
-            self.scratch = scratch
-            self.scratch_address = address
-        var out = msel_new(size, "<i8", context)
-        var address = self.codes_address if words is self.codes else msel_addr(words)
-        var got = msel_select_fold_i64(self.key, address, self.n, want, msel_addr(out), self.scratch_address)
-        _ = words
-        _ = self.scratch
-        _ = out  # keep the Python object alive through the native call above
-        if got != size:
-            raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
-        _ = out  # keep the Python object alive through the native calls above
-        return out
-
-    def split_by_fold(self, to_fold: PythonObject, k: Int, sizes: PythonObject,
-                      context: PythonObject) raises -> PythonObject:
-        """[(train, test)] per fold from each group's fold (int32 words) and
-        each fold's row count (an int64 Array)."""
-        var words = self.mapped_words(to_fold, context)
-        # One split plan for every fold (N051); the per-fold loop it
-        # replaced only served a base binding without select_folds_i64,
-        # which the helper table always carries.
-        var planned = msel_select_folds_plan(words, sizes, self.n, k, "the group counts", context)
-        _ = words
-        _ = sizes
-        return planned
-
-
-def msel_select_folds_plan(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k: Int, counted_by: String,
-                           context: PythonObject) raises -> PythonObject:
-    """Every fold's (train, test) in ONE `select_folds_i64` call (lane
-    ne1-b-door, N051: one split plan per CV call; the fold ids go up once and
-    every fold's rows come back behind one synchronize). Same arrays, same
-    integers, same order as the per-fold `select_fold_i64` loop. `fold_store`
-    holds the n int32 fold words, `fold_counts` each fold's int64 row count;
-    `counted_by` names the counts' source in the disagreement refusal."""
-    var counts = msel_p64(fold_counts)
-    var tests = msel_new(k, "<i8", context)
-    var trains = msel_new(k, "<i8", context)
-    var tp = msel_p64(tests)
-    var rp = msel_p64(trains)
-    var out = Python.list()
-    # An empty side shares one private scratch allocation, as in the loop.
-    # Optional, not a PythonObject read and reassigned in a loop (modular/modular#7546 pattern; runtime-fix-save-forest sweep).
-    var scratch = Optional[PythonObject]()
-    var scratch_address = 0
-    for fold in range(k):  # driver-loop: over folds (output allocation only; the selection is one call)
-        var size = Int(counts[fold])
-        var test = msel_new(size, "<i8", context)
-        var train = msel_new(n - size, "<i8", context)
-        if size == 0 or n - size == 0:
-            if not scratch:
-                scratch = msel_new(n, "<i8", context)
-                scratch_address = msel_addr(scratch.value())
-        tp.unsafe_store(fold, Int64(msel_addr(test) if size else scratch_address))
-        rp.unsafe_store(fold, Int64(msel_addr(train) if n - size else scratch_address))
-        _ = py_call(out.append, Python.tuple(train, test))
-    var bad = msel_select_folds_i64(msel_helpers_key(context), msel_addr(fold_store), n, k, msel_addr(fold_counts),
-                                    msel_addr(tests), msel_addr(trains))
-    _ = out  # keep every fold array alive through the native call above
-    _ = scratch
-    _ = tests
-    _ = trains
-    _ = fold_store
-    _ = fold_counts
-    if bad >= 0:
-        raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with " + counted_by)
-    return out
 
 
 # ---------------------------------------------------------------- random draws
-
-
-def msel_mix64(var x: UInt64) -> UInt64:
-    """splitmix64's finalizer (bindings/msel_split_run.mojo)."""
-    return msel_split_mix64(x)
 
 
 def msel_u64(value: PythonObject) raises -> UInt64:
@@ -821,9 +647,7 @@ struct MselRng(Movable):
                                 PythonObject("little"))
         if (msel_is_bool(state, context) or not msel_is_integral(state, context)
                 or msel_cmp("lt", state, PythonObject(0))):
-            raise Error("mojolearn model_selection: random_state must be None or a non-negative int; "
-                        + "numpy RandomState / Generator objects are NOT IMPLEMENTED (their stream "
-                        + "is numpy's, x_metrics/split.mojo DEVIATION 6108)")
+            raise Error(msel_seed_refusal())
         self.seed = msel_u64(state)
         self.draws = 0
 
@@ -891,40 +715,6 @@ struct MselRng(Movable):
         var store = py_call(native_loaded_module("array").array, PythonObject("i"))
         _ = py_call(store.frombytes, chunk)
         return py_call(msel_b().list, store)
-
-    def approximate_modes(mut self, counts: List[Int], n_train: Int, n_test: Int,
-                          context: PythonObject) raises -> List[Int]:
-        """StratifiedShuffleSplit's per-class train then test counts (two
-        `approx_mode` stages of one program; the draws they report are
-        consumed). Returns n_i followed by t_i."""
-        var k = len(counts)
-        var prog = MetricDoorProg()
-        var c = prog.put_i32(msel_i32_list(counts, context))
-        var out_slot = prog.alloc(2 * k)
-        var out = prog.want(out_slot, 2 * k)
-        var used_slot = prog.alloc(2)
-        var used = prog.want(used_slot, 2)
-        var w0 = msel_signed32(self.seed)
-        var w1 = msel_signed32(self.seed >> 32)
-        var w2 = msel_signed32(self.draws)
-        var w3 = msel_signed32(self.draws >> 32)
-        prog.stage("approx_mode", k, [k, c, MSEL_NONE, n_train, out, MSEL_NONE, used, w0, w1, w2, w3])
-        prog.stage("approx_mode", k, [k, c, out, n_test, out + k, used, used + 1, w0, w1, w2, w3])
-        var arena = metric_door_run(prog, PythonObject(None), context)
-        # Completed arena metadata is invariant across the class-count loop.
-        var words = FAMILY_I32P(unsafe_from_address=arena.base())
-        self.draws += UInt64(Int(words[used]) + Int(words[used + 1]))
-        var both = List[Int]()
-        for i in range(2 * k):  # driver-loop: over classes (train and test counts)
-            both.append(Int(words[out + i]))
-        _ = arena^
-        _ = prog^
-        return both^
-
-
-def msel_mix_seed(seed: UInt64, r: Int) -> Int:
-    """`_mix_seed(seed, r)`: repeat r's seed."""
-    return Int(msel_mix64(seed * MSEL_GOLDEN + UInt64(0x632BE59BD9B4E019) * UInt64(r + 1)) >> 1)
 
 
 # ---------------------------------------------------------------- shuffle sizes
