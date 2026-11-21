@@ -186,7 +186,13 @@ def prep_ignored_target(y: PythonObject, rows: Int, required: Bool, multi: Bool,
     if cls is b.int or cls is b.float or cls is b.bool or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.dict or cls is b.range:
         return y
     if cls is py_item(context, nk[].k_maxabs_rows_class):
-        var shape = py_get(_rows_fields(y, context), nk[].k_shape)
+        # The selection's extents (rows, then the base's trailing extents),
+        # as DeviceRows.shape reports them.
+        var fold = _rows_fields(y, context)
+        var extents = Python.list(PythonObject(fold.rows))
+        for i in range(len(fold.trailing)):  # small-loop(rank: the base's trailing extents)
+            _ = py_call(extents.append, PythonObject(fold.trailing[i]))
+        var shape = py_call(b.tuple, extents)
         if py_type(shape) is not b.tuple:
             raise Error("TypeError: target row selection requires native shape metadata")
         for i in range(len(shape)):  # small-loop(rank: passive selected-target shape metadata)

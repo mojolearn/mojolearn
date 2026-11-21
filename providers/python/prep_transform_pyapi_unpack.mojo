@@ -255,15 +255,16 @@ def _rows_snapshot(source: PythonObject, context: PythonObject, mut pin: ArrayPi
     var nk = prep_keys()
     var b = native_loaded_module("builtins")
     var fields = _rows_fields(source, context)
-    var dtype = py_item(fields, nk[].k_dtype)
-    if py_type(dtype) is not b.str:
+    # The base's dtype string (empty when the base names its dtype with
+    # another object: the former `py_type(dtype) is not str` refusal).
+    if fields.dtype.byte_length() == 0:
         raise Error("TypeError: native row selection requires native dtype metadata")
     # No gathered host copy is cached on the selection (hazard class A,
     # p3-prep): an unkeyed `_host` copy was served after the base Array or
     # the indices were edited in place. The native gather below runs on each
     # call; it is one strided copy of the selected rows.
-    var base = py_item(fields, nk[].k_base)
-    var indices = py_item(fields, nk[].k_indices)
+    var base = fields.base
+    var indices = fields.indices
     classical_admit_value(base, context)
     classical_admit_value(indices, context)
     if not classical_is_array(base, context) or not classical_is_array(indices, context):
