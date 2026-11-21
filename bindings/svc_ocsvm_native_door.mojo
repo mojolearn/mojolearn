@@ -419,20 +419,24 @@ def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObj
     return result
 
 
-def _oc_binding(source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _oc_binding(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `source` is the x_neighbors module the shared door resolved from the
+    # estimator's binding route. A binding facade handed in its place is
+    # resolved through the same route (the estimator's device), never the
+    # process set (before 2026-11-21 this branch took the process's module).
     oc_dictionary(context)
     var nk = svm_keys()
     var backend = py_item(context, nk[].k_backend_fields)
     oc_dictionary(backend)
     var binding = source
     if py_type(source) is py_item(backend, nk[].k__HostBinding) or py_type(source) is py_item(backend, nk[].k__NoGpuBinding):
-        binding = estimator_binding(PythonObject(None), "_mojolearn_x_neighbors", context)
+        binding = estimator_binding(model, "_mojolearn_x_neighbors", context)
     return xn_admit(binding)
 
 
 def svc_ocsvm_operation(model: PythonObject, operation: Int, args: PythonObject,
     context: PythonObject) raises -> PythonObject:
-    var binding = _oc_binding(args[0], context)
+    var binding = _oc_binding(model, args[0], context)
     classical_connect_numpy(context)
     var connection = OcConnection(binding)
     try:

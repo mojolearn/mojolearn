@@ -48,9 +48,23 @@ def construct(cls, *args, **kwargs):
     return model
 
 
+def device_added(cls):
+    """True when the installer gave `cls` the `device` keyword (its original
+    constructor body has no such parameter and no such write): the compiled
+    constructor then checks it and stores it last."""
+    context = CONTEXTS[cls]
+    return bool(context['plans'][cls].get('device_admit')) and (
+        'device' not in inspect.signature(context['originals'][cls]).parameters)
+
+
 def oracle(cls, *args, owner=None, **kwargs):
     model = object.__new__(cls)
-    CONTEXTS[owner or cls]['originals'][owner or cls](model, *args, **kwargs)
+    target = owner or cls
+    added = device_added(target)
+    device = kwargs.pop('device', None) if added else None
+    CONTEXTS[target]['originals'][target](model, *args, **kwargs)
+    if added:
+        vars(model)['device'] = device
     return model
 
 
@@ -88,9 +102,12 @@ def sentinels(cls):
     parameters = inspect.signature(cls).parameters
     checked = _VALUE_CHECKED.get(cls.__name__)
     if checked is None:
-        return {name: object() for name in parameters}
-    values = {name: p.default for name, p in parameters.items()}
-    values.update({k: v for k, v in checked.items() if k != 'replacement'})
+        values = {name: object() for name in parameters}
+    else:
+        values = {name: p.default for name, p in parameters.items()}
+        values.update({k: v for k, v in checked.items() if k != 'replacement'})
+    if 'device' in values and CONTEXTS[cls]['plans'][cls].get('device_admit'):
+        values['device'] = None  # a checked parameter: an arbitrary object is refused in words
     return values
 
 
@@ -132,7 +149,7 @@ def test_schema_proof_final_fields_and_order(cls):
     row = rows[cls.__name__]
     values = sentinels(cls)
     model = construct(cls, **values)
-    assert list(vars(model)) == row['field_order']
+    assert list(vars(model)) == row['field_order'] + (['device'] if device_added(cls) else [])
     for name, source in row['final_fields'].items():
         if 'parameter' in source:
             assert vars(model)[name] is values[source['parameter']]

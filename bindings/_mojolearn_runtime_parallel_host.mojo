@@ -17,7 +17,7 @@ from bindings.parallel_shard_native_door import parallel_shard_c
 from bindings.neighbor_query_native_door import neighbor_query_c, neighbor_query_attribute_c
 from bindings.parallel_forecast_native_door import parallel_forecast_c
 from bindings.tsa_public_native_door import tsa_c
-from providers.python.tsa_route_boundary_door import register_tsa_hw_route_owners, register_tsa_hw_route_owner_identities
+from bindings.tsa_hw_route_unpack import register_tsa_hw_resident_owner, register_tsa_hw_resident_owner_identity
 from bindings.parallel_neural_native_door import parallel_neural_c
 from bindings.parallel_mlp_native_door import parallel_mlp_c
 from bindings.small_mlp_native_door import small_mlp_c, small_mlp_finalize_c
@@ -84,8 +84,8 @@ def build__mojolearn_runtime_parallel_host() -> PythonObject:
         module.def_py_c_function(small_mlp_finalize_c, "small_mlp_finalize")
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
         register_remotestatelifetime(module)
-        # ExponentialSmoothing's per-estimator device route owner and resident lifetime owner, allocated by tsa_native_call.
-        register_tsa_hw_route_owners(module)
+        # The lifetime owner of ExponentialSmoothing's resident device copy, allocated by tsa_native_call.
+        register_tsa_hw_resident_owner(module)
         module.def_function[runtime_parallel_host_numeric_mode_binding]("runtime_parallel_host_numeric_mode")
         module.def_function[runtime_parallel_host_vendor_binding]("runtime_parallel_host_vendor")
         module.def_function[runtime_parallel_host_column_binding]("runtime_parallel_host_column")
@@ -93,7 +93,7 @@ def build__mojolearn_runtime_parallel_host() -> PythonObject:
         # Owner identities need the finalized type objects (Mojo 1.2 creates
         # them in finalize(); see bindings/native_owner_registry.mojo).
         var published = module.finalize()
-        register_tsa_hw_route_owner_identities(published)
+        register_tsa_hw_resident_owner_identity(published)
         return published
     except error:
         abort(String("failed to create _mojolearn_runtime_parallel_host: ", error))

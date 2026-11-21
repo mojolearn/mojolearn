@@ -10,7 +10,7 @@ from x_metrics.descriptor_schema import METRICS_PROGRAM_ABI, MP_OPERATION_COUNT
 from bindings.family_common_pack import family_array
 from bindings.classical_arrays_door import classical_address
 from bindings.gp_keys_unpack import gp_keys
-from bindings.py_balanced import py_item, py_type
+from bindings.py_balanced import py_item
 
 
 struct GPRPredictionRoom(Movable):
@@ -48,7 +48,7 @@ def gpr_score_result(values: GPRScoreValues, target: PythonObject, cpu_metrics: 
     """R^2 of the stored prediction against `target`. `cpu_metrics` is None
     (the process's metrics image, as selected by the family context) or what
     a CPU route in a GPU installation holds: the R^2 program factory of the
-    CPU metrics image, or the text of why that image is not connected."""
+    CPU metrics image."""
     var target_address = Int(py=classical_address(target))
     # Finite/copy refusal precedes the metrics-image selection, as in _Reg.
     var program = gpr_score_prepare(values, target_address)
@@ -59,8 +59,6 @@ def gpr_score_result(values: GPRScoreValues, target: PythonObject, cpu_metrics: 
         var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
         entries = _family_entries(PythonObject(None), "x_metrics", prog_context)
         factory = py_item(entries, nk[].k_metrics_program_native_api_v1)
-    elif py_type(cpu_metrics) is py_type(PythonObject("")):
-        raise Error("ImportError: " + String(cpu_metrics))
     var provider = neural_descriptor_connect_factory_once(factory, String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
     var entry = provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry
     var ranges = String(getenv("MOJOLEARN_ARENA_RANGES", "1").strip()) != "0"

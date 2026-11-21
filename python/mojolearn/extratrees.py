@@ -144,9 +144,9 @@ _UNSUPPORTED_CRITERIA = {
 
 
 # The constructor checks (`_validate_device`, the n_jobs/verbose refusals, the
-# criterion) and the stored `_cfg` are the native owner's `_et_derive`, and
-# the bootstrap count is its `_et_bootstrap_rows` (bindings/
-# trees_public_forest_door.mojo), run at fit on the stored parameters; lane
+# criterion) and the stored `_cfg` are the native owner's `_et_derive`
+# (bindings/trees_public_forest_door.mojo), and the bootstrap count is the
+# fit request's (bindings/forest_config_run.mojo), from the stored parameters; lane
 # py-trees (2026-11-14) deleted their Python copies here.
 
 
@@ -254,7 +254,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this
         installation's device, 'cpu' runs on the CPU and 'gpu' requires a
-        GPU installation. Other values raise `ValueError` at fit.
+        GPU installation. Other values raise `ValueError`.
     inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
         How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
         `fast` mode and 'sequential' otherwise.
@@ -418,7 +418,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
     device : {None, 'gpu', 'cpu'}, default None
         Where the model is fitted and predicts. None uses this
         installation's device, 'cpu' runs on the CPU and 'gpu' requires a
-        GPU installation. Other values raise `ValueError` at fit.
+        GPU installation. Other values raise `ValueError`.
     inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
         How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
         `fast` mode and 'sequential' otherwise.

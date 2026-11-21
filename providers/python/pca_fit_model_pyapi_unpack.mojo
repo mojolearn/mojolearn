@@ -9,7 +9,7 @@ from bindings.sequential_admission_door import sequential_admit_value
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from providers.python.pca_fit_scalar_pyapi_unpack import PCAFitScalar, pca_fit_scalar_admit
 from bindings.pca_descriptor_boundary_door import pca_route, pca_mode_name
-from core.device_route_dw_decomp import DecompRoute
+from bindings.decomp_device_route_door import DecompRoute
 from bindings.pca_keys_unpack import pca_keys
 from bindings.py_balanced import py_item
 

@@ -258,11 +258,14 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, n_clusters=8, *, init="k-means++", max_iter=100, batch_size=1024,
                  verbose=0, compute_labels=True, random_state=None, tol=0.0,
-                 max_no_improvement=10, init_size=None, n_init="auto", reassignment_ratio=0.01, numeric_mode=None):
-        return _NATIVE(self, "family_xc_initialize", (None, (n_clusters, init, max_iter, batch_size, verbose, compute_labels, random_state, tol, max_no_improvement, init_size, n_init, reassignment_ratio, numeric_mode,)), _NATIVE_CONTEXT)
+                 max_no_improvement=10, init_size=None, n_init="auto", reassignment_ratio=0.01, numeric_mode=None, device=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (n_clusters, init, max_iter, batch_size, verbose, compute_labels, random_state, tol, max_no_improvement, init_size, n_init, reassignment_ratio, numeric_mode, device,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         """Fit the centers on `X`.
@@ -394,10 +397,13 @@ class BisectingKMeans(_CentersMixin, _XCluster):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, n_clusters=8, *, init="random", n_init=1, random_state=None, max_iter=300,
-                 verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia", numeric_mode=None):
-        return _NATIVE(self, "family_xc_initialize", (None, (n_clusters, init, n_init, random_state, max_iter, verbose, tol, copy_x, algorithm, bisecting_strategy, numeric_mode,)), _NATIVE_CONTEXT)
+                 verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia", numeric_mode=None, device=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (n_clusters, init, n_init, random_state, max_iter, verbose, tol, copy_x, algorithm, bisecting_strategy, numeric_mode, device,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         """Build the bisection tree on `X`.
@@ -514,10 +520,13 @@ class MeanShift(_XCluster):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
-                 cluster_all=True, n_jobs=None, max_iter=300, numeric_mode=None):
-        return _NATIVE(self, "family_xc_initialize", (None, (bandwidth, seeds, bin_seeding, min_bin_freq, cluster_all, n_jobs, max_iter, numeric_mode,)), _NATIVE_CONTEXT)
+                 cluster_all=True, n_jobs=None, max_iter=300, numeric_mode=None, device=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (bandwidth, seeds, bin_seeding, min_bin_freq, cluster_all, n_jobs, max_iter, numeric_mode, device,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Find the cluster centers of `X`.
@@ -664,12 +673,15 @@ class OPTICS(_XCluster):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, min_samples=5, max_eps=float("inf"), metric="minkowski", p=2,
                  metric_params=None, cluster_method="xi", eps=None, xi=0.05,
                  predecessor_correction=True, min_cluster_size=None, algorithm="auto",
-                 leaf_size=30, memory=None, n_jobs=None, numeric_mode=None):
-        return _NATIVE(self, "family_xc_initialize", (None, (min_samples, max_eps, metric, p, metric_params, cluster_method, eps, xi, predecessor_correction, min_cluster_size, algorithm, leaf_size, memory, n_jobs, numeric_mode,)), _NATIVE_CONTEXT)
+                 leaf_size=30, memory=None, n_jobs=None, numeric_mode=None, device=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (min_samples, max_eps, metric, p, metric_params, cluster_method, eps, xi, predecessor_correction, min_cluster_size, algorithm, leaf_size, memory, n_jobs, numeric_mode, device,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Compute the reachability ordering of `X` and extract clusters.
@@ -787,10 +799,13 @@ class AffinityPropagation(_XCluster):
     """
     # scikit-learn tags, read by `_mode.sklearn_tags`
     _estimator_type = "clusterer"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
-                 preference=None, affinity="euclidean", verbose=False, random_state=None, numeric_mode=None):
-        return _NATIVE(self, "family_xc_initialize", (None, (damping, max_iter, convergence_iter, copy, preference, affinity, verbose, random_state, numeric_mode,)), _NATIVE_CONTEXT)
+                 preference=None, affinity="euclidean", verbose=False, random_state=None, numeric_mode=None, device=None):
+        return _NATIVE(self, "family_xc_initialize", (None, (damping, max_iter, convergence_iter, copy, preference, affinity, verbose, random_state, numeric_mode, device,)), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Find the exemplars of `X`.
@@ -984,17 +999,6 @@ class BayesianGaussianMixture(_XCluster):
                  verbose_interval=10, numeric_mode=None, device=None):
         return _NATIVE(self, "family_xc_initialize", (None, (n_components, covariance_type, tol, reg_covar, max_iter, n_init, init_params, weight_concentration_prior_type, weight_concentration_prior, mean_precision_prior, mean_prior, degrees_of_freedom_prior, covariance_prior, random_state, warm_start, verbose, verbose_interval, numeric_mode, device,)), _NATIVE_CONTEXT)
 
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for an estimator
-            that runs on the CPU.
-        """
-        return _NATIVE(self, "family_mix_vendor_used", (), _NATIVE_CONTEXT)
-
     def fit(self, X, y=None):
         """Fit the mixture on `X`.
 
@@ -1134,10 +1138,6 @@ _native_family_bridge.tables(
 
 # Fixed binding connections belong to package setup, never a model operation.
 _native_family_bridge.connect_bindings("_mojolearn_x_cluster")
-# The CPU image of `device="cpu"`, connected once at import beside the device
-# image (providers/python/device_route_dw_neighbors_cluster_door.mojo).
-from ._native_device_bindings import connect_cpu_device as _connect_cpu_device
-_connect_cpu_device("_mojolearn_x_cluster")
 from ._native_owner_lifetime import connect_owner_context as _connect_cluster_owner_context
 _connect_cluster_owner_context(_NATIVE_CONTEXT)
 

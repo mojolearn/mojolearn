@@ -528,70 +528,77 @@
           "value": {
             "parameter": "damping"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         },
         {
           "field": "convergence_iter",
           "value": {
             "parameter": "convergence_iter"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         },
         {
           "field": "copy",
           "value": {
             "parameter": "copy"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         },
         {
           "field": "preference",
           "value": {
             "parameter": "preference"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         },
         {
           "field": "affinity",
           "value": {
             "parameter": "affinity"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         },
         {
           "field": "verbose",
           "value": {
             "parameter": "verbose"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:847"
+          "source": "python/mojolearn/_expansion_cluster.py:806"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:806"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_cluster.py:847"
+        "python/mojolearn/_expansion_cluster.py:806"
       ],
-      "constructor": "python/mojolearn/_expansion_cluster.py:847",
-      "signature_source": "def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True, preference=None, affinity='euclidean', verbose=False, random_state=None, numeric_mode=None)",
+      "constructor": "python/mojolearn/_expansion_cluster.py:806",
+      "signature_source": "def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True, preference=None, affinity='euclidean', verbose=False, random_state=None, numeric_mode=None, device=None)",
       "parameters": [
         "damping",
         "max_iter",
@@ -601,9 +608,10 @@
         "affinity",
         "verbose",
         "random_state",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "175deeeea1ec8239c92882c5e39c605c3de31454d1621eab8bb0052bdf1e58e3",
+      "constructor_ast_sha256": "a9df32c2ec4cce4ffcf67cc95f7a7247150d2e3e781e13d70e42adff023e0d6e",
       "field_order": [
         "damping",
         "max_iter",
@@ -613,7 +621,8 @@
         "affinity",
         "verbose",
         "random_state",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "damping": {
@@ -642,6 +651,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -653,7 +665,8 @@
         "affinity": "'euclidean'",
         "verbose": "False",
         "random_state": "None",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._expansion_cluster",
@@ -662,8 +675,8 @@
         {
           "path": "python/mojolearn/_expansion_cluster.py",
           "name": "__init__",
-          "line": 847,
-          "ast_sha256": "175deeeea1ec8239c92882c5e39c605c3de31454d1621eab8bb0052bdf1e58e3"
+          "line": 806,
+          "ast_sha256": "a9df32c2ec4cce4ffcf67cc95f7a7247150d2e3e781e13d70e42adff023e0d6e"
         }
       ],
       "constructor_ancestry": [
@@ -1811,84 +1824,91 @@
           "value": {
             "parameter": "n_clusters"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "init",
           "value": {
             "parameter": "init"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "n_init",
           "value": {
             "parameter": "n_init"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "verbose",
           "value": {
             "parameter": "verbose"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "copy_x",
           "value": {
             "parameter": "copy_x"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "algorithm",
           "value": {
             "parameter": "algorithm"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "bisecting_strategy",
           "value": {
             "parameter": "bisecting_strategy"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:457"
+          "source": "python/mojolearn/_expansion_cluster.py:404"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:404"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_cluster.py:457"
+        "python/mojolearn/_expansion_cluster.py:404"
       ],
-      "constructor": "python/mojolearn/_expansion_cluster.py:457",
-      "signature_source": "def __init__(self, n_clusters=8, *, init='random', n_init=1, random_state=None, max_iter=300, verbose=0, tol=0.0001, copy_x=True, algorithm='lloyd', bisecting_strategy='biggest_inertia', numeric_mode=None)",
+      "constructor": "python/mojolearn/_expansion_cluster.py:404",
+      "signature_source": "def __init__(self, n_clusters=8, *, init='random', n_init=1, random_state=None, max_iter=300, verbose=0, tol=0.0001, copy_x=True, algorithm='lloyd', bisecting_strategy='biggest_inertia', numeric_mode=None, device=None)",
       "parameters": [
         "n_clusters",
         "init",
@@ -1900,9 +1920,10 @@
         "copy_x",
         "algorithm",
         "bisecting_strategy",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "af09997048759c42a531a02a87768c62a9dc67a4ad90a2ecbb914475bf5485e0",
+      "constructor_ast_sha256": "d1d4d317cf72f17cf8de81d1c961104eea1bce01f94d573f4cd6d3e8bb040f09",
       "field_order": [
         "n_clusters",
         "init",
@@ -1914,7 +1935,8 @@
         "copy_x",
         "algorithm",
         "bisecting_strategy",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_clusters": {
@@ -1949,6 +1971,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -1962,7 +1987,8 @@
         "copy_x": "True",
         "algorithm": "'lloyd'",
         "bisecting_strategy": "'biggest_inertia'",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._expansion_cluster",
@@ -1971,8 +1997,8 @@
         {
           "path": "python/mojolearn/_expansion_cluster.py",
           "name": "__init__",
-          "line": 457,
-          "ast_sha256": "af09997048759c42a531a02a87768c62a9dc67a4ad90a2ecbb914475bf5485e0"
+          "line": 404,
+          "ast_sha256": "d1d4d317cf72f17cf8de81d1c961104eea1bce01f94d573f4cd6d3e8bb040f09"
         }
       ],
       "constructor_ancestry": [
@@ -2754,49 +2780,49 @@
           "value": {
             "parameter": "eps"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "min_samples",
           "value": {
             "parameter": "min_samples"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "metric",
           "value": {
             "parameter": "metric"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "algorithm",
           "value": {
             "parameter": "algorithm"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "max_mbytes_per_batch",
           "value": {
             "parameter": "max_mbytes_per_batch"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "max_iterations",
           "value": {
             "parameter": "max_iterations"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "prediction_data",
           "value": {
             "parameter": "prediction_data"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "numeric_mode",
@@ -2804,13 +2830,20 @@
             "parameter": "numeric_mode"
           },
           "source": "NumericModeMixin rule kept by native family_density_dbscan_initialize at python/mojolearn/density.py:234"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/density.py:176"
         }
       ],
       "trace": [
-        "python/mojolearn/density.py:234"
+        "python/mojolearn/density.py:176"
       ],
-      "constructor": "python/mojolearn/density.py:234",
-      "signature_source": "def __init__(self, eps=0.5, min_samples=5, *, metric='euclidean', algorithm='rbc', max_mbytes_per_batch=None, max_iterations=None, prediction_data=False, numeric_mode=None)",
+      "constructor": "python/mojolearn/density.py:176",
+      "signature_source": "def __init__(self, eps=0.5, min_samples=5, *, metric='euclidean', algorithm='rbc', max_mbytes_per_batch=None, max_iterations=None, prediction_data=False, numeric_mode=None, device=None)",
       "parameters": [
         "eps",
         "min_samples",
@@ -2819,9 +2852,10 @@
         "max_mbytes_per_batch",
         "max_iterations",
         "prediction_data",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "718dc83321786a82f9976d80aef7294c1c17e51dc7d266ac0863d153ccbfcacc",
+      "constructor_ast_sha256": "73a173087a72cbbf96ac7b65f8edae4c94c0cca58f00eeb34b68f6c5de7bf239",
       "field_order": [
         "eps",
         "min_samples",
@@ -2830,7 +2864,8 @@
         "max_mbytes_per_batch",
         "max_iterations",
         "prediction_data",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "eps": {
@@ -2856,6 +2891,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -2866,7 +2904,8 @@
         "max_mbytes_per_batch": "None",
         "max_iterations": "None",
         "prediction_data": "False",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.density",
@@ -2875,8 +2914,8 @@
         {
           "path": "python/mojolearn/density.py",
           "name": "__init__",
-          "line": 234,
-          "ast_sha256": "718dc83321786a82f9976d80aef7294c1c17e51dc7d266ac0863d153ccbfcacc"
+          "line": 176,
+          "ast_sha256": "73a173087a72cbbf96ac7b65f8edae4c94c0cca58f00eeb34b68f6c5de7bf239"
         }
       ],
       "constructor_ancestry": [
@@ -4455,13 +4494,20 @@
             "parameter": "numeric_mode"
           },
           "source": "NumericModeMixin rule kept by native family_hdbscan_public_initialize at python/mojolearn/hdbscan.py:170"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/hdbscan.py:170"
         }
       ],
       "trace": [
         "python/mojolearn/hdbscan.py:170"
       ],
       "constructor": "python/mojolearn/hdbscan.py:170",
-      "signature_source": "def __init__(self, min_cluster_size=5, min_samples=None, cluster_selection_epsilon=0.0, max_cluster_size=0, metric='euclidean', alpha=1.0, cluster_selection_method='eom', allow_single_cluster=False, prediction_data=False, *, numeric_mode=None)",
+      "signature_source": "def __init__(self, min_cluster_size=5, min_samples=None, cluster_selection_epsilon=0.0, max_cluster_size=0, metric='euclidean', alpha=1.0, cluster_selection_method='eom', allow_single_cluster=False, prediction_data=False, *, numeric_mode=None, device=None)",
       "parameters": [
         "min_cluster_size",
         "min_samples",
@@ -4472,9 +4518,10 @@
         "cluster_selection_method",
         "allow_single_cluster",
         "prediction_data",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "e9780af73738fc5aab2ef9d44c5603a9751ff7c46beb1e55cebae79e45ef647b",
+      "constructor_ast_sha256": "5fd687fb945843bbf020806db6e2da6fc32adc67fa8a43aafc08e7feed821ce0",
       "field_order": [
         "min_cluster_size",
         "min_samples",
@@ -4485,7 +4532,8 @@
         "cluster_selection_method",
         "allow_single_cluster",
         "prediction_data",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "min_cluster_size": {
@@ -4517,6 +4565,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -4529,7 +4580,8 @@
         "cluster_selection_method": "'eom'",
         "allow_single_cluster": "False",
         "prediction_data": "False",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.hdbscan",
@@ -4539,7 +4591,7 @@
           "path": "python/mojolearn/hdbscan.py",
           "name": "__init__",
           "line": 170,
-          "ast_sha256": "e9780af73738fc5aab2ef9d44c5603a9751ff7c46beb1e55cebae79e45ef647b"
+          "ast_sha256": "5fd687fb945843bbf020806db6e2da6fc32adc67fa8a43aafc08e7feed821ce0"
         }
       ],
       "constructor_ancestry": [
@@ -5312,91 +5364,98 @@
           "value": {
             "parameter": "n_estimators"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "max_samples",
           "value": {
             "parameter": "max_samples"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "max_depth",
           "value": {
             "parameter": "max_depth"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "max_features",
           "value": {
             "parameter": "max_features"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "bootstrap",
           "value": {
             "parameter": "bootstrap"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "contamination",
           "value": {
             "parameter": "contamination"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "warm_start",
           "value": {
             "parameter": "warm_start"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "n_jobs",
           "value": {
             "parameter": "n_jobs"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "verbose",
           "value": {
             "parameter": "verbose"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "output_type",
           "value": {
             "parameter": "output_type"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "NumericModeMixin after python/mojolearn/_iforest_impl.py:153"
+          "source": "NumericModeMixin after python/mojolearn/_iforest_impl.py:169"
         }
       ],
       "trace": [
-        "python/mojolearn/_iforest_impl.py:153"
+        "python/mojolearn/_iforest_impl.py:169"
       ],
-      "constructor": "python/mojolearn/_iforest_impl.py:153",
-      "signature_source": "def __init__(self, *, n_estimators=100, max_samples='auto', max_depth=None, max_features=1.0, bootstrap=False, contamination='auto', random_state=None, warm_start=False, n_jobs=None, verbose=False, output_type=None)",
+      "constructor": "python/mojolearn/_iforest_impl.py:169",
+      "signature_source": "def __init__(self, *, n_estimators=100, max_samples='auto', max_depth=None, max_features=1.0, bootstrap=False, contamination='auto', random_state=None, warm_start=False, n_jobs=None, verbose=False, output_type=None, device=None)",
       "parameters": [
         "n_estimators",
         "max_samples",
@@ -5408,9 +5467,10 @@
         "warm_start",
         "n_jobs",
         "verbose",
-        "output_type"
+        "output_type",
+        "device"
       ],
-      "constructor_ast_sha256": "b92f10680b13a126c3eb238e96e946017f954d7999a5373dde902da95d357adb",
+      "constructor_ast_sha256": "0648c8643157b50e184ac6e225341b378af15a2088dcfef0fc55e22abf748cb8",
       "field_order": [
         "n_estimators",
         "max_samples",
@@ -5423,6 +5483,7 @@
         "n_jobs",
         "verbose",
         "output_type",
+        "device",
         "numeric_mode"
       ],
       "final_fields": {
@@ -5459,6 +5520,9 @@
         "output_type": {
           "parameter": "output_type"
         },
+        "device": {
+          "parameter": "device"
+        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         }
@@ -5474,7 +5538,8 @@
         "warm_start": "False",
         "n_jobs": "None",
         "verbose": "False",
-        "output_type": "None"
+        "output_type": "None",
+        "device": "None"
       },
       "numeric_mode_injection": true,
       "module": "mojolearn._iforest_impl",
@@ -5483,8 +5548,8 @@
         {
           "path": "python/mojolearn/_iforest_impl.py",
           "name": "__init__",
-          "line": 153,
-          "ast_sha256": "b92f10680b13a126c3eb238e96e946017f954d7999a5373dde902da95d357adb"
+          "line": 169,
+          "ast_sha256": "0648c8643157b50e184ac6e225341b378af15a2088dcfef0fc55e22abf748cb8"
         }
       ],
       "constructor_ancestry": [
@@ -5693,77 +5758,84 @@
           "value": {
             "parameter": "n_clusters"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "init",
           "value": {
             "parameter": "init"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "n_init",
           "value": {
             "parameter": "n_init"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "init_centroids",
           "value": {
             "parameter": "init_centroids"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "metric",
           "value": {
             "parameter": "metric"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "oversampling_factor",
           "value": {
             "parameter": "oversampling_factor"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/cluster.py:194"
+          "source": "python/mojolearn/cluster.py:198"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/cluster.py:198"
         }
       ],
       "trace": [
-        "python/mojolearn/cluster.py:194"
+        "python/mojolearn/cluster.py:198"
       ],
-      "constructor": "python/mojolearn/cluster.py:194",
-      "signature_source": "def __init__(self, n_clusters=8, init='k-means++', n_init=1, max_iter=300, tol=0.0001, random_state=0, init_centroids=None, metric='euclidean', oversampling_factor=2.0, *, numeric_mode=None)",
+      "constructor": "python/mojolearn/cluster.py:198",
+      "signature_source": "def __init__(self, n_clusters=8, init='k-means++', n_init=1, max_iter=300, tol=0.0001, random_state=0, init_centroids=None, metric='euclidean', oversampling_factor=2.0, *, numeric_mode=None, device=None)",
       "parameters": [
         "n_clusters",
         "init",
@@ -5774,9 +5846,10 @@
         "init_centroids",
         "metric",
         "oversampling_factor",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "512f4d2f036d8c72987fa26a4a62f742d8e26b2d25a92375e3137fdeececfbae",
+      "constructor_ast_sha256": "6265e77f804528ec9a1ef7399f3c263731fb6ec9e43651a0de226ed72b385926",
       "field_order": [
         "n_clusters",
         "init",
@@ -5787,7 +5860,8 @@
         "init_centroids",
         "metric",
         "oversampling_factor",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_clusters": {
@@ -5819,6 +5893,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -5831,7 +5908,8 @@
         "init_centroids": "None",
         "metric": "'euclidean'",
         "oversampling_factor": "2.0",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.cluster",
@@ -5840,8 +5918,8 @@
         {
           "path": "python/mojolearn/cluster.py",
           "name": "__init__",
-          "line": 194,
-          "ast_sha256": "512f4d2f036d8c72987fa26a4a62f742d8e26b2d25a92375e3137fdeececfbae"
+          "line": 198,
+          "ast_sha256": "6265e77f804528ec9a1ef7399f3c263731fb6ec9e43651a0de226ed72b385926"
         }
       ],
       "constructor_ancestry": [
@@ -6524,63 +6602,63 @@
           "value": {
             "parameter": "bandwidth"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "algorithm",
           "value": {
             "parameter": "algorithm"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "kernel",
           "value": {
             "parameter": "kernel"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "metric",
           "value": {
             "parameter": "metric"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "atol",
           "value": {
             "parameter": "atol"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "rtol",
           "value": {
             "parameter": "rtol"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "breadth_first",
           "value": {
             "parameter": "breadth_first"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "leaf_size",
           "value": {
             "parameter": "leaf_size"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "metric_params",
           "value": {
             "parameter": "metric_params"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "numeric_mode",
@@ -6588,13 +6666,20 @@
             "parameter": "numeric_mode"
           },
           "source": "NumericModeMixin rule kept by native family_density_kde_initialize at python/mojolearn/density.py:476"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/density.py:426"
         }
       ],
       "trace": [
-        "python/mojolearn/density.py:476"
+        "python/mojolearn/density.py:426"
       ],
-      "constructor": "python/mojolearn/density.py:476",
-      "signature_source": "def __init__(self, *, bandwidth=1.0, algorithm='auto', kernel='gaussian', metric='euclidean', atol=0, rtol=0, breadth_first=True, leaf_size=40, metric_params=None, numeric_mode=None)",
+      "constructor": "python/mojolearn/density.py:426",
+      "signature_source": "def __init__(self, *, bandwidth=1.0, algorithm='auto', kernel='gaussian', metric='euclidean', atol=0, rtol=0, breadth_first=True, leaf_size=40, metric_params=None, numeric_mode=None, device=None)",
       "parameters": [
         "bandwidth",
         "algorithm",
@@ -6605,9 +6690,10 @@
         "breadth_first",
         "leaf_size",
         "metric_params",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "fd138f1580d86721d46ff6e78c7af4a9265398e52bf4aa59122fdd0516e52260",
+      "constructor_ast_sha256": "7a08c33df347df674319d0b6c6ca116c258cb29e16aad90db9d6fcb9498a2c73",
       "field_order": [
         "bandwidth",
         "algorithm",
@@ -6618,7 +6704,8 @@
         "breadth_first",
         "leaf_size",
         "metric_params",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "bandwidth": {
@@ -6650,6 +6737,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -6662,7 +6752,8 @@
         "breadth_first": "True",
         "leaf_size": "40",
         "metric_params": "None",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.density",
@@ -6671,8 +6762,8 @@
         {
           "path": "python/mojolearn/density.py",
           "name": "__init__",
-          "line": 476,
-          "ast_sha256": "fd138f1580d86721d46ff6e78c7af4a9265398e52bf4aa59122fdd0516e52260"
+          "line": 426,
+          "ast_sha256": "7a08c33df347df674319d0b6c6ca116c258cb29e16aad90db9d6fcb9498a2c73"
         }
       ],
       "constructor_ancestry": [
@@ -6845,13 +6936,20 @@
             "parameter": "numeric_mode"
           },
           "source": "python/mojolearn/_expansion_neighbors.py:1060"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:1060"
         }
       ],
       "trace": [
         "python/mojolearn/_expansion_neighbors.py:1060"
       ],
       "constructor": "python/mojolearn/_expansion_neighbors.py:1060",
-      "signature_source": "def __init__(self, n_components=None, *, kernel='linear', gamma=None, degree=3, coef0=1, kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver='auto', tol=0, max_iter=None, iterated_power='auto', remove_zero_eig=False, random_state=None, copy_X=True, n_jobs=None, numeric_mode=None)",
+      "signature_source": "def __init__(self, n_components=None, *, kernel='linear', gamma=None, degree=3, coef0=1, kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver='auto', tol=0, max_iter=None, iterated_power='auto', remove_zero_eig=False, random_state=None, copy_X=True, n_jobs=None, numeric_mode=None, device=None)",
       "parameters": [
         "n_components",
         "kernel",
@@ -6869,9 +6967,10 @@
         "random_state",
         "copy_X",
         "n_jobs",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "6cd7c045b82b5aa0a52ddb83e59ce3724b71591f4df953c5d90f7df48b68f2b5",
+      "constructor_ast_sha256": "c7cf48ce6a89a68ea6825afc390e0f2d8df6ef42f3eff9988c12f88d8c339a1a",
       "field_order": [
         "n_components",
         "kernel",
@@ -6889,7 +6988,8 @@
         "random_state",
         "copy_X",
         "n_jobs",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_components": {
@@ -6942,6 +7042,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -6961,7 +7064,8 @@
         "random_state": "None",
         "copy_X": "True",
         "n_jobs": "None",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._expansion_neighbors",
@@ -6971,7 +7075,7 @@
           "path": "python/mojolearn/_expansion_neighbors.py",
           "name": "__init__",
           "line": 1060,
-          "ast_sha256": "6cd7c045b82b5aa0a52ddb83e59ce3724b71591f4df953c5d90f7df48b68f2b5"
+          "ast_sha256": "c7cf48ce6a89a68ea6825afc390e0f2d8df6ef42f3eff9988c12f88d8c339a1a"
         }
       ],
       "constructor_ancestry": [
@@ -10024,63 +10128,70 @@
           "value": {
             "parameter": "bandwidth"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:577"
+          "source": "python/mojolearn/_expansion_cluster.py:527"
         },
         {
           "field": "seeds",
           "value": {
             "parameter": "seeds"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:577"
+          "source": "python/mojolearn/_expansion_cluster.py:527"
         },
         {
           "field": "bin_seeding",
           "value": {
             "parameter": "bin_seeding"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:577"
+          "source": "python/mojolearn/_expansion_cluster.py:527"
         },
         {
           "field": "min_bin_freq",
           "value": {
             "parameter": "min_bin_freq"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:577"
+          "source": "python/mojolearn/_expansion_cluster.py:527"
         },
         {
           "field": "cluster_all",
           "value": {
             "parameter": "cluster_all"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:577"
+          "source": "python/mojolearn/_expansion_cluster.py:527"
         },
         {
           "field": "n_jobs",
           "value": {
             "parameter": "n_jobs"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:577"
+          "source": "python/mojolearn/_expansion_cluster.py:527"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:577"
+          "source": "python/mojolearn/_expansion_cluster.py:527"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:577"
+          "source": "python/mojolearn/_expansion_cluster.py:527"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:527"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_cluster.py:577"
+        "python/mojolearn/_expansion_cluster.py:527"
       ],
-      "constructor": "python/mojolearn/_expansion_cluster.py:577",
-      "signature_source": "def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1, cluster_all=True, n_jobs=None, max_iter=300, numeric_mode=None)",
+      "constructor": "python/mojolearn/_expansion_cluster.py:527",
+      "signature_source": "def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1, cluster_all=True, n_jobs=None, max_iter=300, numeric_mode=None, device=None)",
       "parameters": [
         "bandwidth",
         "seeds",
@@ -10089,9 +10200,10 @@
         "cluster_all",
         "n_jobs",
         "max_iter",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "bdf4365efe9eb27c1c024e0d20c20f07745271b35e804627f15206a8428383f2",
+      "constructor_ast_sha256": "e6e740637e0e3b19302ce3c32693c93f3300585eb138926ea3eaeb04157e1cd4",
       "field_order": [
         "bandwidth",
         "seeds",
@@ -10100,7 +10212,8 @@
         "cluster_all",
         "n_jobs",
         "max_iter",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "bandwidth": {
@@ -10126,6 +10239,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -10136,7 +10252,8 @@
         "cluster_all": "True",
         "n_jobs": "None",
         "max_iter": "300",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._expansion_cluster",
@@ -10145,8 +10262,8 @@
         {
           "path": "python/mojolearn/_expansion_cluster.py",
           "name": "__init__",
-          "line": 577,
-          "ast_sha256": "bdf4365efe9eb27c1c024e0d20c20f07745271b35e804627f15206a8428383f2"
+          "line": 527,
+          "ast_sha256": "e6e740637e0e3b19302ce3c32693c93f3300585eb138926ea3eaeb04157e1cd4"
         }
       ],
       "constructor_ancestry": [
@@ -10215,98 +10332,105 @@
           "value": {
             "parameter": "n_clusters"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "init",
           "value": {
             "parameter": "init"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "max_iter",
           "value": {
             "parameter": "max_iter"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "batch_size",
           "value": {
             "parameter": "batch_size"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "verbose",
           "value": {
             "parameter": "verbose"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "compute_labels",
           "value": {
             "parameter": "compute_labels"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "tol",
           "value": {
             "parameter": "tol"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "max_no_improvement",
           "value": {
             "parameter": "max_no_improvement"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "init_size",
           "value": {
             "parameter": "init_size"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "n_init",
           "value": {
             "parameter": "n_init"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "reassignment_ratio",
           "value": {
             "parameter": "reassignment_ratio"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:326"
+          "source": "python/mojolearn/_expansion_cluster.py:265"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:265"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_cluster.py:326"
+        "python/mojolearn/_expansion_cluster.py:265"
       ],
-      "constructor": "python/mojolearn/_expansion_cluster.py:326",
-      "signature_source": "def __init__(self, n_clusters=8, *, init='k-means++', max_iter=100, batch_size=1024, verbose=0, compute_labels=True, random_state=None, tol=0.0, max_no_improvement=10, init_size=None, n_init='auto', reassignment_ratio=0.01, numeric_mode=None)",
+      "constructor": "python/mojolearn/_expansion_cluster.py:265",
+      "signature_source": "def __init__(self, n_clusters=8, *, init='k-means++', max_iter=100, batch_size=1024, verbose=0, compute_labels=True, random_state=None, tol=0.0, max_no_improvement=10, init_size=None, n_init='auto', reassignment_ratio=0.01, numeric_mode=None, device=None)",
       "parameters": [
         "n_clusters",
         "init",
@@ -10320,9 +10444,10 @@
         "init_size",
         "n_init",
         "reassignment_ratio",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "7dc7c3312c96a184b7b27a655d24d53df1363be64e48baaae2e685efbea409ce",
+      "constructor_ast_sha256": "6d943f94891e3486c9f67e319e08493b42b6f0a8343d3782f70cbdfaa3e18a95",
       "field_order": [
         "n_clusters",
         "init",
@@ -10336,7 +10461,8 @@
         "init_size",
         "n_init",
         "reassignment_ratio",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_clusters": {
@@ -10377,6 +10503,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -10392,7 +10521,8 @@
         "init_size": "None",
         "n_init": "'auto'",
         "reassignment_ratio": "0.01",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._expansion_cluster",
@@ -10401,8 +10531,8 @@
         {
           "path": "python/mojolearn/_expansion_cluster.py",
           "name": "__init__",
-          "line": 326,
-          "ast_sha256": "7dc7c3312c96a184b7b27a655d24d53df1363be64e48baaae2e685efbea409ce"
+          "line": 265,
+          "ast_sha256": "6d943f94891e3486c9f67e319e08493b42b6f0a8343d3782f70cbdfaa3e18a95"
         }
       ],
       "constructor_ancestry": [
@@ -11227,112 +11357,119 @@
           "value": {
             "parameter": "min_samples"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "max_eps",
           "value": {
             "parameter": "max_eps"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "metric",
           "value": {
             "parameter": "metric"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "p",
           "value": {
             "parameter": "p"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "metric_params",
           "value": {
             "parameter": "metric_params"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "cluster_method",
           "value": {
             "parameter": "cluster_method"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "eps",
           "value": {
             "parameter": "eps"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "xi",
           "value": {
             "parameter": "xi"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "predecessor_correction",
           "value": {
             "parameter": "predecessor_correction"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "min_cluster_size",
           "value": {
             "parameter": "min_cluster_size"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "algorithm",
           "value": {
             "parameter": "algorithm"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "leaf_size",
           "value": {
             "parameter": "leaf_size"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "memory",
           "value": {
             "parameter": "memory"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "n_jobs",
           "value": {
             "parameter": "n_jobs"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "python/mojolearn/_expansion_cluster.py:727"
+          "source": "python/mojolearn/_expansion_cluster.py:680"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_cluster.py:680"
         }
       ],
       "trace": [
-        "python/mojolearn/_expansion_cluster.py:727"
+        "python/mojolearn/_expansion_cluster.py:680"
       ],
-      "constructor": "python/mojolearn/_expansion_cluster.py:727",
-      "signature_source": "def __init__(self, *, min_samples=5, max_eps=float('inf'), metric='minkowski', p=2, metric_params=None, cluster_method='xi', eps=None, xi=0.05, predecessor_correction=True, min_cluster_size=None, algorithm='auto', leaf_size=30, memory=None, n_jobs=None, numeric_mode=None)",
+      "constructor": "python/mojolearn/_expansion_cluster.py:680",
+      "signature_source": "def __init__(self, *, min_samples=5, max_eps=float('inf'), metric='minkowski', p=2, metric_params=None, cluster_method='xi', eps=None, xi=0.05, predecessor_correction=True, min_cluster_size=None, algorithm='auto', leaf_size=30, memory=None, n_jobs=None, numeric_mode=None, device=None)",
       "parameters": [
         "min_samples",
         "max_eps",
@@ -11348,9 +11485,10 @@
         "leaf_size",
         "memory",
         "n_jobs",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "940048868ef2ceb5a55cd79a60d1f995529ee28a2e6e6a7388747aea9388ca12",
+      "constructor_ast_sha256": "bf17e30e11fa24949799f7091f6b31b30bca458ed841ef9cd23f0f866bdd2836",
       "field_order": [
         "min_samples",
         "max_eps",
@@ -11366,7 +11504,8 @@
         "leaf_size",
         "memory",
         "n_jobs",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "min_samples": {
@@ -11413,6 +11552,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -11430,7 +11572,8 @@
         "leaf_size": "30",
         "memory": "None",
         "n_jobs": "None",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._expansion_cluster",
@@ -11439,8 +11582,8 @@
         {
           "path": "python/mojolearn/_expansion_cluster.py",
           "name": "__init__",
-          "line": 727,
-          "ast_sha256": "940048868ef2ceb5a55cd79a60d1f995529ee28a2e6e6a7388747aea9388ca12"
+          "line": 680,
+          "ast_sha256": "bf17e30e11fa24949799f7091f6b31b30bca458ed841ef9cd23f0f866bdd2836"
         }
       ],
       "constructor_ancestry": [
@@ -12342,6 +12485,13 @@
           "source": "python/mojolearn/_expansion_neighbors.py:1241"
         },
         {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_neighbors.py:1241"
+        },
+        {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
@@ -12353,21 +12503,23 @@
         "python/mojolearn/_expansion_neighbors.py:1241"
       ],
       "constructor": "python/mojolearn/_expansion_neighbors.py:1241",
-      "signature_source": "def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None)",
+      "signature_source": "def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None, device=None)",
       "parameters": [
         "gamma",
         "degree",
         "coef0",
         "n_components",
-        "random_state"
+        "random_state",
+        "device"
       ],
-      "constructor_ast_sha256": "614ed70aa6a58cecd37e82b0bd4f133b9e20d801efc9edb94d432ddfdb292edd",
+      "constructor_ast_sha256": "1ca17b9ac54c06b12b4d54dd1ee4f98f3cf81ce224a532e8ac4b8d9d2bbf818c",
       "field_order": [
         "gamma",
         "degree",
         "coef0",
         "n_components",
         "random_state",
+        "device",
         "numeric_mode"
       ],
       "final_fields": {
@@ -12386,6 +12538,9 @@
         "random_state": {
           "parameter": "random_state"
         },
+        "device": {
+          "parameter": "device"
+        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         }
@@ -12395,7 +12550,8 @@
         "degree": "2",
         "coef0": "0",
         "n_components": "100",
-        "random_state": "None"
+        "random_state": "None",
+        "device": "None"
       },
       "numeric_mode_injection": true,
       "module": "mojolearn._expansion_neighbors",
@@ -12405,7 +12561,7 @@
           "path": "python/mojolearn/_expansion_neighbors.py",
           "name": "__init__",
           "line": 1241,
-          "ast_sha256": "614ed70aa6a58cecd37e82b0bd4f133b9e20d801efc9edb94d432ddfdb292edd"
+          "ast_sha256": "1ca17b9ac54c06b12b4d54dd1ee4f98f3cf81ce224a532e8ac4b8d9d2bbf818c"
         }
       ],
       "constructor_ancestry": [
@@ -15691,6 +15847,13 @@
           "source": "python/mojolearn/_expansion_ann.py:522"
         },
         {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_expansion_ann.py:400"
+        },
+        {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
@@ -15702,7 +15865,7 @@
         "python/mojolearn/_expansion_ann.py:522"
       ],
       "constructor": "python/mojolearn/_expansion_ann.py:522",
-      "signature_source": "def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate='auto', max_iter=1000, init='pca', random_state=0, post_exaggeration_learning_rate_factor=1.0)",
+      "signature_source": "def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate='auto', max_iter=1000, init='pca', random_state=0, post_exaggeration_learning_rate_factor=1.0, device=None)",
       "parameters": [
         "n_components",
         "perplexity",
@@ -15711,9 +15874,10 @@
         "max_iter",
         "init",
         "random_state",
-        "post_exaggeration_learning_rate_factor"
+        "post_exaggeration_learning_rate_factor",
+        "device"
       ],
-      "constructor_ast_sha256": "10cfce3ec59f9b5b58e47d61be5d08dfc1b5ac52640a27dd99d013ccb2e31645",
+      "constructor_ast_sha256": "3f6141025c39482a910379c694f2cdcc2b932e5366e09d8b06145bfad8590b69",
       "field_order": [
         "n_components",
         "perplexity",
@@ -15723,6 +15887,7 @@
         "max_iter",
         "init",
         "random_state",
+        "device",
         "numeric_mode"
       ],
       "final_fields": {
@@ -15752,6 +15917,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -15762,7 +15930,8 @@
         "max_iter": "1000",
         "init": "'pca'",
         "random_state": "0",
-        "post_exaggeration_learning_rate_factor": "1.0"
+        "post_exaggeration_learning_rate_factor": "1.0",
+        "device": "None"
       },
       "numeric_mode_injection": true,
       "module": "mojolearn._expansion_ann",
@@ -15771,8 +15940,8 @@
         {
           "path": "python/mojolearn/_expansion_ann.py",
           "name": "__init__",
-          "line": 522,
-          "ast_sha256": "10cfce3ec59f9b5b58e47d61be5d08dfc1b5ac52640a27dd99d013ccb2e31645"
+          "line": 400,
+          "ast_sha256": "3f6141025c39482a910379c694f2cdcc2b932e5366e09d8b06145bfad8590b69"
         }
       ],
       "constructor_ancestry": [
@@ -16173,13 +16342,20 @@
             "parameter": "numeric_mode"
           },
           "source": "python/mojolearn/_umap_impl.py:164"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_umap_impl.py:167"
         }
       ],
       "trace": [
         "python/mojolearn/_umap_impl.py:164"
       ],
       "constructor": "python/mojolearn/_umap_impl.py:164",
-      "signature_source": "def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1, spread=1.0, n_epochs=None, random_state=0, set_op_mix_ratio=1.0, local_connectivity=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, a=None, b=None, metric_kwds=None, target_n_neighbors=-1, target_metric='categorical', target_weight=0.5, densmap=False, output_metric='euclidean', numeric_mode=None)",
+      "signature_source": "def __init__(self, n_neighbors=15, n_components=2, *, min_dist=0.1, spread=1.0, n_epochs=None, random_state=0, set_op_mix_ratio=1.0, local_connectivity=1.0, metric='euclidean', init='spectral', learning_rate=1.0, repulsion_strength=1.0, negative_sample_rate=5, a=None, b=None, metric_kwds=None, target_n_neighbors=-1, target_metric='categorical', target_weight=0.5, densmap=False, output_metric='euclidean', numeric_mode=None, device=None)",
       "parameters": [
         "n_neighbors",
         "n_components",
@@ -16202,9 +16378,10 @@
         "target_weight",
         "densmap",
         "output_metric",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "8de543808624b926c07375716e3711d3e8465ad09abb1bcae26c9b16411706a2",
+      "constructor_ast_sha256": "b1e8cfef0db04046a34eb8ef1fd9c4b31cece72abf6ae76797c1b127774cec3b",
       "field_order": [
         "n_neighbors",
         "n_components",
@@ -16227,7 +16404,8 @@
         "target_weight",
         "densmap",
         "output_metric",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_neighbors": {
@@ -16295,6 +16473,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -16319,7 +16500,8 @@
         "target_weight": "0.5",
         "densmap": "False",
         "output_metric": "'euclidean'",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn._umap_impl",
@@ -16328,8 +16510,8 @@
         {
           "path": "python/mojolearn/_umap_impl.py",
           "name": "__init__",
-          "line": 164,
-          "ast_sha256": "8de543808624b926c07375716e3711d3e8465ad09abb1bcae26c9b16411706a2"
+          "line": 167,
+          "ast_sha256": "b1e8cfef0db04046a34eb8ef1fd9c4b31cece72abf6ae76797c1b127774cec3b"
         }
       ],
       "constructor_ancestry": [
@@ -16780,8 +16962,18 @@
     "helpers": {
       "_application_subclass": "f3076f9b98210a1e5f0087d6956f9edd6d8a245ba3df000a875772e1513bd76b",
       "_connect_application_params": "b34180df1081c8d2ee4833659dc33542550222a59a961cdbf7e9a2cbba6260c7",
-      "_install_numeric_mode": "47deb1ed7a96919afbc333298dc41b3b0e6382027a7ec80ec23e8b572f9e1f3a"
+      "_install_numeric_mode": "cd53d2198452146f95729cbe31332c47cd45f25c9108029b63dc6de87b45a4ca"
     },
-    "rebound": "2026-11-17 (lane fb14-tool-tests): every ast_sha256 is the function's AST without its docstring (positions excluded), so a docstring or a line move no longer unbinds it. Two helpers rebound on reading the diff of 21b231faac: _application_subclass changed its docstring only; _install_numeric_mode lost the CPU-training guard loop, which set each fit method to itself (_guard_cpu_training returned it unchanged), so the events it writes are unchanged."
+    "rebound": "2026-11-17 (lane fb14-tool-tests): every ast_sha256 is the function's AST without its docstring (positions excluded), so a docstring or a line move no longer unbinds it. Two helpers rebound on reading the diff of 21b231faac: _application_subclass changed its docstring only; _install_numeric_mode lost the CPU-training guard loop, which set each fit method to itself (_guard_cpu_training returned it unchanged), so the events it writes are unchanged. | 2026-11-21 (lane dw-core): _install_numeric_mode records the class in the device table (_device_record) and lists the wrapper for install_device; the numeric_mode wrapper body and the events it writes are unchanged. IsolationForest re-derived by --rederive (its constructor writes device)."
+  },
+  "installer_device_parameter": {
+    "field": "device",
+    "value": {
+      "parameter": "device"
+    },
+    "position": "last",
+    "default": null,
+    "source": "python/mojolearn/_native_full_reset_params.py _install (every class whose own constructor does not name device)",
+    "check": "providers/python/device_route_boundary_door.mojo device_admit_class"
   }
 }
