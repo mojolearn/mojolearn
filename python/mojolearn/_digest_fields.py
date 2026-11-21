@@ -33,7 +33,12 @@ SKIP_BY_NAME = {
 }
 
 #: class name -> why it has no digest yet, in words a user reads.
-REFUSED_BY_NAME = {}
+REFUSED_BY_NAME = {
+    "_BaggingBase": "its fitted members are held as one forest by the trees owner, which the digest does not read yet",
+    "_RecurrentBase": "its fitted weights are held by the recurrent owner (state_dict), which the digest does not read yet",
+    "Sequential": "its layers hold the fitted weights, and the digest does not walk layers yet",
+    "CNNClassifier": "its layers hold the fitted weights, and the digest does not walk layers yet",
+}
 
 #: The tables the compiled walk reads, keyed by class (filled by `declare`).
 EXTRA = {}
