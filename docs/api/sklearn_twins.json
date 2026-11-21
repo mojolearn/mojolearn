@@ -14584,10 +14584,12 @@
     "params": {
      "penalty": {
       "default": "'l2'",
+      "positional": true,
       "accepts": "{'l2', 'l1'}, default 'l2'"
      },
      "loss": {
       "default": "'squared_hinge'",
+      "positional": true,
       "accepts": "{'squared_hinge', 'hinge'}, default 'squared_hinge'"
      },
      "C": {
@@ -14791,13 +14793,6 @@
      "ours": "None",
      "sklearn": "",
      "reason": "Mojolearn's numeric contract: 'identical' (the same bits on Apple, NVIDIA and AMD GPUs) or 'fast' (Apple only). scikit-learn has no such choice."
-    },
-    {
-     "kind": "positional",
-     "name": "(penalty, loss)",
-     "ours": "keyword-only",
-     "sklearn": "penalty, loss",
-     "reason": null
     },
     {
      "kind": "method_missing",
@@ -15563,6 +15558,7 @@
     "params": {
      "penalty": {
       "default": "'l2'",
+      "positional": true,
       "accepts": "{'l2', 'l1', 'elasticnet', None}, default 'l2'"
      },
      "tol": {
@@ -15818,13 +15814,6 @@
      "ours": "None",
      "sklearn": "",
      "reason": "Mojolearn places the computation on a device ('gpu' or 'cpu'); scikit-learn runs on the host only."
-    },
-    {
-     "kind": "positional",
-     "name": "(penalty)",
-     "ours": "keyword-only",
-     "sklearn": "penalty",
-     "reason": null
     },
     {
      "kind": "method_missing",
@@ -24834,6 +24823,7 @@
     "params": {
      "alpha": {
       "default": "1.0",
+      "positional": true,
       "accepts": "float, default 1.0"
      },
      "solver": {
@@ -24992,13 +24982,6 @@
      "ours": "None",
      "sklearn": "",
      "reason": "Mojolearn places the computation on a device ('gpu' or 'cpu'); scikit-learn runs on the host only."
-    },
-    {
-     "kind": "positional",
-     "name": "(alpha)",
-     "ours": "keyword-only",
-     "sklearn": "alpha",
-     "reason": null
     },
     {
      "kind": "method_extra",

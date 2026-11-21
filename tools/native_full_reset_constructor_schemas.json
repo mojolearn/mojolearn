@@ -8682,7 +8682,7 @@
         "python/mojolearn/svm.py:55"
       ],
       "constructor": "python/mojolearn/svm.py:156",
-      "signature_source": "def __init__(self, *, penalty='l2', loss='squared_hinge', C=1.0, fit_intercept=True, penalized_intercept=False, class_weight=None, tol=0.0001, max_iter=1000, linesearch_max_iter=100, lbfgs_memory=5, multi_class='ovr', numeric_mode=None)",
+      "signature_source": "def __init__(self, penalty='l2', loss='squared_hinge', *, C=1.0, fit_intercept=True, penalized_intercept=False, class_weight=None, tol=0.0001, max_iter=1000, linesearch_max_iter=100, lbfgs_memory=5, multi_class='ovr', numeric_mode=None)",
       "parameters": [
         "penalty",
         "loss",
@@ -8697,7 +8697,7 @@
         "multi_class",
         "numeric_mode"
       ],
-      "constructor_ast_sha256": "3937b1d03fcc2e30071518c3445a38a7c264f654a130054a100daa189cc223e4",
+      "constructor_ast_sha256": "afd0eb79f93db9a169c5c49c5aab2ebcc7edd97d9b489be62f6cfd4addd3adcb",
       "field_order": [
         "penalty",
         "loss",
@@ -8771,8 +8771,8 @@
         {
           "path": "python/mojolearn/svm.py",
           "name": "__init__",
-          "line": 156,
-          "ast_sha256": "3937b1d03fcc2e30071518c3445a38a7c264f654a130054a100daa189cc223e4"
+          "line": 160,
+          "ast_sha256": "afd0eb79f93db9a169c5c49c5aab2ebcc7edd97d9b489be62f6cfd4addd3adcb"
         },
         {
           "path": "python/mojolearn/svm.py",

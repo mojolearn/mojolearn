@@ -157,7 +157,7 @@ class LinearSVC(_LinearSVMBase):
 
     _LOSSES = {"hinge": _QN_LOSS_SVC_L1, "squared_hinge": _QN_LOSS_SVC_L2}
 
-    def __init__(self, *, penalty="l2", loss="squared_hinge", C=1.0,
+    def __init__(self, penalty="l2", loss="squared_hinge", *, C=1.0,
                  fit_intercept=True, penalized_intercept=False,
                  class_weight=None, tol=1e-4, max_iter=1000,
                  linesearch_max_iter=100, lbfgs_memory=5, multi_class="ovr", numeric_mode=None):
