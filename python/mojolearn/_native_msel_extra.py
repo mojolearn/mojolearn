@@ -25,7 +25,7 @@ def _connect_lda(prep, register, _layout, BuiltinFunctionType, MethodType, _bind
     # glue: the LDA owner's fixed schema, once, when the prep family loads
     cls = prep.LinearDiscriminantAnalysis
     parameters = ('solver', 'shrinkage', 'priors', 'n_components', 'store_covariance', 'tol',
-                  'covariance_estimator')
+                  'covariance_estimator', 'device')
     methods = {
         'fit': ('fit', (('arg', 0), ('arg', 1))),
         'predict': ('predict', (('arg', 0),)),
