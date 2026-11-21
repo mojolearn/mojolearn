@@ -1286,15 +1286,16 @@ def train(
     order, written on the device (`gbdt/ctrs/ctr_order.mojo`; lane
     cpu4-gbdt). Every CTR column stays on the device.
 
-    **`ctr_estimation_permutation_id` defaults to `permutation_count - 1`,
-    and it is NOT the identity.** Their permutation 0 IS the
-    identity (`permutation.cpp:14-17`) and is safe on their side only
-    because the learn pool was already shuffled at load
+    **`ctr_estimation_permutation_id` defaults to `permutation_count - 1`.**
+    Their permutation 0 IS the identity (`permutation.cpp:14-17`) of a learn
+    pool that was already shuffled at load
     (`private/libs/algo/preprocess.cpp:183-199`, which shuffles whenever the
-    data has a categorical feature and `has_time` is false). This implementation has
-    no such stage, so a caller can hand us rows sorted by target, where the
-    identity order makes every row's ordered statistic read its own
-    neighbourhood. `permutation_count - 1` is their ESTIMATION permutation,
+    data has a categorical feature and `has_time` is false). This
+    implementation draws that load shuffle inside the fit, from
+    `random_seed`, and composes every permutation with it
+    (`gbdt/ctrs/ctr_order.mojo`; lane cat-ctr, 2026-11-21), so no order
+    reads the caller's row order and rows sorted by target are safe under
+    every permutation id. `permutation_count - 1` is their ESTIMATION permutation,
     `GetEstimationPermutation()` (`doc_parallel_boosting.h:101-103`), the
     one whose model `Run()` exports.
 
@@ -1950,13 +1951,16 @@ def train(
         # ONE ORDER PER PERMUTATION, their loop's
         # `ctrsEstimationPermutation.WriteOrder(ctrEstimationOrder)`
         # (`doc_parallel_dataset_builder.cpp:255`), written ON THE DEVICE
-        # one row per thread (`gbdt/ctrs/ctr_order.mojo`: identity for
-        # permutation 0, a keyed Feistel bijection for the others) instead
-        # of the host Fisher-Yates `fill_order` (lane cpu4-gbdt; bits move,
-        # the host column takes the same order).
+        # one row per thread (`gbdt/ctrs/ctr_order.mojo`: the load shuffle
+        # keyed by `random_seed`, composed for every permutation but 0 with
+        # that permutation's keyed bijection) instead of the host
+        # Fisher-Yates `fill_order` (lane cpu4-gbdt) and of the identity
+        # over the caller's row order for permutation 0 (lane cat-ctr,
+        # 2026-11-21: the caller no longer shuffles; bits move, the host
+        # column takes the same order).
         for p in range(perm_count):  # small-loop(perm_count: permutations): one order launch per permutation, written on the device
             var d_ord = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-            launch_ctr_estimation_order(ctx, d_ord, n_rows, p)
+            launch_ctr_estimation_order(ctx, d_ord, n_rows, p, random_seed)
             d_orders.append(d_ord^)
 
     # DEVIATION 2634, THE REACH MARKER (see `CTR_TRACE_ENV`). Every term of
