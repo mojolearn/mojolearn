@@ -21,7 +21,6 @@ struct XPrepKeys(Defaultable, Movable):
     var k___getattribute__: PythonObject
     var k___mro__: PythonObject
     var k__data: PythonObject
-    var k__host: PythonObject
     var k__mgr: PythonObject
     var k__mv: PythonObject
     var k_array_class: PythonObject
@@ -49,7 +48,6 @@ struct XPrepKeys(Defaultable, Movable):
         self.k___getattribute__ = PythonObject(None)
         self.k___mro__ = PythonObject(None)
         self.k__data = PythonObject(None)
-        self.k__host = PythonObject(None)
         self.k__mgr = PythonObject(None)
         self.k__mv = PythonObject(None)
         self.k_array_class = PythonObject(None)
@@ -81,7 +79,6 @@ def _x_prep_keys_fill(nk: UnsafePointer[XPrepKeys, MutUntrackedOrigin]) raises:
     nk[].k___getattribute__ = py_key("__getattribute__")
     nk[].k___mro__ = py_key("__mro__")
     nk[].k__data = py_key("_data")
-    nk[].k__host = py_key("_host")
     nk[].k__mgr = py_key("_mgr")
     nk[].k__mv = py_key("_mv")
     nk[].k_array_class = py_key("array_class")
