@@ -3189,6 +3189,9 @@ class EllipticEnvelope(MinCovDet):
     _parameters = ("store_precision", "assume_centered", "support_fraction", "contamination", "random_state",
                    "numeric_mode", "device")
 
+    #: The member ABI mark (family 32 XDecomp, kind 14; core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 14)
+
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, contamination=0.1,
                  random_state=None, numeric_mode=None, device=None):
         super().__init__(store_precision=store_precision, assume_centered=assume_centered,

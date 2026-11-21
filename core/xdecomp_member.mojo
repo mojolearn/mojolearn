@@ -187,6 +187,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
     MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_OP_SCORE, MEMBER_OP_SCORE_SAMPLES, MEMBER_CAN_SCORE, MEMBER_CAN_SCORE_SAMPLES,
+    MEMBER_OP_PREDICT, MEMBER_OP_DECISION, MEMBER_CAN_PREDICT, MEMBER_CAN_DECISION, MEMBER_I32,
     MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_INVERSE_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
@@ -212,7 +213,9 @@ from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
-from bindings.decomp_kit_run import DKit
+from bindings.decomp_kit_run import DKit, DK_SCALE, DK_ADDS
+from bindings.mcd_run import mcd_fit_run, mcd_labels_run, mcd_mahal
+from core.decomp_native_impl import decomp_f32_to_i32, decomp_u8_to_f32
 from bindings.dict_learning_run import (
     EncodeWords, Gram, DictWords, MiniBatchWords, SpcaFit, dl_split_sign, dl_encode_run, dl_inverse_run,
     dl_dict_learning, dl_minibatch_fit, dl_spca_project, dl_spca_inverse, dl_spca_fit_run,
@@ -241,6 +244,8 @@ comptime XDECOMP_KIND_SPCA = 12
 comptime XDECOMP_SPCA_PARAM_COUNT = 8
 comptime XDECOMP_KIND_MBSPCA = 13
 comptime XDECOMP_MBSPCA_PARAM_COUNT = 11
+comptime XDECOMP_KIND_ENVELOPE = 14
+comptime XDECOMP_ENVELOPE_PARAM_COUNT = 6
 
 comptime XDECOMP_BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY
 comptime XDECOMP_BLOCK_SINGULAR = MEMBER_BLOCK_FAMILY + 1
@@ -375,7 +380,7 @@ def _is_spca(kind: Int) -> Bool:
 
 def _pooled(kind: Int) -> Bool:
     """Handles of this kind are x_decomp pool ids (XD_DEV_FREE)."""
-    return _is_rp(kind) or _is_kit(kind)
+    return _is_rp(kind) or _is_kit(kind) or kind == XDECOMP_KIND_ENVELOPE
 
 
 def _free_handles(entry: EntryRef, handles: List[Int], pool: Bool) raises:
@@ -465,6 +470,8 @@ def _kind_name(kind: Int) -> String:
         return String("SparsePCA")
     if kind == XDECOMP_KIND_MBSPCA:
         return String("MiniBatchSparsePCA")
+    if kind == XDECOMP_KIND_ENVELOPE:
+        return String("EllipticEnvelope")
     return String("IncrementalPCA")
 
 
@@ -1368,6 +1375,175 @@ def _kit_width(words: MutPointer[Float64, MutUntrackedOrigin], asked: Int, featu
     return 2 * atoms if words[7] != 0.0 else atoms
 
 
+# ---------------------------------------------------------------- EllipticEnvelope
+# Kind 14: bindings/mcd_native_door.mojo `mcd_fit` / `mcd_operation` over
+# the kit (bindings/mcd_run.mojo). Blocks after the scalars [n_features_in_,
+# training rows, offset_]: 1 location_ (1 x p), 2 _precision (p x p), 3
+# raw_location_, 4 raw_covariance_, 5 covariance_, 6 dist_ (1 x n), 7
+# raw_support_, 8 support_ (1 x n, 0 / 1 words). An imported state needs
+# only 1 and 2 (what the queries read). location_ and _precision stay on the
+# device across queries (pool ids handles[0], [1]), as the door's record.
+
+comptime _MCD_BLOCKS = 8
+
+
+def _u8_block(support: List[UInt8], n: Int) -> List[Float32]:
+    var words = List[Float32](length=n, fill=Float32(0))
+    if n > 0:
+        decomp_u8_to_f32(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(support.unsafe_ptr())),
+                         _F32P(unsafe_from_address=Int(words.unsafe_ptr())), n)
+    return words^
+
+
+def _mcd_labels(call: _Call, mut kit: DKit, chosen: Int, rows: Int, estimator: String) raises:
+    # The door's `_labels_pack`: the +1 / -1 float32 words as int32 labels.
+    if not call[].dst.dense_host(MEMBER_I32) or call[].dst.rows != rows or call[].dst.cols != 1:
+        raise Error("TypeError: a " + estimator + " member writes predict into a dense host int32 view, one per row")
+    if chosen >= 0:
+        decomp_f32_to_i32(kit.ptr(chosen), MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=call[].dst.data),
+                          rows)
+
+
+def _fit_mcd(slot: _Slot, call: _Call) raises:
+    """`mcd_fit` (envelope) over the borrowed X; fit_output PREDICT =
+    fit_predict's labels over the fit's own distances."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member takes no sample_weight")
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_PREDICT:
+        member_unsupported(estimator, call[].fit_output)
+    _release(slot)
+    slot[].clear()
+    var n = call[].x.rows
+    var p = call[].x.cols
+    if n < 2:
+        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(p)
+                    + ")) while a minimum of 2 is required by MinCovDet.")
+    var h = min((n + p + 2) // 2, n) if slot[].words[1] < 0.0 else Int(slot[].words[1] * Float64(n))
+    var kit = _kit(call)
+    try:
+        var x = kit.borrow(call[].x.data, n, p)
+        var fit = mcd_fit_run(kit, x, h, Int(slot[].words[2]), slot[].words[3] != 0.0, True, slot[].words[4])
+        slot[].blocks.append(_kit_take(kit, fit.loc))
+        slot[].blocks.append(_kit_take(kit, fit.precision))
+        slot[].blocks.append(_kit_take(kit, fit.raw_loc))
+        slot[].blocks.append(_kit_take(kit, fit.raw_cov))
+        slot[].blocks.append(_kit_take(kit, fit.cov))
+        slot[].blocks.append(_kit_take(kit, fit.dist))
+        slot[].blocks.append(_u8_block(fit.raw_support, n))
+        slot[].blocks.append(_u8_block(fit.support, n))
+        var scalars = List[Float64](capacity=3)
+        scalars.append(Float64(p))
+        scalars.append(Float64(n))
+        scalars.append(fit.offset)
+        slot[].scalars = scalars^
+        slot[].count = n
+        slot[].features = p
+        slot[].fitted = True
+        if call[].fit_output == MEMBER_OP_PREDICT:
+            _mcd_labels(call, kit, mcd_labels_run(kit, fit.dist, fit.offset), n, estimator)
+    finally:
+        kit.close()
+
+
+def _query_mcd(slot: _Slot, call: _Call, operation: Int) raises:
+    """`mcd_operation`: predict (int32 +1 / -1), decision_function
+    (-dist - offset_) or score_samples (-dist), one value per row."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var p = slot[].features
+    var offset = slot[].scalars[2]
+    var kit = _kit(call)
+    try:
+        var x = kit.borrow(call[].x.data, call[].x.rows, call[].x.cols)
+        var loc = _kit_operand(slot, call, kit, 0, 1, p)
+        var precision = _kit_operand(slot, call, kit, 1, p, p)
+        var d = mcd_mahal(kit, x, loc, precision)
+        if operation == MEMBER_OP_PREDICT:
+            _mcd_labels(call, kit, mcd_labels_run(kit, d, offset), kit.nrows(d), estimator)
+            return
+        var negated = kit.ew(DK_SCALE, d, scalar=-1.0)
+        if operation == MEMBER_OP_DECISION:
+            _kit_out(call, kit, kit.ew(DK_ADDS, negated, scalar=-offset), estimator)
+        else:
+            _kit_out(call, kit, negated, estimator)
+    finally:
+        kit.close()
+
+
+def _export_mcd(slot: _Slot, call: _Call) raises:
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block > _MCD_BLOCKS:
+            raise Error("member ABI: an EllipticEnvelope member has no fitted block index " + String(block))
+        block = MEMBER_BLOCK_SCALARS if block == 0 else XDECOMP_BLOCK_COMPONENTS + block - 1
+    var p = slot[].features
+    var k = block - XDECOMP_BLOCK_COMPONENTS
+    if block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif k >= 0 and k < len(slot[].blocks):
+        var size = len(slot[].blocks[k])
+        var rows = p if (k == 1 or k == 3 or k == 4) else 1
+        call[].dst = MemberMatrix(_address(slot, k), rows, size // max(rows, 1))
+    else:
+        raise Error("member ABI: an EllipticEnvelope member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _MCD_BLOCKS + 1
+
+
+def _import_mcd(slot: _Slot, call: _Call) raises:
+    var estimator = _name(slot)
+    var block = call[].block
+    if slot[].fitted or len(slot[].blocks) != _MCD_BLOCKS:
+        slot[].clear()
+        for _ in range(_MCD_BLOCKS):  # driver-loop: the fitted blocks
+            slot[].blocks.append(List[Float32]())
+    var k = block - XDECOMP_BLOCK_COMPONENTS
+    if block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != 3:
+            raise Error("member ABI: the EllipticEnvelope scalars block is three host float64 words")
+        var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
+        slot[].scalars = List[Float64](length=3, fill=0.0)
+        for index in range(3):  # driver-loop: three fitted scalars
+            slot[].scalars[index] = source[index]
+    elif k >= 0 and k < _MCD_BLOCKS:
+        var size = call[].x.rows * call[].x.cols
+        var words = List[Float32](length=size, fill=0.0)
+        if size > 0:
+            _dense(call[].x, "a fitted block", estimator)
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=size)
+        slot[].blocks[k] = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: an EllipticEnvelope member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if len(slot[].scalars) != 3:
+        raise Error("member ABI: a fitted EllipticEnvelope state needs its scalars block")
+    var p = Int(slot[].scalars[0])
+    if p < 1 or len(slot[].blocks[0]) != p or len(slot[].blocks[1]) != p * p:
+        raise Error("member ABI: a fitted EllipticEnvelope state needs location_ and _precision, of the fitted sizes")
+    slot[].count = Int(slot[].scalars[1])
+    slot[].features = p
+    slot[].fitted = True
+
+
+def _mcd_width(asked: Int, mut dtype: Int) raises -> Int:
+    # predict: one int32 label per row; decision_function and
+    # score_samples: one float32 value per row.
+    if asked == MEMBER_OP_PREDICT:
+        dtype = MEMBER_I32
+        return 1
+    if asked == MEMBER_OP_DECISION or asked == MEMBER_OP_SCORE_SAMPLES:
+        return 1
+    member_unsupported("EllipticEnvelope", asked)
+    return 0
+
+
 # ---------------------------------------------------------------- random projections
 
 
@@ -1572,6 +1748,9 @@ def _export(slot: _Slot, call: _Call) raises:
     if _is_kit(slot[].kind()):
         _export_kit(slot, call)
         return
+    if slot[].kind() == XDECOMP_KIND_ENVELOPE:
+        _export_mcd(slot, call)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         block = _block_index(block)
@@ -1610,6 +1789,9 @@ def _import(slot: _Slot, call: _Call) raises:
         return
     if _is_kit(slot[].kind()):
         _import_kit(slot, call)
+        return
+    if slot[].kind() == XDECOMP_KIND_ENVELOPE:
+        _import_mcd(slot, call)
         return
     if slot[].fitted or len(slot[].blocks) != 6:
         slot[].clear()
@@ -1687,6 +1869,9 @@ def _outputs(call: _Call) raises:
         if _is_kit(kind):
             call[].out_cols = _kit_width(words, asked_first, call[].x.cols, -1)
             return
+        if kind == XDECOMP_KIND_ENVELOPE:
+            call[].out_cols = _mcd_width(asked_first, call[].out_dtype)
+            return
         if asked_first == MEMBER_OP_INVERSE_TRANSFORM:
             call[].out_cols = call[].x.cols
             return
@@ -1707,6 +1892,9 @@ def _outputs(call: _Call) raises:
     var asked = call[].flags
     if slot[].kind() == XDECOMP_KIND_FA:
         call[].out_cols = _fa_width(asked, slot[].words[1], call[].x.cols, slot[].count if slot[].fitted else -1)
+        return
+    if slot[].kind() == XDECOMP_KIND_ENVELOPE:
+        call[].out_cols = _mcd_width(asked, call[].out_dtype)
         return
     if _is_kit(slot[].kind()):
         var held_words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
@@ -1735,7 +1923,8 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         var mask = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
         if call[].state == 0:
             # The family's union.
-            return mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
+            return (mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
+                    | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION)
         # Kind-exact (`member_kind_capabilities`): an NMF state answers inverse
         # only when its route's image exports it (NMF_CAP_INVERSE at admit).
         # A random projection answers inverse only with the pseudo-inverse
@@ -1744,6 +1933,9 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         var kind = held[].kind()
         if kind == XDECOMP_KIND_FA:
             return mask | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
+        if kind == XDECOMP_KIND_ENVELOPE:
+            return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
+                    | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
         if _is_rp(kind):
             if held[].words[4] != 0.0 or (held[].fitted and held[].scalars[3] != 0.0):
                 mask |= MEMBER_CAN_INVERSE_TRANSFORM
@@ -1783,6 +1975,9 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
                 wanted = XDECOMP_MBSPCA_PARAM_COUNT
             if call[].param_count != wanted:
                 raise Error("member ABI: a " + _kind_name(kind) + " member takes " + String(wanted) + " parameters")
+        elif source[0] == Float64(XDECOMP_KIND_ENVELOPE):
+            if call[].param_count != XDECOMP_ENVELOPE_PARAM_COUNT:
+                raise Error("member ABI: an EllipticEnvelope member takes six parameters")
         else:
             raise Error("member ABI: unknown or unpublished XDecomp member kind")
         var words = List[Float64](length=call[].param_count, fill=0.0)
@@ -1814,8 +2009,16 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _fit_coder(slot, call)
         elif _is_spca(kind):
             _fit_spca(slot, call)
+        elif kind == XDECOMP_KIND_ENVELOPE:
+            _fit_mcd(slot, call)
         else:
             _fit_ipca(slot, call)
+    elif kind == XDECOMP_KIND_ENVELOPE and (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
+            or operation == MEMBER_OP_SCORE_SAMPLES):
+        _query_mcd(slot, call, operation)
+    elif kind == XDECOMP_KIND_ENVELOPE and (operation == MEMBER_OP_TRANSFORM
+            or operation == MEMBER_OP_INVERSE_TRANSFORM):
+        member_unsupported(_name(slot), operation)
     elif kind == XDECOMP_KIND_FA and operation == MEMBER_OP_TRANSFORM:
         _query_fa(slot, call, _FA_TRANSFORM)
     elif kind == XDECOMP_KIND_FA and operation == MEMBER_OP_SCORE_SAMPLES:

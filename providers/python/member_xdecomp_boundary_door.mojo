@@ -6,7 +6,7 @@ core/xdecomp_member.mojo). Published: IncrementalPCA (kind 0,
 GaussianRandomProjection (kind 5, `(32, 5)`), SparseRandomProjection (kind 6,
 `(32, 6)`), FastICA (kind 7, `(32, 7)`), FactorAnalysis (kind 8, `(32, 8)`),
 DictionaryLearning (9), MiniBatchDictionaryLearning (10), SparseCoder (11),
-SparsePCA (12), MiniBatchSparsePCA (13). Falls back at admit (False): a
+SparsePCA (12), MiniBatchSparsePCA (13), EllipticEnvelope (14). Falls back at admit (False): a
 callback, code_init or dict_init (the dictionary learners), V_init or U_init
 (SparsePCA), a w_init (FastICA). The family's other classes carry no mark
 yet: a caller keeps their own doors, and admit refuses their kinds in words.
@@ -55,8 +55,11 @@ from core.xdecomp_member import (
     XDECOMP_KIND_GRP, XDECOMP_KIND_SRP, XDECOMP_ROUTE_POOL, XDECOMP_BLOCK_RP_INVERSE, XDECOMP_KIND_ICA,
     XDECOMP_KIND_FA, XDECOMP_KIND_DL, XDECOMP_KIND_MBDL, XDECOMP_KIND_CODER, XDECOMP_KIND_SPCA, XDECOMP_KIND_MBSPCA,
     XDECOMP_DL_PARAM_COUNT, XDECOMP_MBDL_PARAM_COUNT, XDECOMP_CODER_PARAM_COUNT, XDECOMP_SPCA_PARAM_COUNT,
-    XDECOMP_MBSPCA_PARAM_COUNT, XDECOMP_ROUTE_KIT_RESIDENT, XDECOMP_ROUTE_KIT_SHIFT,
+    XDECOMP_MBSPCA_PARAM_COUNT, XDECOMP_ROUTE_KIT_RESIDENT, XDECOMP_ROUTE_KIT_SHIFT, XDECOMP_KIND_ENVELOPE,
+    XDECOMP_ENVELOPE_PARAM_COUNT,
 )
+from bindings.mcd_native_door import _typed as mcd_typed
+from core.decomp_native_impl import decomp_f32_to_u8
 from bindings.dict_learning_native_unpack import (
     _check_algos as dl_check_algos, _algo_index as dl_algo_index, _fit_index as dl_fit_index,
     _dict_words as dl_dict_words, _coder_dictionary as dl_coder_dictionary, _is_str as dl_is_str,
@@ -289,6 +292,9 @@ def xdecomp_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         return True
     if kind == XDECOMP_KIND_SPCA or kind == XDECOMP_KIND_MBSPCA:
         return _spca_admit(model, fields, kind, context, owner)
+    if kind == XDECOMP_KIND_ENVELOPE:
+        _mcd_admit(model, fields, context, owner)
+        return True
     raise Error("ValueError: mojolearn: XDecomp member kind " + String(kind) + " is not published")
 
 
@@ -327,6 +333,9 @@ def xdecomp_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         return
     if plan.kind >= XDECOMP_KIND_DL and plan.kind <= XDECOMP_KIND_MBSPCA:
         _kit_pack(fields, context, plan, state)
+        return
+    if plan.kind == XDECOMP_KIND_ENVELOPE:
+        _mcd_pack(fields, context, plan, state)
         return
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
@@ -412,6 +421,8 @@ def xdecomp_member_state(model: PythonObject, fields: PythonObject, context: Pyt
         return _fa_state(fields, context, plan)
     if plan.kind >= XDECOMP_KIND_DL and plan.kind <= XDECOMP_KIND_MBSPCA:
         return _kit_state(fields, context, plan)
+    if plan.kind == XDECOMP_KIND_ENVELOPE:
+        return _mcd_state(fields, context, plan)
     if plan.kind != XDECOMP_KIND_IPCA:
         raise Error("ValueError: mojolearn: XDecomp member kind " + String(plan.kind) + " is not published")
     var count = py_get(fields, "n_components_")
@@ -901,4 +912,92 @@ def _kit_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) ra
         raise error
     _ = len(scalars)
     _ = source
+    return call.state
+
+
+# ---------------------------------------------------------------- EllipticEnvelope
+
+
+def _mcd_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
+    # bindings/mcd_native_door.mojo `mcd_operation` fit: the contamination
+    # check first, in its words; then `mcd_fit`'s reads (h needs n: RUN).
+    var c = fields["contamination"]
+    var op = native_loaded_module("operator")
+    if not (Bool(py=py_call(op.lt, PythonObject(0), c)) and Bool(py=py_call(op.le, c, PythonObject(0.5)))):
+        raise Error("contamination must be in (0, 0.5]")
+    _ = _kit_route(model, fields, context, owner)
+    var words = List[Float64](length=XDECOMP_ENVELOPE_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(XDECOMP_KIND_ENVELOPE)
+    var fraction = fields["support_fraction"]
+    words[1] = -1.0 if fraction is None else decomp_float(fraction)
+    words[2] = Float64(decomp_seed_word(kit_seed(fields["random_state"])))
+    words[3] = _flag(fields["assume_centered"])
+    words[4] = decomp_float(c)
+    words[5] = _flag(fields["store_precision"])
+    owner.plan.params = words^
+
+
+def _mcd_vector(view: MemberMatrix, context: PythonObject) raises -> PythonObject:
+    # A fitted (n,) float32 vector, the door's `decomp_kit_out_shape` type.
+    var count = view.rows * view.cols
+    var vector = decomp_f32(Python.tuple(count), context)
+    if count > 0:
+        unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(vector))), src=f32_ptr(view.data), count=count)
+    return vector
+
+
+def _mcd_support(view: MemberMatrix, context: PythonObject) raises -> PythonObject:
+    # The door's `_support_pack`: the 0 / 1 words as the public '<u1' (n,) Array.
+    var n = view.rows * view.cols
+    var out = mcd_typed(n, "<u1", "B", 1, context)
+    if n > 0:
+        decomp_f32_to_u8(f32_ptr(view.data), MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr)), n)
+    return out
+
+
+def _mcd_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    # `mcd_fit`'s fitted fields, in its order.
+    decomp_set_mode(fields, context)
+    py_setitem(fields, "_seed", kit_seed(fields["random_state"]))
+    py_setitem(fields, "_draws", PythonObject(0))
+    var call = MemberCall(plan.route, state)
+    var scalars_view = _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var scalars = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars_view.data)
+    var features = Int(scalars[0])
+    var offset = scalars[2]
+    py_setitem(fields, "raw_location_", _mcd_vector(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 2), context))
+    py_setitem(fields, "raw_covariance_", _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 3), context))
+    py_setitem(fields, "raw_support_", _mcd_support(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 6), context))
+    py_setitem(fields, "location_", _mcd_vector(_export(plan, call, XDECOMP_BLOCK_COMPONENTS), context))
+    py_setitem(fields, "covariance_", _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 4), context))
+    var stored = _rp_matrix(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 1), context)
+    py_setitem(fields, "_precision", stored)
+    py_setitem(fields, "precision_", stored if Bool(py=fields["store_precision"]) else PythonObject(None))
+    py_setitem(fields, "support_", _mcd_support(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 7), context))
+    py_setitem(fields, "dist_", _mcd_vector(_export(plan, call, XDECOMP_BLOCK_COMPONENTS + 5), context))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+    py_setitem(fields, "offset_", PythonObject(offset))
+
+
+def _mcd_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # What the door's queries read: location_, _precision, offset_.
+    var precision = py_get(fields, "_precision")
+    var offset = py_get(fields, "offset_")
+    if precision is None or py_get(fields, "location_") is None or offset is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var dist = py_get(fields, "dist_")
+    var scalars: List[Float64] = [Float64(Int(py=precision.shape[0])),
+        Float64(Int(py=dist.shape[0])) if dist is not None else 0.0, Float64(py=offset)]
+    var call = member_new(plan)
+    try:
+        _import(plan, call, fields, "location_", 1, XDECOMP_BLOCK_COMPONENTS, context)
+        _import(plan, call, fields, "_precision", 2, XDECOMP_BLOCK_COMPONENTS + 1, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
     return call.state
