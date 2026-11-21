@@ -3184,9 +3184,6 @@ FAMILIES = (
         exports=(
             "arima_host_numeric_mode", "arima_host_vendor", "arima_host_column",
             "arima_host_sabotage", "arima_vendor", "arima_numeric_mode",
-            "arima_fit", "arima_predict", "arima_forecast",
-            # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "arima_order_caps",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3355,7 +3352,7 @@ FAMILIES = (
         # for saved ARIMA models, with no fit in the binary. The reference
         # arima family above carries the whole fit and stays out of the
         # wheels; this binding registers arima_predict and arima_forecast
-        # from the same source (bindings/arima_host_predict_pack.mojo) and ships.
+        # from the same source (arima/arima_ops_host_inference.mojo) and ships.
         # `routes` is None because `_mojolearn_arima` routes to the reference
         # binding when it is built; `serves` names the route this binding
         # takes when it is not (`_backend._HOST_INFERENCE_MODULES`), which is
@@ -3378,13 +3375,13 @@ FAMILIES = (
         display=("batched ARIMA prediction, in sample and out of sample, and forecasts, with or without"
                  " exogenous regressors, and Holt-Winters"
                  " forecasts and in-sample one-step predictions, additive and multiplicative"),
-        host_modules=("arima/host/arima_oracle.mojo", "bindings/arima_host_predict_pack.mojo",
+        host_modules=("arima/host/arima_oracle.mojo", "arima/arima_ops_host_inference.mojo",
                       "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict_run.mojo",
                       "tsa/checks/kpss_oracle.mojo", "bindings/kpss_host_test_unpack.mojo"),
         exports=(
             "forecast_host_numeric_mode", "forecast_host_vendor", "forecast_host_column",
             "forecast_host_sabotage", "arima_vendor", "arima_numeric_mode",
-            "arima_predict", "arima_forecast", "kpss_test",
+            "kpss_test",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "select_d",
         ),

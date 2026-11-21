@@ -61,18 +61,10 @@ struct TsaKeys(Defaultable, Movable):
     var k__y_ndim: PythonObject
     var k_aic_: PythonObject
     var k_arima_bindings: PythonObject
+    var k_arima_cpu_bindings: PythonObject
+    var k_arima_install_vendor: PythonObject
     var k_arima_class: PythonObject
-    var k_arima_entry_names: PythonObject
-    var k_arima_forecast_resident: PythonObject
     var k_arima_methods: PythonObject
-    var k_arima_ndiffs_kpss: PythonObject
-    var k_arima_numeric_mode: PythonObject
-    var k_arima_order_search: PythonObject
-    var k_arima_order_search_device: PythonObject
-    var k_arima_order_search_fit: PythonObject
-    var k_arima_predict_resident: PythonObject
-    var k_arima_resident_prepare: PythonObject
-    var k_arima_resident_release: PythonObject
     var k_array_class: PythonObject
     var k_array_type: PythonObject
     var k_autoarima_class: PythonObject
@@ -170,18 +162,10 @@ struct TsaKeys(Defaultable, Movable):
         self.k__y_ndim = PythonObject(None)
         self.k_aic_ = PythonObject(None)
         self.k_arima_bindings = PythonObject(None)
+        self.k_arima_cpu_bindings = PythonObject(None)
+        self.k_arima_install_vendor = PythonObject(None)
         self.k_arima_class = PythonObject(None)
-        self.k_arima_entry_names = PythonObject(None)
-        self.k_arima_forecast_resident = PythonObject(None)
         self.k_arima_methods = PythonObject(None)
-        self.k_arima_ndiffs_kpss = PythonObject(None)
-        self.k_arima_numeric_mode = PythonObject(None)
-        self.k_arima_order_search = PythonObject(None)
-        self.k_arima_order_search_device = PythonObject(None)
-        self.k_arima_order_search_fit = PythonObject(None)
-        self.k_arima_predict_resident = PythonObject(None)
-        self.k_arima_resident_prepare = PythonObject(None)
-        self.k_arima_resident_release = PythonObject(None)
         self.k_array_class = PythonObject(None)
         self.k_array_type = PythonObject(None)
         self.k_autoarima_class = PythonObject(None)
@@ -283,18 +267,10 @@ def _tsa_keys_fill(nk: UnsafePointer[TsaKeys, MutUntrackedOrigin]) raises:
     nk[].k__y_ndim = py_key("_y_ndim")
     nk[].k_aic_ = py_key("aic_")
     nk[].k_arima_bindings = py_key("arima_bindings")
+    nk[].k_arima_cpu_bindings = py_key("arima_cpu_bindings")
+    nk[].k_arima_install_vendor = py_key("arima_install_vendor")
     nk[].k_arima_class = py_key("arima_class")
-    nk[].k_arima_entry_names = py_key("arima_entry_names")
-    nk[].k_arima_forecast_resident = py_key("arima_forecast_resident")
     nk[].k_arima_methods = py_key("arima_methods")
-    nk[].k_arima_ndiffs_kpss = py_key("arima_ndiffs_kpss")
-    nk[].k_arima_numeric_mode = py_key("arima_numeric_mode")
-    nk[].k_arima_order_search = py_key("arima_order_search")
-    nk[].k_arima_order_search_device = py_key("arima_order_search_device")
-    nk[].k_arima_order_search_fit = py_key("arima_order_search_fit")
-    nk[].k_arima_predict_resident = py_key("arima_predict_resident")
-    nk[].k_arima_resident_prepare = py_key("arima_resident_prepare")
-    nk[].k_arima_resident_release = py_key("arima_resident_release")
     nk[].k_array_class = py_key("array_class")
     nk[].k_array_type = py_key("array_type")
     nk[].k_autoarima_class = py_key("autoarima_class")
