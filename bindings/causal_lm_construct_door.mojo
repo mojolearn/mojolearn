@@ -467,7 +467,10 @@ def _model_recurrent_shapes(mut mods: NativeModules, kind: String, dm: Int, plan
     else:
         py_setitem(fields, nk[].k_nheads, PythonObject(words.nheads))
         py_setitem(fields, nk[].k_d_in_proj, PythonObject(words.d_in_proj))
-    return words.shapes^
+    # Take the shapes out by swap: moving the field would leave `words` partly destroyed.
+    var shapes = List[List[Int]]()
+    swap(shapes, words.shapes)
+    return shapes^
 
 
 def _model_block_refusal(mut mods: NativeModules, words: CausalTransformerWords, options: PythonObject, scaling_kind: String, optional_names: PythonObject) raises -> Error:
