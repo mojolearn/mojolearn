@@ -21,6 +21,7 @@ from checks.numerics import (
     identical_exp, identical_log, identical_mul_add_simd,
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL,
 )
+from checks.mode_policy import ROW_FLUSH_OFF
 
 comptime FP = MutPointer[Float32, MutAnyOrigin]
 # The CPU gate's negative control: a host build with this define folds every
@@ -45,7 +46,15 @@ def fz(x: Float32) -> Float32:
     """The lane's flush: `fz_branchless` on a GPU under IDENTICAL (lane
     linear speed phase: the branchy spelling cost the device fits 3.5x on
     the RTX 4090), `ftz` itself everywhere else (on an x86 host the
-    branchless spelling was 1.8x slower). The same word either way."""
+    branchless spelling was 1.8x slower). The same word either way.
+
+    The `fast` row ROW_FLUSH_OFF (checks/mode_policy.mojo) drops the flush
+    here as it does in `ftz`: a fast-rows build is the identical tier, so
+    without this the GPU branch kept every flush of the linear family while
+    the host branch (`ftz`) dropped them (lane/sp-online-linear, 2026-11-20).
+    The row is off in every `identical` build: no word moves there."""
+    comptime if ROW_FLUSH_OFF:
+        return x
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()):
         return fz_branchless(x)
     return ftz(x)

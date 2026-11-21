@@ -872,7 +872,7 @@
   },
   "fast-flush-off": {
    "define": "MOJOLEARN_MODE_FAST_FLUSH_OFF,MOJOLEARN_MODE_FAST_ROWS",
-   "status": "define in code (checks/mode_policy.mojo ROW_FLUSH_OFF; checks/numerics.mojo ftz, ftz_simd): B drops the denormal flush at every seam call of every family; A = the zero-row fast set",
+   "status": "define in code (checks/mode_policy.mojo ROW_FLUSH_OFF; checks/numerics.mojo ftz, ftz_simd): B drops the denormal flush at every seam call of every family; A = the zero-row fast set UPDATED 2026-11-20 (lane sp-online-linear): the linear family's own flush (x_linear/ops.mojo `fz`) now reads the row on a GPU too; before, a fast-rows build (identical tier) kept `fz_branchless` there, so this arm dropped no flush in any x_linear device kernel (the online-linear per-sample loop has 3 to 4 flushes an operation) while its host branch did. Rebuild the arm at the wave's sha before it is run.",
    "owed": "RUN"
   },
   "fast-vendor-math": {
@@ -946,6 +946,11 @@
   "fast-bf16-resident": {
    "define": "MOJOLEARN_GEMM_FAST_BF16_RESIDENT,MOJOLEARN_MODE_FAST_ROWS",
    "status": "define in code (gemm/fast_bf16_resident.mojo GEMM_FAST_BF16_RESIDENT; refused outside a fast-rows build with the matrix-units route, core/experiment_guards_neural.mojo), lane inv-bf16-kernel 2026-11-20: bf16 matrix-unit products over RESIDENT bf16 operands (a weight narrowed once and kept until its owner reports a rewrite; an activation stored in bf16 by the epilogue launch that produces it; FP32 accumulation, FP32 at the public boundary; one launch a product). A new define: the per-call arm MOJOLEARN_GEMM_FAST_BF16_UNITS stays deleted (docs/TOMBSTONES.md). No product route reads it yet: its only consumer is bench/gemm_units_kernel_clock_main.mojo, whose arms fp32-exact, tf32-unit, bf16-percall and bf16-resident are four calls inside this ONE build (A and B are lines of one program run, not two wheels). The product wiring (sequence executor inference chain, neural dispatch) is decided by the kernel-clock rows.",
+   "owed": "RUN"
+  },
+  "sgd-ps-preload": {
+   "define": "MOJOLEARN_SGD_FAST_PS_PRELOAD",
+   "status": "define in code (x_linear/device.mojo SGD_FAST_PS_PRELOAD, `_sgd_ps_warp_body`, `_spw_row`), lane sp-online-linear 2026-11-20: B = the per-sample warp kernel issues sample r + 1's loads (its row block, label, PA norm, sample weight, and the order word of r + 2) while sample r computes, the form 0.8.25 ran (6cdbd32abe); A = today's kernel, which reads each sample's words when the sample starts (the old order of loads). Opt-in, default off; same words in the same statements, so digests must equal A's. Binding to build: _mojolearn_x_linear",
    "owed": "RUN"
   }
  },
@@ -5742,6 +5747,104 @@
     "weight_narrows_total (3: one a weight, however many calls)"
    ],
    "decides": "whether the resident bf16 arm is wired into the sequence executor's inference chain (sequence/mlp_fit.mojo::mlp_predict: weight images kept with the resident fitted block, the chunk copy narrowing the batch, the epilogue tail storing the next layer's image): only if chain-bf16-resident is faster than chain-tf32 beyond the spread with max_rel_diff_vs_fp32 inside 0.01 at a size and its neighbour; the 4096-row chunks against the whole-batch rows also price the 4096-row chunking of mlp_predict itself on both units"
+  },
+  {
+   "id": "sgd-ps-preload-board",
+   "source": "lane sp-online-linear (2026-11-20; Andrew: 'find what is most important, in loops, shared across families, and fix it'); ~/mojolearn-evidence/briefs-20261118/sp-online-linear-RESULT.md; list item 5 of ideas-rank-shared-RESULT.md: the taxi rows are 59-62 s against 26-27 s in the stored 0.8.25 cells (another host: a screen, not a verdict)",
+   "kind": "ab",
+   "lane": [
+    "pa-clf",
+    "pa-reg",
+    "perceptron",
+    "sgd-ocsvm"
+   ],
+   "dataset": "*",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sgd-ps-preload"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "quality"
+   ],
+   "decides": "promote B (the preload) to the default unless it is slower than A on the NVIDIA L40S (same box, same job); both arms' quality beside every time; digests must not move between the arms (the same loads' words in the same statements: a difference is a bug in the arm, not a bits change). On promotion the old order of loads is deleted with the four tombstone parts. The eight rows: the four lanes on taxi and istella, batch_size=0 (the per-sample fit) as the board races them"
+  },
+  {
+   "id": "sgd-ps-preload-random",
+   "source": "lane sp-online-linear (2026-11-20; Andrew: 'find what is most important, in loops, shared across families, and fix it'); ~/mojolearn-evidence/briefs-20261118/sp-online-linear-RESULT.md; list item 5 of ideas-rank-shared-RESULT.md: the taxi rows are 59-62 s against 26-27 s in the stored 0.8.25 cells (another host: a screen, not a verdict); neighbouring shapes no board row has, random rows so that nothing rests on a board dataset's values",
+   "kind": "ab",
+   "lane": [
+    "pa-clf",
+    "pa-reg",
+    "perceptron",
+    "sgd-ocsvm"
+   ],
+   "dataset": "gaussian",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sgd-ps-preload"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "quality"
+   ],
+   "shape": [
+    {
+     "rows": 100000,
+     "features": 16,
+     "what": "X fits the device cache: the control where the loads are hits, B must not be slower"
+    },
+    {
+     "rows": 1000000,
+     "features": 64,
+     "what": "two column blocks a row, X far above the cache: every row a miss"
+    }
+   ],
+   "decides": "the same verdict at 100,000 x 16 and 1,000,000 x 64 (max_iter 20, tol None, batch_size 0, the board's other settings); digests must not move. OWED TOOLING if the board harness cannot take a caller-given random shape for these lanes: time them with tools/measure_owed_driver.py or the lanes' recipes at the stated shapes"
+  },
+  {
+   "id": "sgd-ps-preload-covtype",
+   "source": "lane sp-online-linear (2026-11-20; Andrew: 'find what is most important, in loops, shared across families, and fix it'); ~/mojolearn-evidence/briefs-20261118/sp-online-linear-RESULT.md; list item 5 of ideas-rank-shared-RESULT.md: the taxi rows are 59-62 s against 26-27 s in the stored 0.8.25 cells (another host: a screen, not a verdict); non-board dataset, 54 features (between taxi's few and istella's 220: two column blocks)",
+   "kind": "ab",
+   "lane": [
+    "pa-clf",
+    "perceptron",
+    "sgd-ocsvm"
+   ],
+   "dataset": "covtype",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sgd-ps-preload"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "quality"
+   ],
+   "decides": "the same verdict on a dataset no board row has; digests must not move"
+  },
+  {
+   "id": "sgd-ps-preload-year",
+   "source": "lane sp-online-linear (2026-11-20; Andrew: 'find what is most important, in loops, shared across families, and fix it'); ~/mojolearn-evidence/briefs-20261118/sp-online-linear-RESULT.md; list item 5 of ideas-rank-shared-RESULT.md: the taxi rows are 59-62 s against 26-27 s in the stored 0.8.25 cells (another host: a screen, not a verdict); non-board dataset, 90 features (three column blocks), the regressor's",
+   "kind": "ab",
+   "lane": "pa-reg",
+   "dataset": "year",
+   "rows": "full",
+   "vendor": "nvidia",
+   "b_arms": [
+    "sgd-ps-preload"
+   ],
+   "owed": "RUN",
+   "columns": [
+    "time",
+    "quality"
+   ],
+   "decides": "the same verdict on a dataset no board row has; digests must not move"
   }
  ]
 }
