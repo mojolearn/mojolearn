@@ -29,7 +29,8 @@ LabelPropagation LabelSpreading KNNImputer SVGP.
     image (the resident solve's entry in `route.second`), the image's fused
     labels and `family_svc_xn_old_items`; pack = `oc_fit_pack`'s fields.
     KernelPCA: admit = `kpca_fit`'s checks with the door's own helpers on
-    `_expansion_neighbors._KPCA_CONTEXT` and its resolved decomposition
+    `_expansion_neighbors._KPCA_CONTEXT` (the shared context's
+    `family_xn_kpca_context`) and its resolved decomposition
     route (`_kpca_route`); a precomputed kernel answers False; pack =
     `kpca_fit`'s fields on that context's output arrays.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
@@ -243,9 +244,11 @@ def _ocsvm_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
 def _kpca_context() raises -> PythonObject:
     """The context KernelPCA's own doors are called with:
     `_expansion_neighbors._KPCA_CONTEXT` (the decomposition owner's public
-    connection, holding `kpca_kernels`, `kpca_old_items`, the route keys)."""
-    var module = py_fields(native_loaded_module("mojolearn._expansion_neighbors"))
-    var kcontext = py_get(module, PythonObject("_KPCA_CONTEXT"), PythonObject(None))
+    connection, holding `kpca_kernels`, `kpca_old_items`, the route keys),
+    which that module puts in the shared family context at import as
+    `family_xn_kpca_context`."""
+    var family = _family_context()
+    var kcontext = py_get(family, PythonObject("family_xn_kpca_context"), PythonObject(None))
     if kcontext is None:
         raise Error("ImportError: mojolearn: KernelPCA's owner is not connected")
     return kcontext
