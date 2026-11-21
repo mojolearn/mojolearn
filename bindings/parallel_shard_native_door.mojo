@@ -39,7 +39,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
 from bindings.classifier_public_lifecycle_door import classifier_after_fit
-from bindings.scaler_lifecycle_native_door import _public_result, _entries, scaler_standard_rows
+from bindings.scaler_lifecycle_native_door import _public_result, _entries, scaler_standard_rows, _fitted as scaler_fitted
 from bindings.scaler_native_door import scaler_door_calls, scaler_standard_publish, _bool as _scaler_bool
 from bindings.minmax_native_door import minmax_rows, minmax_fit_publish, _configuration as minmax_configuration
 from bindings.minmax_metadata_unpack import _flag as _minmax_flag
@@ -48,7 +48,6 @@ from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scal
 from bindings.parallel_public_result_door import parallel_public_result
 from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
-from bindings.family_common_pack import family_call
 from bindings.native_process_pool_door import (
     process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
     process_pool_create, process_pool_close, process_pool_closed, process_pool_pids, process_pool_devices,
@@ -400,11 +399,18 @@ def _transform_scaler(args: PythonObject) raises -> PythonObject:
     var estimator = args[0]
     var kind = _scaler_kind(estimator)
     var names = _scaler_stats(kind)
-    var entry = _t(kind + "_call")
-    var owner_context = _t(kind + "_context")
-    shard_fitted_admit(Bool(py=py_call(b.bool, family_call(entry, estimator, PythonObject("is_fitted"), Python.tuple(), owner_context))),
-                       "scaler is not fitted")
+    # The fitted test is the scalers' own (`_fitted`: `scale_` and
+    # `numeric_mode_` in the instance fields), read here on the fields this
+    # door reads next. REMOVED: the `family_call(entry, estimator,
+    # "is_fitted", ...)` crossing through the scaler binding's Python entry
+    # (an argument tuple, the entry's dispatch and a `bool` call per
+    # transform) and the registered `standard_call` / `minmax_call` entries.
+    # NOT a member ABI call: a held member state (`member_held`) would IMPORT
+    # the fitted arrays to answer one flag, and the column shards below run
+    # under the driver's device tuple, which a member's one route cannot
+    # carry (MEMBER-ABI-V2 "Not covered" terms).
     var fields = py_fields(estimator)
+    shard_fitted_admit(scaler_fitted(fields), "scaler is not fitted")
     _member_device(fields, "transform_scaler")
     var fitted_mode = py_get(fields, PythonObject("numeric_mode_"), PythonObject(None))
     var fitted_exact = fitted_mode is not None and py_type(fitted_mode) is b.str
