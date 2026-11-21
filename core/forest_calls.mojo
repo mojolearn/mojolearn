@@ -13,7 +13,8 @@ from core.forest_fit_request import (
     ForestFitArgs, FOREST_ENTRY_ABI, XF_OP_COUNT, XF_CAPS, XF_NUMERIC_MODE, XF_DT_DEFAULT_BINS, XF_FIT, XF_FIT_DART,
     XF_EXPORT_SIZES, XF_EXPORT_INTO, XF_EXPORT_VERIFY, XF_EXPORT_RELEASE, XF_PREDICT, XF_RESIDENT_PREPARE,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_RESIDENT_RELEASE, XF_STRICT_PREPARE, XF_STRICT_PREDICT,
-    XF_STRICT_RELEASE, XF_META_MAX, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_words,
+    XF_STRICT_RELEASE, XF_SESSION_OPEN, XF_SESSION_CLOSE, XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND,
+    XF_META_MAX, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_words,
 )
 
 
@@ -165,3 +166,43 @@ def xf_snapshot_release(key: EntryRef, op: Int, handle: Int) raises:
     var none = List[Int]()
     var ints: List[Int] = [handle]
     _ = _call(key, op, none, ints)
+
+
+def xf_session_open(key: EntryRef, x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
+    """The former `rf_data_session_open`: X (float32, row-major or
+    column-major) kept in the image for the member fits of one ensemble; the
+    session handle. An image without XF_CAP_SESSION refuses."""
+    var addrs: List[Int] = [x]
+    var ints: List[Int] = [rows, cols, 1 if row_major else 0, 1 if share_tables else 0]
+    return _call(key, XF_SESSION_OPEN, addrs, ints)
+
+
+def xf_session_close(key: EntryRef, handle: Int) raises:
+    """The former `rf_data_session_close`."""
+    var none = List[Int]()
+    var ints: List[Int] = [handle]
+    _ = _call(key, XF_SESSION_CLOSE, none, ints)
+
+
+def xf_fit_session(key: EntryRef, classifier: Bool, args: ForestFitArgs) raises -> Int:
+    """A member fit on the data session `args.session`; its export handle
+    (the former `rf_classifier_fit_weighted_session_export`: y = class
+    codes, `weights` the row weights; and `rf_regressor_fit_session_rows_export`:
+    x = the int32 row ids, y = their targets)."""
+    return _fit(key, XF_FIT_SESSION, XF_SHAPE_CLASSIFIER if classifier else 0, args)
+
+
+def xf_ada_open(key: EntryRef, handle: Int, w: Int, y: Int, cw: Int, n: Int, k: Int) raises:
+    """The former `rf_ada_open`: an AdaBoost fit's weights, labels or
+    targets and class_weight rows kept on the session's device."""
+    var addrs: List[Int] = [w, y, cw]
+    var ints: List[Int] = [handle, n, k]
+    _ = _call(key, XF_ADA_OPEN, addrs, ints)
+
+
+def xf_fit_ada_round(key: EntryRef, classifier: Bool, args: ForestFitArgs) raises -> Int:
+    """One AdaBoost round on the data session `args.session` (the former
+    `rf_classifier_fit_ada_round_export` / `rf_regressor_fit_ada_round_export`):
+    the member's export handle; the step's four words are written at
+    `args.stats`."""
+    return _fit(key, XF_FIT_ADA_ROUND, XF_SHAPE_CLASSIFIER if classifier else 0, args)
