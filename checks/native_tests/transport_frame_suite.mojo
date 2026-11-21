@@ -182,6 +182,7 @@ def _archive() raises:
     var archive = byte_checkpoint_read_header(path, read_failure)
     require(archive.metadata == state and len(archive.counts) == 4 and archive.counts[0] == 300000
             and archive.counts[3] == 7, "byte checkpoint: the typed read's header differs from the state written")
+    require(archive.complete, "byte checkpoint: the file written does not end with its last array")
     var got_parameters = List[Float32](length=300000, fill=Float32(-1.0))
     var got_first = List[Float32](length=300000, fill=Float32(-1.0))
     var got_second = List[Float32](length=300000, fill=Float32(-1.0))

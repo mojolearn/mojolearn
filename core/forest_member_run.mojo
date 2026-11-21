@@ -2,7 +2,7 @@
 """The forest member RUN shared by the Tree (13), Forest (14) and ExtraTrees
 (15) families (core/member_abi.mojo). Each family file
 (core/tree_member.mojo, core/forest_member.mojo, core/extra_trees_member.mojo)
-names its own store and calls `fm_member[store]` from its entry.
+names its own store and calls `fm_member[store, rf_layout]` from its entry.
 
 It runs the families' EXISTING typed forest RUN over the entry the caller's
 route holds in `route.entry` (the forest entry of the image the estimator's
@@ -23,18 +23,36 @@ MEMBER_OP_NEW parameters (Float64 words):
   [6] 1: a DecisionTreeRegressor left at n_bins=None (the image's bin count)
   [7] ET max_samples as a fraction of the fit's rows (0.0: the slot holds it)
   [8] 1: the fast tier; [9] 1: the parallel_groves predict engine
-  [10] S, the parameter slot count; then S triples
-      [11 + 3k] the int reading of slot k as the Float64 bit pattern of its
+  [10] 1: every fit also computes the feature importances (the estimator's
+      `fit(..., feature_importances=True)`), exported as
+      `MEMBER_BLOCK_FEATURE_IMPORTANCES`. The admission writes 0; a caller
+      that reads importances (recursive elimination, selection from a
+      model) sets it to 1 in `plan.params` before `member_new`. RF layout
+      only: the ExtraTrees fit computes none (a 1 there is refused).
+  [11] S, the parameter slot count; then S triples
+      [12 + 3k] the int reading of slot k as the Float64 bit pattern of its
       Int64 (std.memory.bitcast: seeds and counts travel exactly),
-      [12 + 3k] its float reading, [13 + 3k] 1 when it has no reading.
+      [13 + 3k] its float reading, [14 + 3k] 1 when it has no reading.
 Views: X dense row-major host float32 (finite: the caller's admission, as
 the estimator's own door; an image with the device scan tests it again);
 y host int32 class codes 0..classes-1 (classifier, `call.classes` >= 2) or a
-float32 target column (regressor). Refused in words: sample weights, a row
+float32 target column (regressor); `call.weights` (optional) host float32,
+one per row (finite and non-negative: the caller's admission, as the
+estimator's `admit_weights`), multiplied by nothing (no class_weight: the
+admission keeps the estimator's own doors for it). Refused in words: a row
 or column index, a device-home view, a nonzero `fit_output`, a multi-column
-y. predict writes int32 codes (classifier) or float32 values; predict_proba
-float32 rows x classes; score (classifier only) the accuracy count / rows,
-unweighted.
+y, a weighted score, and on a regressor of the RF layout weights together
+with importances (the estimator's own refusal). predict writes int32 codes
+(classifier) or float32 values; predict_proba float32 rows x classes; score
+(classifier only) the accuracy count / rows, unweighted.
+
+Fits, as the estimator's own fit door picks them: unweighted without
+importances reads X row-major (the view itself, no copy); the ExtraTrees
+weighted fit also reads it row-major; the RF layout's weighted fit and its
+importance fit read X column-major, so the member writes the column-major
+float32 copy the estimator's door writes for them (`order="F"`), split over
+the host workers, alive until the launch returns. The RF regressor's
+weighted fit also carries the largest weight (a parallel max).
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
   0 `MEMBER_BLOCK_FAMILY + 0` offsets int32 1 x (trees + 1)
@@ -44,7 +62,10 @@ Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
   4 `MEMBER_BLOCK_FAMILY + 4` leaves float32 nodes x outputs
   5 `MEMBER_BLOCK_SCALARS` float64 [features, trees, nodes, outputs,
     classes, n_meta, meta words...] (meta: the export's metadata words)
-An import needs all six; the last one carries MEMBER_IMPORT_DONE.
+  6 `MEMBER_BLOCK_FEATURE_IMPORTANCES` float32 1 x features, only when the
+    fit computed them (or they were imported): the block count is then 7
+An import needs the first six (importances optional, before the last); the
+last one carries MEMBER_IMPORT_DONE.
 
 The state (the five arrays, the snapshot handle) is OWNED by its slot in a
 process-wide store of fixed chunks: a slot never moves, the lock covers
@@ -52,8 +73,9 @@ mint, free and the handle lookup only. Members are independent: a caller
 runs them on its own workers, one handle each. The snapshot is prepared once
 at the end of a fit or import (never lazily, so concurrent predicts of one
 state never race on it) and released at the next fit, import or free.
-Parallel: the ET classifier's code cast, the argmax of the votes and the
-accuracy count split rows over the host workers. Serial by nature: the
+Parallel: the ET classifier's code cast, the column-major copy, the largest
+weight, the argmax of the votes and the accuracy count split rows over the
+host workers. Serial by nature: the
 store's bookkeeping.
 """
 from std.sys.info import size_of
@@ -76,16 +98,17 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT,
-    MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER,
-    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
+    MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_IMPORTANCES,
+    MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FEATURE_IMPORTANCES, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_unsupported,
 )
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
-comptime _HEAD = 11
+comptime _HEAD = 12
 comptime _BLOCKS = 6
+comptime _SLOTS_WORD = 11
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -105,6 +128,7 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     var rows_fraction: Float64
     var fast: Bool
     var groves: Bool
+    var importances: Bool
     var ints: List[Int]
     var floats: List[Float64]
     var bad: List[UInt8]
@@ -120,6 +144,8 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
     var left: List[Int32]
     var leaves: List[Float32]
     var scalars: List[Float64]
+    #: the fitted (or imported) feature importances; empty: none
+    var imp: List[Float32]
     #: the image the snapshot lives in, and the predict route words
     var key: EntryRef
     var route: Int
@@ -140,6 +166,7 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.rows_fraction = 0.0
         self.fast = False
         self.groves = False
+        self.importances = False
         self.ints = List[Int]()
         self.floats = List[Float64]()
         self.bad = List[UInt8]()
@@ -155,6 +182,7 @@ struct ForestMemberSlot(Copyable, Movable, Defaultable):
         self.left = List[Int32]()
         self.leaves = List[Float32]()
         self.scalars = List[Float64]()
+        self.imp = List[Float32]()
         self.key = entry_ref_unresolved()
         self.route = FOREST_ROUTE_SEQUENTIAL
         self.labels = False
@@ -192,11 +220,13 @@ def fm_store_address[name: StaticString]() raises -> Int:
 
 
 def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
-    var slots = Int(words[10])
+    var slots = Int(words[_SLOTS_WORD])
     if count != _HEAD + 3 * slots or slots < 3:
         raise Error("member ABI: a forest member takes " + String(_HEAD) + " words and three per parameter slot")
     if words[0] != 0.0 and words[0] != 1.0:
         raise Error("member ABI: unknown forest member kind")
+    if words[10] != 0.0 and words[1] != 0.0:
+        raise Error("NotImplementedError: mojolearn: the ExtraTrees fit computes no feature importances")
     var store = SharedSlot[ForestMemberStore, name, 2].get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
     shared_slot_lock(lock)
@@ -224,6 +254,7 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
         slot[].rows_fraction = words[7]
         slot[].fast = words[8] != 0.0
         slot[].groves = words[9] != 0.0
+        slot[].importances = words[10] != 0.0
         slot[].ints = List[Int](length=slots, fill=0)
         slot[].floats = List[Float64](length=slots, fill=0.0)
         slot[].bad = List[UInt8](length=slots, fill=0)
@@ -232,6 +263,7 @@ def _mint[name: StaticString](words: _F64P, count: Int) raises -> Int:
             slot[].floats[k] = words[_HEAD + 3 * k + 1]
             slot[].bad[k] = UInt8(1) if words[_HEAD + 3 * k + 2] != 0.0 else UInt8(0)
         slot[].fitted = False
+        slot[].imp = List[Float32]()
         slot[].snapshot = 0
         return slot[].generation * _INDEX_SPAN + index + 1
     finally:
@@ -264,6 +296,7 @@ def _lookup[name: StaticString](handle: Int, release: Bool) raises -> Int:
             slot[].left = List[Int32]()
             slot[].leaves = List[Float32]()
             slot[].scalars = List[Float64]()
+            slot[].imp = List[Float32]()
             store[].free.append(index)
         return address
     finally:
@@ -306,6 +339,52 @@ def _cast_codes(src: Int, dst: Int, rows: Int):
             target[i] = Float32(source[i])
 
     host_parallelize(task, tasks)
+
+
+def _column_major(src: Int, dst: Int, rows: Int, cols: Int):
+    """The float32 rows x cols matrix at `src` (row-major) as its
+    column-major copy at `dst` (the estimator's `order="F"` copy), split
+    over the host workers by rows."""
+    var tasks = host_predict_task_count_work(rows, rows * cols)
+    var chunk = host_predict_chunk(rows, tasks)
+    var source = _F32P(unsafe_from_address=src)
+    var target = _F32P(unsafe_from_address=dst)
+
+    def task(unit: Int) {imm source, imm target, imm chunk, imm rows, imm cols}:
+        for i in range(unit * chunk, min((unit + 1) * chunk, rows)):  # native data loop (one host task's rows)
+            for c in range(cols):  # native data loop (one row's columns)
+                target[c * rows + i] = source[i * cols + c]
+
+    host_parallelize(task, tasks)
+
+
+def _largest(src: Int, rows: Int) -> Float64:
+    """The largest of `rows` float32 weights (the estimator's
+    `reduce_stat` max): per-task maxima, then their max (any order gives
+    the same value). `rows` >= 1."""
+    var tasks = host_predict_task_count_work(rows, rows)
+    var chunk = host_predict_chunk(rows, tasks)
+    var source = _F32P(unsafe_from_address=src)
+    var tops = List[Float32](length=max(tasks, 1), fill=source[0])
+    var top_words = _F32P(unsafe_from_address=Int(tops.unsafe_ptr()))
+
+    def task(unit: Int) {imm source, imm top_words, imm chunk, imm rows}:
+        var first = unit * chunk
+        var last = min(first + chunk, rows)
+        if first >= last:
+            return
+        var top = source[first]
+        for i in range(first + 1, last):  # native data loop (one host task's rows)
+            if source[i] > top:
+                top = source[i]
+        top_words[unit] = top
+
+    host_parallelize(task, tasks)
+    var best = tops[0]
+    for t in range(1, len(tops)):  # small-loop(tasks): one maximum per host task
+        if tops[t] > best:
+            best = tops[t]
+    return Float64(best)
 
 
 def _argmax_rows(src: Int, dst: Int, rows: Int, width: Int):
@@ -393,14 +472,17 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     _whole(call, estimator)
     if call[].fit_output != 0:
         member_unsupported(estimator, call[].fit_output)
-    if call[].weights.rows > 0:
-        raise Error("NotImplementedError: mojolearn: sample_weight is not published for a " + estimator
-            + " member; the caller resamples or keeps the estimator's own fit")
     _dense(call[].x, MEMBER_F32, "X", estimator)
     if call[].y.cols != 1:
         raise Error("ValueError: a " + estimator + " member fits one target column")
     if call[].y.rows != rows:
         raise Error("ValueError: Found input variables with inconsistent numbers of samples")
+    var weighted = call[].weights.rows > 0
+    if weighted:
+        _dense(call[].weights, MEMBER_F32, "the sample weights", estimator)
+        if call[].weights.rows != rows or call[].weights.cols != 1:
+            raise Error("ValueError: sample_weight.shape == (" + String(call[].weights.rows)
+                + ",), expected (" + String(rows) + ",)!")
     var classes = 0
     if slot[].classifier:
         _dense(call[].y, MEMBER_I32, "y (class codes)", estimator)
@@ -409,8 +491,13 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
             raise Error("ValueError: y has fewer than 2 classes")
     else:
         _dense(call[].y, MEMBER_F32, "y", estimator)
+        if weighted and slot[].importances and not slot[].et:
+            # The estimator's own refusal (`_rf_fit_regressor`).
+            raise Error("NotImplementedError: sample_weight is not implemented together with oob_score, feature "
+                        + "importances or a tree-ID shard")
     _release_snapshot(slot)
     slot[].fitted = False
+    slot[].imp = List[Float32]()
     # The ET classifier reads float32 codes; the cast lives until the launch returns.
     var codes = List[Float32]()
     var y_addr = call[].y.data
@@ -418,6 +505,24 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         codes = List[Float32](length=rows, fill=0.0)
         _cast_codes(call[].y.data, Int(codes.unsafe_ptr()), rows)
         y_addr = Int(codes.unsafe_ptr())
+    # The fit the estimator's own door picks (module docstring): the RF
+    # layout's weighted and importance fits read X column-major.
+    var w_addr = call[].weights.data if weighted else 0
+    var column_major = not slot[].et and (weighted or slot[].importances)
+    var x_cols = List[Float32]()
+    var x_addr = call[].x.data
+    if column_major:
+        x_cols = List[Float32](length=rows * cols, fill=0.0)
+        _column_major(call[].x.data, Int(x_cols.unsafe_ptr()), rows, cols)
+        x_addr = Int(x_cols.unsafe_ptr())
+    var imp = List[Float32]()
+    if slot[].importances:
+        imp = List[Float32](length=cols, fill=0.0)
+    var w_max = 0.0
+    if weighted and not slot[].classifier and not slot[].et:
+        w_max = _largest(w_addr, rows)
+    var fit = ForestFit(slot[].classifier, rowmajor_ok=not column_major, weights=w_addr,
+                        importance=Int(imp.unsafe_ptr()) if slot[].importances else 0, weight_max=w_max)
     var config = ForestConfig(slot[].et, slot[].ints.copy(), slot[].floats.copy(), slot[].bad.copy())
     config.criterion = slot[].criterion
     config.features.form = slot[].form
@@ -425,11 +530,14 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
     config.features.fraction = slot[].fraction
     config.bins_image = slot[].bins_image
     config.rows_fraction = slot[].rows_fraction
-    var fit = ForestFit(slot[].classifier, rowmajor_ok=True)
-    var request = forest_request(config, key, rows, cols, classes, call[].x.data, y_addr, fit, False)
+    # `unweighted` as the ET door passes it: a weighted ET classifier fit
+    # clears the class-weight slot (its class weights travel as row weights).
+    var request = forest_request(config, key, rows, cols, classes, x_addr, y_addr, fit,
+        weighted and slot[].classifier and slot[].et)
     var device_scan = (xf_caps(key) & XF_CAP_DEVICE_SCAN) != 0
-    var handle = forest_fit_core(key, slot[].classifier, True, request, device_scan)
+    var handle = forest_fit_core(key, slot[].classifier, not column_major, request, device_scan)
     _ = len(codes)
+    _ = len(x_cols)
     try:
         var sizes = xf_export_sizes(key, handle)
         var counts = forest_export_counts(sizes)
@@ -449,6 +557,8 @@ def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estim
         _scalars(slot, sizes.meta)
     finally:
         xf_export_release(key, handle)
+    if slot[].importances:
+        slot[].imp = imp^
     _prepare(slot, key)
     slot[].fitted = True
 
@@ -542,9 +652,15 @@ def _score(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], est
     call[].value = Float64(hits) / Float64(rows) if rows > 0 else 0.0
 
 
-def _block_of(index: Int) raises -> Int:
-    if index < 0 or index >= _BLOCKS:
-        raise Error("member ABI: a forest member has six fitted blocks")
+def _block_count(slot: _SlotPtr) -> Int:
+    return _BLOCKS + 1 if len(slot[].imp) > 0 else _BLOCKS
+
+
+def _block_of(slot: _SlotPtr, index: Int) raises -> Int:
+    if index < 0 or index >= _block_count(slot):
+        raise Error("member ABI: this forest member has " + String(_block_count(slot)) + " fitted blocks")
+    if index == 6:
+        return MEMBER_BLOCK_FEATURE_IMPORTANCES
     return MEMBER_BLOCK_SCALARS if index == 5 else MEMBER_BLOCK_FAMILY + index
 
 
@@ -554,7 +670,7 @@ def _export(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
     _require_fitted(slot, estimator)
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
-        block = _block_of(block)
+        block = _block_of(slot, block)
     if block == MEMBER_BLOCK_FAMILY:
         call[].dst = MemberMatrix(Int(slot[].offsets.unsafe_ptr()), 1, len(slot[].offsets), MEMBER_I32)
     elif block == MEMBER_BLOCK_FAMILY + 1:
@@ -567,10 +683,15 @@ def _export(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
         call[].dst = MemberMatrix(Int(slot[].leaves.unsafe_ptr()), slot[].nodes, slot[].outputs, MEMBER_F32)
     elif block == MEMBER_BLOCK_SCALARS:
         call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif block == MEMBER_BLOCK_FEATURE_IMPORTANCES and len(slot[].imp) > 0:
+        call[].dst = MemberMatrix(Int(slot[].imp.unsafe_ptr()), 1, len(slot[].imp), MEMBER_F32)
+    elif block == MEMBER_BLOCK_FEATURE_IMPORTANCES:
+        raise Error("AttributeError: this " + estimator + " member was fitted without feature importances "
+            + "(parameter word 10)")
     else:
         raise Error("member ABI: a forest member has no fitted block " + String(block))
     call[].block = block
-    call[].out_cols = _BLOCKS
+    call[].out_cols = _block_count(slot)
 
 
 def _copy_i32(view: MemberMatrix, estimator: String) raises -> List[Int32]:
@@ -598,6 +719,8 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
         _release_snapshot(slot)
         slot[].fitted = False
     if block == MEMBER_BLOCK_FAMILY:
+        # The first block of an import: importances only when imported again.
+        slot[].imp = List[Float32]()
         slot[].offsets = _copy_i32(call[].x, estimator)
     elif block == MEMBER_BLOCK_FAMILY + 1:
         slot[].colid = _copy_i32(call[].x, estimator)
@@ -607,6 +730,10 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
         slot[].left = _copy_i32(call[].x, estimator)
     elif block == MEMBER_BLOCK_FAMILY + 4:
         slot[].leaves = _copy_f32(call[].x, estimator)
+    elif block == MEMBER_BLOCK_FEATURE_IMPORTANCES:
+        if slot[].et:
+            raise Error("member ABI: an ExtraTrees member has no feature importances block")
+        slot[].imp = _copy_f32(call[].x, estimator)
     elif block == MEMBER_BLOCK_SCALARS:
         if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols < 6:
             raise Error("member ABI: the forest scalars block is host float64 words "
@@ -638,24 +765,31 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
         raise Error("forest model array shapes do not match metadata")
     if slot[].classifier and slot[].classes != slot[].outputs:
         raise Error("member ABI: a forest classifier's class count differs from its outputs")
+    if len(slot[].imp) > 0 and len(slot[].imp) != slot[].features:
+        raise Error("member ABI: the forest feature importances block holds one word per feature")
     _prepare(slot, call[].route.entry)
     slot[].fitted = True
 
 
-def _capabilities(classifier: Bool) -> Int:
-    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+def _capabilities(classifier: Bool, importances: Bool) -> Int:
+    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+    if importances:
+        mask |= MEMBER_CAN_IMPORTANCES
     if classifier:
         mask |= MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE | MEMBER_CAN_CLASSIFIER
     return mask
 
 
-def fm_member[name: StaticString](operation: Int, address: Int, estimator: String) raises -> Int:
-    """One member call on the store `name` (the family's own store)."""
+def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int, estimator: String) raises -> Int:
+    """One member call on the store `name` (the family's own store).
+    `rf_layout`: the family fits on the RF slots (Tree, Forest), whose fit
+    computes feature importances; the ExtraTrees family does not."""
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _capabilities(True)
-        return _capabilities(_SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))[].classifier)
+            return _capabilities(True, rf_layout)
+        var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
+        return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0)
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a forest member needs its parameter words")

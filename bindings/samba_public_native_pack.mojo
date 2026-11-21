@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """One compiled Samba boundary for public and distributed model operations."""
-from bindings.torch_parameters_pack import torch_parameter_form
+from bindings.torch_parameter_form_pack import torch_parameter_form
 from std.python import Python, PythonObject
 from bindings.samba_keys_unpack import samba_keys
 from bindings.samba_keys_unpack import (

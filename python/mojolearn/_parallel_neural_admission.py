@@ -9,8 +9,8 @@ def connect(context, owner_cls, model_cls):
     source = context['admission']
     admission = dict(source)
     fields = (
-        '_operation', '_pool', '_update_pool', 'model', 'logical_shards',
-        '_lock', '_closed', '_gradients', '_opt', '_session', '_config', '_schedule',
+        '_pool', '_update_pool', 'model', 'logical_shards',
+        '_lock', '_opt', '_session', '_config', '_schedule',
         '_handle',
     )
     records, guards = list(source['records']), list(source['guards'])
@@ -25,7 +25,7 @@ def connect(context, owner_cls, model_cls):
     admission['records'] = tuple(records)
     admission['guards'] = tuple(guards)
     admission['metadata_fields'] = source['metadata_fields'] + (
-        '_operation', 'logical_shards', '_closed', '_session', '_config', '_schedule',
+        'logical_shards', '_session', '_config', '_schedule',
         '_handle',
     )
     # Worker sockets are the native POSIX transport's PyCapsule owners

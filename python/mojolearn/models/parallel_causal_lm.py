@@ -110,7 +110,16 @@ class ParallelCausalLM(_CausalLM):
         return _native_parallel_causal("rpc", (self, device, operation, args))
 
     def parameters(self):
-        return _native_parallel_causal("parameters", (self,))
+        """An iterator over the weight arrays, as ``torch.nn.Module.parameters``."""
+        return _native_parallel_causal("parameters", (self, 1))
+
+    def named_parameters(self):
+        """An iterator over ``(checkpoint name, array)`` pairs."""
+        return _native_parallel_causal("parameters", (self, 2))
+
+    def state_dict(self):
+        """The weights as a dict from checkpoint name to array."""
+        return _native_parallel_causal("parameters", (self, 0))
 
     def close(self):
         return _native_parallel_causal("close", (self,))

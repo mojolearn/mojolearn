@@ -43,7 +43,7 @@ from bindings.xcnn_common_door import (
     xcnn_on_dev, xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_host_i32, xcnn_device_io_off,
     xcnn_dev_fields, xcnn_reshape_t, xcnn_dev_get_f, xcnn_out_new, xcnn_plain_scalar,
-    xcnn_device_init, xcnn_device_inherit,
+    xcnn_device_init, xcnn_device_inherit, xcnn_reshape, xcnn_slice_f32, xcnn_state_mapping,
 )
 from core.entry_table import EntryRef
 from x_cnn.graph_layer_run import (
@@ -1493,6 +1493,92 @@ def _sage_backward_host(fields: PythonObject, entries: PythonObject, g: PythonOb
     _ = keep
     _ = g
     return dx
+
+
+def xcnn_graph_state(layer: PythonObject, sage: Bool, load: Bool, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """GCNConv / SAGEConv `state_dict()` / `load_state_dict(sd)` with PyG's
+    names and layouts (lane api-torch round 3). GCNConv: `bias` (bias=True),
+    `lin.weight` `(out, in)`. SAGEConv: `lin.weight` `(in, in)` and
+    `lin.bias` (project=True), `lin_l.weight` `(out, in)`, `lin_l.bias`
+    (bias=True), `lin_r.weight` `(out, in)` (root_weight=True); PyG's order.
+    state_dict returns copies; load_state_dict is torch's `strict=True` and
+    checks every name and shape before any field changes (the forward reads
+    the weights from these fields at each call: nothing else to refresh).
+    Cold API call."""
+    var nk = xcnn_keys()
+    var fields = _graph_layer_fields(layer, context)
+    var d = Int(py=py_item(fields, nk[].k_in_channels))
+    var f = Int(py=py_item(fields, nk[].k_out_channels))
+    var bias = Bool(py=py_item(fields, nk[].k_bias))
+    var names = List[String]()
+    var owners = List[PythonObject]()
+    var slots = List[String]()
+    var shapes = List[List[Int]]()
+    if not sage:
+        if bias:
+            names.append("bias")
+            owners.append(fields)
+            slots.append("bias_")
+            shapes.append([f])
+        names.append("lin.weight")
+        owners.append(fields)
+        slots.append("weight_")
+        shapes.append([f, d])
+    else:
+        var lin = py_get(fields, nk[].k_lin)
+        if lin is not None:
+            var lf = _linear_fields(lin, context)
+            names.append("lin.weight")
+            owners.append(lf)
+            slots.append("weight_")
+            shapes.append([d, d])
+            names.append("lin.bias")
+            owners.append(lf)
+            slots.append("bias_")
+            shapes.append([d])
+        var ll = _linear_fields(py_item(fields, nk[].k_lin_l), context)
+        names.append("lin_l.weight")
+        owners.append(ll)
+        slots.append("weight_")
+        shapes.append([f, d])
+        if bias:
+            names.append("lin_l.bias")
+            owners.append(ll)
+            slots.append("bias_")
+            shapes.append([f])
+        if Bool(py=py_item(fields, nk[].k_root_weight)):
+            names.append("lin_r.weight")
+            owners.append(fields)
+            slots.append("weight_r_")
+            shapes.append([f, d])
+    var what = String("SAGEConv") if sage else String("GCNConv")
+    var b = xcnn_builtins()
+    if not load:
+        var result = b.dict()
+        for k in range(len(names)):  # driver-loop: over the layer's named tensors
+            var held = xcnn_f32(py_item(owners[k], PythonObject(slots[k])), slots[k], context)
+            var size = xcnn_size(shapes[k])
+            if xcnn_size(xcnn_shape(held)) != size:
+                raise Error("RuntimeError: " + what + ".state_dict: '" + slots[k] + "' has the wrong size")
+            py_setitem(result, PythonObject(names[k]), xcnn_reshape(xcnn_slice_f32(held, 0, size, context), shapes[k], context))
+        return result
+    var sd = xcnn_state_mapping(args[0], names, what)
+    var values = List[PythonObject]()
+    for k in range(len(names)):  # driver-loop: over the layer's named tensors (checked before any write)
+        var given = xcnn_f32(sd[PythonObject(names[k])], names[k], context)
+        var shape = xcnn_shape(given)
+        var same = len(shape) == len(shapes[k])
+        if same:
+            for j in range(len(shape)):  # small-loop(rank 1 or 2)
+                if shape[j] != shapes[k][j]:
+                    same = False
+        if not same:
+            raise Error("ValueError: " + what + ".load_state_dict: '" + names[k] + "' has the wrong shape")
+        var size = xcnn_size(shapes[k])
+        values.append(xcnn_reshape(xcnn_slice_f32(given, 0, size, context), shapes[k], context))
+    for k in range(len(names)):  # driver-loop: over the checked tensors
+        py_setitem(owners[k], PythonObject(slots[k]), values[k])
+    return layer
 
 
 def xcnn_graph_layers(layer: PythonObject, operation: Int, name: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
