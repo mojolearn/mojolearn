@@ -154,62 +154,127 @@ comptime SHARD_TRACE = SharedSlot[ShardTrace, "MojolearnParallelShardTraceV4", 4
 struct ShardIdle(Defaultable, Movable):
     #: {(child module, devices tuple): [pool, parent environment snapshot, owner pid]}
     var pools: PythonObject
-    #: a WORKER's stored call operands, {token: payload tuple} (`shard_store`)
-    var stored: PythonObject
+    # A WORKER's stored call operands (`shard_store`), typed (lane pools-frame,
+    # 2026-11-21: it was a Python dict {token: payload tuple}). One entry per
+    # call in flight on this worker, so the token scan is over one entry in
+    # practice. `stored_payloads[i]` is the boundary pin of the payload tuple
+    # as its frame was PACKed; `stored_models[i]` is the model built from the
+    # call's stored state at its first request (None until then), dropped
+    # with the store at the call's release.
+    var stored_tokens: List[String]
+    var stored_payloads: List[PythonObject]
+    var stored_models: List[PythonObject]
 
     def __init__(out self):
         self.pools = PythonObject(None)
-        self.stored = PythonObject(None)
+        self.stored_tokens = List[String]()
+        self.stored_payloads = List[PythonObject]()
+        self.stored_models = List[PythonObject]()
+
+    def find(self, token: String) -> Int:
+        """The store entry of `token`, or -1."""
+        for i in range(len(self.stored_tokens)):  # small-loop(the calls in flight on this worker: one)
+            if self.stored_tokens[i] == token:
+                return i
+        return -1
 
 
 def shard_store_put(token: PythonObject, payload: PythonObject) raises -> PythonObject:
     """A worker's `shard_store`: keep `payload` under `token` for the call."""
     var idle = SHARD_IDLE.get_or_create_ptr()
-    if idle[].stored is None:
-        idle[].stored = shard_b().dict()
+    if py_type(token) is not shard_b().str:
+        raise Error("parallel shards: a store token is a string")
     if py_type(payload) is not shard_b().tuple:
         raise Error("parallel shards: a stored payload is a tuple")
-    py_setitem(idle[].stored, token, payload)
+    var name = String(token)
+    var at = idle[].find(name)
+    if at >= 0:
+        idle[].stored_payloads[at] = payload
+        idle[].stored_models[at] = PythonObject(None)
+    else:
+        idle[].stored_tokens.append(name^)
+        idle[].stored_payloads.append(payload)
+        idle[].stored_models.append(PythonObject(None))
     return PythonObject(True)
 
 
 def shard_store_drop(token: PythonObject) raises -> PythonObject:
-    """A worker's `shard_release`: drop the call's stored operands."""
+    """A worker's `shard_release`: drop the call's stored operands and the
+    model built from them."""
     var idle = SHARD_IDLE.get_or_create_ptr()
-    if idle[].stored is not None:
-        _ = py_call(idle[].stored.pop, token, PythonObject(None))
+    if py_type(token) is shard_b().str:
+        var at = idle[].find(String(token))
+        if at >= 0:
+            _ = idle[].stored_tokens.pop(at)
+            _ = idle[].stored_payloads.pop(at)
+            _ = idle[].stored_models.pop(at)
     return PythonObject(True)
+
+
+def _stored_entry(reference: PythonObject) raises -> Int:
+    """The store entry a `shard_stored_ref` names; refused when this worker
+    holds none."""
+    var at = SHARD_IDLE.get_or_create_ptr()[].find(String(reference[1]))
+    if at < 0:
+        raise Error("parallel shards: no stored operands for this call on this worker")
+    return at
 
 
 def shard_resolve_stored(value: PythonObject) raises -> PythonObject:
     """A request's state or argument tuple with every top-level
     `shard_stored_ref` replaced by the stored operand it names; any other
-    value is returned as is."""
+    value is returned as is. One pass: each operand is tested once (it was
+    tested in a first pass and again in the second), and the result tuple is
+    built only from the first reference on."""
     var b = shard_b()
     if py_type(value) is not b.tuple:
         return value
-    var any_ref = False
-    for i in range(len(value)):  # small-loop(a request tuple's few operands)
-        if _is_stored_ref(value[i]):
-            any_ref = True
-    if not any_ref:
-        return value
-    var idle = SHARD_IDLE.get_or_create_ptr()
-    var out = b.list()
+    var out = PythonObject(None)
     for i in range(len(value)):  # small-loop(a request tuple's few operands)
         var item = value[i]
         if _is_stored_ref(item):
-            var payload = PythonObject(None)
-            if idle[].stored is not None:
-                payload = py_get(idle[].stored, item[1], PythonObject(None))
-            if payload is None:
-                raise Error("parallel shards: no stored operands for this call on this worker")
+            if out is None:
+                out = b.list()
+                for j in range(i):  # small-loop(the operands before the first reference)
+                    _ = py_call(out.append, value[j])
+            var payload = SHARD_IDLE.get_or_create_ptr()[].stored_payloads[_stored_entry(item)]
             var k = Int(py=item[2])
             shard_stored_index_admit(k, len(payload))
             _ = py_call(out.append, payload[k])
-        else:
+        elif out is not None:
             _ = py_call(out.append, item)
+    if out is None:
+        return value
     return py_call(b.tuple, out)
+
+
+def shard_stored_model(cls: PythonObject, state: PythonObject) raises -> PythonObject:
+    """A worker's model of `cls` for one request's `state`.
+
+    `state` is either the state record itself (a call with at most one
+    request per worker sends it with that request) or a one-operand tuple
+    holding a `shard_stored_ref` (a call with more requests than workers
+    stores the record once per worker). For a stored record the model is
+    built at the call's first request on this worker and held beside the
+    store until the call's release: one model per call per worker, where
+    every request used to carry the whole record and rebuild the model."""
+    var b = shard_b()
+    if py_type(state) is not b.tuple:
+        return shard_model(cls, state)
+    if len(state) != 1 or not _is_stored_ref(state[0]):
+        raise Error("parallel shards: a stored model state is one stored operand")
+    var reference = state[0]
+    var at = _stored_entry(reference)
+    var idle = SHARD_IDLE.get_or_create_ptr()
+    if idle[].stored_models[at] is None:
+        var payload = idle[].stored_payloads[at]
+        var k = Int(py=reference[2])
+        shard_stored_index_admit(k, len(payload))
+        var built = shard_model(cls, payload[k])
+        # The slot is read again: building a model can run a collection.
+        idle = SHARD_IDLE.get_or_create_ptr()
+        idle[].stored_models[at] = built
+    return idle[].stored_models[at]
 
 
 def _is_stored_ref(item: PythonObject) raises -> Bool:
@@ -231,7 +296,8 @@ def _is_stored_ref(item: PythonObject) raises -> Bool:
 #: workers by identity and starts its own trace record, as a fresh pool
 #: does. A failed call closes its pool and nothing is kept. Workers held
 #: here end when the parent process ends (their socket closes).
-comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV2", 2]
+#: V3: the worker store is typed (tokens, payload pins, models).
+comptime SHARD_IDLE = SharedSlot[ShardIdle, "MojolearnParallelShardIdleV3", 3]
 
 
 def shard_identity() raises -> PythonObject:

@@ -71,6 +71,7 @@ from bindings.parallel_shard_common_door import (
     shard_concat,
     shard_state,
     shard_model,
+    shard_stored_model,
     shard_array,
     shard_join_rows,
     shard_row_vector,
@@ -262,13 +263,22 @@ def _transform_rbf_sampler(args: PythonObject) raises -> PythonObject:
     var n_devices = shard_devices(args[2])
     var ranges = shard_ranges(rows, rps, "rows_per_shard", "")
     var state = shard_state(fields, b.frozenset(Python.list("_resident_holder")), context)
+    # With more row blocks than workers the fitted state (the random weights
+    # and offsets) goes to each worker once (`shard_run_stored`) and each
+    # worker builds its model once for the call (`shard_stored_model`); it
+    # rode with every row block, and every block rebuilt the model, before
+    # 2026-11-21. With at most one block per worker the state rides with it.
+    var stored = len(ranges) // 2 > n_devices
+    var token = shard_store_token() if stored else String("")
+    var carried = Python.tuple(shard_stored_ref(token, 0)) if stored else state
     var requests = shard_wave()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per row block
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
-        requests.add(PARALLEL_SHARD_WORKER_OPN_RBF_ROWS, state, Python.tuple(shard_rows(x, lo - shift, hi - shift, context)))
-    var parts = shard_run(requests, args[2], _CHILD)
+        requests.add(PARALLEL_SHARD_WORKER_OPN_RBF_ROWS, carried, Python.tuple(shard_rows(x, lo - shift, hi - shift, context)))
+    var parts = (shard_run_stored(Python.tuple(state), token, requests, args[2], _CHILD) if stored
+                 else shard_run(requests, args[2], _CHILD))
     var q = Int(py=py_item(fields, nk[].k_random_weights_).shape[1])
     for r in range(len(parts)):  # driver-loop: checks one result block per row shard
         var part = parts[r]
@@ -1490,16 +1500,19 @@ def shard_worker_dispatch(operation: Int, request: PythonObject) raises -> Pytho
         return shard_store_put(request[0], request[1])
     if operation == PARALLEL_SHARD_WORKER_OPN_SHARD_RELEASE:
         return shard_store_drop(request[0])
-    var state = shard_resolve_stored(request[0])
-    var args = shard_resolve_stored(request[1])
     if operation == PARALLEL_SHARD_WORKER_OPN_RBF_ROWS:
-        var model = shard_model(_t("rbf_class"), state)
+        # The model of the call, built once per worker when its state is
+        # stored (`shard_stored_model`); only the row block rides here.
+        var model = shard_stored_model(_t("rbf_class"), request[0])
+        var args = request[1]
         var rows_pin = ArrayPin()
         var rows_meta = admit_family_meta(args[0], 2, "X", context, rows_pin, True)
         var rows_out = _rbf_transform(model, Python.tuple(_worker_binding("_mojolearn_kernel_methods"), rows_pin.keep),
                                       context, rows_meta, rows_pin)
         _ = rows_pin^
         return rows_out
+    var state = shard_resolve_stored(request[0])
+    var args = shard_resolve_stored(request[1])
     if operation == PARALLEL_SHARD_WORKER_OPN_SCALER_FIT or operation == PARALLEL_SHARD_WORKER_OPN_SCALER_TRANSFORM:
         return _scaler_worker(operation, state, args, context)
     # The GPC sites call the GP table entry (core/gp_entry_table.mojo) of the
