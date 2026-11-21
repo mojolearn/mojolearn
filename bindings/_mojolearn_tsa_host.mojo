@@ -69,6 +69,7 @@ from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
 from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
+from tsa.tsa_ops_host import publish_tsa_hw_ops_host
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -209,6 +210,11 @@ def build__mojolearn_tsa_host() -> PythonObject:
         module.def_function[holtwinters_predict_binding]("holtwinters_predict")
         module.def_function[kpss_test_binding]("kpss_test")
         module.def_function[select_d_host_binding]("select_d")
-        return module.finalize()
+        # The Holt-Winters operations table (core/tsa_entry_table.mojo): the
+        # ExponentialSmoothing owner resolves it once per estimator and calls
+        # through it; published once the module is ready.
+        var published_module = module.finalize()
+        publish_tsa_hw_ops_host()
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_tsa_host: ", error))

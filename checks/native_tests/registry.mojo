@@ -599,6 +599,7 @@ from checks.native_tests.x_neighbors_semi_check import register as register_x_ne
 from checks.native_tests.x_neighbors_sketch_check import register as register_x_neighbors_sketch_check
 from checks.native_tests.xtrees_glue_check import register as register_xtrees_glue_check
 from checks.native_tests.xtrees_zero_cover_check import register as register_xtrees_zero_cover_check
+from checks.native_tests.tsa_hw_route import register as register_tsa_hw_route
 
 def all_checks() -> List[Check]:
     var checks = List[Check]()
@@ -1180,4 +1181,5 @@ def all_checks() -> List[Check]:
     checks.append(register_x_neighbors_sketch_check())
     checks.append(register_xtrees_glue_check())
     checks.append(register_xtrees_zero_cover_check())
+    checks.append(register_tsa_hw_route())
     return checks^

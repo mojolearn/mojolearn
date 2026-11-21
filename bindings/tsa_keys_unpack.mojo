@@ -30,6 +30,7 @@ comptime TSA_OPN_AUTOARIMA_INITIALIZE = 17
 comptime TSA_OPN_AUTOARIMA_FORECAST = 18
 comptime TSA_OPN_AUTOARIMA_FIT = 19
 comptime TSA_OPN_AUTOARIMA_PREDICT = 20
+comptime TSA_OPN_HW_VENDOR_USED = 21
 
 
 struct TsaKeys(Defaultable, Movable):
@@ -90,12 +91,15 @@ struct TsaKeys(Defaultable, Movable):
     var k_eps: PythonObject
     var k_fit_executed_flag: PythonObject
     var k_fx_: PythonObject
-    var k_holtwinters_query_resident: PythonObject
-    var k_holtwinters_resident_prepare: PythonObject
-    var k_holtwinters_resident_release: PythonObject
     var k_hw_bindings: PythonObject
+    var k_device: PythonObject
+    var k_hw_cpu_bindings: PythonObject
+    var k_hw_install_vendor: PythonObject
+    var k_hw_cell_family: PythonObject
+    var k_hw_cell_mode: PythonObject
+    var k_hw_cell_vendor: PythonObject
+    var k_hw_cell_module: PythonObject
     var k_hw_class: PythonObject
-    var k_hw_entry_names: PythonObject
     var k_hw_host_module: PythonObject
     var k_hw_init_codes: PythonObject
     var k_ic_: PythonObject
@@ -196,12 +200,15 @@ struct TsaKeys(Defaultable, Movable):
         self.k_eps = PythonObject(None)
         self.k_fit_executed_flag = PythonObject(None)
         self.k_fx_ = PythonObject(None)
-        self.k_holtwinters_query_resident = PythonObject(None)
-        self.k_holtwinters_resident_prepare = PythonObject(None)
-        self.k_holtwinters_resident_release = PythonObject(None)
         self.k_hw_bindings = PythonObject(None)
+        self.k_device = PythonObject(None)
+        self.k_hw_cpu_bindings = PythonObject(None)
+        self.k_hw_install_vendor = PythonObject(None)
+        self.k_hw_cell_family = PythonObject(None)
+        self.k_hw_cell_mode = PythonObject(None)
+        self.k_hw_cell_vendor = PythonObject(None)
+        self.k_hw_cell_module = PythonObject(None)
         self.k_hw_class = PythonObject(None)
-        self.k_hw_entry_names = PythonObject(None)
         self.k_hw_host_module = PythonObject(None)
         self.k_hw_init_codes = PythonObject(None)
         self.k_ic_ = PythonObject(None)
@@ -306,12 +313,15 @@ def _tsa_keys_fill(nk: UnsafePointer[TsaKeys, MutUntrackedOrigin]) raises:
     nk[].k_eps = py_key("eps")
     nk[].k_fit_executed_flag = py_key("fit_executed_flag")
     nk[].k_fx_ = py_key("fx_")
-    nk[].k_holtwinters_query_resident = py_key("holtwinters_query_resident")
-    nk[].k_holtwinters_resident_prepare = py_key("holtwinters_resident_prepare")
-    nk[].k_holtwinters_resident_release = py_key("holtwinters_resident_release")
     nk[].k_hw_bindings = py_key("hw_bindings")
+    nk[].k_device = py_key("device")
+    nk[].k_hw_cpu_bindings = py_key("hw_cpu_bindings")
+    nk[].k_hw_install_vendor = py_key("hw_install_vendor")
+    nk[].k_hw_cell_family = py_key("family")
+    nk[].k_hw_cell_mode = py_key("mode")
+    nk[].k_hw_cell_vendor = py_key("vendor")
+    nk[].k_hw_cell_module = py_key("module")
     nk[].k_hw_class = py_key("hw_class")
-    nk[].k_hw_entry_names = py_key("hw_entry_names")
     nk[].k_hw_host_module = py_key("hw_host_module")
     nk[].k_hw_init_codes = py_key("hw_init_codes")
     nk[].k_ic_ = py_key("ic_")
@@ -365,6 +375,7 @@ def _tsa_keys_fill(nk: UnsafePointer[TsaKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "hw_fit", TSA_OPN_HW_FIT)
     py_op_add(ops, "hw_predict", TSA_OPN_HW_PREDICT)
     py_op_add(ops, "hw_score", TSA_OPN_HW_SCORE)
+    py_op_add(ops, "hw_vendor_used", TSA_OPN_HW_VENDOR_USED)
     py_op_add(ops, "arima_initialize", TSA_OPN_ARIMA_INITIALIZE)
     py_op_add(ops, "arima_parameter", TSA_OPN_ARIMA_PARAMETER)
     py_op_add(ops, "arima_repr", TSA_OPN_ARIMA_REPR)
