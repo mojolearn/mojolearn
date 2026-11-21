@@ -48,9 +48,28 @@ def shared_context():
                        classifier_labels_class=ClassLabels,
                        classifier_labels_namespace=dict(vars(ClassLabels)),
                        classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels))
+        # The CPU metrics connection every family's device route shares
+        # (providers/python/metrics_route_boundary_door.mojo
+        # `device_route_metrics_cpu`): on a GPU installation, the R^2 /
+        # accuracy programs of a device="cpu" estimator's score.
+        context["metrics_cpu_cells"] = _cpu_metrics_cells()
         _CONTEXT = context
         _connect_context_module()
     return _CONTEXT
+
+
+def _cpu_metrics_cells():
+    # glue: import-time connection, once, of the CPU metrics program table
+    # beside the device one; the refusal text when it cannot be connected. A
+    # CPU-only process has no second table (its own is the CPU one).
+    from . import _backend
+    from ._native_classical_bridge import _native_table_cells, _CPU_DEVICE_METRICS_HOST
+    if _backend._CPU_ONLY is not None:
+        return "ImportError: this installation is CPU only; its own metrics table is the CPU one"
+    try:
+        return _native_table_cells(_backend.load_host_module(_CPU_DEVICE_METRICS_HOST), "x_metrics")  # import-time: the CPU metrics image beside the device one
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError, LookupError) as error:
+        return type(error).__name__ + ": " + str(error)
 
 
 def connect():

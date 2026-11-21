@@ -22,6 +22,14 @@ def test_native_metadata_dependency_closure_is_enforced():
     assert 'PythonObject' not in NATIVE
 
 
+def test_layer_request_and_route_types_are_native():
+    # dw-neural-models (2026-11-21): the typed layer request and route import no Python.
+    result = audit(roots=('core.causal_layer_run',))
+    assert result['passed'], result['failures']
+    source = (ROOT / 'core/causal_layer_run.mojo').read_text()
+    assert 'PythonObject' not in source and 'std.python' not in source
+
+
 def test_layer_inner_execution_uses_native_dimensions_and_weight_addresses():
     body = function('_causal_layer_run_bound')
     assert 'return _causal_layer_run_bound(' in function('_causal_layer_run_prepared')
@@ -95,14 +103,26 @@ def test_prepared_embedding_head_and_layer_loop_do_not_read_model_metadata():
 
 
 def test_existing_standalone_and_profile_routes_remain_available():
-    layer = function('causal_layer_run')
-    assert 'GenerationLayerSnapshot(_block(mods, model, i), kind, planes)' in layer
+    # dw-neural-models (2026-11-21): the SimpleNamespace-owner layer run (causal_layer_run) had no caller and is
+    # deleted; the standalone door is causal_layer_run_fields with the plan's typed route.
+    assert not re.search(r'^def causal_layer_run\(', BINDING, re.M)
+    layer = function('causal_layer_run_fields')
+    assert 'GenerationLayerSnapshot(fields, kind, planes)' in layer
+    assert 'py_contains(entries' not in layer and 'entries[' not in layer
     body = function('_causal_layer_run_bound')
+    run = function('_causal_layer_request_run')
+    assert 'PythonObject' not in run and 'py_' not in run
+    assert 'transformer_block_session_run_words(request.entry, request.handle, request.operation,' in run
+    assert '_causal_table_call(request.entry, request.operation, request.addresses, request.words, request.floats)' in run
+    # the layer run reads no entry word by name per call: the arms test the typed route
+    for name in ('e["cpu"]', 'py_contains(e, "block_session")', 'e["mamba1_profile"]', 'causal_entry_key(e)'):
+        assert name not in body
+    assert body.index('\n    # RUN\n') < body.index('result = _causal_layer_request_run(request)') < body.index('\n    # PACK\n')
     assert 'return _causal_layer_run_bound(' in function('_causal_layer_run_prepared')
     # 3daf242df3: the CPU block runs through the CausalLM entry table (plain and fixed15 ops); the GPU block runs
     # its native session (plain and fixed15 ops); the bound Python forward/decode entries remain the fallback.
     for route in ('CAUSAL_BLOCK_HOST_FORWARD_INT15 if head_profile else CAUSAL_BLOCK_HOST_FORWARD',
-                  'transformer_block_session_run(session,',
+                  'request.handle = transformer_block_session_handle(session)',
                   'NEURAL_BLOCK_SESSION_FORWARD_INT15 if device15 else NEURAL_BLOCK_SESSION_FORWARD',
                   'e["decode" if step else "forward"]'):
         assert route in body

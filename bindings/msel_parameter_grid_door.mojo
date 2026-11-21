@@ -10,6 +10,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_setitem
 from bindings.msel_search_state_door import msel_parameter_values
+from bindings.msel_parameter_grid_run import ParameterGridShape, parameter_grid_advance
 
 
 def parameter_grid_dicts(param_grid_in: PythonObject, context: PythonObject,
@@ -42,25 +43,32 @@ def parameter_grid_dicts(param_grid_in: PythonObject, context: PythonObject,
 
 
 struct ParameterGridRow(Movable):
+    """The owners of one parameter dictionary: its names and its prepared
+    choice lists (opaque to RUN)."""
     var keys: List[PythonObject]
     var choices: List[PythonObject]
-    var widths: List[Int]
 
-    def __init__(out self, captured: PythonObject, b: PythonObject, sorted_keys: Bool) raises:
+    def __init__(out self, captured: PythonObject, b: PythonObject, sorted_keys: Bool,
+                 mut shape: ParameterGridShape) raises:
         var names = py_call(b.sorted, captured) if sorted_keys else py_call(b.list, captured)
         self.keys = List[PythonObject]()
         self.choices = List[PythonObject]()
-        self.widths = List[Int]()
+        var widths = List[Int]()
         for i in range(len(names)):  # driver-loop: retain exact key/choice owners once before enumeration
             var key = names[i]
             var values = captured[key]
             self.keys.append(key)
             self.choices.append(values)
-            self.widths.append(len(values))
+            widths.append(len(values))
+        shape.add(widths^)
 
 
 struct PreparedParameterGrid(Movable):
+    """UNPACK of a parameter grid: the owners (`rows`) and the typed shape
+    RUN computes on (bindings/msel_parameter_grid_run.mojo); `item` and
+    `expand` are the PACK of candidates from RUN's positions."""
     var rows: List[ParameterGridRow]
+    var shape: ParameterGridShape
 
     def __init__(out self, source: PythonObject, context: PythonObject,
                  captured: Bool = False, sorted_keys: Bool = True) raises:
@@ -68,20 +76,17 @@ struct PreparedParameterGrid(Movable):
         # distribution admission, which already prepared these exact lists.
         var grids = source if captured else parameter_grid_dicts(source, context, True)
         var b = native_loaded_module("builtins")
-        self.rows = List[ParameterGridRow]()
+        var rows = List[ParameterGridRow]()
+        var shape = ParameterGridShape()
         # Finish every insertion-order validation before sorting/expansion,
         # matching the old grid_dicts -> grid_list refusal boundary.
         for i in range(len(grids)):  # driver-loop: one native schema per parameter dictionary
-            self.rows.append(ParameterGridRow(grids[i], b, sorted_keys))
+            rows.append(ParameterGridRow(grids[i], b, sorted_keys, shape))
+        self.rows = rows^
+        self.shape = shape^
 
     def count(self) -> Int:
-        var total = 0
-        for i in range(len(self.rows)):  # driver-loop: native cardinalities; no value rematerialization
-            var count = 1
-            for j in range(len(self.rows[i].widths)):  # driver-loop: dimensions of one grid
-                count *= self.rows[i].widths[j]
-            total += count
-        return total
+        return self.shape.count()
 
     def item(self, index_in: Int) raises -> PythonObject:
         """`list(ParameterGrid)[index]` without expanding the grid: the
@@ -89,30 +94,13 @@ struct PreparedParameterGrid(Movable):
         rightmost parameter fastest, as `expand` emits them (lane
         perf-sweep-msel-nbr-svc: `ParameterGrid[i]` expanded every candidate
         to return one)."""
-        var total = self.count()
-        var index = index_in + total if index_in < 0 else index_in
-        if index < 0 or index >= total:
-            raise Error("IndexError: list index out of range")
-        for i in range(len(self.rows)):  # driver-loop: outer grids, in emission order
-            ref row = self.rows[i]
-            var size = 1
-            for j in range(len(row.widths)):  # driver-loop: dimensions of one grid
-                size *= row.widths[j]
-            if index >= size:
-                index -= size
-                continue
-            var rank = len(row.keys)
-            var positions = List[Int](length=rank, fill=0)
-            var axis = rank - 1
-            while axis >= 0:  # driver-loop: mixed-radix digits of one candidate
-                positions[axis] = index % row.widths[axis]
-                index //= row.widths[axis]
-                axis -= 1
-            var candidate = Python.dict()
-            for j in range(rank):  # driver-loop: sorted parameter insertion order
-                py_setitem(candidate, row.keys[j], row.choices[j][positions[j]])
-            return candidate
-        raise Error("IndexError: list index out of range")
+        var positions = List[Int]()
+        var i = self.shape.locate(index_in, positions)
+        ref row = self.rows[i]
+        var candidate = Python.dict()
+        for j in range(len(row.keys)):  # driver-loop: sorted parameter insertion order
+            py_setitem(candidate, row.keys[j], row.choices[j][positions[j]])
+        return candidate
 
     def expand(self) raises -> PythonObject:
         var output = Python.list()
@@ -122,6 +110,7 @@ struct PreparedParameterGrid(Movable):
         var get_item = cpy.lib.get_function[PyObjectPtr]("PyList_GetItem")
         for i in range(len(self.rows)):  # driver-loop: preserve outer-grid ordering
             ref row = self.rows[i]
+            ref widths = self.shape.widths[i]
             var rank = len(row.keys)
             var positions = List[Int](length=rank, fill=0)
             while True:  # driver-loop: emit final dictionaries directly, without product tuples/zip/dict calls
@@ -135,15 +124,8 @@ struct PreparedParameterGrid(Movable):
                 if append(output._obj_ptr, candidate._obj_ptr) != 0:
                     raise cpy.unsafe_get_error()
                 _ = candidate  # retain through the borrowed C call above
-                # Rightmost parameter changes fastest, as itertools.product.
-                # No multiplied product size can overflow an enumeration bound.
-                var axis = rank - 1
-                while axis >= 0:  # driver-loop: carry across native mixed-radix counters
-                    positions[axis] += 1
-                    if positions[axis] < row.widths[axis]:
-                        break
-                    positions[axis] = 0
-                    axis -= 1
-                if axis < 0:
+                # RUN: the odometer step, rightmost parameter fastest, as
+                # itertools.product (inlined: no call per candidate).
+                if not parameter_grid_advance(widths, positions):
                     break
         return output

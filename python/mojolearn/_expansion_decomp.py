@@ -2499,15 +2499,19 @@ class Isomap(_Base):
     >>> Y = mojolearn.Isomap(n_neighbors=10, n_components=2).fit_transform(X)
     """
     _parameters = ("n_neighbors", "radius", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode",
-                   "max_iter", "metric_params", "n_jobs", "neighbors_algorithm", "tol")
+                   "max_iter", "metric_params", "n_jobs", "neighbors_algorithm", "tol", "device")
+
+    # Takes `device=`: every image of an operation comes from the estimator's
+    # binding route (bindings/mani_decomp_native_door.mojo `_mani_arguments`).
+    _mojolearn_device = True
 
     def __init__(self, *, n_neighbors=5, radius=None, n_components=2, eigen_solver="auto", tol=0, max_iter=None,
                  path_method="auto", neighbors_algorithm="auto", n_jobs=None, metric="minkowski", p=2,
-                 metric_params=None, numeric_mode=None):
+                 metric_params=None, numeric_mode=None, device=None):
         self.n_neighbors, self.radius, self.n_components = n_neighbors, radius, n_components
         self.eigen_solver, self.tol, self.max_iter, self.path_method = eigen_solver, tol, max_iter, path_method
         self.neighbors_algorithm, self.n_jobs, self.metric, self.p = neighbors_algorithm, n_jobs, metric, p
-        self.metric_params, self.numeric_mode = metric_params, numeric_mode
+        self.metric_params, self.numeric_mode, self.device = metric_params, numeric_mode, device
 
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
@@ -2618,10 +2622,15 @@ class ClassicalMDS(_Base):
     >>> Y = mojolearn.ClassicalMDS(n_components=2).fit_transform(X)
     """
     _parameters = ("n_components", "metric", "numeric_mode",
-                   "metric_params")
+                   "metric_params", "device")
 
-    def __init__(self, n_components=2, *, metric="euclidean", metric_params=None, numeric_mode=None):
+    # Takes `device=`: every image of an operation comes from the estimator's
+    # binding route (bindings/mani_decomp_native_door.mojo `_mani_arguments`).
+    _mojolearn_device = True
+
+    def __init__(self, n_components=2, *, metric="euclidean", metric_params=None, numeric_mode=None, device=None):
         self.n_components, self.metric, self.metric_params, self.numeric_mode = n_components, metric, metric_params, numeric_mode
+        self.device = device
 
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
@@ -2726,15 +2735,19 @@ class MDS(_Base):
     """
     _parameters = ("n_components", "metric_mds", "n_init", "init", "max_iter", "eps", "random_state", "metric",
                    "normalized_stress", "numeric_mode",
-                   "metric_params", "n_jobs", "verbose")
+                   "metric_params", "n_jobs", "verbose", "device")
+
+    # Takes `device=`: every image of an operation comes from the estimator's
+    # binding route (bindings/mani_decomp_native_door.mojo `_mani_arguments`).
+    _mojolearn_device = True
 
     def __init__(self, n_components=2, *, metric_mds=True, n_init=1, init="random", max_iter=300, verbose=0,
                  eps=1e-6, n_jobs=None, random_state=None, metric="euclidean", metric_params=None,
-                 normalized_stress="auto", numeric_mode=None):
+                 normalized_stress="auto", numeric_mode=None, device=None):
         self.n_components, self.metric_mds, self.n_init, self.init = n_components, metric_mds, n_init, init
         self.max_iter, self.verbose, self.eps, self.n_jobs = max_iter, verbose, eps, n_jobs
         self.random_state, self.metric, self.metric_params = random_state, metric, metric_params
-        self.normalized_stress, self.numeric_mode = normalized_stress, numeric_mode
+        self.normalized_stress, self.numeric_mode, self.device = normalized_stress, numeric_mode, device
 
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit_transform(self, X, y=None, init=None):
@@ -2848,15 +2861,19 @@ class LocallyLinearEmbedding(_Base):
     >>> Y = mojolearn.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit_transform(X)
     """
     _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode",
-                   "hessian_tol", "max_iter", "modified_tol", "n_jobs", "neighbors_algorithm", "tol")
+                   "hessian_tol", "max_iter", "modified_tol", "n_jobs", "neighbors_algorithm", "tol", "device")
+
+    # Takes `device=`: every image of an operation comes from the estimator's
+    # binding route (bindings/mani_decomp_native_door.mojo `_mani_arguments`).
+    _mojolearn_device = True
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
                  method="standard", hessian_tol=1e-4, modified_tol=1e-12, neighbors_algorithm="auto",
-                 random_state=None, n_jobs=None, numeric_mode=None):
+                 random_state=None, n_jobs=None, numeric_mode=None, device=None):
         self.n_neighbors, self.n_components, self.reg, self.eigen_solver = n_neighbors, n_components, reg, eigen_solver
         self.tol, self.max_iter, self.method, self.hessian_tol = tol, max_iter, method, hessian_tol
         self.modified_tol, self.neighbors_algorithm, self.random_state = modified_tol, neighbors_algorithm, random_state
-        self.n_jobs, self.numeric_mode = n_jobs, numeric_mode
+        self.n_jobs, self.numeric_mode, self.device = n_jobs, numeric_mode, device
 
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
@@ -3274,13 +3291,18 @@ class AlternatingLeastSquares(_Base):
     _mojolearn_native_public = True
 
     _parameters = ("factors", "regularization", "alpha", "iterations", "use_cg", "cg_steps",
-                   "calculate_training_loss", "random_state", "numeric_mode")
+                   "calculate_training_loss", "random_state", "numeric_mode", "device")
+
+    # Takes `device=`: the x_decomp entries of fit, recommend and similar_items
+    # are the estimator's (bindings/als_native_door.mojo).
+    _mojolearn_device = True
 
     def __init__(self, factors=100, regularization=0.01, alpha=1.0, iterations=15, use_cg=False,
-                 calculate_training_loss=False, random_state=None, numeric_mode=None, cg_steps=3):
+                 calculate_training_loss=False, random_state=None, numeric_mode=None, cg_steps=3, device=None):
         self.factors, self.regularization, self.alpha, self.iterations = factors, regularization, alpha, iterations
         self.use_cg, self.calculate_training_loss = use_cg, calculate_training_loss
         self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
+        self.device = device
 
     # fit, recommend and similar_items are one call each into the native
     # AlternatingLeastSquares owner (bindings/als_native_door.mojo).

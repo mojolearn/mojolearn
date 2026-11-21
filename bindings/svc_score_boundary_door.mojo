@@ -13,7 +13,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_cpython_table import cpython_table
 from bindings.p3_labels_metrics_native_door import p3_item
-from bindings.py_balanced import py_type, py_get
+from bindings.py_balanced import py_type, py_get, py_fields
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.classical_labels_door import (
@@ -34,7 +34,7 @@ from bindings.labels_score_boundary_door import ScoreKeyOwner, score_keys_unpack
 from core.labels_score_keys import ScoreKeyIndex, score_integer_keys, score_key_codes
 from core.svc_score_codes import svc_score_codes_valid, svc_used_classes, svc_gather_words, SvcUsedClasses
 from core.gp_native_accuracy import GPCAccuracyProgram
-from bindings.arena_prog_native_door import _family_entries
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.arena_prog_run import _switch
 from bindings.x_prep_native_owner_door import _resident_scope
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
@@ -243,7 +243,7 @@ def _svc_score_remap(labels: SvcScoreLabels, index: ScoreKeyIndex, context: Pyth
     return result^
 
 
-def svc_accuracy_native(truth: PythonObject, prediction: SvcDecodedScore,
+def svc_accuracy_native(model: PythonObject, truth: PythonObject, prediction: SvcDecodedScore,
                         context: PythonObject) raises -> Float64:
     var shape = svc_shape_of(truth, context)
     if len(shape) != 1 or Int(py=shape[0]) != prediction.rows:
@@ -272,10 +272,18 @@ def svc_accuracy_native(truth: PythonObject, prediction: SvcDecodedScore,
     _ = index
     _ = true_labels
     _ = pred_labels
-    # Read the same live module context as labels_accuracy; do not substitute
-    # the GP caller's connected context or cache a rebinding-sensitive value.
+    # The runner context (thread-local scope storage) is the live module
+    # context labels_accuracy reads. The metrics IMAGE is the estimator's:
+    # the x_metrics module of its device from its binding route (resolved
+    # once per estimator, a hit is one record read), in the process mode as
+    # before (mode None, no compiled-mode check: the old process-set read
+    # made none). Its module namespace holds the same three compiled entries
+    # the process table listed (the program factory and the optional ranges
+    # and output-range runners). Before 2026-11-21 this read the PROCESS
+    # x_metrics set, so a device="cpu" estimator beside a GPU set counted on
+    # the GPU image.
     var prog_context = _accuracy_context(context)
-    var entries = _family_entries(PythonObject(None), "x_metrics", prog_context)
+    var entries = py_fields(estimator_binding_routed(model, PythonObject(None), "_mojolearn_x_metrics", context, False))
     var nk = svm_keys()
     var provider = neural_descriptor_connect_factory_once(py_item(entries, nk[].k_metrics_program_native_api_v1),
         String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)

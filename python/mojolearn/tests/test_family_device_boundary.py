@@ -19,6 +19,12 @@ import pytest
 
 import mojolearn
 from mojolearn import QNRegressor
+from mojolearn.kernel_methods import KernelRidge
+from mojolearn.svm import SVC, SVR, LinearSVC, LinearSVR
+from mojolearn import (
+    BayesianRidge, HuberRegressor, LogisticRegressionCV, PoissonRegressor, QNRegressor, QuantileRegressor, RidgeCV,
+    RidgeClassifier, SGDClassifier, SGDRegressor,
+)
 
 TWO_DEVICES = mojolearn.vendor() != "cpu"
 two_devices = pytest.mark.skipif(not TWO_DEVICES, reason="a CPU-only installation has one device")
@@ -31,6 +37,16 @@ def regression(rows=200, cols=6, seed=3):
     return x, y
 
 
+def classification(rows=200, cols=6, seed=5):
+    rng = np.random.default_rng(seed)
+    x = rng.random((rows, cols), dtype=np.float32)
+    y = (x @ np.arange(1, cols + 1, dtype=np.float32) > np.float32(10.5)).astype(np.int64)
+    return x, y
+def classification(rows=200, cols=6, seed=3):
+    x, y = regression(rows, cols, seed)
+    return x, (y > np.median(y)).astype(np.int32)
+
+
 # (id, class, constructor keywords, data, the fitted arrays compared bit for bit, the methods compared bit for bit)
 CASES = [
     ("qn-squared", QNRegressor, dict(loss="squared_error", l2_strength=0.5, max_iter=60), regression,
@@ -39,6 +55,28 @@ CASES = [
      ("coef_", "_w"), ("predict",)),
     ("qn-l1", QNRegressor, dict(l1_strength=0.01, max_iter=60, fit_intercept=False), regression,
      ("coef_", "_w"), ("predict",)),
+    ("linear-svr", LinearSVR, dict(max_iter=60), regression, ("coef_", "_w"), ("predict",)),
+    ("linear-svc", LinearSVC, dict(max_iter=60), classification, ("coef_", "intercept_"), ("predict", "decision_function")),
+    ("svr-rbf", SVR, dict(kernel="rbf", C=1.0), regression, ("dual_coef_", "support_vectors_"), ("predict",)),
+    ("svc-rbf", SVC, dict(kernel="rbf", C=1.0), classification, ("dual_coef_", "support_vectors_"),
+     ("predict", "decision_function")),
+    ("kernel-ridge-rbf", KernelRidge, dict(kernel="rbf", alpha=1.0), regression, ("dual_coef_",), ("predict",)),
+    # lane dw-xlinear: the linear expansion estimators (one row per group of the x_linear door: SGD, the GLM and
+    # Huber and Bayes and quantile fits, the cross-validated ridge, the classifiers with class preparation, the
+    # cross-validated logistic fit)
+    ("xl-sgd-regressor", SGDRegressor, dict(max_iter=20, random_state=0), regression,
+     ("coef_", "intercept_"), ("predict",)),
+    ("xl-huber", HuberRegressor, dict(max_iter=50), regression, ("coef_", "intercept_"), ("predict",)),
+    ("xl-poisson", PoissonRegressor, dict(max_iter=50), regression, ("coef_", "intercept_"), ("predict",)),
+    ("xl-bayesian-ridge", BayesianRidge, dict(max_iter=50), regression, ("coef_", "intercept_"), ("predict",)),
+    ("xl-quantile", QuantileRegressor, dict(), regression, ("coef_", "intercept_"), ("predict",)),
+    ("xl-ridge-cv", RidgeCV, dict(), regression, ("coef_", "intercept_"), ("predict",)),
+    ("xl-sgd-classifier", SGDClassifier, dict(max_iter=20, random_state=0), classification,
+     ("coef_", "intercept_"), ("predict", "decision_function")),
+    ("xl-ridge-classifier", RidgeClassifier, dict(), classification,
+     ("coef_", "intercept_"), ("predict", "decision_function")),
+    ("xl-logistic-cv", LogisticRegressionCV, dict(Cs=3, cv=3, max_iter=50), classification,
+     ("coef_", "intercept_"), ("predict", "decision_function")),
 ]
 IDS = [case[0] for case in CASES]
 case = pytest.mark.parametrize("spec", CASES, ids=IDS)

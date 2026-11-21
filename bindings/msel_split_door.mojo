@@ -13,59 +13,57 @@
 # Python made them all up front, or in one device program). The public
 # `split` stays a generator shell that `yield from`s the result, so its
 # refusals are still raised at the first `next`.
-from std.memory import unsafe_memcpy
-from std.builtin.sort import sort
+#
+# UNPACK / RUN / PACK (device wave, lane dw-msel-parallel, 2026-11-21). This
+# file is the boundary: it reads the splitter's stored fields, the row
+# count, the labels (as int32 codes) and the seed into typed values
+# (UNPACK), hands them to bindings/msel_split_plan_run.mojo, which computes
+# every fold on typed values with no Python object (RUN, the GIL released
+# once per call), and returns the (train, test) Arrays (PACK,
+# bindings/msel_split_unpack.mojo `msel_split_finish`: the Arrays are
+# allocated from the plan's sizes and RUN writes the rows into them). What
+# stays here with Python objects is boundary work only: the splitter's
+# class and field admission, its constructor state, `check_cv`, the lazy
+# iterators of the per-row and per-combination splitters, the label input
+# step, and `train_test_split`'s gather of the caller's inputs (through the
+# resident helpers of bindings/msel_common_door.mojo).
 from std.os import getenv
 from core.shared_slot import SharedSlot
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.native_class_admission_door import class_record, class_admit, dict_keys_admitted, dict_keys_admit
-from bindings.msel_common_door import msel_signed32
-from bindings.msel_split_run import (
-    MselFoldRows, msel_fold_rows_fits, msel_shuffled_fold_rows_plan, msel_stratified_fold_rows_plan,
-)
-from bindings.msel_helpers_key_unpack import msel_helpers_key
-from bindings.msel_helpers_released_unpack import (
-    msel_fold_ids, msel_first_seen_i32, msel_strat_fold_assign_i32, msel_group_fold_perm_i32, msel_leave_range_i64,
-    msel_select_fold_i64, msel_gather_i32, msel_split_table_i32,
-)
-# lane calltable-msel: the host-only passes both base bindings exported,
-# linked into this door instead of called through CPython.
-from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat_group_plan_i32
-from x_metrics.epilogue import first_rows_i32
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.base_helpers_key_unpack import base_helpers_key
-from bindings.base_helpers_released_unpack import base_reduce_stat_int, base_bincount_i64, base_bincount2_i32
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
+from bindings.base_helpers_released_unpack import base_reduce_stat_int
+from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem, py_contains
 from bindings.classical_arrays_door import classical_wrap_array
 from bindings.native_buffer_owner_pack import native_storage_allocate
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.msel_search_state_door import msel_parameter_values
-from bindings.family_common_unpack import (
-    FAMILY_I64P,
-    FAMILY_I32P,
-    family_isinstance,
-    family_is_str,
-    family_repr,
-    family_str,
-)
-from bindings.family_common_pack import (
-    family_call,
-    family_call_kw,
-)
-from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.family_common_unpack import family_str
+from bindings.family_common_pack import family_call
 from bindings.label_input_sources_unpack import labels_list_integer_storage
 from bindings.label_input_sources_pack import labels_series_values
 from bindings.py_optional import py_present
 from bindings.msel_common_door import (
-    MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_select_folds_plan, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
+    msel_b, msel_missed, msel_catch, msel_is_bool,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
     msel_try_materialize, msel_flatten, msel_encode, msel_labels_list, msel_n_samples, msel_is_array, msel_addr, msel_admit,
-    msel_numeric_vector,
-    msel_p64, msel_p32, msel_new, msel_new2, msel_i64_list, msel_i32_list, msel_read_i64, msel_slice_i64,
-    msel_arange, msel_range_index, msel_split_mask, msel_split_indices, msel_index_copy, msel_as_index,
-    MselGroups, MselRng, msel_mix_seed, msel_shuffle_sizes, msel_take_any, msel_lazy, msel_index_i64,
-    msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
+    msel_numeric_vector, msel_new, msel_read_i64, msel_arange, msel_range_index, msel_index_copy,
+    msel_shuffle_sizes, msel_lazy, msel_u64, msel_take_labels, msel_resident_new, msel_resident_take, msel_resident_close,
+)
+# RUN: every fold computation, on typed values (no Python object).
+from bindings.msel_split_run import msel_fold_rows_fits
+from bindings.msel_split_plan_run import (
+    MSEL_LABELS_ALIGNED, MSEL_LABELS_SORTED, MSEL_LABELS_FIRST_SEEN, MselCodes, MselSeed, MselSplitRoute,
+    MselSplitPlan, msel_seed_refusal, msel_mix_seed, msel_code_counts, msel_plan_default_folds, msel_plan_kfold,
+    msel_plan_stratified, msel_plan_group_kfold, msel_plan_strat_group, msel_plan_time_series, msel_plan_shuffle,
+    msel_plan_group_shuffle, msel_plan_strat_shuffle, msel_plan_select, msel_plan_group_set, msel_plan_indexed,
+    msel_leave_one,
+)
+# UNPACK (the entries, the label codes, the seed) and PACK (the fold arrays).
+from bindings.msel_split_unpack import (
+    MselLabelPin, msel_split_route, msel_label_codes, msel_label_array, msel_split_finish,
 )
 
 
@@ -372,63 +370,28 @@ def msel_truth(value: PythonObject) raises -> Bool:
     return Bool(py=family_call(msel_b().bool, value))
 
 
-# ---------------------------------------------------------------- fold programs
+# ---------------------------------------------------------------- seed UNPACK
 
 
-def _fold_rows_run(prog: MetricDoorProg, rows: MselFoldRows, context: PythonObject) raises -> PythonObject:
-    """`_fold_rows_run`: the program run, then each fold's (train, test)
-    int64 rows read out of the arena (the table's layout:
-    bindings/msel_split_run.mojo `MselFoldRows`)."""
-    var arena = metric_door_run(prog, PythonObject(None), context)
-    var base = arena.base()
-    var n = rows.n
-    var res = Python.list()
-    for f in range(rows.k):  # driver-loop: over folds
-        var c = rows.size(base, f)
-        var test = msel_new(c, "<i8", context)
-        var train = msel_new(n - c, "<i8", context)
-        if c > 0:
-            unsafe_memcpy(dest=msel_p64(test), src=FAMILY_I64P(unsafe_from_address=rows.test_rows(base, f)), count=c)
-            _ = test  # keep the Python object alive through the native call above
-        if n - c > 0:
-            unsafe_memcpy(dest=msel_p64(train), src=FAMILY_I64P(unsafe_from_address=rows.train_rows(base, f)), count=n - c)
-            _ = train  # keep the Python object alive through the native call above
-        _ = py_call(res.append, Python.tuple(train, test))
-    _ = arena^  # count words and copied row addresses remain owned through the final fold
-    return res
+def msel_seed(random_state: PythonObject, used: Bool, context: PythonObject) raises -> MselSeed:
+    """UNPACK of `CounterRng(random_state)`'s seed: None draws eight bytes
+    from the operating system. A splitter that will not draw (`used` False)
+    reads nothing. An unusable value is carried as `bad` and refused by RUN
+    where the splitter first draws, so the size refusals that came first
+    still come first."""
+    if not used:
+        return MselSeed(0, False)
+    var state = random_state
+    if state is None:
+        state = family_call(msel_b().int.from_bytes, py_call(native_loaded_module("os").urandom, PythonObject(8)),
+                            PythonObject("little"))
+    if (msel_is_bool(state, context) or not msel_is_integral(state, context)
+            or msel_cmp("lt", state, PythonObject(0))):
+        return MselSeed(0, True)
+    return MselSeed(msel_u64(state), False)
 
 
-def msel_fold_rows_shuffled(n: Int, k: Int, mut rng: MselRng, context: PythonObject) raises -> PythonObject:
-    """`fold_rows(n, k, rng=rng)`; None past the table bound (no draw made).
-    The program is built by bindings/msel_split_run.mojo."""
-    if not msel_fold_rows_fits(n, k):
-        return PythonObject(None)
-    var prog = MetricDoorProg()
-    var counter = rng.counter()
-    var rows = msel_shuffled_fold_rows_plan(prog.plan, n, k, counter)
-    rng.draws = counter.draws
-    return _fold_rows_run(prog, rows, context)
-
-
-def msel_stratified_fold_rows(enc: PythonObject, counts: List[Int], alloc: PythonObject, k: Int,
-                              mut rng: MselRng, shuffle: Bool, context: PythonObject) raises -> PythonObject:
-    """`stratified_fold_rows`: StratifiedKFold's folds in one program; None
-    past the table bound. UNPACK: the pinned codes and the allocation
-    table's address; RUN: bindings/msel_split_run.mojo builds the program."""
-    var n = Int(py=enc.size)
-    if not msel_fold_rows_fits(n, k):
-        return PythonObject(None)
-    var prog = MetricDoorProg()
-    var enc_slot = prog.put_i32(enc)
-    var counter = rng.counter()
-    var rows = msel_stratified_fold_rows_plan(prog.plan, enc_slot, n, counts, Int(msel_p64(alloc)), k,
-                                              counter, shuffle)
-    _ = alloc  # keep the Python object alive through the build above
-    rng.draws = counter.draws
-    return _fold_rows_run(prog, rows, context)
-
-
-# ---------------------------------------------------------------- default folds
+# ---------------------------------------------------------------- label UNPACK
 
 
 def msel_discrete_codes(y: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -455,141 +418,36 @@ def msel_discrete_codes(y: PythonObject, context: PythonObject) raises -> Python
     return msel_encode(flat if have else y, context)
 
 
-def _select_folds(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k: Int,
-                  context: PythonObject) raises -> PythonObject:
-    """`_select_folds`: every fold's (train, test) in one split plan
-    (`select_folds_i64` through the native helper table; the per-fold
-    `select_fold_i64` loop it replaced only served a base binding without
-    the plan, which the table always carries)."""
-    return msel_select_folds_plan(fold_store, fold_counts, n, k, "fold_ids", context)
-
-
-def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool,
-                       context: PythonObject) raises -> PythonObject:
-    """`_native_default_folds(y, n_splits, classifier)`."""
-    var n = msel_n_samples(y, context)
-    if msel_is_bool(n_splits, context) or not msel_is_integral(n_splits, context) or msel_cmp("lt", n_splits, PythonObject(2)):
-        raise Error("cv must specify at least two folds")
-    if msel_cmp("gt", n_splits, PythonObject(n)):
-        raise Error("cv cannot exceed the number of samples")
-    var k = msel_int(n_splits)
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var codes = Optional[PythonObject]()
-    var n_classes = 0
-    if classifier:
-        var got = msel_discrete_codes(y, context)
-        if got is not None:
-            n_classes = len(got[0])
-            codes = py_present(got[1])
-    var fold_store = msel_new(n, "<i4", context)
-    var fold_counts = msel_new(k, "<i8", context)
-    var class_counts = msel_new(max(n_classes, 1), "<i8", context)
-    _ = msel_fold_ids(msel_helpers_key(context), 0 if not codes else msel_addr(codes.value()), n, n_classes, k,
-                      msel_addr(class_counts), msel_addr(fold_store), msel_addr(fold_counts))
-    _ = codes  # keep the Python object alive through the native call above
-    _ = class_counts  # keep the Python object alive through the native call above
-    _ = fold_counts  # keep the Python object alive through the native call above
-    _ = fold_store  # keep the Python object alive through the native call above
-    if Bool(codes):
-        var cc = msel_p64(class_counts)
-        _ = class_counts  # keep the Python object alive through the native call above
-        var most = Int(cc[0]) if n_classes else 0
-        _ = class_counts  # keep the Python object alive through the native call above
-        var least = Int(cc[0]) if n_classes else 0
-        _ = class_counts  # keep the Python object alive through the native call above
-        for c in range(n_classes):  # driver-loop: over classes (the fold count checks)
-            most = max(most, Int(cc[c]))
-            _ = class_counts  # keep the Python object alive through the native call above
-            least = min(least, Int(cc[c]))
-            _ = class_counts  # keep the Python object alive through the native call above
-        if n_classes == 0:
-            raise Error("max() iterable argument is empty")
-        if most < k:
-            raise Error("cv cannot exceed the number of members in every class")
-        if least < k:
-            msel_warn("The least populated class has fewer members than cv folds", msel_b().UserWarning, context)
-    var out = _select_folds(fold_store, fold_counts, n, k, context)
-    if msel_sabotage():
-        # THE DORMANT NEGATIVE CONTROL (a verification switch, never set in
-        # production): each nonempty fold's smallest test row moves to the
-        # previous nonempty fold (the last fold takes fold 0's).
-        var nonempty = List[Int]()
-        var firsts = List[Int]()
-        for f in range(k):  # driver-loop: over folds
-            var test = out[f][1]
-            if Int(py=test.size) > 0:
-                nonempty.append(f)
-                firsts.append(Int(msel_p64(test)[0]))
-                _ = test  # keep the Python object alive through the native call above
-        var store = msel_p32(fold_store)
-        _ = fold_store  # keep the Python object alive through the native call above
-        for at in range(len(nonempty)):  # driver-loop: over nonempty folds (one row id moved each)
-            store[firsts[(at + 1) % len(nonempty)]] = Int32(nonempty[at])
-            _ = fold_store  # keep the Python object alive through the native call above
-        out = _select_folds(fold_store, fold_counts, n, k, context)
-    return out
-
-
-# ---------------------------------------------------------------- first-seen codes
-
-
-def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_first_seen_native(y)`: (int32 codes in first-seen order, k, counts
-    list), or None."""
+def _aligned_labels(y: PythonObject, mut pin: MselLabelPin, context: PythonObject) raises -> Bool:
+    """The first half of `_first_seen_native(y)`: y as one sorted-order code
+    per row, in `pin`. False (what the Python returned None for) when y is
+    None, has no class, or its admission raised TypeError, ValueError or
+    OverflowError; the caller then takes its other label route."""
     if y is None:
-        return PythonObject(None)
+        return False
     var b = msel_b()
     var classes = Python.tuple(b.TypeError, b.ValueError, b.OverflowError)
-    var n = 0
     try:
-        n = msel_n_samples(y, context)
-        var gc = MselGroups(y, n, "y", context)
-        if gc.m < 1:
-            return PythonObject(None)
-        var first = msel_new(gc.m, "<i8", context)
-        # x_metrics' first-row pass linked into this door (a host pass in
-        # every binding that exported it; no cross-module call). The O(n)
-        # pass reads and writes only raw buffers, so it runs with the GIL
-        # released as the GPU binding's former `x_metrics_first_rows` export did.
-        var codes_address = gc.codes_address
-        var classes_count = gc.m
-        var first_address = msel_addr(first)
-        with GILReleased(Python()):
-            first_rows_i32(codes_address, n, classes_count, first_address)
-        _ = gc  # keep the code storage alive through the pass above
-        _ = first  # keep the Python object alive through the native call above
-        # pass 3 (rank 367): the classes ordered by their first row natively.
-        # Every class's first row is distinct, so sorting the first rows and
-        # mapping each back to its class is `sorted(range(m), key=first)`
-        # exactly (no ties), without a Python list, key callable and sort.
-        var fp = msel_p64(first)
-        var rows_sorted = List[Int](capacity=gc.m)
-        var class_of = Dict[Int, Int]()
-        for c in range(gc.m):  # driver-loop: over classes (one first-row word each)
-            var r = Int(fp[c])
-            rows_sorted.append(r)
-            class_of[r] = c
-        _ = first  # keep the storage alive through the reads above
-        sort(rows_sorted)
-        var table = List[Int](length=gc.m, fill=0)
-        var counts = Python.list()
-        for rank in range(gc.m):  # driver-loop: over classes (first-seen order)
-            var c = class_of[rows_sorted[rank]]
-            table[c] = rank
-            _ = py_call(counts.append, PythonObject(gc.counts[c]))
-        var words = gc.mapped(table, context)
-        return Python.tuple(words, PythonObject(gc.m), counts)
+        var n = msel_n_samples(y, context)
+        pin = msel_label_codes(y, n, "y", context, True, True)
+        pin.form = MSEL_LABELS_ALIGNED
+        return pin.view.m >= 1
     except error:
         if msel_catch(error, classes):
-            return PythonObject(None)
+            return False
         raise Error(String(error))
 
 
-def _counts_list(counts: PythonObject) raises -> List[Int]:
-    var out = List[Int]()
-    for i in range(len(counts)):  # driver-loop: over classes
-        out.append(Int(py=counts[i]))
-    return out^
+def _strat_labels(y: PythonObject, context: PythonObject) raises -> MselLabelPin:
+    """StratifiedKFold's labels: one sorted-order code per row (RUN ranks
+    the classes by first row), else the encoder's codes as they are (RUN
+    renumbers them with `first_seen_i32`)."""
+    var pin = MselLabelPin()
+    if _aligned_labels(y, pin, context):
+        return pin^
+    var plain = msel_label_codes(y, 0, "y", context, False, False)
+    plain.form = MSEL_LABELS_SORTED
+    return plain^
 
 
 def _encode_first_seen(values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -602,6 +460,59 @@ def _encode_first_seen(values: PythonObject, context: PythonObject) raises -> Py
     return Python.tuple(codes, PythonObject(len(index)))
 
 
+def _strat_group_labels(y: PythonObject, context: PythonObject) raises -> MselLabelPin:
+    """StratifiedGroupKFold's labels: one sorted-order code per row, else
+    first-seen codes by the builtins' dictionary order over the label
+    objects."""
+    var pin = MselLabelPin()
+    if _aligned_labels(y, pin, context):
+        return pin^
+    var got = _encode_first_seen(msel_labels_list(y, "y", context), context)
+    var store = family_call(native_loaded_module("array").array, PythonObject("i"), got[0])
+    var yenc = classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
+    var listed = MselLabelPin()
+    listed.view = MselCodes(msel_addr(yenc), Int(py=yenc.size), Int(py=got[1]))
+    listed.owner = yenc
+    listed.form = MSEL_LABELS_FIRST_SEEN
+    return listed^
+
+
+# ---------------------------------------------------------------- default folds
+
+
+def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool,
+                       context: PythonObject) raises -> PythonObject:
+    """`_native_default_folds(y, n_splits, classifier)`."""
+    # UNPACK
+    var n = msel_n_samples(y, context)
+    if msel_is_bool(n_splits, context) or not msel_is_integral(n_splits, context) or msel_cmp("lt", n_splits, PythonObject(2)):
+        raise Error("cv must specify at least two folds")
+    if msel_cmp("gt", n_splits, PythonObject(n)):
+        raise Error("cv cannot exceed the number of samples")
+    var k = msel_int(n_splits)
+    var codes = MselCodes(0, 0, 0)
+    var coded = False
+    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
+    var held = Optional[PythonObject]()
+    if classifier:
+        var got = msel_discrete_codes(y, context)
+        if got is not None:
+            held = py_present(got[1])
+            codes = MselCodes(msel_addr(held.value()), n, len(got[0]))
+            coded = True
+    var pin = msel_split_route(context, False, False, False)
+    var route = pin.route
+    var sabotage = msel_sabotage()
+    # RUN
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_default_folds(route, n, k, codes, coded, sabotage)
+    # PACK (allocation), RUN (rows)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = held  # the codes stay alive through the plan above
+    return pairs
+
+
 # ---------------------------------------------------------------- KFold family
 
 
@@ -609,205 +520,72 @@ def msel_kfold_split(x: PythonObject, k: Int, shuffle: Bool, random_state: Pytho
                      context: PythonObject) raises -> PythonObject:
     """`KFold.split`."""
     var n = msel_n_samples(x, context)
-    if k > n:
-        raise Error("Cannot have number of splits n_splits=" + String(k) + " greater than the "
-                    + "number of samples: n_samples=" + String(n) + ".")
-    if shuffle:
-        var rng = MselRng(random_state, context)
-        var got = msel_fold_rows_shuffled(n, k, rng, context)
-        if got is not None:
-            return got
-        var whole = rng.permutation_rows([n], context)[0]
-        var out = Python.list()
-        var start = 0
-        for fold in range(k):  # driver-loop: over folds
-            var size = n // k + (1 if fold < n % k else 0)
-            _ = py_call(out.append, msel_split_indices(msel_addr(whole) + 8 * start, size, n, context))
-            _ = whole  # keep the Python object alive through the native call above
-            start += size
-        _ = whole^
-        return out
-    return msel_default_folds(py_call(msel_b().range, PythonObject(n)), PythonObject(k), False, context)
-
-
-def _fold_plan(y: PythonObject, k: Int, context: PythonObject) raises -> PythonObject:
-    """`StratifiedKFold._fold_plan`: (enc, n_classes, counts, alloc)."""
-    var fs = msel_first_seen(y, context)
-    var enc = PythonObject(None)
-    var counts = List[Int]()
-    var n_classes = 0
-    if fs is not None:
-        enc = fs[0]
-        n_classes = Int(py=fs[1])
-        counts = _counts_list(fs[2])
-    else:
-        var got = msel_encode(y, context)
-        var codes = got[1]
-        var n = Int(py=codes.size)
-        var width = max(len(got[0]), 1)
-        enc = msel_new(n, "<i4", context)
-        var cnt = msel_new(width, "<i8", context)
-        n_classes = msel_first_seen_i32(msel_helpers_key(context), msel_addr(codes), n, width, msel_addr(enc),
-                                        msel_addr(cnt))
-        _ = codes  # keep the Python object alive through the native call above
-        _ = cnt  # keep the Python object alive through the native call above
-        _ = enc  # keep the Python object alive through the native call above
-        var all_counts = msel_read_i64(cnt)
-        for c in range(n_classes):  # driver-loop: over classes
-            counts.append(all_counts[c])
-    var most = 0
-    var least = 0
-    for c in range(len(counts)):  # driver-loop: over classes (the fold count checks)
-        most = counts[c] if c == 0 else max(most, counts[c])
-        least = counts[c] if c == 0 else min(least, counts[c])
-    if len(counts) == 0 or most < k:
-        raise Error("n_splits=" + String(k) + " cannot be greater than the number of members in each class.")
-    if least < k:
-        msel_warn("The least populated class in y has only " + String(least) + " members, which is less "
-                  + "than n_splits=" + String(k) + ".", msel_b().UserWarning, context)
-    var alloc = msel_new2(k, n_classes, "<i8", context)
-    var cnt_arr = msel_i64_list(counts, context)
-    # The allocation table's host pass linked into this door (both base
-    # bindings exported the same host function; no cross-module call).
-    _ = strat_alloc_i64(msel_addr(cnt_arr), n_classes, k, msel_addr(alloc))
-    _ = cnt_arr  # keep the Python object alive through the native call above
-    _ = alloc  # keep the Python object alive through the native call above
-    var counts_py = Python.list()
-    for c in range(len(counts)):  # driver-loop: over classes
-        _ = py_call(counts_py.append, PythonObject(counts[c]))
-    return Python.tuple(enc, PythonObject(n_classes), counts_py, alloc)
+    var seed = msel_seed(random_state, shuffle, context)
+    var pin = msel_split_route(context, False, shuffle, False)
+    var route = pin.route
+    var sabotage = msel_sabotage()
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_kfold(route, n, k, shuffle, seed, sabotage)
+    return msel_split_finish(pin, plan, context)
 
 
 def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     """`StratifiedKFold.split`."""
-    var plan = _fold_plan(y, k, context)
-    var enc = plan[0]
-    var n_classes = Int(py=plan[1])
-    var counts = _counts_list(plan[2])
-    var alloc = plan[3]
-    var rng = MselRng(random_state if shuffle else PythonObject(0), context)
-    if k <= 256:
-        var got = msel_stratified_fold_rows(enc, counts, alloc, k, rng, shuffle, context)
-        if got is not None:
-            return got
-        if shuffle:
-            rng = MselRng(random_state, context)
-    # the same assignment by `strat_fold_assign_i32`, then each fold's rows
-    var n = Int(py=enc.size)
-    var cnt = msel_i64_list(counts, context)
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var perms = Optional[PythonObject]()
-    if shuffle:
-        perms = msel_new(n, "<i8", context)
-        var draws = rng.permutation_rows(counts, context)
-        var at = 0
-        for c in range(len(counts)):  # driver-loop: over classes (one draw each)
-            if counts[c] > 0:
-                unsafe_memcpy(dest=msel_p64(perms.value()) + at, src=msel_p64(draws[c]), count=counts[c])
-                _ = perms  # keep the Python object alive through the native call above
-            at += counts[c]
-    var folds = msel_new(n, "<i4", context)
-    _ = msel_strat_fold_assign_i32(msel_helpers_key(context), msel_addr(enc), n, n_classes, k, msel_addr(alloc),
-                                   msel_addr(perms.value()) if Bool(perms) and n > 0 else 0, msel_addr(cnt),
-                                   msel_addr(folds))
-    _ = enc  # keep the Python object alive through the native call above
-    _ = alloc  # keep the Python object alive through the native call above
-    _ = perms  # keep the Python object alive through the native call above
-    _ = folds  # keep the Python object alive through the native call above
-    _ = cnt  # keep the Python object alive through the native call above
-    var sizes = msel_new(k, "<i8", context)
-    _ = base_bincount_i64(base_helpers_key(context["family_msel_entries"]), msel_addr(folds), 2, n, k,
-                          msel_addr(sizes), False)
-    _ = folds  # keep the Python object alive through the native call above
-    _ = sizes  # keep the Python object alive through the native call above
-    # One split plan for every fold (N051); the sizes are the folds' own
-    # bincount, so the plan's count check always holds. (The per-fold
-    # select_fold_i64 loop served only a base binding without the plan.)
-    return msel_select_folds_plan(folds, sizes, n, k, "fold_ids", context)
+    var labels = _strat_labels(y, context)
+    var seed = msel_seed(random_state, shuffle, context)
+    var view = labels.view
+    var form = labels.form
+    # The base helper table is called only past the one-program bounds
+    # (strat_fold_assign_i32, then the folds' bincount): its key is not
+    # read for the program route.
+    var pin = msel_split_route(context, not (k <= 256 and msel_fold_rows_fits(view.n, k)), True, True)
+    var route = pin.route
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_stratified(route, view, form, k, shuffle, seed)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = labels  # the codes stay alive through the plan above
+    return pairs
 
 
 def msel_group_kfold_split(x: PythonObject, groups: PythonObject, k: Int, shuffle: Bool,
                            random_state: PythonObject, context: PythonObject) raises -> PythonObject:
     """`GroupKFold.split`."""
     var n = msel_n_samples(x, context)
-    var gc = MselGroups(groups, n, "groups", context)
-    var m = gc.m
-    if k > m:
-        raise Error("Cannot have number of splits n_splits=" + String(k) + " greater than the "
-                    + "number of groups: " + String(m) + ".")
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var perm = Optional[PythonObject]()
-    if shuffle:
-        var rng = MselRng(random_state, context)
-        perm = rng.permutation_rows([m], context)[0]
-    var to_fold = msel_new(m, "<i4", context)
-    var sizes = msel_new(k, "<i8", context)
-    var counts = msel_i64_list(gc.counts, context)
-    if Bool(perm):
-        _ = msel_group_fold_perm_i32(msel_helpers_key(context), msel_addr(counts), m, k, msel_addr(perm.value()),
-                                     msel_addr(to_fold), msel_addr(sizes))
-        _ = counts  # keep the Python object alive through the native call above
-        _ = to_fold  # keep the Python object alive through the native call above
-        _ = perm  # keep the Python object alive through the native call above
-        _ = sizes  # keep the Python object alive through the native call above
-    else:
-        # The greedy plan's host pass linked into this door (both base
-        # bindings exported the same host function; no cross-module call).
-        _ = group_fold_assign_i32(msel_addr(counts), m, k, 0, msel_addr(to_fold), msel_addr(sizes))  # cpu-route: sequential greedy fold plan over groups, not rows
-        _ = counts  # keep the Python object alive through the native call above
-        _ = sizes  # keep the Python object alive through the native call above
-        _ = to_fold  # keep the Python object alive through the native call above
-    return gc.split_by_fold(to_fold, k, sizes, context)
+    var labels = msel_label_codes(groups, n, "groups", context, True, True)
+    var seed = msel_seed(random_state, shuffle, context)
+    var pin = msel_split_route(context, False, shuffle, False)
+    var route = pin.route
+    var view = labels.view
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_group_kfold(route, view, k, shuffle, seed)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = labels  # the codes stay alive through the plan and the fill above
+    return pairs
 
 
 def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObject, k: Int, shuffle: Bool,
                            random_state: PythonObject, context: PythonObject) raises -> PythonObject:
     """`StratifiedGroupKFold.split`."""
     var n = msel_n_samples(x, context)
-    var gc = MselGroups(groups, n, "groups", context)
-    var fs = msel_first_seen(y, context)
-    var yenc = PythonObject(None)
-    var n_classes = 0
-    if fs is not None:
-        yenc = fs[0]
-        n_classes = Int(py=fs[1])
-    else:
-        var got = _encode_first_seen(msel_labels_list(y, "y", context), context)
-        var store = family_call(native_loaded_module("array").array, PythonObject("i"), got[0])
-        yenc = classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
-        n_classes = Int(py=got[1])
-    if Int(py=yenc.size) != n:
-        raise Error("y has " + String(Int(py=yenc.size)) + " labels for " + String(n) + " samples")
-    var m = gc.m
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var perm = Optional[PythonObject]()
-    if shuffle:
-        var rng = MselRng(random_state, context)
-        perm = rng.permutation_rows([m], context)[0]
-    var to_fold = msel_new(m, "<i4", context)
-    var sizes = msel_new(k, "<i8", context)
-    var dist = msel_new(m * n_classes, "<i8", context)
-    _ = base_bincount2_i32(base_helpers_key(context["family_msel_entries"]), msel_addr(yenc), msel_addr(gc.codes),
-                           n, n_classes, m, msel_addr(dist))
-    _ = yenc  # keep the Python object alive through the native call above
-    _ = dist  # keep the Python object alive through the native call above
-    # The group-level plan's host pass linked into this door (both base
-    # bindings exported the same host function; no cross-module call).
-    var bad = strat_group_plan_i32(msel_addr(dist), msel_addr(perm.value()) if Bool(perm) else 0,  # cpu-route: sequential greedy fold plan over groups, not rows
-                                   msel_addr(to_fold), msel_addr(sizes), n_classes, m, k)
-    _ = dist  # keep the Python object alive through the native call above
-    _ = perm  # keep the Python object alive through the native call above
-    _ = sizes  # keep the Python object alive through the native call above
-    _ = to_fold  # keep the Python object alive through the native call above
-    if bad:
-        raise Error("n_splits=" + String(k) + " cannot be greater than the number of members in "
-                    + "each class.")
-    _ = dist  # keep the Python object alive through the native calls above
-    _ = sizes  # keep the Python object alive through the native calls above
-    _ = to_fold  # keep the Python object alive through the native calls above
-    _ = perm  # keep the Python object alive through the native calls above
-    return gc.split_by_fold(to_fold, k, sizes, context)
+    var group_labels = msel_label_codes(groups, n, "groups", context, True, True)
+    var labels = _strat_group_labels(y, context)
+    var seed = msel_seed(random_state, shuffle, context)
+    var pin = msel_split_route(context, True, shuffle, False)
+    var route = pin.route
+    var view = labels.view
+    var form = labels.form
+    var group_view = group_labels.view
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_strat_group(route, n, view, form, group_view, k, shuffle, seed)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = labels  # both code vectors stay alive through the plan above
+    _ = group_labels
+    return pairs
 
 
 # ---------------------------------------------------------------- the other splitters
@@ -817,32 +595,15 @@ def msel_time_series_split(sp: MselSplitter, x: PythonObject, context: PythonObj
     """`TimeSeriesSplit.split`."""
     var n = msel_n_samples(x, context)
     var k = msel_int(sp.field("n_splits", context))
-    var folds = k + 1
     var ts_field = sp.field("test_size", context)
-    var ts = msel_int(ts_field) if ts_field is not None else n // folds
+    var has_ts = ts_field is not None
+    var ts = msel_int(ts_field) if has_ts else 0
     var gap = msel_int(sp.field("gap", context))
     var max_train_field = sp.field("max_train_size", context)
-    if folds > n:
-        raise Error("Cannot have number of folds=" + String(folds) + " greater than the number of samples="
-                    + String(n) + ".")
-    if n - gap - ts * k <= 0:
-        raise Error("Too many splits=" + String(k) + " for number of samples=" + String(n) + " with "
-                    + "test_size=" + String(ts) + " and gap=" + String(gap) + ".")
-    if ts == 0:
-        raise Error("range() arg 3 must not be zero")
-    var out = Python.list()
-    var start = n - k * ts
-    while start < n:  # driver-loop: over splits
-        var end = start - gap
-        var lo = 0
-        if msel_truth(max_train_field):
-            var mt = msel_int(max_train_field)
-            if mt < end:
-                lo = end - mt
-        _ = py_call(out.append, Python.tuple(msel_range_index(lo, end, context),
-                                             msel_range_index(start, start + ts, context)))
-        start += ts
-    return out
+    var max_train = msel_int(max_train_field) if msel_truth(max_train_field) else 0
+    var pin = msel_split_route(context, False, False, False)
+    var plan = msel_plan_time_series(n, k, ts, has_ts, gap, max_train)
+    return msel_split_finish(pin, plan, context)
 
 
 def msel_loo_split(x: PythonObject, sp: MselSplitter, context: PythonObject) raises -> PythonObject:
@@ -862,7 +623,12 @@ def msel_loo_at(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var s = Int(py=args[1])
     var train = msel_new(n - 1, "<i8", context)
     var test = msel_new(1, "<i8", context)
-    _ = msel_leave_range_i64(msel_helpers_key(context), n, s, s + 1, msel_addr(train), msel_addr(test))
+    var pin = msel_split_route(context, False, False, False)
+    var route = pin.route
+    var train_at = msel_addr(train)
+    var test_at = msel_addr(test)
+    with GILReleased(Python()):
+        msel_leave_one(route, n, s, train_at, test_at)
     _ = test  # keep the Python object alive through the native call above
     _ = train  # keep the Python object alive through the native call above
     return Python.tuple(train, test)
@@ -890,61 +656,69 @@ def msel_lpo_split(x: PythonObject, sp: MselSplitter, context: PythonObject) rai
     return msel_lazy(sp.model, "family_msel_split_lpo_at", items, context)
 
 
+def _only_pair(pairs: PythonObject) raises -> PythonObject:
+    """The one (train, test) pair of a single-split plan."""
+    var pair = py_item(pairs, PythonObject(0))
+    return pair
+
+
 def msel_lpo_at(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """One LeavePOut split: the combination's rows as the test set."""
     var n = Int(py=args[0])
     var combo = family_call(native_loaded_module("array").array, PythonObject("q"), args[1])
     var k = len(combo)
-    var result = msel_split_indices(Int(py=py_call(combo.buffer_info)[0]) if k else 0, k, n, context)
+    var rows = Int(py=py_call(combo.buffer_info)[0]) if k else 0
+    var pin = msel_split_route(context, False, False, False)
+    var plan = msel_plan_indexed(n, rows, k)
+    var pairs = msel_split_finish(pin, plan, context)
     # The integer address does not retain its array owner. Keep the complete
     # combination alive until the native mask and both row arrays are built.
     _ = combo
-    return result
+    return _only_pair(pairs)
 
 
-def _group_state(gc: MselGroups) raises -> PythonObject:
+def _group_state(labels: MselLabelPin, route: MselSplitRoute, context: PythonObject) raises -> PythonObject:
+    """What a lazy group splitter carries from split to split: (the int32
+    group codes, n, each group's row count)."""
+    var view = labels.view
+    var counted = List[Int64]()
+    with GILReleased(Python()):
+        counted = msel_code_counts(route, view)
     var counts = Python.list()
-    for g in range(gc.m):  # driver-loop: over groups
-        _ = py_call(counts.append, PythonObject(gc.counts[g]))
-    return Python.tuple(gc.codes, PythonObject(gc.n), py_call(msel_b().tuple, counts))
-
-
-def _state_rows(state: PythonObject, words: PythonObject, want: Int, size: Int,
-                context: PythonObject) raises -> PythonObject:
-    """`_GroupCodes.rows` from a lazy split's group state."""
-    var n = Int(py=state[1])
-    var test = msel_new(size, "<i8", context)
-    var train = msel_new(n - size, "<i8", context)
-    var got = msel_select_fold_i64(msel_helpers_key(context), msel_addr(words), n, want, msel_addr(test),
-                                   msel_addr(train))
-    _ = words  # keep the Python object alive through the native call above
-    _ = train  # keep the Python object alive through the native call above
-    _ = test  # keep the Python object alive through the native call above
-    if got != size:
-        raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
-    _ = train  # keep the Python object alive through the native calls above
-    _ = test  # keep the Python object alive through the native calls above
-    return Python.tuple(train, test)
+    for g in range(view.m):  # driver-loop: over groups
+        _ = py_call(counts.append, PythonObject(Int(counted[g])))
+    return Python.tuple(msel_label_array(labels, context), PythonObject(view.n), py_call(msel_b().tuple, counts))
 
 
 def msel_logo_split(x: PythonObject, groups: PythonObject, sp: MselSplitter,
                     context: PythonObject) raises -> PythonObject:
     """`LeaveOneGroupOut.split`: one split per group, made on demand."""
     var n = msel_n_samples(x, context)
-    var gc = MselGroups(groups, n, "groups", context)
-    if gc.m <= 1:
-        raise Error("The groups parameter contains fewer than 2 unique groups (" + family_str(gc.classes) + "). "
+    var labels = msel_label_codes(groups, n, "groups", context, True, True)
+    if labels.view.m <= 1:
+        raise Error("The groups parameter contains fewer than 2 unique groups (" + family_str(labels.classes) + "). "
                     + "LeaveOneGroupOut expects at least 2.")
+    var pin = msel_split_route(context, False, False, False)
+    var state = _group_state(labels, pin.route, context)
     var b = msel_b()
-    var items = py_call(b.zip, py_call(native_loaded_module("itertools").repeat, _group_state(gc)),
-                        py_call(b.range, PythonObject(gc.m)))
+    var items = py_call(b.zip, py_call(native_loaded_module("itertools").repeat, state),
+                        py_call(b.range, PythonObject(labels.view.m)))
     return msel_lazy(sp.model, "family_msel_split_logo_at", items, context)
 
 
 def msel_logo_at(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var state = args[0]
     var g = Int(py=args[1])
-    return _state_rows(state, state[0], g, Int(py=state[2][g]), context)
+    var codes = state[0]
+    var counts = state[2]
+    var view = MselCodes(msel_addr(codes), Int(py=state[1]), len(counts))
+    var wants: List[Int] = [g]
+    var sizes: List[Int] = [Int(py=counts[g])]
+    var pin = msel_split_route(context, False, False, False)
+    var plan = msel_plan_select(pin.route, view, wants, False, sizes)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = codes  # keep the Python object alive through the native call above
+    return _only_pair(pairs)
 
 
 def msel_lpgo_split(x: PythonObject, groups: PythonObject, sp: MselSplitter,
@@ -952,15 +726,17 @@ def msel_lpgo_split(x: PythonObject, groups: PythonObject, sp: MselSplitter,
     """`LeavePGroupsOut.split`: one split per combination of groups, made
     on demand."""
     var n = msel_n_samples(x, context)
-    var gc = MselGroups(groups, n, "groups", context)
+    var labels = msel_label_codes(groups, n, "groups", context, True, True)
     var n_groups = sp.field("n_groups", context)
-    if msel_cmp("ge", n_groups, PythonObject(gc.m)):
+    if msel_cmp("ge", n_groups, PythonObject(labels.view.m)):
         raise Error("The groups parameter contains fewer than (or equal to) n_groups (" + family_str(n_groups)
-                    + ") numbers of unique groups (" + family_str(gc.classes) + ").")
+                    + ") numbers of unique groups (" + family_str(labels.classes) + ").")
+    var pin = msel_split_route(context, False, False, False)
+    var state = _group_state(labels, pin.route, context)
     var b = msel_b()
     var itertools = native_loaded_module("itertools")
-    var combos = py_call(itertools.combinations, py_call(b.range, PythonObject(gc.m)), n_groups)
-    var items = py_call(b.zip, py_call(itertools.repeat, _group_state(gc)), combos)
+    var combos = py_call(itertools.combinations, py_call(b.range, PythonObject(labels.view.m)), n_groups)
+    var items = py_call(b.zip, py_call(itertools.repeat, state), combos)
     return msel_lazy(sp.model, "family_msel_split_lpgo_at", items, context)
 
 
@@ -968,24 +744,22 @@ def msel_lpgo_at(args: PythonObject, context: PythonObject) raises -> PythonObje
     var state = args[0]
     var combo = args[1]
     var counts = state[2]
-    var m = len(counts)
-    var table = msel_new(m, "<i4", context)
-    var tp = msel_p32(table)
-    _ = table  # keep the Python object alive through the native call above
+    var chosen = List[Int]()
     var size = 0
     for i in range(len(combo)):  # driver-loop: over the chosen groups of one combination
         var g = Int(py=combo[i])
-        tp[g] = 1
-        _ = table  # keep the Python object alive through the native call above
+        chosen.append(g)
         size += Int(py=counts[g])
-    var n = Int(py=state[1])
-    var words = msel_new(n, "<i4", context)
     var codes = state[0]
-    _ = msel_gather_i32(msel_helpers_key(context), msel_addr(table), m, msel_addr(codes), n, msel_addr(words))
-    _ = codes  # keep the Python object alive through the native call above
-    _ = table  # keep the Python object alive through the native call above
-    _ = words  # keep the Python object alive through the native call above
-    return _state_rows(state, words, 1, size, context)
+    var view = MselCodes(msel_addr(codes), Int(py=state[1]), len(counts))
+    var pin = msel_split_route(context, False, False, False)
+    var route = pin.route
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_group_set(route, view, chosen, size)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = codes  # keep the Python object alive through the native calls above
+    return _only_pair(pairs)
 
 
 def msel_shuffle_split(x: PythonObject, n_splits: Int, test_size: PythonObject, train_size: PythonObject,
@@ -995,53 +769,33 @@ def msel_shuffle_split(x: PythonObject, n_splits: Int, test_size: PythonObject, 
     var sizes = msel_shuffle_sizes(n, test_size, train_size, default_test, context)
     var n_train = sizes[0]
     var n_test = sizes[1]
-    var rng = MselRng(random_state, context)
-    var want = List[Int](length=max(n_splits, 0), fill=n)
-    var perms = rng.permutation_rows(want, context)
-    var out = Python.list()
-    for s in range(len(want)):  # driver-loop: over splits
-        var perm = perms[s]
-        _ = py_call(out.append, Python.tuple(msel_slice_i64(perm, n_test, n_train, context),
-                                             msel_slice_i64(perm, 0, n_test, context)))
-    return out
+    var seed = msel_seed(random_state, True, context)
+    var pin = msel_split_route(context, False, True, False)
+    var route = pin.route
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_shuffle(route, n, n_splits, n_train, n_test, seed)
+    return msel_split_finish(pin, plan, context)
 
 
 def msel_group_shuffle_split(x: PythonObject, groups: PythonObject, n_splits: Int, test_size: PythonObject,
                              train_size: PythonObject, random_state: PythonObject, default_test: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     """`GroupShuffleSplit.split`."""
-    var gc = MselGroups(groups, msel_n_samples(x, context), "groups", context)
-    var m = gc.m
-    var sizes = msel_shuffle_sizes(m, test_size, train_size, default_test, context)
+    var labels = msel_label_codes(groups, msel_n_samples(x, context), "groups", context, True, True)
+    var view = labels.view
+    var sizes = msel_shuffle_sizes(view.m, test_size, train_size, default_test, context)
     var n_train = sizes[0]
     var n_test = sizes[1]
-    var rng = MselRng(random_state, context)
-    var counts = msel_i64_list(gc.counts, context)
-    var table = msel_new(m, "<i4", context)
-    var sums = msel_new(2, "<i8", context)
-    var want = List[Int](length=max(n_splits, 0), fill=m)
-    var perms = rng.permutation_rows(want, context)
-    var out = Python.list()
-    var sp = msel_p64(sums)
-    _ = sums  # keep the Python object alive through the native call above
-    var key = msel_helpers_key(context)
-    for s in range(len(want)):  # driver-loop: over splits
-        _ = msel_split_table_i32(key, msel_addr(perms[s]), m, n_test, n_train, msel_addr(counts), msel_addr(table),
-                                 msel_addr(sums))
-        _ = perms  # keep the permutations alive through the native call above
-        _ = counts  # keep the Python object alive through the native call above
-        _ = sums  # keep the Python object alive through the native call above
-        _ = table  # keep the Python object alive through the native call above
-        var words = gc.mapped_words(table, context)
-        _ = table  # keep the Python object alive through the native call above
-        var train = gc.only(words, 0, Int(sp[0]), context)
-        _ = sums  # keep the Python object alive through the native call above
-        _ = table  # keep the Python object alive through the native call above
-        var test = gc.only(words, 1, Int(sp[1]), context)
-        _ = sums  # keep the Python object alive through the native call above
-        _ = table  # keep the Python object alive through the native call above
-        _ = py_call(out.append, Python.tuple(train, test))
-    return out
+    var seed = msel_seed(random_state, True, context)
+    var pin = msel_split_route(context, False, True, False)
+    var route = pin.route
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_group_shuffle(route, view, n_splits, n_train, n_test, seed)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = labels  # the codes stay alive through the plan and the fill above
+    return pairs
 
 
 def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonObject, train_size: PythonObject,
@@ -1049,163 +803,86 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
                              context: PythonObject) raises -> PythonObject:
     """`StratifiedShuffleSplit._native_split`: every split, in split order
     (the same draws in the same order the generator made)."""
-    var b = msel_b()
     var n0 = 0 if y is None else msel_n_samples(y, context)
-    var gc = MselGroups(y, n0, "y", context)
-    var n = gc.n
-    var k = gc.m
-    var sizes = msel_shuffle_sizes(n, test_size, train_size, default_test, context)
+    var labels = msel_label_codes(y, n0, "y", context, True, True)
+    var view = labels.view
+    var sizes = msel_shuffle_sizes(view.n, test_size, train_size, default_test, context)
     var n_train = sizes[0]
     var n_test = sizes[1]
-    if k == 0:
-        raise Error("min() iterable argument is empty")
-    var least = gc.counts[0]
-    for c in range(k):  # driver-loop: over classes
-        least = min(least, gc.counts[c])
-    if least < 2:
-        raise Error("The least populated classes in y have only 1 member, which is too few. The "
-                    + "minimum number of groups for any class cannot be less than 2.")
-    if n_train < k:
-        raise Error("The train_size = " + String(n_train) + " should be greater or equal to the number of classes = " + String(k))
-    if n_test < k:
-        raise Error("The test_size = " + String(n_test) + " should be greater or equal to the number of classes = " + String(k))
-    # N086 (lane ne2-b-search-workers): ONE program per split. The rows
-    # class by class (a stable group_sort of the class codes: class c's
-    # ascending rows, what `gc.only` selected) are read back once per call;
-    # each split's program then runs the two approx_mode stages, the class
-    # draws and the two final draws as `permute_drawn` stages (their draw
-    # numbers follow the approx_mode draws the same program consumed), the
-    # per-class selection (`strat_take`) and the final orders (`take_rows64`),
-    # and reads back the train and test rows and the consumed draw count.
-    # The same draws in the same order, the same gathers: no bit changes.
-    # approx_mode hands out exactly n_train (then n_test) draws, so the
-    # train and test lengths are known before the program runs.
-    var classed = _class_order(gc.codes, n, k, context)
-    var ord32 = classed[0]
-    var off32 = classed[1]
-    var offsets = List[Int]()
-    var at = 0
-    for c in range(k):  # driver-loop: over classes (offsets of the class-ordered rows)
-        offsets.append(at)
-        at += gc.counts[c]
-    var counts32 = msel_i32_list(gc.counts, context)
-    var rng = MselRng(random_state, context)
-    var out = Python.list()
-    for _ in range(max(n_splits, 0)):  # driver-loop: over splits (one program each)
-        var prog = MetricDoorProg()
-        var cnt = prog.put_i32(counts32)
-        var ordr = prog.put_i32(ord32)
-        var off = prog.put_i32(off32)
-        var modes = prog.alloc(2 * k)
-        var used_slot = prog.alloc(2)
-        var used = prog.want(used_slot, 2)
-        var w0 = msel_signed32(rng.seed)
-        var w1 = msel_signed32(rng.seed >> 32)
-        var w2 = msel_signed32(rng.draws)
-        var w3 = msel_signed32(rng.draws >> 32)
-        prog.stage("approx_mode", k, [k, cnt, MSEL_NONE, n_train, modes, MSEL_NONE, used, w0, w1, w2, w3])
-        prog.stage("approx_mode", k, [k, cnt, modes, n_test, modes + k, used, used + 1, w0, w1, w2, w3])
-        var draws = prog.alloc(n)
-        for c in range(k):  # driver-loop: over classes (one draw stage each, all in this program)
-            var d = rng.draws + UInt64(c)
-            prog.stage("permute_drawn", 1, [gc.counts[c], draws + offsets[c], w0, w1, msel_signed32(d),
-                                            msel_signed32(d >> 32), used, 2])
-        var train = prog.alloc(n_train)
-        var test = prog.alloc(n_test)
-        prog.stage("strat_take", n, [k, ordr, off, draws, modes, train, test])
-        var last_tr = prog.alloc(n_train)
-        var last_te = prog.alloc(n_test)
-        var d_tr = rng.draws + UInt64(k)
-        var d_te = rng.draws + UInt64(k + 1)
-        prog.stage("permute_drawn", 1, [n_train, last_tr, w0, w1, msel_signed32(d_tr), msel_signed32(d_tr >> 32), used, 2])
-        prog.stage("permute_drawn", 1, [n_test, last_te, w0, w1, msel_signed32(d_te), msel_signed32(d_te >> 32), used, 2])
-        var tr_slot = prog.alloc(2 * n_train)
-        var tr_words = prog.want(tr_slot, 2 * n_train)
-        var te_slot = prog.alloc(2 * n_test)
-        var te_words = prog.want(te_slot, 2 * n_test)
-        prog.stage("take_rows64", n_train, [train, last_tr, tr_words])
-        prog.stage("take_rows64", n_test, [test, last_te, te_words])
-        var arena = metric_door_run(prog, PythonObject(None), context)
-        var base = arena.base()
-        var words = FAMILY_I32P(unsafe_from_address=base)
-        rng.draws += UInt64(Int(words[used]) + Int(words[used + 1]) + k + 2)
-        var out_tr = msel_new(n_train, "<i8", context)
-        var out_te = msel_new(n_test, "<i8", context)
-        unsafe_memcpy(dest=msel_p64(out_tr), src=FAMILY_I64P(unsafe_from_address=base + 4 * tr_words), count=n_train)
-        _ = out_tr  # keep the Python object alive through the native copy above
-        unsafe_memcpy(dest=msel_p64(out_te), src=FAMILY_I64P(unsafe_from_address=base + 4 * te_words), count=n_test)
-        _ = out_te  # keep the Python object alive through the native copy above
-        # The copied addresses point into this arena: keep it through the copies.
-        _ = arena^
-        _ = prog^
-        _ = py_call(out.append, Python.tuple(out_tr, out_te))
-    _ = counts32
-    _ = ord32
-    _ = off32
-    return out
-
-
-def _class_order(codes: PythonObject, n: Int, k: Int, context: PythonObject) raises -> PythonObject:
-    """(rows class by class, class offsets) as int32 Arrays: a stable
-    group_sort of the n int32 class codes (class c's rows ascending at
-    OFF[c] ..), in one program, read back once (N086)."""
-    var prog = MetricDoorProg()
-    var key = prog.put_i32(codes)
-    var off_slot = prog.alloc(k + 1)
-    var off = prog.want(off_slot, k + 1)
-    var ord_slot = prog.alloc(n)
-    var ordr = prog.want(ord_slot, n)
-    prog.stage("group_sort", 1, [key, n, k, off_slot, ord_slot])
-    var arena = metric_door_run(prog, PythonObject(None), context)
-    var base = arena.base()
-    var ord32 = msel_new(n, "<i4", context)
-    var off32 = msel_new(k + 1, "<i4", context)
-    unsafe_memcpy(dest=msel_p32(ord32), src=FAMILY_I32P(unsafe_from_address=base + 4 * ordr), count=n)
-    _ = ord32  # keep the Python object alive through the native copy above
-    unsafe_memcpy(dest=msel_p32(off32), src=FAMILY_I32P(unsafe_from_address=base + 4 * off), count=k + 1)
-    _ = off32  # keep the Python object alive through the native copy above
-    _ = arena^
-    _ = prog^
-    return Python.tuple(ord32, off32)
+    var seed = msel_seed(random_state, True, context)
+    var pin = msel_split_route(context, False, True, True)
+    var route = pin.route
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_strat_shuffle(route, view, n_splits, n_train, n_test, seed)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = labels  # the codes stay alive through the plan above
+    return pairs
 
 
 def msel_predefined_split(sp: MselSplitter, context: PythonObject) raises -> PythonObject:
     """`PredefinedSplit.split`: each fold value other than -1, in sorted
     order."""
     var folds = sp.field("_folds", context)
-    var gc = MselGroups(folds, Int(py=folds.size), "test_fold", context)
-    var out = Python.list()
-    for c in range(len(gc.classes)):  # driver-loop: over fold values
-        if msel_cmp("ne", gc.classes[c], PythonObject(-1)):
-            _ = py_call(out.append, gc.rows(gc.codes, c, gc.counts[c], context))
-    return out
+    var labels = msel_label_codes(folds, Int(py=folds.size), "test_fold", context, True, True)
+    var view = labels.view
+    var wants = List[Int]()
+    for c in range(len(labels.classes)):  # driver-loop: over fold values
+        if msel_cmp("ne", labels.classes[c], PythonObject(-1)):
+            wants.append(c)
+    var pin = msel_split_route(context, False, False, False)
+    var route = pin.route
+    var none = List[Int]()
+    var plan = MselSplitPlan()
+    with GILReleased(Python()):
+        plan = msel_plan_select(route, view, wants, True, none)
+    var pairs = msel_split_finish(pin, plan, context)
+    _ = labels  # the codes stay alive through the plan and the fill above
+    return pairs
 
 
 def msel_repeated_split(sp: MselSplitter, x: PythonObject, y: PythonObject, groups: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """`_Repeated.split`: repeat r is a shuffled run of the splitter with
-    seed `_mix_seed(base, r)`."""
-    var base = MselRng(sp.field("random_state", context), context)
+    seed `_mix_seed(base, r)`. UNPACK is done once for all repeats (the
+    labels are encoded once; before, every repeat built a splitter object
+    and admitted and encoded y again); each repeat is one plan and one
+    fill."""
+    var base = msel_seed(sp.field("random_state", context), True, context)
+    if base.bad:
+        raise Error(msel_seed_refusal())
     var cv = sp.field("cv", context)
     var cvargs = sp.field("cvargs", context)
     var repeats = msel_int(sp.field("n_repeats", context))
-    var out = Python.list()
-    for r in range(repeats):  # driver-loop: over repeats
-        var seed = PythonObject(msel_mix_seed(base.seed, r))
-        var keywords = py_call(msel_b().dict, cvargs)
-        py_setitem(keywords, "random_state", seed)
-        py_setitem(keywords, "shuffle", PythonObject(True))
-        var splitter = PythonObject(None)
-        var folds = PythonObject(None)
-        if cv is msel_cls("KFold", context) or cv is msel_cls("StratifiedKFold", context):
-            var name = String("KFold") if cv is msel_cls("KFold", context) else String("StratifiedKFold")
-            var n_splits = py_get(keywords, PythonObject("n_splits"), PythonObject(5))
-            splitter = msel_new_kfold(name, n_splits, PythonObject(True), seed, context)
-            folds = msel_split(splitter, x, y, groups, context)
-        else:
-            raise Error("TypeError: repeated model selection requires a native splitter configuration")
-        _ = py_call(out.extend, folds)
-    return out
+    var pairs = Python.list()
+    if repeats <= 0:
+        return pairs
+    var stratified = cv is msel_cls("StratifiedKFold", context)
+    if not stratified and cv is not msel_cls("KFold", context):
+        raise Error("TypeError: repeated model selection requires a native splitter configuration")
+    var k = msel_check_splits(py_get(cvargs, PythonObject("n_splits"), PythonObject(5)), context)
+    var n = 0
+    var labels = MselLabelPin()
+    if stratified:
+        labels = _strat_labels(y, context)
+    else:
+        n = msel_n_samples(x, context)
+    var view = labels.view
+    var form = labels.form
+    var pin = msel_split_route(context, stratified and not (k <= 256 and msel_fold_rows_fits(view.n, k)), True,
+                               stratified)
+    var route = pin.route
+    for r in range(repeats):  # driver-loop: over repeats (one plan and one fill each)
+        var seed = MselSeed(UInt64(msel_mix_seed(base.value, r)), False)
+        var plan = MselSplitPlan()
+        with GILReleased(Python()):
+            if stratified:
+                plan = msel_plan_stratified(route, view, form, k, True, seed)
+            else:
+                plan = msel_plan_kfold(route, n, k, True, seed, False)
+        _ = py_call(pairs.extend, msel_split_finish(pin, plan, context))
+    _ = labels  # the codes stay alive through every repeat above
+    return pairs
 
 
 # ---------------------------------------------------------------- dispatch
@@ -1245,7 +922,7 @@ def msel_split(model: PythonObject, var x: PythonObject, var y: PythonObject, va
         x = py_call(msel_b().range, msel_n_samples(x, context))
     # Perf (lane perf-svm-and-msel): a numeric ndarray/Array label vector
     # holds no Python leaf to pin; every consumer below encodes it through
-    # msel_encode (MselGroups, msel_first_seen), which reads it from its
+    # msel_encode (msel_label_codes), which reads it from its
     # buffer. Flattening it here boxed every label on every split call.
     # perf3-label-doors: a numpy-backed pandas Series whose stored exact
     # ndarray is such a vector is read through it (the labels its `tolist()`
@@ -1305,7 +982,6 @@ def msel_n_splits(model: PythonObject, x: PythonObject, y: PythonObject, groups:
     """`<splitter>.get_n_splits(X, y, groups)`."""
     var b = msel_b()
     var sp = MselSplitter(model, context)  # N070: class code and fields once per call
-    var math = native_loaded_module("math")
     if sp.kind == SPLITTER_LOO:
         if x is None:
             raise Error("The 'X' parameter should not be None.")

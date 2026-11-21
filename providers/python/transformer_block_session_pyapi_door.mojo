@@ -57,17 +57,23 @@ def transformer_block_session_close(owner: PythonObject) raises:
     owner.downcast_value_ptr[TransformerBlockSession]()[].close()
 
 
-def transformer_block_session_run(owner: PythonObject, operation: Int, addresses: List[Int],
+def transformer_block_session_entry(owner: PythonObject) raises -> EntryRef:
+    """The block entry a session owner was opened in: one native downcast at
+    a layer call's UNPACK, beside `transformer_block_session_handle`."""
+    return owner.downcast_value_ptr[TransformerBlockSession]()[].entry
+
+
+def transformer_block_session_run_words(entry: EntryRef, handle: Int, operation: Int, addresses: List[Int],
     scalars: List[Int]) raises -> Int:
-    """One session operation through the owner's block entry: reserve with
+    """One session operation through the session's block entry: reserve with
     the GIL held (the image's busy/closed admission), run `operation` with the
-    GIL released, release. The handle word leads the operation's words. The
-    caller keeps `owner` and every addressed buffer alive through the call.
-    Replaces the generation session provider's reserve/run/release and the
-    block provider capsule's reserved execute for a CausalLM layer."""
-    var held = owner.downcast_value_ptr[TransformerBlockSession]()
-    var entry = held[].entry
-    var handle = held[].word()
+    GIL released, release. The handle word leads the operation's words.
+    `entry` and `handle` are the session owner's (`transformer_block_session_entry`,
+    `transformer_block_session_handle`), unpacked by the caller, which keeps
+    the owner and every addressed buffer alive through the call.
+    Lane dw-neural-models (2026-11-21): the owner form
+    (`transformer_block_session_run(owner, ...)`) is gone; its one caller,
+    the CausalLM layer run, passes a typed request."""
     var slot: List[Int] = [handle]
     var words = List[Int](capacity=1 + len(scalars))
     words.append(handle)

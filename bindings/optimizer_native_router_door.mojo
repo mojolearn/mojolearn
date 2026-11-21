@@ -20,6 +20,7 @@ from bindings.optimizer_public_door import (
 )
 from bindings.optimizer_descriptor_boundary_door import optimizer_provider_entries, optimizer_native_mode, optimizer_driver
 from core.linear_metadata import linear_mode_name
+from core.shared_slot import SharedSlot
 from bindings.optimizer_serialization_boundary_pack import optimizer_restore_state
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_value, optimizer_owner_close, optimizer_owner_idle, optimizer_owner_admit_replacement
 from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
@@ -65,11 +66,51 @@ from bindings.optimizer_keys_unpack import (
 from bindings.py_keys import py_op_code
 
 
+struct OptimizerModeRoutes(Defaultable, Movable):
+    # `held`: (mode object, context, entries) triples of resolved numeric
+    # modes, at most OPTIMIZER_MODE_ROUTE_LIMIT of them. The mode object is an
+    # exact str (immutable) and is pinned here, so its identity names its word
+    # for as long as the triple is held. `identical`: the retained word of
+    # the identical-only operations.
+    var held: List[PythonObject]
+    var identical: List[PythonObject]
+
+    def __init__(out self):
+        self.held = List[PythonObject]()
+        self.identical = List[PythonObject]()
+
+
+# The named global may be shared by every Mojo extension in the process:
+# bump the name's version whenever OptimizerModeRoutes' layout changes.
+comptime OPTIMIZER_MODE_ROUTES = SharedSlot[OptimizerModeRoutes, "MojolearnOptimizerModeRoutesV1"]
+comptime OPTIMIZER_MODE_ROUTE_LIMIT = 8
+
+
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The entry dictionary of `mode` (None: the installation's default mode).
+
+    lane dw-autograd-seq (2026-11-21): resolved once per mode object. An
+    optimizer keeps one `numeric_mode` object for its life (and None reads
+    the one default-mode object), so every operation after its first is
+    pointer compares against the held triples. Before, EVERY optimizer /
+    training operation built the mode's String, normalised it, built a Python
+    str key for `bindings[word]`, resolved the provider and compared its
+    compiled mode. A different mode object, a different context or more than
+    OPTIMIZER_MODE_ROUTE_LIMIT live mode objects resolve in full again; a
+    refusal is never held. The compiled mode of a connected binding cannot
+    change within a process."""
     var selected = mode
     var nk = optimizer_keys()
     if selected is None:
         selected = py_item(py_item(context, nk[].k_backend), nk[].k__DEFAULT_MODE)
+    var routes = OPTIMIZER_MODE_ROUTES.get_or_create_ptr()
+    var held_count = len(routes[].held)
+    var at = 0
+    while at + 2 < held_count:  # driver-loop: over at most OPTIMIZER_MODE_ROUTE_LIMIT resolved mode objects
+        if routes[].held[at] is selected and routes[].held[at + 1] is context:
+            var found = routes[].held[at + 2]
+            return found
+        at += 3
     if py_type(selected) is not py_item(context, nk[].k_scalar_types)[5]:
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     var word = String()
@@ -83,7 +124,22 @@ def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> Pytho
     var provider = optimizer_provider_entries(entries)
     if optimizer_native_mode(provider) != (1 if word == "identical" else 0):
         raise Error("ImportError: optimizer binary numeric mode disagrees with the requested mode")
+    if held_count >= 3 * OPTIMIZER_MODE_ROUTE_LIMIT:
+        routes[].held.clear()
+    routes[].held.append(selected)
+    routes[].held.append(context)
+    routes[].held.append(entries)
     return entries
+
+
+def optimizer_entries_identical(context: PythonObject) raises -> PythonObject:
+    """`optimizer_entries` of the identical mode for the operations that run
+    in identical mode only; the word object is kept, so they hit the held
+    triple (a new `PythonObject("identical")` per call never would)."""
+    var routes = OPTIMIZER_MODE_ROUTES.get_or_create_ptr()
+    if len(routes[].identical) == 0:
+        routes[].identical.append(PythonObject("identical"))
+    return optimizer_entries(routes[].identical[0], context)
 
 
 def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Tuple[Float64, Float64]:
@@ -418,7 +474,7 @@ def optimizer_native(operation: Int, name: PythonObject, owner: PythonObject, va
         return sequence_device_operation(operation, owner, values, mode, context)
     if operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT or operation == OPTIMIZER_OPN_RESIDUAL_DROPOUT_BACKWARD:
         # the explicit residual layer runs in identical mode only
-        return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context), context)
+        return training_residual_dropout(operation, values, optimizer_entries_identical(context), context)
     if route == OPTIMIZER_ROUTE_EMBLAYER:
         # mojolearn.Embedding's forward and load (bindings/embedding_layer_native.mojo)
         if operation < 0:

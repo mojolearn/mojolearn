@@ -186,3 +186,93 @@ def _kmeans_admitted(source: PythonObject, context: PythonObject) raises -> Bool
     if cls is not py_item(context, nk[].k_array_class) and cls is not py_get(context, nk[].k_ndarray):
         return False
     return classical_is_f32(source, context) and classical_c_order(source, context)
+
+
+comptime _INIT_ARRAY = 2
+
+
+@fieldwise_init
+struct KMeansFitInit(Movable):
+    """First UNPACK stage of a fit. `clusters` (n_clusters as stored) and
+    `init_centroids` are the Python values the later refusals quote and
+    admit; the codes and the factor are what RUN takes."""
+    var clusters: PythonObject
+    var init_centroids: PythonObject
+    var init_code: Int
+    var metric_code: Int
+    var oversampling: Float64
+
+
+def kmeans_fit_init(fields: PythonObject, b: PythonObject, context: PythonObject) raises -> KMeansFitInit:
+    """n_clusters, init (a name, a code or explicit centers; a Python
+    callable is refused before it is called), metric and
+    oversampling_factor, in the public order and wording. `b`: the
+    builtins module the operator resolved once for the call."""
+    var k_obj = family_field(fields, "n_clusters")
+    var init = family_field(fields, "init")
+    var init_centroids = family_field(fields, "init_centroids")
+    var init_code = 0
+    var nk = cluster_keys()
+    if _kmeans_is_name(init, context):
+        var inits = py_item(context, nk[].k_family_kmeans_inits)
+        if not py_contains(inits, init):
+            raise Error("mojolearn: init must be one of " + family_repr(py_call(b.sorted, inits))
+                        + ", got " + family_repr(init))
+        init_code = Int(py=inits[init])
+    elif Bool(py=py_call(b.callable, init)):
+        # Refused before it is called: a Python init would run Python code
+        # inside the fit. PyCallable_Check through builtins.callable runs no
+        # user code.
+        raise Error("TypeError: Python init callbacks are not accepted; pass explicit initial centers "
+                    + "(an array of shape (n_clusters, n_features)) or use 'k-means++' or 'random'")
+    elif py_type(init) is b.int:
+        init_code = Int(py=family_call(b.int, init))
+    else:
+        if (py_type(init) is not b.bool
+                and cpython_table()[].PyType_IsSubtype(py_type(init)._obj_ptr, b.int._obj_ptr) != 0):
+            raise Error("TypeError: scalar model state requires native values without Python conversion hooks")
+        init_code = _INIT_ARRAY
+        init_centroids = init
+    var metric_code = _kmeans_metric(fields, context)
+    var factor = family_field(fields, "oversampling_factor")
+    var factor_type = py_type(factor)
+    var factor_admitted = factor_type is b.int or factor_type is b.float
+    if not factor_admitted and py_get(context, nk[].k_ndarray) is not None:
+        factor_admitted = factor_type is py_item(context, nk[].k_float64).type
+    if not factor_admitted:
+        # Use the canonical type getset directly; a custom metaclass can
+        # override __name__ even through type.__getattribute__.
+        var name = String(py_call(py_item(b.type.__dict__, nk[].k___name__).__get__, factor_type))
+        raise Error("TypeError: mojolearn: oversampling_factor must be a float, got " + name)
+    var oversampling = family_call(b.float, factor)
+    return KMeansFitInit(k_obj, init_centroids, init_code, metric_code, Float64(py=oversampling))
+
+
+@fieldwise_init
+struct KMeansFitScalars(Copyable, Movable):
+    """Second UNPACK stage of a fit: machine words only."""
+    var clusters: Int
+    var iterations: Int
+    var seed: Int
+    var restarts: Int
+    var tolerance: Float64
+
+
+def kmeans_fit_scalars(fields: PythonObject, k_obj: PythonObject, host: Bool, b: PythonObject,
+                       context: PythonObject) raises -> KMeansFitScalars:
+    """max_iter, tol, random_state and n_init in their original admission
+    order, then every narrowing in its original order."""
+    var max_iter = family_field(fields, "max_iter")
+    var tolerance = family_field(fields, "tol")
+    _kmeans_conversion_scalar(tolerance, context)
+    tolerance = family_call(b.float, tolerance)
+    var seed = family_field(fields, "random_state")
+    _kmeans_conversion_scalar(seed, context)
+    seed = family_call(b.int, seed)
+    var n_init = family_field(fields, "n_init")
+    var native_clusters = kmeans_integer(k_obj, host, context)
+    var native_iterations = kmeans_integer(max_iter, host, context)
+    var native_tolerance = Float64(py=tolerance)
+    var native_seed = kmeans_integer(seed, host, context)
+    var native_restarts = kmeans_integer(n_init, host, context)
+    return KMeansFitScalars(native_clusters, native_iterations, native_seed, native_restarts, native_tolerance)

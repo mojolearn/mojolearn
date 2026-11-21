@@ -48,6 +48,10 @@ _OPT_DEFAULTS = {
 class _RecurrentBase(ParamsMixin):
     # The xseq public native lifecycle owns the former fit/validation/output wrappers.
     _mojolearn_native_public = True
+    #: `device=None | "gpu" | "cpu"`: every operation runs on the estimator's
+    #: one native route (bindings/xseq_native_common_door.mojo `xseq_route`);
+    #: its check runs the same estimator on the other device, in this process.
+    _mojolearn_device = True
     _CELL = "lstm"
     _TASK = 0
 
@@ -183,6 +187,9 @@ class LSTMRegressor(_RecurrentRegressor):
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -272,6 +279,9 @@ class LSTMClassifier(_RecurrentClassifier):
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -366,6 +376,9 @@ class GRURegressor(_RecurrentRegressor):
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -455,6 +468,9 @@ class GRUClassifier(_RecurrentClassifier):
         Unused by this model; accepted for a common signature.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -549,6 +565,9 @@ class RNNRegressor(_RecurrentRegressor):
         Activation of the recurrence, as `nn.RNN`.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
@@ -639,6 +658,9 @@ class RNNClassifier(_RecurrentClassifier):
         Activation of the recurrence, as `nn.RNN`.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this installation's device, 'cpu'
+        runs on the CPU and 'gpu' requires a GPU installation. Other values raise `ValueError`.
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
