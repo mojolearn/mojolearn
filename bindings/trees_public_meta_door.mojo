@@ -2579,7 +2579,13 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             _ = _place(xt, S, n, c, blk.view(), splits[f][1], 0)
             _ = blk^
         var e = _clone(base, context)
-        _fit_member(e, Xa, labels.codes, PythonObject(None), context)
+        # The one member over every row sees every class (the codes were
+        # encoded from this y): a native member fit when its family has
+        # published, else its fit door. The per-fold fits of `_CalUnits`
+        # keep the member doors: a fold may lack a class and its member is
+        # fitted on the classes present, which the door's own encoding does.
+        _fit_members(_repeat(e, 1), Xa, n, d, _repeat(labels.codes, 1), False, PythonObject(None),
+                     _repeat(PythonObject(k), 1), jobs, context)
         _ = py_call(pairs.append, Python.tuple(e, _fit_calibrators(model, xt, trees_reshape(S, Python.tuple(n, c), context),
                                                                    labels.codes, context)))
     _set(model, "n_features_in_", PythonObject(d))
