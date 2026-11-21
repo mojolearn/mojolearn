@@ -520,6 +520,13 @@ def dbscan_fit(
 ) raises -> Int:
     """`Dbscan::run`, single node. Returns the total propagation passes.
 
+    The return is the `weak_cc` passes summed over the batches. The two
+    edge-free routes (`dbscan/impl/edge_free.mojo` and
+    `dbscan/impl/brute_edge_free.mojo`) label by union-find and run no
+    propagation pass, so a fit that takes either returns 0. Nothing a user
+    calls reads this number; checks use it as a reach signal and must not
+    read 0 as "no work".
+
     `edge_cap` is the most edges one batch's CSR may hold: `MAX_LABEL`, the
     int32 CSR's bound, and nothing else in production. A ball-cover batch
     whose EXACT edge count exceeds it is split in two and re-counted until
