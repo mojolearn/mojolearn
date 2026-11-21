@@ -73,32 +73,35 @@ struct ForestState(Movable):
 
     def __init__(out self, key: EntryRef, native: Int, caps: Int, fast: Bool, groves: Bool, features: Int,
                  trees: Int, outputs: Int):
+        var route = forest_route(groves, caps)
+        # The aggregation (`_resident_ordered_flag`): strict for the
+        # sequential engine, the 32-grove graph named explicitly under
+        # IDENTICAL, the binary's default otherwise.
+        var ordered = -1
+        if (caps & XF_CAP_ORDERED_RESIDENT) != 0:
+            if not groves:
+                ordered = 1
+            elif not fast:
+                ordered = 0
+        var words = List[Int](capacity=5)
+        if route != FOREST_ROUTE_SEQUENTIAL:
+            words.append(features)
+            words.append(trees)
+            words.append(outputs)
+        if route == FOREST_ROUTE_RESIDENT:
+            words.append(1 if fast else 0)
+            words.append(ordered)
         self.key = key.copy()
         self.native = native
         self.caps = caps
         self.fast = fast
         self.groves = groves
-        self.route = forest_route(groves, caps)
-        # The aggregation (`_resident_ordered_flag`): strict for the
-        # sequential engine, the 32-grove graph named explicitly under
-        # IDENTICAL, the binary's default otherwise.
-        self.ordered = -1
-        if (caps & XF_CAP_ORDERED_RESIDENT) != 0:
-            if not groves:
-                self.ordered = 1
-            elif not fast:
-                self.ordered = 0
+        self.route = route
+        self.ordered = ordered
         self.features = features
         self.trees = trees
         self.outputs = outputs
-        self.words = List[Int](capacity=5)
-        if self.route != FOREST_ROUTE_SEQUENTIAL:
-            self.words.append(features)
-            self.words.append(trees)
-            self.words.append(outputs)
-        if self.route == FOREST_ROUTE_RESIDENT:
-            self.words.append(1 if fast else 0)
-            self.words.append(self.ordered)
+        self.words = words^
 
 
 def forest_labels_route(state: ForestState) -> Bool:
