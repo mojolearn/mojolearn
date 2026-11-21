@@ -257,24 +257,12 @@ def _svm_query_refuse(finite: Int, range_word: Int, q: _SvmQuery, est: String) r
         admitted_finite_refuse(finite, est)
 
 
-def _svm_query_refuse(words: PythonObject, q: _SvmQuery, est: String) raises:
-    """The refusal of a query the resident entry flagged (its [finite,
-    range] words; None: another route, which tests the query itself), in
-    scikit-learn's wording 'Input X contains NaN or infinity (<est>).'"""
-    if words is None:
-        return
-    if q.store.active():
-        door_rows_refuse(Int(py=words[0]), Int(py=words[1]), est, q.store.base_rows)
-    else:
-        admitted_finite_refuse(Int(py=words[0]), est)
-
-
-def _svm_device_ok(resident_entry: PythonObject, kernel: Int, n_supports: List[Int]) raises -> Bool:
+def svm_device_ok(resident: Bool, kernel: Int, n_supports: List[Int]) -> Bool:
     """The resident entry runs (and tests the query of) every machine: a
     computed kernel (precomputed reads the cross-kernel's columns on the
     host) and support rows in every machine (an empty machine takes the
     host-list route). Then a fold may stay on the device."""
-    if resident_entry is None or kernel == 4 or len(n_supports) == 0:
+    if not resident or kernel == 4 or len(n_supports) == 0:
         return False
     for n in n_supports:  # small-loop(one word per fitted machine)
         if n <= 0:

@@ -7,9 +7,11 @@
 # SvrFitRequest, SvrQueryRequest). Every check and every field read of the
 # old `_svr_fit` / `_svr_predict` is here, in the same order and words; RUN
 # sees addresses and plain words only.
-from std.python import PythonObject
+from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family, admit_family_copied
-from bindings.py_balanced import py_fields
+from bindings.py_balanced import py_call, py_fields
+from bindings.family_common_pack import family_array
+from bindings.svc_kernel_query_unpack import svc_support_columns
 from bindings.classical_arrays_door import classical_address
 from bindings.family_common_unpack import family_repr
 from core.svr_native_api import SvrFitPlan, SvrFitRequest, SvrQueryRequest
@@ -19,10 +21,7 @@ from bindings.device_rows_door_run import DoorRowsStore
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
 from bindings.svm_keys_unpack import svm_keys
-from bindings.svc_kernel_rows_unpack import (
-    _SVR_RESIDENT_SLOT, _SvmQuery, _addr, _gather_support_columns, _svm_device_ok, _svm_fit_admit, _svm_fit_entry,
-    _svm_fit_host_rows, _svm_query, _svm_query_refuse, _svm_x_scan,
-)
+from bindings.svc_kernel_rows_unpack import _SVR_RESIDENT_SLOT, _SvmQuery, _addr, svm_device_ok, _svm_fit_admit, _svm_fit_entry, _svm_fit_host_rows, _svm_query, _svm_query_refuse, _svm_x_scan
 from bindings.svc_kernel_params_unpack import _c_rows, _kernel_code, _resolve_gamma, svm_settings_unpack
 
 
@@ -133,12 +132,16 @@ struct SvrQueryUnpacked(Movable):
     """A query: the typed request, the provider, the two status words the
     resident entry writes (`status`: X's finite and range words), and the
     Python owners of the buffers the request addresses: the admitted X
-    (`q`), the cross-kernel's support columns of kernel='precomputed'
-    (`query`), the fitted dual coefficients and support vectors, and the
+    (`q`), for kernel='precomputed' the int32 support indices and the buffer
+    RUN gathers the cross-kernel's support columns into (`owners`;
+    `gather_columns`, `gather_count`; the request's `x` is that buffer), the
+    fitted dual coefficients and support vectors, and the
     resident lease of the fitted state. `resident`: the binding keeps the
     fitted state on the device and tests the query it uploads or gathers."""
     var q: _SvmQuery
-    var query: PythonObject
+    var owners: PythonObject
+    var gather_columns: Int
+    var gather_count: Int
     var dual: PythonObject
     var sv: PythonObject
     var connection: SvrConnection
@@ -147,11 +150,14 @@ struct SvrQueryUnpacked(Movable):
     var request: SvrQueryRequest
     var resident: Bool
 
-    def __init__(out self, var q: _SvmQuery, query: PythonObject, dual: PythonObject, sv: PythonObject,
+    def __init__(out self, var q: _SvmQuery, owners: PythonObject, gather_columns: Int, gather_count: Int,
+                 dual: PythonObject, sv: PythonObject,
                  var connection: SvrConnection, var lease: SvrResidentPin, var status: List[Int32],
                  request: SvrQueryRequest, resident: Bool):
         self.q = q^
-        self.query = query
+        self.owners = owners
+        self.gather_columns = gather_columns
+        self.gather_count = gather_count
         self.dual = dual
         self.sv = sv
         self.connection = connection^
@@ -162,19 +168,22 @@ struct SvrQueryUnpacked(Movable):
 
 
 def svr_query_unpack(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
-                     context: PythonObject, native: PythonObject) raises -> SvrQueryUnpacked:
+                     context: PythonObject, candidate: Bool) raises -> SvrQueryUnpacked:
     """`SVR.predict`: the fitted test, X, the fitted state and the kernel
     parameters. The request's `dst` is 0: the door writes the address of the
     public result PACK allocates."""
     var nk = svm_keys()
     if not svc_has(fields, nk[].k_dual_coef_):
         raise Error("mojolearn SVR: call fit() first")
-    var resident_entry = neural_descriptor_entry(binding, "svr_predict_resident", False) if native is None else PythonObject(None)
+    # The B arm (the descriptor candidate) has no resident route.
+    var resident = False
+    if not candidate:
+        resident = neural_descriptor_entry(binding, "svr_predict_resident", False) is not None
     var n_support = svc_int(svc_field(fields, nk[].k_n_support_, "n_support_"))
     var k = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel"))
     var precomputed = k == "precomputed"
     var q_meta = _svm_query(source, "SVR", context,
-                            _svm_device_ok(resident_entry, 4 if precomputed else 0, [n_support]))
+                            svm_device_ok(resident, 4 if precomputed else 0, [n_support]))
     var d = svc_int(svc_field(fields, nk[].k_n_features_in_, "n_features_in_"))
     if q_meta.cols != d:
         raise Error("mojolearn SVR: X has " + String(q_meta.cols) + " features, fit saw " + String(d))
@@ -182,13 +191,18 @@ def svr_query_unpack(model: PythonObject, fields: PythonObject, binding: PythonO
     var dual = svc_field(fields, nk[].k_dual_coef_, "dual_coef_")
     var sv = svc_field(fields, nk[].k_support_vectors_, "support_vectors_")
     var n_features = d
-    var query = q_meta.keep
+    var owners = Python.list()
     var query_address = q_meta.address
+    var gather_columns = 0
+    var gather_count = 0
     if precomputed and n_support > 0:
-        # the cross-kernel's columns at the support vectors (SVC's rule)
-        query = _gather_support_columns(binding, q_meta.address, n_rows, q_meta.cols, svc_field(fields, nk[].k_support_, "support_"), -1,
-            context, native)
-        query_address = _addr(query)
+        # the cross-kernel's columns at the support vectors (SVC's rule), gathered by RUN
+        var columns = svc_support_columns(svc_field(fields, nk[].k_support_, "support_"), -1, owners, context)
+        gather_columns = columns[0]
+        gather_count = columns[1]
+        var gathered = family_array(Python.tuple(PythonObject(n_rows), PythonObject(gather_count)), "<f4", context)
+        _ = py_call(owners.append, gathered)
+        query_address = _addr(gathered)
         n_features = n_support
         sv = dual
     var bias = svc_read_f32(svc_field(fields, nk[].k_intercept_, "intercept_"), 0)
@@ -201,7 +215,6 @@ def svr_query_unpack(model: PythonObject, fields: PythonObject, binding: PythonO
         degree = svc_int(svc_field(fields, nk[].k__hp_degree, "_hp_degree"))
         coef0 = svc_float(svc_field(fields, nk[].k__hp_coef0, "_hp_coef0"))
     var connection = svr_connection(binding)
-    var resident = resident_entry is not None
     var lease = SvrResidentPin(PythonObject(None), 0)
     if resident and not precomputed:
         var mirrors: List[PythonObject] = [dual, sv]
@@ -216,7 +229,8 @@ def svr_query_unpack(model: PythonObject, fields: PythonObject, binding: PythonO
         Int(status.unsafe_ptr()), n_rows, n_features, n_support, kernel, degree,
         lease.handle, 0, q_meta.store.base_id, q_meta.store.base_rows, q_meta.store.index_id,
         bias, gamma, cache_mib, coef0)
-    return SvrQueryUnpacked(q_meta^, query, dual, sv, connection^, lease^, status^, request, resident)
+    return SvrQueryUnpacked(q_meta^, owners, gather_columns, gather_count, dual, sv, connection^, lease^, status^,
+                            request, resident)
 
 
 def svr_query_refused(unpacked: SvrQueryUnpacked) raises:

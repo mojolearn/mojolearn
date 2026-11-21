@@ -7,7 +7,11 @@ ROOT = Path(__file__).resolve().parents[1]
 # The kernel SVM door and its UNPACK / PACK files (lane dw-svc-kernel split the door).
 PUBLIC = '\n'.join((ROOT / 'bindings' / name).read_text() for name in (
     'svc_kernel_native_door.mojo', 'svc_kernel_params_unpack.mojo', 'svc_kernel_rows_unpack.mojo',
-    'svc_kernel_svr_unpack.mojo', 'svc_kernel_svr_pack.mojo'))
+    'svc_kernel_svr_unpack.mojo', 'svc_kernel_svr_pack.mojo', 'svc_kernel_provider_unpack.mojo',
+    'svc_kernel_query_unpack.mojo', 'svc_kernel_query_pack.mojo'))
+RUN = (ROOT / 'svm/svc_kernel_native_run.mojo').read_text()
+TRANSPORT = (ROOT / 'core/svc_native_api.mojo').read_text()
+DEVICE = (ROOT / 'svm/svc_native_device.mojo').read_text()
 NATIVE = (ROOT / 'svm/native_descriptor_dispatch.mojo').read_text()
 SETTINGS = (ROOT / 'svm/operation_metadata.mojo').read_text()
 
@@ -29,10 +33,10 @@ def test_repeated_binary_calls_do_not_reread_model_settings_or_query_shape():
         for forbidden in ('svc_field(', '_kernel_code(', 'q.shape', '_svc_provider(', '_svc_fit_settings(', '_svc_predict_settings('):
             assert forbidden not in src
         assert 'svc_descriptor_execute(native,' in src
-    for name in ('_run', '_pair_decisions'):
-        src = body(name)
-        assert src.count('_svc_predict_settings(') == 1
-        assert '_svc_provider(' not in src
+    # Inference: the fitted settings are read once at UNPACK; RUN (typed, no Python) never reads a field.
+    assert body('svc_query_unpack').count('svc_predict_settings(') == 1
+    for forbidden in ('PythonObject', 'std.python', 'svc_field(', 'py_call'):
+        assert forbidden not in RUN and forbidden not in TRANSPORT and forbidden not in DEVICE
     # the fit's operation words come once from the settings record read after validation (SvmSettings)
     assert body('_svc_fit').count('hp.fit_operation(') == 1 and body('_svc_fit').count('svm_settings_unpack(') == 1
     assert '_svc_provider(' not in body('_svc_fit')
@@ -40,8 +44,9 @@ def test_repeated_binary_calls_do_not_reread_model_settings_or_query_shape():
     # algorithm-only early return, and the public/fit lifecycle after it.
     operation = body('svc_kernel_operation')
     early, lifecycle = operation.split('        return plain\n', 1)
-    assert early.count('_svc_provider(') == 1
-    assert lifecycle.count('_svc_provider(') == 1
+    assert early.count('svc_connection(') == 1 and early.count('_svc_provider(') == 0
+    # the lifecycle path admits once per operation: a fit through _svc_provider, an inference through svc_connection
+    assert lifecycle.count('_svc_provider(') == 1 and lifecycle.count('svc_connection(') == 1
 
 
 def test_common_provider_is_selected_without_new_provider_type():
@@ -57,7 +62,7 @@ def test_common_provider_is_selected_without_new_provider_type():
     # No provider type of its own: the only structs are the door's query record (_SvmQuery, its two storage
     # owners), the settings record (SvmSettings) and the UNPACK records of the split operations (`*Unpacked`).
     structs = re.findall(r'^struct (\w+)', PUBLIC, re.M)
-    assert '_SvmQuery' in structs and all(name in ('_SvmQuery', 'SvmSettings') or name.endswith('Unpacked') for name in structs), structs
+    assert '_SvmQuery' in structs and all(name in ('_SvmQuery', 'SvmSettings', 'SvcConnection') or name.endswith('Unpacked') for name in structs), structs
     assert 'neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider)' in body('_svc_publish_dispatch')
 
 
@@ -78,7 +83,8 @@ def test_all_solve_and_machine_call_sites_receive_operation_snapshot():
     solves = re.findall(r'(?<!def )_solve\(fields, binding,.*?context, settings, native,', PUBLIC, re.S)
     machines = re.findall(r'(?<!def )_machine\(fields, binding,.*?context, settings, native,', PUBLIC, re.S)
     assert len(solves) == 3
-    assert len(machines) == 3
+    assert len(machines) == 1  # Platt's fold decisions; inference runs svc_machines_run (svm/svc_kernel_native_run.mojo)
+    assert RUN.count('drivers.query(SvcQueryRequest(') == 1
     assert 'settings, native,' in body('_fit_ovo')
     assert 'settings, native,' in body('_platt')
 
@@ -86,7 +92,8 @@ def test_all_solve_and_machine_call_sites_receive_operation_snapshot():
 def test_pair_fold_and_calibration_calls_use_same_native_provider():
     for operation in ('svc_pair_epilogue', 'svc_platt_train', 'svc_splitmix_perm'):
         assert f'family_call(_entry(binding, "{operation}"' not in PUBLIC
-    for function in ('_c_rows', '_gather', '_gather_i32', '_pair_select', '_epilogue', '_platt'):
+    assert RUN.count('drivers.epilogue(') == 3  # the cross-kernel column gather (twice: SVC machines, SVR) and the per-row epilogue
+    for function in ('_c_rows', '_gather', '_gather_i32', '_pair_select', '_platt'):
         src = body(function)
         assert 'native: PythonObject' in src.split('raises', 1)[0]
         assert 'svc_epilogue_execute(binding, native,' in src
@@ -130,7 +137,8 @@ def test_svc_auxiliary_dispatch_retains_native_owners_and_operation_metadata():
         assert name+'(' in aux
     assert 'svc_descriptor_flags(native)' in body('_resolve_gamma')
     assert 'svc_descriptor_execute(native, 9,' in body('_resolve_gamma')
-    assert 'svc_descriptor_execute(native, 11,' in body('_linear_coef')
+    assert 'svc_coef_run(drivers,' in body('_linear_coef') and RUN.count('drivers.dual_gemv(') == 1
+    assert 'SVC_TABLE_GEMV = 11' in TRANSPORT
     assert 'svc_ovo_execute(binding, native,' in body('_fit_ovo')
     admit=body('_svc_provider')
     assert admit.count('neural_descriptor_execute(native, 8,')==1
@@ -152,10 +160,10 @@ def test_svm_shared_inputs_are_snapshotted_outside_pair_and_fold_loops():
         # the admitted X outlives the solve: named after it, or moved into the unpacked record the door holds
         assert '_ = x_meta' in src or 'x_meta^' in src
     assert body('_svm_fit_admit').count('admit_family_meta(source,') == 1
-    for name in ('_run', '_pair_decisions', 'svr_query_unpack'):
-        # the query record (_SvmQuery) holds the admitted address, read once; kept alive past the last native use
-        assert 'q_meta.address' in body(name)
-        assert 'q_meta^' in body(name)
+    for name, record in (('svc_query_unpack', 'q'), ('svr_query_unpack', 'q_meta')):
+        # the query record (_SvmQuery) holds the admitted address, read once; moved into the unpacked record the door holds past RUN
+        assert record + '.address' in body(name)
+        assert record + '^' in body(name)
     assert '_addr(q)' not in body('_machine')
     metadata=(ROOT/'providers/python/array_metadata_pyapi_door.mojo').read_text()
     for slot in ('_store', '_base', '_pin', '_mv'):

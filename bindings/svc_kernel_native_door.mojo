@@ -28,8 +28,6 @@ from core.admitted_input import admitted_cast_f32
 from core.cast_in import CAST_KIND_SIGNED
 from core.admitted_convert import admitted_convert_vector
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.classical_pandas_door import classical_admit_value
-from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.native_owner_lifetime_door import native_release_admit
 from bindings.label_admission_native_unpack import labels_primitive_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
@@ -43,24 +41,28 @@ from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside,
 from bindings.family_common_unpack import FAMILY_F32P, FAMILY_F64P, FAMILY_I32P, family_repr
 from bindings.family_common_pack import family_call, family_array
 from std.python._cpython import GILReleased
+from core.svc_native_api import SvcDrivers
+from svm.svc_kernel_native_run import svc_query_run, svc_coef_run, svc_gather_columns_run
+from bindings.svc_kernel_provider_unpack import SvcConnection, svc_connection, svc_connection_publish
+from bindings.svc_kernel_query_unpack import svc_query_unpack, svc_query_refused, svc_coef_unpack, SVC_QUERY_DECISION, SVC_QUERY_CODES, SVC_QUERY_PROBA, SVC_QUERY_LOG_PROBA
+from bindings.svc_kernel_query_pack import svc_query_result, svc_query_pack, svc_coef_output
 from bindings.svc_kernel_svr_unpack import svr_fit_unpack, svr_query_unpack, svr_query_refused, svr_score_unpack
 from bindings.svc_kernel_svr_pack import svr_fit_pack, svr_query_output, svr_score_pack
-from bindings.svc_common_unpack import svc_builtins, svc_field, svc_has, svc_float, svc_int, svc_truthy, svc_read_f64, svc_read_f32, svc_shape_of
-from bindings.svc_common_pack import svc_prefix, svc_scalar_array, svc_decode, svc_threshold_codes, svc_argmax_rows
+from bindings.svc_common_unpack import svc_builtins, svc_field, svc_float, svc_int, svc_truthy, svc_read_f64, svc_shape_of
+from bindings.svc_common_pack import svc_prefix, svc_scalar_array, svc_decode, svc_threshold_codes
 from bindings.svc_common_door import svc_accuracy_codes
 from bindings.svc_common_run import svc_round_f32
-from bindings.fitted_resident_door import fitted_resident_lease
 from bindings.device_rows_door_run import DoorRowsStore
 from providers.python.svc_descriptor_pyapi_door import svc_epilogue_execute, svc_platt_execute, svc_splitmix_execute, svc_descriptor_execute, svc_ovo_execute
 from providers.python.compiled_binding_snapshot_pyapi_door import CompiledBindingSnapshot
-from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once
+from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from providers.python.classical_native_dispatch import CLASSICAL_NATIVE_DISPATCH
 from svm.operation_metadata import SvcOperationSettings, SVC_ABI_NAME
-from bindings.operation_names_svc import SVC_OPN_FAMILY_SVC_SVC_COEF, SVC_OPN_FAMILY_SVC_SVC_DECISION, SVC_OPN_FAMILY_SVC_SVC_FIT, SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA, SVC_OPN_FAMILY_SVC_SVC_PREDICT, SVC_OPN_FAMILY_SVC_SVC_PROBA, SVC_OPN_FAMILY_SVC_SVC_SCORE, SVC_OPN_FAMILY_SVC_SVC_VALIDATE, SVC_OPN_FAMILY_SVC_SVR_COEF, SVC_OPN_FAMILY_SVC_SVR_FIT, SVC_OPN_FAMILY_SVC_SVR_PREDICT, SVC_OPN_FAMILY_SVC_SVR_SCORE, SVC_OPN_FAMILY_SVC_SVR_VALIDATE
+from bindings.operation_names_svc import SVC_OPN_FAMILY_SVC_SVC_COEF, SVC_OPN_FAMILY_SVC_SVC_DECISION, SVC_OPN_FAMILY_SVC_SVC_FIT, SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA, SVC_OPN_FAMILY_SVC_SVC_PREDICT, SVC_OPN_FAMILY_SVC_SVC_PROBA, SVC_OPN_FAMILY_SVC_SVC_SCORE, SVC_OPN_FAMILY_SVC_SVC_VALIDATE, SVC_OPN_FAMILY_SVC_SVR_FIT, SVC_OPN_FAMILY_SVC_SVR_PREDICT, SVC_OPN_FAMILY_SVC_SVR_SCORE, SVC_OPN_FAMILY_SVC_SVR_VALIDATE
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_info
 from bindings.svm_keys_unpack import svm_keys
-from bindings.svc_kernel_rows_unpack import _EPI_BINARY, _EPI_LOG_PROBA, _EPI_OVO, _EPI_OVR, _EPI_PROBA, _EPI_VOTES, _GLUE_FOLD, _GLUE_FOLD_FINISH, _SVC_RESIDENT_SLOT, _addr, _entry, _gather, _gather_i32, _gather_support_columns, _pair_select, _query, _resident_entry, _svm_device_ok, _svm_fit_admit, _svm_fit_entry, _svm_fit_host_rows, _svm_fit_refuse, _svm_query_refuse, _svm_x_scan
-from bindings.svc_kernel_params_unpack import _c_rows, _kernel_code, _resolve_gamma, _svm_validate, svm_settings_unpack
+from bindings.svc_kernel_rows_unpack import _GLUE_FOLD, _GLUE_FOLD_FINISH, _addr, _entry, _gather, _gather_i32, _gather_support_columns, _pair_select, _svm_fit_admit, _svm_fit_entry, _svm_fit_host_rows, _svm_fit_refuse, _svm_query_refuse, _svm_x_scan
+from bindings.svc_kernel_params_unpack import _c_rows, _resolve_gamma, _svm_validate, svm_settings_unpack
 
 comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 636: a NaN or inf cannot be fitted; a computed NaN carries a vendor-specific payload and cannot sit in a hashed stage)"
 
@@ -91,13 +93,6 @@ def _svc_publish_dispatch(fields: PythonObject, native: PythonObject, context: P
         if py_contains(fields, nk[].k__native_svc_dispatch):
             native_release_admit(py_item(fields, nk[].k__native_svc_dispatch), context)
         py_setitem(fields, nk[].k__native_svc_dispatch, neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider))
-
-
-def _svc_predict_settings(fields: PythonObject, context: PythonObject) raises -> SvcOperationSettings:
-    var nk = svm_keys()
-    return SvcOperationSettings(_kernel_code(fields, context), svc_int(svc_field(fields, nk[].k__hp_degree, "_hp_degree")),
-        0, 0, svc_int(svc_field(fields, nk[].k_n_features_in_, "n_features_in_")), svc_float(svc_field(fields, nk[].k__gamma, "_gamma")),
-        0.0, 0.0, svc_float(svc_field(fields, nk[].k__hp_coef0, "_hp_coef0")), svc_float(svc_field(fields, nk[].k__hp_cache_size, "_hp_cache_size")))
 
 
 # ---------------------------------------------------------------- the machines
@@ -712,225 +707,23 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
 # ---------------------------------------------------------------- SVC inference
 
 
-def _run(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject, predict_class: Bool,
-         context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVC._run`: the binary machine's (n,) float32 decisions or labels."""
-    var settings = _svc_predict_settings(fields, context)
-    var resident_entry = _resident_entry(binding, native)
-    var nk = svm_keys()
-    var n_support = svc_int(svc_field(fields, nk[].k_n_support_, "n_support_")) if svc_has(fields, nk[].k_dual_coef_) else 0
-    var q_meta = _query(fields, source, context, _svm_device_ok(resident_entry, settings.kernel, [n_support]))
-    var q = q_meta.keep
-    var n_rows = q_meta.rows
-    var query_cols = q_meta.cols
-    var out = family_array(Python.tuple(PythonObject(n_rows)), "<f4", context)
-    var dual = svc_field(fields, nk[].k_dual_coef_, "dual_coef_")
-    var sv = svc_field(fields, nk[].k_support_vectors_, "support_vectors_")
-    var lease = 0
-    if resident_entry is not None and settings.kernel != 4:
-        # The support rows and duals cross to the device once per fitted
-        # state (bindings/fitted_resident_door.mojo; precomputed reads none).
-        lease = fitted_resident_lease(model, _SVC_RESIDENT_SLOT, binding, "svm_resident_lease", Python.list(dual, sv))
-    var words = _machine(fields, binding, q, dual, sv,
-             n_support, svc_read_f32(svc_field(fields, nk[].k_intercept_, "intercept_"), 0),
-             svc_float(svc_field(fields, nk[].k__label0, "_label0")), svc_float(svc_field(fields, nk[].k__label1, "_label1")), predict_class,
-             svc_field(fields, nk[].k_support_, "support_"), _addr(out), context, settings, native, n_rows, query_cols, q_meta.address,
-             PythonObject(None), lease, 0, resident_entry, q_meta.store)
-    _ = dual
-    _ = sv
-    _ = out  # keep the Python object alive through the native call above
-    _svm_query_refuse(words, q_meta, "SVC")
-    _ = q^
-    _ = q_meta^  # retain captured storage owners through the last native use
-    # The dispatch diagnostic is published once, by svc_kernel_operation,
-    # after the operation (it published it twice per predict).
-    return out
-
-
-def _pair_decisions(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
-                    context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVC._pair_decisions`: each pair machine's raw decision, pair-major,
-    in ONE float32 (n_pairs, n) Array."""
-    var nk = svm_keys()
-    var pairs = svc_field(fields, nk[].k__pairs, "_pairs")
-    var settings = _svc_predict_settings(fields, context)
-    var resident_entry = _resident_entry(binding, native) if len(pairs) > 0 else PythonObject(None)
-    var pair_supports = List[Int]()
-    for pno in range(len(pairs)):  # driver-loop: over the class pairs (one support count each)
-        pair_supports.append(Int(py=py_item(pairs[pno], nk[].k_dual).shape[1]))
-    var q_meta = _query(fields, source, context, _svm_device_ok(resident_entry, settings.kernel, pair_supports))
-    var q = q_meta.keep
-    var n_rows = q_meta.rows
-    var query_cols = q_meta.cols
-    var dec = family_array(Python.tuple(PythonObject(len(pairs)), PythonObject(n_rows)), "<f4", context)
-    var base = _addr(dec)
-    _ = dec  # keep the Python object alive through the native call above
-    # One entry lookup per call, not one per pair machine (lane perf-sweep-msel-nbr-svc).
-    var predict_entry = PythonObject(None)
-    if native is None and len(pairs) > 0 and resident_entry is None:
-        predict_entry = _entry(binding, "svc_predict", context)
-    var lease = 0
-    if resident_entry is not None and settings.kernel != 4:
-        # One lease for every pair machine, slot = the pair's index
-        # (bindings/fitted_resident_door.mojo; precomputed reads none).
-        var mirrors = Python.list()
-        for pno in range(len(pairs)):  # driver-loop: over the class pairs (two fitted arrays each)
-            _ = py_call(mirrors.append, py_item(pairs[pno], nk[].k_dual))
-            _ = py_call(mirrors.append, py_item(pairs[pno], nk[].k_sv))
-        lease = fitted_resident_lease(model, _SVC_RESIDENT_SLOT, binding, "svm_resident_lease", mirrors)
-    for pno in range(len(pairs)):  # driver-loop: over the class pairs (one machine each)
-        var p = pairs[pno]
-        var dual = py_item(p, nk[].k_dual)
-        # A fold is gathered again per machine (one device gather each).
-        var words = _machine(fields, binding, q, dual, py_item(p, nk[].k_sv), Int(py=dual.shape[1]), svc_float(py_item(p, nk[].k_b)), 0.0, 1.0, False,
-                 py_item(p, nk[].k_support), base + 4 * n_rows * pno, context, settings, native, n_rows, query_cols, q_meta.address,
-                 predict_entry, lease, pno, resident_entry, q_meta.store)
-        _ = dec  # keep the Python object alive through the native call above
-        _svm_query_refuse(words, q_meta, "SVC")
-    _ = q^
-    _ = q_meta^  # retain captured storage owners through the last native use
-    # The dispatch diagnostic is published once, by svc_kernel_operation.
-    return dec
-
-
-def _pair_codes(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The (i, j) class codes of the pairs, as int32 words."""
-    var nk = svm_keys()
-    var pairs = svc_field(fields, nk[].k__pairs, "_pairs")
-    var out = family_array(Python.tuple(PythonObject(max(1, 2 * len(pairs)))), "<i4", context)
-    var op = FAMILY_I32P(unsafe_from_address=_addr(out))
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(len(pairs)):  # driver-loop: over the class pairs
-        op[2 * i] = Int32(Int(py=py_item(pairs[i], nk[].k_i)))
-        _ = out  # keep the Python object alive through the native call above
-        op[2 * i + 1] = Int32(Int(py=py_item(pairs[i], nk[].k_j)))
-        _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _binary_codes(context: PythonObject) raises -> PythonObject:
-    var out = family_array(Python.tuple(PythonObject(2)), "<i4", context)
-    FAMILY_I32P(unsafe_from_address=_addr(out))[1] = 1
-    _ = out  # keep the Python object alive through the native call above
-    return out
-
-
-def _epilogue(fields: PythonObject, binding: PythonObject, mode: Int, dec: PythonObject, n_pairs: Int, n_rows: Int,
-              codes: PythonObject, shape: PythonObject, typestr: String, ab: PythonObject, label1: Float64,
-              context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVC._epilogue`: the per-row epilogues in the binding."""
-    var out = family_array(shape, typestr, context)
-    if n_rows > 0:
-        # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-        var abuf = Optional[PythonObject]()
-        if ab is not None and len(ab) > 0:
-            abuf = family_array(Python.tuple(PythonObject(2 * len(ab))), "<f8", context)
-            var ap = FAMILY_F64P(unsafe_from_address=_addr(abuf.value()))
-            _ = abuf  # keep the Python object alive through the native call above
-            for i in range(len(ab)):  # driver-loop: over the class pairs (their sigmoid parameters)
-                ap[2 * i] = svc_float(ab[i][0])
-                _ = abuf  # keep the Python object alive through the native call above
-                ap[2 * i + 1] = svc_float(ab[i][1])
-                _ = abuf  # keep the Python object alive through the native call above
-        var nk = svm_keys()
-        _ = svc_epilogue_execute(binding, native, classical_address(dec),
-                        classical_address(codes) if n_pairs > 0 else PythonObject(0),
-                        PythonObject(0) if not abuf else classical_address(abuf.value()), classical_address(out),
-                        Python.list(PythonObject(mode), PythonObject(n_rows), PythonObject(n_pairs),
-                                    PythonObject(len(svc_field(fields, nk[].k_classes_, "classes_"))), PythonObject(label1)))
-        _ = abuf  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
-        _ = abuf^
-    return out
-
-
-def _svc_decision(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
-                  context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVC.decision_function`."""
-    var nk = svm_keys()
-    var pairs = py_get(fields, nk[].k__pairs, PythonObject(None))
-    if pairs is None:
-        return _run(model, fields, binding, source, False, context, native)
-    var dec = _pair_decisions(model, fields, binding, source, context, native)
-    var n_pairs = Int(py=dec.shape[0])
-    var n_rows = Int(py=dec.shape[1])
-    var codes = _pair_codes(fields, context)
-    if String(svc_field(fields, nk[].k_decision_function_shape, "decision_function_shape")) == "ovo":
-        return _epilogue(fields, binding, _EPI_OVO, dec, n_pairs, n_rows, codes,
-                         Python.tuple(PythonObject(n_rows), PythonObject(n_pairs)), "<f4", PythonObject(None), 0.0, context, native)
-    var k = len(svc_field(fields, nk[].k_classes_, "classes_"))
-    return _epilogue(fields, binding, _EPI_OVR, dec, n_pairs, n_rows, codes,
-                     Python.tuple(PythonObject(n_rows), PythonObject(k)), "<f8", PythonObject(None), 0.0, context, native)
-
-
-def _svc_predict(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
-                 context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVC.predict`: the predicted codes decoded to the fitted classes."""
-    var nk = svm_keys()
-    return svc_decode(model, svc_field(fields, nk[].k_classes_, "classes_"),
-                      _svc_predict_codes(model, fields, binding, source, context, native), context)
-
-
-def _svc_predict_codes(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
-                       context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVC.predict` as int64 codes into `classes_`: the binary epilogue's
-    codes, or the one-vs-one vote (the 'ovr' argmax with break_ties). The
-    same epilogues as before; only the decode moved to `_svc_predict`, so
-    `score` compares these codes with y encoded against `classes_`."""
-    var nk = svm_keys()
-    var pairs = py_get(fields, nk[].k__pairs, PythonObject(None))
-    if pairs is None:
-        var raw = _run(model, fields, binding, source, True, context, native)
-        var n_rows = Int(py=raw.shape[0])
-        var codes = _epilogue(fields, binding, _EPI_BINARY, raw, 1, n_rows, _binary_codes(context),
-                              Python.tuple(PythonObject(n_rows)), "<i8", PythonObject(None),
-                              svc_float(svc_field(fields, nk[].k__label1, "_label1")), context, native)
-        return codes
-    var dec = _pair_decisions(model, fields, binding, source, context, native)
-    var n_pairs = Int(py=dec.shape[0])
-    var n_rows = Int(py=dec.shape[1])
-    var classes = svc_field(fields, nk[].k_classes_, "classes_")
-    var k = len(classes)
-    var pc = _pair_codes(fields, context)
-    if svc_truthy(svc_field(fields, nk[].k__hp_break_ties, "_hp_break_ties")):
-        var scores = _epilogue(fields, binding, _EPI_OVR, dec, n_pairs, n_rows, pc,
-                               Python.tuple(PythonObject(n_rows), PythonObject(k)), "<f8", PythonObject(None), 0.0, context, native)
-        return svc_argmax_rows(scores, context)
-    return _epilogue(fields, binding, _EPI_VOTES, dec, n_pairs, n_rows, pc,
-                     Python.tuple(PythonObject(n_rows)), "<i8", PythonObject(None), 0.0, context, native)
-
-
-def _svc_proba(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject, mode: Int,
-               context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVC.predict_proba` / `predict_log_proba` (`_proba`)."""
-    var nk = svm_keys()
-    var ab = py_get(fields, nk[].k__prob_ab, PythonObject(None))
-    if ab is None:
-        raise Error("AttributeError: mojolearn SVC: predict_proba is not available when "
-                    + "probability=False (scikit-learn's rule); fit with probability=True")
-    var k = len(svc_field(fields, nk[].k_classes_, "classes_"))
-    var dec: PythonObject
-    var codes: PythonObject
-    var n_pairs: Int
-    var n_rows: Int
-    if py_get(fields, nk[].k__pairs, PythonObject(None)) is None:
-        dec = _run(model, fields, binding, source, False, context, native)
-        n_pairs = 1
-        n_rows = Int(py=dec.shape[0])
-        codes = _binary_codes(context)
-    else:
-        dec = _pair_decisions(model, fields, binding, source, context, native)
-        n_pairs = Int(py=dec.shape[0])
-        n_rows = Int(py=dec.shape[1])
-        codes = _pair_codes(fields, context)
-    return _epilogue(fields, binding, mode, dec, n_pairs, n_rows, codes,
-                     Python.tuple(PythonObject(n_rows), PythonObject(k)), "<f8", ab, 0.0, context, native)
-
-
-def _pred_count(pred: PythonObject) raises -> Int:
-    if py_type(pred) is svc_builtins().list:
-        return len(pred)
-    return Int(py=pred.shape[0])
+def _svc_query(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject, kind: Int,
+               context: PythonObject, drivers: SvcDrivers) raises -> PythonObject:
+    """One inference operation (`kind`: SVC_QUERY_*): UNPACK, the public
+    array, every machine and the epilogue in ONE release of the GIL, the
+    refusal of a query the device entry flagged, PACK."""
+    var unpacked = svc_query_unpack(model, fields, binding, source, kind, context, drivers)
+    var result = svc_query_result(unpacked, context)
+    var complete = False
+    with GILReleased(Python()):
+        complete = svc_query_run(unpacked.drivers, unpacked.plan)
+    if not complete:
+        svc_query_refused(unpacked)
+        raise Error("RuntimeError: mojolearn SVC: the device entry flagged the query")
+    var packed = svc_query_pack(unpacked, result, context)
+    # The owners of X, the fitted arrays, the scratch and the lease outlive RUN and PACK.
+    _ = unpacked
+    return packed
 
 
 # ---------------------------------------------------------------- SVR
@@ -950,13 +743,17 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
 
 
 def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,
-                 context: PythonObject, native: PythonObject) raises -> PythonObject:
-    """`SVR.predict`: UNPACK, one typed query with the GIL released, the
-    refusal of a query the device entry flagged, the public vector."""
-    var unpacked = svr_query_unpack(model, fields, binding, source, context, native)
+                 context: PythonObject, connection: SvcConnection) raises -> PythonObject:
+    """`SVR.predict`: UNPACK, the public vector, then in one release of
+    the GIL the cross-kernel's support columns (kernel='precomputed') and
+    one typed query; then the refusal of a query the device entry flagged."""
+    var unpacked = svr_query_unpack(model, fields, binding, source, context, connection.candidate)
     var result = svr_query_output(unpacked.request.rows, context)
     unpacked.request.dst = _addr(result)
     with GILReleased(Python()):
+        if unpacked.gather_columns != 0:
+            svc_gather_columns_run(connection.drivers, unpacked.q.address, unpacked.q.rows, unpacked.q.cols,
+                                   unpacked.gather_columns, unpacked.gather_count, unpacked.request.x)
         _ = unpacked.connection.driver.query(unpacked.request, unpacked.resident)
     svr_query_refused(unpacked)
     # The owners of X, the fitted arrays, the lease and the provider outlive RUN.
@@ -965,82 +762,23 @@ def _svr_predict(model: PythonObject, fields: PythonObject, binding: PythonObjec
 
 
 def _svr_score(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject, y: PythonObject,
-               context: PythonObject, native: PythonObject) raises -> PythonObject:
+               context: PythonObject, connection: SvcConnection) raises -> PythonObject:
     """`SVR.score`: R^2 of the prediction against y."""
-    var pred = _svr_predict(model, fields, binding, source, context, native)
+    var pred = _svr_predict(model, fields, binding, source, context, connection)
     svr_score_unpack(Int(py=pred.shape[0]), y, context)
     return svr_score_pack(pred, y, context)
 
 
-def _coef_snapshot(value: PythonObject, name: String, context: PythonObject, mut pin: ArrayPin) raises -> ArrayMetadata:
-    var nk = svm_keys()
-    if py_type(value) is not py_item(context, nk[].k_array_class) and py_type(value) is not py_get(context, nk[].k_ndarray):
-        raise Error("TypeError: " + name + " requires an admitted native array")
-    classical_admit_value(value, context)
-    var shape = array_shape_once(value, context)
-    var captured = array_metadata_once(value, shape^, name, context, pin)
-    if len(captured.shape) != 2 or not captured.f32_c() or not captured.native_byte_order:
-        raise Error("TypeError: " + name + " requires a contiguous native float32 matrix")
-    return captured^
-
-
-def _linear_coef(fields: PythonObject, binding: PythonObject, classifier: Bool,
-                 context: PythonObject, native: PythonObject) raises -> PythonObject:
-    # Public coef_ and composed RFE use the same admitted metadata and GEMV.
-    var b = native_loaded_module("builtins")
-    var name = String("SVC" if classifier else "SVR")
-    var nk = svm_keys()
-    if not svc_has(fields, nk[].k_dual_coef_):
-        raise Error("AttributeError: mojolearn " + name + ": call fit() first")
-    if py_type(py_item(fields, nk[].k__hp_kernel)) is not b.str:
-        raise Error("TypeError: fitted SVM kernel requires an exact native string")
-    if String(py_item(fields, nk[].k__hp_kernel)) != "linear":
-        raise Error("AttributeError: mojolearn " + name + ": coef_ is only available for kernel='linear'")
-    host_inference_scalar(py_item(fields, nk[].k_n_features_in_), context)
-    var d = Int(py=py_item(fields, nk[].k_n_features_in_))
-    if d < 0:
-        raise Error("ValueError: SVM feature count cannot be negative")
-    var pairs = py_get(fields, nk[].k__pairs) if classifier else PythonObject(None)
-    if pairs is not None and py_type(pairs) is not b.list and py_type(pairs) is not b.tuple:
-        raise Error("TypeError: SVM pair state requires an exact list or tuple")
-    var count = len(pairs) if pairs is not None else 1
-    var duals = List[ArrayMetadata]()
-    var supports = List[ArrayMetadata]()
-    var pins = List[ArrayPin]()  # the door's pins of every captured buffer, held through the GEMVs
-    for row in range(count):  # driver-loop: capture each fitted buffer exactly once before execution
-        var pair = pairs[row] if pairs is not None else fields
-        if py_type(pair) is not b.dict:
-            raise Error("TypeError: SVM pair state requires an exact dictionary")
-        var keys = py_call(b.list, pair)
-        for i in range(len(keys)):  # driver-loop: reject key equality/hash hooks before field lookups
-            if py_type(keys[i]) is not b.str:
-                raise Error("TypeError: SVM fitted state requires exact string keys")
-        var dual_pin = ArrayPin()
-        var sv_pin = ArrayPin()
-        var dual = _coef_snapshot(pair["dual" if pairs is not None else "dual_coef_"], "dual_coef_", context, dual_pin)
-        var sv = _coef_snapshot(pair["sv" if pairs is not None else "support_vectors_"], "support_vectors_", context, sv_pin)
-        if dual.shape[0] != 1 or dual.shape[1] != sv.shape[0] or sv.shape[1] != d:
-            raise Error("ValueError: SVM coefficient and support-vector shapes disagree")
-        duals.append(dual^)
-        supports.append(sv^)
-        pins.append(dual_pin^)
-        pins.append(sv_pin^)
-    var out = family_array(Python.tuple(count, d), "<f4", context)
-    var address = Int(py=classical_address(out))
-    var entry = neural_descriptor_entry(binding, "svc_dual_gemv", False) if native is None else PythonObject(None)
-    for row in range(count):  # driver-loop: one existing GEMV per fitted pair; captured owners remain live
-        var n = supports[row].shape[0]
-        if d > 0 and n > 0:
-            if native is not None:
-                _ = svc_descriptor_execute(native, 11, [duals[row].source.addr, supports[row].source.addr, address + 4 * row * d],
-                    [n, d, 1 if pairs is not None else 0], [])
-            else:
-                _ = family_call(entry, PythonObject(duals[row].source.addr), PythonObject(supports[row].source.addr),
-                    Python.list(n, d, 1 if pairs is not None else 0), PythonObject(address + 4 * row * d))
-    _ = duals
-    _ = supports
-    _ = pins^
-    return out
+def _linear_coef(fields: PythonObject, classifier: Bool, context: PythonObject, drivers: SvcDrivers) raises -> PythonObject:
+    """Public `coef_` and composed RFE: UNPACK (every fitted buffer captured
+    once), one GEMV per fitted machine with the GIL released, the matrix."""
+    var unpacked = svc_coef_unpack(fields, classifier, context)
+    var result = svc_coef_output(len(unpacked.rows), unpacked.features, context)
+    var address = _addr(result)
+    with GILReleased(Python()):
+        svc_coef_run(drivers, unpacked.rows, unpacked.features, unpacked.sign, address)
+    _ = unpacked
+    return result
 
 
 # ---------------------------------------------------------------- dispatch
@@ -1100,9 +838,9 @@ def svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject
                   or operation == SVC_OPN_FAMILY_SVC_SVR_SCORE)
     if not fitting and not public:
         # coef_ (the native property schema) and composed callers: algorithm only.
-        var native_only = _svc_provider(args[0])
-        var plain = _svc_kernel_operation(model, operation, args, context, fields, native_only)
-        _svc_publish_dispatch(fields, native_only, context)
+        var connected = svc_connection(args[0])
+        var plain = _linear_coef(fields, operation == SVC_OPN_FAMILY_SVC_SVC_COEF, context, connected.drivers)
+        svc_connection_publish(fields, connected, context)
         return plain
     _svm_lifecycle_admit(model, fields, context)
     var nk = svm_keys()
@@ -1111,20 +849,28 @@ def svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject
         classical_require_fitted(model, False, _svc_method(operation), context)
         if depth == 0:
             estimator_feature_check(model, fields, args[1], context)
-    var native = _svc_provider(args[0])
-    var initial_depth = estimator_fit_begin(fields) if fitting else 0
-    var result = PythonObject(None)
-    try:
-        result = _svc_kernel_operation(model, operation, args, context, fields, native)
-    finally:
-        if fitting:
+    if fitting:
+        # The fits still take the by-name / descriptor route of `_svc_provider` (group D).
+        var native = _svc_provider(args[0])
+        var initial_depth = estimator_fit_begin(fields)
+        try:
+            if operation == SVC_OPN_FAMILY_SVC_SVC_FIT:
+                _svc_fit(model, args, context, native)
+            else:
+                _svr_fit(model, args, context, native)
+        finally:
             estimator_fit_end(model, initial_depth)
+        # A nested set_params may have replaced the dictionary's contents.
+        fields = py_fields(model)
+        _svc_publish_dispatch(fields, native, context)
+        estimator_fit_complete(model, args[1], classifier, context)
+        return model
+    # One provider admission per public operation; RUN takes its typed drivers.
+    var connection = svc_connection(args[0])
+    var result = _svc_kernel_operation(model, operation, args, context, fields, connection)
     # A nested set_params may have replaced the dictionary's contents.
     fields = py_fields(model)
-    _svc_publish_dispatch(fields, native, context)
-    if fitting:
-        estimator_fit_complete(model, args[1], classifier, context)
-        return result
+    svc_connection_publish(fields, connection, context)
     if (operation == SVC_OPN_FAMILY_SVC_SVC_SCORE or operation == SVC_OPN_FAMILY_SVC_SVR_SCORE
             or not estimator_outside() or py_get(context, nk[].k_ndarray) is None
             or py_type(result) is not py_item(context, nk[].k_array_class)):
@@ -1140,35 +886,31 @@ def svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject
 
 
 def _svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject,
-                          context: PythonObject, fields: PythonObject, native: PythonObject) raises -> PythonObject:
-    if operation == SVC_OPN_FAMILY_SVC_SVC_COEF or operation == SVC_OPN_FAMILY_SVC_SVR_COEF:
-        return _linear_coef(fields, args[0], operation == SVC_OPN_FAMILY_SVC_SVC_COEF, context, native)
-    if operation == SVC_OPN_FAMILY_SVC_SVC_FIT:
-        _svc_fit(model, args, context, native)
-        return model
+                          context: PythonObject, fields: PythonObject,
+                          connection: SvcConnection) raises -> PythonObject:
     if operation == SVC_OPN_FAMILY_SVC_SVC_DECISION:
-        return _svc_decision(model, fields, args[0], args[1], context, native)
+        return _svc_query(model, fields, args[0], args[1], SVC_QUERY_DECISION, context, connection.drivers)
     if operation == SVC_OPN_FAMILY_SVC_SVC_PREDICT:
-        return _svc_predict(model, fields, args[0], args[1], context, native)
+        # the predicted codes decoded to the fitted classes
+        var nk = svm_keys()
+        return svc_decode(model, svc_field(fields, nk[].k_classes_, "classes_"),
+                          _svc_query(model, fields, args[0], args[1], SVC_QUERY_CODES, context, connection.drivers), context)
     if operation == SVC_OPN_FAMILY_SVC_SVC_PROBA:
-        return _svc_proba(model, fields, args[0], args[1], _EPI_PROBA, context, native)
+        return _svc_query(model, fields, args[0], args[1], SVC_QUERY_PROBA, context, connection.drivers)
     if operation == SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA:
-        return _svc_proba(model, fields, args[0], args[1], _EPI_LOG_PROBA, context, native)
+        return _svc_query(model, fields, args[0], args[1], SVC_QUERY_LOG_PROBA, context, connection.drivers)
     if operation == SVC_OPN_FAMILY_SVC_SVC_SCORE:
         # N382: accuracy on codes. y is encoded once against classes_ and
         # compared with the predicted codes in the x_metrics COUNT program
         # (classical_score_from_codes, bindings/classical_labels_door.mojo); the
         # prediction is never decoded to label objects and re-encoded. The
         # same matched count over the same row count: no bit change.
-        var codes = _svc_predict_codes(model, fields, args[0], args[1], context, native)
+        var codes = _svc_query(model, fields, args[0], args[1], SVC_QUERY_CODES, context, connection.drivers)
         var nk = svm_keys()
         return PythonObject(svc_accuracy_codes(args[2], svc_field(fields, nk[].k_classes_, "classes_"), codes,
                                                Int(py=codes.shape[0]), context))
-    if operation == SVC_OPN_FAMILY_SVC_SVR_FIT:
-        _svr_fit(model, args, context, native)
-        return model
     if operation == SVC_OPN_FAMILY_SVC_SVR_PREDICT:
-        return _svr_predict(model, fields, args[0], args[1], context, native)
+        return _svr_predict(model, fields, args[0], args[1], context, connection)
     if operation == SVC_OPN_FAMILY_SVC_SVR_SCORE:
-        return _svr_score(model, fields, args[0], args[1], args[2], context, native)
+        return _svr_score(model, fields, args[0], args[1], args[2], context, connection)
     raise Error("RuntimeError: unknown kernel SVM operation " + String(operation))
