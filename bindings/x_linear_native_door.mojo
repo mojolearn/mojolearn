@@ -18,6 +18,13 @@
 # (no second conversion); IsotonicRegression.fit_transform transforms the
 # column the fit converted; a classifier's score scores the prediction the
 # same call decoded; Lasso / ElasticNet score the prediction buffer as it is.
+#
+# Every operation here is three calls: UNPACK and PACK in the group's
+# bindings/x_linear_<group>_unpack.mojo / _pack.mojo (cd, infer, isotonic,
+# regressors, sgd, cv), RUN in x_linear/door_run.mojo with the GIL released
+# and no Python object. The scores are a split predict and the metric door's
+# own operation. RidgeCV's split path is the one loop driven from here (a
+# RUN per cv split): bindings/x_linear_cv_unpack.mojo says why.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.x_linear_route_unpack import XLinearOps, xl_route, xl_route_host, xl_device_admit, xl_route_drop
