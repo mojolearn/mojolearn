@@ -20,7 +20,7 @@ from bindings.classical_validate_unpack import classical_view
 from bindings.x_prep_native_inputs_door import _rows_fields, _values
 from bindings.classical_labels_door import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog_door import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
-from bindings.prep_classify_prog_run import cls_col_stats, cls_class_stats, cls_nb_counts
+from bindings.prep_classify_prog_run import cls_col_stats, cls_class_stats, cls_nb_counts, ClsDaMode
 from bindings.sequential_admission_door import _one_of
 from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.prep_keys_unpack import prep_keys
@@ -33,25 +33,12 @@ comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 # x_prep stage codes (_expansion_prep._OPS) used by the statistics groups.
 comptime OP_LOOKUP = 7
 comptime OP_COUNT_NEG = 8
-comptime OP_MATMUL = 13
-comptime OP_COL_STATS = 1
-comptime OP_CLASS_STATS = 16
-comptime OP_QDA_COV = 40
 comptime OP_LAB_LOAD = 119
 comptime OP_CSR_DENSE = 164
 comptime OP_F2_CLAMP0 = 235
-comptime OP_GB_PART = 236
-comptime OP_GB_PART_ROW = 237
-comptime OP_GB_FOLD = 238
-comptime OP_QCB_PART = 239
-comptime OP_QCB_FOLD = 240
 
 # x_prep/blocked.mojo XB: the rows a block unit folds (_expansion_prep._XB).
 comptime XB = 2048
-# `_cls`: the most partial words a blocked class_stats keeps (_CLS_BLOCK_WORDS).
-comptime CLS_BLOCK_WORDS = 67108864
-# `_gram_rows`: the most partial words a blocked Gram keeps (_GRAM_WORDS).
-comptime GRAM_WORDS = 67108864
 # _IDN_FAM bits.
 comptime IDN_STATS_BLOCKED = 1
 comptime IDN_CLASS_ONEPASS = 2
@@ -59,9 +46,6 @@ comptime IDN_CLASS_ONEPASS = 2
 comptime IDN_NB_ONEPASS = 2
 comptime IDN_NB_CSR = 4
 comptime IDN_NB_CSR_DENSE = 8
-# _IDN_FAM2 bits.
-comptime F2_GRAM = 16
-comptime F2_GRAM_ROWTILE = 32
 
 
 def cls_builtins() raises -> PythonObject:
@@ -390,6 +374,35 @@ def cls_float(value: PythonObject) raises -> Float64:
     return Float64(py=py_call(cls_builtins().float, value))
 
 
+# ---------------------------------------------------------------- discriminant parameter checks
+# (the door's fit and the member admission read them: one copy)
+
+
+def da_shrinkage(shrinkage: PythonObject, context: PythonObject) raises -> Optional[Float64]:
+    """`_shrinkage_value`: None, -1.0 for 'auto', else the float in [0, 1]."""
+    var b = cls_builtins()
+    if shrinkage is None:
+        return None
+    if Bool(py=py_call(b.isinstance, shrinkage, b.str)):
+        if String(shrinkage) != "auto":
+            raise Error("mojolearn: invalid shrinkage " + cls_repr(shrinkage))
+        return Optional[Float64](-1.0)
+    if not is_real(shrinkage, context) or not (cls_float(shrinkage) >= 0 and cls_float(shrinkage) <= 1):
+        raise Error("mojolearn: shrinkage must be 'auto' or a float in [0, 1], got " + cls_repr(shrinkage))
+    return Optional[Float64](cls_float(shrinkage))
+
+
+def da_check_estimator_shrinkage(est: PythonObject, shrinkage: PythonObject) raises:
+    if est is not None and shrinkage is not None and Bool(py=shrinkage != PythonObject(0)):
+        raise Error("mojolearn: covariance_estimator and shrinkage parameters are not None. Only one of the two can be set.")
+
+
+def da_solver_is(fields: PythonObject, name: String) raises -> Bool:
+    var nk = prep_keys()
+    var solver = py_item(fields, nk[].k_solver)
+    return py_type(solver) is cls_builtins().str and String(solver) == name
+
+
 # ---------------------------------------------------------------- statistics stage groups
 
 
@@ -398,14 +411,6 @@ def col_stats(mut pr: ClsProg, xo: Int, n: Int, d: Int, out_buf: Int, variance: 
     in the blocked order when `_blocked()`: the typed group
     (bindings/prep_classify_prog_run.mojo `cls_col_stats`)."""
     cls_col_stats(pr.program, xo, n, d, out_buf, variance, blocked())
-
-
-def cs(mut pr: ClsProg, mode: PythonObject, xo: Int, n: Int, d: Int, out_buf: Int, context: PythonObject, variance: Bool = True) raises:
-    """`_cs`: the blocked order under IDN_STATS_BLOCKED, else one col_stats stage."""
-    if blocked() and (idn_fam(mode, context) & IDN_STATS_BLOCKED) != 0:
-        col_stats(pr, xo, n, d, out_buf, variance)
-    else:
-        pr.stage(OP_COL_STATS, d, xo, n, d, out_buf)
 
 
 def class_stats(mut pr: ClsProg, wo: Int, total: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int,
@@ -419,56 +424,16 @@ def class_stats(mut pr: ClsProg, wo: Int, total: Int, xo: Int, n: Int, d: Int, y
     cls_class_stats(pr.program, wo, total, xo, n, d, yo, K, cnt, mean_in, var_, sums, is_blocked, onepass)
 
 
-def cls_stats(mut pr: ClsProg, mode: PythonObject, xo: Int, n: Int, d: Int, yo: Int, K: Int,
-              cnt: Int, mean: Int, var_: Int, sums: Int, context: PythonObject, tail: Int = -2) raises:
-    """`_cls`: the blocked order under IDN_STATS_BLOCKED while its partials fit,
-    else one class_stats stage (tail -2: no trailing parameter; else the one
-    trailing word QuadraticDiscriminantAnalysis passes)."""
-    var nb = (n + XB - 1) // XB
-    if blocked() and (idn_fam(mode, context) & IDN_STATS_BLOCKED) != 0 and nb * K * d <= CLS_BLOCK_WORDS:
-        class_stats(pr, NONE, K * d, xo, n, d, yo, K, cnt, mean, var_, sums, mode, context, True)
-    elif tail == -2:
-        pr.stage(OP_CLASS_STATS, K * d, xo, n, d, yo, K, cnt, mean, var_, sums)
-    else:
-        pr.stage(OP_CLASS_STATS, K * d, xo, n, d, yo, K, cnt, mean, var_, sums, tail)
-
-
-def gram_rows(v: Int, n: Int, cells: Int) -> Int:
-    """`_gram_rows`."""
-    var rows = (v >> 16) if (v >> 16) != 0 else XB
-    while ((n + rows - 1) // rows) * cells > GRAM_WORDS and rows < 4194304:  # driver-loop: the block length doubles (a function of the shape only)
-        rows *= 2
-    return rows if ((n + rows - 1) // rows) * cells <= GRAM_WORDS else 0
-
-
-def gram(mut pr: ClsProg, mode: PythonObject, z: Int, n: Int, d: Int, g: Int, context: PythonObject) raises:
-    """`_gram`: G = Z'Z."""
-    var v = idn_fam2(mode, context)
-    var rows = gram_rows(v, n, d * d) if (blocked() and (v & F2_GRAM) != 0) else 0
-    if rows == 0:
-        pr.stage(OP_MATMUL, d * d, z, 1, d, z, d, 1, g, d, n, NONE, NONE)
-        return
-    var nb = (n + rows - 1) // rows
-    var part = pr.work(nb * d * d)
-    if (v & F2_GRAM_ROWTILE) != 0:
-        pr.stage(OP_GB_PART_ROW, nb * d, z, n, d, part, nb, rows)
-    else:
-        pr.stage(OP_GB_PART, nb * d * d, z, n, d, part, nb, rows)
-    pr.stage(OP_GB_FOLD, d * d, part, nb, d, g)
-
-
-def qda_cov(mut pr: ClsProg, mode: PythonObject, xo: Int, n: Int, d: Int, yo: Int, K: Int, mean: Int, cnt: Int,
-            cov: Int, context: PythonObject) raises:
-    """`_qda_cov`: the K class covariances (divisor the class count)."""
-    var v = idn_fam2(mode, context)
-    var rows = gram_rows(v, n, K * d * d) if (blocked() and (v & F2_GRAM) != 0) else 0
-    if rows == 0:
-        pr.stage(OP_QDA_COV, K * d * d, xo, n, d, yo, mean, cnt, cov)
-        return
-    var nb = (n + rows - 1) // rows
-    var part = pr.work(nb * K * d * d)
-    pr.stage(OP_QCB_PART, nb * d * d, xo, n, d, yo, K, mean, part, nb, rows)
-    pr.stage(OP_QCB_FOLD, K * d * d, part, nb, K, d, cnt, cov)
+def cls_da_mode(mode: PythonObject, context: PythonObject) raises -> ClsDaMode:
+    """UNPACK of the image's mode words a discriminant program is laid out
+    from (bindings/prep_classify_prog_run.mojo `ClsDaMode`), read once per
+    operation: the typed groups `cls_da_stats`, `cls_gram`, `cls_qda_cov`
+    replaced the door groups that read them at every group (`_cs`, `_cls`,
+    `_gram`, `_qda_cov`)."""
+    if not blocked():
+        return ClsDaMode(False, False, 0)
+    var fam = idn_fam(mode, context)
+    return ClsDaMode((fam & IDN_STATS_BLOCKED) != 0, (fam & IDN_CLASS_ONEPASS) != 0, idn_fam2(mode, context))
 
 
 def nb_onepass(mode: PythonObject, context: PythonObject) raises -> Bool:
