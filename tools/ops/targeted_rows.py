@@ -61,12 +61,17 @@ BOX HELPERS (tools/ops/paper_compare_job.sh, CPU, seconds):
     prep-groups --ids F [--ids G] --out-dir D: the races cut into one group per family and prep dataset
              (group-<family>-<dataset>.txt), which the job's tg-prep phase prepares at once, one process each.
     timed-check --results RES --ids F [--units U] [--arms A,B]: one UNTIMED line per staged arm (the candidate on the
-             listed rows, each owed unit's arm and its base) that has no timed race, with why; exit 3 when any.
+             listed rows, each owed unit's arm and its base) that has no timed race, with why; exit 3 when any. A unit
+             timed on both sides whose arm and base hold different rows gets one PARTIAL line naming them (no exit change).
+    ab-gaps  --arm A --rows T --ids F --base B --board X: one AB-ROWS-DIFFER line naming the races done on one side of
+             an A/B unit and not the other, with the reason (the preflight record, the race status, the cell status).
     empty-board --out D [--host-probe F] [--why W]: D/board.json with no race and the job's host probe, written
              only when D has no board (the candidate timed nothing), so the compare names the host and the NOT-RUN rows.
     summary  --compare C --rows R --results RES --ids F [--units U]: SUMMARY-TG (rows timed on both,
              FASTER/SAME/REGRESSION, rows still over 1.10 worst first, rows fixed (over 1.10 in the input compare, now
-             at or under 1.00), done/total per arm, and each owed A/B unit's arm over its back-to-back base).
+             at or under 1.00), done/total per arm, and each owed A/B unit's arm over its back-to-back base: the median
+             verdict, then the direction reading (cells faster/flat/slower on the raw ratio, min and max, ONE-WAY), and
+             every cell or race without a time with its reason).
 
 PARALLEL PLAN (HARD RULE, 2026-11-07): the two commits' closure facts (git archive + the Mojo import walk, about two
 minutes each) are computed at once in two processes; everything else is a pass over JSON in one process (seconds,
@@ -946,12 +951,39 @@ def untimed(results, ids, units_path=None, only_arms=None, prior_wheels=()):
     return out
 
 
+def partial(results, units_path=None, only_arms=None):
+    """[(arm, AB-ROWS-DIFFER line)] of every owed unit timed on both sides whose arm and base boards hold different
+    done races (lane fx-tools-round3, 2026-11-20: gemm-leaf512's arm board held 3 of its base's 4 rows, the unit ended
+    rc=1 and untimed() said nothing, because the arm had SOME timed race). A reading, not an UNTIMED arm."""
+    import measure_owed as MO
+    out = []
+    if not units_path or not os.path.isfile(units_path):
+        return out
+    with open(units_path) as fh:
+        units = [ln.rstrip("\n").split("\t") for ln in fh]
+    for f in units:
+        if len(f) != 3 or f[0] in ("candidate", "prior") or (only_arms and f[0] not in only_arms):
+            continue
+        arm, rows, ids_file = f
+        use = (_lines(ids_file + ".pass") if rows == "full" else None) or _lines(ids_file) or []
+        base = MO.load_board(os.path.join(results, "board-tg-ab-%s-base-%s" % (arm, rows), "board.json"))
+        brd = MO.load_board(os.path.join(results, "board-tg-ab-%s-%s" % (arm, rows), "board.json"))
+        if base is None or brd is None or not use:
+            continue     # an untimed side is untimed()'s line
+        line = gap_line(arm, rows, ab_row_gaps(base, brd, use))
+        if line:
+            out.append((arm, line))
+    return out
+
+
 def cmd_timed_check(a):
     ids = _lines(a.ids) or []
     only = [x for x in (a.arms or "").split(",") if x] or None
     bad = untimed(a.results, ids, a.units, only, [x for x in (a.prior_wheels or "").split(",") if x])
     for arm, why in bad:
         print("UNTIMED %s: %s" % (arm, why))
+    for arm, line in partial(a.results, a.units, only):
+        print("PARTIAL %s: %s" % (arm, line))
     print("TG-TIMED-CHECK untimed=%d%s" % (len(bad), "" if not bad else " (the job exits non-zero)"))
     return 3 if bad else 0
 
@@ -985,6 +1017,94 @@ def _done(board_path, ids):
     except (OSError, ValueError):
         races = {}
     return sum(1 for i in ids if (races.get(i) or {}).get("status") == "done")
+
+
+#: the A/B direction reading (lane fx-tools-round3, 2026-11-20: tf32-all had 12 of 13 cells faster and none slower
+#: and read "median 0.93 SAME"): a cell under 0.99 is faster, over 1.01 slower, between them flat; ONE-WAY when at least
+#: 80% of the cells (and at least 5) move one way with none beyond 1.05 the other way. An added reading only: the
+#: per-cell FASTER/SLOWER flags and the median verdict keep PC.FASTER / PC.SLOWER.
+DIR_FLAT = 0.01
+ONE_WAY_SHARE = 0.80
+ONE_WAY_MIN = 5
+ONE_WAY_AGAINST = 0.05
+
+
+def direction(ratios):
+    """'faster F flat N slower S min X max Y[ ONE-WAY faster|slower]' of an arm's raw cell ratios ('' with none)."""
+    if not ratios:
+        return ""
+    lo, hi = 1.0 - DIR_FLAT, 1.0 + DIR_FLAT
+    f = sum(1 for r in ratios if r < lo)
+    s = sum(1 for r in ratios if r > hi)
+    text = "faster %d flat %d slower %d min %s max %s" % (f, len(ratios) - f - s, s, PC.fmt_ratio(min(ratios)),
+                                                          PC.fmt_ratio(max(ratios)))
+    n = len(ratios)
+    for way, k, against in (("faster", f, any(r > 1.0 + ONE_WAY_AGAINST for r in ratios)),
+                            ("slower", s, any(r < 1.0 - ONE_WAY_AGAINST for r in ratios))):
+        if k >= ONE_WAY_MIN and k >= ONE_WAY_SHARE * n and not against:
+            text += " ONE-WAY " + way
+    return text
+
+
+def missing_reason(brd, rid, key=None):
+    """Why race RID (and, with KEY, its our-arm cell (phase, arm, batch)) has no timed cell in board document BRD:
+    no board, the preflight record (failed_preflight_recipes / skipped_recipes with its problems), the race not in the
+    board, the race's status and failure, or the cell's own status. Never empty (lane fx-tools-round3, 2026-11-20:
+    gemm-leaf512's arm lost neural/gemm to the profile admission and its line read 'arm - ms ratio -')."""
+    import measure_owed as MO
+    if brd is None:
+        return "no board"
+    for field, word in (("failed_preflight_recipes", "FAILED"), ("skipped_recipes", "REFUSED")):
+        rec = (brd.get(field) or {}).get(rid)
+        if rec is not None:
+            probs = [str(p) for p in (rec.get("problems") or [])] if isinstance(rec, dict) else [str(rec)]
+            return "preflight %s: %s" % ((rec.get("status") if isinstance(rec, dict) else None) or word,
+                                         "; ".join(probs[:3])[:300] or "no problem recorded")
+    race = (brd.get("races") or {}).get(rid)
+    if race is None:
+        return "race not in the board (never reached: see the board's log)"
+    why = "race %s" % (race.get("status") or "without status")
+    if race.get("failure"):
+        why += ": " + str(race["failure"])[:240]
+    if key is not None:
+        cell = MO.our_cells(race).get(key)
+        if cell is None:
+            return why + "; no %s %s cell" % (key[0], key[1])
+        if race.get("status") in (None, "done"):
+            return "cell %s" % PC.short_status(cell.get("status"))[:240]
+        why += "; cell %s" % PC.short_status(cell.get("status"))[:160]
+    return why
+
+
+def ab_row_gaps(base, brd, uids):
+    """[(race id, side, why)] of the unit's races done on one side and not on the other (side 'arm' or 'base'):
+    a row an arm lost is named with its reason, never only a shorter count (lane fx-tools-round3, 2026-11-20)."""
+    out = []
+    for rid in uids:
+        b_done = ((((base or {}).get("races") or {}).get(rid)) or {}).get("status") == "done"
+        a_done = ((((brd or {}).get("races") or {}).get(rid)) or {}).get("status") == "done"
+        if b_done and not a_done:
+            out.append((rid, "arm", missing_reason(brd, rid)))
+        elif a_done and not b_done:
+            out.append((rid, "base", missing_reason(base, rid)))
+    return out
+
+
+def gap_line(arm, rows_tag, gaps):
+    """The one AB-ROWS-DIFFER line of an A/B unit whose arm and base hold different rows ('' when they match)."""
+    if not gaps:
+        return ""
+    return "AB-ROWS-DIFFER arm=%s rows=%s %s" % (arm, rows_tag, " | ".join(
+        "%s missing on the %s: %s" % (rid, side, why) for rid, side, why in gaps))
+
+
+def cmd_ab_gaps(a):
+    """Print the AB-ROWS-DIFFER line of one unit (the job calls it after each unit; exit 0 always: a reading)."""
+    import measure_owed as MO
+    uids = _lines(a.ids) or []
+    line = gap_line(a.arm, a.rows, ab_row_gaps(MO.load_board(a.base), MO.load_board(a.board), uids))
+    print(line or "AB-ROWS-SAME arm=%s rows=%s (%d race(s))" % (a.arm, a.rows, len(uids)))
+    return 0
 
 
 def summary(doc, rows, results, ids, units=(), prior_versions=None):
@@ -1058,26 +1178,46 @@ def summary(doc, rows, results, ids, units=(), prior_versions=None):
     for arm, rows_tag, uids, capped_ids in units:
         base = MO.load_board(os.path.join(results, "board-tg-ab-%s-base-%s" % (arm, rows_tag), "board.json"))
         brd = MO.load_board(os.path.join(results, "board-tg-ab-%s-%s" % (arm, rows_tag), "board.json"))
-        ratios = []
+        ratios, untimed_cells, start = [], 0, len(detail)
         for rid in uids:
             bc = MO.our_cells(((base or {}).get("races") or {}).get(rid) or {})
             ac = MO.our_cells(((brd or {}).get("races") or {}).get(rid) or {})
-            for k in sorted(set(bc) | set(ac), key=str):
+            keys = sorted(set(bc) | set(ac), key=str)
+            if not keys:
+                # a race neither board timed: its line names why instead of vanishing (lane fx-tools-round3)
+                untimed_cells += 1
+                detail.append("AB %s rows=%s %s: no cell on either side (base: %s; arm: %s)" % (
+                    arm, rows_tag, rid, missing_reason(base, rid), missing_reason(brd, rid)))
+                continue
+            for k in keys:
                 b, x = MO.cell_ms(bc.get(k)), MO.cell_ms(ac.get(k))
                 r = x / b if b and x else None
                 if r is not None:
                     ratios.append(r)
+                else:
+                    untimed_cells += 1
                 if r is None and b and rid in capped_ids and MO.capped(ac.get(k)):
                     # IN-JOB BASE CAP (measure_owed.py): the arm's rounds stopped at this job's base time
                     v = " NOT-FASTER-THAN-BASE (stopped at this job's base time)"
+                elif r is None:
+                    # the side without a time says why (lane fx-tools-round3, 2026-11-20)
+                    v = " NOT-TIMED (%s)" % "; ".join(
+                        "%s: %s" % (side, missing_reason(d, rid, k))
+                        for side, d, ms in (("base", base, b), ("arm", brd, x)) if not ms)
                 else:
-                    v = "" if r is None else " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")
+                    v = " " + MO.verdict(r, "FASTER", "SLOWER", "SAME")
                 detail.append("AB %s rows=%s %s %s %s: base %s -> arm %s ms ratio %s%s" % (
                     arm, rows_tag, rid, k[0], k[1], PC.fmt_ms(b), PC.fmt_ms(x), PC.fmt_ratio(r), v))
         med = statistics.median(ratios) if ratios else None
-        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s" % (
+        gaps = ab_row_gaps(base, brd, uids)
+        table.append("  %-34s rows=%-6s races=%-3d cells=%-3d median arm/base %s %s%s%s%s" % (
             arm, rows_tag, len(uids), len(ratios), PC.fmt_ratio(med),
-            "-" if med is None else MO.verdict(med, "FASTER", "SLOWER", "SAME")))
+            "-" if med is None else MO.verdict(med, "FASTER", "SLOWER", "SAME"),
+            ("; " + direction(ratios)) if ratios else "",
+            ("; untimed cells %d" % untimed_cells) if untimed_cells else "",
+            ("; rows differ %d" % len(gaps)) if gaps else ""))
+        if gaps:
+            detail.insert(start, gap_line(arm, rows_tag, gaps))
     if table:
         lines.append("A/B (arm and its base, the candidate, back to back):")
         lines += table + detail
@@ -1173,6 +1313,12 @@ def build_box_parser():
     eb.add_argument("--out", required=True)
     eb.add_argument("--host-probe", default=None)
     eb.add_argument("--why", default=None)
+    ag = sub.add_parser("ab-gaps", help="one AB-ROWS-DIFFER line: the races an A/B unit holds on one side only, why")
+    ag.add_argument("--arm", required=True)
+    ag.add_argument("--rows", required=True, help="the unit's rows tag")
+    ag.add_argument("--ids", required=True, help="the unit's ids file (both sides time the same list)")
+    ag.add_argument("--base", required=True, help="the base board.json")
+    ag.add_argument("--board", required=True, help="the arm board.json")
     sm = sub.add_parser("summary")
     sm.add_argument("--compare", required=True)
     sm.add_argument("--rows", required=True)
@@ -1186,10 +1332,10 @@ def build_box_parser():
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] in ("plan", "chunks", "prep-groups", "summary", "timed-check", "empty-board"):
+    if argv and argv[0] in ("plan", "chunks", "prep-groups", "summary", "timed-check", "empty-board", "ab-gaps"):
         a = build_box_parser().parse_args(argv)
         return {"plan": cmd_plan, "chunks": cmd_chunks, "prep-groups": cmd_prep_groups, "summary": cmd_summary,
-                "timed-check": cmd_timed_check, "empty-board": cmd_empty_board}[a.cmd](a)
+                "timed-check": cmd_timed_check, "empty-board": cmd_empty_board, "ab-gaps": cmd_ab_gaps}[a.cmd](a)
     return cmd_select(build_select_parser().parse_args(argv))
 
 
