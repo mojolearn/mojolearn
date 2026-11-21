@@ -80,6 +80,10 @@ from bindings.trees_public_boost_door import (
 )
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
 from bindings.classical_labels_door import labels_accuracy, _classification_encoded as score_classification_encoded
+from bindings.member_set_door import (
+    MemberSet, member_set_admit, member_set_run, member_set_pack, member_set_release,
+)
+from core.member_abi import MEMBER_F32, MEMBER_I32
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
     prep_estimator_plan, prep_native_context, prep_native_split, prep_estimator_predict_internal,
@@ -534,6 +538,71 @@ def _fit_member(member: PythonObject, X: PythonObject, y: PythonObject, weights:
     _ = meta_member_call(member, "fit", Python.tuple(X, y), context, keywords)
 
 
+def _fit_members_native(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject,
+                        float_targets: Bool, weights: PythonObject, counts: PythonObject,
+                        context: PythonObject) raises -> Bool:
+    """Fit the unfitted `clones` as ONE NATIVE MEMBER SET (core/member_abi.mojo,
+    bindings/member_set_door.mojo): every member admitted once, the fits run
+    with the GIL released on host workers (independent members in parallel;
+    one worker when a member's route is a GPU), the fitted states written
+    into the clones as their own fit writes them. False, with nothing run,
+    when any clone is not a native member (its family has not published, or
+    its admit keeps the estimator's own doors): the caller then runs its
+    `_fit_member` loop for all of them.
+
+    `X`: the float32 C-order `n` x `d` Array every member reads (by view: no
+    copy). `targets[i]`: member i's target Array of `n` values, float32
+    (`float_targets`) or the int32 class codes 0 .. counts[i]-1 (`counts`:
+    one class count per member; None for regressors). `weights`: the float32
+    sample weights Array or None."""
+    var b = trees_builtins()
+    var m = len(clones)
+    if m == 0:
+        return False
+    var set = MemberSet(trees_address(X), n, d, MEMBER_F32 if float_targets else MEMBER_I32, MEMBER_I32)
+    var w_address = 0
+    if weights is not None:
+        w_address = trees_address(weights)
+    for i in range(m):  # driver-loop: over members (admission, once each)
+        var classes = 0
+        if counts is not None:
+            classes = Int(py=counts[i])
+        if not member_set_admit(set, clones[i], trees_address(targets[i]), w_address, 0, 0, 0, 0, classes, context, b):
+            return False
+    member_set_run(set)
+    _ = X  # keep the Python objects alive through the member fits above
+    _ = targets
+    _ = weights
+    try:
+        for i in range(m):  # driver-loop: over members (publication)
+            var codes = PythonObject(None)
+            if counts is not None:
+                codes = py_call(b.list, py_call(b.range, counts[i]))
+            _ = member_set_pack(set, i, codes, b)
+    finally:
+        member_set_release(set)  # a failing publication leaves no state behind
+    return True
+
+
+def _fit_members(clones: PythonObject, X: PythonObject, n: Int, d: Int, targets: PythonObject, float_targets: Bool,
+                 weights: PythonObject, counts: PythonObject, context: PythonObject) raises:
+    """Fit every clone: as one native member set when every member's family
+    has published its member entry (`_fit_members_native`), else one member
+    fit door call after the other (`_fit_member`)."""
+    if _fit_members_native(clones, X, n, d, targets, float_targets, weights, counts, context):
+        return
+    for i in range(len(clones)):  # driver-loop: over members
+        _fit_member(clones[i], X, targets[i], weights, context)
+
+
+def _repeat(value: PythonObject, m: Int) raises -> PythonObject:
+    """`[value] * m`: one target (or class count) shared by m members."""
+    var items = Python.list()
+    for _ in range(m):  # driver-loop: over members
+        _ = py_call(items.append, value)
+    return items
+
+
 def _takes_weights(est: PythonObject, context: PythonObject) raises -> Bool:
     var plan = prep_estimator_plan(est, context)
     if plan is None:
@@ -820,10 +889,31 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     var weights = _member_weights(active.names, active.ests, sample_weight, _rows(Xa), context)
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
-    for i in range(len(active.ests)):  # driver-loop: over members
-        var e = _clone(active.ests[i], context)
-        _fit_member(e, Xa, target, weights, context)
-        _ = py_call(fitted.append, e)
+    var m = len(active.ests)
+    var clones = Python.list()
+    for i in range(m):  # driver-loop: over members
+        _ = py_call(clones.append, _clone(active.ests[i], context))
+    # Native members read typed targets: the class codes, or (regressors) y
+    # as float32 words. A y the float32 admission refuses keeps the member
+    # fit doors, which refuse it in their own words.
+    var native = False
+    if classifier:
+        var k = len(_attr(model, PythonObject("classes_"), Python.list()))
+        native = _fit_members_native(clones, Xa, _rows(Xa), _cols(Xa), _repeat(target, m), False, weights,
+                                     _repeat(PythonObject(k), m), context)
+    else:
+        var y32 = PythonObject(None)
+        try:
+            y32 = _f32_array(y, 1, "y", context)
+        except:
+            y32 = PythonObject(None)
+        if y32 is not None and _rows(y32) == _rows(Xa):
+            native = _fit_members_native(clones, Xa, _rows(Xa), _cols(Xa), _repeat(y32, m), True, weights,
+                                         PythonObject(None), context)
+    for i in range(m):  # driver-loop: over members
+        if not native:
+            _fit_member(clones[i], Xa, target, weights, context)
+        _ = py_call(fitted.append, clones[i])
     _set(model, "named_estimators_", _named(active.names, fitted))
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
     _set(model, "_fitted", PythonObject(True))
@@ -1030,10 +1120,21 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         sw_addr = trees_address(sw)
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
-    for i in range(len(active.ests)):  # driver-loop: over members
-        var e = _clone(active.ests[i], context)
-        _fit_member(e, Xa, y_full, sw, context)
-        _ = py_call(fitted.append, e)
+    var n_members = len(active.ests)
+    # Class counts of the code targets (None for regressors): the native
+    # member sets fit every member on the ensemble's codes.
+    var counts = PythonObject(None)
+    var final_counts = PythonObject(None)
+    if codes:
+        var k_classes = PythonObject(len(_attr(model, PythonObject("classes_"), Python.list())))
+        counts = _repeat(k_classes, n_members)
+        final_counts = _repeat(k_classes, 1)
+    var full = Python.list()
+    for i in range(n_members):  # driver-loop: over members
+        _ = py_call(full.append, _clone(active.ests[i], context))
+    _fit_members(full, Xa, n, d, _repeat(y_full, n_members), not codes, sw, counts, context)
+    for i in range(n_members):  # driver-loop: over members
+        _ = py_call(fitted.append, full[i])
     var methods = Python.list()
     var native_methods = List[String]()
     for i in range(len(fitted)):  # driver-loop: over members
@@ -1090,9 +1191,13 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
             # fold's members read the fold matrices as admitted too.
             admitted_hold_rows_of(Xa, Xtr, trees_address(Xtr), Int(py=tr_view.shape[0]), d)
             admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
+        var fold_members = Python.list()
+        for i in range(n_members):  # driver-loop: over members
+            _ = py_call(fold_members.append, _clone(active.ests[i], context))
+        _fit_members(fold_members, Xtr, Int(py=tr_view.shape[0]), d, _repeat(y_tr, n_members), not codes, w_tr,
+                     counts, context)
         for i in range(len(active.ests)):  # driver-loop: over members
-            var e = _clone(active.ests[i], context)
-            _fit_member(e, Xtr, y_tr, w_tr, context)
+            var e = fold_members[i]
             var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, Int(py=te_view.shape[0]), binary, context), Int(py=te_view.shape[0]), context)
             _ = Xa  # keep the Python object alive through the native call above
             var got = _place(xt, meta_view, n, width, blk.view(), te_view, col0)
@@ -1114,7 +1219,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var final_ = _clone(final, context)
     _set(model, "final_estimator_", final_)
     var meta32 = _f32_array(trees_reshape(meta, Python.tuple(n, width), context), 2, "meta", context)
-    _fit_member(final_, meta32, y_full, sw, context)
+    _fit_members(_repeat(final_, 1), meta32, n, width, _repeat(y_full, 1), not codes, sw, final_counts, context)
     _set(model, "n_features_in_", PythonObject(d))
     _set(model, "_fitted", PythonObject(True))
     return model
@@ -1366,14 +1471,19 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
     var rows = _arange(xt, n, context)
+    var columns = Python.list()
+    var clones = Python.list()
     for j in range(_cols(Ya)):  # driver-loop: over the output columns (one member each)
-        var e = _clone(est, context)
         var col = _codes_array(Python.list(PythonObject(j)), context)
         var yj = trees_reshape(_gather(xt, trees_address(Ya), n, _cols(Ya), rows, col, context), Python.tuple(n), context)
         _ = Ya  # keep the Python object alive through the native call above
-        _fit_member(e, Xa, yj, weights, context)
-        _ = Ya  # keep the Python object alive through the native call above
-        _ = py_call(fitted.append, e)
+        _ = py_call(columns.append, yj)
+        _ = py_call(clones.append, _clone(est, context))
+    # The columns are independent members: one native member set (parallel)
+    # when the family has published, else one fit door call per column.
+    _fit_members(clones, Xa, n, _cols(Xa), columns, True, weights, PythonObject(None), context)
+    for j in range(len(clones)):  # driver-loop: over the output columns (one member each)
+        _ = py_call(fitted.append, clones[j])
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
     _set(model, "_fitted", PythonObject(True))
     return model
@@ -1503,6 +1613,11 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, n, context)
     var fitted = Python.list()
     var classes = Python.list()
+    # One clone, one encoded code column and one class count per output
+    # column; the columns are independent members fitted together below.
+    var clones = Python.list()
+    var code_columns = Python.list()
+    var counts = Python.list()
     # The label steps run on the estimator's device (labels_scope), read once.
     var label_context = labels_scope(model, context)
     var columns = _label_columns(target, _xt(py_fields(model), context), context)
@@ -1516,9 +1631,9 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         _set(model, "classes_", classes)
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var labels = trees_encode_labels(_copy_block(T, j * rows_n, (j + 1) * rows_n, String(T.dtype), context), label_context)
-            var e = _clone(est, context)
-            _fit_member(e, Xa, labels.codes, weights, context)
-            _ = py_call(fitted.append, e)
+            _ = py_call(clones.append, _clone(est, context))
+            _ = py_call(code_columns.append, labels.codes)
+            _ = py_call(counts.append, PythonObject(len(labels.classes)))
             _ = py_call(classes.append, labels.classes)
     else:
         var rows = Python.list()
@@ -1537,10 +1652,13 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
         for j in range(m):  # driver-loop: over the output columns (one member each)
             var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
             var labels = trees_encode_labels(column, label_context)
-            var e = _clone(est, context)
-            _fit_member(e, Xa, labels.codes, weights, context)
-            _ = py_call(fitted.append, e)
+            _ = py_call(clones.append, _clone(est, context))
+            _ = py_call(code_columns.append, labels.codes)
+            _ = py_call(counts.append, PythonObject(len(labels.classes)))
             _ = py_call(classes.append, labels.classes)
+    _fit_members(clones, Xa, n, _cols(Xa), code_columns, False, weights, counts, context)
+    for j in range(len(clones)):  # driver-loop: over the output columns (one member each)
+        _ = py_call(fitted.append, clones[j])
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
     _set(model, "_fitted", PythonObject(True))
     return model
@@ -1806,10 +1924,15 @@ def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: Pyt
             _ = py_call(targets.append, _indicator(xt, codes_view, j, context))
     var fitted = Python.list()
     _set(model, "estimators_", fitted)
+    var clones = Python.list()
     for i in range(len(targets)):  # driver-loop: over members
-        var e = _clone(est, context)
-        _fit_member(e, Xa, targets[i], PythonObject(None), context)
-        _ = py_call(fitted.append, e)
+        _ = py_call(clones.append, _clone(est, context))
+    # One binary member per target (0/1 codes, two classes): independent,
+    # fitted together.
+    _fit_members(clones, Xa, _rows(Xa), _cols(Xa), targets, False, PythonObject(None),
+                 _repeat(PythonObject(2), len(targets)), context)
+    for i in range(len(clones)):  # driver-loop: over members
+        _ = py_call(fitted.append, clones[i])
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
     _set(model, "_fitted", PythonObject(True))
     return model
@@ -2346,9 +2469,8 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             # size floor), as in MselFoldRows
             var opened = native_storage_allocate(family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io),
                                                              PythonObject("resident")))
-            py_setattr(opened, "min_words", PythonObject(1 << 62))
-            py_setattr(opened, "_scope", PythonObject(None))
-            _ = _cal_rows_call(opened, "scope_enter", Python.tuple(), mctx)
+            # the floor goes to the native scope state with the enter call
+            _ = _cal_rows_call(opened, "scope_enter", Python.tuple(PythonObject(1 << 62)), mctx)
             scope = opened
             units.rows_class = family_call(b.getattr, py_item(mctx, nk[].k_family_msel_arena_io), PythonObject("DeviceRows"))
             units.rows_take = family_call(b.getattr, res, PythonObject("take"))

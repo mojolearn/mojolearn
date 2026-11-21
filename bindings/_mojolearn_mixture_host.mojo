@@ -30,6 +30,7 @@ from std.python import Python, PythonObject
 from std.python.bindings import PythonModuleBuilder
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from mixture.host.gmm_native_host import GMM_NATIVE_HOST_API
+from core.mixture_member import mixture_member_publish
 
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -99,6 +100,9 @@ def build__mojolearn_mixture_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_gmm_python.patch
         module.def_function[gmm_sample_binding]("gmm_sample")
         module.def_function[mixture_native_api_v1_binding]("mixture_native_api_v1")
-        return module.finalize()
+        var published_module = module.finalize()
+        # The GaussianMixture member entry (core/mixture_member.mojo) beside its host kernel table.
+        mixture_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(GMM_NATIVE_HOST_API.get_or_create_ptr()[].entries.unsafe_ptr()))
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_mixture_host: ", e))

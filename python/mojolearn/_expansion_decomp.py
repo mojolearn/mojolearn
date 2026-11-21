@@ -1547,6 +1547,8 @@ class PLSRegression(_PLS):
     >>> pred = mojolearn.PLSRegression(n_components=2).fit(X, y).predict(X)
     """
     _deflation, _pmode = "regression", "A"
+    # The member ABI (core/member_abi.mojo): family 22 (Pls), kind 0.
+    _mojolearn_member = (22, 0)
 
     def fit(self, X, y=None, Y=None):
         """Fit the model to X and the targets (``y`` or ``Y``).
@@ -1616,6 +1618,8 @@ class PLSCanonical(_PLS):
     >>> xs, ys = mojolearn.PLSCanonical(n_components=2).fit(X, Y).transform(X, Y)
     """
     _deflation, _pmode = "canonical", "A"
+    # The member ABI (core/member_abi.mojo): family 22 (Pls), kind 1.
+    _mojolearn_member = (22, 1)
     _parameters = ("n_components", "scale", "algorithm", "max_iter", "tol", "copy", "numeric_mode", "device")
 
     def __init__(self, n_components=2, *, scale=True, algorithm="nipals", max_iter=500, tol=1e-06, copy=True,
@@ -1674,6 +1678,8 @@ class CCA(_PLS):
     >>> xs, ys = mojolearn.CCA(n_components=2).fit(X, Y).transform(X, Y)
     """
     _deflation, _pmode = "canonical", "B"
+    # The member ABI (core/member_abi.mojo): family 22 (Pls), kind 2.
+    _mojolearn_member = (22, 2)
 
 
 # ================================================================ dictionary learning / sparse PCA
