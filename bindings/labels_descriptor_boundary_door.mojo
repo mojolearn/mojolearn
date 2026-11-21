@@ -196,17 +196,24 @@ def labels_scope(model: PythonObject, context: PythonObject) raises -> PythonObj
     var scope = py_get(context, "labels_cpu_scope")
     if scope is None:
         return context
-    # The scope is a copy of `context`; a family context that grew after the
-    # copy (a module imported later added its tables) is copied again, once
-    # per growth: the CPU branch only, one length read and one dictionary
-    # read per call otherwise.
+    # The scope is a copy of the context it was made from. A family context
+    # that grew after the copy (a module imported later added its tables), or
+    # a context derived from it (the typed context a door builds once per
+    # connected context, which carries the base's scope key), is copied
+    # again, once per growth or derivation: the CPU branch only; two
+    # dictionary reads, one pointer compare and one length read otherwise.
     var size = len(context)
+    var source = py_get(scope, "labels_cpu_source")
     var held = py_get(scope, "labels_cpu_source_size")
-    if held is not None and Int(py=held) == size:
+    if source is context and held is not None and Int(py=held) == size:
+        return scope
+    var entries = py_get(context, "labels_cpu_entries")
+    if entries is None:
         return scope
     var fresh = py_call(context.copy)
     _ = py_call(fresh.pop, PythonObject("labels_cpu_scope"), PythonObject(None))
-    _ = py_call(fresh.update, py_get(context, "labels_cpu_entries"))
+    _ = py_call(fresh.update, entries)
+    py_setitem(fresh, PythonObject("labels_cpu_source"), context)
     py_setitem(fresh, PythonObject("labels_cpu_source_size"), PythonObject(size))
     py_setitem(context, PythonObject("labels_cpu_scope"), fresh)
     return fresh

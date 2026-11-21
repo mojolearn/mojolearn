@@ -167,6 +167,7 @@ def cpu_scope(context, **entries):
     scope.update(cpu)
     # `labels_scope` copies again when `context` has grown since (a shared
     # family context that later imports extend): the size it was copied at.
+    scope["labels_cpu_source"] = context
     scope["labels_cpu_source_size"] = len(context)
     context["labels_cpu_scope"] = scope
     return scope
