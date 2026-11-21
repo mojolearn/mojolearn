@@ -35,9 +35,12 @@ group) and the one rounding is the final Float32 divide, as in
 
 GROUPS. A group id is the rank of the row's member values among the distinct
 member-value tuples present, built one member at a time
-(`tree_ctr_refine_host`: key = group * cardinality + code, then the rank of
-the key). Only group EQUALITY reaches the columns, so the labelling moves no
-bit; it is fixed anyway so that the host tables are reproducible.
+(`tree_ctr_refine_host`: key = code * groups + group, then the rank of the
+key, so the member added last is the most significant). That is the device
+builder's segment numbering: each member is a stable sort of all rows by its
+code, so the segments come out ordered by (new code, old segment). Only
+group EQUALITY reaches the columns; the shared numbering is what lets a
+model table built on either side index the same entries.
 
 PARALLEL PLAN. The candidates of one level are independent units:
 `tree_ctr_level_host` runs one task per candidate across the host's workers,
@@ -281,7 +284,8 @@ def tree_ctr_refine_host(
     parallel: Bool,
 ) -> TreeCtrGroups:
     """Split every group of the base by one more member: the new id is the
-    rank of `base * cardinality + code` among the keys present. `codes[r]`
+    rank of `code * base_count + base` among the keys present (the new
+    member most significant, the device builder's segment order). `codes[r]`
     is below `cardinality` (a dense categorical code, or a split's 0/1 side
     with cardinality 2). `parallel` splits the row passes across the
     workers (the caller is not itself inside a task); the distinct-key sort
@@ -290,15 +294,15 @@ def tree_ctr_refine_host(
     var ids = List[UInt32](unsafe_uninit_length=max(n_rows, 1))
     var kp = TreeU64Ptr(unsafe_from_address=Int(keys.unsafe_ptr()))
     var ip = TreeU32Ptr(unsafe_from_address=Int(ids.unsafe_ptr()))
-    var card = UInt64(cardinality)
+    var radix = UInt64(max(base_count, 1))
     var units = 1
     if parallel:
         units = max(1, host_predict_task_count_work(n_rows, n_rows * 2))
     var chunk = host_predict_chunk(n_rows, units)
 
-    def fill(unit: Int) {imm chunk, imm n_rows, imm kp, imm base_ids, imm codes, imm card}:
+    def fill(unit: Int) {imm chunk, imm n_rows, imm kp, imm base_ids, imm codes, imm radix}:
         for r in range(unit * chunk, min((unit + 1) * chunk, n_rows)):
-            kp[r] = UInt64(base_ids[r]) * card + UInt64(codes[r])
+            kp[r] = UInt64(codes[r]) * radix + UInt64(base_ids[r])
 
     host_parallelize(fill, units)
 
@@ -331,7 +335,7 @@ def tree_ctr_refine_host(
     # the scratch lists are read through raw pointers above
     _ = len(keys)
     _ = len(distinct)
-    _ = base_count
+    _ = cardinality
     if n_rows <= 0:
         return TreeCtrGroups(List[UInt32](), 0)
     return TreeCtrGroups(ids^, count)
