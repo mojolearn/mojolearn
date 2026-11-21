@@ -47,7 +47,7 @@ FAMILIES = [
     ("EXTRA_TREES", "ExtraTrees", "extra_trees", "ExtraTreesClassifier ExtraTreesRegressor", "trees"),
     ("GBDT", "Gbdt", "gbdt", "GradientBoosting GradientBoostingClassifier GradientBoostingRegressor OrderedRMSE", "gbdt"),
     ("DART", "Dart", "dart", "DARTClassifier DARTRegressor", "x_trees"),
-    ("ISOLATION_FOREST", "IsolationForest", "isolation_forest", "IsolationForest", "svm"),
+    ("ISOLATION_FOREST", "IsolationForest", "isolation_forest", "IsolationForest", "trees"),
     ("MLP", "Mlp", "mlp", "MLPClassifier MLPRegressor", "x_sequence"),
     ("SEQUENCE", "Sequence", "sequence",
      "LSTMRegressor LSTMClassifier GRURegressor GRUClassifier RNNRegressor RNNClassifier", "x_sequence"),
@@ -67,7 +67,7 @@ FAMILIES = [
      "IncrementalPCA GaussianRandomProjection SparseRandomProjection NMF FastICA FactorAnalysis DictionaryLearning "
      "MiniBatchDictionaryLearning SparsePCA MiniBatchSparsePCA SparseCoder LatentDirichletAllocation Isomap MDS "
      "ClassicalMDS LocallyLinearEmbedding MinCovDet EllipticEnvelope", "x_decomp"),
-    ("MANIFOLD", "Manifold", "manifold", "UMAP TSNE", "metrics / x_ann"),
+    ("MANIFOLD", "Manifold", "manifold", "UMAP", "metrics"),
     ("SCALER", "Scaler", "scaler", "StandardScaler MinMaxScaler", "preprocessing"),
     ("PREP", "Prep", "prep",
      "RobustScaler MaxAbsScaler OrdinalEncoder OneHotEncoder TargetEncoder SimpleImputer IterativeImputer "
@@ -82,7 +82,9 @@ FAMILIES = [
      "CalibratedClassifierCV RandomTreesEmbedding (a meta-estimator as the member of another)", "x_trees"),
     ("SEARCH", "Search", "search", "GridSearchCV RandomizedSearchCV and the halving searches as members", "model_selection"),
     ("PIPELINE", "Pipeline", "pipeline", "Pipeline and the column composers, when they exist", "-"),
-    ("SPARE0", "Spare0", None, "(unassigned)", "-"),
+    # Number 42 was SPARE0 until 2026-11-21 (nothing had published on it): TSNE lives in another image
+    # than UMAP, and one family publishes from ONE image per (tier, vendor).
+    ("TSNE", "Tsne", "tsne", "TSNE", "x_ann"),
     ("SPARE1", "Spare1", None, "(unassigned)", "-"),
     ("SPARE2", "Spare2", None, "(unassigned)", "-"),
     ("SPARE3", "Spare3", None, "(unassigned)", "-"),
@@ -229,7 +231,8 @@ SERIAL BY NATURE: one member's admission; a caller with many members admits
 each once and runs them on its own workers.
 """
 from std.python import PythonObject
-from bindings.member_owner_unpack import MemberOwner, member_mark
+from bindings.member_owner_unpack import MemberOwner, member_mark, member_labels_hold, member_labels_take
+from bindings.py_balanced import py_setitem
 from core.member_abi import MemberPlan, member_resolve_family
 from core.member_families import (
 %(consts)s)
@@ -264,10 +267,35 @@ def member_pack(model: PythonObject, fields: PythonObject, context: PythonObject
 %(pack)s    raise Error("RuntimeError: mojolearn: unknown member family number " + String(plan.family))
 
 
+def member_pack_labeled(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    plan: MemberPlan, state: Int, labels: PythonObject) raises:
+    """PACK of a CLASSIFIER member: `member_pack`, with the caller's class
+    labels (the object the estimator's own fit publishes as its classes for
+    the `y` the caller encoded: code `c` is `labels[c]`).
+
+    The labels never enter the typed plan. They are held in the instance
+    dictionary under the one reserved key while the family's pack runs
+    (bindings/member_owner_unpack.mojo `member_labels_hold`). A family whose
+    fitted estimator keeps the labels in its own form (a property over a
+    private field, a label-name table) takes them with
+    `member_labels_take(fields, b)` inside its pack and writes that form. A
+    family that does not take them gets the plain attribute: `classes_` is
+    written here, as the estimators that keep it as an instance field do.
+    If the family's pack raises, the caller drops the estimator; the key is
+    not removed from an estimator nobody will see."""
+    member_labels_hold(fields, labels)
+    member_pack(model, fields, context, b, plan, state)
+    var left = member_labels_take(fields, b)
+    if left is not None:
+        py_setitem(fields, PythonObject("classes_"), left)
+
+
 def member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan) raises -> Int:
     """UNPACK: a new member state holding the fitted attributes of the
-    fitted estimator `model` (a prefit member). The caller frees it."""
+    fitted estimator `model` (a prefit member). The caller frees it. A prefit
+    classifier's labels are its public `classes_`: the caller reads them at
+    its own UNPACK and sets `plan.classes` before this call."""
 %(state)s    raise Error("RuntimeError: mojolearn: unknown member family number " + String(plan.family))
 '''
 

@@ -63,7 +63,7 @@ comptime MEMBER_FAMILY_CHOLESKY = 38
 comptime MEMBER_FAMILY_ENSEMBLE = 39
 comptime MEMBER_FAMILY_SEARCH = 40
 comptime MEMBER_FAMILY_PIPELINE = 41
-comptime MEMBER_FAMILY_SPARE0 = 42
+comptime MEMBER_FAMILY_TSNE = 42
 comptime MEMBER_FAMILY_SPARE1 = 43
 comptime MEMBER_FAMILY_SPARE2 = 44
 comptime MEMBER_FAMILY_SPARE3 = 45
@@ -156,8 +156,8 @@ def member_family_name(family: Int) -> String:
         return String("Search")
     if family == MEMBER_FAMILY_PIPELINE:
         return String("Pipeline")
-    if family == MEMBER_FAMILY_SPARE0:
-        return String("Spare0")
+    if family == MEMBER_FAMILY_TSNE:
+        return String("Tsne")
     if family == MEMBER_FAMILY_SPARE1:
         return String("Spare1")
     if family == MEMBER_FAMILY_SPARE2:
@@ -1238,30 +1238,30 @@ def member_table[family: Int, publish: Int](mode: Int, vendor: Int, publisher: I
         if vendor == 3 and mode == 0:
             comptime NAME = "MojolearnMemberPipelineFastHIPV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
-    comptime if family == MEMBER_FAMILY_SPARE0:
+    comptime if family == MEMBER_FAMILY_TSNE:
         if vendor == 0 and mode == 1:
-            comptime NAME = "MojolearnMemberSpare0IdenticalCPUV2"
+            comptime NAME = "MojolearnMemberTsneIdenticalCPUV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
         if vendor == 0 and mode == 0:
-            comptime NAME = "MojolearnMemberSpare0FastCPUV2"
+            comptime NAME = "MojolearnMemberTsneFastCPUV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
         if vendor == 1 and mode == 1:
-            comptime NAME = "MojolearnMemberSpare0IdenticalMetalV2"
+            comptime NAME = "MojolearnMemberTsneIdenticalMetalV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
         if vendor == 1 and mode == 0:
-            comptime NAME = "MojolearnMemberSpare0FastMetalV2"
+            comptime NAME = "MojolearnMemberTsneFastMetalV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
         if vendor == 2 and mode == 1:
-            comptime NAME = "MojolearnMemberSpare0IdenticalCUDAV2"
+            comptime NAME = "MojolearnMemberTsneIdenticalCUDAV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
         if vendor == 2 and mode == 0:
-            comptime NAME = "MojolearnMemberSpare0FastCUDAV2"
+            comptime NAME = "MojolearnMemberTsneFastCUDAV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
         if vendor == 3 and mode == 1:
-            comptime NAME = "MojolearnMemberSpare0IdenticalHIPV2"
+            comptime NAME = "MojolearnMemberTsneIdenticalHIPV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
         if vendor == 3 and mode == 0:
-            comptime NAME = "MojolearnMemberSpare0FastHIPV2"
+            comptime NAME = "MojolearnMemberTsneFastHIPV2"
             return _member_slot[NAME, publish](mode, vendor, publisher, entry)
     comptime if family == MEMBER_FAMILY_SPARE1:
         if vendor == 0 and mode == 1:
@@ -1429,8 +1429,8 @@ def member_table_resolve(family: Int, mode: Int, vendor: Int, absent: NativeDesc
         return member_table[MEMBER_FAMILY_SEARCH, 0](mode, vendor, 0, absent)
     if family == MEMBER_FAMILY_PIPELINE:
         return member_table[MEMBER_FAMILY_PIPELINE, 0](mode, vendor, 0, absent)
-    if family == MEMBER_FAMILY_SPARE0:
-        return member_table[MEMBER_FAMILY_SPARE0, 0](mode, vendor, 0, absent)
+    if family == MEMBER_FAMILY_TSNE:
+        return member_table[MEMBER_FAMILY_TSNE, 0](mode, vendor, 0, absent)
     if family == MEMBER_FAMILY_SPARE1:
         return member_table[MEMBER_FAMILY_SPARE1, 0](mode, vendor, 0, absent)
     if family == MEMBER_FAMILY_SPARE2:

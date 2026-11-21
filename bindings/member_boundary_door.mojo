@@ -15,7 +15,8 @@ SERIAL BY NATURE: one member's admission; a caller with many members admits
 each once and runs them on its own workers.
 """
 from std.python import PythonObject
-from bindings.member_owner_unpack import MemberOwner, member_mark
+from bindings.member_owner_unpack import MemberOwner, member_mark, member_labels_hold, member_labels_take
+from bindings.py_balanced import py_setitem
 from core.member_abi import MemberPlan, member_resolve_family
 from core.member_families import (
     MEMBER_FAMILY_LINEAR,
@@ -60,6 +61,7 @@ from core.member_families import (
     MEMBER_FAMILY_ENSEMBLE,
     MEMBER_FAMILY_SEARCH,
     MEMBER_FAMILY_PIPELINE,
+    MEMBER_FAMILY_TSNE,
 )
 from providers.python.member_linear_boundary_door import linear_member_admit, linear_member_pack, linear_member_state
 from providers.python.member_logistic_boundary_door import logistic_member_admit, logistic_member_pack, logistic_member_state
@@ -103,6 +105,7 @@ from providers.python.member_cholesky_boundary_door import cholesky_member_admit
 from providers.python.member_ensemble_boundary_door import ensemble_member_admit, ensemble_member_pack, ensemble_member_state
 from providers.python.member_search_boundary_door import search_member_admit, search_member_pack, search_member_state
 from providers.python.member_pipeline_boundary_door import pipeline_member_admit, pipeline_member_pack, pipeline_member_state
+from providers.python.member_tsne_boundary_door import tsne_member_admit, tsne_member_pack, tsne_member_state
 
 
 def member_admit(model: PythonObject, fields: PythonObject, plan: PythonObject, context: PythonObject,
@@ -203,6 +206,8 @@ def member_admit(model: PythonObject, fields: PythonObject, plan: PythonObject, 
         filled = search_member_admit(model, fields, mark.kind, context, b, owner)
     elif owner.plan.family == MEMBER_FAMILY_PIPELINE:
         filled = pipeline_member_admit(model, fields, mark.kind, context, b, owner)
+    elif owner.plan.family == MEMBER_FAMILY_TSNE:
+        filled = tsne_member_admit(model, fields, mark.kind, context, b, owner)
     if not filled:
         return owner^
     owner.plan.member = member_resolve_family(owner.plan.family, owner.plan.route)
@@ -341,13 +346,41 @@ def member_pack(model: PythonObject, fields: PythonObject, context: PythonObject
     if plan.family == MEMBER_FAMILY_PIPELINE:
         pipeline_member_pack(model, fields, context, b, plan, state)
         return
+    if plan.family == MEMBER_FAMILY_TSNE:
+        tsne_member_pack(model, fields, context, b, plan, state)
+        return
     raise Error("RuntimeError: mojolearn: unknown member family number " + String(plan.family))
+
+
+def member_pack_labeled(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    plan: MemberPlan, state: Int, labels: PythonObject) raises:
+    """PACK of a CLASSIFIER member: `member_pack`, with the caller's class
+    labels (the object the estimator's own fit publishes as its classes for
+    the `y` the caller encoded: code `c` is `labels[c]`).
+
+    The labels never enter the typed plan. They are held in the instance
+    dictionary under the one reserved key while the family's pack runs
+    (bindings/member_owner_unpack.mojo `member_labels_hold`). A family whose
+    fitted estimator keeps the labels in its own form (a property over a
+    private field, a label-name table) takes them with
+    `member_labels_take(fields, b)` inside its pack and writes that form. A
+    family that does not take them gets the plain attribute: `classes_` is
+    written here, as the estimators that keep it as an instance field do.
+    If the family's pack raises, the caller drops the estimator; the key is
+    not removed from an estimator nobody will see."""
+    member_labels_hold(fields, labels)
+    member_pack(model, fields, context, b, plan, state)
+    var left = member_labels_take(fields, b)
+    if left is not None:
+        py_setitem(fields, PythonObject("classes_"), left)
 
 
 def member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan) raises -> Int:
     """UNPACK: a new member state holding the fitted attributes of the
-    fitted estimator `model` (a prefit member). The caller frees it."""
+    fitted estimator `model` (a prefit member). The caller frees it. A prefit
+    classifier's labels are its public `classes_`: the caller reads them at
+    its own UNPACK and sets `plan.classes` before this call."""
     if plan.family == MEMBER_FAMILY_LINEAR:
         return linear_member_state(model, fields, context, b, plan)
     if plan.family == MEMBER_FAMILY_LOGISTIC:
@@ -432,4 +465,6 @@ def member_state(model: PythonObject, fields: PythonObject, context: PythonObjec
         return search_member_state(model, fields, context, b, plan)
     if plan.family == MEMBER_FAMILY_PIPELINE:
         return pipeline_member_state(model, fields, context, b, plan)
+    if plan.family == MEMBER_FAMILY_TSNE:
+        return tsne_member_state(model, fields, context, b, plan)
     raise Error("RuntimeError: mojolearn: unknown member family number " + String(plan.family))
