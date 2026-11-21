@@ -24,7 +24,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_codec_door import codec_initialize
 from bindings.native_process_pool_door import (
     process_initialize, process_pool_create, process_pool_start, process_pool_map, process_pool_close,
-    process_worker_connect, process_worker_next, process_send,
+    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
+    process_pool_pids,
 )
 from bindings.native_transport_door import transport_close
 from bindings.native_worker_inventory_door import native_worker_inventory, native_require_worker_inventory
@@ -50,6 +51,8 @@ from bindings.parallel_cv_native_run import (
     CV_REQUEST_IDENTITY, CV_REQUEST_FOLD, CV_REQUEST_DATA, CV_DEVICE_NOT_AN_INDEX,
     cv_devices_admit, cv_vendor_admit, cv_request_code, cv_request_admit, cv_wave_count,
     cv_batch_count_admit, cv_reply_order_admit,
+    CvTrace, cv_stage_name, cv_status_name, CV_STATUS_RUNNING, CV_STATUS_FAILED, CV_STATUS_COMPLETE,
+    CV_STAGE_VALIDATED, CV_STAGE_START, CV_STAGE_IDENTITY, CV_STAGE_DATA, CV_STAGE_WAVE,
 )
 
 
@@ -173,7 +176,7 @@ def _worker_data(request: PythonObject, mut rows: MselFoldRows, context: PythonO
     return PythonObject(True)
 
 
-def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory: PythonObject,
+def _worker_request(socket: PythonObject, sequence: Int, request: PythonObject, mut inventory: PythonObject,
                     mut rows: MselFoldRows, metadata: PythonObject, context: PythonObject) raises:
     # One authenticated request owns its result/error response, but never the
     # socket lifetime. A broken envelope or error-response send still raises
@@ -182,9 +185,7 @@ def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory:
     # The pinned parser rejects this handler as the final nested statement of
     # the worker's try/finally (https://github.com/modular/modular/issues/6718).
     var nk = parallel_keys()
-    var sequence = Int(py=py_get(envelope[0], nk[].k_sequence, -1))
     try:
-        var request = envelope[1]
         var b = native_loaded_module("builtins")
         if py_type(request) is not b.tuple or len(request) < 1 or py_type(request[0]) is not b.str:
             raise Error("ValueError: malformed native CV worker request")
@@ -201,9 +202,9 @@ def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory:
             result = _worker_data(request, rows, context)
         else:
             result = _fold_rows(request, rows, inventory, context)
-        process_send(socket, "result", sequence, result)
+        process_worker_reply(socket, sequence, result)
     except error:
-        process_send(socket, "error", sequence, PythonObject(_worker_error(error, context)))
+        process_worker_refuse(socket, sequence, _worker_error(error, context))
 
 
 def msel_parallel_worker(argv: PythonObject, context: PythonObject) raises:
@@ -216,10 +217,10 @@ def msel_parallel_worker(argv: PythonObject, context: PythonObject) raises:
     var rows = MselFoldRows(PythonObject(None), PythonObject(None), Python.list(), False, context)
     try:
         while True:  # driver-loop: authenticated fixed native CV request dispatch
-            var envelope = process_worker_next(socket)
-            if envelope is None:
+            var turn = process_worker_next(socket)
+            if not turn.open:
                 break
-            _worker_request(socket, envelope, inventory, rows, metadata, context)
+            _worker_request(socket, turn.sequence, turn.value, inventory, rows, metadata, context)
         rows.close(context)
     finally:
         # A worker that stops on an error exits with its process; the device
@@ -241,22 +242,51 @@ def msel_parallel_require_batch(result: PythonObject, start: Int, count: Int) ra
             raise Error("TypeError: cross-validation worker capture must be native metadata")
 
 
+def _trace_publish(published: PythonObject, trace: CvTrace) raises:
+    """PACK of the run's record into the `last_run` mapping."""
+    var nk = parallel_keys()
+    var stages = Python.list()
+    for i in range(len(trace.stages)):  # small-loop(the stages one run passed)
+        _ = py_call(stages.append, PythonObject(cv_stage_name(trace.stages[i])))
+    var workers = Python.list()
+    for i in range(len(trace.workers)):  # small-loop(one process id per worker)
+        _ = py_call(workers.append, PythonObject(trace.workers[i]))
+    var waves = Python.list()
+    for i in range(len(trace.waves)):  # small-loop(one size per wave)
+        _ = py_call(waves.append, PythonObject(trace.waves[i]))
+    var assignments = Python.list()
+    for i in range(len(trace.assignments) // 3):  # small-loop(one triple per assigned fold)
+        _ = py_call(assignments.append, Python.tuple(PythonObject(trace.assignments[3 * i]),
+            PythonObject(trace.assignments[3 * i + 1]), PythonObject(trace.assignments[3 * i + 2])))
+    py_setitem(published, nk[].k_stages, stages)
+    py_setitem(published, nk[].k_workers, workers)
+    py_setitem(published, nk[].k_waves, waves)
+    py_setitem(published, nk[].k_assignments, assignments)
+    py_setitem(published, nk[].k_status, PythonObject(cv_status_name(trace.status)))
+    py_setitem(published, nk[].k_closed, PythonObject(trace.closed))
+
+
 def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject) raises -> PythonObject:
     # All configuration, callback refusal and fold validation precede spawn.
-    var trace = Python.dict()
+    # The run's record is typed (`CvTrace`); `published` is its PACKed form,
+    # the `last_run` mapping, written when validation ends and when the run
+    # ends (it was a dictionary appended to stage by stage).
+    var trace = CvTrace()
+    var published = Python.dict()
     var nk = parallel_keys()
-    py_setitem(trace, nk[].k_stages, Python.list("validate"))
-    py_setitem(trace, nk[].k_workers, Python.list())
-    py_setitem(trace, nk[].k_waves, Python.list())
-    py_setitem(trace, nk[].k_assignments, Python.list())
-    py_setitem(trace, nk[].k_status, "VALIDATING")
-    py_setitem(trace, nk[].k_closed, True)
-    py_setitem(py_item(context, nk[].k_family_msel_parallel), nk[].k_last_run, trace)
+    py_setitem(py_item(context, nk[].k_family_msel_parallel), nk[].k_last_run, published)
+    _trace_publish(published, trace)
     var devices = _devices(args[3], context)
+    # UNPACK of the admitted worker indices, once: the wave plan and the
+    # assignments read these words.
+    var device_words = List[Int]()
+    for i in range(len(devices)):  # small-loop(explicit worker indices, before spawn)
+        device_words.append(Int(py=devices[i]))
     var prepared = msel_prepare_folds(args[0], args[1], args[2], args[4], args[5], args[6], args[7], context)
     var model = msel_parallel_model_pack(args[0], context)
     var scorer = msel_parallel_scorer_pack(prepared[3], context)
-    _ = py_call(py_item(trace, nk[].k_stages).append, "validated")
+    trace.stage(CV_STAGE_VALIDATED)
+    _trace_publish(published, trace)
     if capture:
         var cls = py_type(args[0])
         var accepted = py_item(py_item(context, nk[].k_family_msel_parallel), nk[].k_capture_classes)
@@ -269,21 +299,22 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
     var scores = List[Float64]()
     var captures = Python.list()
     try:
-        py_setitem(trace, nk[].k_closed, False)
-        py_setitem(trace, nk[].k_status, "RUNNING")
-        _ = py_call(py_item(trace, nk[].k_stages).append, "start")
+        trace.closed = False
+        trace.status = CV_STATUS_RUNNING
+        trace.stage(CV_STAGE_START)
         var requests = Python.list()
         for i in range(len(devices)):  # driver-loop: one pre-fit identity request per selected worker
             _ = py_call(requests.append, Python.tuple("identity"))
         var identities = process_pool_map(pool, requests)
+        # The spawned process ids, from the pool's record.
+        trace.workers = process_pool_pids(pool)
         var pids = Python.list()
-        for i in range(len(py_item(pool, nk[].k_workers))):  # driver-loop: authenticate inventory against actual spawned PIDs
-            _ = py_call(pids.append, py_item(py_item(pool, nk[].k_workers)[i], nk[].k_pid))
-        py_setitem(trace, nk[].k_workers, pids)
+        for i in range(len(trace.workers)):  # driver-loop: authenticate inventory against actual spawned PIDs
+            _ = py_call(pids.append, PythonObject(trace.workers[i]))
         native_require_worker_inventory(identities, String(py_item(py_item(context, nk[].k_family_msel_parallel), nk[].k_vendor)), pids,
                                         Int(external_call["getpid", Int32]()))
-        py_setitem(trace, nk[].k_identities, identities)
-        _ = py_call(py_item(trace, nk[].k_stages).append, "identity")
+        py_setitem(published, nk[].k_identities, identities)
+        trace.stage(CV_STAGE_IDENTITY)
         # X and y go to every worker once (N057); the fold requests below
         # carry only index arrays.
         requests = Python.list()
@@ -292,18 +323,18 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
         var loaded = process_pool_map(pool, requests)
         if py_type(loaded) is not native_loaded_module("builtins").list or len(loaded) != len(devices):
             raise Error("ValueError: cross-validation workers did not all receive the run's X and y")
-        _ = py_call(py_item(trace, nk[].k_stages).append, "data")
+        trace.stage(CV_STAGE_DATA)
         var folds = prepared[2]
-        var width = len(devices)
+        var width = len(device_words)
         for start in range(0, len(folds), width):  # driver-loop: bounded whole-fold waves
             requests = Python.list()
             var wave = cv_wave_count(width, len(folds), start)
-            _ = py_call(py_item(trace, nk[].k_waves).append, wave)
+            trace.waves.append(wave)
             for i in range(start, start + wave):  # driver-loop: independent fresh estimator per fold
                 var pair = folds[i]
-                _ = py_call(py_item(trace, nk[].k_assignments).append, Python.tuple(i, devices[i - start], pids[i - start]))
+                trace.assign(i, device_words[i - start], trace.workers[i - start])
                 _ = py_call(requests.append, Python.tuple("fold_rows", i, model, scorer, pair[0], pair[1], capture))
-            _ = py_call(py_item(trace, nk[].k_stages).append, "wave")
+            trace.stage(CV_STAGE_WAVE)
             var result = process_pool_map(pool, requests)
             msel_parallel_require_batch(result, start, len(requests))
             for i in range(len(result)):  # driver-loop: consume in logical fold order, never completion order
@@ -317,15 +348,14 @@ def msel_parallel_score(args: PythonObject, capture: Bool, context: PythonObject
             process_pool_close(pool)
         except cleanup_error:
             cleanup += "; process cleanup also failed: " + _worker_error(cleanup_error, context)
-        py_setitem(trace, nk[].k_closed, len(py_item(pool, nk[].k_workers)) == 0)
-        py_setitem(trace, nk[].k_status, "FAILED")
-        py_setitem(trace, nk[].k_error, failure + cleanup)
-        _ = py_call(py_item(trace, nk[].k_stages).append, "close")
+        trace.error = failure + cleanup
+        trace.finish(CV_STATUS_FAILED, len(process_pool_pids(pool)) == 0)
+        _trace_publish(published, trace)
+        py_setitem(published, nk[].k_error, PythonObject(failure + cleanup))
         raise Error(failure + cleanup)
     process_pool_close(pool)
-    py_setitem(trace, nk[].k_closed, len(py_item(pool, nk[].k_workers)) == 0)
-    py_setitem(trace, nk[].k_status, "COMPLETE")
-    _ = py_call(py_item(trace, nk[].k_stages).append, "close")
+    trace.finish(CV_STATUS_COMPLETE, len(process_pool_pids(pool)) == 0)
+    _trace_publish(published, trace)
     var result = msel_f64_list(scores, context)
     return Python.tuple(result, captures) if capture else result
 

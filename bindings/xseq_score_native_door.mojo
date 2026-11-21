@@ -12,7 +12,8 @@ against y on the metrics binding of the model's numeric mode, the kernel
 
 The same kernels in the same order, so the score keeps its bits.
 """
-from core.device_route import device_mode_word, device_cpu_absent
+from core.device_route import device_mode_word
+from bindings.labels_descriptor_boundary_door import labels_scope
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
@@ -89,14 +90,17 @@ def _metrics_key(route: XseqRoute) raises -> MetricsEntryKey:
     return MetricsEntryKey(actual, Int(py=route.metrics[1]))
 
 
-def _score_on_route(model: PythonObject, route: XseqRoute, what: String) raises:
-    """The metrics family's own operations (the classifier accuracy, the
-    multi-output R^2) select their image by numeric mode alone: this
-    process's device. An estimator on `device="cpu"` beside a GPU set does
-    not run them there; it says so in the shared words."""
+def _score_context(model: PythonObject, route: XseqRoute, family: PythonObject) raises -> PythonObject:
+    """The metrics family context the score's metrics owner runs in: the
+    family context itself, or, for a `device="cpu"` estimator beside a GPU
+    set (its route's CPU table), the family's CPU label scope
+    (bindings/labels_descriptor_boundary_door.mojo `labels_scope`), whose
+    label steps run the host kernels and whose metric programs run on the
+    CPU x_metrics image (bindings/metrics_program_door.mojo
+    `metric_plan_run`). The default route reads nothing more."""
     if route.cpu_table:
-        device_cpu_absent(String(py_type(model).__name__) + ".score",
-                          what + " of the metrics family is not routed by device yet")
+        return labels_scope(model, family)
+    return family
 
 
 def _r2_native(key: MetricsEntryKey, operation: Int, var addresses: List[Int], n: Int) raises -> Float64:
@@ -128,7 +132,6 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
     var route = xseq_route(model, py_fields(model), context)
     if Int(py=truth.ndim) == 2 and Int(py=truth.shape[1]) != 1:
         # multi-output targets: the x_metrics program of `r2_score_options`
-        _score_on_route(model, route, String("the multi-output R^2"))
         var nk = xseq_keys()
         var options = py_get(context, nk[].k_xseq_r2_options)
         if options is None:
@@ -140,7 +143,7 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
         # its UNPACK, and options[1] is the metrics family context the door would have received.
         return metrics_reg_operation(METRIC_OPN_FAMILY_METRIC_R2_OPTIONS,
                                      Python.tuple(truth, pred, sample_weight, "uniform_average", True, mode),
-                                     options[1])
+                                     _score_context(model, route, options[1]))
     var y = _vector(truth, "y_true")
     var yh = _vector(pred, "y_pred")
     var n = Int(py=y.shape[0])
@@ -175,7 +178,7 @@ def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: P
     `family_mcls_accuracy_fraction`, the same entry with the same arguments,
     so the score keeps its bits."""
     var nk = xseq_keys()
-    _score_on_route(model, xseq_route(model, py_fields(model), context), String("the accuracy"))
+    var route = xseq_route(model, py_fields(model), context)
     var owner = py_get(context, nk[].k_xseq_r2_options)
     if owner is None:
         raise Error("NotImplementedError: mojolearn: the classifier score needs the native metrics owner "
@@ -184,4 +187,4 @@ def xseq_classifier_score(model: PythonObject, prediction: PythonObject, args: P
     # pyout-metrics-cnn (2026-11-11): the metrics owner's body, called natively (no CPython call of its
     # family door); the labels are the caller's Python objects, admitted in that owner's UNPACK.
     return metrics_cls_operation(PythonObject(None), MCLS_OPN_FAMILY_MCLS_ACCURACY_FRACTION,
-                                 Python.tuple(args[1], prediction, args[2], mode), owner[1])
+                                 Python.tuple(args[1], prediction, args[2], mode), _score_context(model, route, owner[1]))

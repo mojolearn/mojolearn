@@ -6,11 +6,12 @@
 # bindings/svc_common_unpack.mojo, its shared public arrays and decode
 # bindings/svc_common_pack.mojo, the typed checks bindings/svc_common_run.mojo.
 #
-# NOTE (decided, 2026-11-21): both metrics still take the PROCESS image
-# through the shared runner (bindings/arena_prog_native_door.mojo
-# `_family_entries(mode, "x_metrics", ...)`) and the label helpers of
-# bindings/classical_labels_door.mojo; a later coordinated lane routes them by
-# the estimator. `svc_r2_sums` and `svc_accuracy_codes` are left as they are.
+# Both metrics follow the estimator's device (lane label-steps, 2026-11-21):
+# the caller hands them its label scope (bindings/labels_descriptor_boundary_door.mojo
+# `labels_scope(model, context)`). A `device="cpu"` estimator's scope names the
+# CPU x_metrics runner entries (`labels_metrics_entries`), which run the R^2
+# sums program and the accuracy COUNT tail; any other context names none and
+# runs the process image through the shared runner, as before.
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.classical_arrays_door import classical_address
@@ -52,6 +53,7 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     var den = r.fin(tot_sums, 0)
     _ = r.plan.want(num, 2, -1, 1)
     _ = r.plan.want(den, 2, -1, 1)
+    # The image of the context's device (metric_plan_run reads the scope).
     var arena = metric_plan_run(r.plan, pins, PythonObject(None), context)
     var ss_res = arena.f64(num)
     var ss_tot = arena.f64(den)

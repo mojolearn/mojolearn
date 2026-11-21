@@ -149,6 +149,11 @@ class KMeans(_NumericModeMixin):
         sequential k-means++, any positive value runs scalable k-means||
         with this oversampling. Negative values raise `ValueError`. Only used
         with `init='k-means++'`.
+    verbose : int, default 0
+        Accepted for scikit-learn compatibility; ignored. Nothing is printed.
+    copy_x : bool, default True
+        Accepted for scikit-learn compatibility; ignored. ``X`` is never
+        modified.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode for this estimator (``'fast'`` is Apple only). None uses
         the process default.
@@ -198,6 +203,12 @@ class KMeans(_NumericModeMixin):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
+    # scikit-learn's no-op keywords, at the class too: a model the archive door loads
+    # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
+    # get_params reads these defaults (as `device` does).
+    verbose = 0
+    copy_x = True
+
     def __init__(
         self,
         n_clusters=8,
@@ -210,6 +221,8 @@ class KMeans(_NumericModeMixin):
         metric="euclidean",
         oversampling_factor=2.0,
         *,
+        verbose=0,
+        copy_x=True,
         numeric_mode=None,
         device=None,
     ):
@@ -222,6 +235,8 @@ class KMeans(_NumericModeMixin):
         self.init_centroids = init_centroids
         self.metric = metric
         self.oversampling_factor = oversampling_factor
+        self.verbose = verbose
+        self.copy_x = copy_x
         self.numeric_mode = numeric_mode
         self.device = device
 

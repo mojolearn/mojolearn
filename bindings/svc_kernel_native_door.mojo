@@ -51,6 +51,7 @@ from bindings.svc_kernel_svr_pack import svr_fit_pack, svr_query_output, svr_sco
 from bindings.svc_common_unpack import svc_field
 from bindings.svc_common_pack import svc_decode
 from bindings.svc_common_door import svc_accuracy_codes
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.operation_names_svc import SVC_OPN_FAMILY_SVC_SVC_COEF, SVC_OPN_FAMILY_SVC_SVC_DECISION, SVC_OPN_FAMILY_SVC_SVC_FIT, SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA, SVC_OPN_FAMILY_SVC_SVC_PREDICT, SVC_OPN_FAMILY_SVC_SVC_PROBA, SVC_OPN_FAMILY_SVC_SVC_SCORE, SVC_OPN_FAMILY_SVC_SVC_VALIDATE, SVC_OPN_FAMILY_SVC_SVR_FIT, SVC_OPN_FAMILY_SVC_SVR_PREDICT, SVC_OPN_FAMILY_SVC_SVR_SCORE, SVC_OPN_FAMILY_SVC_SVR_VALIDATE
 from bindings.svm_keys_unpack import svm_keys
 from bindings.svc_kernel_rows_unpack import _addr
@@ -151,7 +152,8 @@ def _svr_score(model: PythonObject, fields: PythonObject, binding: PythonObject,
     """`SVR.score`: R^2 of the prediction against y."""
     var pred = _svr_predict(model, fields, binding, source, context, connection)
     svr_score_unpack(Int(py=pred.shape[0]), y, context)
-    return svr_score_pack(pred, y, context)
+    # The R^2 sums run on the estimator's device's metrics image (labels_scope).
+    return svr_score_pack(pred, y, labels_scope(model, context))
 
 
 def _linear_coef(fields: PythonObject, classifier: Bool, context: PythonObject, drivers: SvcDrivers) raises -> PythonObject:
@@ -277,7 +279,8 @@ def _svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObjec
         # the predicted codes decoded to the fitted classes
         var nk = svm_keys()
         return svc_decode(model, svc_field(fields, nk[].k_classes_, "classes_"),
-                          _svc_query(model, fields, args[0], args[1], SVC_QUERY_CODES, context, connection.drivers), context)
+                          _svc_query(model, fields, args[0], args[1], SVC_QUERY_CODES, context, connection.drivers),
+                          labels_scope(model, context))
     if operation == SVC_OPN_FAMILY_SVC_SVC_PROBA:
         return _svc_query(model, fields, args[0], args[1], SVC_QUERY_PROBA, context, connection.drivers)
     if operation == SVC_OPN_FAMILY_SVC_SVC_LOG_PROBA:
@@ -291,7 +294,7 @@ def _svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObjec
         var codes = _svc_query(model, fields, args[0], args[1], SVC_QUERY_CODES, context, connection.drivers)
         var nk = svm_keys()
         return PythonObject(svc_accuracy_codes(args[2], svc_field(fields, nk[].k_classes_, "classes_"), codes,
-                                               Int(py=codes.shape[0]), context))
+                                               Int(py=codes.shape[0]), labels_scope(model, context)))
     if operation == SVC_OPN_FAMILY_SVC_SVR_PREDICT:
         return _svr_predict(model, fields, args[0], args[1], context, connection)
     if operation == SVC_OPN_FAMILY_SVC_SVR_SCORE:

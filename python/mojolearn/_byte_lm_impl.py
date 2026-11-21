@@ -18,10 +18,18 @@ the same little-endian `<f4` / `<i4` bytes the NumPy spelling emitted
 written here loads there, byte for byte, and the resume/compare tooling
 under tools/ reads the same file (see `save_checkpoint`).
 
+NATIVE STATE OWNER (lane byte-state, 2026-11-21). This object holds no
+training state. The weights, the optimizer moments, the flags, the step
+counter, the optimizer scalars, the data schedule and the resident session
+are one native owner (`ByteLmTrainerState`,
+bindings/byte_lm_trainer_native_run.mojo); `_native` is its handle. The state
+dictionary exists only as what `export_state()` returns and what
+`load_state_dict()` and the checkpoint restores take.
+
 DEVICE-OWNED STEP (DEVIATION 2514). With `resident=True`
 the native session's device buffers are the ONLY copy of the parameters,
-the optimizer moments and the last gradient while it is open: this object's
-`_state['parameters']`, `['m']` and `['v']` are `None` from the call that
+the optimizer moments and the last gradient while it is open: the native
+state's host buffers are freed from the call that
 opened the session until `close()`, `load_state_dict()` or a lost session.
 State crosses the boundary at admission (the first call after
 construction, `load_state_dict()` or `close()` hands the host state to the
@@ -474,7 +482,17 @@ class SmallByteLanguageModelTrainer:
         # tools/byte_lm_offload_check.py (fault-hook probes). The trainer door
         # admits the binding, suspends a session on a change and computes the
         # run metadata natively (bindings/byte_lm_trainer_native_door.mojo `_binding`).
-        return _load(state_shape(self._state))
+        return _LM_TRAINER(self, "trainer_binding", (), _LM_TRAINER_CONTEXT)
+
+    def _state_metadata(self):
+        # glue: the state dictionary with None in place of its four arrays (no
+        # device download, no copy); tools read the model shape and schedule.
+        return _LM_TRAINER(self, "state_metadata", (), _LM_TRAINER_CONTEXT)
+
+    def _session_info(self):
+        # glue: the session lifecycle words (session, session_id, open, lost, host_state,
+        # grad_step, last_export_step, completed_steps); tools and tests.
+        return _LM_TRAINER(self, "session_info", (), _LM_TRAINER_CONTEXT)
 
     def run_metadata(self):
         """Profile, configuration, schedule and binary details of this run.

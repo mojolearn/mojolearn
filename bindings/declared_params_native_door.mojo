@@ -127,7 +127,8 @@ def _assign(model: PythonObject, keywords: PythonObject, context: PythonObject) 
             # A new device is refused in the shared words before it is
             # written (the route was dropped above).
             device_admit_class(model, value, py_get(context["backend_fields"], "_CPU_ONLY") is not None,
-                               py_get(context, "device_cpu"), b)
+                               py_get(context, "device_cpu"), b,
+                               py_get(context, "device_cpu_connect"))
         if py_contains(fields, name):
             var previous = native_instance_item(fields, name)
             if previous is not value:

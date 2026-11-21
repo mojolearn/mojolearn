@@ -2,17 +2,18 @@
 """Typed frames over the native POSIX transport (lane parallel-payload-transport,
 2026-11-12).
 
-UNPACK: a Python value (None, bool, int, float, str, list, tuple, dict with
-str/int keys, native Array or contiguous buffer, packed bfloat16/int8 weight)
-becomes a `WireRecord` once (`core/parallel_worker_frame.mojo`); each tensor
+UNPACK: a Python value (None, bool, int, float, str, bytes, bytearray, list,
+tuple, dict with str/int keys, native Array or contiguous buffer, packed
+bfloat16/int8 weight) becomes a `WireRecord` once (`core/parallel_worker_frame.mojo`); each tensor
 keeps only its buffer exporter, and its bytes are written to the socket from
 that exporter's storage (no payload copy for contiguous storage).
 PACK: a received record becomes Python values once; each tensor's bytes are
 read from the socket straight into a fresh native Array store.
 
-Replaces, for the ParallelCausalLM pool, the codec path (JSON header dict,
-JSON structural descriptor, joined bytearray payload; `native_codec.mojo`)
-that other pools still use. A frame is serial by nature (one socket, one
+Every pool sends these frames (lane pools-frame, 2026-11-21: the byte-string
+node carries the serialized member states the codec path was kept for; that
+path, a JSON header dict, a JSON structural descriptor and a joined bytearray
+payload, is removed from the pool). A frame is serial by nature (one socket, one
 byte stream): the tensors go one after another; independent workers are
 addressed in parallel by the pool, not here.
 """
@@ -31,7 +32,7 @@ from core.parallel_worker_frame import (
     WireRecord, WireTensor, WireFrame, wire_frame_words, wire_frame_header, wire_frame_body,
     wire_dtype_word, wire_dtype_name, WIRE_FRAME_HEADER_WORDS, WIRE_RECORD_MAX_DEPTH,
     WIRE_NONE, WIRE_BOOL, WIRE_INT, WIRE_FLOAT, WIRE_TEXT, WIRE_TENSOR, WIRE_BF16, WIRE_INT8,
-    WIRE_LIST, WIRE_TUPLE, WIRE_MAP,
+    WIRE_LIST, WIRE_TUPLE, WIRE_MAP, WIRE_BYTES, WIRE_BYTEARRAY, WIRE_U1,
 )
 from bindings.native_keys_unpack import native_keys
 
@@ -142,7 +143,10 @@ def _wire_unpack(value: PythonObject, mut outgoing: WireOutgoing, depth: Int, mu
         _ = _wire_tensor(native_instance_item(fields, PythonObject("exponents")), outgoing)
         outgoing.record.node(WIRE_INT8, index)
     elif cls is bi.bytes or cls is bi.bytearray:
-        raise Error("parallel wire: raw byte strings are not a worker payload")
+        # The exact built-in byte strings export their own storage; the send
+        # writes it in place and checks the length again under its pin.
+        outgoing.exporters.append(value)
+        outgoing.record.byte_string(len(value), cls is bi.bytearray)
     else:
         outgoing.record.node(WIRE_TENSOR, _wire_tensor(value, outgoing))
 
@@ -169,11 +173,21 @@ def _wire_socket(socket: PythonObject, mut fd: Int, mut timeout: Float64) raises
 
 
 def wire_send(socket: PythonObject, kind: Int, sequence: Int, request: List[Int64], outgoing: WireOutgoing) raises:
-    """One typed frame: header and descriptor words in one write, then each
-    tensor's bytes from its exporter's storage."""
+    """One typed frame on an owned native socket (a worker's connection)."""
     var fd = -1
     var timeout = Float64(-1)
     _wire_socket(socket, fd, timeout)
+    wire_send_fd(fd, timeout, kind, sequence, request, outgoing)
+    _ = socket
+
+
+def wire_send_fd(fd: Int, timeout: Float64, kind: Int, sequence: Int, request: List[Int64], outgoing: WireOutgoing) raises:
+    """One typed frame: header and descriptor words in one write, then each
+    tensor's bytes from its exporter's storage. `fd` and `timeout` are the
+    typed pool record's (bindings/native_process_pool_run.mojo) or a
+    socket's; the caller keeps the descriptor open through the call."""
+    if fd < 0:
+        raise Error("transport: socket is closed")
     var words = wire_frame_words(kind, sequence, request, outgoing.record)
     posix_transfer(fd, PosixBytes(unsafe_from_address=Int(words.unsafe_ptr())), len(words) * 8, timeout, True)
     _ = words^
@@ -199,7 +213,6 @@ def wire_send(socket: PythonObject, kind: Int, sequence: Int, request: List[Int6
             pin.release()
             raise error
         pin.release()
-    _ = socket
 
 
 def _wire_array(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonObject:
@@ -246,6 +259,19 @@ def _wire_array(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonO
     return result
 
 
+def _wire_bytes(fd: Int, timeout: Float64, tensor: WireTensor) raises -> PythonObject:
+    """PACK of one byte string's storage: a bytearray that receives the
+    bytes in place (`_wire_pack` hands it on, or its immutable copy, the one
+    copy the codec's decoder made as well)."""
+    if tensor.dtype != WIRE_U1 or len(tensor.shape) != 1 or tensor.order != 0:
+        raise Error("parallel wire: a byte string requires a one-dimensional uint8 descriptor")
+    var bi = CODEC_BOUNDARY.get_or_create_ptr()[].bi
+    var store = py_call(bi.bytearray, PythonObject(tensor.byte_count))
+    if tensor.byte_count > 0:
+        posix_transfer(fd, PosixBytes(unsafe_from_address=native_buffer_address(store)), tensor.byte_count, timeout, False)
+    return store
+
+
 def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject], mut next_tensor: Int,
                depth: Int) raises -> PythonObject:
     if cursor >= record.node_count() or depth > WIRE_RECORD_MAX_DEPTH:
@@ -266,12 +292,21 @@ def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject],
         return PythonObject(record.real_value(at))
     if tag == WIRE_TEXT:
         return PythonObject(record.text_value(at))
-    if tag == WIRE_TENSOR or tag == WIRE_BF16 or tag == WIRE_INT8:
+    if tag == WIRE_TENSOR or tag == WIRE_BF16 or tag == WIRE_INT8 or tag == WIRE_BYTES or tag == WIRE_BYTEARRAY:
         # Tensors are claimed in descriptor order, each exactly once.
         var width = 2 if tag == WIRE_INT8 else 1
         if word != next_tensor or word + width > len(tensors):
             raise Error("parallel wire: tensor references must follow descriptor order")
         next_tensor += width
+        # A byte-string node names a bytearray store and nothing else does:
+        # the receive built each store from the node kinds (`_wire_byte_strings`).
+        var stored = py_type(tensors[word]) is bi.bytearray
+        if stored != (tag == WIRE_BYTES or tag == WIRE_BYTEARRAY):
+            raise Error("parallel wire: byte string and tensor references are mixed")
+        if tag == WIRE_BYTEARRAY:
+            return tensors[word]
+        if tag == WIRE_BYTES:
+            return py_call(bi.bytes, tensors[word])
         if tag == WIRE_TENSOR:
             return tensors[word]
         var nk = native_keys()
@@ -327,12 +362,36 @@ def _wire_pack(record: WireRecord, mut cursor: Int, tensors: List[PythonObject],
     raise Error("parallel wire: unknown record tag " + String(tag))
 
 
+def _wire_byte_strings(record: WireRecord) raises -> List[Bool]:
+    """Per tensor descriptor: whether a byte-string node names it. One pass
+    over the node pairs, which carry no nesting a tag scan could misread
+    (every pair is a node; containers hold only counts)."""
+    var marked = List[Bool](length=len(record.tensors), fill=False)
+    for i in range(record.node_count()):  # small-loop(record nodes: one pair per value of one frame)
+        var tag = record.tag(i)
+        if tag == WIRE_BYTES or tag == WIRE_BYTEARRAY:
+            var index = record.value(i)
+            if index < 0 or index >= len(marked):
+                raise Error("parallel wire: byte string index outside its record")
+            marked[index] = True
+    return marked^
+
+
 def wire_receive(socket: PythonObject) raises -> WireMessage:
-    """One typed frame: header, descriptor words, then each tensor's bytes
-    into its own Array store; PACK of the record once."""
+    """One typed frame from an owned native socket (a worker's connection)."""
     var fd = -1
     var timeout = Float64(-1)
     _wire_socket(socket, fd, timeout)
+    var message = wire_receive_fd(fd, timeout)
+    _ = socket
+    return message^
+
+
+def wire_receive_fd(fd: Int, timeout: Float64) raises -> WireMessage:
+    """One typed frame: header, descriptor words, then each tensor's bytes
+    into its own Array store; PACK of the record once."""
+    if fd < 0:
+        raise Error("transport: socket is closed")
     var head = List[Int64](length=WIRE_FRAME_HEADER_WORDS, fill=0)
     posix_transfer(fd, PosixBytes(unsafe_from_address=Int(head.unsafe_ptr())), WIRE_FRAME_HEADER_WORDS * 8, timeout, False)
     var header = wire_frame_header(head, WIRE_MAX_TENSOR_BYTES)
@@ -342,8 +401,12 @@ def wire_receive(socket: PythonObject) raises -> WireMessage:
     var frame = wire_frame_body(header, body)
     _ = body^
     var tensors = List[PythonObject]()
+    var byte_strings = _wire_byte_strings(frame.record)
     for i in range(len(frame.record.tensors)):  # driver-loop: over the tensors of one frame, in descriptor order
-        tensors.append(_wire_array(fd, timeout, frame.record.tensors[i]))
+        if byte_strings[i]:
+            tensors.append(_wire_bytes(fd, timeout, frame.record.tensors[i]))
+        else:
+            tensors.append(_wire_array(fd, timeout, frame.record.tensors[i]))
     var value = PythonObject(None)
     if frame.record.node_count() > 0:
         var cursor = 0
@@ -353,7 +416,6 @@ def wire_receive(socket: PythonObject) raises -> WireMessage:
             raise Error("parallel wire: unclaimed nodes or tensors at the end of the record")
     elif len(tensors) != 0:
         raise Error("parallel wire: tensors without a record")
-    _ = socket
     return WireMessage(frame.kind, frame.sequence, frame.request.copy(), value)
 
 
