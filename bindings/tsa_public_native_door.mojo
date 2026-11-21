@@ -23,7 +23,7 @@ from bindings.classical_pandas_door import classical_admit_value
 from core.xseq_marshal import tsa_flags_u8
 from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.native_array_storage_door import native_scratch_bytes, native_scratch_address
-from bindings.tsa_hw_native_door import tsa_array, hw_fit, hw_predict, hw_score, hw_initialize, hw_forecast, hw_component, hw_save
+from bindings.tsa_hw_native_door import tsa_array, hw_fit, hw_predict, hw_score, hw_vendor_used, hw_initialize, hw_forecast, hw_component, hw_save
 from bindings.tsa_admission_door import tsa_scalar, tsa_truth
 from bindings.admitted_input_unpack import admit_view, AdmittedTypedPin
 from bindings.admitted_input_run import admitted_view_kind
@@ -35,7 +35,7 @@ from providers.python.autoarima_lifecycle_pyapi_door import autoarima_initialize
 from providers.python.autoarima_search_pyapi_door import autoarima_search
 from bindings.tsa_keys_unpack import (tsa_keys, TSA_OPN_ARIMA_FIT, TSA_OPN_ARIMA_FORECAST, TSA_OPN_ARIMA_INITIALIZE, TSA_OPN_ARIMA_PARAMETER, TSA_OPN_ARIMA_PREDICT, TSA_OPN_ARIMA_REPR, TSA_OPN_AUTOARIMA_FIT, TSA_OPN_AUTOARIMA_FORECAST,
     TSA_OPN_AUTOARIMA_INITIALIZE, TSA_OPN_AUTOARIMA_PREDICT, TSA_OPN_AUTOARIMA_SEARCH, TSA_OPN_HW_ATTRIBUTE, TSA_OPN_HW_COMPONENT, TSA_OPN_HW_FIT, TSA_OPN_HW_FORECAST,
-    TSA_OPN_HW_INITIALIZE, TSA_OPN_HW_PREDICT, TSA_OPN_HW_SAVE, TSA_OPN_HW_SCORE, TSA_OPN_KPSS_TEST, TSA_OPN_SELECT_D)
+    TSA_OPN_HW_INITIALIZE, TSA_OPN_HW_PREDICT, TSA_OPN_HW_SAVE, TSA_OPN_HW_SCORE, TSA_OPN_HW_VENDOR_USED, TSA_OPN_KPSS_TEST, TSA_OPN_SELECT_D)
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
@@ -188,6 +188,8 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return hw_predict(call[0], call[2], context).steal_data()
         if operation == TSA_OPN_HW_SCORE:
             return hw_score(call[0], call[2], context).steal_data()
+        if operation == TSA_OPN_HW_VENDOR_USED:
+            return hw_vendor_used(call[0], context).steal_data()
         # ARIMA (bindings/tsa_arima_native.mojo)
         if operation == TSA_OPN_ARIMA_INITIALIZE:
             return arima_initialize(call[0], call[2], context).steal_data()

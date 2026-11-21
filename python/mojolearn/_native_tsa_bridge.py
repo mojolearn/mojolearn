@@ -7,6 +7,29 @@ call that asks for it) and the shared context, once, at import."""
 
 _ENTRIES = ("kpss_test", "select_d")
 
+#: `(metadata prefix, table family)` of the binaries the `_mojolearn_tsa` name
+#: resolves to: the device binding, the CPU binding with the fit, and the
+#: forecast inference binding (core/tsa_entry_table.mojo TSA_TABLE_*).
+_HW_IMAGES = (("tsa", 0), ("tsa_host", 0), ("forecast_host", 1))
+
+
+def _hw_cells(module):
+    """One connected Holt-Winters binding: the module and the table key it
+    reports (`family`, `mode` 1 identical / 0 fast, `vendor` word)."""
+    # glue: read the compiled image's own metadata once, at import
+    from types import BuiltinFunctionType
+    from . import _backend
+    for prefix, family in _HW_IMAGES:  # glue: fixed compiled metadata names
+        vendor = getattr(module, prefix + "_vendor", None)
+        mode = getattr(module, prefix + "_numeric_mode", None)
+        if isinstance(vendor, BuiltinFunctionType) and isinstance(mode, BuiltinFunctionType):
+            # the image itself (a CPU-only install hands a facade for the name)
+            image = getattr(vendor, "__self__", None)
+            if type(image) is not type(_backend):
+                image = module
+            return {"module": image, "family": family, "mode": int(mode()), "vendor": str(vendor())}
+    raise TypeError("the Holt-Winters binding reports no vendor and numeric mode")
+
 
 def connect():
     """`(entry, context)` for `kpss_test` and `select_d`."""
@@ -44,24 +67,33 @@ def connect():
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["tsa_bindings"] = bindings
+    # ExponentialSmoothing's device route (bindings/tsa_hw_native_door.mojo):
+    # each connected binding is its module (the image pin) and the key of the
+    # Holt-Winters operations table it published at initialization
+    # (core/tsa_entry_table.mojo). The compiled owner resolves an estimator's
+    # entry from that table once; no entry is looked up by name here.
     hw = {}
-    names = ("holtwinters_fit", "holtwinters_forecast", "holtwinters_predict",
-             # resident components (bindings/tsa_hw_native_door.mojo); absent on the host binding
-             "holtwinters_resident_prepare", "holtwinters_resident_release",  # glue: fixed compiled entry names
-             "holtwinters_resident_count", "holtwinters_query_resident")  # glue: fixed compiled entry names
     for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
         try:
-            module = _backend.binding("_mojolearn_tsa", mode)
-            symbols = {}
-            for name in names:  # glue: fixed compiled entry names
-                fn = getattr(module, name, None)
-                if isinstance(fn, BuiltinFunctionType):
-                    symbols[name] = fn
-            hw[mode] = symbols
+            hw[mode] = _hw_cells(_backend.binding("_mojolearn_tsa", mode))
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             hw[mode] = type(error).__name__ + ": " + str(error)
     context["hw_bindings"] = hw
-    context["hw_entry_names"] = names
+    chosen = hw[selected]
+    # "none": the selected binding did not load; its own refusal is said by
+    # the first operation, not by the constructor's device check.
+    context["hw_install_vendor"] = chosen["vendor"] if type(chosen) is dict else "none"
+    # device="cpu" on a GPU installation: the CPU binding, loaded once here
+    # beside the device binding. In a CPU-only process the selected binding
+    # already is the CPU one and nothing more is loaded. A CPU binary that is
+    # not built is kept as its refusal text, said when a device="cpu"
+    # estimator first runs.
+    if context["hw_install_vendor"] not in ("cpu", "none"):
+        try:
+            cpu = _hw_cells(_backend.load_host_module("_mojolearn_tsa_host"))
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+            cpu = type(error).__name__ + ": " + str(error)
+        context["hw_cpu_bindings"] = {"identical": cpu}
     # the host inference class reads its loaded forecast binding from the
     # module table at call time (its own load loads it)
     context["hw_host_module"] = "mojolearn._host._mojolearn_forecast_host"

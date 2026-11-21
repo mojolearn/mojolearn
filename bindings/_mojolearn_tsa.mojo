@@ -58,6 +58,7 @@ from holtwinters.resident_state import (
     holtwinters_query_resident,
 )
 from tsa.estimator import kpss_test_host, select_d_host
+from tsa.tsa_ops_device import publish_tsa_hw_ops_device
 
 
 def holtwinters_fit_binding(
@@ -418,6 +419,11 @@ def build__mojolearn_tsa() -> PythonObject:
         m.def_function[holtwinters_query_resident_binding]("holtwinters_query_resident")
         m.def_function[kpss_test_binding]("kpss_test")
         m.def_function[select_d_binding]("select_d")
-        return m.finalize()
+        # The Holt-Winters operations table (core/tsa_entry_table.mojo): the
+        # ExponentialSmoothing owner resolves it once per estimator and calls
+        # through it; published once the module is ready.
+        var published_module = m.finalize()
+        publish_tsa_hw_ops_device()
+        return published_module
     except e:
         abort(String("failed to create _mojolearn_tsa: ", e))

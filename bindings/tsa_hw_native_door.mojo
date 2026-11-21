@@ -13,21 +13,26 @@
              `_shaped`'s three return shapes
     score    the fitted SSE, or one series' SSE
 
-The same compiled entries with the same argument words, so no bit moves.
-A host inference class (`HostExponentialSmoothing`) reads its loaded
-forecast host binding from the module table.
+The same compiled kernels with the same argument words, so no bit moves.
+
+UNPACK / RUN / PACK. This file is the boundary: it admits the model's fields
+and buffers (UNPACK) and writes the fitted state and the returned arrays
+(PACK). RUN is core/tsa_hw_run.mojo: one call through the estimator's
+resolved operations entry (core/tsa_entry_table.mojo) over typed addresses
+and words, with the GIL released. The entry is the estimator's device route
+(`device=None | "gpu" | "cpu"`, providers/python/tsa_route_boundary_door.mojo),
+resolved once per estimator; no operation here tests the device, looks an
+entry up by name or builds a Python argument list. A host inference class
+(`HostExponentialSmoothing`) resolves the forecast inference image's table.
 """
-from bindings.mode_answer_door import answer_mode_object
-from core.mode_answer import MODE_FAMILY_TSA, fast_is_answered_by_identical
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
+from std.python._cpython import GILReleased
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.native_array_storage_door import native_array_zeros, native_array_unfilled
 from bindings.arena_materialize_native_door import _owned
-from bindings.native_numpy_metadata_pack import native_numpy_module_fields
 from bindings.classical_archive_door import classical_archive_write
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays_door import classical_input, classical_address, classical_cast_kind, classical_wrap_array
 from bindings.classical_pandas_door import classical_admit_value
 from providers.python.array_metadata_pyapi_door import ArrayMetadata
@@ -45,7 +50,16 @@ from core.admitted_input_nd import admitted_cast_nd_f32
 from bindings.admitted_sequence_door import admitted_array_f32
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
-from bindings.native_resident_capsule_pack import resident_capsule
+from core.tsa_hw_run import (
+    tsa_hw_fit_run, tsa_hw_forecast_run, tsa_hw_predict_run, tsa_hw_resident_prepare_run,
+    tsa_hw_resident_release_run, tsa_hw_query_resident_run,
+)
+from core.tsa_route import TsaHwRoute, tsa_hw_route_fits, tsa_hw_route_resident, tsa_vendor_word
+from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
+from providers.python.tsa_route_boundary_door import (
+    TsaHwRouteCall, tsa_hw_route_call, tsa_hw_route_clear, tsa_hw_device_admit,
+    tsa_hw_resident_new, tsa_hw_resident_matches, tsa_hw_resident_handle,
+)
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable_any, fitted_freeze_any
 from bindings.tsa_keys_unpack import tsa_keys
 from bindings.py_balanced import py_item
@@ -54,10 +68,11 @@ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _HW = "mojolearn ExponentialSmoothing: "
 # The resident fitted components of a fitted model (lane ne1-a-decomp-tsa,
 # plan section A, row N030): one prepared-owner record per model, outside
-# its __dict__ and dropped with it, `(_comps, prepare entry, n, ts_num,
-# seasonal_periods, handle, capsule)`. A refit stores a new `_comps`, so the
-# next query misses, mints again and the replaced record's capsule returns
-# the old device copy.
+# its __dict__ and dropped with it, `(_comps, lifetime owner, n, ts_num,
+# seasonal_periods)`. The lifetime owner (providers/python/tsa_route_boundary_door.mojo
+# `TsaHwResidentOwner`) holds the handle and the entry that minted it. A
+# refit stores a new `_comps`, so the next query misses, mints again and the
+# replaced record's owner returns the old device copy through that entry.
 comptime _HW_RESIDENT_SLOT = "tsa_hw_resident_v1"
 
 
@@ -101,56 +116,19 @@ def _is_int(value: PythonObject) raises -> Bool:
     return py_type(value) is b.int
 
 
-def _hw_entries(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`self._bind()`: the `_mojolearn_tsa` entries of the model's tier (the
-    process default until a loaded model restores its own); a host inference
-    class's loaded forecast host binding."""
+def _hw_route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> TsaHwRouteCall:
+    """The estimator's resolved device route (one record read and three
+    pointer compares once resolved); the returned owner pins the image and
+    is kept alive by the caller through its entry calls."""
+    return tsa_hw_route_call(model, fields, tsa_hw_class(model, context), context, _b())
+
+
+def _seasonal(fields: PythonObject) raises -> Int:
+    """The SEASONAL_* word of the admitted `seasonal` name (`_settings`
+    checked its type and spelling; an unknown name is refused here in the
+    kernel's words)."""
     var nk = tsa_keys()
-    var b = _b()
-    if tsa_hw_class(model, context):
-        var saved = py_get(fields, nk[].k_numeric_mode)
-        # lane fx-fast-mask: a model saved under `fast` where the identical set
-        # answered it (TSA) holds identical state; the host runs it.
-        if saved is not None and (py_type(saved) is not b.str or (String(saved) != "identical" and not (
-                String(saved) == "fast" and fast_is_answered_by_identical(MODE_FAMILY_TSA)))):
-            raise Error("ValueError: mojolearn: " + String("ExponentialSmoothing")
-                        + " runs IDENTICAL only on the host")
-        var module = py_get(py_item(context, nk[].k_modules), py_item(context, nk[].k_hw_host_module))
-        if module is None:
-            raise Error("RuntimeError: mojolearn: the host " + String("ExponentialSmoothing")
-                        + " has no loaded forecast binding; load the model with its own load()")
-        if py_type(module) is not py_type(native_loaded_module("sys")):
-            raise Error("TypeError: host forecast requires its native module")
-        var module_fields = native_numpy_module_fields(module)
-        var host = b.dict()
-        var names = py_item(context, nk[].k_hw_entry_names)
-        for i in range(len(names)):  # driver-loop: over the fixed host entry names
-            var entry = py_get(module_fields, names[i])
-            if entry is not None:
-                if py_type(entry) is not py_type(b.len):
-                    raise Error("TypeError: host forecast requires compiled entries")
-                py_setitem(host, names[i], entry)
-        return host
-    var mode = py_get(fields, nk[].k_numeric_mode)
-    if mode is None:
-        mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    if py_type(mode) is not b.str:
-        raise Error("ValueError: numeric_mode must be fast, identical or None")
-    mode = py_call(py_call(mode.strip).lower)
-    var mode_word = String(py=mode)
-    if mode_word != "identical" and mode_word != "fast":
-        raise Error("ValueError: numeric_mode must be fast, identical or None")
-    answer_mode_object(mode, mode_word, MODE_FAMILY_TSA)
-    var entries = py_item(context, nk[].k_hw_bindings)[mode]
-    if py_type(entries) is b.str:
-        raise Error(String(py=entries))
-    return entries
-
-
-def _entry(entries: PythonObject, name: String) raises -> PythonObject:
-    if not py_contains(entries, name):
-        raise Error("AttributeError: the forecast binding has no " + name)
-    return entries[name]
+    return seasonal_from_name(String(py_item(fields, nk[].k_seasonal)))
 
 
 # ---------------------------------------------------------------- fit
@@ -240,17 +218,29 @@ def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var comps = tsa_array("f", "<f4", Python.tuple(3 * cl), 3 * cl, 4, context)
     var stats = tsa_array("f", "<f4", Python.tuple(4 * ts_num), 4 * ts_num, 4, context)
     var flags = tsa_array("i", "<i4", Python.tuple(2 * ts_num), 2 * ts_num, 4, context)
-    var entries = _hw_entries(model, fields, context)
-    var init = py_item(context, nk[].k_hw_init_codes)[py_item(fields, nk[].k_initialization_method)]
-    _ = py_call_typed(_entry(entries, "holtwinters_fit"), classical_address(data), classical_address(comps),
-                      classical_address(stats), classical_address(flags),
-                      Python.list(n, ts_num, period, Int(py=py_item(fields, nk[].k_start_periods)),
-                                  py_item(fields, nk[].k_eps), init),
-                      py_item(fields, nk[].k_seasonal))
-    _ = comps  # keep the Python object alive through the native call above
-    _ = data  # keep the Python object alive through the native call above
-    _ = flags  # keep the Python object alive through the native call above
-    _ = stats  # keep the Python object alive through the native call above
+    var call = _hw_route(model, fields, context)
+    var route = call.route
+    if not tsa_hw_route_fits(route):
+        raise Error("AttributeError: the forecast binding has no holtwinters_fit")
+    var init = Int(py=py_item(context, nk[].k_hw_init_codes)[py_item(fields, nk[].k_initialization_method)])
+    var start_periods = Int(py=py_item(fields, nk[].k_start_periods))
+    var eps = Float64(py=py_item(fields, nk[].k_eps))
+    var seasonal = _seasonal(fields)
+    var data_address = Int(py=classical_address(data))
+    var comps_address = Int(py=classical_address(comps))
+    var stats_address = Int(py=classical_address(stats))
+    var flags_address = Int(py=classical_address(flags))
+    var py = Python()
+    try:
+        with GILReleased(py):
+            _ = tsa_hw_fit_run(route, data_address, comps_address, stats_address, flags_address,
+                               n, ts_num, period, start_periods, init, seasonal, eps)
+    finally:
+        _ = comps  # keep the Python object alive through the native call above
+        _ = data  # keep the Python object alive through the native call above
+        _ = flags  # keep the Python object alive through the native call above
+        _ = stats  # keep the Python object alive through the native call above
+        _ = call.owner  # the route owner pins the image through the call
     var updates = _set_fitted(fields, n, comps, stats, flags, context)
     py_setitem(updates, nk[].k__data, data)
     _commit(live, updates, context, True)
@@ -297,52 +287,68 @@ def _hw_held(model: PythonObject, fields: PythonObject) raises -> PythonObject:
     return held
 
 
-def _hw_matches(held: PythonObject, entries: PythonObject, n: Int, b: Int, period: Int) raises -> Bool:
-    """The held record was minted by this binding with these fitted words."""
-    var nk = tsa_keys()
-    if held is None or py_get(entries, nk[].k_holtwinters_query_resident) is None:
+def _hw_matches(held: PythonObject, route: TsaHwRoute, n: Int, b: Int, period: Int) raises -> Bool:
+    """The held record was minted through this route's entry with these
+    fitted words."""
+    if held is None or not tsa_hw_route_resident(route):
         return False
-    return (held[1] is py_get(entries, nk[].k_holtwinters_resident_prepare) and Int(py=held[2]) == n
+    return (tsa_hw_resident_matches(held[1], route) and Int(py=held[2]) == n
             and Int(py=held[3]) == b and Int(py=held[4]) == period)
 
 
-def _hw_mint(model: PythonObject, fields: PythonObject, entries: PythonObject, n: Int, b: Int, period: Int,
+def _hw_mint(model: PythonObject, fields: PythonObject, call: TsaHwRouteCall, n: Int, b: Int, period: Int,
              comps_address: Int) raises -> PythonObject:
     """Upload the admitted components (`comps_address`, the `_packed`
-    admission of `_comps`) once and record them; returns the record (word 5
-    the handle; the caller keeps it alive through its query, since a model
-    that cannot be weakly referenced keeps no record and the capsule would
-    release the copy at once). None (the per-call path) on a binding without
-    the resident entries (the host column) or components that cannot be
-    frozen (a caller-assigned ndarray: plan section A's read-only rule)."""
+    admission of `_comps`) once and record them; returns the record (word 1
+    the lifetime owner of the handle; the caller keeps the record alive
+    through its query, since a model that cannot be weakly referenced keeps
+    no record and the owner would release the copy at once). None (the
+    per-call path) on a route without the resident operations (a CPU
+    binding) or components that cannot be frozen (a caller-assigned ndarray:
+    plan section A's read-only rule)."""
     var nk = tsa_keys()
-    var prepare = py_get(entries, nk[].k_holtwinters_resident_prepare)
-    var release = py_get(entries, nk[].k_holtwinters_resident_release)
-    if prepare is None or release is None or py_get(entries, nk[].k_holtwinters_query_resident) is None:
+    var route = call.route
+    if not tsa_hw_route_resident(route):
         return PythonObject(None)
     var comps_obj = py_get(fields, nk[].k__comps)
     if not fitted_is_freezable_any(comps_obj):
         return PythonObject(None)
     _ = fitted_freeze_any(comps_obj)
-    var handle = Int(py=py_call_typed(prepare, PythonObject(comps_address), Python.list(n, b, period)))
-    # From here the capsule owns the device copy.
-    var capsule = resident_capsule(release, handle)
-    var record = Python.tuple(comps_obj, prepare, n, b, period, handle, capsule)
+    var handle = 0
+    var py = Python()
+    with GILReleased(py):
+        handle = tsa_hw_resident_prepare_run(route, comps_address, n, b, period)
+    # From here the lifetime owner owns the device copy.
+    var resident = PythonObject(None)
+    try:
+        resident = tsa_hw_resident_new(route, handle, call.owner)
+    except error:
+        tsa_hw_resident_release_run(route, handle)
+        raise error
+    var record = Python.tuple(comps_obj, resident, n, b, period)
     var mods = NativeModules()
     prepared_put(mods, _HW_RESIDENT_SLOT, model, record)
     return record
 
 
-def _hw_query(entries: PythonObject, record: PythonObject, fields: PythonObject, start: Int, end: Int, b: Int,
+def _hw_query(call: TsaHwRouteCall, record: PythonObject, fields: PythonObject, start: Int, end: Int, b: Int,
               context: PythonObject) raises -> PythonObject:
-    """One `holtwinters_query_resident` call: `(end - start) * b` float32,
-    time-major, the in-sample steps then the forecast steps."""
-    var nk = tsa_keys()
+    """One resident query: `(end - start) * b` float32, time-major, the
+    in-sample steps then the forecast steps."""
     var steps = end - start
     var whole = tsa_array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
-    _ = py_call_typed(_entry(entries, "holtwinters_query_resident"), record[5], classical_address(whole),
-                      Python.list(start, end), py_item(fields, nk[].k_seasonal))
-    _ = record  # the record (and its capsule) outlive the query
+    var route = call.route
+    var handle = tsa_hw_resident_handle(record[1])
+    var seasonal = _seasonal(fields)
+    var whole_address = Int(py=classical_address(whole))
+    var py = Python()
+    try:
+        with GILReleased(py):
+            _ = tsa_hw_query_resident_run(route, handle, whole_address, start, end, seasonal)
+    finally:
+        _ = record  # the record (and its lifetime owner) outlive the query
+        _ = whole  # keep the Python object alive through the native call above
+        _ = call.owner  # the route owner pins the image through the call
     return whole
 
 
@@ -378,47 +384,54 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
         raise Error("ValueError: " + _HW + "need 0 <= start < end (start=" + String(start) + ", end=" + String(end) + ")")
     if index is not None and (Int(py=index) < 0 or Int(py=index) >= b):
         raise Error("IndexError: " + _HW + "index input: " + String(Int(py=index)) + " outside of range [0, " + String(b) + ")")
-    var entries = _hw_entries(model, fields, context)
+    var call = _hw_route(model, fields, context)
+    var route = call.route
     var period = Int(py=py_item(fields, nk[].k_seasonal_periods))
     var steps = end - start
     if steps > 9223372036854775807 // 4 // b or (end > n and end - n > 9223372036854775807 // 4 // b):
         raise Error("ValueError: Holt-Winters prediction extent exceeds native indexing bounds")
     # One call over the device copy (the in-sample steps, then the forecast
-    # steps, time-major: the words of the two per-call entries) when the
+    # steps, time-major: the words of the two per-call operations) when the
     # components are resident or can be made so.
     var held = _hw_held(model, fields)
-    if _hw_matches(held, entries, n, b, period):
-        return _shaped(fields, _hw_query(entries, held, fields, start, end, b, context), 0, steps, index, context)
+    if _hw_matches(held, route, n, b, period):
+        return _shaped(fields, _hw_query(call, held, fields, start, end, b, context), 0, steps, index, context)
     var packed_pin = AdmittedTypedPin()
     var packed = _packed(py_item(fields, nk[].k__comps), 3 * (n - period) * b, context, packed_pin)
     var comps = packed_pin.keep
-    var minted = _hw_mint(model, fields, entries, n, b, period, packed.addr)
+    var minted = _hw_mint(model, fields, call, n, b, period, packed.addr)
     if minted is not None:
-        var whole = _hw_query(entries, minted, fields, start, end, b, context)
+        var whole = _hw_query(call, minted, fields, start, end, b, context)
         _ = comps
         _ = packed_pin^
         return _shaped(fields, whole, 0, steps, index, context)
+    var seasonal = _seasonal(fields)
+    var comps_address = Int(py=classical_address(comps))
+    var py = Python()
     if start >= n:
         var fc = tsa_array("f", "<f4", Python.tuple((end - n) * b), (end - n) * b, 4, context)
-        _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps), classical_address(fc),
-                          Python.list(n, b, period, end - n), py_item(fields, nk[].k_seasonal))
-        _ = fc  # keep the Python object alive through the native call above
-        _ = comps  # keep the Python object alive through the native call above
+        var fc_address = Int(py=classical_address(fc))
+        try:
+            with GILReleased(py):
+                _ = tsa_hw_forecast_run(route, comps_address, fc_address, n, b, period, end - n, seasonal)
+        finally:
+            _ = fc  # keep the Python object alive through the native call above
+            _ = comps  # keep the Python object alive through the native call above
+            _ = call.owner  # the route owner pins the image through the call
         _ = packed_pin^
         return _shaped(fields, fc, (start - n) * b, steps, index, context)
     var out = tsa_array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
     var k_in = min(end, n) - start
     var base = Int(py=classical_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    _ = py_call_typed(_entry(entries, "holtwinters_predict"), classical_address(comps), PythonObject(base),
-                      Python.list(n, b, period, start, start + k_in), py_item(fields, nk[].k_seasonal))
-    _ = out  # keep the Python object alive through the native call above
-    _ = comps  # keep the Python object alive through the native call above
-    if end > n:
-        _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps),
-                          PythonObject(base + 4 * k_in * b), Python.list(n, b, period, end - n), py_item(fields, nk[].k_seasonal))
-        _ = comps  # keep the Python object alive through the native call above
-        _ = out  # keep the Python object alive through the native call above
+    try:
+        with GILReleased(py):
+            _ = tsa_hw_predict_run(route, comps_address, base, n, b, period, start, start + k_in, seasonal)
+            if end > n:
+                _ = tsa_hw_forecast_run(route, comps_address, base + 4 * k_in * b, n, b, period, end - n, seasonal)
+    finally:
+        _ = out  # keep the Python object alive through the native calls above
+        _ = comps  # keep the Python object alive through the native calls above
+        _ = call.owner  # the route owner pins the image through the calls
     _ = packed_pin^
     return _shaped(fields, out, 0, steps, index, context)
 
@@ -507,11 +520,27 @@ def _commit(fields: PythonObject, updates: PythonObject, context: PythonObject, 
     _ = old
 
 
+def hw_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`vendor_used()`: the vendor word the estimator's resolved entry
+    itself reports (`cpu`, `metal`, `cuda`, `hip`), resolving the route when
+    this is the estimator's first operation."""
+    var fields = tsa_hw_fields(model, context)
+    var call = _hw_route(model, fields, context)
+    return PythonObject(tsa_vendor_word(call.route.vendor))
+
+
 def hw_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = tsa_hw_fields(model, context)
+    # `device` is checked before any field changes (an unknown value, or an
+    # explicit "gpu" on a CPU-only installation, is refused in words) and
+    # the route of an estimator constructed again is forgotten; it is read
+    # into the route owner at the estimator's first operation.
+    tsa_hw_device_admit(args[7], context, _b())
     var updates = Python.dict(endog=args[0], seasonal=args[1], seasonal_periods=args[2],
-        start_periods=args[3], ts_num=args[4], eps=args[5], initialization_method=args[6], fit_executed_flag=False)
+        start_periods=args[3], ts_num=args[4], eps=args[5], initialization_method=args[6], fit_executed_flag=False,
+        device=args[7])
     _settings(updates, context)
+    tsa_hw_route_clear(model)
     # Constructor retains endog without numerical preparation, matching its
     # deferred fit contract. Its replacement is admitted before publication.
     _commit(fields, updates, context)
@@ -551,24 +580,32 @@ def hw_forecast(model: PythonObject, args: PythonObject, context: PythonObject) 
         # change which refusal a call meets.
         if h > 9223372036854775807 // 4 // b:
             raise Error("ValueError: Holt-Winters forecast extent exceeds native indexing bounds")
-        var hit_entries = _hw_entries(model, fields, context)
-        if _hw_matches(held, hit_entries, n, b, period):
-            return _shaped(fields, _hw_query(hit_entries, held, fields, n, n + h, b, context), 0, h, index, context)
+        var hit = _hw_route(model, fields, context)
+        if _hw_matches(held, hit.route, n, b, period):
+            return _shaped(fields, _hw_query(hit, held, fields, n, n + h, b, context), 0, h, index, context)
     var comps_pin = AdmittedTypedPin()
     var comps = _packed(py_item(fields, nk[].k__comps), 3 * (n - period) * b, context, comps_pin)
     if h > 9223372036854775807 // 4 // b:
         raise Error("ValueError: Holt-Winters forecast extent exceeds native indexing bounds")
     var out = tsa_array("f", "<f4", Python.tuple(h * b), h * b, 4, context)
-    var entries = _hw_entries(model, fields, context)
-    var minted = _hw_mint(model, fields, entries, n, b, period, comps.addr)
+    var call = _hw_route(model, fields, context)
+    var minted = _hw_mint(model, fields, call, n, b, period, comps.addr)
     if minted is not None:
-        var whole = _hw_query(entries, minted, fields, n, n + h, b, context)
+        var whole = _hw_query(call, minted, fields, n, n + h, b, context)
         _ = comps_pin^
         return _shaped(fields, whole, 0, h, index, context)
-    _ = py_call_typed(_entry(entries, "holtwinters_forecast"),
-        PythonObject(comps.addr), classical_address(out), Python.list(n, b, period, h), py_item(fields, nk[].k_seasonal))
+    var route = call.route
+    var seasonal = _seasonal(fields)
+    var comps_address = comps.addr
+    var out_address = Int(py=classical_address(out))
+    var py = Python()
+    try:
+        with GILReleased(py):
+            _ = tsa_hw_forecast_run(route, comps_address, out_address, n, b, period, h, seasonal)
+    finally:
+        _ = out  # keep the Python object alive through the native call above
+        _ = call.owner  # the route owner pins the image through the call
     _ = comps_pin^
-    _ = out
     return _shaped(fields, out, 0, h, index, context)
 
 

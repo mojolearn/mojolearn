@@ -59,6 +59,7 @@ from bindings.holtwinters_host_predict_door import (
     holtwinters_predict_binding,
 )
 from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding, select_d_host_binding
+from tsa.tsa_ops_forecast_host import publish_tsa_hw_ops_forecast_host
 
 
 def forecast_host_numeric_mode_binding() raises -> PythonObject:
@@ -134,6 +135,11 @@ def build__mojolearn_forecast_host() -> PythonObject:
         # binding, which holds holtwinters_fit, is not built.
         module.def_function[kpss_test_binding]("kpss_test")
         module.def_function[select_d_host_binding]("select_d")
-        return module.finalize()
+        # The Holt-Winters operations table of this inference image
+        # (core/tsa_entry_table.mojo, family TSA_TABLE_FORECAST): the explicit
+        # host class's route resolves it once per estimator.
+        var published_module = module.finalize()
+        publish_tsa_hw_ops_forecast_host()
+        return published_module
     except error:
         abort(String("failed to create _mojolearn_forecast_host: ", error))
