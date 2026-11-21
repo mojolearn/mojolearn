@@ -1732,15 +1732,17 @@ class SGDOneClassSVM(NumericModeMixin):
     >>> labels = model.predict(X)
     """
     _mojolearn_native_public = True
+    # Runs on both devices (its operations call through the estimator's
+    # route). Its constructor and setter are the shared full-reset door's,
+    # which gives the class `device=` and checks it (lane dw-core).
     _mojolearn_device = True
-    set_params = _device_set_params(NumericModeMixin)
 
     _BINDING = _BINDING
     _estimator_type = "outlier_detector"
 
     def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
                  random_state=None, learning_rate="optimal", eta0=0.0, power_t=0.5, warm_start=False,
-                 average=False, batch_size=None, *, numeric_mode=None, device=None):
+                 average=False, batch_size=None, *, numeric_mode=None):
         # batch_size=None (fix-l1-linear, from lane/neural-pass139): "auto".
         # IDENTICAL builds fit the fixed-order minibatch at 4096 (the mean
         # step, a float-float intercept and an IMPLICIT intercept step,
@@ -1755,7 +1757,6 @@ class SGDOneClassSVM(NumericModeMixin):
         self.learning_rate, self.eta0, self.power_t = learning_rate, eta0, power_t
         self.warm_start, self.average = warm_start, average
         self.numeric_mode = numeric_mode
-        self.device = device
 
     def fit(self, X, y=None, sample_weight=None):
         """Fit the model.
@@ -2463,18 +2464,19 @@ class IsotonicRegression(NumericModeMixin):
     >>> y_fit = model.predict(x)
     """
     _mojolearn_native_public = True
+    # Runs on both devices (its operations call through the estimator's
+    # route). Its constructor and setter are the shared full-reset door's,
+    # which gives the class `device=` and checks it (lane dw-core).
     _mojolearn_device = True
-    set_params = _device_set_params(NumericModeMixin)
 
     _BINDING = _BINDING
     _estimator_type = "regressor"
     # scikit-learn's IsotonicRegression tags: X is one feature, 1-D
     _sklearn_input_tags = {"one_d_array": True, "two_d_array": False}
 
-    def __init__(self, *, y_min=None, y_max=None, increasing=True, out_of_bounds="nan", numeric_mode=None, device=None):
+    def __init__(self, *, y_min=None, y_max=None, increasing=True, out_of_bounds="nan", numeric_mode=None):
         self.y_min, self.y_max, self.increasing, self.out_of_bounds = y_min, y_max, increasing, out_of_bounds
         self.numeric_mode = numeric_mode
-        self.device = device
 
     def fit(self, X, y, sample_weight=None):
         """Fit the monotone function.
@@ -2586,7 +2588,7 @@ from . import _native_x_linear_bridge  # noqa: E402
 _XL_CALL, _XL_CONTEXT = _native_x_linear_bridge.connect({
     "sgd_clf_loss": _SGD_CLF_LOSS, "sgd_reg_loss": _SGD_REG_LOSS, "sgd_penalty": _SGD_PENALTY,
     "sgd_lr": _SGD_LR, "sgd_sum_losses": _SGD_SUM_LOSSES})
-for _name in __all__:  # glue: class-definition time, the 21 classes of this module
-    _cls = globals()[_name]
-    _cls.__init__ = _device_constructor(_cls.__dict__["__init__"])
-del _name, _cls
+for _cls in vars().copy().values():  # glue: class-definition time, the 19 field-only classes of the two mixins
+    if isinstance(_cls, type) and _cls.__module__ == __name__ and issubclass(_cls, NativeParamsSetter) and "__init__" in _cls.__dict__:
+        _cls.__init__ = _device_constructor(_cls.__dict__["__init__"])
+del _cls

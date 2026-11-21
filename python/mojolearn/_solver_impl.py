@@ -224,13 +224,15 @@ class ElasticNet(ParamsMixin):
     # feature checks, NumPy/float64 results) replaces the `_mode` wrappers.
     _mojolearn_native_public = True
     # Runs on both devices: fit, predict and score call through the
-    # estimator's own route (bindings/x_linear_route_unpack.mojo).
+    # estimator's own route (bindings/x_linear_route_unpack.mojo). The
+    # constructor and the setter are the shared full-reset door's, which
+    # gives the class `device=` and checks it (lane dw-core).
     _mojolearn_device = True
 
     def __init__(self, alpha=1.0, *, l1_ratio=0.5, fit_intercept=True,
                  max_iter=1000, tol=1e-3, solver="auto", selection="cyclic",
                  precompute=False, copy_X=True, warm_start=False,
-                 positive=False, random_state=None, numeric_mode=None, device=None):
+                 positive=False, random_state=None, numeric_mode=None):
         # Stored verbatim (scikit-learn's convention); `_validate_params`
         # checks them when `fit` runs.
         self.alpha = alpha
@@ -246,28 +248,6 @@ class ElasticNet(ParamsMixin):
         self.positive = positive
         self.random_state = random_state
         self.numeric_mode = numeric_mode
-        self.device = device
-
-    def set_params(self, **params):
-        """Set constructor parameters. The estimator is rebuilt through its
-        constructor, so every constructor check runs again and any fitted
-        state is dropped, as a new setting invalidates it.
-
-        Parameters
-        ----------
-        **params : keyword arguments
-            Constructor parameters; use ``name__parameter`` for nested values.
-
-        Returns
-        -------
-        self : object
-            This estimator with its updated parameters.
-        """
-        if "device" in params:
-            # checked in compiled code where it is given, before any field
-            # changes; drops the estimator's route (bindings/x_linear_route_unpack.mojo)
-            _CD_CALL(self, "device_admit", (params["device"],), _CD_CONTEXT)
-        return ParamsMixin.set_params(self, **params)
 
     # sample_weight (lane sk-kernels): checked natively with scikit-learn's
     # wording and handed to the weighted coordinate descent
@@ -438,13 +418,12 @@ class Lasso(ElasticNet):
     def __init__(self, alpha=1.0, *, fit_intercept=True, max_iter=1000,
                  tol=1e-3, solver="auto", selection="cyclic",
                  precompute=False, copy_X=True, warm_start=False,
-                 positive=False, random_state=None, numeric_mode=None, device=None):
+                 positive=False, random_state=None, numeric_mode=None):
         super().__init__(
             alpha=alpha, l1_ratio=1.0, fit_intercept=fit_intercept,
             max_iter=max_iter, tol=tol, solver=solver, selection=selection,
             precompute=precompute, copy_X=copy_X, warm_start=warm_start,
             positive=positive, random_state=random_state, numeric_mode=numeric_mode,
-            device=device,
         )
 
 
@@ -468,25 +447,3 @@ _native_archive_bridge.register(Lasso, _CD_FORMAT, _CD_SCHEMA)
 # (bindings/x_linear_native_door.mojo: `cd_fit` / `cd_predict` on the solver
 # binding imported above, R^2 by the x_metrics program), connected once.
 _CD_CALL, _CD_CONTEXT = _native_x_linear_bridge.connect({"cd_selection": _SELECTION_SHUFFLE}, _mojolearn_solver)
-
-
-def _device_constructor(orig):
-    # glue: class-definition time. The constructor only stores its arguments;
-    # a `device` that is given, and a constructor run again on a live
-    # estimator, is checked in compiled code before any field changes (Lasso
-    # reaches it through `super().__init__`). The default None on a new
-    # instance calls nothing.
-    import functools
-    get = object.__getattribute__
-
-    @functools.wraps(orig)
-    def __init__(self, *args, **kwargs):
-        device = kwargs.get("device")
-        if device is not None or "device" in get(self, "__dict__"):
-            _CD_CALL(self, "device_admit", (device,), _CD_CONTEXT)
-        orig(self, *args, **kwargs)
-
-    return __init__
-
-
-ElasticNet.__init__ = _device_constructor(ElasticNet.__dict__["__init__"])
