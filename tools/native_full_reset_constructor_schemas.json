@@ -2780,49 +2780,49 @@
           "value": {
             "parameter": "eps"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "min_samples",
           "value": {
             "parameter": "min_samples"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "metric",
           "value": {
             "parameter": "metric"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "algorithm",
           "value": {
             "parameter": "algorithm"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "max_mbytes_per_batch",
           "value": {
             "parameter": "max_mbytes_per_batch"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "max_iterations",
           "value": {
             "parameter": "max_iterations"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "prediction_data",
           "value": {
             "parameter": "prediction_data"
           },
-          "source": "python/mojolearn/density.py:234"
+          "source": "python/mojolearn/density.py:176"
         },
         {
           "field": "numeric_mode",
@@ -2830,13 +2830,20 @@
             "parameter": "numeric_mode"
           },
           "source": "NumericModeMixin rule kept by native family_density_dbscan_initialize at python/mojolearn/density.py:234"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/density.py:176"
         }
       ],
       "trace": [
-        "python/mojolearn/density.py:234"
+        "python/mojolearn/density.py:176"
       ],
-      "constructor": "python/mojolearn/density.py:234",
-      "signature_source": "def __init__(self, eps=0.5, min_samples=5, *, metric='euclidean', algorithm='rbc', max_mbytes_per_batch=None, max_iterations=None, prediction_data=False, numeric_mode=None)",
+      "constructor": "python/mojolearn/density.py:176",
+      "signature_source": "def __init__(self, eps=0.5, min_samples=5, *, metric='euclidean', algorithm='rbc', max_mbytes_per_batch=None, max_iterations=None, prediction_data=False, numeric_mode=None, device=None)",
       "parameters": [
         "eps",
         "min_samples",
@@ -2845,9 +2852,10 @@
         "max_mbytes_per_batch",
         "max_iterations",
         "prediction_data",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "718dc83321786a82f9976d80aef7294c1c17e51dc7d266ac0863d153ccbfcacc",
+      "constructor_ast_sha256": "73a173087a72cbbf96ac7b65f8edae4c94c0cca58f00eeb34b68f6c5de7bf239",
       "field_order": [
         "eps",
         "min_samples",
@@ -2856,7 +2864,8 @@
         "max_mbytes_per_batch",
         "max_iterations",
         "prediction_data",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "eps": {
@@ -2882,6 +2891,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -2892,7 +2904,8 @@
         "max_mbytes_per_batch": "None",
         "max_iterations": "None",
         "prediction_data": "False",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.density",
@@ -2901,8 +2914,8 @@
         {
           "path": "python/mojolearn/density.py",
           "name": "__init__",
-          "line": 234,
-          "ast_sha256": "718dc83321786a82f9976d80aef7294c1c17e51dc7d266ac0863d153ccbfcacc"
+          "line": 176,
+          "ast_sha256": "73a173087a72cbbf96ac7b65f8edae4c94c0cca58f00eeb34b68f6c5de7bf239"
         }
       ],
       "constructor_ancestry": [
@@ -4481,13 +4494,20 @@
             "parameter": "numeric_mode"
           },
           "source": "NumericModeMixin rule kept by native family_hdbscan_public_initialize at python/mojolearn/hdbscan.py:170"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/hdbscan.py:170"
         }
       ],
       "trace": [
         "python/mojolearn/hdbscan.py:170"
       ],
       "constructor": "python/mojolearn/hdbscan.py:170",
-      "signature_source": "def __init__(self, min_cluster_size=5, min_samples=None, cluster_selection_epsilon=0.0, max_cluster_size=0, metric='euclidean', alpha=1.0, cluster_selection_method='eom', allow_single_cluster=False, prediction_data=False, *, numeric_mode=None)",
+      "signature_source": "def __init__(self, min_cluster_size=5, min_samples=None, cluster_selection_epsilon=0.0, max_cluster_size=0, metric='euclidean', alpha=1.0, cluster_selection_method='eom', allow_single_cluster=False, prediction_data=False, *, numeric_mode=None, device=None)",
       "parameters": [
         "min_cluster_size",
         "min_samples",
@@ -4498,9 +4518,10 @@
         "cluster_selection_method",
         "allow_single_cluster",
         "prediction_data",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "e9780af73738fc5aab2ef9d44c5603a9751ff7c46beb1e55cebae79e45ef647b",
+      "constructor_ast_sha256": "5fd687fb945843bbf020806db6e2da6fc32adc67fa8a43aafc08e7feed821ce0",
       "field_order": [
         "min_cluster_size",
         "min_samples",
@@ -4511,7 +4532,8 @@
         "cluster_selection_method",
         "allow_single_cluster",
         "prediction_data",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "min_cluster_size": {
@@ -4543,6 +4565,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -4555,7 +4580,8 @@
         "cluster_selection_method": "'eom'",
         "allow_single_cluster": "False",
         "prediction_data": "False",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.hdbscan",
@@ -4565,7 +4591,7 @@
           "path": "python/mojolearn/hdbscan.py",
           "name": "__init__",
           "line": 170,
-          "ast_sha256": "e9780af73738fc5aab2ef9d44c5603a9751ff7c46beb1e55cebae79e45ef647b"
+          "ast_sha256": "5fd687fb945843bbf020806db6e2da6fc32adc67fa8a43aafc08e7feed821ce0"
         }
       ],
       "constructor_ancestry": [
@@ -6550,63 +6576,63 @@
           "value": {
             "parameter": "bandwidth"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "algorithm",
           "value": {
             "parameter": "algorithm"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "kernel",
           "value": {
             "parameter": "kernel"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "metric",
           "value": {
             "parameter": "metric"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "atol",
           "value": {
             "parameter": "atol"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "rtol",
           "value": {
             "parameter": "rtol"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "breadth_first",
           "value": {
             "parameter": "breadth_first"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "leaf_size",
           "value": {
             "parameter": "leaf_size"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "metric_params",
           "value": {
             "parameter": "metric_params"
           },
-          "source": "python/mojolearn/density.py:476"
+          "source": "python/mojolearn/density.py:426"
         },
         {
           "field": "numeric_mode",
@@ -6614,13 +6640,20 @@
             "parameter": "numeric_mode"
           },
           "source": "NumericModeMixin rule kept by native family_density_kde_initialize at python/mojolearn/density.py:476"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/density.py:426"
         }
       ],
       "trace": [
-        "python/mojolearn/density.py:476"
+        "python/mojolearn/density.py:426"
       ],
-      "constructor": "python/mojolearn/density.py:476",
-      "signature_source": "def __init__(self, *, bandwidth=1.0, algorithm='auto', kernel='gaussian', metric='euclidean', atol=0, rtol=0, breadth_first=True, leaf_size=40, metric_params=None, numeric_mode=None)",
+      "constructor": "python/mojolearn/density.py:426",
+      "signature_source": "def __init__(self, *, bandwidth=1.0, algorithm='auto', kernel='gaussian', metric='euclidean', atol=0, rtol=0, breadth_first=True, leaf_size=40, metric_params=None, numeric_mode=None, device=None)",
       "parameters": [
         "bandwidth",
         "algorithm",
@@ -6631,9 +6664,10 @@
         "breadth_first",
         "leaf_size",
         "metric_params",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
-      "constructor_ast_sha256": "fd138f1580d86721d46ff6e78c7af4a9265398e52bf4aa59122fdd0516e52260",
+      "constructor_ast_sha256": "7a08c33df347df674319d0b6c6ca116c258cb29e16aad90db9d6fcb9498a2c73",
       "field_order": [
         "bandwidth",
         "algorithm",
@@ -6644,7 +6678,8 @@
         "breadth_first",
         "leaf_size",
         "metric_params",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "bandwidth": {
@@ -6676,6 +6711,9 @@
         },
         "numeric_mode": {
           "parameter": "numeric_mode"
+        },
+        "device": {
+          "parameter": "device"
         }
       },
       "signature_defaults": {
@@ -6688,7 +6726,8 @@
         "breadth_first": "True",
         "leaf_size": "40",
         "metric_params": "None",
-        "numeric_mode": "None"
+        "numeric_mode": "None",
+        "device": "None"
       },
       "numeric_mode_injection": false,
       "module": "mojolearn.density",
@@ -6697,8 +6736,8 @@
         {
           "path": "python/mojolearn/density.py",
           "name": "__init__",
-          "line": 476,
-          "ast_sha256": "fd138f1580d86721d46ff6e78c7af4a9265398e52bf4aa59122fdd0516e52260"
+          "line": 426,
+          "ast_sha256": "7a08c33df347df674319d0b6c6ca116c258cb29e16aad90db9d6fcb9498a2c73"
         }
       ],
       "constructor_ancestry": [

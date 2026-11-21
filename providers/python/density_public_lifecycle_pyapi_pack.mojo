@@ -23,7 +23,9 @@ from bindings.neighbors_kde_native_door import neighbors_kde_operation, _kde_rel
 from bindings.kde_native_boundary_unpack import kde_owner_admit
 from bindings.kde_admission_boundary_unpack import kde_admission_hit, kde_admission_remember, kde_admission_drop
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
-from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding_current as estimator_binding
+from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
+from providers.python.device_route_boundary_door import device_route_clear
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi_door import _target, _refusal
 
@@ -49,7 +51,12 @@ from bindings.py_balanced import py_item
 
 def _initialize(model: PythonObject, args: PythonObject, names: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
-    if len(args) != len(names):
+    # `device` is the constructor's last value, outside the names every
+    # operation admits again: an instance without the field runs this
+    # installation's device. Its check is the shared constructor door's (the
+    # public constructor is the full-reset native constructor); a constructor
+    # run again on a live estimator drops its binding route.
+    if len(args) != len(names) + 1:
         raise Error("TypeError: density constructor argument count differs from its native schema")
     var values = List[PythonObject]()
     for i in range(len(names)):  # driver-loop: fixed constructor parameter schema
@@ -61,6 +68,8 @@ def _initialize(model: PythonObject, args: PythonObject, names: PythonObject, co
         values.append(value)
     for i in range(len(names)):  # driver-loop: publish only after every replaced owner passed admission
         py_setitem(fields, names[i], values[i])
+    py_setitem(fields, PythonObject("device"), args[len(names)])
+    device_route_clear(model)
     return PythonObject(None)
 
 
@@ -174,7 +183,14 @@ def density_public_operation(model: PythonObject, operation: Int, args: PythonOb
     if fitting:
         # A fit replaces the fitted state: release the old record now.
         kde_admission_drop(model, slot)
-    var binding = estimator_binding(model, "_mojolearn_estimators", context)
+    # A saved-host class keeps its CPU owner; every other estimator takes the
+    # image of its own binding route (its device and mode: one record read and
+    # pointer compares on a hit). `host_estimator_binding_current` selected
+    # the PROCESS set here on every call, whatever the estimator's device.
+    var mode = py_get(fields, nk[].k_numeric_mode)
+    var binding = host_estimator_binding(model, "_mojolearn_estimators", mode, context)
+    if binding is None:
+        binding = estimator_binding_routed(model, mode, "_mojolearn_estimators", context)
     if not dbscan:
         # KDE already owns fitted tracking, y admission and public outputs in
         # the shared neighbor lifecycle. Preserve that compiled owner once.

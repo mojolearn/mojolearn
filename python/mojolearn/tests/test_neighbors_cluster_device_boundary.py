@@ -57,6 +57,11 @@ CASES = [
     Case("MeanShift", lambda **kw: mojolearn.MeanShift(bandwidth=4.0, **kw), ("predict",)),
     Case("OPTICS", lambda **kw: mojolearn.OPTICS(min_samples=5, **kw), ("fit_predict",)),
     Case("AffinityPropagation", lambda **kw: mojolearn.AffinityPropagation(random_state=0, **kw), ("predict",)),
+    Case("DBSCAN", lambda **kw: mojolearn.DBSCAN(eps=2.5, min_samples=4, **kw), ("fit_predict",)),
+    Case("DBSCAN-prediction-data",
+         lambda **kw: mojolearn.DBSCAN(eps=2.5, min_samples=4, prediction_data=True, **kw), ("predict",)),
+    Case("KernelDensity", lambda **kw: mojolearn.KernelDensity(bandwidth=1.5, **kw), ("score_samples",)),
+    Case("HDBSCAN", lambda **kw: mojolearn.HDBSCAN(min_cluster_size=8, **kw), ("fit_predict",)),
 ]
 ids = [case.name for case in CASES]
 
