@@ -43,21 +43,29 @@ def test_computation_transport_reuses_common_provider_and_resource():
     assert 'struct ' not in source
     assert 'neural_descriptor_reuse(previous, factory' in source
     assert 'neural_descriptor_execute(native, operation' in source
-    source = read('bindings/kernel_methods_native_door.mojo')
-    assert 'neural_descriptor_adopt(native, Int(py=handle), 5, [])' in source
+    # The door split: the resident ownership record and the pickle state are PACK.
+    source = read('bindings/kernel_methods_boundary_pack.mojo')
+    assert 'neural_descriptor_adopt(route.native, handle, 5, [])' in source
     assert 'neural_descriptor_resource_close(held[3], [])' in source
-    assert 'held[4] is native' in source
+    assert 'held[4] is route.native' in source
     assert 'state.pop, "_native_kernel_method_provider"' in source
+    # RUN is typed and holds no Python; the door runs it with the GIL released.
+    run = read('kernel_methods/native_call_run.mojo')
+    assert 'PythonObject' not in run and 'py=' not in run and 'std.python' not in run
+    assert 'neural_descriptor_record_call(provider_id, call.operation, call.a, call.p, call.f)' in run
+    door = read('bindings/kernel_methods_native_door.mojo')
+    assert 'with GILReleased(Python()):\n            result = km_call_run(route.provider_id, call)' in door
+    assert 'Python.list(' not in door
 
 def test_compound_transform_reuses_admitted_x_and_provider():
     source = read('bindings/kernel_methods_native_door.mojo')
     # X is admitted once per public operation by the dispatcher and handed to
     # the bodies as x_meta (312223206b, c251819d8a); no body re-admits it.
-    for name, operation in [('_nys_fit', 'nystroem_transform'), ('_rbf_fit', 'rbf_sampler_transform')]:
+    for name, operation in [('_nys_fit', 'nys_transform'), ('_rbf_fit', 'rbf_transform')]:
         part = body(source, name)
         assert 'x_meta: ArrayMetadata' in part
         assert part.count('admit_family_meta(args[1]') == 0
-        assert f'kernel_method_execute(native, "{operation}"' in part
+        assert f'km_{operation}_call(' in part
     _assert_x_admitted_once_per_operation(source)
 
 
@@ -102,8 +110,12 @@ def test_private_span_bounds_and_scalar_schemas_are_checked_before_dispatch():
     assert 'nf != np' in source
     assert 'operation == 6 and na != 3' in source
     assert 'operation == 5 and (na != 1 or np != 0)' in source
-    source = read('providers/python/kernel_method_descriptor_pyapi_door.mojo')
-    assert source.index('len(params) != schema[0]') < source.index('params[i]')
+    # The typed request sizes its scalar vectors from the schema and refuses a
+    # word set against the schema's mask (kernel_methods/native_call_run.mojo).
+    source = read('kernel_methods/native_call_run.mojo')
+    assert 'KmCall(operation, schema[0], schema[1])' in source
+    assert 'if (self.mask & (1 << slot)) != 0:' in body(source.replace('    def word', 'def word'), 'word')
+    assert source.index('buffers > 8') < source.index('neural_descriptor_record_admit(provider_id, call.operation)')
 
 
 def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
@@ -135,8 +147,8 @@ def test_common_array_metadata_snapshot_retains_owner_and_native_shape():
         for text in ('x.shape', 'xq.shape', 'x.size', 'xq.size', 'classical_address(x)', 'classical_address(xq)'):
             assert text not in part, (name, text)
     # the fitted X is the admission's own copy when it made one, else one memcpy; never the caller's Array
-    owned = body(source, '_km_fit_owned')
+    assert 'km_fit_owned(x_meta, x_pin, context)' in source
+    owned = body(read('bindings/kernel_methods_boundary_pack.mojo'), 'km_fit_owned')
     assert 'if x_meta.copied and x_meta.owned_writable:\n        return x_pin.keep' in owned
     assert 'unsafe_memcpy(' in owned
-    assert '_km_fit_owned(x_meta, x_pin, context)' in source
-    assert '_km_scale_gamma(extension, x_meta, d, context, native)' in source
+    assert '_km_scale_gamma(u.route, x_meta, d)' in source
