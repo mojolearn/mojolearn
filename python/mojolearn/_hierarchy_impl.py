@@ -209,6 +209,9 @@ class AgglomerativeClustering(ParamsMixin):
     #: training-only family; the prediction entry lives in the estimators
     #: family, whose host binding ships in the inference wheel.
     _BINDING = "_mojolearn_estimators"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, n_clusters=2, *, metric="euclidean",
                  connectivity=None, linkage="single", c=15,
