@@ -99,7 +99,9 @@ def cross_header_floats(address: Int, count: Int, key: String) raises -> List[Fl
             size += 1
             i += 1
         token[size] = UInt8(0)
-        var value = external_call["strtod", Float64](token.unsafe_ptr(), stop.unsafe_ptr())
+        # The end pointer goes as its address (an Int): every strtod declaration in one
+        # build must share one signature (core/native_archive_scalar_text.mojo passes Int(0)).
+        var value = external_call["strtod", Float64](token.unsafe_ptr(), Int(stop.unsafe_ptr()))
         if stop[0] != Int(token.unsafe_ptr()) + size or not isfinite(value):
             raise Error("transport: header field " + key + " is not a list of numbers")
         values.append(value)
