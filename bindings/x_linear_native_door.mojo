@@ -23,7 +23,6 @@ from std.math import isinf
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from core.linear_entry_table_ext import XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_SPEARMAN, XL_OP_BEST_ALPHA
-from core.solver_entry_table import solver_cd_fit_call, solver_cd_predict_call
 from x_linear.door_run import (
     ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV,
     ALGO_LOGCV, ALGO_ISOTONIC, ALGO_ISOTONIC_PREDICT, ALGO_RIDGE_KFOLD, LINK_IDENTITY, LINK_EXP, LINK_SIGMOID,
@@ -40,6 +39,9 @@ from bindings.x_linear_common_unpack import (
     _xl_decision, _xl_codes, _xl_run, _xl_fold_matrix, _xl_run_x, _xl_with_weights, _xl_owned, _xl_reals,
     _xl_class_prep,
 )
+from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
+from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
+from bindings.x_linear_cd_pack import xl_cd_fit_pack, xl_cd_predict_pack
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
@@ -68,12 +70,11 @@ from bindings.classical_warnings_unpack import classical_warning
 from bindings.prep_native_estimator_door import prep_native_context, prep_native_split
 from bindings.msel_inputs_unpack import msel_admit
 from bindings.admitted_input_unpack import (
-    AdmittedX, admit_x_unrecorded, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector,
-    admitted_storage, classical_view, admit_ids,
+    AdmittedX, admit_f32, admit_weight_words, admitted_words, admitted_array, admitted_vector, admitted_storage,
+    admit_ids,
 )
 from bindings.admitted_input_run import admitted_finite_entry_refuse
 from bindings.admitted_input_run import AdmittedXView
-from bindings.classical_arrays_door import classical_c_order, classical_is_f32
 from bindings.py_optional import py_or_none, py_present
 from bindings.x_linear_keys_unpack import (
     x_linear_keys,
@@ -119,9 +120,8 @@ from bindings.x_linear_keys_unpack import (
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 from bindings.classical_labels_door import (
-    ClassicalLabels, labels_full_f32, labels_address, labels_cast, labels_reshape, labels_shape_of,
-    classical_encode_labels, classical_decode_labels, classical_accuracy, labels_r2, labels_real_type,
-    labels_integral_type,
+    ClassicalLabels, labels_full_f32, labels_address, labels_cast, labels_reshape, classical_encode_labels,
+    classical_decode_labels, classical_accuracy, labels_r2, labels_real_type, labels_integral_type,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -141,14 +141,6 @@ comptime _XL_M_TRANSFORM = 8
 comptime _ROWS_SGD_PROBA = 2
 comptime _ROWS_LRCV_PROBA = 3
 # `_lbfgs_work`'s memory.
-# ElasticNet / Lasso refusals by name, word for word.
-comptime _CD_COPY_X = "mojolearn ElasticNet: copy_X=False is refused. The design crosses to the device as a copy and the caller's array is never written (DEVIATION 880); there is no in-place arm to select"
-comptime _CD_POSITIVE = "mojolearn ElasticNet: positive=True is not supported (cuML raises UnsupportedOnGPU for it too, elastic_net.py:143)"
-comptime _CD_PRECOMPUTE = "mojolearn ElasticNet: precompute is not supported (cuML raises UnsupportedOnGPU for it too, elastic_net.py:149)"
-comptime _CD_QN = "mojolearn ElasticNet: solver='qn' is not implemented. cuML's solver='auto' picks 'qn' only for SPARSE input (elastic_net.py:243-244), and 'qn' under an l1 penalty is OWL-QN (min_owlqn, qn_solvers.cuh), which glm/NOT_IMPLEMENTED.tsv lists as not implemented. solver='cd' (cuML's 'auto' for dense input) is the implemented arm; see solver/NOT_IMPLEMENTED.tsv"
-comptime _CD_RANDOM = "mojolearn ElasticNet: selection='random' is REFUSED BY NAME. cuML seeds std::mt19937(0) and shuffles the coordinate order with std::shuffle each epoch (cd.cuh:198-199, :222), and the C++ standard does not specify std::shuffle's algorithm, so their permutation is a function of the toolchain rather than of the seed and cannot be gated bitwise or certified across vendors. An exact implementation is DEVIATION 611, reserved and not spent; see solver/NOT_IMPLEMENTED.tsv"
-comptime _CD_SPARSE = "mojolearn ElasticNet: sparse X is refused. cdFit is dense only; cuML routes sparse input to solver='qn' and raises for solver='cd' (elastic_net.py:265-269), and 'qn' is not implemented"
-comptime _CD_WARM = "mojolearn ElasticNet: warm_start=True is not supported (cuML raises UnsupportedOnGPU for it too, elastic_net.py:146). cdFit reads coef as its starting point and solver/estimator.mojo zeroes it on every fit"
 
 
 # ------------------------------------------------------------ bindings
@@ -1228,168 +1220,39 @@ comptime _XL_AFTER_FIT_SLOT = "x_linear_no_after_fit_v1"
 # (`xl_route(..., cd=True)`). Code recoverable at 0121caad3d.
 
 
-def _xl_cd_validate(fields: PythonObject, context: PythonObject) raises:
-    """ElasticNet._validate_params: cuML's guards first, in their order and
-    with their messages, then this implementation's refusals by name."""
-    var nk = x_linear_keys()
-    var alpha = py_item(fields, nk[].k_alpha)
-    var l1_ratio = py_item(fields, nk[].k_l1_ratio)
-    var solver = py_item(fields, nk[].k_solver)
-    var selection = py_item(fields, nk[].k_selection)
-    if _lt(alpha, PythonObject(0.0)):
-        raise Error("Expected alpha >= 0, got " + _str(alpha))
-    if not py_contains(py_item(context, nk[].k_cd_selection), selection):
-        raise Error("selection " + _repr(selection) + " is not supported")
-    if _lt(l1_ratio, PythonObject(0.0)) or _gt(l1_ratio, PythonObject(1.0)):
-        raise Error("Expected 0.0 <= l1_ratio <= 1.0, got " + _str(l1_ratio))
-    if not py_contains(Python.tuple("auto", "cd", "qn"), solver):
-        raise Error("solver=" + _repr(solver) + " is not supported")
-    if _eq(solver, PythonObject("qn")):
-        raise Error("NotImplementedError: " + _CD_QN)
-    if _eq(selection, PythonObject("random")):
-        raise Error("NotImplementedError: " + _CD_RANDOM)
-    if _truth(py_item(fields, nk[].k_positive)):
-        raise Error("NotImplementedError: " + _CD_POSITIVE)
-    if _truth(py_item(fields, nk[].k_warm_start)):
-        raise Error("NotImplementedError: " + _CD_WARM)
-    if not (py_item(fields, nk[].k_precompute) is PythonObject(False)):
-        raise Error("NotImplementedError: " + _CD_PRECOMPUTE)
-    if not _truth(py_item(fields, nk[].k_copy_X)):
-        raise Error("NotImplementedError: " + _CD_COPY_X)
-    var rs = py_item(fields, nk[].k_random_state)
-    var b = _b()
-    if rs is not None and (_isinstance(rs, b.bool) or not (_isinstance(rs, b.int)
-                                                           or Bool(py=py_call(b.hasattr, rs, PythonObject("randint")))
-                                                           or Bool(py=py_call(b.hasattr, rs, PythonObject("integers"))))):
-        raise Error("random_state=" + _repr(rs) + ": None, an int or a numpy random state")
-
-
 def xl_cd_fit(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """ElasticNet.fit / Lasso.fit(X, y, sample_weight): `cd_fit` over the
-    design as the Python handed it (a float32 C-order design as it is, the
-    device transposing it; any other input as one F-order float32 copy)."""
-    var nk = x_linear_keys()
+    """ElasticNet.fit / Lasso.fit(X, y, sample_weight): UNPACK
+    (bindings/x_linear_cd_unpack.mojo), RUN (`cd_fit` on the route's solver
+    entry, GIL released), PACK (bindings/x_linear_cd_pack.mojo)."""
     var fields = py_fields(model)
-    var b = _b()
-    if entries.host_only:
-        raise Error("ImportError: mojolearn: no CPU implementation of the " + _name(model)
-                    + " fit on the host class; the host model predicts a saved model only")
-    _xl_cd_validate(fields, context)
-    var source = args[0]
-    if Bool(py=py_call(b.hasattr, source, PythonObject("toarray"))) or Bool(py=py_call(b.hasattr, source, PythonObject("tocsr"))):
-        raise Error("NotImplementedError: " + _CD_SPARSE)
-    var listed = py_type(source) is b.list or py_type(source) is b.tuple
-    # A float32 C-order design is read as it is (the device transposes it);
-    # any other input is one F-order float32 copy (admit_x order "F": one
-    # parallel cast-and-transpose pass). cd_fit has no finite test: the
-    # words are admitted as they are, as before (finite=False).
-    var view = classical_view(source, context, "X")
-    var row_major = (Int(py=view.ndim) == 2 and classical_is_f32(view, context) and classical_c_order(view, context)
-                     and Int(py=view.shape[0]) > 1 and Int(py=view.shape[1]) > 1)
-    var x = admit_x_unrecorded(view, _name(model), context, admitted=True, order="C" if row_major else "F",
-                               finite=False)
-    _ = view^
-    var copied = listed or not x.borrowed
-    py_setitem(fields, nk[].k_input_copied_, PythonObject(copied))
-    py_setitem(fields, nk[].k_fortran_copied_, PythonObject(copied))
-    var n_rows = x.rows
-    var n_cols = x.cols
-    if n_rows < 2:
-        raise Error("Found array with " + String(n_rows) + " sample(s) (shape=(" + String(n_rows) + ", "
-                    + String(n_cols) + ")) while a minimum of 2 is required.")
-    if len(labels_shape_of(args[1], context)) != 1:
-        raise Error("mojolearn ElasticNet currently requires one target")
-    var target = admit_f32(args[1], 1, "y", context, finite=False)
-    if target.rows != n_rows:
-        raise Error("mojolearn ElasticNet X and y lengths differ")
-    var sw_keep = PythonObject(None)
-    var sw_addr = 0
-    if args[2] is not None:
-        var w = admit_weight_words(args[2], n_rows, context)
-        sw_keep = w.array
-        sw_addr = w.address
-        _ = w  # keep the Python object alive through the native call above
-    xl_ops_require(entries)
-    var entry = entries.entry
-    var coef = admitted_array(Python.tuple(n_cols), "<f4", context)
-    py_setitem(fields, nk[].k_coef_, coef)
-    var info = admitted_vector(1, "<f4", context)
-    # UNPACK: the settings as plain values, then one native call of the
-    # solver operations table with the GIL released (no CPython between the
-    # two modules).
-    var fit_intercept = _truth(py_item(fields, nk[].k_fit_intercept))
-    var epochs = _int(py_item(fields, nk[].k_max_iter))
-    var alpha = _float(py_item(fields, nk[].k_alpha))
-    var l1_ratio = _float(py_item(fields, nk[].k_l1_ratio))
-    var tol = _float(py_item(fields, nk[].k_tol))
-    var shuffle = _int(py_item(context, nk[].k_cd_selection)[py_item(fields, nk[].k_selection)]) != 0
-    var coef_addr = labels_address(coef)
-    var info_addr = labels_address(info)
+    var call = xl_cd_fit_unpack(model, fields, args, entries, context)
     var n_iter = 0
     var py = Python()
     with GILReleased(py):
-        n_iter = solver_cd_fit_call(entry, x.address, target.address, coef_addr, info_addr, sw_addr, n_rows, n_cols,
-                                    fit_intercept, epochs, shuffle, row_major, alpha, l1_ratio, tol)
-    _ = target  # keep the Python object alive through the native call above
-    _ = info  # keep the Python object alive through the native call above
-    _ = coef  # keep the Python object alive through the native call above
-    _ = sw_keep  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_intercept_, _xl_float(info, 0))
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(n_iter))
-    _ = info  # keep the Python object alive through the native call above
-    _ = coef  # keep the Python object alive through the native call above
-    _ = target  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(n_cols))
-    _ = x^
-    _ = target^
-    _ = sw_keep^
-    _ = info^
-    return model
+        n_iter = xl_cd_fit_run(call.request)
+    return xl_cd_fit_pack(model, fields, call, n_iter)
 
 
 def xl_cd_predict(model: PythonObject, source: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
-    """ElasticNet.predict / Lasso.predict(X): `cd_predict` over the F-order
-    float32 design."""
-    var nk = x_linear_keys()
-    var fields = py_fields(model)
-    if not py_contains(fields, nk[].k_coef_):
-        raise Error("mojolearn ElasticNet: call fit before predict")
-    var x = admit_x_unrecorded(source, "ElasticNet", context, order="F", finite=False)
-    if x.cols != _int(py_item(fields, nk[].k_n_features_in_)):
-        raise Error("mojolearn ElasticNet feature count differs from fit")
-    xl_ops_require(entries)
-    var entry = entries.entry
-    var coef = _xl_words(py_item(fields, nk[].k_coef_), "coef_", context)
-    var out = admitted_vector(x.rows, "<f4", context)
-    var intercept = _float(py_item(fields, nk[].k_intercept_))
-    var out_addr = labels_address(out)
+    """ElasticNet.predict / Lasso.predict(X): UNPACK, RUN (`cd_predict`,
+    GIL released), PACK."""
+    var call = xl_cd_predict_unpack(model, source, entries, context)
     var py = Python()
     with GILReleased(py):
-        solver_cd_predict_call(entry, x.address, coef.address, out_addr, x.rows, x.cols, intercept)
-    _ = coef  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    _ = x^
-    _ = coef^
-    return out
+        xl_cd_predict_run(call.request)
+    return xl_cd_predict_pack(call)
 
 
 def xl_cd_score(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """ElasticNet.score / Lasso.score(X, y): `_r2_host(self.predict(X), y)`.
-    The prediction is the R^2 program's input as it is. An explicit host
-    class predicts through its own native host entry (`host_infer_predict`)."""
-    var nk = x_linear_keys()
-    var prediction = PythonObject(None)
+    The prediction is the R^2 program's input as it is (the metric door's
+    own operation, in the scope of the route's device). An explicit host
+    class predicts through its own native host entry."""
     if entries.host_only:
-        var host = py_item(context, nk[].k_cd_host_predict)
-        var published = py_call_typed(host[0], model, PythonObject("host_infer_predict"), Python.tuple(args[0]), host[1])
-        var cast = admit_f32(published, 1, "predictions", context, finite=False)
-        prediction = _xl_join(cast.address, cast.rows, 0, 0, context)
-        _ = cast  # keep the Python object alive through the native call above
-        _ = cast^
-    else:
-        prediction = xl_cd_predict(model, args[0], entries, context)
-    return classical_r2_score(prediction, args[1], _xl_scope(entries, context))
+        return classical_r2_score(xl_cd_host_prediction_unpack(model, args[0], context), args[1],
+                                  _xl_scope(entries, context))
+    return classical_r2_score(xl_cd_predict(model, args[0], entries, context), args[1], _xl_scope(entries, context))
+
 
 
 # ------------------------------------------------------------ cv helpers

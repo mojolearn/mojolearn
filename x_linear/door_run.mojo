@@ -11,6 +11,7 @@ from std.memory import unsafe_memcpy
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.linear_entry_table_ext import XL_OP_FIT, XL_OP_FIT_FOLD
+from core.solver_entry_table import solver_cd_fit_call, solver_cd_predict_call
 from core.admitted_refusals import admitted_finite_refuse
 from core.entry_table import EntryRef
 from core.base_helpers_calls import (
@@ -233,3 +234,90 @@ def xl_cv_roles_run(key: EntryRef, splits: XlSplitWords, n: Int, roles: Int, nam
                 raise Error("mojolearn " + name + ": a cv split repeats a row, or puts a row on both sides")
         if splits.train_sizes[k] == 0 or splits.test_sizes[k] == 0:
             raise Error("mojolearn " + name + ": every cv split needs training and test rows")
+
+
+# ------------------------------------------------- Lasso / ElasticNet (cd)
+# RUN of the coordinate-descent pair's operations (UNPACK:
+# bindings/x_linear_cd_unpack.mojo, PACK: bindings/x_linear_cd_pack.mojo).
+# A request is addresses and plain words; the boundary keeps every
+# addressed buffer alive and releases the GIL around the run.
+
+
+struct XlCdFitRequest(Movable):
+    """`cd_fit` of one design: `entry` is the solver operations entry of
+    the estimator's route; `x` addresses n_rows x n_cols float32 words
+    (C order when `row_major`, else F order), `y` n_rows targets, `coef`
+    the n_cols result words, `info` one result word (the intercept),
+    `sample_weight` n_rows weights or 0."""
+    var entry: NativeDescriptorCall
+    var x: Int
+    var y: Int
+    var coef: Int
+    var info: Int
+    var sample_weight: Int
+    var n_rows: Int
+    var n_cols: Int
+    var fit_intercept: Bool
+    var epochs: Int
+    var shuffle: Bool
+    var row_major: Bool
+    var alpha: Float64
+    var l1_ratio: Float64
+    var tol: Float64
+
+    def __init__(out self, entry: NativeDescriptorCall, x: Int, y: Int, coef: Int, info: Int, sample_weight: Int,
+                 n_rows: Int, n_cols: Int, fit_intercept: Bool, epochs: Int, shuffle: Bool, row_major: Bool,
+                 alpha: Float64, l1_ratio: Float64, tol: Float64):
+        self.entry = entry
+        self.x = x
+        self.y = y
+        self.coef = coef
+        self.info = info
+        self.sample_weight = sample_weight
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.fit_intercept = fit_intercept
+        self.epochs = epochs
+        self.shuffle = shuffle
+        self.row_major = row_major
+        self.alpha = alpha
+        self.l1_ratio = l1_ratio
+        self.tol = tol
+
+
+def xl_cd_fit_run(request: XlCdFitRequest) raises -> Int:
+    """ElasticNet.fit / Lasso.fit: one `cd_fit` call; n_iter. The
+    coefficients are in `request.coef`, the intercept in `request.info`."""
+    return solver_cd_fit_call(request.entry, request.x, request.y, request.coef, request.info,
+                              request.sample_weight, request.n_rows, request.n_cols, request.fit_intercept,
+                              request.epochs, request.shuffle, request.row_major, request.alpha, request.l1_ratio,
+                              request.tol)
+
+
+struct XlCdPredictRequest(Movable):
+    """`cd_predict`: `x` addresses n_rows x n_cols F-order float32 words,
+    `coef` n_cols words, `dst` the n_rows result words."""
+    var entry: NativeDescriptorCall
+    var x: Int
+    var coef: Int
+    var dst: Int
+    var n_rows: Int
+    var n_cols: Int
+    var intercept: Float64
+
+    def __init__(out self, entry: NativeDescriptorCall, x: Int, coef: Int, dst: Int, n_rows: Int, n_cols: Int,
+                 intercept: Float64):
+        self.entry = entry
+        self.x = x
+        self.coef = coef
+        self.dst = dst
+        self.n_rows = n_rows
+        self.n_cols = n_cols
+        self.intercept = intercept
+
+
+def xl_cd_predict_run(request: XlCdPredictRequest) raises:
+    """ElasticNet.predict / Lasso.predict: one `cd_predict` call into
+    `request.dst`."""
+    solver_cd_predict_call(request.entry, request.x, request.coef, request.dst, request.n_rows, request.n_cols,
+                           request.intercept)
