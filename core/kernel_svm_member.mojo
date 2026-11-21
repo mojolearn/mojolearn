@@ -10,10 +10,19 @@ svm/svc_kernel_native_run.mojo `svc_query_run`, core/svr_native_api.mojo
 `SvrNativeDriver`) over the entries of the `DeviceRoute` it is handed:
 `entry` the image's shared SVC table (short-form solve, host-words query,
 epilogues, row glue, Platt, scale_gamma's limbs, the one-vs-one layout),
-`second` the SVC device table (a GPU image only: the device-X binary solve),
-`third` the SVR table. `route.flags` bit 1: the
--D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH B arm (the SVR request's candidate
-word). No kernel is touched.
+`second` the SVC device table (a GPU image only: the device-X binary solve
+and the device-resident query), `third` the SVR table (SVR; and on a GPU
+route for SVC too: its LEASE_OPEN / LEASE_CLOSE hold the state's device
+copies). `route.flags` bit 1: the -D MOJOLEARN_CLASSICAL_NATIVE_DISPATCH B
+arm (the SVR request's candidate word). No kernel is touched.
+
+PREDICT ON A GPU ROUTE is the estimator's own door's route: the resident
+entry (SVC_DEVICE_RESIDENT, SVR_NATIVE_RESIDENT except the B arm) reads each
+machine from slot (its index) of the state's lease, opened on the first
+query and closed before a refit, an import or a free; X crosses from the
+caller's view once per call and its finite and range words come back with
+the decisions. A host route keeps the host-words query. No copy of X: fit
+and predict borrow the caller's view.
 
 KINDS: 0 SVC (a classifier: MEMBER_CAN_CLASSIFIER), 1 SVR.
 
@@ -76,6 +85,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_KERNEL_SVM
+from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -154,6 +164,12 @@ struct KernelSvmMemberSlot(Copyable, Movable, Defaultable):
     var prob: List[Float64]
     var scalars: List[Float64]
     var table: List[Float64]
+    # The device-resident copies of the machines (the estimator's own lease,
+    # svm/svm_resident_state.mojo): opened on the first GPU query, closed
+    # through `lease_entry` (the SVR table's LEASE_CLOSE) before a refit, an
+    # import or a free. 0: none held.
+    var lease: Int
+    var lease_entry: EntryRef
 
     def __init__(out self):
         self.generation = 0
@@ -176,6 +192,8 @@ struct KernelSvmMemberSlot(Copyable, Movable, Defaultable):
         self.prob = List[Float64]()
         self.scalars = List[Float64]()
         self.table = List[Float64]()
+        self.lease = 0
+        self.lease_entry = entry_ref_unresolved()
 
     def clear(mut self):
         self.fitted = False
@@ -244,26 +262,51 @@ def _mint(var params: List[Float64]) raises -> Int:
 
 def _lookup(handle: Int, release: Bool) raises -> Int:
     """The slot address of a live handle. A released handle, a handle of
-    another store or a made-up integer is refused: never a stale read."""
+    another store or a made-up integer is refused: never a stale read. A
+    release closes the state's device lease after the lock is dropped."""
     var store = _STORE.get_or_create_ptr()
     var lock = rebind[MutPointer[Int64, MutUntrackedOrigin]](store[].synchronization.unsafe_ptr())
+    var address = 0
+    var lease = 0
+    var entry = entry_ref_unresolved()
     shared_slot_lock(lock)
     try:
         var index = handle % _INDEX_SPAN - 1
         if handle <= 0 or index < 0 or index >= store[].count:
             raise Error("NotFittedError: this member state was released or never created")
-        var address = _slot_address(index)
+        address = _slot_address(index)
         var slot = MutPointer[KernelSvmMemberSlot, MutUntrackedOrigin](unsafe_from_address=address)
         if not slot[].live or slot[].generation != handle // _INDEX_SPAN:
             raise Error("NotFittedError: this member state was released or never created")
         if release:
+            lease = slot[].lease
+            entry = slot[].lease_entry
+            slot[].lease = 0
             slot[].live = False
             slot[].clear()
             slot[].params = List[Float64]()
             store[].free.append(index)
-        return address
     finally:
         shared_slot_unlock(lock)
+    if lease != 0:
+        _close_lease(entry, lease)
+    return address
+
+
+def _close_lease(entry: EntryRef, lease: Int):
+    """Free a lease's device copies. Never raises (FREE never raises)."""
+    try:
+        SvrNativeDriver(entry.call).lease_close(lease)
+    except:
+        pass
+
+
+def _drop_lease(slot: MutPointer[KernelSvmMemberSlot, MutUntrackedOrigin]):
+    """Before the fitted machines change (fit, import): their device copies go."""
+    if slot[].lease != 0:
+        var lease = slot[].lease
+        slot[].lease = 0
+        _close_lease(slot[].lease_entry, lease)
 
 
 comptime _Slot = MutPointer[KernelSvmMemberSlot, MutUntrackedOrigin]
@@ -286,6 +329,17 @@ def _settings(slot: _Slot, features: Int, gamma: Float64) -> SvcOperationSetting
 def _drivers(call: _Call) -> SvcDrivers:
     var route = call[].route
     return SvcDrivers(route.entry.call, route.second.call if route.has_second else route.entry.call, route.has_second)
+
+
+def _lease(slot: _Slot, call: _Call) raises -> Int:
+    """The state's device lease (a GPU route only), opened once per fitted
+    state through the SVR table's LEASE_OPEN, as the estimator's own door
+    opens one per fitted model. 0 (no SVR table on the route): the resident
+    entry uploads the machines for this call only (same launches, same bits)."""
+    if slot[].lease == 0 and call[].route.has_third:
+        slot[].lease = SvrNativeDriver(call[].route.third.call).lease_open()
+        slot[].lease_entry = call[].route.third
+    return slot[].lease
 
 
 def _whole(call: _Call, estimator: String) raises:
@@ -436,21 +490,23 @@ def _fit_svc(slot: _Slot, call: _Call) raises:
             Int(result.solved.info[2])))
         slot[].label0 = _round_f32(result.solved.info[3])
         slot[].label1 = _round_f32(result.solved.info[4])
-        _binary_layout(slot)
+        _binary_layout(slot, False)
     slot[].fitted = True
     _ = labels^
     _ = held^
 
 
-def _binary_layout(slot: _Slot):
-    """The public layout of one machine (binary SVC, SVR): its own arrays."""
-    var machine = slot[].machines[0].copy()
-    slot[].support = machine.support.copy()
-    slot[].vectors = machine.vectors.copy()
-    slot[].dual = machine.dual.copy()
-    slot[].n_support = List[Int32](length=1, fill=Int32(machine.supports))
-    slot[].intercept = List[Float32](length=1, fill=Float32(machine.bias))
-    slot[].n_iter = List[Int32](length=1, fill=Int32(machine.n_iter))
+def _binary_layout(slot: _Slot, vectors: Bool):
+    """The public layout of one machine (binary SVC, SVR): its own arrays,
+    copied field by field (no copy of the whole machine). `vectors` False:
+    support_vectors_ is already in place (the binary SVC fit writes it)."""
+    slot[].support = slot[].machines[0].support.copy()
+    if vectors:
+        slot[].vectors = slot[].machines[0].vectors.copy()
+    slot[].dual = slot[].machines[0].dual.copy()
+    slot[].n_support = List[Int32](length=1, fill=Int32(slot[].machines[0].supports))
+    slot[].intercept = List[Float32](length=1, fill=Float32(slot[].machines[0].bias))
+    slot[].n_iter = List[Int32](length=1, fill=Int32(slot[].machines[0].n_iter))
 
 
 def _fit_svr(slot: _Slot, call: _Call) raises:
@@ -507,7 +563,7 @@ def _fit_svr(slot: _Slot, call: _Call) raises:
         Int(plan.info[2])))
     slot[].features = cols
     slot[].gamma = gamma
-    _binary_layout(slot)
+    _binary_layout(slot, True)
     slot[].fitted = True
     _ = bounds^
     _ = held^
@@ -519,6 +575,7 @@ def _fit(slot: _Slot, call: _Call) raises:
     if call[].fit_output != 0:
         member_unsupported(estimator, call[].fit_output)
     _dense(call[].x, MEMBER_F32, "X", estimator)
+    _drop_lease(slot)
     if _svc(slot):
         _fit_svc(slot, call)
     else:
@@ -616,6 +673,12 @@ def _query_svc(slot: _Slot, call: _Call, operation: Int, dst: Int) raises:
     var codes = List[Int32]()
     var plan = _svc_plan(slot, call, _settings(slot, slot[].features, slot[].gamma), status, codes)
     var pairs = len(slot[].machines)
+    # The estimator's own route (bindings/svc_kernel_query_unpack.mojo): on a
+    # GPU binding the device entry runs every machine from the state's lease
+    # and tests X (its finite and range words come back in `status`).
+    plan.resident = call[].route.has_second and pairs > 0
+    if plan.resident:
+        plan.lease = _lease(slot, call)
     var decisions = List[Float32]()
     var wide = List[Int64]()
     var scores = List[Float64]()
@@ -687,10 +750,15 @@ def _predict(slot: _Slot, call: _Call, operation: Int) raises:
     var p = slot[].params.copy()
     var status = List[Int32](length=2, fill=Int32(0))
     var n = slot[].machines[0].supports
+    # The estimator's own route (bindings/svc_kernel_svr_unpack.mojo): a GPU
+    # binding's resident entry, except the B arm (no resident route).
+    var resident = route.has_second and (route.flags & 1) == 0
+    var lease = _lease(slot, call) if resident else 0
     var request = SvrQueryRequest(call[].x.data, _f32(slot[].machines[0].dual) if n > 0 else 0,
         _f32(slot[].machines[0].vectors) if n > 0 else 0, call[].dst.data, Int(status.unsafe_ptr()), rows,
-        slot[].features, n, Int(p[1]), Int(p[2]), 0, 0, -1, 0, -1, slot[].machines[0].bias, slot[].gamma, p[11], p[3])
-    _ = SvrNativeDriver(route.third.call).query(request, False)
+        slot[].features, n, Int(p[1]), Int(p[2]), lease, 0, -1, 0, -1, slot[].machines[0].bias, slot[].gamma,
+        p[11], p[3])
+    _ = SvrNativeDriver(route.third.call).query(request, resident)
     _flagged(Float64(status[0]), Float64(status[1]), "SVR")
 
 
@@ -845,6 +913,7 @@ def _copy_f64(view: MemberMatrix, what: String) raises -> List[Float64]:
 def _import(slot: _Slot, call: _Call) raises:
     """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state.
     The machine table (block FAMILY+5) comes before the machines' own."""
+    _drop_lease(slot)
     var block = call[].block
     if block == MEMBER_BLOCK_SCALARS:
         var words = _copy_f64(call[].x, "the scalars block")
@@ -903,7 +972,7 @@ def _import(slot: _Slot, call: _Call) raises:
     if _svc(slot) and slot[].probability and len(slot[].prob) != k * (k - 1):
         raise Error("member ABI: a probability SVC state needs its sigmoid parameters block")
     if len(slot[].machines) == 1 and len(slot[].support) == 0:
-        _binary_layout(slot)
+        _binary_layout(slot, len(slot[].vectors) == 0)
     slot[].fitted = True
 
 
