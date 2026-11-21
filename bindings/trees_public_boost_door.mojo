@@ -26,7 +26,7 @@
 # it on the device); RandomTreesEmbedding's `fit_transform`
 # converts X once for the fit and the transform.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
 from bindings.native_f32_view_pack import native_f32_view_array
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
@@ -67,6 +67,7 @@ from xtrees.trees_boost_run import (
     _sub_seed, _dart_thr,
     boost_ada_session_choice, boost_bagging_validate, boost_check_n_estimators, boost_check_learning_rate,
     boost_count_fraction_ok, boost_count_check, boost_weight_flags_check,
+    rte_targets_run, rte_numbering_run, rte_transform_run,
 )
 from bindings.trees_public_forest_door import (
     forest_fit,
@@ -92,7 +93,13 @@ from bindings.trees_public_forest_door import (
     _launch,
     _dt_tier_bins,
     forest_fit_request,
+    forest_config,
+    _et_fit_arrays,
+    _target_check,
+    _model_list,
+    _report_engine,
 )
+from bindings.trees_keys_unpack import trees_keys
 from core.forest_calls import (
     xf_caps, xf_session_open, xf_session_close, xf_fit_session, xf_ada_open, xf_fit_ada_round,
 )
@@ -2212,18 +2219,28 @@ def _rte_validate(fields: PythonObject, context: PythonObject) raises:
     _ = _seed(fields["random_state"], context)
 
 
+# Each embedding operation is three steps (lane dw-trees-boost, 2026-11-21):
+#   UNPACK  the checks, X admitted once, the seed, the glue entry; for a fit
+#           the embedding's forest assembled with its constructor state and
+#           its configuration read once as plain values (`forest_config`);
+#           for a transform the forest's model arrays through the forest
+#           door's descriptor (`_model_list`), never by name.
+#   RUN     typed calls only: `rte_targets_run`, the forest door's typed fit
+#           (`_et_fit_arrays`: `forest_request` + XF_FIT), `rte_numbering_run`,
+#           `rte_transform_run` (xtrees/trees_boost_run.mojo).
+#   PACK    the fitted attributes, the result Array (allocated before RUN,
+#           which writes into it).
+
+
 def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: PythonObject) raises:
     """`RandomTreesEmbedding.fit` on a C-order float32 X: uniform targets,
     one ExtraTreesRegressor fit, the leaf numbering."""
+    # UNPACK
     var n = x.rows
     var d = x.cols
     var seed = _seed(fields["random_state"], context)
     var xt = _xt(fields, context)
-    var u = admitted_vector(n, "<f8", context)
     var glue = _xr(xt)
-    _ = xt_uniform(glue, trees_address(u), n, seed, 0)
-    _ = u  # keep the Python object alive through the native call above
-    var yr = admit_f32(u, 1, "y", context, finite=False)
     var settings = Python.dict()
     py_setitem(settings, "n_estimators", _int(fields["n_estimators"]))
     py_setitem(settings, "max_depth", fields["max_depth"])
@@ -2238,34 +2255,53 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: AdmittedX, context: P
     # embedding's run context either way; trees_route_boundary_door).
     py_setitem(settings, "device", py_get(fields, "device"))
     var forest = _new_member(context["trees_et_regressor"], settings, context)
-    # fb-infer/D (2026-11-17): the member fit takes the admitted X itself (the
+    # The forest's configuration as plain values, read once (the forest
+    # door's own fit reads it the same way: `et_fit`).
+    var nk = trees_keys()
+    var ff = forest_refresh(forest, "et_regressor", context)
+    var mode = forest_capture_mode(ff, context)
+    var et = trees_table(context, mode, "_mojolearn_trees")
+    var config = forest_config(ff, py_item(ff, nk[].k__cfg), "et_regressor", True, context)
+    var u = admitted_vector(n, "<f8", context)
+    # RUN: the targets
+    rte_targets_run(glue, trees_address(u), n, seed)
+    _ = u  # keep the Python object alive through the native call above
+    var yr = admit_f32(u, 1, "y", context, finite=False)
+    _target_check(yr.view(), config, context)
+    # RUN + PACK of the forest: the typed request and XF_FIT, the export
+    # into the forest's model Arrays.
+    # fb-infer/D (2026-11-17): the fit takes the admitted X itself (the
     # caller's float32 C-order array when borrowed, else the door's own), as
-    # 0.8.55 passed `Xa` straight to ExtraTreesRegressor.fit; the member's
+    # 0.8.55 passed `Xa` straight to ExtraTreesRegressor.fit; the forest's
     # own admission borrows it. `_as_array` here made one more serial n x d
     # cast copy of every borrowed X before the fit (RTE fit 160 -> 754 ms on
     # a 1M x 220 float32 X, 35 -> 60 ms on 1M x 10: ~1.5 GB/s, linear in
     # n x d). Neighbours to time: 500k x 64 and any non-board float32 table.
-    _member_fit(forest, x.array, yr.array, PythonObject(None), context)
-    py_setitem(fields, "forest_", forest)
-    var ff = py_fields(forest)
-    var offsets = ff["_offsets"]
-    var n_trees = Int(py=offsets.size) - 1
-    var nn = _i32_word(offsets, n_trees)
+    _et_fit_arrays(ff, config, False, x.array, yr.address, yr.rows, 0, ForestFit(False, rowmajor_ok=True), et, context)
+    _ = yr  # keep the targets alive through the fit above
+    _fitted(forest)
+    _report_engine(forest, context)
+    # The forest's model through the forest door's descriptor.
+    var arrays = _model_list(ff)
+    var n_trees = Int(py=arrays[0].size) - 1
+    var nn = _i32_word(arrays[0], n_trees)
     var node_col = admitted_vector(nn, "<i4", context)
-    var left_child = ff["_left_child"]
-    var col = xt_leaf_numbering(glue, trees_address(left_child), trees_address(node_col), nn)
-    _ = left_child
+    # RUN: the leaf numbering
+    var col = rte_numbering_run(glue, trees_address(arrays[3]), trees_address(node_col), nn)
     _ = node_col  # keep the Python object alive through the native call above
-    py_setitem(fields, "_tree_base", _copy_i32(offsets, 0, n_trees, context))
+    # PACK
+    py_setitem(fields, "forest_", forest)
+    py_setitem(fields, "_tree_base", _copy_i32(arrays[0], 0, n_trees, context))
     py_setitem(fields, "_node_col", node_col)
     py_setitem(fields, "n_trees_", _P(n_trees))
     py_setitem(fields, "n_output_features_", _P(col))
-    _ = node_col  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", _P(d))
+    _ = arrays^  # the model Arrays stay alive through the reads above
 
 
 def _rte_transform(fields: PythonObject, x: AdmittedXView, context: PythonObject) raises -> PythonObject:
     """`RandomTreesEmbedding.transform` (`apply`, then the one-hot)."""
+    # UNPACK
     if not py_contains(fields, "forest_"):
         raise Error("RuntimeError: this estimator is not fitted yet")
     var n = x.rows
@@ -2273,31 +2309,27 @@ def _rte_transform(fields: PythonObject, x: AdmittedXView, context: PythonObject
     var fitted = Int(py=_int(fields["n_features_in_"]))
     trees_check_features(d, fitted)
     var xt = _xt(fields, context)
-    var ff = py_fields(fields["forest_"])
+    var glue = _xr(xt)
     var trees = Int(py=_int(fields["n_trees_"]))
     var width = Int(py=_int(fields["n_output_features_"]))
-    var nodes = admitted_vector(n * trees, "<i4", context)
-    var forest_offsets = ff["_offsets"]
-    var forest_colid = ff["_colid"]
-    var forest_quesval = ff["_quesval"]
-    var forest_left = ff["_left_child"]
-    var glue = _xr(xt)
-    _ = xt_apply(glue, trees_address(forest_offsets), trees_address(forest_colid), trees_address(forest_quesval),
-                 trees_address(forest_left), x.address, trees_address(nodes), n, d, 0, trees)
-    _ = forest_offsets
-    _ = forest_colid
-    _ = forest_quesval
-    _ = forest_left
-    _ = nodes  # keep the Python object alive through the native call above
-    var out = admitted_vector(n * width, "<f8", context)
+    # the forest's model through the forest door's descriptor, never by name
+    var arrays = _model_list(py_fields(fields["forest_"]))
+    var addrs = List[Int](capacity=4)
+    for i in range(4):  # driver-loop: over the four model arrays `apply` reads
+        addrs.append(trees_address(arrays[i]))
     var tree_base = fields["_tree_base"]
     var node_col = fields["_node_col"]
-    _ = xt_onehot_leaves(glue, trees_address(nodes), trees_address(tree_base), trees_address(node_col),
-                         trees_address(out), n, trees, width)
+    var nodes = admitted_vector(n * trees, "<i4", context)
+    var out = admitted_vector(n * width, "<f8", context)
+    # RUN
+    rte_transform_run(glue, addrs, x.address, trees_address(nodes), trees_address(tree_base), trees_address(node_col),
+                      trees_address(out), n, d, trees, width)
+    _ = arrays^  # the model Arrays stay alive through the native calls above
     _ = tree_base
     _ = node_col
     _ = nodes  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
+    # PACK
     return trees_reshape(out, Python.tuple(n, width), context)
 
 
