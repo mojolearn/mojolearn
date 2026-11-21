@@ -245,6 +245,20 @@ def connect_classifier():
             labels[mode] = {"model_labels": entry, "model_native_api_v1": provider}
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             labels[mode] = type(error).__name__ + ": " + str(error)
+    if _backend._CPU_ONLY is None:
+        # glue: `device="cpu"` beside a GPU set: the CPU identical sequence
+        # image's label provider (the image `_native_xseq_bridge` also loads;
+        # one load per process), held by a CPU-route classifier's route.
+        try:
+            module = _backend.load_host_module(_backend._HOST_MODULES["_mojolearn_x_sequence"])  # import-time: the CPU image
+            entry = getattr(module, "model_labels")
+            provider = getattr(module, "model_native_api_v1")
+            if not isinstance(entry, BuiltinFunctionType) or not isinstance(provider, BuiltinFunctionType):
+                raise TypeError("CNNClassifier requires the compiled label provider")
+            cpu_labels = {"identical": {"model_labels": entry, "model_native_api_v1": provider}}
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError, KeyError) as error:
+            cpu_labels = {"identical": type(error).__name__ + ": " + str(error)}
+        context.update(xcnn_cpu_label_bindings=cpu_labels)
     context.update(xcnn_label_bindings=labels, os_urandom=os.urandom,
                    xseq_base={"uniform_init_f32": _native("uniform_init_f32")})
 

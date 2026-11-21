@@ -24,7 +24,8 @@ Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 """
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.xcnn_common_door import xcnn_builtins, xcnn_entries, xcnn_f32, xcnn_addr, xcnn_readonly
+from bindings.xcnn_common_door import xcnn_builtins, xcnn_labels, xcnn_f32, xcnn_addr, xcnn_readonly
+from bindings.xcnn_common_door import xcnn_device_init, xcnn_device_inherit
 from bindings.xseq_native_common_door import XseqStream, xseq_neural_provider
 from bindings.neural_labels_native_unpack import neural_encode_labels, neural_decode_labels
 from bindings.mode_metadata_native_door import _fields
@@ -181,6 +182,7 @@ def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonOb
     neural_plain_value(args, 0, context)
     var b = _b()
     var fields = _fields(model)
+    xcnn_device_init(model, fields, args[17], context)
     if py_type(args[0]) is not b.tuple and py_type(args[0]) is not b.list:
         raise Error("TypeError: input_shape requires a native tuple or list")
     cnnclf_run_check_input_rank(len(args[0]))
@@ -346,6 +348,11 @@ def _build(fields: PythonObject, k: Int, context: PythonObject) raises:
     py_setitem(fields, nk[].k_head_, _linear_new(flat, k, cnnclf_run_head_seed(seed), mode, context))
     py_setitem(fields, nk[].k_layers_, layers)
     py_setitem(fields, nk[].k__blocks, blocks)
+    # Every layer of the stack takes the classifier's device (checked at its
+    # constructor), as it took its numeric mode above.
+    xcnn_device_inherit(_fields(py_item(fields, nk[].k_head_)), fields)
+    for i in range(len(layers)):  # driver-loop: over the layer list (model structure)
+        xcnn_device_inherit(_fields(layers[i]), fields)
 
 
 def _params(fields: PythonObject) raises -> PythonObject:
@@ -378,11 +385,16 @@ def _images(fields: PythonObject, source: PythonObject, context: PythonObject) r
 
 # ---------------------------------------------------------------- the program descriptor
 
-def _engine(fields: PythonObject, context: PythonObject) raises -> PythonObject:
-    """The x_sequence whole-model door of the model's tier (the provider the
-    label sort already uses)."""
-    var nk = xcnn_keys()
-    var labels = py_item(context, nk[].k_xcnn_label_bindings)[py_item(fields, nk[].k_numeric_mode_)]
+def _engine(labels: PythonObject) raises -> PythonObject:
+    """The x_sequence whole-model door of the model's tier and device (the
+    provider the label sort already uses), as the model's route holds it
+    (`xcnn_labels`: the identical-mode profile check and `numeric_mode_`
+    ran there); an image that did not connect raises its recorded text."""
+    # dw-neural-b (2026-11-21): this read `xcnn_label_bindings` by the
+    # recorded mode at every fit and predict (the process set, whatever the
+    # model's device); the route holds the image of the model's device.
+    if labels is None:
+        raise Error("ImportError: CNNClassifier requires the compiled label provider")
     if py_type(labels) is _b().str:
         raise Error(String(py=labels))
     return labels
@@ -429,11 +441,10 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var b = _b()
     var fields = _classifier_fields(model, context)
     var x = _contiguous(_images(fields, args[0], context), context)
-    # the identical-mode profile check, and `numeric_mode_`
-    _ = xcnn_entries(model, fields, context)
+    # the identical-mode profile check, and `numeric_mode_`; then the
     # sorted classes and the inverse codes (the sequence owner's label sort,
-    # `model_labels` of the x_sequence binding of the model's tier)
-    var labels = _engine(fields, context)
+    # `model_labels` of the x_sequence binding of the model's tier and device)
+    var labels = _engine(xcnn_labels(model, fields, context))
     var encoded = neural_encode_labels(args[1], labels, context)
     var nk = xcnn_keys()
     py_setitem(fields, nk[].k_classes_, encoded[0])
@@ -487,6 +498,44 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
     var ishape = py_item(fields, nk[].k_input_shape)
     py_setitem(fields, nk[].k_n_features_in_, cnnclf_run_features([Int(py=ishape[0]), Int(py=ishape[1]), Int(py=ishape[2])]))
     return model
+
+
+# ---------------------------------------------------------------- the fitted state on another device
+
+def cnnclf_adopt(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`model.check`: hand the fitted state of `args[0]` (a fitted classifier
+    of the same class and settings on the other device) to `model`. The
+    layer stack is built again for `model` (so every layer holds `model`'s
+    device) and takes the source's learned arrays themselves (no copy: the
+    same words answer on both devices); `classes_` and the loss records are
+    the same objects. A structure step with no independent units to split."""
+    var source = args[0]
+    if py_type(source) is not py_type(model):
+        raise Error("TypeError: the fitted state of a CNN classifier goes to a classifier of its own class")
+    var fields = _classifier_fields(model, context)
+    var given = _classifier_fields(source, context, True)
+    var nk = xcnn_keys()
+    var classes = py_item(given, nk[].k_classes_)
+    var drop_mods = NativeModules()
+    prepared_drop(drop_mods, _PREDICT_SLOT, model)
+    _build(fields, len(classes), context)
+    var learned = _params(given)
+    var mine = _params(fields)
+    if len(learned) != len(mine):
+        raise Error("ValueError: the two CNN classifiers do not have the same layers")
+    for i in range(len(mine)):  # driver-loop: over the layer parameter list (model structure)
+        py_setitem(_fields(mine[i][0]), mine[i][1], _fields(learned[i][0])[learned[i][1]])
+    py_setitem(fields, nk[].k_classes_, classes)
+    _carry(fields, given, nk[].k_losses_)
+    _carry(fields, given, nk[].k_loss_curve_)
+    _carry(fields, given, nk[].k_n_features_in_)
+    return PythonObject(None)
+
+
+def _carry(fields: PythonObject, given: PythonObject, key: PythonObject) raises:
+    # one fit record of `given`, the same object, when it has it
+    if py_contains(given, key):
+        py_setitem(fields, key, py_item(given, key))
 
 
 # ---------------------------------------------------------------- predict
@@ -597,11 +646,11 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
     var n = Int(py=x.shape[0])
     var nk = xcnn_keys()
     var k = len(py_item(fields, nk[].k_classes_))
-    _ = xcnn_entries(model, fields, context)
+    var held = xcnn_labels(model, fields, context)
     var out = _empty(Python.tuple(n), "int32", context) if codes else _empty(Python.tuple(n, k), "float32", context)
     if n == 0:
         return out
-    var labels = _engine(fields, context)
+    var labels = _engine(held)
     var provider = xseq_neural_provider(labels)
     var mods = NativeModules()
     var layers = _predict_layers(fields)

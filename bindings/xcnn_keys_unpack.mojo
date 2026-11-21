@@ -94,6 +94,7 @@ comptime XCNN_OPN_POOL_INDICES_GET = 81
 comptime XCNN_OPN_POOL_INDICES_SET = 82
 comptime XCNN_OPN_POOL_FORWARD = 83
 comptime XCNN_OPN_POOL_TRANSFORM = 84
+comptime XCNN_OPN_CNNCLF_ADOPT = 85
 
 
 struct XcnnKeys(Defaultable, Movable):
@@ -250,7 +251,6 @@ struct XcnnKeys(Defaultable, Movable):
     var k_xcnn_conv1d_class: PythonObject
     var k_xcnn_conv2d_class: PythonObject
     var k_xcnn_dev_class: PythonObject
-    var k_xcnn_label_bindings: PythonObject
     var k_xcnn_linear_class: PythonObject
     var k_xcnn_maxpool_class: PythonObject
     var k_xcnn_numpy_import_tried: PythonObject
@@ -414,7 +414,6 @@ struct XcnnKeys(Defaultable, Movable):
         self.k_xcnn_conv1d_class = PythonObject(None)
         self.k_xcnn_conv2d_class = PythonObject(None)
         self.k_xcnn_dev_class = PythonObject(None)
-        self.k_xcnn_label_bindings = PythonObject(None)
         self.k_xcnn_linear_class = PythonObject(None)
         self.k_xcnn_maxpool_class = PythonObject(None)
         self.k_xcnn_numpy_import_tried = PythonObject(None)
@@ -582,7 +581,6 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     nk[].k_xcnn_conv1d_class = py_key("xcnn_conv1d_class")
     nk[].k_xcnn_conv2d_class = py_key("xcnn_conv2d_class")
     nk[].k_xcnn_dev_class = py_key("xcnn_dev_class")
-    nk[].k_xcnn_label_bindings = py_key("xcnn_label_bindings")
     nk[].k_xcnn_linear_class = py_key("xcnn_linear_class")
     nk[].k_xcnn_maxpool_class = py_key("xcnn_maxpool_class")
     nk[].k_xcnn_numpy_import_tried = py_key("xcnn_numpy_import_tried")
@@ -678,6 +676,7 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "pool_indices_set", XCNN_OPN_POOL_INDICES_SET)
     py_op_add(ops, "pool_forward", XCNN_OPN_POOL_FORWARD)
     py_op_add(ops, "pool_transform", XCNN_OPN_POOL_TRANSFORM)
+    py_op_add(ops, "cnnclf_adopt", XCNN_OPN_CNNCLF_ADOPT)
     nk[].ops = ops
     nk[].ready = True
 

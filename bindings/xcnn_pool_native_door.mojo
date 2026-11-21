@@ -39,7 +39,7 @@ from bindings.xcnn_common_door import (
     XK_STRIDE, XK_PADDING, XK_DILATION, XK_COUNT_INCLUDE_PAD, XK_CEIL_MODE, XK_DIVISOR,
 )
 # fx-maxpool (2026-11-19): a resident input's admission hands over its dimensions.
-from bindings.xcnn_common_door import xcnn_dev_word_shape
+from bindings.xcnn_common_door import xcnn_dev_word_shape, xcnn_device_init, xcnn_device_inherit
 from x_cnn.door_run import xcnn_run_copy_f32
 from x_cnn.pool_run import (
     PoolSettings, pool_run_words, pool_run_out_words, pool_run_flat_rest, pool_run_row_dims, pool_run_check_nchw,
@@ -422,6 +422,7 @@ def _pool_shape_words(value: PythonObject, name: String, context: PythonObject) 
 
 def xcnn_pool_init(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
+    xcnn_device_init(model, fields, args[10], context)
     var one = Bool(py=args[9])
     var kernel = _pool_pair(args[0], "kernel_size", one, context)
     var stride = _pool_pair(args[0] if args[1] is None else args[1], "stride", one, context)
@@ -712,6 +713,9 @@ def _pool_layer(fields: PythonObject, entries: PythonObject, k: List[Int], maxed
     py_setitem(state, nk[].k_count_include_pad, PythonObject(True))
     py_setitem(state, nk[].k_input_shape, PythonObject(None))
     py_setitem(state, nk[].k_numeric_mode, xcnn_get(fields, XK_NUMERIC_MODE))
+    # ... and its device, once, here: the adaptive layer's constructor drops
+    # this cache, so a cached inner pool always holds its parent's device.
+    xcnn_device_inherit(state, fields)
     xcnn_put(fields, XK_POOL_CACHE, Python.tuple(pair, layer))
     return layer
 
@@ -878,6 +882,7 @@ def _dropout_probability(value: PythonObject, context: PythonObject) raises -> F
 
 def xcnn_dropout_init(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
+    xcnn_device_init(model, fields, args[4], context)
     var p = _dropout_probability(args[0], context)
     var state = args[1]
     if state is None:
@@ -1005,9 +1010,14 @@ def _adaptive_output(fields: PythonObject, context: PythonObject) raises -> List
 
 def xcnn_adaptive_init(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = _fields(model)
+    xcnn_device_init(model, fields, args[3], context)
     var output = _pool_pair(args[0], "output_size", False, context)
     _cnn_shape_mode(fields, args[1], args[2], context)
     _set(fields, "output_size", output)
+    # A constructor run again on a live layer: its inner pool was built for
+    # the device it had; the next forward builds one for the device it has.
+    if xcnn_get(fields, XK_POOL_CACHE) is not None:
+        xcnn_put(fields, XK_POOL_CACHE, PythonObject(None))
     return PythonObject(None)
 
 
