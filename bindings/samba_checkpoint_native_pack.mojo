@@ -143,13 +143,13 @@ def _checkpoint_read_stream(stream: PythonObject, context: PythonObject) raises 
     var expected = expected_header
     for i in range(4):  # driver-loop: over stored array spans
         expected += Int(py=py_item(descriptors[i], nk[].k_nbytes))
-    if Int(py=py_call(native_loaded_module("posix").fstat, stream.fileno()).st_size) != expected:
+    var posix = native_loaded_module("posix")
+    var fd = Int(py=stream.fileno())
+    if Int(py=py_call(posix.fstat, fd).st_size) != expected:
         raise Error("Samba checkpoint truncated or trailing array data")
     # The arrays are read through the raw descriptor, positioned once at the
     # first array (one posix call per load); the buffered stream is not used
     # for them and is repositioned for the trailing-data check below.
-    var posix = native_loaded_module("posix")
-    var fd = Int(py=stream.fileno())
     _ = py_call(posix.lseek, fd, expected_header, 0)
     for i in range(4):  # driver-loop: over admitted complete training-state arrays
         var entry = descriptors[i]
