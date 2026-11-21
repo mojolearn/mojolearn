@@ -468,6 +468,7 @@ from checks.soft_f64_check import register as register_soft_f64_check
 from checks.sym_arms_check import register as register_sym_arms_check
 from checks.tensor_sync_state_check import register as register_tensor_sync_state_check
 from checks.train_api_check import register as register_train_api_check
+from checks.combination_code_device_check import register as register_combination_code_device_check
 from checks.tree_ctr_device_check import register as register_tree_ctr_device_check
 from checks.tree_ctr_slice_check import register as register_tree_ctr_slice_check
 # lane fx-checks-orphans (2026-11-18): the family standalone main() checks nothing ran; each suite stays in
@@ -1063,6 +1064,7 @@ def all_checks() -> List[Check]:
     checks.append(register_sym_arms_check())
     checks.append(register_tensor_sync_state_check())
     checks.append(register_train_api_check())
+    checks.append(register_combination_code_device_check())
     checks.append(register_tree_ctr_device_check())
     checks.append(register_tree_ctr_slice_check())
     checks.append(register_arima_fit_check())
