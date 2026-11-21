@@ -124,7 +124,9 @@ EXTRA_BY_NAME = {
 #: the machine while the fitted model is the same, so no class hashes them.
 NOT_STATE = ("input_copied_", "fortran_copied_", "last_shards_", "used_query_tile_", "n_candidate_distances_",
              # a layer's gradient buffers of the last training step
-             "grad_weight_", "grad_bias_")
+             "grad_weight_", "grad_bias_",
+             # a search's resolved scorer object: a setting (`scoring`), not a fitted value
+             "scorer_")
 
 #: Base classes of layer objects a layered model keeps in its fitted fields
 #: (`CNNClassifier.layers_`, `head_`). The walk enters such an object: its
