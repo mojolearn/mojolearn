@@ -96,6 +96,74 @@ def neural_cache_current(digest: String, committed: String, version: Int) -> Boo
     return digest != "" and committed == digest and version > 0
 
 
+struct NeuralTrainerState(Movable):
+    """One trainer's typed state: what the operations decide on. The door's
+    owner record holds it beside the boundary pins (the model, the pools, the
+    lock, the committed gradient buffers and the step deltas on their way to
+    the workers); no operation reads any of it from the instance."""
+    var operation: Int
+    var logical_shards: Int
+    #: one device: the update request goes to the gradient pool's worker
+    var shared_pool: Bool
+    var closed: Bool
+    #: a step committed since the last failed or started one: its gradient
+    #: buffers can be exported
+    var committed: Bool
+    var cache_epoch: Int
+    var cache_version: Int
+    var cache_digest: String
+
+    def __init__(out self, operation: Int, logical_shards: Int, shared_pool: Bool):
+        self.operation = operation
+        self.logical_shards = logical_shards
+        self.shared_pool = shared_pool
+        self.closed = False
+        self.committed = False
+        self.cache_epoch = 0
+        self.cache_version = 0
+        self.cache_digest = String()
+
+
+def neural_step_admit(state: NeuralTrainerState, supplied: Int) raises:
+    """A step needs an open trainer and one microbatch per logical shard."""
+    neural_train_admit(state.closed, 0, 0)
+    neural_train_admit(False, supplied, state.logical_shards)
+
+
+def neural_step_withdraw(mut state: NeuralTrainerState):
+    """The last committed gradient is withdrawn once a step has taken its
+    snapshot: a failed step leaves nothing to export."""
+    state.committed = False
+
+
+def neural_step_begin(mut state: NeuralTrainerState, digest: String) -> Bool:
+    """Starts a step on the owner's state of `digest`. True when that state
+    is the one last committed (the request carries deltas); otherwise a new
+    cache epoch starts and the caller drops the retained deltas and sends
+    the full state."""
+    var cached = neural_cache_current(digest, state.cache_digest, state.cache_version)
+    if not cached:
+        state.cache_epoch += 1
+    return cached
+
+
+def neural_step_version(state: NeuralTrainerState) -> Int:
+    """The version the step in flight commits as."""
+    return state.cache_version + 1
+
+
+def neural_step_commit(mut state: NeuralTrainerState, digest: String):
+    """The step is published: `digest` is the committed state's digest."""
+    state.cache_version += 1
+    state.cache_digest = digest
+    state.committed = True
+
+
+def neural_history_excess(retained: Int) -> Int:
+    """How many of the oldest retained step deltas to drop."""
+    return retained - NEURAL_CACHE_HISTORY if retained > NEURAL_CACHE_HISTORY else 0
+
+
 def neural_resend_full(cached: Bool, failure: String) -> Bool:
     """A delta request a worker answered with the cache-miss words is sent
     again with the full state; any other failure is raised."""

@@ -178,6 +178,10 @@ class PCA(_NumericModeMixin):
     _mojolearn_device = True
     #: A model built without the constructor runs this installation's device.
     device = None
+    #: The member ABI mark (family 31 Decomposition, kind 0): model selection
+    #: and the meta-estimators run this class through its native member entry
+    #: (core/decomposition_member.mojo).
+    _mojolearn_member = (31, 0)
 
     def __init__(self, n_components=None, *, copy=True, whiten=False, svd_solver="auto", tol=0.0,
                  iterated_power="auto", n_oversamples=10, power_iteration_normalizer="auto", random_state=None,
@@ -427,6 +431,10 @@ class TruncatedSVD(_NumericModeMixin):
     #: A model built without the constructor (a loaded file) runs this
     #: installation's device.
     device = None
+    #: The member ABI mark (family 31 Decomposition, kind 1): model selection
+    #: and the meta-estimators run this class through its native member entry
+    #: (core/decomposition_member.mojo).
+    _mojolearn_member = (31, 1)
 
     def __init__(self, n_components=2, *, algorithm="covariance_eigh", n_iter=5, n_oversamples=10,
                  power_iteration_normalizer="auto", random_state=None, tol=0.0, numeric_mode=None):

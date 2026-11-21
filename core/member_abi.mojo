@@ -61,6 +61,22 @@ core/member_families.mojo (generated; no family edits this file).
   * `MEMBER_OP_CAPABILITIES` with a live `call.state` answers for that
     state's kind (a regressor of a family with classifiers has no
     predict_proba); with `state == 0` it answers the family's union.
+  * SEQUENCES (layout 3): `MemberMatrix.steps` makes a row of X `steps` x
+    features (`MEMBER_CAN_STEPS`).
+  * FORECASTERS (`MEMBER_CAN_FORECAST`): fit reads the series in `y`
+    (observations x series) and optional regressors in `x`; predict with
+    `x` not given writes `dst.rows` steps ahead (with regressors, `x.rows`
+    is the horizon). No operation of its own.
+  * `MEMBER_OP_OUTPUTS` WITHOUT A STATE (`member_outputs`): with
+    `state == 0` the call carries what a `MEMBER_OP_NEW` would (`params`,
+    `param_count`, `classes`) plus two shape words of the fit to come,
+    `x.cols` (features) and `y.cols` (targets; both views have `rows == 0`
+    and no address: they are shapes, not data). The family answers the width
+    from those words, exactly as a state made from them and fitted on such
+    data would. A family whose width is only known after a fit (a count the
+    fit chooses) refuses in words, and the caller asks a fitted state
+    (`member_outputs_of`). With a live state the state answers and the
+    shape words are ignored.
 
 SERIAL BY NATURE: publication and resolution are metadata operations with no
 independent units. The member operations themselves are the family's RUN and
@@ -77,7 +93,8 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: The layout of `MemberCall` / `MemberMatrix`. Bump it, and the schema
 #: `MEMBER_ABI` (core/member_families.mojo), on any change of `MemberCall`,
 #: `MemberMatrix`, `DeviceRoute` or the operation codes.
-comptime MEMBER_CALL_LAYOUT = 2
+#: 3 (2026-11-21): `MemberMatrix.steps`.
+comptime MEMBER_CALL_LAYOUT = 3
 
 comptime MEMBER_OP_CAPABILITIES = 0       # result word: the mask of MEMBER_CAN_* (of call.state's kind, or the family's union)
 comptime MEMBER_OP_NEW = 1                # params -> call.state (an unfitted member state)
@@ -117,6 +134,16 @@ comptime MEMBER_CAN_COEF = 131072            # exports MEMBER_BLOCK_COEF
 comptime MEMBER_CAN_IMPORTANCES = 262144     # exports MEMBER_BLOCK_FEATURE_IMPORTANCES
 comptime MEMBER_CAN_CLASSIFIER = 524288      # y is class codes; fit reads call.classes
 comptime MEMBER_CAN_MULTI_OUTPUT = 1048576   # y may have more than one column
+comptime MEMBER_CAN_STEPS = 2097152          # reads x.steps: each row of X is steps x features (a sequence member)
+comptime MEMBER_CAN_FORECAST = 4194304       # fits a series in y; predict without x writes dst.rows steps ahead
+
+#: What a caller needs of a member, as masks for `MemberRef.has`,
+#: `member_require` and `member_admit_serving`: a predictor (classifier,
+#: regressor, clusterer with predict) or a transformer (a Pipeline step, a
+#: decomposition or scaler under a search). A caller adds the bits of what
+#: else it will ask (score, predict_proba, sample weights, index views).
+comptime MEMBER_NEEDS_PREDICTOR = 3      # MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
+comptime MEMBER_NEEDS_TRANSFORMER = 33   # MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM
 
 #: Fitted-state blocks (`MEMBER_OP_EXPORT` / `MEMBER_OP_IMPORT`). The shared
 #: names mean the same in every family; a family's own blocks start at
@@ -154,7 +181,13 @@ struct MemberMatrix(ImplicitlyCopyable, Movable):
     """A typed matrix view: `rows` x `cols` elements of `dtype`, row `i`
     starting `(offset + i) * stride` elements after `data` (`stride == cols`
     for a dense row-major matrix; a vector is `cols == 1`). `rows == 0` is
-    "not given"."""
+    "not given".
+
+    `steps` is the inner shape of a row: 0 (or 1), a plain matrix; `s > 1`,
+    each row is `s` steps of `cols / s` features, row-major (a rows x steps
+    x features tensor of a sequence member). `cols` is always the full width
+    of a row, so the addressing above does not change. Only a family with
+    `MEMBER_CAN_STEPS` is handed `steps > 1`."""
     var data: Int
     var rows: Int
     var cols: Int
@@ -162,6 +195,7 @@ struct MemberMatrix(ImplicitlyCopyable, Movable):
     var offset: Int
     var dtype: Int
     var home: Int
+    var steps: Int
 
     def __init__(out self):
         self.data = 0
@@ -169,6 +203,7 @@ struct MemberMatrix(ImplicitlyCopyable, Movable):
         self.cols = 0
         self.stride = 0
         self.offset = 0
+        self.steps = 0
         self.dtype = MEMBER_F32
         self.home = MEMBER_HOME_HOST
 
@@ -180,6 +215,7 @@ struct MemberMatrix(ImplicitlyCopyable, Movable):
         self.offset = 0
         self.dtype = dtype
         self.home = MEMBER_HOME_HOST
+        self.steps = 0
 
     def given(self) -> Bool:
         return self.rows > 0 and self.data != 0
@@ -271,7 +307,12 @@ struct MemberRef(ImplicitlyCopyable, Movable):
     var capabilities: Int
 
     def can(self, capability: Int) -> Bool:
+        """ONE capability bit is set (with a mask of several: any of them)."""
         return (self.capabilities & capability) != 0
+
+    def has(self, needs: Int) -> Bool:
+        """EVERY bit of the mask `needs` is set."""
+        return (self.capabilities & needs) == needs
 
 
 struct MemberPlan(Copyable, Movable):
@@ -349,6 +390,50 @@ def member_new(plan: MemberPlan) raises -> MemberCall:
     return call^
 
 
+def member_kind_capabilities(plan: MemberPlan) raises -> Int:
+    """The capability mask of THIS member's kind (a regressor of a family
+    that also has classifiers is no classifier), where `plan.member.capabilities`
+    is the family's union. One state is minted, asked and released: call it
+    once per member class at UNPACK, never per unit."""
+    var call = member_new(plan)
+    var mask = 0
+    try:
+        mask = member_call(plan.member, MEMBER_OP_CAPABILITIES, call)
+    finally:
+        member_free(plan, call)
+    return mask
+
+
+def member_outputs(plan: MemberPlan, operation: Int, features: Int, targets: Int) raises -> Int:
+    """The columns per row of `operation`'s output (`MEMBER_OP_PREDICT`,
+    `_PREDICT_PROBA`, `_DECISION`, `_TRANSFORM`, ...) for a member of this
+    plan fitted on `features` columns and `targets` target columns, asked
+    BEFORE any state exists: a caller sizes its placed output buffers once,
+    at UNPACK, and its workers write into them. No state is minted. A family
+    that cannot know the width before a fit refuses in words; ask a fitted
+    state with `member_outputs_of` then."""
+    var call = MemberCall(plan.route)
+    call.params = Int(plan.params.unsafe_ptr())
+    call.param_count = len(plan.params)
+    call.classes = plan.classes
+    call.flags = operation
+    call.x.cols = features
+    call.y.cols = targets
+    _ = member_call(plan.member, MEMBER_OP_OUTPUTS, call)
+    return call.out_cols
+
+
+def member_outputs_of(plan: MemberPlan, mut call: MemberCall, operation: Int) raises -> Int:
+    """The columns per row of `operation`'s output for the call's live
+    state (exact after its fit). `call.classes` comes back as the state's
+    class count; `call.flags` is left as the caller had it."""
+    var held = call.flags
+    call.flags = operation
+    _ = member_call(plan.member, MEMBER_OP_OUTPUTS, call)
+    call.flags = held
+    return call.out_cols
+
+
 def member_free(plan: MemberPlan, mut call: MemberCall):
     """Release the call's state. Never raises: a worker calls it on its
     error path too, and a state that was never minted is nothing to free."""
@@ -362,8 +447,12 @@ def member_free(plan: MemberPlan, mut call: MemberCall):
 
 def member_require(plan: MemberPlan, capability: Int, what: String) raises:
     """UNPACK: refuse in words, before any work, a member that lacks an
-    operation the caller will ask for."""
-    if not plan.member.can(capability):
+    operation the caller will ask for (every bit of `capability`). ONLY for a
+    request that had no path before the member mark existed. A caller that
+    served this class before the mark never calls this: it falls back to
+    that path silently (`member_admit_serving`; MEMBER-ABI-V2.md, the
+    fallback rule)."""
+    if not plan.member.has(capability):
         raise Error("AttributeError: a " + member_family_name(plan.family) + " member has no " + what)
 
 

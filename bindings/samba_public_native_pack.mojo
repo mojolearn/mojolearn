@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """One compiled Samba boundary for public and distributed model operations."""
+from bindings.torch_parameters_pack import torch_parameter_form
 from std.python import Python, PythonObject
 from bindings.samba_keys_unpack import samba_keys
 from bindings.samba_keys_unpack import (
@@ -196,7 +197,9 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         elif operation == SAMBA_OPN_INFERENCE_CONSTRUCT:
             result = samba_inference_construct(values[0], values[1], values[2], context)
         elif operation == SAMBA_OPN_INFERENCE_PARAMETERS:
-            result = samba_inference_parameters(values[0])
+            # values[1] (round 2, lane api-torch): the torch result form
+            # (bindings/torch_parameters_pack.mojo); absent = the mapping.
+            result = torch_parameter_form(samba_inference_parameters(values[0]), Int(py=values[1]) if len(values) > 1 else 0)
         elif operation == SAMBA_OPN_INFERENCE_CHECKPOINT:
             result = samba_inference_checkpoint(values[0], values[1], context)
         elif operation == SAMBA_OPN_INFERENCE_FORWARD:
@@ -238,7 +241,7 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         elif operation == SAMBA_OPN_LOAD_WEIGHTS:
             result = samba_load_weights(values[0], values[1], context)
         elif operation == SAMBA_OPN_PARAMETERS:
-            result = samba_parameters(values[0])
+            result = torch_parameter_form(samba_parameters(values[0]), Int(py=values[1]) if len(values) > 1 else 0)
         elif operation == SAMBA_OPN_GENERATOR_INIT:
             result = generator_init(values[0], values[1], values[2])
         elif operation == SAMBA_OPN_GENERATOR_SNAPSHOT:

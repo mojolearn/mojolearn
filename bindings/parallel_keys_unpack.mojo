@@ -234,7 +234,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__exog: PythonObject
     var k__failed: PythonObject
     var k__fit_numeric_mode: PythonObject
-    var k__gradients: PythonObject
     var k__handle: PythonObject
     var k__head: PythonObject
     var k__head_int15: PythonObject
@@ -258,7 +257,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__native_parallel_entries_live: PythonObject
     var k__native_parallel_extra_blocks: PythonObject
     var k__native_parallel_model: PythonObject
-    var k__native_parallel_pool_live: PythonObject
     var k__native_state_identity: PythonObject
     var k__native_vendor: PythonObject
     var k__norm: PythonObject
@@ -314,7 +312,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_config: PythonObject
     var k_config_class: PythonObject
     var k_config_context: PythonObject
-    var k_cooperative: PythonObject
     var k_copy: PythonObject
     var k_counter: PythonObject
     var k_cpu_only: PythonObject
@@ -406,7 +403,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_model: PythonObject
     var k_model_class: PythonObject
     var k_model_shape: PythonObject
-    var k_module: PythonObject
     var k_modules: PythonObject
     var k_mro: PythonObject
     var k_n: PythonObject
@@ -500,7 +496,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_schema: PythonObject
     var k_seasonal_periods: PythonObject
     var k_selected_vendor: PythonObject
-    var k_sequence: PythonObject
     var k_sha256: PythonObject
     var k_shapes: PythonObject
     var k_shard: PythonObject
@@ -580,7 +575,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__exog = PythonObject(None)
         self.k__failed = PythonObject(None)
         self.k__fit_numeric_mode = PythonObject(None)
-        self.k__gradients = PythonObject(None)
         self.k__handle = PythonObject(None)
         self.k__head = PythonObject(None)
         self.k__head_int15 = PythonObject(None)
@@ -604,7 +598,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__native_parallel_entries_live = PythonObject(None)
         self.k__native_parallel_extra_blocks = PythonObject(None)
         self.k__native_parallel_model = PythonObject(None)
-        self.k__native_parallel_pool_live = PythonObject(None)
         self.k__native_state_identity = PythonObject(None)
         self.k__native_vendor = PythonObject(None)
         self.k__norm = PythonObject(None)
@@ -660,7 +653,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_config = PythonObject(None)
         self.k_config_class = PythonObject(None)
         self.k_config_context = PythonObject(None)
-        self.k_cooperative = PythonObject(None)
         self.k_copy = PythonObject(None)
         self.k_counter = PythonObject(None)
         self.k_cpu_only = PythonObject(None)
@@ -752,7 +744,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_model = PythonObject(None)
         self.k_model_class = PythonObject(None)
         self.k_model_shape = PythonObject(None)
-        self.k_module = PythonObject(None)
         self.k_modules = PythonObject(None)
         self.k_mro = PythonObject(None)
         self.k_n = PythonObject(None)
@@ -846,7 +837,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_schema = PythonObject(None)
         self.k_seasonal_periods = PythonObject(None)
         self.k_selected_vendor = PythonObject(None)
-        self.k_sequence = PythonObject(None)
         self.k_sha256 = PythonObject(None)
         self.k_shapes = PythonObject(None)
         self.k_shard = PythonObject(None)
@@ -918,7 +908,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__exog = py_key("_exog")
     nk[].k__failed = py_key("_failed")
     nk[].k__fit_numeric_mode = py_key("_fit_numeric_mode")
-    nk[].k__gradients = py_key("_gradients")
     nk[].k__handle = py_key("_handle")
     nk[].k__head = py_key("_head")
     nk[].k__head_int15 = py_key("_head_int15")
@@ -942,7 +931,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__native_parallel_entries_live = py_key("_native_parallel_entries_live")
     nk[].k__native_parallel_extra_blocks = py_key("_native_parallel_extra_blocks")
     nk[].k__native_parallel_model = py_key("_native_parallel_model")
-    nk[].k__native_parallel_pool_live = py_key("_native_parallel_pool_live")
     nk[].k__native_state_identity = py_key("_native_state_identity")
     nk[].k__native_vendor = py_key("_native_vendor")
     nk[].k__norm = py_key("_norm")
@@ -998,7 +986,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_config = py_key("config")
     nk[].k_config_class = py_key("config_class")
     nk[].k_config_context = py_key("config_context")
-    nk[].k_cooperative = py_key("cooperative")
     nk[].k_copy = py_key("copy")
     nk[].k_counter = py_key("counter")
     nk[].k_cpu_only = py_key("cpu_only")
@@ -1090,7 +1077,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_model = py_key("model")
     nk[].k_model_class = py_key("model_class")
     nk[].k_model_shape = py_key("model_shape")
-    nk[].k_module = py_key("module")
     nk[].k_modules = py_key("modules")
     nk[].k_mro = py_key("mro")
     nk[].k_n = py_key("n")
@@ -1184,7 +1170,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_schema = py_key("schema")
     nk[].k_seasonal_periods = py_key("seasonal_periods")
     nk[].k_selected_vendor = py_key("selected_vendor")
-    nk[].k_sequence = py_key("sequence")
     nk[].k_sha256 = py_key("sha256")
     nk[].k_shapes = py_key("shapes")
     nk[].k_shard = py_key("shard")

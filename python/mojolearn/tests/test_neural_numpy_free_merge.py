@@ -52,13 +52,13 @@ def test_samba_parameter_alias_checkpoint(tmp_path):
                          head_dim=16, intermediate=48)
     model = SambaStack(config, weights={n: buffers.full(s, .25, '<f4') for n, s in config.registry()})
     first = model.names[0]
-    checks.flat_view(model.parameters()[first], 'f')[0] = 7
+    checks.flat_view(dict(model.named_parameters())[first], 'f')[0] = 7
     assert checks.flat_view(model.flat, 'f')[0] == 7
     path = tmp_path / 'state.json'
     model.save_checkpoint(path)
     restored = SambaStack.from_checkpoint(path)
     assert checks.le_bytes(restored.flat, 'f') == checks.le_bytes(model.flat, 'f')
-    checks.flat_view(restored.parameters()[first], 'f')[0] = 9
+    checks.flat_view(dict(restored.named_parameters())[first], 'f')[0] = 9
     assert checks.flat_view(restored.flat, 'f')[0] == 9
 
 

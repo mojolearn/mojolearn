@@ -60,6 +60,8 @@ from core.forest_fit_request import (
     XF_CAP_SESSION,
     XF_CAP_ADA,
 )
+from core.tree_member import tree_member_publish_image
+from core.forest_member import forest_member_publish_image
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_RF
 from core.native_descriptor_abi import NativeDescriptorError
@@ -891,6 +893,9 @@ def build__mojolearn_rf() -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_rf")
         # The native forest entry (core/forest_entry_table.mojo) under this image's key.
         forest_entry_publish["MojolearnForestEntryOwnerRfGpuV1"](FOREST_TABLE_RF, COMPILED_VENDOR, rf_gpu_forest_entry_v1)
+        # The families' member entries (core/member_abi.mojo) over this forest entry.
+        tree_member_publish_image(COMPILED_VENDOR)
+        forest_member_publish_image(COMPILED_VENDOR)
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[device_plan_enter_binding]("device_plan_enter")
         m.def_function[device_plan_exit_binding]("device_plan_exit")
