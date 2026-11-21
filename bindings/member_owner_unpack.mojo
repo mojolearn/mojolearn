@@ -7,7 +7,7 @@ workers get `owner.plan` (typed words) and nothing else.
 SERIAL BY NATURE: one record read per member admission.
 """
 from std.python import PythonObject
-from bindings.py_balanced import py_get, py_type
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.member_abi import MemberPlan
 from core.member_families import MEMBER_FAMILY_COUNT
 
@@ -52,3 +52,21 @@ def member_mark(plan: PythonObject, b: PythonObject) raises -> MemberMark:
     if number < 0 or number >= MEMBER_FAMILY_COUNT:
         raise Error("ValueError: mojolearn: unknown member family number " + String(number))
     return MemberMark(number, Int(py=kind))
+
+
+def member_labels_hold(fields: PythonObject, labels: PythonObject) raises:
+    """PACK: hold a classifier member's class labels in the instance
+    dictionary `fields` under the one reserved key, for the family's pack
+    (bindings/member_boundary_door.mojo `member_pack_labeled`)."""
+    py_setitem(fields, PythonObject("_mojolearn_member_labels"), labels)
+
+
+def member_labels_take(fields: PythonObject, b: PythonObject) raises -> PythonObject:
+    """PACK: the class labels the caller handed to `member_pack_labeled`
+    (None: the caller gave none), removed from the instance dictionary. A
+    family's pack that writes the labels in its own form calls this once;
+    code `c` of the member's `y` and predictions is `labels[c]`. `fields` is
+    the exact instance dictionary, so the unbound `dict.pop` runs no hook."""
+    var key = PythonObject("_mojolearn_member_labels")
+    var labels = py_call(b.dict.pop, fields, key, PythonObject(None))
+    return labels

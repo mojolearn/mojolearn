@@ -41,12 +41,20 @@ Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), in index order:
 classifier, float32 for the regressor). An import needs both;
 `MEMBER_IMPORT_DONE` reads `call.classes` for the classifier.
 
-The fitted state (points, targets, the class set present in them, the
-resident index handle) is OWNED here, in a process-wide store of fixed
-chunks (the core/linear_member.mojo form): a slot never moves once minted;
-the store's lock covers only mint, free and the handle lookup. A fit copies
-the caller's X once into the slot (the view is valid only during the call;
-the estimator's own fit borrows the user's array instead). Parallel: the
+The fitted state (the class set present in the targets, the resident index
+handle, the per-state query buffers) is OWNED here, in a process-wide store
+of fixed chunks (the core/linear_member.mojo form): a slot never moves once
+minted; the store's lock covers only mint, free and the handle lookup.
+
+LIFETIME: a fit BORROWS the caller's X and y views, exactly as the
+estimator's own fit borrows the user's array (k-NN is a lazy learner: the
+fitted points ARE X). The caller keeps the words of X and y alive and
+unchanged until this state's next fit, import or free; no copy is made per
+fit (a copy per fit is a copy per fold inside cross-validation). The first
+MEMBER_OP_EXPORT of a block copies that block once into the slot, and the
+state reads the slot's copy from then on, so an exported view lives until
+the state's next fit, import or free whatever the caller does with X. An
+import copies its blocks in. Parallel: the
 class-presence scan of the codes and the probability scatter split their
 rows across the host's cores; the search and vote are the device or host
 entry's.
@@ -98,6 +106,12 @@ struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
     var rows: Int
     var features: Int
     var classes: Int
+    # The words every query reads: the caller's borrowed views after a fit,
+    # the slot's own lists below after an import or an export.
+    var points_addr: Int
+    var targets_addr: Int
+    # Slot-owned copies: filled by an import, or by the first export of a
+    # borrowed block; empty while the state borrows.
     var points: List[Float32]
     var codes: List[Int32]
     var targets: List[Float32]
@@ -131,6 +145,8 @@ struct NeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.rows = 0
         self.features = 0
         self.classes = 0
+        self.points_addr = 0
+        self.targets_addr = 0
         self.points = List[Float32]()
         self.codes = List[Int32]()
         self.targets = List[Float32]()
@@ -218,6 +234,8 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
         if release:
             slot[].live = False
             slot[].fitted = False
+            slot[].points_addr = 0
+            slot[].targets_addr = 0
             slot[].points = List[Float32]()
             slot[].codes = List[Int32]()
             slot[].targets = List[Float32]()
@@ -272,7 +290,7 @@ def _present_codes(slot: _SlotPtr) raises:
     var bad = List[UInt8](length=tasks, fill=UInt8(0))
     var marks_ptr = _U8P(unsafe_from_address=Int(marks.unsafe_ptr()))
     var bad_ptr = _U8P(unsafe_from_address=Int(bad.unsafe_ptr()))
-    var codes_ptr = _I32P(unsafe_from_address=Int(slot[].codes.unsafe_ptr()))
+    var codes_ptr = _I32P(unsafe_from_address=slot[].targets_addr)
 
     def _scan(t: Int) {imm marks_ptr, imm bad_ptr, imm codes_ptr, imm rows, imm classes, imm chunk}:
         var lo = t * chunk
@@ -329,16 +347,16 @@ def _fit(slot: _SlotPtr, call: _CallPtr) raises:
     knn_check_metric_input(estimator, slot[].metric, call[].x.data, rows * cols)
     _release_index(slot)
     slot[].fitted = False
-    slot[].points = List[Float32](length=rows * cols, fill=Float32(0.0))
-    unsafe_memcpy(dest=slot[].points.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=rows * cols)
+    # Borrow, never copy (LIFETIME in the module docstring). A copy a
+    # previous import or export left in the slot is dropped.
+    slot[].points = List[Float32]()
+    slot[].codes = List[Int32]()
+    slot[].targets = List[Float32]()
+    slot[].points_addr = call[].x.data
+    slot[].targets_addr = call[].y.data
     slot[].rows = rows
     slot[].features = cols
-    if slot[].regressor:
-        slot[].targets = List[Float32](length=rows, fill=Float32(0.0))
-        unsafe_memcpy(dest=slot[].targets.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].y.data), count=rows)
-    else:
-        slot[].codes = List[Int32](length=rows, fill=Int32(0))
-        unsafe_memcpy(dest=slot[].codes.unsafe_ptr(), src=_I32P(unsafe_from_address=call[].y.data), count=rows)
+    if not slot[].regressor:
         slot[].classes = call[].classes
         _present_codes(slot)
     slot[].fitted = True
@@ -356,7 +374,7 @@ def _request(slot: _SlotPtr, call: _CallPtr) raises -> KnnQueryRequest:
     if slot[].k < 1 or slot[].k > slot[].rows:
         raise Error("mojolearn: n_neighbors must be in [1, " + String(slot[].rows) + "], got " + String(slot[].k))
     knn_check_metric_input(estimator, slot[].metric, call[].x.data, call[].x.rows * call[].x.cols)
-    var request = KnnQueryRequest(Int(slot[].points.unsafe_ptr()), call[].x.data, slot[].rows, call[].x.rows,
+    var request = KnnQueryRequest(slot[].points_addr, call[].x.data, slot[].rows, call[].x.rows,
         slot[].features, slot[].k, slot[].query_tile,
         KnnDistWords(slot[].metric, slot[].metric_arg, slot[].weights))
     var route = call[].route
@@ -366,7 +384,7 @@ def _request(slot: _SlotPtr, call: _CallPtr) raises -> KnnQueryRequest:
         if slot[].handle != 0 and not entry_ref_same(slot[].handle_entry, route.entry):
             _release_index(slot)
         if slot[].handle == 0:
-            slot[].handle = nb_index_prepare_call(route.entry.call, Int(slot[].points.unsafe_ptr()), 0,
+            slot[].handle = nb_index_prepare_call(route.entry.call, slot[].points_addr, 0,
                 slot[].rows, slot[].features)
             slot[].handle_entry = route.entry
         request.resident = True
@@ -384,12 +402,12 @@ def _predict(slot: _SlotPtr, call: _CallPtr) raises:
         _dense(call[].dst, MEMBER_F32, "the prediction buffer", estimator)
         if call[].dst.rows != rows or call[].dst.cols != 1:
             raise Error("ValueError: the prediction buffer holds one value per row of X")
-        outcome = knn_regress_run(entry, request, Int(slot[].targets.unsafe_ptr()), call[].dst.data, 1)
+        outcome = knn_regress_run(entry, request, slot[].targets_addr, call[].dst.data, 1)
     else:
         _dense(call[].dst, MEMBER_I32, "the prediction buffer (class codes)", estimator)
         if call[].dst.rows != rows or call[].dst.cols != 1:
             raise Error("ValueError: the prediction buffer holds one class code per row of X")
-        outcome = knn_classify_run(entry, request, Int(slot[].codes.unsafe_ptr()), call[].dst.data,
+        outcome = knn_classify_run(entry, request, slot[].targets_addr, call[].dst.data,
             Int(slot[].one_f32.unsafe_ptr()), Int(slot[].uniq.unsafe_ptr()), False, slot[].counts)
     _ = outcome^
 
@@ -413,7 +431,7 @@ def _predict_proba(slot: _SlotPtr, call: _CallPtr) raises:
         if len(slot[].proba) < rows * present:
             slot[].proba = List[Float32](length=rows * present, fill=Float32(0.0))
         target = Int(slot[].proba.unsafe_ptr())
-    var outcome = knn_classify_run(call[].route.entry.call, request, Int(slot[].codes.unsafe_ptr()),
+    var outcome = knn_classify_run(call[].route.entry.call, request, slot[].targets_addr,
         Int(slot[].one_i32.unsafe_ptr()), target, Int(slot[].uniq.unsafe_ptr()), True, slot[].counts)
     _ = outcome^
     if present == classes:
@@ -440,9 +458,43 @@ def _predict_proba(slot: _SlotPtr, call: _CallPtr) raises:
         host_parallelize(_scatter, tasks)
 
 
+def _own_points(slot: _SlotPtr):
+    """Copy borrowed points into the slot once (first export); the state
+    reads its own copy from then on. A resident device index is a copy of
+    the same words and stays valid."""
+    var count = slot[].rows * slot[].features
+    if slot[].points_addr == Int(slot[].points.unsafe_ptr()) and len(slot[].points) == count:
+        return
+    var owned = List[Float32](length=count, fill=Float32(0.0))
+    unsafe_memcpy(dest=owned.unsafe_ptr(), src=_F32P(unsafe_from_address=slot[].points_addr), count=count)
+    slot[].points = owned^
+    slot[].points_addr = Int(slot[].points.unsafe_ptr())
+
+
+def _own_targets(slot: _SlotPtr):
+    """Copy borrowed targets (float32) or class codes (int32) into the slot
+    once (first export)."""
+    var count = slot[].rows
+    if slot[].regressor:
+        if slot[].targets_addr == Int(slot[].targets.unsafe_ptr()) and len(slot[].targets) == count:
+            return
+        var owned = List[Float32](length=count, fill=Float32(0.0))
+        unsafe_memcpy(dest=owned.unsafe_ptr(), src=_F32P(unsafe_from_address=slot[].targets_addr), count=count)
+        slot[].targets = owned^
+        slot[].targets_addr = Int(slot[].targets.unsafe_ptr())
+    else:
+        if slot[].targets_addr == Int(slot[].codes.unsafe_ptr()) and len(slot[].codes) == count:
+            return
+        var owned = List[Int32](length=count, fill=Int32(0))
+        unsafe_memcpy(dest=owned.unsafe_ptr(), src=_I32P(unsafe_from_address=slot[].targets_addr), count=count)
+        slot[].codes = owned^
+        slot[].targets_addr = Int(slot[].codes.unsafe_ptr())
+
+
 def _export(slot: _SlotPtr, call: _CallPtr) raises:
-    """A view of one fitted block; the slot owns the words until this
-    state's next fit, import or free."""
+    """A view of one fitted block. A block the state still borrows from the
+    caller's fit views is copied into the slot here, once; the slot owns the
+    words until this state's next fit, import or free."""
     if not slot[].fitted:
         raise Error("NotFittedError: this " + _name(slot) + " member is not fitted yet")
     var block = call[].block
@@ -451,8 +503,10 @@ def _export(slot: _SlotPtr, call: _CallPtr) raises:
             raise Error("member ABI: a k-NN member has two fitted blocks")
         block = NEIGHBORS_BLOCK_POINTS + block
     if block == NEIGHBORS_BLOCK_POINTS:
+        _own_points(slot)
         call[].dst = MemberMatrix(Int(slot[].points.unsafe_ptr()), slot[].rows, slot[].features)
     elif block == NEIGHBORS_BLOCK_TARGETS:
+        _own_targets(slot)
         if slot[].regressor:
             call[].dst = MemberMatrix(Int(slot[].targets.unsafe_ptr()), 1, slot[].rows)
         else:
@@ -472,6 +526,7 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
         var count = call[].x.rows * call[].x.cols
         _release_index(slot)
         slot[].fitted = False
+        slot[].points_addr = 0
         slot[].points = List[Float32](length=count, fill=Float32(0.0))
         unsafe_memcpy(dest=slot[].points.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         slot[].rows = call[].x.rows
@@ -479,6 +534,7 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
     elif call[].block == NEIGHBORS_BLOCK_TARGETS:
         var count = call[].x.rows * call[].x.cols
         slot[].fitted = False
+        slot[].targets_addr = 0
         if slot[].regressor:
             _dense(call[].x, MEMBER_F32, "the fitted targets", estimator)
             slot[].targets = List[Float32](length=count, fill=Float32(0.0))
@@ -496,6 +552,8 @@ def _import(slot: _SlotPtr, call: _CallPtr) raises:
     var targets = len(slot[].targets) if slot[].regressor else len(slot[].codes)
     if slot[].rows == 0 or len(slot[].points) != slot[].rows * slot[].features or targets != slot[].rows:
         raise Error("member ABI: a fitted k-NN state needs its points and one target per point")
+    slot[].points_addr = Int(slot[].points.unsafe_ptr())
+    slot[].targets_addr = Int(slot[].targets.unsafe_ptr()) if slot[].regressor else Int(slot[].codes.unsafe_ptr())
     if not slot[].regressor:
         if call[].classes < 1:
             raise Error("member ABI: a k-NN classifier import needs the class count")
