@@ -168,46 +168,18 @@ def _parallel_int_keys(value: PythonObject) raises -> PythonObject:
     return keys
 
 
-def _parallel_pool_capture(mut mods: NativeModules, pool: PythonObject) raises -> PythonObject:
-    # Native process helpers mutate their resource record. Give them an admitted
-    # operation-owned record, retain the socket capsules, and publish lifecycle
-    # words back after every request, including failed transport/reap paths.
+def _parallel_pool_admit(mut mods: NativeModules, pool: PythonObject) raises:
+    """The pool's state is its native record
+    (bindings/native_process_pool_door.mojo), which the pool door checks on
+    every call. The dictionary around it carries the record, the spawn
+    configuration (which the pool door admits where it reads it, at the
+    start) and a published mirror no operation reads; an operation therefore
+    uses the model's own dictionary. The per-operation copy of the mirror
+    and its publication back after every request are gone."""
     model_dict(mods, pool)
-    var copy = Python.dict()
     var nk = parallel_keys()
-    var devices = py_item(pool, nk[].k_devices)
-    model_sequence(mods, devices)
-    for i in range(len(devices)):  # driver-loop: capture native worker device metadata
-        _ = _parallel_word(devices[i])
-    py_setitem(copy, nk[].k_devices, py_call(PARALLEL_CAUSAL.get_or_create_ptr()[].bi.tuple, devices))
-    py_setitem(copy, nk[].k_cooperative, _parallel_flag(py_item(pool, nk[].k_cooperative)))
-    py_setitem(copy, nk[].k_closed, _parallel_flag(py_item(pool, nk[].k_closed)))
-    py_setitem(copy, nk[].k_sequence, _parallel_word(py_item(pool, nk[].k_sequence)))
-    py_setitem(copy, nk[].k_module, model_string(mods, py_item(pool, nk[].k_module)))
-    # The pool's state is its native record (bindings/native_process_pool_door.mojo);
-    # the operation's record shares it. The other entries copied here are the
-    # door's published mirror and the spawn configuration.
-    py_setitem(copy, nk[].k_record, py_item(pool, nk[].k_record))
-    if py_contains(pool, nk[].k_environment):
-        py_setitem(copy, nk[].k_environment, model_plain(mods, py_item(pool, nk[].k_environment)))
-    var workers = py_item(pool, nk[].k_workers)
-    model_sequence(mods, workers)
-    var captured = Python.list()
-    for i in range(len(workers)):  # driver-loop: snapshot each published worker record (the sockets are pinned by the pool's record)
-        var worker = workers[i]
-        model_dict(mods, worker)
-        var item = Python.dict()
-        py_setitem(item, nk[].k_pid, _parallel_word(py_item(worker, nk[].k_pid)))
-        var group = py_item(worker, nk[].k_devices)
-        model_sequence(mods, group)
-        for j in range(len(group)):  # driver-loop: over physical device indices owned by one worker group
-            _ = _parallel_word(group[j])
-        py_setitem(item, nk[].k_devices, py_call(PARALLEL_CAUSAL.get_or_create_ptr()[].bi.tuple, group))
-        if py_contains(worker, nk[].k_identity):
-            py_setitem(item, nk[].k_identity, model_plain(mods, py_item(worker, nk[].k_identity)))
-        _ = py_call(captured.append, item)
-    py_setitem(copy, nk[].k_workers, captured)
-    return copy
+    if py_get(pool, nk[].k_record) is None:
+        raise Error("TypeError: parallel routing has an inconsistent process owner")
 
 
 def _parallel_capture_model_fields(mut mods: NativeModules, owner: PythonObject, live: PythonObject) raises -> PythonObject:
@@ -219,11 +191,9 @@ def _parallel_capture_model_fields(mut mods: NativeModules, owner: PythonObject,
     py_setitem(result, nk[].k__closed, _parallel_flag(py_item(live, nk[].k__closed)))
     py_setitem(result, nk[].k__failed, _parallel_flag(py_item(live, nk[].k__failed)))
     var original_pool = py_item(live, nk[].k__pool)
-    var pool = PythonObject(None)
     if original_pool is not None:
-        pool = _parallel_pool_capture(mods, original_pool)
-    py_setitem(result, nk[].k__pool, pool)
-    py_setitem(result, nk[].k__native_parallel_pool_live, original_pool)
+        _parallel_pool_admit(mods, original_pool)
+    py_setitem(result, nk[].k__pool, original_pool)
     var indices = py_item(live, nk[].k__worker_index)
     var keys = _parallel_int_keys(indices)
     var copied = Python.dict()
@@ -236,7 +206,7 @@ def _parallel_capture_model_fields(mut mods: NativeModules, owner: PythonObject,
     for i in range(len(keys)):  # driver-loop: preserve aliases to the one native process owner
         if pools[keys[i]] is not original_pool:
             raise Error("TypeError: parallel routing has an inconsistent process owner")
-        py_setitem(copied, keys[i], pool)
+        py_setitem(copied, keys[i], original_pool)
     py_setitem(result, nk[].k__pools, copied)
     var blocks = py_item(live, nk[].k__blocks)
     model_sequence(mods, blocks)
@@ -684,26 +654,6 @@ def _parallel_causal_usable(fields: PythonObject) raises:
     causal_lost_admit(_parallel_flag(py_item(fields, nk[].k__failed)))
 
 
-def _parallel_pool_publish(mut mods: NativeModules, fields: PythonObject, workers: Bool = True) raises:
-    var nk = parallel_keys()
-    var pool = py_item(fields, nk[].k__pool)
-    var live = py_item(fields, nk[].k__native_parallel_pool_live)
-    if pool is None or live is None:
-        return
-    model_dict(mods, live)
-    # Do not expose this operation's mutable worker metadata through the live
-    # pool: later RPCs can release the GIL. Only native socket capsule identity
-    # is shared; the worker dictionaries/lists are detached publication copies.
-    # `workers` False: a successful request on an already started pool left
-    # the worker records as they were published (process_pool_start returns
-    # at once and the request mutates only sequence/closed), so only the two
-    # progress words are republished, not a fresh capture of every worker.
-    if workers:
-        py_setitem(live, nk[].k_workers, py_item(_parallel_pool_capture(mods, pool), nk[].k_workers))
-    for name in ["sequence", "closed"]:  # small-loop(two resource progress words published after every request)
-        py_setitem(live, name, pool[name])
-
-
 struct CausalRpc(Movable):
     """One worker request after UNPACK: the typed struct and the tensor or
     structural payload that rides beside it."""
@@ -777,21 +727,18 @@ def _parallel_causal_send(mut mods: NativeModules, owner: PythonObject, device: 
     if pool is None:
         raise Error("RuntimeError: ParallelCausalLM has no process owner")
     var result = PythonObject(None)
-    var started = len(process_pool_pids(pool)) != 0
     var wire = request.encode()
     try:
         result = process_pool_request(pool, index, wire, outgoing)
         mods.released()
     except error:
         mods.released()
-        _parallel_pool_publish(mods, fields)
         if len(process_pool_pids(pool)) == 0:
             py_setitem(fields, nk[].k__failed, True)
             var live = py_item(fields, nk[].k__causal_live_fields)
             model_dict(mods, live)
             py_setitem(live, nk[].k__failed, True)
         raise error
-    _parallel_pool_publish(mods, fields, not started)
     return result
 
 
@@ -808,18 +755,13 @@ def _parallel_causal_close(mut mods: NativeModules, owner: PythonObject) raises:
     py_setitem(fields, nk[].k__closed, True)
     var live = py_get(fields, nk[].k__pool)
     if live is not None:
-        var pool = _parallel_pool_capture(mods, live)
-        var captured = Python.dict()
-        py_setitem(captured, nk[].k__pool, pool)
-        py_setitem(captured, nk[].k__native_parallel_pool_live, live)
+        _parallel_pool_admit(mods, live)
         try:
-            process_pool_close(pool)
+            process_pool_close(live)
             mods.released()
         except error:
             mods.released()
-            _parallel_pool_publish(mods, captured)
             raise error
-        _parallel_pool_publish(mods, captured)
     model_dict(mods, fields)
     py_setitem(fields, nk[].k__pools, Python.dict())
 
@@ -925,7 +867,6 @@ def _parallel_causal_init(mut mods: NativeModules, owner: PythonObject, input_pl
     try:
         process_pool_start(py_item(fields, nk[].k__pool))
         mods.released()
-        _parallel_pool_publish(mods, fields)
         # The configure record, written once for every worker: (model
         # metadata, block-construction plan) as typed fields. REMOVED: the
         # two Python dicts built only to be sent (and _parallel_causal_wire_plan).
@@ -960,7 +901,6 @@ def _parallel_causal_init(mut mods: NativeModules, owner: PythonObject, input_pl
         py_setitem(live, nk[].k__head_int15, packed)
     except error:
         mods.released()
-        _parallel_pool_publish(mods, fields)
         try:
             _parallel_causal_close(mods, owner)
         except cleanup_error:
