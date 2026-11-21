@@ -76,6 +76,10 @@ knows no scorer. Served only where the width is the plain one: predict one
 column, predict_proba one column per class; anything else takes the Python
 units.
 
+A SEARCH'S REFIT (`msel_member_refit`): the same route with one candidate
+and one unit whose train side is all of X (a view), fit only; the fitted
+state is packed into the route's own clone and held by it.
+
 FITTED ESTIMATORS ASKED BACK (`return_estimator`; `keep` True). A unit then
 leaves its fitted state alive; PACK (GIL held, after the units joined) makes
 one Python estimator per unit: the native clone of the candidate, the
@@ -201,6 +205,8 @@ struct MselMemberRun(Movable):
     # runs nothing more; the other units are unaffected.
     var tolerate: Bool
     var fit_failed: List[UInt8]
+    # A search's refit: one unit that fits on every row and runs nothing else.
+    var fit_only: Bool
 
     def __init__(out self, x: Int, y: Int, rows: Int, cols: Int, n_folds: Int, n_units: Int, workers: Int,
         return_train: Bool, keep: Bool):
@@ -211,6 +217,7 @@ struct MselMemberRun(Movable):
         self.dst = List[Int]()
         self.codes = List[List[Int32]]()
         self.tolerate = False
+        self.fit_only = False
         self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.plans = List[MemberPlan]()
         self.folds = List[Int]()
@@ -405,6 +412,11 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
         if run[].fit_failed[u] != UInt8(0):
             run[].fit_time[u] = t1 - t0
             return
+        if run[].fit_only:
+            run[].fit_time[u] = t1 - t0
+            run[].states[u] = call.state
+            kept = True
+            return
         var n_ops = len(run[].ops)
         _side_set(run, test_mode, run[].starts[2 * f + 1], test_index, test_rows, Int(x_test.unsafe_ptr()),
                   Int(y_test.unsafe_ptr()), call)
@@ -478,6 +490,31 @@ def _whole_classes(classes: PythonObject, b: PythonObject) raises -> Bool:
 def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObject, x: PythonObject,
     folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
     b: PythonObject, responses: List[Int], tolerate: Bool) raises -> MselMemberScores:
+    return _member_units(base, candidates, y, x, folds, return_train, keep, workers_in, context, b, responses,
+                         tolerate, False)
+
+
+def msel_member_refit(base: PythonObject, parameters: PythonObject, y: PythonObject, x: PythonObject,
+    context: PythonObject, b: PythonObject) raises -> PythonObject:
+    """A search's refit over the native member: a clone of `base` with
+    `parameters` set, fitted ONCE on every row of X (a view: nothing is
+    gathered or copied) with the GIL released, packed by its family's
+    `member_pack` and holding its fitted member state
+    (bindings/member_held_door.mojo), so a caller that uses the best
+    estimator as a member imports nothing. None when this member, data or
+    fit is not one the route runs: the caller then fits the estimator through
+    its own door, which raises its own exception (THE FALLBACK RULE)."""
+    var none = List[Int]()
+    var got = _member_units(base, Python.list(parameters), y, x, Python.list(PythonObject(None)), False, True, 1,
+                            context, b, none, False, True)
+    if not got.ran:
+        return PythonObject(None)
+    return got.estimators[0]
+
+
+def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject, x: PythonObject,
+    folds: PythonObject, return_train: Bool, keep: Bool, workers_in: Int, context: PythonObject,
+    b: PythonObject, responses: List[Int], tolerate: Bool, fit_only: Bool) raises -> MselMemberScores:
     """Run every (candidate, fold) unit over native members, or answer
     `ran == False` having changed nothing when this member, data or request
     is not one this route runs (module note). `keep`: one fitted estimator
@@ -515,7 +552,7 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
     var member_pins = Python.list()
     var n_ops = len(responses)
     var asked = MEMBER_CAN_FIT
-    if n_ops == 0:
+    if n_ops == 0 and not fit_only:
         asked = asked | MEMBER_CAN_SCORE
     for k in range(n_ops):  # driver-loop: over the request's responses (at most two)
         if responses[k] == MEMBER_OP_PREDICT:
@@ -595,7 +632,17 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
             return scores^
     _ = py_call(pins.append, target)
     run.y = msel_addr(target)
-    for f in range(n_folds):  # driver-loop: over folds (their index arrays, read once)
+    if fit_only:
+        # The one unit's train side is every row of X: a view from row 0, no
+        # index array; it holds every class by construction of the encode.
+        run.folds.append(0)
+        run.folds.append(rows)
+        run.folds.append(0)
+        run.folds.append(0)
+        run.starts[0] = 0
+        run.starts[1] = 0
+        run.fit_only = True
+    for f in range(0 if fit_only else n_folds):  # driver-loop: over folds (their index arrays, read once)
         var pair = folds[f]
         var train = msel_index_i64(pair[0], context)
         var test = msel_index_i64(pair[1], context)
@@ -657,7 +704,8 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
         with GILReleased(py):
             # The fold sides' shapes first (independent scans of the index
             # arrays), then the units.
-            host_parallelize(_shape, 2 * n_folds)
+            if not fit_only:
+                host_parallelize(_shape, 2 * n_folds)
             # A classifier fold whose train side lacks a class is not this
             # route's (module note): nothing has run, the Python units take it.
             var whole = True
@@ -704,7 +752,9 @@ def msel_member_units(base: PythonObject, candidates: PythonObject, y: PythonObj
         try:
             for u in range(n_units):  # driver-loop: over units (Python estimators, GIL held)
                 var c = u // n_folds
-                var fitted = msel_native_clone(members[c], context)
+                # A refit's member is this route's own clone, never fitted
+                # and seen by nobody: it is the estimator handed back.
+                var fitted = members[c] if fit_only else msel_native_clone(members[c], context)
                 var fitted_fields = py_call(plan["fields_get"], fitted, py_type(fitted))
                 if classifier:
                     member_pack_labeled(fitted, fitted_fields, member_context, b, run.plans[c], run.states[u], labels)
