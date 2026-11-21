@@ -47,17 +47,7 @@ def connect(tables, solver=None):
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             linear[mode] = _refusal(error)
         try:
-            module = _backend.binding("_mojolearn_x_metrics", mode)
-            table = {}
-            for name in ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",  # glue: fixed native exports
-                         "x_metrics_run_out", "x_metrics_run_ranges", "metrics_program_native_api_v1"):
-                entry = getattr(module, name, None)
-                if entry is None and name in ("x_metrics_run_out", "x_metrics_run_ranges"):
-                    continue
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"the x_linear owner's score requires compiled {name}")
-                table[name] = entry
-            metrics[mode] = table
+            metrics[mode] = _x_metrics_table(_backend.binding("_mojolearn_x_metrics", mode))
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             metrics[mode] = _refusal(error)
     cd, host_predict = "ImportError: the coordinate-descent solver is not connected here", None
@@ -108,7 +98,91 @@ def connect(tables, solver=None):
                    xl_sgd_penalty=dict(tables.get("sgd_penalty", {})), xl_sgd_lr=dict(tables.get("sgd_lr", {})),
                    xl_sgd_sum_losses=frozenset(tables.get("sgd_sum_losses", ())),
                    cd_selection=dict(tables.get("cd_selection", {})))
+    _connect_cpu_device(context, solver is not None)
     return call, context
+
+
+def _x_metrics_table(module):
+    # glue: the metric-program entries of one x_metrics image, checked once at import
+    from types import BuiltinFunctionType
+    table = {}
+    for name in ("x_metrics_run", "x_metrics_vendor", "x_metrics_numeric_mode",  # glue: fixed native exports
+                 "x_metrics_run_out", "x_metrics_run_ranges", "metrics_program_native_api_v1"):
+        entry = getattr(module, name, None)
+        if entry is None and name in ("x_metrics_run_out", "x_metrics_run_ranges"):
+            continue
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"the x_linear owner's score requires compiled {name}")
+        table[name] = entry
+    return table
+
+
+#: The CPU identical images `device="cpu"` runs on a GPU installation, by the
+#: device binding each one is the CPU column of: the x_linear operations, the
+#: coordinate-descent solver (Lasso / ElasticNet), and the two metrics images
+#: a score runs (the metric programs of accuracy and R^2, the R^2 kernel).
+_CPU_DEVICE_BINDINGS = ("_mojolearn_x_linear", "_mojolearn_solver", "_mojolearn_x_metrics", "_mojolearn_metrics")
+
+
+def _connect_cpu_device(context, with_solver):
+    """Connect the CPU images of `device="cpu"` once, at import, beside the
+    device images (`context["xl_bindings"]`, `context["cd_solver"]`).
+
+    Each host binary publishes its native operations table when it
+    initializes; the compiled owner resolves an estimator's route against
+    the device table or these, once per estimator
+    (bindings/x_linear_route_unpack.mojo). `xl_cpu_scope` is the context a
+    `device="cpu"` estimator's score programs run in: this context with the
+    metrics tables of the CPU images. In a CPU-only process the selected
+    images already are the CPU images and nothing is loaded. A host binary
+    that is not built is kept as its refusal text, said when a
+    `device="cpu"` estimator first needs it."""
+    # glue: load the CPU images once and retain their tables; nothing here runs per call
+    from types import BuiltinFunctionType
+    from . import _backend
+    if context["vendor"] == "cpu" or _backend._CPU_ONLY is not None:
+        return
+    errors = (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError, KeyError)
+
+    def host(name):
+        # glue: the CPU identical image of one device binding (read back as CPU and identical when loaded)
+        return _backend.load_host_module(_backend._HOST_MODULES[name])
+
+    linear_name, solver_name, x_metrics_name, metrics_name = _CPU_DEVICE_BINDINGS
+    try:
+        linear = _linear_entries(host(linear_name))
+    except errors as error:
+        linear = _refusal(error)
+    cd = "ImportError: the coordinate-descent solver is not connected here"
+    if with_solver:
+        try:
+            host(solver_name)
+            # load_host_module read the image back as CPU and identical: its
+            # solver operations table key is (tier 1, vendor 0).
+            cd = (1, _NATIVE_VENDORS["cpu"])
+        except errors as error:
+            cd = _refusal(error)
+    try:
+        x_metrics = _x_metrics_table(host(x_metrics_name))
+    except errors as error:
+        x_metrics = _refusal(error)
+    try:
+        module = host(metrics_name)
+        r2 = {}
+        for name in ("r2_score", "r2_score_weighted", "metrics_numeric_mode", "umap_numeric_mode"):  # glue: fixed native exports
+            entry = getattr(module, name, None)
+            if isinstance(entry, BuiltinFunctionType):
+                r2[name] = entry
+        if "r2_score" not in r2:
+            raise TypeError("the CPU metrics image has no compiled r2_score")
+    except errors as error:
+        r2 = _refusal(error)
+    scope = dict(context)
+    scope.pop("classical_metric_vendor", None)
+    # device="cpu" is identical only: both mode words name the CPU identical tables.
+    scope.update(vendor="cpu", classical_metrics={"identical": x_metrics, "fast": x_metrics},
+                 labels_bindings={"identical": {"_mojolearn_metrics": r2}, "fast": {"_mojolearn_metrics": r2}})
+    context.update(xl_cpu_bindings={"identical": linear}, cd_solver_cpu=cd, xl_cpu_scope=scope)
 
 
 #: The native tables' vendor words (core/solver_entry_table.mojo
