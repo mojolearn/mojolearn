@@ -245,7 +245,9 @@ def _svc_score_remap(labels: SvcScoreLabels, index: ScoreKeyIndex, context: Pyth
 
 
 def svc_accuracy_native(model: PythonObject, truth: PythonObject, prediction: SvcDecodedScore,
-                        context: PythonObject) raises -> Float64:
+                        context: PythonObject, label_context: PythonObject) raises -> Float64:
+    # `label_context`: the estimator's label scope (labels_scope) for the
+    # label steps; `context` names the binding route of its metrics image.
     var shape = svc_shape_of(truth, context)
     if len(shape) != 1 or Int(py=shape[0]) != prediction.rows:
         raise Error("mojolearn: y must be 1-D with one entry per row of X")
@@ -256,8 +258,8 @@ def svc_accuracy_native(model: PythonObject, truth: PythonObject, prediction: Sv
         # fails first, with the same refusal).
         for i in range(len(prediction.pins)):  # UNPACK element admission, one per used class
             classical_admit_value(prediction.pins[i], context, 1)
-    var true_labels = _svc_score_truth(truth, context)
-    var pred_labels = _svc_score_prediction(prediction, context)
+    var true_labels = _svc_score_truth(truth, label_context)
+    var pred_labels = _svc_score_prediction(prediction, label_context)
     if true_labels.rows != pred_labels.rows:
         raise Error("mojolearn accuracy_score: y_true and y_pred lengths differ")
     if true_labels.kind != pred_labels.kind:
@@ -266,8 +268,8 @@ def svc_accuracy_native(model: PythonObject, truth: PythonObject, prediction: Sv
         raise Error("mojolearn accuracy_score: at most INT32_MAX rows")
     var joined = score_keys_union(true_labels.owner, pred_labels.owner)
     var index = score_keys_index(joined)
-    var true_codes = _svc_score_remap(true_labels, index, context)
-    var pred_codes = _svc_score_remap(pred_labels, index, context)
+    var true_codes = _svc_score_remap(true_labels, index, label_context)
+    var pred_codes = _svc_score_remap(pred_labels, index, label_context)
     var class_count = len(index.sorted_rows)
     _ = joined
     _ = index

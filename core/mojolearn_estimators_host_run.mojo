@@ -10,6 +10,8 @@ unchanged (lane rs-metrics-estimators, 2026-11-12)."""
 from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_ESTIMATORS
 from core.linear_fit_types import LINEAR_FIT_ABI, LINEAR_FIT_OPERATION_COUNT
 from core.linear_member import linear_member_publish
+from core.decomposition_member import decomposition_member_publish
+from core.logistic_member import logistic_member_publish
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from glm.host.linear_fit_native import linear_fit_host_v1, LINEAR_FIT_HOST_API
 from glm.host.linear_predict_native import linear_predict_host_v1
@@ -81,6 +83,9 @@ def _publish_linear_entry_table() raises:
     # The family's member entry (core/member_abi.mojo): Ridge and
     # LinearRegression run as members of a meta-estimator through it.
     linear_member_publish(key.mode, key.vendor, Int(api[].entries.unsafe_ptr()))
+    # PCA and TruncatedSVD members (core/decomposition_member.mojo): they call the
+    # PCA / TruncatedSVD entries their route carries, never a table.
+    decomposition_member_publish(key.mode, key.vendor, Int(api[].entries.unsafe_ptr()))
 
 
 def _publish_estimators_qn_table() raises:
@@ -90,3 +95,5 @@ def _publish_estimators_qn_table() raises:
     var api = LOGISTIC_HOST_API.get_or_create_ptr()
     estimators_table_publish[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(Int(GLOBAL_NUMERIC_MODE), 0),
         Int(api[].entries.unsafe_ptr()), qn_host_native_v1)
+    # LogisticRegression's member entry (core/logistic_member.mojo).
+    logistic_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(api[].entries.unsafe_ptr()))

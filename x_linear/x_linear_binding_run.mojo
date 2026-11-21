@@ -7,6 +7,7 @@ called once from the module builder. Typed Mojo only, no Python import
 from core.linear_entry_table import LinearEntryKey, linear_table_publish, LINEAR_TABLE_X_LINEAR
 from core.linear_fit_types import RIDGE_FIT_ABI
 from core.linear_entry_table_ext import xl_ops_publish
+from core.xlinear_member import xlinear_member_publish
 from x_linear.ridge_descriptor_device import ridge_fit_device_v1, RIDGE_FIT_DEVICE_API
 from x_linear.ops_entry_device import x_linear_ops_device_v1, XLINEAR_OPS_DEVICE_API
 from checks.vendor import COMPILED_VENDOR
@@ -24,3 +25,7 @@ def _publish_linear_entry_table() raises:
     # native owner of the linear expansion estimators calls these entries.
     var ops = XLINEAR_OPS_DEVICE_API.get_or_create_ptr()
     xl_ops_publish(key, Int(ops[].entries.unsafe_ptr()), x_linear_ops_device_v1)
+    # The XLinear family's member entry (core/xlinear_member.mojo); a build
+    # with no vendor (-1) publishes no member entry.
+    if key.vendor >= 0:
+        xlinear_member_publish(key.mode, key.vendor, Int(ops[].entries.unsafe_ptr()))

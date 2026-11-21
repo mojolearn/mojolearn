@@ -418,10 +418,13 @@ def gbdt_ctr_host_fit(
         binarized_target = build_binarized_target(y, target_borders)
         for p in range(perm_count):
             # the device's order (`gbdt/ctrs/ctr_order.mojo`, lane
-            # cpu4-gbdt): identity for permutation 0, the keyed Feistel
-            # bijection for the others, the same words as
+            # cpu4-gbdt; seeded by lane cat-ctr): the load shuffle keyed
+            # by `random_seed`, composed for every permutation but 0 with
+            # its keyed bijection, the same words as
             # `launch_ctr_estimation_order` writes
-            ctr_orders.append(ctr_estimation_order_host(n_rows, p))
+            ctr_orders.append(
+                ctr_estimation_order_host(n_rows, p, params.random_seed)
+            )
 
     # ---- the column loop (`:1532-1676`) ----
     var columns = List[List[Float32]]()

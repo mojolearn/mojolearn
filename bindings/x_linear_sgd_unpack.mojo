@@ -15,7 +15,7 @@
 # call before the fit (x_linear/door_run.mojo `xl_class_fit_run`): SGD takes
 # the k class weights as its last float parameters, RidgeClassifier reads
 # the row weights behind its class codes. No native call is made here.
-from bindings.x_linear_common_unpack import XlFit, xl_fit_build, xl_fit_build_x, xl_class_weights_unpack
+from bindings.x_linear_common_unpack import XlFit, xl_fit_build, xl_fit_build_x, xl_class_weights_unpack, _xl_scope
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from x_linear.door_run import (
@@ -274,7 +274,7 @@ def xl_fit_sgd_classifier_unpack(model: PythonObject, fields: PythonObject, args
             raise Error("mojolearn PassiveAggressiveClassifier: C must be > 0")
     xl_ops_require(entries)
     var x = _xl_matrix(args[0], _name(model), context)
-    var labels = _xl_class_codes(model, args[1], x.rows, context)
+    var labels = _xl_class_codes(model, args[1], x.rows, _xl_scope(entries, context))
     var codes = admitted_vector(x.rows, "<f4", context)
     labels_cast(labels_address(labels.codes), "<i4", labels_address(codes), "<f4", x.rows, context)
     var k = len(labels.classes)
@@ -326,7 +326,7 @@ def xl_fit_ridge_classifier_unpack(model: PythonObject, fields: PythonObject, ar
     var x = _xl_fold_matrix(args[0], name, entries, context)
     var n = x.rows
     var d = x.cols
-    var labels = classical_encode_labels(args[1], context)
+    var labels = classical_encode_labels(args[1], _xl_scope(entries, context))
     if labels.n != n:
         raise Error("mojolearn RidgeClassifier: X and y lengths differ")
     var k = len(labels.classes)

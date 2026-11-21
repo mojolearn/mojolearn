@@ -167,8 +167,15 @@ class CausalLM:
         return _NATIVE.causal_lm_blocks(self)
 
     def parameters(self):
-        """Return tensors by checkpoint name."""
-        return _NATIVE.causal_lm_parameters(self)
+        """An iterator over the weight arrays, in checkpoint order, as ``torch.nn.Module.parameters``."""
+        return _NATIVE.causal_lm_parameter_list(self)
+
+    def named_parameters(self):
+        """An iterator over ``(checkpoint name, array)`` pairs.
+
+        ``dict(model.named_parameters())`` gives the weights by checkpoint name.
+        """
+        return _NATIVE.causal_lm_named_parameters(self)
 
     def _run(self, ids, state, step, what):
         return _NATIVE.causal_lm_forward(self, ids, state, step)

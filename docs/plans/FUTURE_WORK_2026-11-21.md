@@ -77,7 +77,7 @@ docs. Work:
 2. Run scikit-learn's own estimator checks (`check_estimator`) on every class that claims a twin, as a test of the
    Python boundary.
 3. Gradient boosting: CatBoost / XGBoost / LightGBM parameter names accepted where the meaning is the same.
-4. Neural models and the Torch adapter: PyTorch conventions (`state_dict`, `train()`/`eval()`, device names,
+4. Neural models and the Torch adapter: PyTorch conventions (`state_dict`, `train()`/`eval()`, ~~device names~~ device is 'gpu' or 'cpu' only (Andrew, 2026-11-21),
    dtype names) where the meaning is the same.
 5. Nothing here may add Python work inside a call: renames and defaults are resolved at construction.
 

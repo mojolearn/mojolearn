@@ -835,16 +835,18 @@ def _check_train_default(
             + String(tm2.ctr_column_count)
         )
 
-    # --- AND THE PERMUTATION REACHES train(), ON A FIXTURE THAT CAN SEE IT
+    # --- NO ORDER OF THE FIT READS THE CALLER'S ROW ORDER
     #
-    # The fixture above cannot: its target is a pure function of the
-    # category, so the ordered statistic is near 0 or near 1 whatever the
-    # order, and the quantized columns come out the same. The one below is
-    # the opposite -- rows SORTED BY TARGET and a category that carries no
-    # information about it, with the categorical column as the ONLY feature.
-    # In row order the CTR leaks the label, so the training loss collapses
-    # to something no honest estimator can reach; under the CTR estimation
-    # permutation it cannot.
+    # Lane cat-ctr, 2026-11-21 (seeded permutation inside the fit). Until
+    # then permutation 0 was the identity over the rows as passed, and this
+    # section asserted that pinning it on a target-sorted fixture LEAKED the
+    # label (a far lower train loss than the shipped permutation's). Every
+    # order is now the load shuffle keyed by `random_seed`
+    # (`gbdt/ctrs/ctr_order.mojo`), so the same fixture -- rows SORTED BY
+    # TARGET, a category that carries no information, the categorical
+    # column as the ONLY feature -- must fit no better under permutation 0
+    # than under the shipped one: a collapse of the train loss means some
+    # order still reads row order.
     var m = 4001
     var leak_codes = _codes(m, 29, 137)
     var leak_y = List[Float32]()
@@ -873,8 +875,8 @@ def _check_train_default(
         " columns only):",
     )
     print("      train loss under the PERMUTATION:", shipped_loss)
-    print("      train loss in ROW order         :", identity_loss)
-    if identity_loss >= shipped_loss * Float64(0.9):
+    print("      train loss under permutation 0  :", identity_loss)
+    if identity_loss < shipped_loss * Float64(0.9):
         failures.append(
             String("train(ctr_estimation_permutation_id=0) reached train")
             + String(" loss ")
@@ -883,10 +885,10 @@ def _check_train_default(
             + String(DEFAULT_PERMUTATION_COUNT - 1)
             + String("'s ")
             + String(shipped_loss)
-            + String("; on a target-sorted fixture row order LEAKS the")
-            + String(" label and must fit far better in sample. These being")
-            + String(" close means the permutation argument is not reaching")
-            + String(" the CTR ordering")
+            + String("; on a target-sorted fixture that is the label")
+            + String(" LEAKING through row order. Permutation 0 must be the")
+            + String(" seeded load shuffle, not the identity over the")
+            + String(" caller's rows")
         )
     print("  train(): the categorical path runs under CatBoost's GPU default")
 

@@ -922,6 +922,10 @@ _MODE_METADATA, _MODE_METADATA_CONTEXT = _connect_mode_metadata()
 # why device="cpu" is refused for it (_device_table.py). The same dictionary
 # object: classes defined later add their row.
 _MODE_METADATA_CONTEXT["device_cpu"] = _DEVICE_CPU_CLASSES
+# The lazy CPU-image connection the same check calls on an admitted
+# device="cpu" beside a GPU set (_device_table.connect_cpu).
+from ._device_table import connect_cpu as _device_connect_cpu
+_MODE_METADATA_CONTEXT["device_cpu_connect"] = _device_connect_cpu
 from ._native_loaded_modules import connect_module as _connect_native_module
 # GP lifecycle admission reads this initialized owner without importing or
 # invoking Python. Later class connections extend the same metadata dictionary.

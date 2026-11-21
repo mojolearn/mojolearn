@@ -1541,6 +1541,17 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
     row blocks (weighted) do not depend on how the labels are numbered, so
     any numbering of the same labels gives the same bits (x_metrics
     cm_epi.mojo `_count`, group.mojo `pair_key_unit`)."""
+    # `metrics` None: a classifier's CPU label scope (`labels_scope`, the
+    # context of a `device="cpu"` estimator beside a device set) names its CPU
+    # x_metrics entries (`labels_metrics_entries`); any other context names
+    # none and runs the process's image of `mode`. One dictionary read with
+    # the interned key per score.
+    var routed = metrics
+    if routed is None:
+        routed = py_get(context, classical_keys()[].k_labels_metrics_entries)
+    if routed is not None and py_type(routed) is py_type(PythonObject("")):
+        # the CPU image did not connect at import: its recorded words
+        raise Error(String(routed))
     var weighted = False
     if w:
         weighted = True
@@ -1558,7 +1569,7 @@ def _accuracy_codes(yt: PythonObject, yp: PythonObject, n: Int, L: Int, var w: O
         w_array = wv.array if py_type(wv.array) is py_item(context, nk[].k_array_class) else native_f32_view_array(
             wv.array, wv.address, Python.tuple(wv.rows), wv.rows, 1, py_item(context, nk[].k_array_class))
         inputs.append(w_array)
-    var arena = _accuracy_run(plan.program, inputs, mode, context, metrics)
+    var arena = _accuracy_run(plan.program, inputs, mode, context, routed)
     var base = arena.base()
     var result_at = plan.result_offset
     _ = yt

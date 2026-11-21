@@ -22,6 +22,7 @@ from bindings.sequential_keys_unpack import (
     SEQUENTIAL_OPN_PREDICT_PROBA,
     SEQUENTIAL_OPN_PROGRAM,
     SEQUENTIAL_OPN_TABLE,
+    SEQUENTIAL_OPN_TO,
 )
 from bindings.py_balanced import py_item
 
@@ -400,4 +401,8 @@ def sequential_admit(mut mods: NativeModules, model: PythonObject, operation: In
                 var admitted = cache.downcast_value_ptr[SequentialAdmissions]()
                 admitted[].operations[operation] = PythonObject(alloc=key^)
                 prepared_put(mods, _SEQUENTIAL_ADMIT_SLOT, model, cache)
-    _sequential_admit_value(mods, args, context, types, 0)
+    # `to()` takes a torch.dtype or NumPy dtype, which the input-type walk
+    # refuses; its arguments are admitted by exact type in
+    # bindings/torch_to_unpack.mojo before anything reads them.
+    if operation != SEQUENTIAL_OPN_TO:
+        _sequential_admit_value(mods, args, context, types, 0)

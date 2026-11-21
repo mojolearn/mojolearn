@@ -84,7 +84,9 @@ def test_construct_captures_plan_options_and_all_weights_before_numerical_work()
     assert 'object.__getattribute__' not in source
     assert 'context["backend"]._DEFAULT_MODE' not in source
     read = source.split("def causal_model_read_weights_binding", 1)[1].split("def causal_model_load_binding", 1)[0]
-    assert 'model_checkpoint_names_snapshot(mods, plan)' in read and '_model_layer_weights(mods, plan, i)' in read
+    assert 'model_checkpoint_names_snapshot(mods, plan)' in read and 'causal_layer_weights(entries, i)' in read
+    # The layer map is admitted once per load, before the layer loop.
+    assert read.index('causal_plan_layer_map(mods, plan)') < read.index('causal_layer_weights(entries, i)')
     assert 'infos[name].' not in read and '_info_snapshot(mods, infos[info_names[i]])' in read
 
 
