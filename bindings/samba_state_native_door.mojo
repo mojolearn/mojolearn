@@ -17,43 +17,23 @@ from std.memory import unsafe_memcpy
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.python._cpython import GILReleased
 from core.entry_table import EntryRef, entry_ref_call
-from core.samba_entry_table import (
-    SambaEntryKey, samba_ref, samba_vendor_word, SAMBA_TABLE_TRAINING, SAMBA_PRIM_OPTIMIZER_STEP,
-)
+from core.samba_entry_table import SAMBA_PRIM_OPTIMIZER_STEP
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, generation_copy, py_ints
 from bindings.causal_lm_construct_door import _model_f32, _model_shape, _model_block, _model_bindings, _model_native_buffer
 from bindings.causal_lm_public_door import _native_function
-from bindings.p3_samba_caps_door import samba_caps, SAMBA_CAP_MODE, SAMBA_CAP_VENDOR
+from bindings.samba_route_unpack import samba_route, samba_route_process, samba_route_publish, samba_device_admit
 from bindings.samba_config_native_door import samba_config_dict, samba_config_from_dict, samba_registry, samba_block_shapes
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease
 from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
 from bindings.samba_optimizer_boundary_unpack import samba_optimizer_transfer
 # RUN (lane rs-neural): typed pieces, no Python import.
 from training.samba_state_run import samba_optimizer_device_plan
-from core.mode_answer import MODE_FAMILY_NEURAL, answer_mode_word
 from bindings.samba_keys_unpack import samba_keys
 from bindings.py_balanced import py_item
 
 
 def samba_fields(value: PythonObject) raises -> PythonObject:
     return py_call(native_loaded_module("builtins").object.__getattribute__, value, "__dict__")
-
-
-def samba_entry_key(context: PythonObject, mode: PythonObject) raises -> SambaEntryKey:
-    """UNPACK: the Samba table key (core/samba_entry_table.mojo) of the
-    stack's connected binding, from the mode and vendor words the bridge
-    admitted; `samba_entries` checks them against the binding's own."""
-    var nk = samba_keys()
-    var selected = py_item(context, nk[].k_mode) if mode is None else mode
-    var vendor = String("cpu") if py_item(context, nk[].k_vendor) is None else String(py_item(context, nk[].k_vendor))
-    var word = samba_vendor_word(vendor)
-    if word < 0:
-        raise Error("Samba: unsupported native vendor " + vendor)
-    # lane fx-fast-mask: `fast` answered by the identical set (NEURAL) keys
-    # the identical table, as the stack's own fit runs it.
-    var text = String(selected)
-    answer_mode_word(text, MODE_FAMILY_NEURAL)
-    return SambaEntryKey(1 if text == "identical" else 0, word)
 
 
 def samba_primitive(entry: EntryRef, op: Int, addresses: List[Int], ints: List[Int],
@@ -66,28 +46,6 @@ def samba_primitive(entry: EntryRef, op: Int, addresses: List[Int], ints: List[I
     with GILReleased(Python()):
         result = entry_ref_call(entry, op, addresses, ints, floats)
     return result
-
-
-def samba_entries(context: PythonObject, mode: PythonObject) raises -> PythonObject:
-    var nk = samba_keys()
-    var entries = py_item(context, nk[].k_entries)
-    var selected = py_item(context, nk[].k_mode) if mode is None else mode
-    # lane fx-fast-mask: the stack's word is answered (NEURAL) before it is
-    # compared with the connected mode, so an answered `fast` stack runs the
-    # connected identical binding. One String compare replaces the Python
-    # rich compare the old line made.
-    var text = String(selected)
-    answer_mode_word(text, MODE_FAMILY_NEURAL)
-    if text != String(py_item(context, nk[].k_mode)):
-        raise Error("Samba: requested numeric mode differs from the connected native mode")
-    var want = 1 if text == "identical" else 0
-    # The binding's numeric mode and vendor words are fixed per compiled
-    # module: read them once per binding (bindings/p3_samba_caps.mojo), not
-    # with two binding crossings on every operation.
-    var caps = samba_caps(entries)
-    if Int(py=caps[SAMBA_CAP_MODE]) != want or Bool(py=caps[SAMBA_CAP_VENDOR] != py_item(context, nk[].k_vendor)):
-        raise Error("Samba: native training mode/vendor admission mismatch")
-    return entries
 
 
 def samba_experiment(entries: PythonObject) raises -> PythonObject:
@@ -241,7 +199,7 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
     _ = generation_initialize_binding(py_item(py_item(context, nk[].k_neural), nk[].k_generation_classes))
     var bi = native_loaded_module("builtins")
     var fields = samba_fields(model)
-    var entries = samba_entries(context, py_item(fields, nk[].k_numeric_mode))
+    var route = samba_route(model, fields, context)
     var opt = samba_fields(py_item(fields, nk[].k_optimizer))
     var lease = OptimizerOwnerLease(py_item(fields, nk[].k_optimizer))
     var owner = lease.value.downcast_value_ptr[OptimizerOwner]()
@@ -270,8 +228,8 @@ def samba_snapshot(model: PythonObject, copy_arrays: Bool, context: PythonObject
     var result = bi.dict()
     py_setitem(result, nk[].k_schema, "mojolearn.samba-stack-state.v1")
     py_setitem(result, nk[].k_profile, "mojolearn.samba-stack.fp32.v1")
-    py_setitem(result, nk[].k_experiment_profile, samba_experiment(entries))
-    py_setitem(result, nk[].k_numeric_mode, py_item(context, nk[].k_mode))
+    py_setitem(result, nk[].k_experiment_profile, samba_experiment(route.entries))
+    py_setitem(result, nk[].k_numeric_mode, route.mode)
     py_setitem(result, nk[].k_config, samba_config_dict(py_item(fields, nk[].k_config)))
     py_setitem(result, nk[].k_registry, _samba_registry(py_item(fields, nk[].k_config)))
     py_setitem(result, nk[].k_parameters, generation_copy(py_item(fields, nk[].k_flat)) if copy_arrays else py_item(fields, nk[].k_flat))
@@ -303,7 +261,9 @@ def samba_validate_state(state: PythonObject, context: PythonObject) raises -> P
     var nk = samba_keys()
     _ = generation_initialize_binding(py_item(py_item(context, nk[].k_neural), nk[].k_generation_classes))
     var bi = native_loaded_module("builtins")
-    var entries = samba_entries(context, py_item(state, nk[].k_numeric_mode))
+    # A state has no stack: the process route, admitted for its mode word.
+    var process = samba_route_process(py_item(state, nk[].k_numeric_mode), context)
+    var entries = process.entries
     if String(py_get(state, nk[].k_schema)) != "mojolearn.samba-stack-state.v1" or String(py_get(state, nk[].k_profile)) != "mojolearn.samba-stack.fp32.v1":
         raise Error("Samba: state schema/profile mismatch")
     if Bool(py=py_get(state, nk[].k_experiment_profile, PythonObject("baseline")) != samba_experiment(entries)):
@@ -408,12 +368,17 @@ def _samba_publish_checked(model: PythonObject, checked: PythonObject, context: 
 def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
     var nk = samba_keys()
     var bi = native_loaded_module("builtins")
-    var config = py_item(samba_fields(model), nk[].k_config)
+    var fields = samba_fields(model)
+    var config = py_item(fields, nk[].k_config)
     py_setattr(model, "_blocks", bi.list())
-    var route = PythonObject("cpu" if py_item(context, nk[].k_vendor) is None or String(py_item(context, nk[].k_vendor)) == "cpu" else "gpu")
+    # The stack's one route (bindings/samba_route_unpack.mojo), resolved here
+    # at construction / restoration: its blocks are built on the route's
+    # device word and its primitives are the route's image.
+    var resolved = samba_route_publish(model, fields, context)
+    var route = resolved.blocks
     var nc = py_item(context, nk[].k_neural)
     # Immutable ABI connection occurs once at model construction/restoration.
-    _ = neural_descriptor_cached(samba_fields(model), samba_entries(context, model.numeric_mode),
+    _ = neural_descriptor_cached(fields, resolved.entries,
         "_native_primitives", "neural_primitives_api_v1", String(PRIMITIVE_ABI_NAME), True)
     # Samba preserves its training block interfaces on CPU-only installs too.
     # The execution route still selects the installed native CPU kernels; only
@@ -453,11 +418,21 @@ def samba_build_blocks(model: PythonObject, context: PythonObject) raises:
 
 def samba_from_state(state: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = samba_keys()
+    return samba_from_state(state, py_item(context, nk[].k_model_class), PythonObject(None), context)
+
+
+def samba_from_state(state: PythonObject, cls: PythonObject, device: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A stack of class `cls` from a state, on `device` (None: this
+    installation's device). The device is refused before the state is
+    validated; the stack's route is resolved once, by `samba_build_blocks`."""
+    var nk = samba_keys()
+    samba_device_admit(device, py_item(state, nk[].k_numeric_mode), context)
     var checked = samba_validate_state(state, context)
     var bi = native_loaded_module("builtins")
-    var model = py_call(bi.object.__new__, py_item(context, nk[].k_model_class))
+    var model = py_call(bi.object.__new__, cls)
     var config = samba_config_from_dict(py_item(context, nk[].k_config_class), py_item(checked, nk[].k_config))
     py_setattr(model, "config", config)
+    py_setattr(model, "device", device)
     py_setattr(model, "numeric_mode", py_item(checked, nk[].k_numeric_mode))
     py_setattr(model, "flat", py_item(checked, nk[].k_parameters))
     # lane x56d: the registry a kernel reads is read-only (see samba_view)
@@ -515,7 +490,9 @@ def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObjec
     var nk = samba_keys()
     var bi = native_loaded_module("builtins")
     var device_plan = samba_optimizer_device_plan()
-    var entries = samba_entries(context, py_item(state, nk[].k_numeric_mode))
+    # A state has no stack: the process route, resolved once for the call.
+    var route = samba_route_process(py_item(state, nk[].k_numeric_mode), context)
+    var entries = route.entries
     if Int(py=py_call(bi.int, device_plan.setting)) > 1:
         for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:  # driver-loop: over cooperative native capability metadata
             if not Bool(py=py_call(bi.hasattr, entries, name)) or Int(py=_native_function(entries, name)()) != 1:
@@ -565,7 +542,7 @@ def samba_apply_gradients_from_state(state: PythonObject, gradients: PythonObjec
     var addresses: List[Int] = [Int(py=py_item(result, nk[].k_parameters)._addr), Int(py=flat_gradient._addr),
         Int(py=py_item(result, nk[].k_exp_avg)._addr), Int(py=py_item(result, nk[].k_exp_avg_sq)._addr), Int(py=offsets._addr),
         Int(py=py_item(result, nk[].k_buf_initialized)._addr), Int(py=info._addr)]
-    var written = samba_primitive(samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, py_item(state, nk[].k_numeric_mode))),
+    var written = samba_primitive(route.primitives(),
         SAMBA_PRIM_OPTIMIZER_STEP, addresses, ints, floats)
     _ = info  # keep the Python owner alive through the native call above
     _ = flat_gradient

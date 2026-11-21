@@ -11,6 +11,7 @@ from bindings.native_transport_door import _transport_json
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, py_ints
 from bindings.causal_checkpoint_door import checkpoint_array
 from bindings.samba_state_native_door import samba_snapshot, samba_from_state, _samba_registry
+from bindings.samba_route_unpack import samba_device_admit
 from bindings.samba_config_native_door import samba_config_from_dict
 from bindings.sha256_door import sha256_update, sha256_digest
 from core.sha256 import sha256_hex_addr
@@ -211,11 +212,18 @@ def samba_checkpoint_read(value: PythonObject, context: PythonObject) raises -> 
     return result
 
 
-def samba_checkpoint_load(cls: PythonObject, path: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+def samba_checkpoint_load(cls: PythonObject, path: PythonObject, mode: PythonObject, device: PythonObject,
+    context: PythonObject) raises -> PythonObject:
     var nk = samba_keys()
+    # The device is refused before the file is read (a given mode decides the
+    # tier of the rule; without one the saved mode is checked again, with the
+    # state, by `samba_from_state`).
+    if mode is not None:
+        samba_device_admit(device, mode, context)
     var state = samba_checkpoint_read(path, context)
     if mode is not None:
         py_setitem(state, nk[].k_numeric_mode, mode)
-    var selected = py_call(native_loaded_module("builtins").dict, context)
-    py_setitem(selected, nk[].k_model_class, cls)
-    return samba_from_state(state, selected)
+    # The class is passed as a value: the restored stack's route is held for
+    # the connection context itself, not for a per-load copy of it (the copy
+    # made every restored stack miss its route at its first operation).
+    return samba_from_state(state, cls, device, context)

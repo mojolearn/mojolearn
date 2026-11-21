@@ -14,8 +14,9 @@ comptime OPT_LAZY_MOMENTS = not is_defined["MOJOLEARN_OPT_LAZY_MOMENTS_OFF"]()
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array
 from bindings.generator_state_native_unpack import generator_fields
 from bindings.generator_state_native_pack import generator_init, generator_validate, generator_next
-from bindings.samba_state_native_door import samba_fields, samba_entries, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot, samba_entry_key, samba_primitive
-from core.samba_entry_table import samba_ref, SAMBA_TABLE_TRAINING, SAMBA_PRIM_NEURAL_RNG
+from bindings.samba_state_native_door import samba_fields, samba_view, _samba_registry, samba_build_blocks, samba_schedule_snapshot, samba_primitive
+from bindings.samba_route_unpack import samba_route_process, samba_device_admit
+from core.samba_entry_table import SAMBA_PRIM_NEURAL_RNG
 from bindings.causal_lm_construct_door import _model_f32, _model_shape
 from bindings.py_balanced import py_call, py_setitem, py_setattr, py_get
 from bindings.py_model_records import bump_model_generation
@@ -69,11 +70,12 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
     var generator = fields["generator"]
     var rng = generator_fields(generator)
     _ = generator_validate(rng["seed"], rng["counter"])
-    # samba_entries keeps its mode/vendor admission; the RNG below calls the
-    # training image's primitive entry resolved once here (op 6, the former
-    # `neural_rng` Python entry; lane entangled-native-modules, 2026-11-12).
-    _ = samba_entries(context, rng["numeric_mode"])
-    var primitives = samba_ref[SAMBA_TABLE_TRAINING](samba_entry_key(context, rng["numeric_mode"]))
+    # The RNG below calls the training image's primitive entry (op 6, the
+    # former `neural_rng` Python entry), admitted for the GENERATOR's mode
+    # word as before. The stack's device was admitted by `samba_construct`
+    # before any field: on every installation a constructed stack runs this
+    # installation's device, so the process route is the stack's route.
+    var primitives = samba_route_process(rng["numeric_mode"], context).primitives()
     var seed = rng["seed"]
     var low = Int(py=seed & PythonObject(0xffffffff))
     var high = Int(py=(seed >> PythonObject(32)) & PythonObject(0xffffffff))
@@ -126,7 +128,10 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     if (weights is None) == (generator is None):
         raise Error("SambaStack: pass exactly one of weights= or generator=")
     var mode = args[10]
-    _ = samba_entries(context, mode)
+    # The device, checked before any field is published (shared words); the
+    # mode and vendor admission of the connected binding follows it.
+    samba_device_admit(args[11], mode, context)
+    _ = samba_route_process(mode, context)
     var accumulation = Int(py=py_call(bi.int, args[9]))
     if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:
         raise Error("SambaStack: accumulation_steps must be a power of two >= 1")
@@ -137,6 +142,7 @@ def samba_construct(model: PythonObject, args: PythonObject, context: PythonObje
     var fields = samba_fields(model)
     py_setitem(fields, "config", config)
     py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "device", args[11])
     py_setitem(fields, "n_total", n)
     var flat = generation_array([n])
     # lane x56d: the registry a kernel reads is read-only; the native
