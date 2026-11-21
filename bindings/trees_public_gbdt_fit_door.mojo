@@ -69,6 +69,8 @@ from gbdt.trees_gbdt_fit_run import (
 from bindings.trees_keys_unpack import trees_keys
 from bindings.operation_names_trees import TREES_OPN_TREES_GBDT_BOOSTING_TYPE, TREES_OPN_TREES_GBDT_LEARNING_RATE
 from bindings.py_balanced import py_item
+from bindings.trees_route_boundary_door import trees_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 
 comptime _UNSET = -1.0
 
@@ -1150,13 +1152,36 @@ def _parsed_real(value: PythonObject, context: PythonObject) raises -> Float64:
 
 
 def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`GradientBoosting.__init__`: every refusal in the constructor's
-    order and wording, then the stored parameters (normalized as it
-    normalized them) and the unfitted state."""
+    """`GradientBoosting.__init__` (and, through the two subclass
+    constructors, `OrderedRMSE` / `ExperimentalTwoLevelFeatureFreq`):
+    `device` is the last constructor parameter name, checked here, where it
+    is given, in the shared words before any field is published (None is one
+    identity compare); then every refusal in the constructor's order and
+    wording and the stored parameters; the estimator's device route is
+    dropped once they are stored (this constructor is also `set_params`'
+    rebuild), so the next operation resolves it once."""
+    var nk = trees_keys()
+    var count = len(py_item(_tables(context), nk[].k_init_names))
+    if len(args) < count:
+        raise Error("TypeError: the GradientBoosting constructor takes its " + String(count) + " parameters")
+    trees_device_admit(args[count - 1], context)
+    var done = _gbdt_store(model, args, context)
+    device_route_clear(model)
+    return done
+
+
+def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The constructor's refusals, in its order and wording, then the stored
+    parameters (normalized as it normalized them) and the unfitted state.
+    `device` is stored as given: its check is the caller's (the public
+    constructor above; the adapter's learner takes the adapter's value,
+    checked when the adapter was constructed, so a fit checks nothing)."""
     var b = _b()
     var t = _tables(context)
     var nk = trees_keys()
     var names = py_item(t, nk[].k_init_names)
+    if len(args) < len(names):
+        raise Error("TypeError: the GradientBoosting constructor takes its " + String(len(names)) + " parameters")
     var kw = Python.dict()
     for i in range(len(names)):  # driver-loop: over the constructor parameter names
         py_setitem(kw, names[i], args[i])
@@ -1396,6 +1421,7 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
         Python.tuple("feature_fraction", py_item(kw, nk[].k_feature_fraction)), Python.tuple("feature_border_type", border),
         Python.tuple("boosting_type", boosting), Python.tuple("fold_len_multiplier", py_call_typed(b.float, fold_len)),
         Python.tuple("fold_permutation_block", PythonObject(None) if block is None else py_call_typed(b.int, block)),
+        Python.tuple("device", py_item(kw, nk[].k_device)),
         Python.tuple("model_", PythonObject(None)), Python.tuple("loss_curve_", PythonObject(None)),
         Python.tuple("test_loss_curve_", PythonObject(None)), Python.tuple("best_iteration_", PythonObject(None)),
         Python.tuple("stopped_early_", PythonObject(None)), Python.tuple("learning_rate_", PythonObject(None)),
@@ -1474,8 +1500,8 @@ def gbdt_ordered_construct(model: PythonObject, args: PythonObject, context: Pyt
     l2_leaf_reg, border_count)`: the ordered settings' checks, then the
     GradientBoosting constructor with loss RMSE, no boost-from-average and
     nan_mode Forbidden."""
-    if py_type(args) is not _b().tuple or (len(args) != 5 and len(args) != 6):
-        raise Error("TypeError: the OrderedRMSE constructor takes its five parameters and numeric_mode")
+    if py_type(args) is not _b().tuple or len(args) < 5 or len(args) > 7:
+        raise Error("TypeError: the OrderedRMSE constructor takes its five parameters, numeric_mode and device")
     ordered_option_values(Python.tuple(args[0], args[1], args[4], args[2], args[3]), context)
     _gbdt_subclass_storage(model, Python.tuple("numeric_mode"), context)
     var overrides = Python.dict()
@@ -1488,8 +1514,11 @@ def gbdt_ordered_construct(model: PythonObject, args: PythonObject, context: Pyt
     py_setitem(overrides, nk[].k_border_count, args[4])
     py_setitem(overrides, nk[].k_boost_from_average, PythonObject(False))
     py_setitem(overrides, nk[].k_nan_mode, PythonObject("Forbidden"))
+    if len(args) == 7:
+        # Checked and stored by the GradientBoosting constructor below.
+        py_setitem(overrides, nk[].k_device, args[6])
     _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
-    _gbdt_store_mode(model, args[5] if len(args) == 6 else PythonObject(None))
+    _gbdt_store_mode(model, args[5] if len(args) >= 6 else PythonObject(None))
     return PythonObject(None)
 
 
@@ -1498,8 +1527,8 @@ def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context
     l2_leaf_reg, random_state)`: the GradientBoosting constructor (one
     depth-two RMSE tree), then the sources: at least two distinct integers."""
     var b = _b()
-    if py_type(args) is not b.tuple or (len(args) != 4 and len(args) != 5):
-        raise Error("TypeError: the FeatureFreq constructor takes its four parameters and numeric_mode")
+    if py_type(args) is not b.tuple or len(args) < 4 or len(args) > 6:
+        raise Error("TypeError: the FeatureFreq constructor takes its four parameters, numeric_mode and device")
     _gbdt_subclass_storage(model, Python.tuple("numeric_mode", "sources"), context)
     var overrides = Python.dict()
     var nk = trees_keys()
@@ -1509,8 +1538,11 @@ def gbdt_feature_freq_construct(model: PythonObject, args: PythonObject, context
     py_setitem(overrides, nk[].k_learning_rate, args[1])
     py_setitem(overrides, nk[].k_l2_leaf_reg, args[2])
     py_setitem(overrides, nk[].k_random_state, args[3])
+    if len(args) == 6:
+        # Checked and stored by the GradientBoosting constructor below.
+        py_setitem(overrides, nk[].k_device, args[5])
     _ = gbdt_initialize(model, _gbdt_base_args(model, overrides, context), context)
-    _gbdt_store_mode(model, args[4] if len(args) == 5 else PythonObject(None))
+    _gbdt_store_mode(model, args[4] if len(args) >= 5 else PythonObject(None))
     var parsed = Python.list()
     try:
         var items = py_call_typed(b.tuple, args[0])
@@ -1577,7 +1609,10 @@ def _new_learner(model: PythonObject, mode: PythonObject, context: PythonObject)
             _ = py_call(args.append, loss)
         else:
             _ = py_call(args.append, py_get(params, name, py_item(context, nk[].k_trees_defaults)[learner_cls][name]))
-    _ = gbdt_initialize(learner, py_call(b.tuple, args), context)
+    # The learner is a new object (no route to drop) and its `device` is the
+    # adapter's own stored value (the learner's parameter names end with it),
+    # checked when the adapter was constructed: nothing is checked per fit.
+    _ = _gbdt_store(learner, py_call(b.tuple, args), context)
     py_setitem(py_fields(learner), nk[].k_numeric_mode, mode)
     return learner
 
