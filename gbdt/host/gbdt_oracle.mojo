@@ -2776,11 +2776,22 @@ def _oracle_move_to(
     then `add_bin_model_value_kernel` (`kernel_add_model_value.mojo:
     114-183`), a plain add per row."""
     var shift = List[Float32](length=len(new_point), fill=Float32(0.0))
-    for i in range(len(new_point)):
+    for i in range(len(new_point)):  # driver-loop: over the leaves
         shift[i] = new_point[i] - current_point[i]
-    for pos in range(n_rows):
-        g_cursor[pos] = g_cursor[pos] + shift[bins[pos]]
-    for i in range(len(new_point)):
+    # rows are the units (one device thread a row, one add each)
+    var units = _gbdt_units(n_rows, 2 * n_rows)
+    var chunk = (n_rows + units - 1) // units
+    var shift_p = rebind[HostF32Ptr](shift.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm shift_p, imm bins_p, imm cursor_p}:
+        for pos in range(unit * chunk, min((unit + 1) * chunk, n_rows)):
+            cursor_p[pos] = cursor_p[pos] + shift_p[bins_p[pos]]
+
+    host_parallelize(rows, units)
+    _ = len(shift)
+    for i in range(len(new_point)):  # driver-loop: over the leaves
         current_point[i] = new_point[i]
 
 
@@ -2807,29 +2818,44 @@ def _oracle_eval(
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
     var has_weights = len(g_weights) > 0
-    var weight = Float32(1.0)
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par): the unit is the kernel's 256-thread
+    # block, which writes its rows' two planes and folds its own score
+    # partial through its own halving tree; a task takes a run of blocks
+    var units = _gbdt_units(blocks, 16 * n_rows)
+    var chunk = (blocks + units - 1) // max(units, 1)
+    var target_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var weights_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm chunk, imm blocks, imm n_rows, imm border, imm has_weights, imm target_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                if has_weights:
-                    weight = g_weights[i]
-                var r = _cross_entropy_row(g_target[i], g_cursor[i], border, weight)
-                stats[i] = r.weighted_direction
-                stats[n_rows + i] = r.weighted_scale
-                s_score[t] = r.score
-        fv[b] = _halving_fold(s_score)
+        for b in range(unit * chunk, min((unit + 1) * chunk, blocks)):
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                var score = Float32(0.0)
+                if i < n_rows:
+                    var weight = Float32(1.0)
+                    if has_weights:
+                        weight = weights_p[i]
+                    var r = _cross_entropy_row(target_p[i], cursor_p[i], border, weight)
+                    stats_p[i] = r.weighted_direction
+                    stats_p[n_rows + i] = r.weighted_scale
+                    score = r.score
+                s_score[t] = score
+            fv_p[b] = _halving_fold(s_score)
+
+    host_parallelize(score_blocks, units)
     gradient.clear()
     cached_der2.clear()
-    for leaf in range(len(sizes)):
-        gradient.append(
-            Float64(_partition_stat(stats, n_rows, 0, offsets[leaf], sizes[leaf]))
-        )
-        cached_der2.append(
-            Float64(_partition_stat(stats, n_rows, 1, offsets[leaf], sizes[leaf]))
-            + lambda_reg
-        )
+    # `compute_partition_stats` per leaf, the chunks across the cores
+    var leaf_stats = _partition_stats_level(
+        stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, len(sizes)
+    )
+    for leaf in range(len(sizes)):  # driver-loop: over the leaves
+        gradient.append(Float64(leaf_stats[2 * leaf]))
+        cached_der2.append(Float64(leaf_stats[2 * leaf + 1]) + lambda_reg)
     # lane cpu4-gbdt: the oracle's value fold is the device's
     # `deterministic_sum_lanes_kernel[1]` order (was an ascending chain)
     value = Float64(_deterministic_sum_lanes(fv, 1, blocks)[0])
@@ -2886,31 +2912,56 @@ def _estimate_leaves(
     var n_leaves = len(sizes)
     var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
-    for pos in range(n_rows):
-        g_target[pos] = targets[row_index[pos]]
-        g_cursor[pos] = cursor[row_index[pos]]
     # the weighted arm gathers the weights in the same bin order
     var has_weights = len(weights) > 0
     var g_weights = List[Float32]()
     if has_weights:
         g_weights = List[Float32](length=n_rows, fill=Float32(0.0))
-        for pos in range(n_rows):
-            g_weights[pos] = weights[row_index[pos]]
-    # `fill_bins_from_partition_kernel` (`kernel_add_model_value.mojo:186-204`)
     var bins = List[Int](length=n_rows, fill=0)
-    for leaf in range(n_leaves):
-        for k in range(sizes[leaf]):
-            bins[offsets[leaf] + k] = leaf
+    # THE SPLIT (lane gbdt-host-par): the gathers and
+    # `fill_bins_from_partition_kernel` (`kernel_add_model_value.mojo:186-
+    # 204`) move values, one position a device thread; a task owns a run of
+    # positions and writes the leaf of each (a leaf's range clipped to it)
+    var units = _gbdt_units(n_rows, 6 * n_rows)
+    var chunk = (n_rows + units - 1) // units
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var gt_p = rebind[HostF32Ptr](g_target.unsafe_ptr())
+    var gc_p = rebind[HostF32Ptr](g_cursor.unsafe_ptr())
+    var gw_p = rebind[HostF32Ptr](g_weights.unsafe_ptr())
+    var bins_p = rebind[GbdtIntPtr](bins.unsafe_ptr())
+
+    def gather(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm row_p, imm off_p, imm sz_p, imm gt_p, imm gc_p, imm gw_p, imm bins_p}:
+        var lo = unit * chunk
+        var hi = min(lo + chunk, n_rows)
+        for pos in range(lo, hi):
+            var row = row_p[pos]
+            gt_p[pos] = targets_p[row]
+            gc_p[pos] = cursor_p[row]
+            if has_weights:
+                gw_p[pos] = weights_p[row]
+        for leaf in range(n_leaves):
+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
+                bins_p[pos] = leaf
+
+    host_parallelize(gather, units)
     # WeightsCpu (`pointwise_oracle.mojo`, `make_bin_optimized_oracle`): the
     # exact leaf sizes unweighted; weighted, `compute_partition_stats` of the
     # gathered weights at ONE stat, (2 * 32 + 1 - 1) // 1 = 64 chunks
     var weights_cpu = List[Float64]()
-    for leaf in range(n_leaves):
-        if has_weights:
-            weights_cpu.append(Float64(_pinned_partition_stat(
-                g_weights, offsets[leaf], sizes[leaf], 2 * GBDT_PINNED_SM
-            )))
-        else:
+    if has_weights:
+        var weight_sums = List[Float32](length=n_leaves, fill=Float32(0.0))
+        _pinned_partition_stats(
+            g_weights, offsets, sizes, 2 * GBDT_PINNED_SM, weight_sums
+        )
+        for leaf in range(n_leaves):  # driver-loop: over the leaves
+            weights_cpu.append(Float64(weight_sums[leaf]))
+    else:
+        for leaf in range(n_leaves):  # driver-loop: over the leaves
             weights_cpu.append(Float64(sizes[leaf]))
     var lambda_reg = Float64(l2_leaf_reg)
     comptime if GBDT_ORACLE_HOST_SABOTAGE:
@@ -2965,6 +3016,40 @@ def _estimate_leaves(
         if not accepted:
             break
     return cur_point^
+
+
+def _apply_leaves(
+    mut cursor: List[Float32],
+    row_index: List[Int],
+    offsets: List[Int],
+    sizes: List[Int],
+    leaves: List[Float32],
+    rate: Float32,
+    n_rows: Int,
+):
+    """`cursor[row] = identical_mul_add(leaves[leaf], rate, cursor[row])`
+    for every row of every leaf of a partition (the weak model onto a
+    cursor, one device thread a row, one pinned fma each). A row is in one
+    leaf, so rows are the units: a task owns a run of positions and visits
+    each leaf's range clipped to it; `_gbdt_units` tasks."""
+    var n_leaves = len(sizes)
+    var units = _gbdt_units(n_rows, 4 * n_rows)
+    var chunk = (n_rows + units - 1) // units
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
+    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
+    var leaves_p = rebind[HostF32Ptr](leaves.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm rate, imm cursor_p, imm row_p, imm off_p, imm sz_p, imm leaves_p}:
+        var lo = unit * chunk
+        var hi = min(lo + chunk, n_rows)
+        for leaf in range(n_leaves):
+            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
+                var row = row_p[pos]
+                cursor_p[row] = identical_mul_add(leaves_p[leaf], rate, cursor_p[row])
+
+    host_parallelize(rows, units)
 
 
 # ===========================================================================
@@ -3681,12 +3766,10 @@ def gbdt_host_boost(
                     params.l2_leaf_reg, params.leaf_estimation_iterations,
                     weights,
                 )
-                for leaf in range(n_live):
-                    for k in range(sizes[leaf]):
-                        var row = row_index[offsets[leaf] + k]
-                        cursors[p][row] = identical_mul_add(
-                            est_p_leaves[leaf], lr, cursors[p][row]
-                        )
+                _apply_leaves(
+                    cursors[p], row_index, offsets, sizes, est_p_leaves, lr,
+                    n_rows,
+                )
             else:
                 var part = _partition_for_model(
                     cindexes[p], layout, tree_features, tree_bins, grown,
@@ -3697,12 +3780,10 @@ def gbdt_host_boost(
                     n_rows, border, params.l2_leaf_reg,
                     params.leaf_estimation_iterations, weights,
                 )
-                for leaf in range(len(part.sizes)):
-                    for k in range(part.sizes[leaf]):
-                        var row = part.row_index[part.offsets[leaf] + k]
-                        cursors[p][row] = identical_mul_add(
-                            est_p_leaves[leaf], lr, cursors[p][row]
-                        )
+                _apply_leaves(
+                    cursors[p], part.row_index, part.offsets, part.sizes,
+                    est_p_leaves, lr, n_rows,
+                )
             # the EXPORTED ensemble is the estimation permutation's
             if p == est_p:
                 estimated = est_p_leaves.copy()
