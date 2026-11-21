@@ -12,6 +12,7 @@ from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.linear_entry_table_ext import (
     XL_OP_FIT, XL_OP_FIT_FOLD, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_SPEARMAN,
+    XL_OP_HUBER_OUT,
 )
 from core.solver_entry_table import solver_cd_fit_call, solver_cd_predict_call
 from core.admitted_refusals import admitted_finite_refuse
@@ -479,3 +480,19 @@ def xl_isotonic_fit_run(request: XlFitRequest, auto: Bool, targets: Int) raises 
     _ = xl_run_fit(request.entry, request.algo, request.x, request.x_size, request.n, request.d, request.y,
                    request.y_size, ip, request.fp, request.n_out, request.n_fw, request.n_iw, request.dst)
     return sign >= 0
+
+
+def xl_huber_fit_run(request: XlFitRequest, targets: Int, flags: Int, link: Int, epsilon: Float64) raises:
+    """HuberRegressor.fit: the fit, then the outlier flag of each training
+    row (one byte at `flags`; |y - prediction| > scale * epsilon) from the
+    X the fit read, in one device session (XL_OP_HUBER_OUT). The fit's
+    first d + 1 result words are [coef | intercept], the one-row
+    coefficient block the flags call reads as it is; `scale` is the word
+    after them (`float(scale_) * epsilon`, one binary64 product)."""
+    _ = xl_fit_run(request)
+    var d = request.d
+    var thr = Float64(xl_run_word(request.dst, d + 1)) * epsilon
+    var addresses: List[Int] = [request.x, request.dst, targets, flags]
+    var ints: List[Int] = [request.n, d, link]
+    var floats: List[Float64] = [thr]
+    _ = native_descriptor_call(request.entry, XL_OP_HUBER_OUT, addresses, ints, floats)

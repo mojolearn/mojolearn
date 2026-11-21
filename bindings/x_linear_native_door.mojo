@@ -18,40 +18,47 @@
 # (no second conversion); IsotonicRegression.fit_transform transforms the
 # column the fit converted; a classifier's score scores the prediction the
 # same call decoded; Lasso / ElasticNet score the prediction buffer as it is.
-from std.ffi import c_int, c_long
 from std.math import isinf
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from core.linear_entry_table_ext import XL_OP_DECISION_ROWS, XL_OP_HUBER_OUT, XL_OP_BEST_ALPHA
+from core.linear_entry_table_ext import XL_OP_DECISION_ROWS, XL_OP_BEST_ALPHA
 from x_linear.door_run import (
-    ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV,
-    ALGO_LOGCV, ALGO_RIDGE_KFOLD, LINK_IDENTITY, LINK_EXP, xl_run_parts, xl_parts_total, xl_seed_halves,
-    xl_lbfgs_work, xl_sgd_class_floats, XlSplitWords, xl_cv_fold_ids_run, xl_cv_roles_limit, xl_cv_roles_run,
+    ALGO_SGD, ALGO_RIDGE, ALGO_ENETCV, ALGO_LOGCV, ALGO_RIDGE_KFOLD, LINK_IDENTITY, xl_run_parts, xl_parts_total,
+    xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats, XlSplitWords, xl_cv_fold_ids_run, xl_cv_roles_limit,
+    xl_cv_roles_run,
 )
 from bindings.x_linear_route_unpack import (
     XLinearOps, xl_route, xl_route_host, xl_ops_require, xl_device_admit, xl_route_drop,
 )
 from bindings.x_linear_common_unpack import (
-    _b, _op, _truth, _float, _int, _repr, _str, _gt, _ge, _lt, _le, _eq, _isinstance, _is_int, _name, _class_attr,
-    _attr, _sorted_repr, _xl_scope, _xl_call, _xl_word, _xl_float, _xl_count, _xl_slice, _xl_matrix, _xl_vector,
-    _xl_block, _xl_decision, _xl_run, _xl_fold_matrix, _xl_run_x, _xl_with_weights, _xl_owned, _xl_reals,
-    _xl_class_prep,
+    _b, _op, _truth, _float, _int, _repr, _gt, _ge, _lt, _le, _eq, _isinstance, _is_int, _name, _attr, _sorted_repr,
+    _xl_scope, _xl_call, _xl_word, _xl_float, _xl_count, _xl_slice, _xl_matrix, _xl_vector, _xl_decision, _xl_run,
+    _xl_fold_matrix, _xl_run_x, _xl_with_weights, _xl_owned, _xl_reals, _xl_class_prep,
 )
 from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
 from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
 from bindings.x_linear_cd_pack import xl_cd_fit_pack, xl_cd_predict_pack
-from bindings.x_linear_common_unpack import xl_decision_released, _xl_bayes_refuse
+from bindings.x_linear_common_unpack import xl_decision_released
 from bindings.x_linear_infer_unpack import (
     xl_regressor_predict_unpack, xl_decision_function_unpack, xl_classifier_predict_unpack,
     xl_predict_proba_unpack, xl_one_class_unpack,
 )
 from bindings.x_linear_infer_pack import xl_scores_pack, xl_classifier_predict_pack, xl_one_class_predict_pack
 from x_linear.door_run import xl_isotonic_fit_run
-from bindings.x_linear_common_unpack import xl_fit_released, _xl_or
+from bindings.x_linear_common_unpack import xl_fit_released
 from bindings.x_linear_isotonic_unpack import (
     xl_isotonic_fit_unpack, xl_isotonic_transform_unpack, xl_isotonic_refit_transform_unpack,
 )
 from bindings.x_linear_isotonic_pack import xl_isotonic_fit_pack, xl_isotonic_transform_pack
+from x_linear.door_run import xl_huber_fit_run
+from bindings.x_linear_regressors_unpack import (
+    xl_fit_glm_unpack, xl_fit_huber_unpack, xl_fit_bayes_unpack, xl_fit_ard_unpack, xl_fit_lars_unpack,
+    xl_fit_quantile_unpack,
+)
+from bindings.x_linear_regressors_pack import (
+    xl_fit_glm_pack, xl_fit_huber_pack, xl_fit_bayes_pack, xl_fit_ard_pack, xl_fit_lars_pack,
+    xl_fit_quantile_pack, _xl_set_linear,
+)
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
@@ -65,7 +72,6 @@ from bindings.classical_attributes_door import _type_mro
 from bindings.mode_metadata_native_door import _class_fields
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.py_lists import py_list_int
 from bindings.classical_exceptions_door import classical_require_fitted
 from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.classical_arrays_door import classical_address
@@ -410,167 +416,29 @@ def xl_classifier_score(model: PythonObject, args: PythonObject, entries: XLinea
 
 
 # ------------------------------------------------------------ regressors
-
-
-def _xl_set_linear(fields: PythonObject, out_buf: PythonObject, d: Int, context: PythonObject) raises:
-    """coef_ = vals[:d] (float32 Array), intercept_ = float(vals[d])."""
-    var nk = x_linear_keys()
-    py_setitem(fields, nk[].k_coef_, _xl_slice(out_buf, 0, d, Python.tuple(d), context))
-    py_setitem(fields, nk[].k_intercept_, _xl_float(out_buf, d))
-
-
-def _xl_tweedie_link(fields: PythonObject) raises -> Int:
-    """TweedieRegressor._link_code."""
-    var nk = x_linear_keys()
-    var p = _float(py_item(fields, nk[].k_power))
-    if p < 0 or (p > 0 and p < 1):
-        raise Error("mojolearn TweedieRegressor: power=" + _str(PythonObject(p)) + " is not implemented (power 0 or >= 1)")
-    var link = py_item(fields, nk[].k_link)
-    if _eq(link, PythonObject("auto")):
-        return 0 if p == 0 else 1
-    if _eq(link, PythonObject("identity")):
-        if p != 0:
-            raise Error("mojolearn TweedieRegressor: the identity link is implemented for power=0 only")
-        return 0
-    if _eq(link, PythonObject("log")):
-        return 1
-    raise Error("mojolearn TweedieRegressor: link must be 'auto', 'identity' or 'log'")
+# Each fit is UNPACK (bindings/x_linear_regressors_unpack.mojo), RUN
+# (x_linear/door_run.mojo `xl_fit_run`, GIL released, no Python object) and
+# PACK (bindings/x_linear_regressors_pack.mojo).
 
 
 def xl_fit_glm(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """`_GLMBase.fit(X, y, sample_weight)`: Poisson, Gamma and Tweedie."""
-    var nk = x_linear_keys()
     var fields = py_fields(model)
-    var name = _name(model)
-    if not py_contains(Python.tuple("lbfgs", "newton-cholesky"), py_item(fields, nk[].k_solver)):
-        raise Error("mojolearn " + name + ": solver must be 'lbfgs' or 'newton-cholesky'")
-    if _truth(py_item(fields, nk[].k_warm_start)):
-        raise Error("mojolearn " + name + ": warm_start is not implemented")
-    if not _ge(py_item(fields, nk[].k_alpha), PythonObject(0)):
-        raise Error("mojolearn " + name + ": alpha must be >= 0")
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    var y = _xl_vector(args[1], n, context)
-    # TweedieRegressor reads its own power and link; Poisson and Gamma fix
-    # them (`_power`, log link)
-    var tweedie = py_contains(fields, nk[].k_power) and py_contains(fields, nk[].k_link)
-    var link = _xl_tweedie_link(fields) if tweedie else 1
-    var power = _float(py_item(fields, nk[].k_power)) if tweedie else _float(_class_attr(model, "_power"))
-    var m = d + 1
-    var has_sw = 0
-    var yy = _xl_with_weights(y, args[2], n, has_sw, context)
-    var ip: List[Int] = [_int(py_item(fields, nk[].k_max_iter)), 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, link, has_sw]
-    var fp: List[Float64] = [power, _float(py_item(fields, nk[].k_alpha)), _float(py_item(fields, nk[].k_tol))]
-    var out = _xl_run(entries, ALGO_GLM, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
-                      d + 3, 3 * n + m * m + 3 * m, 1, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    if _xl_word(out, d + 2) < 0:
-        var loss_name = _class_attr(model, "_loss_name")
-        raise Error("Some value(s) of y are out of the valid range of the loss '"
-                    + (_str(loss_name) if _truth(loss_name) else String("HalfTweedieLoss")) + "'.")
-    _ = yy  # keep the Python object alive through the native calls above
-    _ = x  # keep the Python object alive through the native calls above
-    _xl_set_linear(fields, out, d, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(out, d + 1)))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    py_setitem(fields, nk[].k__link, PythonObject(LINK_EXP if link == 1 else LINK_IDENTITY))
-    _ = x^
-    _ = y^
-    _ = yy^
-    return model
-
-
-def _xl_huber_mask(flags: PythonObject, address: Int, count: Int) raises -> PythonObject:
-    # The private <u1 output already has one completed native flag per row.
-    # Keep its owner live while publishing directly into one final bool list.
-    ref cpy = Python().cpython()
-    var raw = cpy.lib.get_function[PyObjectPtr]("PyList_New")(count)
-    if not raw:
-        raise cpy.unsafe_get_error()
-    # Own the NULL-filled list immediately: partial failures release every
-    # initialized slot, while CPython skips the uninitialized NULL slots.
-    var out = PythonObject(from_owned=raw)
-    var box = cpy.lib.get_function[PyObjectPtr]("PyBool_FromLong")
-    var set_item = cpy.lib.get_function[c_int]("PyList_SetItem")
-    var data = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
-    for i in range(count):  # driver-loop: publish completed native Huber result bytes as Python bool slots
-        var item = box(c_long(data[i] != 0))
-        if not item:
-            raise cpy.unsafe_get_error()
-        # SetItem steals the new reference on both success and failure.
-        if set_item(out._obj_ptr, i, item) != 0:
-            raise cpy.unsafe_get_error()
-    _ = flags
-    return out
+    var call = xl_fit_glm_unpack(model, fields, args, entries, context)
+    xl_fit_released(call, model)
+    return xl_fit_glm_pack(model, fields, call, context)
 
 
 def xl_fit_huber(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """HuberRegressor.fit(X, y, sample_weight): the fit, then the outlier
-    mask of the training rows from the X the fit already holds."""
-    var nk = x_linear_keys()
+    mask of the training rows from the X the fit already holds (one RUN,
+    `xl_huber_fit_run`)."""
     var fields = py_fields(model)
-    var epsilon = py_item(fields, nk[].k_epsilon)
-    if not _ge(epsilon, PythonObject(1.0)):
-        raise Error("mojolearn HuberRegressor: epsilon must be >= 1.0")
-    if _truth(py_item(fields, nk[].k_warm_start)):
-        raise Error("mojolearn HuberRegressor: warm_start is not implemented")
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    var y = _xl_vector(args[1], n, context)
-    var intercept = _truth(py_item(fields, nk[].k_fit_intercept))
-    var p = d + 2 if intercept else d + 1
-    var has_sw = 0
-    var yy = _xl_with_weights(y, args[2], n, has_sw, context)
-    var ip: List[Int] = [_int(py_item(fields, nk[].k_max_iter)), 1 if intercept else 0, has_sw]
-    var fp: List[Float64] = [_float(epsilon), _float(py_item(fields, nk[].k_alpha)), _float(py_item(fields, nk[].k_tol))]
-    var out = _xl_run(entries, ALGO_HUBER, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
-                      d + 4 + p, xl_lbfgs_work(p) + n, 1, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _xl_set_linear(fields, out, d, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var scale = _xl_float(out, d + 1)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_scale_, scale)
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(out, d + 2)))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    # `self.predict(a)`: the fitted model on the float32 X this call holds
-    var link = _int(_attr(model, "_link", PythonObject(LINK_IDENTITY)))
-    # ne2-g-linear (N302): `float(scale_ * epsilon)` as one binary64 product
-    # in Mojo (Python's float multiply on the same two doubles).
-    var thr = _float(scale) * _float(epsilon)
-    var flags = admitted_vector(n, "<u1", context)
-    var flag_address = labels_address(flags)
-    # The prediction and |y - pred| > thr in one device session
-    # (XL_OP_HUBER_OUT). Both x_linear bindings publish it, so the former
-    # two-call path (decision, then `py2mojo_rows` ROWS_HUBER_OUT) is deleted.
-    var block = _xl_block(py_item(fields, nk[].k_coef_), py_item(fields, nk[].k_intercept_), context)
-    var wb = block[0]
-    _ = _xl_call(entries, XL_OP_HUBER_OUT, [x.address, labels_address(wb), y.address, flag_address],
-                 [n, d, link], [thr])
-    _ = wb  # keep the Python object alive through the native call above
-    _ = y  # keep the Python object alive through the native call above
-    _ = flags  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_outliers_, _xl_huber_mask(flags, flag_address, n))
-    _ = wb^
-    _ = flags^
-    _ = x^
-    _ = y^
-    _ = yy^
-    return model
+    var call = xl_fit_huber_unpack(model, fields, args, entries, context)
+    var py = Python()
+    with GILReleased(py):
+        xl_huber_fit_run(call.fit.request, call.targets, call.flags_address, call.link, call.epsilon)
+    return xl_fit_huber_pack(model, fields, call, context)
 
 
 def xl_regressor_score(model: PythonObject, args: PythonObject, entries: XLinearOps,
@@ -604,172 +472,35 @@ def xl_regressor_score(model: PythonObject, args: PythonObject, entries: XLinear
 
 def xl_fit_bayes(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """BayesianRidge.fit(X, y, sample_weight)."""
-    var nk = x_linear_keys()
     var fields = py_fields(model)
-    _xl_bayes_refuse(model, fields, PythonObject(False))
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    var y = _xl_vector(args[1], n, context)
-    var has_sw = 0
-    var yy = _xl_with_weights(y, args[2], n, has_sw, context)
-    var ip: List[Int] = [_int(py_item(fields, nk[].k_max_iter)), 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, has_sw]
-    var fp: List[Float64] = [_float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)), _float(py_item(fields, nk[].k_alpha_2)),
-                             _float(py_item(fields, nk[].k_lambda_1)), _float(py_item(fields, nk[].k_lambda_2)),
-                             _xl_or(py_item(fields, nk[].k_alpha_init), -1.0), _xl_or(py_item(fields, nk[].k_lambda_init), -1.0)]
-    var out = _xl_run(entries, ALGO_BAYES, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
-                      d + 4, 3 * d * d + 5 * d + n, 1, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _xl_set_linear(fields, out, d, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_alpha_, _xl_float(out, d + 1))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_lambda_, _xl_float(out, d + 2))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(out, d + 3)))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    _ = x^
-    _ = y^
-    _ = yy^
-    return model
+    var call = xl_fit_bayes_unpack(model, fields, args, entries, context)
+    xl_fit_released(call, model)
+    return xl_fit_bayes_pack(model, fields, call, context)
 
 
 def xl_fit_ard(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """ARDRegression.fit(X, y)."""
-    var nk = x_linear_keys()
     var fields = py_fields(model)
-    _xl_bayes_refuse(model, fields, PythonObject(False))
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    if n < 2:
-        raise Error("mojolearn ARDRegression: at least 2 samples are required")
-    var y = _xl_vector(args[1], n, context)
-    var ip: List[Int] = [_int(py_item(fields, nk[].k_max_iter)), 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0]
-    var fp: List[Float64] = [_float(py_item(fields, nk[].k_tol)), _float(py_item(fields, nk[].k_alpha_1)), _float(py_item(fields, nk[].k_alpha_2)),
-                             _float(py_item(fields, nk[].k_lambda_1)), _float(py_item(fields, nk[].k_lambda_2)), _float(py_item(fields, nk[].k_threshold_lambda))]
-    var out = _xl_run(entries, ALGO_ARD, x.address, n * d, n, d, y.address, y.rows, ip, fp,
-                      2 * d + 4, 3 * d * d + 4 * d + n, 2 * d, context)
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _xl_set_linear(fields, out, d, context)
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_alpha_, _xl_float(out, d + 1))
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_lambda_, _xl_slice(out, d + 2, d, Python.tuple(d), context))
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(out, 2 * d + 2)))
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    _ = x^
-    _ = y^
-    return model
+    var call = xl_fit_ard_unpack(model, fields, args, entries, context)
+    xl_fit_released(call, model)
+    return xl_fit_ard_pack(model, fields, call, context)
 
 
 def xl_fit_lars(model: PythonObject, args: PythonObject, lasso: Bool, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """Lars.fit(X, y) and (`lasso`) LassoLars.fit(X, y): `_lars_fit`."""
-    var nk = x_linear_keys()
     var fields = py_fields(model)
-    var name = _name(model)
-    # LassoLars has max_iter and alpha; Lars has n_nonzero_coefs
-    var max_iter: PythonObject
-    var alpha_min = Float64(0.0)
-    if lasso:
-        if not _ge(py_item(fields, nk[].k_alpha), PythonObject(0)):
-            raise Error("mojolearn LassoLars: alpha must be >= 0")
-        max_iter = py_item(fields, nk[].k_max_iter)
-        alpha_min = _float(py_item(fields, nk[].k_alpha))
-    else:
-        max_iter = py_item(fields, nk[].k_n_nonzero_coefs)
-    if _attr(model, "jitter", PythonObject(None)) is not None:
-        raise Error("mojolearn " + name + ": jitter is not implemented")
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    var y = _xl_vector(args[1], n, context)
-    var ip: List[Int] = [_int(max_iter), 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, 1 if lasso else 0,
-                         1 if _truth(_attr(model, "positive", PythonObject(False))) else 0]
-    var fp: List[Float64] = [alpha_min]
-    var out = _xl_run(entries, ALGO_LARS, x.address, n * d, n, d, y.address, y.rows, ip, fp,
-                      2 * d + 4, 2 * d * d + 8 * d, 2 * d, context)
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _xl_set_linear(fields, out, d, context)
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(out, d + 1)))
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_alpha_, _xl_float(out, d + 2))
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    var k = _xl_count(out, d + 3)
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    # the active feature indices read natively, published as one list
-    # (py_list_int), not a bound `append` call per feature
-    var active_words = List[Int](capacity=max(k, 0))
-    for i in range(k):  # driver-loop: over the active features (model structure)
-        active_words.append(_xl_count(out, d + 4 + i))
-    _ = out  # keep the result words alive through the reads above
-    _ = y  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_active_, py_list_int(active_words))
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    _ = x^
-    _ = y^
-    return model
+    var call = xl_fit_lars_unpack(model, fields, args, lasso, entries, context)
+    xl_fit_released(call, model)
+    return xl_fit_lars_pack(model, fields, call, context)
 
 
 def xl_fit_quantile(model: PythonObject, args: PythonObject, entries: XLinearOps, context: PythonObject) raises -> PythonObject:
     """QuantileRegressor.fit(X, y, sample_weight)."""
-    var nk = x_linear_keys()
     var fields = py_fields(model)
-    var q = py_item(fields, nk[].k_quantile)
-    if not (_lt(PythonObject(0), q) and _lt(q, PythonObject(1))):
-        raise Error("mojolearn QuantileRegressor: quantile must be strictly between 0 and 1")
-    if not _ge(py_item(fields, nk[].k_alpha), PythonObject(0)):
-        raise Error("mojolearn QuantileRegressor: alpha must be >= 0")
-    xl_ops_require(entries)
-    var x = _xl_matrix(args[0], _name(model), context)
-    var n = x.rows
-    var d = x.cols
-    var y = _xl_vector(args[1], n, context)
-    var m = d + 1
-    var has_sw = 0
-    var yy = _xl_with_weights(y, args[2], n, has_sw, context)
-    var tol = py_item(fields, nk[].k_tol)
-    var ip: List[Int] = [_int(py_item(fields, nk[].k_max_iter)), 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, has_sw]
-    var fp: List[Float64] = [_float(q), _float(py_item(fields, nk[].k_alpha)), _float(py_call(_op().truediv, tol, PythonObject(100.0))),
-                             _float(tol), 1.0]  # fp[4]: unread since MOJOLEARN_XQ_ABS_BALANCE went (TOMBSTONE in x_linear/quantile.mojo)
-    var out = _xl_run(entries, ALGO_QUANTILE, x.address, n * d, n, d, yy.address, yy.rows, ip, fp,
-                      d + 3, m * m + 3 * m + 4 * n + 3 * d, 1, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    _xl_set_linear(fields, out, d, context)
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_iter_, PythonObject(_xl_count(out, d + 1)))
-    _ = yy  # keep the Python object alive through the native call above
-    _ = x  # keep the Python object alive through the native call above
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
-    _ = x^
-    _ = y^
-    _ = yy^
-    return model
+    var call = xl_fit_quantile_unpack(model, fields, args, entries, context)
+    xl_fit_released(call, model)
+    return xl_fit_quantile_pack(model, fields, call, context)
+
 
 
 # ----------------------------------------------------------- classifiers
