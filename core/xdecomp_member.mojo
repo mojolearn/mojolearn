@@ -1910,7 +1910,8 @@ def _import_rp(slot: _Slot, call: _Call) raises:
 # LIFETIME: the state OWNS every matrix. Training X is the kit's admission
 # copy (`from_snapshot`: a host copy or a device upload, the one copy the
 # door's fit makes too) exported into the state; nothing points into a fit
-# buffer after FIT returns (no MEMBER_BORROWS_FIT when that bit lands).
+# buffer after FIT returns: MEMBER_BORROWS_FIT is clear for both kinds (as
+# for every XDecomp kind: each copies what it keeps, SparseCoder included).
 # MEMBER_CAN_TEST_ROWS is NOT set: from_snapshot refuses non-finite X in
 # every fit / transform, but whether those are the estimator's first words
 # (the door's own admission runs before it) was not read; the caller scans.
