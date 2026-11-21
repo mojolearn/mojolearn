@@ -84,6 +84,9 @@ comptime AFN_LM_BWD_FUSE = BYTE_LM_FAST_APPLE and (
 # Same 12-step task and provenance, evidence results/F08/views; promoting
 # NOSYNC does not claim the unmeasured combination with views or fusion.
 # T03 AFN26 alias: not tested in this campaign; historical evidence above stands.
+# 2026-11-20 (lane fx-percall-copies): the views are the one form of training/byte_lm.mojo on every column and in
+# both modes (the copies were repeated work on unchanged data; no float operation, no bits). This define has no
+# reader left there and selects nothing; the name stays declared for the paused Apple fast programme's records.
 comptime AFN_LM_PARAM_VIEWS = BYTE_LM_FAST_APPLE and (
     is_defined["MOJOLEARN_AFN_LM_PARAM_VIEWS"]() or _AFN_LM_ALL
     or is_defined["MOJOLEARN_AFN26_LM_PARAM_VIEWS"]()

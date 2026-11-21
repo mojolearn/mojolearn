@@ -264,6 +264,32 @@ comptime XD_FAST_SVD_ONE_BLOCK = is_defined["MOJOLEARN_XD_FAST_SVD_ONE_BLOCK"]()
 # min-cov-det/istella fit 8.91x on NVIDIA (see `_eigh_par_test`). Every mode, every vendor (the same words).
 comptime XD_EIGH_ONE_BLOCK_N = 32
 
+# Lane sp-mcd-wide (2026-11-20): when MANY n x n Jacobi solves are due at once (MinCovDet's lockstep C-steps,
+# x_decomp/kit_device.mojo `DMcd._ls_eigh`), the choice is between ONE launch of the batched kernel (a block a
+# problem, every problem running at the same time, each short of threads above the cut) and the per-round
+# multi-block launches one problem after another. Cost of a round, from the two solvers' shapes: the one block
+# walks ceil((h h + n h) / RR_OFF_TPB) barrier steps whatever the batch; the serial route pays one launch pair a
+# problem. So the batch pays when batch x (steps a launch pair is worth) >= the steps of one round.
+# The one measurement of that exchange rate on record is perf-decomp-eigh's (a batch of ONE at n = 220, 142 steps
+# a round, whole fit 8.91x slower): a launch pair is worth at most 142 / 8.91 = 16 steps, "at most" because the
+# fit also held work that did not slow down. Half of it is taken, so the batch is chosen only where the model
+# says it wins by 2x at that bound. At n = 32 (3 steps) this is true at a batch of one, which is the cut above;
+# the rule is a cost of n and of the batch, not of any input. UNMEASURED as a rule: owed row mcd-wide-lockstep.
+comptime XD_EIGH_LAUNCH_PAIR_STEPS = 8
+
+
+def eigh_batch_one_block_pays(batch: Int, n: Int) -> Bool:
+    """Whether `batch` n x n Jacobi solves due together run as one launch of
+    the batched one-block kernel (True) or one after another on the
+    per-round multi-block route (False). The same words either way
+    (x_decomp/rr_batch.mojo's module note); see XD_EIGH_LAUNCH_PAIR_STEPS."""
+    if n <= XD_EIGH_ONE_BLOCK_N:
+        return True
+    var m = n + (n % 2)
+    var h = m // 2
+    var steps = (h * h + n * h + RR_OFF_TPB - 1) // RR_OFF_TPB
+    return batch * XD_EIGH_LAUNCH_PAIR_STEPS >= steps
+
 # lane fam-decomp (2026-10-04), IDENTICAL: `DevExec.qr_r` uploads the caller's
 # matrix straight from its address and takes R straight into the caller's
 # array (`_qr_r_on`: `device_qr_r`'s buffers and its one `qr_factor`), instead
@@ -2875,21 +2901,13 @@ struct DevExec(Exec):
         success the sign flip, the ascending order and the unscale into dw,
         dv (enqueued). False: refused, dw and dv not written. (The 0.8.66
         `_eigh_td_try`, outputs on the device.)"""
-        var nn = n * n
-        var dwork = ctx.enqueue_create_buffer[DType.float32](nn)
-        ctx.enqueue_function[td_copy_kernel](
-            da.unsafe_ptr(), dwork.unsafe_ptr(), Int32(nn), grid_dim=_pj_blocks(nn), block_dim=PJ_TPB
-        )
-        # the Jacobi's power-of-two range scale on the copy
-        var dfac = enqueue_es_scale(ctx, _p(dwork), 1, n)
-        var dz = ctx.enqueue_create_buffer[DType.float32](nn)
+        var dz = ctx.enqueue_create_buffer[DType.float32](n * n)
         var dwt = ctx.enqueue_create_buffer[DType.float32](n)
         var dinfo = ctx.enqueue_create_buffer[DType.float32](4)
         var hinfo = ctx.enqueue_create_host_buffer[DType.float32](4)
-        eigh_td_enqueue(ctx, dwork, n, dz, dwt, dinfo)
+        var dfac = DevExec._eigh_td_start_dev(ctx, da, n, dz, dwt, dinfo)
         ctx.enqueue_copy(dst_buf=hinfo, src_buf=dinfo)
         ctx.synchronize()
-        _ = dwork^
         _ = dinfo^
         var refused = hinfo.unsafe_ptr().unsafe_load(2) != Float32(0.0)
         _ = hinfo^
@@ -2898,17 +2916,59 @@ struct DevExec(Exec):
             _ = dz^
             _ = dwt^
             return False
+        DevExec._eigh_td_finish_dev(ctx, dz, dwt, dfac, dw, dv, n)
+        _ = dfac^
+        _ = dz^
+        _ = dwt^
+        return True
+
+    @staticmethod
+    def eigh_td_tried(n: Int) -> Bool:
+        """Whether `eigh_into` tries the tridiagonal solve first at this n
+        (its own test, for a caller that runs the two halves below itself)."""
+        comptime if EIGH_TRIDIAG_ROUTE:
+            return n >= TD_MIN_N
+        return False
+
+    @staticmethod
+    def _eigh_td_start_dev(
+        ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], n: Int, mut dz: DeviceBuffer[DType.float32],
+        mut dwt: DeviceBuffer[DType.float32], mut dinfo: DeviceBuffer[DType.float32],
+    ) raises -> DeviceBuffer[DType.float32]:
+        """`_eigh_td_try_dev`'s launches up to its wait, ENQUEUED: the work
+        copy of `da` (left untouched), the Jacobi's power-of-two range scale
+        on the copy and x_decomp/eigh_tridiag.mojo into dz (n x n), dwt (n)
+        and dinfo (4; dinfo[2] != 0 is a refusal). Returns the scale's
+        factors for `_eigh_td_finish_dev`. Nothing is read: the caller reads
+        dinfo at its own wait (lane sp-mcd-wide, 2026-11-20: MinCovDet's
+        lockstep reads every candidate's refusal word at ONE wait)."""
+        var nn = n * n
+        var dwork = ctx.enqueue_create_buffer[DType.float32](nn)
+        ctx.enqueue_function[td_copy_kernel](
+            da.unsafe_ptr(), dwork.unsafe_ptr(), Int32(nn), grid_dim=_pj_blocks(nn), block_dim=PJ_TPB
+        )
+        # the Jacobi's power-of-two range scale on the copy
+        var dfac = enqueue_es_scale(ctx, _p(dwork), 1, n)
+        eigh_td_enqueue(ctx, dwork, n, dz, dwt, dinfo)
+        _ = dwork^
+        return dfac^
+
+    @staticmethod
+    def _eigh_td_finish_dev(
+        ctx: DeviceContext, mut dz: DeviceBuffer[DType.float32], mut dwt: DeviceBuffer[DType.float32],
+        dfac: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+        mut dv: DeviceBuffer[DType.float32], n: Int,
+    ) raises:
+        """`_eigh_td_try_dev`'s launches after an accepted solve, ENQUEUED:
+        the sign flip, the ascending order and the unscale into dw (n) and
+        dv (n x n)."""
         ctx.enqueue_function[sign_flip_kernel](
             dz.unsafe_ptr(), Int32(n), grid_dim=(n, 1, 1), block_dim=(SIGNFLIP_TPB, 1, 1)
         )
         var dpos = ctx.enqueue_create_buffer[DType.int32](n)
         enqueue_eigh_ascending(ctx, _p(dwt), 1, _p(dz), n, dpos, _p(dw), _p(dv))
         enqueue_es_unscale(ctx, _p(dw), dfac, 1, n)
-        _ = dfac^
         _ = dpos^
-        _ = dz^
-        _ = dwt^
-        return True
 
     @staticmethod
     def _eigh_par_dev(

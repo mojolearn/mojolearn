@@ -19,17 +19,25 @@ seconds at the first scored call's time:
     callgrind  `valgrind --tool=callgrind --instr-atstart=no --collect-atstart=no`, instrumentation and collection on
                for the window only (tools/ops/call_profile_cg.c): exact instructions per call by function
     strace     `strace -f -ttt -T` cut to the window by the marker stats: syscalls per call (opt-in)
+LONG ROWS (lane fx-profile-big-rows, 2026-11-20): a rows-file line may carry `ms=<stored board ms>` and `cap=<s>`. A
+row of LONG_ROW_MS or more is profiled in ONE call per pass (no warmup; the window around the first scored call;
+tools/bench_board_small_rows.py one_call), with no time pass and no callgrind, each pass under the row's cap; a pass the
+job stops at its cap leaves run.capped and the row is reported CAPPED (exit 8) with what its tools collected. The
+report adds, per long row: stored ms beside the one call's wall, GPU kernel / CUDA API (of it sync) / host ms, launches,
+syncs, H2D/D2H MB, the top GPU kernels, and one LARGEST COST line (tools/ops/call_profile_rows_big.tsv).
 Subcommands (each prints one line; the job keeps their files):
-    rows       --rows-file F --out-dir D      D/runs.tsv (row, race id, phase) and D/ids.txt (the races to plan)
-    estimate   --rows-file F [--passes ...]   pod minutes per row and in all (printed by the job's plan phase)
+    rows       --rows-file F --out-dir D      D/runs.tsv (row, race id, phase, cap s or 0, long 1/0) and D/ids.txt
+    estimate   --rows-file F [--passes ...]   pod minutes per row and in all (printed by the job's plan phase); for
+                                              long rows also stored ms x passes and the sum of the caps
     window     --window W                     calls and wall of a pass's window (JSON)
     perf       --script S --window W --out J --folded F      folded stacks and the top self/inclusive frames
     pyspy      --raw C --window W --out J [--rate R]         the same from py-spy's raw stacks (main thread)
     callgrind  --dir D --window W --out J                    instructions per call by function, self and inclusive
     strace     --trace T --window W --out J                  syscalls per call in the window
-    report     --res R [--rows-file F]        CALL-PROFILE-<vendor>.md and .json; exit 0 every row has its wall, nsys
-                                              counts and one function-level source (py-spy, perf, callgrind or the
-                                              shim), 6 a row lacks one of those, 7 a row lacks a wall time
+    report     --res R [--rows-file F] [--top N]   CALL-PROFILE-<vendor>.md and .json; exit 0 every row has its wall,
+                                              nsys counts and one function-level source (py-spy, perf, callgrind or the
+                                              shim), 6 a row lacks one of those, 7 a row lacks a wall time, 8 a row hit
+                                              its cap (CAPPED)
 """
 import argparse
 import collections
@@ -97,13 +105,41 @@ def category(obj):
     return "other"
 
 
+#: LONG ROWS (lane fx-profile-big-rows, 2026-11-20): a row given `ms=<stored board ms>` whose call takes at least
+#: this long is profiled in ONE call per pass (the job's one-call mode, tools/bench_board_small_rows.py one_call): no
+#: warmup, the window around the first scored call, no window seconds to fill
+LONG_ROW_MS = 10000.0
+#: a long row's own cap when its line gives no `cap=`: its stored seconds times CAP_FACTOR plus CAP_PAD_S, per pass
+CAP_FACTOR, CAP_PAD_S = 2.0, 300.0
+#: each tool's slowdown of ONE long call (the estimate): py-spy at a low rate and the shim cost little per second of
+#: a call that runs kernels for minutes; nsys traces every CUDA API call
+LONG_CALL_SLOWDOWN = {"time": 1.0, "pyspy": 1.05, "perf": 1.2, "nsys": 1.3, "shim": 1.05, "callgrind": 50.0,
+                      "strace": 1.5}
+EXIT_CAPPED = 8
+
+
 class Row(object):
-    def __init__(self, name, race_id, phase):
+    def __init__(self, name, race_id, phase, ms=None, cap_s=None):
         self.name, self.race_id, self.phase = name, race_id, phase
+        self.ms, self.cap_s = ms, cap_s
+
+    @property
+    def long(self):
+        """True for a row profiled in one call per pass (its stored ms at or above LONG_ROW_MS)."""
+        return self.ms is not None and self.ms >= LONG_ROW_MS
+
+    def cap(self):
+        """The row's per-pass cap in seconds (its `cap=`, else from its stored ms for a long row), or None."""
+        if self.cap_s:
+            return self.cap_s
+        if self.long:
+            return int(math.ceil(self.ms / 1000.0 * CAP_FACTOR + CAP_PAD_S))
+        return None
 
 
 def parse_rows(text, where="rows file"):
-    """[Row] from a rows file (race id, phase, optional name=); a malformed line or a repeated name is refused."""
+    """[Row] from a rows file (race id, phase, optional name=, ms=<stored board ms>, cap=<seconds a pass may run>);
+    a malformed line or a repeated name is refused."""
     rows, names, seen = [], set(), collections.Counter()
     for i, raw in enumerate(text.splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
@@ -113,10 +149,22 @@ def parse_rows(text, where="rows file"):
         # fit+infer (lane fx-harness, 2026-11-18): board order, each fit then the first predict right after it
         if len(f) < 2 or f[0].count("/") < 2 or not (f[1] in ("fit", "fit+infer") or f[1].startswith("infer")):
             raise ValueError("%s line %d: want <race id> <fit|infer[/<batch>]|fit+infer> [name=]: %r" % (where, i, raw))
-        name = None
+        name, ms, cap = None, None, None
         for opt in f[2:]:
             if opt.startswith("name="):
                 name = opt[5:]
+            elif opt.startswith("ms=") or opt.startswith("cap="):
+                k, _, v = opt.partition("=")
+                try:
+                    x = float(v)
+                except ValueError:
+                    x = -1.0
+                if not (x > 0 and math.isfinite(x)):
+                    raise ValueError("%s line %d: %s= wants a positive number: %r" % (where, i, k, raw))
+                if k == "ms":
+                    ms = x
+                else:
+                    cap = int(math.ceil(x))
             else:
                 raise ValueError("%s line %d: unknown field %r" % (where, i, opt))
         seen[f[0]] += 1
@@ -125,7 +173,10 @@ def parse_rows(text, where="rows file"):
         if not re.match(r"^[A-Za-z0-9._-]+$", name) or name in names:
             raise ValueError("%s line %d: row name %r is repeated or not a plain name (give name=)" % (where, i, name))
         names.add(name)
-        rows.append(Row(name, f[0], f[1]))
+        if ms is not None and ms >= LONG_ROW_MS and f[1] == "fit+infer":
+            raise ValueError("%s line %d: a long row (ms >= %d) is profiled in one call of fit or infer, not fit+infer"
+                             % (where, i, LONG_ROW_MS))
+        rows.append(Row(name, f[0], f[1], ms, cap))
     if not rows:
         raise ValueError("%s: no rows" % where)
     return rows
@@ -145,15 +196,32 @@ def estimate(rows, passes=DEFAULT_PASSES, seconds=None, overhead_s=OVERHEAD_S, s
     serial = [p for p in passes if p != "callgrind"]
     per = []
     for r in rows:
-        s = sum(overhead_s * PASS_SLOWDOWN[p] + secs[p] for p in serial)
-        per.append({"row": r.name, "seconds": round(s, 1), "pod_min": round(s / 60.0, 1)})
+        if r.long:
+            # one call per pass, no warmup: the stored call under each tool's slowdown, beside the process overhead;
+            # the cap bounds a pass (a capped pass ends there)
+            one = [min(overhead_s * PASS_SLOWDOWN[p] + r.ms / 1000.0 * LONG_CALL_SLOWDOWN[p], float(r.cap() or 1e18))
+                   for p in serial if p != "time"]          # no time pass on a long row (the shim's wall stands)
+            s = sum(one)
+            per.append({"row": r.name, "seconds": round(s, 1), "pod_min": round(s / 60.0, 1), "long": True,
+                        "stored_ms": r.ms, "cap_s": r.cap()})
+        else:
+            s = sum(overhead_s * PASS_SLOWDOWN[p] + secs[p] for p in serial)
+            per.append({"row": r.name, "seconds": round(s, 1), "pod_min": round(s / 60.0, 1)})
     cg = 0.0
-    if "callgrind" in passes:
-        cg = math.ceil(len(rows) / float(max(callgrind_parallel, 1))) * (
+    short = [r for r in rows if not r.long]          # no callgrind on a long row (the job skips it)
+    if "callgrind" in passes and short:
+        cg = math.ceil(len(short) / float(max(callgrind_parallel, 1))) * (
             overhead_s * PASS_SLOWDOWN["callgrind"] + secs["callgrind"] * CALLGRIND_WINDOW_SLOWDOWN)
     total = sum(p["seconds"] for p in per) + cg + setup_s
+    stored = sum(r.ms for r in rows if r.long) / 1000.0
     return {"rows": per, "callgrind_s": round(cg, 1), "total_min": round(total / 60.0, 1), "passes": list(passes),
+            "long_rows": sum(1 for r in rows if r.long), "long_stored_s": round(stored, 1),
+            "long_passes": [p for p in serial if p != "time"],
+            "long_stored_x_passes_min": round(stored * len([p for p in serial if p != "time"]) / 60.0, 1),
+            "cap_total_min": round(sum(float(r.cap() or 0) for r in rows if r.long) *
+                                   len([p for p in serial if p != "time"]) / 60.0, 1),
             "assumptions": {"overhead_s_per_race_process": overhead_s, "slowdown": PASS_SLOWDOWN,
+                            "long_call_slowdown": LONG_CALL_SLOWDOWN,
                             "window_seconds": secs, "setup_and_postprocess_s": setup_s,
                             "callgrind_parallel": callgrind_parallel}}
 
@@ -177,7 +245,7 @@ def read_window(path):
     """{calls, wall_ms_per_call, wall_s, shim_per_call, perf_enabled, pyspy, callgrind, windows} of a pass's window
     file (the first open/close pair; `windows` counts the pairs). Missing file or no close: calls 0."""
     out = {"calls": 0, "wall_ms_per_call": None, "wall_s": None, "shim_per_call": None, "perf_enabled": None,
-           "pyspy": None, "pyspy_error": None, "callgrind": None, "pid": None, "windows": 0}
+           "pyspy": None, "pyspy_error": None, "callgrind": None, "pid": None, "windows": 0, "opened_unix": None}
     if not path or not os.path.isfile(path):
         return out
     opened = None
@@ -188,7 +256,11 @@ def read_window(path):
                 rec = json.loads(ln)
             except ValueError:
                 continue
-            if rec.get("event") == "open":
+            if rec.get("event") == "open-mark":       # a one-call run writes its open at the open (a capped run)
+                if out["opened_unix"] is None:
+                    out["opened_unix"] = rec.get("t_unix")
+                    out["pid"] = rec.get("pid")
+            elif rec.get("event") == "open":
                 opened = rec
             elif rec.get("event") == "close" and opened is not None:
                 pairs.append((opened, rec))
@@ -652,9 +724,57 @@ def host_split(wall_ms, shim, sampled, shim_wall_ms=None):
     return out
 
 
+def read_capped(path):
+    """{cap_s, elapsed_s, ...} of a pass the job stopped at its cap (run.capped, one JSON object), or None."""
+    if not os.path.isfile(path):
+        return None
+    got = _load(path)
+    return got if isinstance(got, dict) else {"cap_s": None, "elapsed_s": None}
+
+
+def largest_cost(rec):
+    """One line naming the largest cost of a row's call: GPU kernels (with the top kernel), the host outside CUDA
+    (with the top sampled host frame) or the CUDA API outside its waits (with the top entry), whichever is largest;
+    None without a wall or an nsys capture. Kernel time and the host's waits overlap: the API's sync time is the host
+    waiting for those kernels, so it is not a cost of its own."""
+    ns = rec.get("nsys") or {}
+    sp = rec.get("split") or {}
+    wall = rec.get("wall_ms_per_call")
+    if wall is None and rec.get("capped"):
+        cp = rec["capped"]
+        wall = float(cp.get("in_call_s") or cp.get("elapsed_s") or 0.0) * 1e3 or None
+    if not wall or not ns.get("captured"):
+        return None
+    api, sync = ns.get("api_ms"), ns.get("sync_ms") or 0.0
+    parts = {"GPU kernels": ns.get("kernel_ms"),
+             "host outside CUDA": sp.get("host_outside_cuda_ms") if rec.get("wall_ms_per_call") is not None else
+             (max(wall - api, 0.0) if api is not None else None),
+             "CUDA API outside its waits (launches, copies, allocations)": (max(api - sync, 0.0)
+                                                                          if api is not None else None)}
+    parts = {k: v for k, v in parts.items() if v is not None}
+    if not parts:
+        return None
+    k, v = max(parts.items(), key=lambda kv: kv[1])
+    if k == "GPU kernels":
+        top = sorted(ns.get("kernels") or [], key=lambda x: -x.get("total_ms_per_call", 0.0))
+        det = ("top kernel `%s` %s ms in %s launches" % (top[0]["name"][:90], _f(top[0]["total_ms_per_call"], 1),
+                                                         _f(top[0]["instances_per_call"], 0))) if top else "-"
+    elif k == "host outside CUDA":
+        top = rec.get("largest_host_costs") or []
+        det = ("top host frame `%s` %s (%s)" % (top[0]["frame"][:90], _cost(top[0]), rec.get("largest_host_costs_source"))
+               if top else "no sampled host frame")
+    else:
+        top = sorted(((n, x) for n, x in (ns.get("api") or {}).items() if x.get("kind") != "sync"),
+                     key=lambda kv: -kv[1].get("ms", 0.0))
+        det = ("top entry %s %s ms in %s calls" % (top[0][0], _f(top[0][1]["ms"], 1), _f(top[0][1]["calls"], 0))
+               if top else "-")
+    return "%s %s ms of %s ms (%s%%): %s" % (k, _f(v, 1), _f(wall, 1), _f(100.0 * v / wall, 1), det)
+
+
 def collect_row(res, row):
     d = os.path.join(res, "rows", row.name)
-    out = {"row": row.name, "race_id": row.race_id, "phase": row.phase, "passes": {}}
+    out = {"row": row.name, "race_id": row.race_id, "phase": row.phase, "passes": {}, "stored_ms": row.ms,
+           "long": row.long, "cap_s": row.cap(), "capped": None}
     for p in PASSES:
         pd = os.path.join(d, p)
         err = None
@@ -662,8 +782,18 @@ def collect_row(res, row):
         if os.path.isfile(ef):
             with open(ef, errors="replace") as fh:
                 err = fh.read().strip()[:400]
+        cap = read_capped(os.path.join(pd, "run.capped"))
         out["passes"][p] = {"window": read_window(os.path.join(pd, "window.jsonl")), "error": err,
-                            "ran": os.path.isdir(pd)}
+                            "ran": os.path.isdir(pd), "capped": cap}
+        if cap is not None:
+            # seconds inside the call when the cap stopped it: from the window's open-mark to the stop
+            w = out["passes"][p]["window"]
+            if w.get("opened_unix") and cap.get("t_capped_unix"):
+                cap["in_call_s"] = round(float(cap["t_capped_unix"]) - float(w["opened_unix"]), 1)
+        if cap is not None and out["capped"] is None:
+            out["capped"] = dict(cap, passes=[])
+        if cap is not None:
+            out["capped"]["passes"].append(p)
     for src, f in (("perf", "perf.json"), ("pyspy", "pyspy.json"), ("nsys", "nsys.json"), ("strace", "strace.json"),
                    ("callgrind", "callgrind.json")):
         out[src] = _load(os.path.join(d, src, f))
@@ -692,6 +822,7 @@ def collect_row(res, row):
         if got:
             out["largest_host_costs"], out["largest_host_costs_source"] = got, src
             break
+    out["largest_cost"] = largest_cost(out)
     return out
 
 
@@ -734,8 +865,35 @@ def render(doc):
             _f(h.get("cuda_us"), 1), _f(h.get("libc_us"), 1), _f(other, 1), _f(h.get("unexplained_us"), 1),
             h.get("source") or "-")))
     L.append("")
+    longs = [r for r in doc["rows"] if r.get("long")]
+    if longs:
+        L.append("Long rows: ONE call per pass (no warmup; the call carries what a first call carries), ms per call. "
+                 "host = the wall less the CUDA API time (nsys); the API's sync time is the host waiting on kernels. "
+                 "CAPPED: a pass the job stopped at the row's cap, reported with what it collected.")
+        L.append("")
+        L.append("| row | stored ms | wall ms | status | GPU kernel ms | CUDA API ms | of it sync ms | host ms | "
+                 "launches | syncs | H2D MB | D2H MB | largest cost |")
+        L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        for r in longs:
+            ns = r.get("nsys") or {}
+            c = ns.get("counts") or {}
+            mem = ns.get("mem") or {}
+            L.append("| %s |" % " | ".join(str(x) for x in (
+                r["row"], _f(r.get("stored_ms"), 0), _f(r["wall_ms_per_call"], 0), r.get("status") or "-",
+                _f(ns.get("kernel_ms"), 0), _f(ns.get("api_ms"), 0), _f(ns.get("sync_ms"), 0),
+                _f(r["split"].get("host_outside_cuda_ms"), 0), _f(c.get("launch"), 0), _f(c.get("sync"), 0),
+                _f((mem.get("h2d") or {}).get("mb"), 1), _f((mem.get("d2h") or {}).get("mb"), 1),
+                (r.get("largest_cost") or "-").replace("|", "/"))))
+        L.append("")
+    top_n = int(doc.get("top") or TOP)
     for r in doc["rows"]:
         L.append("## %s (%s, %s)" % (r["row"], r["race_id"], r["phase"]))
+        L.append("LARGEST COST: %s" % (r.get("largest_cost") or "- (no wall or no nsys capture)"))
+        if r.get("capped"):
+            cp = r["capped"]
+            L.append("CAPPED: %s stopped at the cap of %s s (%s s inside the call; the call ran at least that long); "
+                     "what they collected is below" % (", ".join(cp.get("passes") or []), _f(cp.get("cap_s"), 0),
+                                                        _f(cp.get("in_call_s"), 0)))
         names = ", ".join("%s %s" % (x["frame"], _cost(x)) for x in r["largest_host_costs"]) or "-"
         L.append("LARGEST HOST COSTS (%s, self per call): %s" % (r.get("largest_host_costs_source") or "none", names))
         L.append("")
@@ -770,6 +928,11 @@ def render(doc):
             api = sorted((ns.get("api") or {}).items(), key=lambda kv: -kv[1].get("ms", 0))[:8]
             L.append("CUDA API per call (nsys): %s" % (", ".join("%s %s x %s ms" % (k, _f(v["calls"], 1), _f(v["ms"], 4))
                                                                 for k, v in api) or "-"))
+            kern = sorted(ns.get("kernels") or [], key=lambda x: -x.get("total_ms_per_call", 0.0))[:8]
+            if kern:
+                L.append("GPU kernels per call (nsys, top %d of %d): %s" % (len(kern), len(ns.get("kernels") or []), ", ".join(
+                    "`%s` %s ms in %s launches" % (k["name"][:70], _f(k["total_ms_per_call"], 2),
+                                                   _f(k["instances_per_call"], 1)) for k in kern)))
         st = r.get("strace") or {}
         if st:
             L.append("syscalls per call (%s in all): %s" % (_f(st.get("total_per_call"), 1), ", ".join(
@@ -792,7 +955,7 @@ def render(doc):
                 L.append("")
                 L.append("| %s top %s | %% | %s |" % (src, kind, unit))
                 L.append("|---|---|---|")
-                for x in prof.get(kind) or []:
+                for x in (prof.get(kind) or [])[:top_n]:
                     L.append("| `%s` | %s | %s |" % (x["frame"][:150].replace("|", "/"), x["pct"],
                                                     x.get("us_per_call", x.get("ir_per_call"))))
         L.append("")
@@ -815,13 +978,18 @@ def function_sources(rec):
 
 def cmd_report(a):
     rows = load_rows(a.rows_file)
-    doc = {"vendor": a.vendor, "wheel": a.wheel, "host": a.host, "tools": a.tools, "rows": []}
+    doc = {"vendor": a.vendor, "wheel": a.wheel, "host": a.host, "tools": a.tools, "rows": [], "top": a.top}
     code = EXIT_OK
     for r in rows:
         rec = collect_row(a.res, r)
         rec["function_sources"] = function_sources(rec)
         doc["rows"].append(rec)
-        if rec["wall_ms_per_call"] is None:
+        if rec.get("capped"):
+            # a pass stopped at the row's cap: reported with what it collected (never a silent timeout)
+            code = max(code, EXIT_CAPPED)
+            why = "CAPPED (%s at %s s)" % (",".join(rec["capped"].get("passes") or []),
+                                           _f(rec["capped"].get("cap_s"), 0))
+        elif rec["wall_ms_per_call"] is None:
             code = max(code, EXIT_NO_WALL)
             why = "no wall time"
         elif not rec["function_sources"]:
@@ -832,7 +1000,10 @@ def cmd_report(a):
             why = "no nsys capture"
         else:
             why = "ok"
+        rec["status"] = "CAPPED" if rec.get("capped") else ("ok" if why == "ok" else "incomplete")
         h = rec.get("host") or {}
+        if rec.get("long"):
+            print("LARGEST row=%s %s" % (r.name, rec.get("largest_cost") or "-"))
         print("SUMMARY row=%s wall_ms=%s kernel_ms=%s api_ms=%s cuda_us=%s libc_us=%s unexplained_us=%s sources=%s "
               "top=%s status=%s" % (
                   r.name, _f(rec["wall_ms_per_call"]), _f(rec["split"]["kernel_ms"]), _f(rec["split"]["cuda_api_ms"]),
@@ -852,7 +1023,8 @@ def cmd_rows(a):
     os.makedirs(a.out_dir, exist_ok=True)
     with open(os.path.join(a.out_dir, "runs.tsv"), "w") as fh:
         for r in rows:
-            fh.write("%s\t%s\t%s\n" % (r.name, r.race_id, r.phase))
+            # cap (s, 0 = none) and long (1: one call per pass): tools/ops/call_profile_job.sh run_pass
+            fh.write("%s\t%s\t%s\t%d\t%d\n" % (r.name, r.race_id, r.phase, r.cap() or 0, 1 if r.long else 0))
     with open(os.path.join(a.out_dir, "ids.txt"), "w") as fh:
         for rid in dict.fromkeys(r.race_id for r in rows):
             fh.write(rid + "\n")
@@ -873,7 +1045,12 @@ def cmd_estimate(a):
         secs[k] = float(v)
     e = estimate(rows, passes, secs, overhead_s=a.overhead_s, callgrind_parallel=a.callgrind_parallel)
     for r in e["rows"]:
-        print("ESTIMATE row=%s pod_min=%s" % (r["row"], r["pod_min"]))
+        print("ESTIMATE row=%s pod_min=%s%s" % (r["row"], r["pod_min"], (" one-call stored_s=%s cap_s=%s" % (
+            _f(r["stored_ms"] / 1000.0, 1), r["cap_s"])) if r.get("long") else ""))
+    if e["long_rows"]:
+        print("ESTIMATE long rows=%d stored %s s x %d passes = %s min (one call per pass, no warmup); at every cap %s min"
+              % (e["long_rows"], e["long_stored_s"], len(e["long_passes"]),
+                 e["long_stored_x_passes_min"], e["cap_total_min"]))
     print("ESTIMATE total pod_min=%s passes=%s (%s s per race process outside its window; callgrind %s s with %d "
           "rows at once; setup %s s)" % (e["total_min"], ",".join(passes), a.overhead_s, e["callgrind_s"],
                                          a.callgrind_parallel, SETUP_S))
@@ -924,6 +1101,7 @@ def main(argv=None):
     rp.add_argument("--wheel", default=None)
     rp.add_argument("--host", default=None)
     rp.add_argument("--tools", default=None)
+    rp.add_argument("--top", type=int, default=TOP, help="frames per top table (the job: CP_REPORT_TOP)")
     a = ap.parse_args(argv)
     try:
         return {"rows": cmd_rows, "estimate": cmd_estimate, "window": cmd_window, "perf": cmd_perf,
