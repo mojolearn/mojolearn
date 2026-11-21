@@ -61,6 +61,43 @@ Operations: transform (rows x n_components_), score_samples (rows x 1),
 score (the mean log-likelihood into `call.value`; no y, no weights). No
 MEMBER_CAN_TEST_ROWS: x_decomp/fa_owner.mojo has no finite test.
 
+Dictionary learning (the typed kit of bindings/dict_learning_run.mojo, the
+door's own RUN): DictionaryLearning 9, MiniBatchDictionaryLearning 10,
+SparseCoder 11, SparsePCA 12, MiniBatchSparsePCA 13. Route: `entry` the
+image's x_decomp operations entry; `flags` XDECOMP_ROUTE_POOL (fitted
+operands kept on the device across queries, as the door's resident
+record), XDECOMP_ROUTE_KIT_RESIDENT (the kit's `resident`) and the image's
+DK_HAS_* bits shifted left by XDECOMP_ROUTE_KIT_SHIFT. Operations: fit
+(fit_output TRANSFORM = the door's fit_transform), transform,
+inverse_transform. No MEMBER_CAN_TEST_ROWS: the kit borrows X untested
+(bindings/decomp_kit_run.mojo:246-252 `borrow`; the door's `decomp_input`
+admission tests it, bindings/dict_learning_native_unpack.mojo:127-129).
+Coding words of kinds 9, 10, 11 ([1 .. 7], `_coding_words`):
+  [1] transform_algorithm 0 lasso_lars, 1 lasso_cd, 2 lars, 3 omp, 4 threshold
+  [2] transform_n_nonzero_coefs: -1 None (int(min(max(m / 10, 1), atoms)))
+  [3] the lasso / threshold alpha (transform_alpha, else alpha, else 1)
+  [4] transform_max_iter (lasso only, else 0)   [5] positive_code (lasso)
+  [6] positive_code (threshold)   [7] split_sign 0 / 1
+DictionaryLearning (17): [8] n_components (-1 None) [9] alpha [10] max_iter
+  [11] tol [12] fit_algorithm 0 lars, 1 cd [13] seed (random_state &
+  0xFFFFFFFF) [14] positive_dict [15] positive_code [16] transform_max_iter
+MiniBatchDictionaryLearning (20): [8] n_components [9] batch_size [10] seed
+  [11] shuffle [12] max_iter [13] max_no_improvement (-1 None) [14]
+  fit_algorithm [15] transform_max_iter [16] positive_dict [17]
+  positive_code [18] alpha [19] tol
+SparseCoder (11): [8] the address of the admitted float32 dictionary (the
+  admit pins it; the fit copies it into components_) [9] its rows [10] its
+  columns
+SparsePCA (8): [1] n_components [2] alpha [3] max_iter [4] tol [5] method
+  0 lars, 1 cd [6] seed [7] ridge_alpha
+MiniBatchSparsePCA (11): [1] n_components [2] alpha [3] batch_size [4] seed
+  [5] shuffle [6] max_iter [7] max_no_improvement [8] method [9] tol
+  [10] ridge_alpha
+Blocks: 0 scalars float64 [n_components_, n_features_in_, n_iter_, n_steps_
+(0 where the class has none), then error_ (DictionaryLearning, SparsePCA)];
+1 components_ (n_components_ x n_features_in_); 2 mean_ (1 x
+n_features_in_, SparsePCA kinds only).
+
 Random projection blocks: 0 `MEMBER_BLOCK_SCALARS` float64 [n_components_,
 n_features_in_, density_ (0 Gaussian), inverse 0 / 1]; 1
 `XDECOMP_BLOCK_COMPONENTS` float32 n_components_ x n_features_in_
@@ -175,6 +212,11 @@ from core.entry_table import EntryRef, entry_ref_unresolved
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from bindings.decomp_kit_run import DKit
+from bindings.dict_learning_run import (
+    EncodeWords, Gram, DictWords, MiniBatchWords, SpcaFit, dl_split_sign, dl_encode_run, dl_inverse_run,
+    dl_dict_learning, dl_minibatch_fit, dl_spca_project, dl_spca_inverse, dl_spca_fit_run,
+)
 
 comptime XDECOMP_KIND_IPCA = 0
 comptime XDECOMP_IPCA_PARAM_COUNT = 4
@@ -187,6 +229,18 @@ comptime XDECOMP_KIND_ICA = 7
 comptime XDECOMP_ICA_PARAM_COUNT = 9
 comptime XDECOMP_KIND_FA = 8
 comptime XDECOMP_FA_PARAM_COUNT = 6  # plus the noise_variance_init values
+# The dictionary-learning kinds run the typed kit (bindings/decomp_kit_run.mojo
+# `DKit` over the image's x_decomp operations entry).
+comptime XDECOMP_KIND_DL = 9
+comptime XDECOMP_DL_PARAM_COUNT = 17
+comptime XDECOMP_KIND_MBDL = 10
+comptime XDECOMP_MBDL_PARAM_COUNT = 20
+comptime XDECOMP_KIND_CODER = 11
+comptime XDECOMP_CODER_PARAM_COUNT = 11
+comptime XDECOMP_KIND_SPCA = 12
+comptime XDECOMP_SPCA_PARAM_COUNT = 8
+comptime XDECOMP_KIND_MBSPCA = 13
+comptime XDECOMP_MBSPCA_PARAM_COUNT = 11
 
 comptime XDECOMP_BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY
 comptime XDECOMP_BLOCK_SINGULAR = MEMBER_BLOCK_FAMILY + 1
@@ -200,6 +254,10 @@ comptime XDECOMP_BLOCK_RATIO = MEMBER_BLOCK_FAMILY + 5
 comptime XDECOMP_ROUTE_RESIDENT = 1
 comptime XDECOMP_ROUTE_NMF_INVERSE = 2
 comptime XDECOMP_ROUTE_POOL = 4
+# The kit kinds: bit 8 = the image is resident (`x_decomp_dev_ew`, the
+# kit's `resident`); the image's DK_HAS_* bits sit from bit 8 up.
+comptime XDECOMP_ROUTE_KIT_RESIDENT = 8
+comptime XDECOMP_ROUTE_KIT_SHIFT = 8
 
 comptime _IPCA_SCALARS = 5
 comptime _NMF_SCALARS = 4
@@ -307,6 +365,19 @@ def _is_rp(kind: Int) -> Bool:
     return kind == XDECOMP_KIND_GRP or kind == XDECOMP_KIND_SRP
 
 
+def _is_kit(kind: Int) -> Bool:
+    return kind >= XDECOMP_KIND_DL and kind <= XDECOMP_KIND_MBSPCA
+
+
+def _is_spca(kind: Int) -> Bool:
+    return kind == XDECOMP_KIND_SPCA or kind == XDECOMP_KIND_MBSPCA
+
+
+def _pooled(kind: Int) -> Bool:
+    """Handles of this kind are x_decomp pool ids (XD_DEV_FREE)."""
+    return _is_rp(kind) or _is_kit(kind)
+
+
 def _free_handles(entry: EntryRef, handles: List[Int], pool: Bool) raises:
     """Release resident device state through the entry that made it
     (`pool`: x_decomp pool ids, XD_DEV_FREE; else IncrementalPCA state ids).
@@ -350,7 +421,7 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             # is the kernel's, never under this store's lock).
             held = slot[].handles.copy()
             entry = slot[].handle_entry
-            pool = len(slot[].words) > 0 and _is_rp(slot[].kind())
+            pool = len(slot[].words) > 0 and _pooled(slot[].kind())
             slot[].handles = List[Int](length=_HANDLES, fill=-1)
             slot[].handle_entry = entry_ref_unresolved()
             slot[].live = False
@@ -370,7 +441,7 @@ def _release(slot: _Slot) raises:
     var entry = slot[].handle_entry
     slot[].handles = List[Int](length=_HANDLES, fill=-1)
     slot[].handle_entry = entry_ref_unresolved()
-    _free_handles(entry, held, _is_rp(slot[].kind()))
+    _free_handles(entry, held, _pooled(slot[].kind()))
 
 
 def _kind_name(kind: Int) -> String:
@@ -384,6 +455,16 @@ def _kind_name(kind: Int) -> String:
         return String("FastICA")
     if kind == XDECOMP_KIND_FA:
         return String("FactorAnalysis")
+    if kind == XDECOMP_KIND_DL:
+        return String("DictionaryLearning")
+    if kind == XDECOMP_KIND_MBDL:
+        return String("MiniBatchDictionaryLearning")
+    if kind == XDECOMP_KIND_CODER:
+        return String("SparseCoder")
+    if kind == XDECOMP_KIND_SPCA:
+        return String("SparsePCA")
+    if kind == XDECOMP_KIND_MBSPCA:
+        return String("MiniBatchSparsePCA")
     return String("IncrementalPCA")
 
 
@@ -924,6 +1005,369 @@ def _import_fa(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
+# ---------------------------------------------------------------- the dictionary-learning kit
+# DictionaryLearning (9), MiniBatchDictionaryLearning (10), SparseCoder (11),
+# SparsePCA (12), MiniBatchSparsePCA (13): the door's typed kit RUN
+# (bindings/dict_learning_run.mojo over bindings/decomp_kit_run.mojo `DKit`),
+# the kit built from the route words the admit read from the image's entries
+# (`decomp_kit_unpack`). Fitted operands stay on the device across queries
+# as the door's resident record keeps them (pool ids in `handles`: 0
+# components_, 1 mean_, 2 the Gram of components_), freed at refit, import
+# and free through the same entry.
+
+comptime _KIT_GRAM = 2
+
+
+def _kit(call: _Call) -> DKit:
+    """`decomp_kit_unpack(entries)` from the route words: the image's x_decomp
+    entry (resolved at admit), its residency and its DK_HAS_* bits."""
+    var flags = call[].route.flags
+    return DKit(call[].route.entry, True, (flags & XDECOMP_ROUTE_KIT_RESIDENT) != 0, flags >> XDECOMP_ROUTE_KIT_SHIFT)
+
+
+def _four(a: Int, b: Int, c: Int, d: Int) -> List[Float64]:
+    var words = List[Float64](capacity=4)
+    words.append(Float64(a))
+    words.append(Float64(b))
+    words.append(Float64(c))
+    words.append(Float64(d))
+    return words^
+
+
+def _kit_copy(mut kit: DKit, a: Int, dst: Int) raises:
+    """Matrix a's words into `dst`: a device-only result comes down once,
+    straight into it (the door's `decomp_kit_out_shape`), else one copy."""
+    var n = kit.size(a)
+    if n < 1:
+        return
+    if kit.matrices[a].device >= 0 and kit.matrices[a].store < 0 and kit.matrices[a].borrowed == 0:
+        kit.dev_download(kit.matrices[a].device, dst, n)
+        kit.matrices[a].on_device = False
+    else:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=dst), src=_F32P(unsafe_from_address=kit.at(a)), count=n)
+
+
+def _kit_take(mut kit: DKit, a: Int) raises -> List[Float32]:
+    var words = List[Float32](length=kit.size(a), fill=Float32(0))
+    if len(words) > 0:
+        _kit_copy(kit, a, Int(words.unsafe_ptr()))
+    return words^
+
+
+def _kit_out(call: _Call, mut kit: DKit, a: Int, estimator: String) raises:
+    _dense(call[].dst, "the output buffer", estimator)
+    if call[].dst.rows != kit.nrows(a) or call[].dst.cols != kit.ncols(a):
+        raise Error("ValueError: the output buffer holds " + String(kit.ncols(a)) + " values per row of X")
+    _kit_copy(kit, a, call[].dst.data)
+
+
+def _kit_operand(slot: _Slot, call: _Call, mut kit: DKit, k: Int, rows: Int, cols: Int) raises -> Int:
+    """Fitted block k: its device copy kept in the pool (uploaded at the
+    first query, the door's `decomp_door_resident_input`) on a resident
+    image, else the host words borrowed."""
+    if kit.resident:
+        var handle = _rp_pool(slot, call, k, rows * cols)
+        if handle >= 0:
+            return kit.add_resident(_address(slot, k), handle, rows, cols)
+    return kit.borrow(_address(slot, k), rows, cols)
+
+
+def _kit_gram(slot: _Slot, mut kit: DKit, wanted: Bool) -> Gram:
+    # The door's `_gram`: the kept device Gram of components_, else -1.
+    if not wanted or slot[].handles[_KIT_GRAM] < 0:
+        return Gram(-1)
+    return Gram(kit.add_device(slot[].handles[_KIT_GRAM], slot[].count, slot[].count))
+
+
+def _kit_keep_gram(slot: _Slot, call: _Call, mut kit: DKit, gram: Gram):
+    # The door's `_keep_gram`: a Gram RUN left on the device is kept.
+    if gram.computed < 0 or slot[].handles[_KIT_GRAM] >= 0 or not kit.resident:
+        return
+    if (call[].route.flags & XDECOMP_ROUTE_POOL) == 0:
+        return
+    var handle = kit.release_device(gram.computed)
+    if handle >= 0:
+        slot[].handles[_KIT_GRAM] = handle
+        slot[].handle_entry = call[].route.entry
+
+
+def _encode(slot: _Slot, m: Int, kc: Int) -> EncodeWords:
+    """bindings/dict_learning_native_unpack.mojo `_encode_words` from the
+    coding words [1 .. 7]; the lars / omp budget defaults to
+    int(min(max(m / 10, 1), kc)) for the input width m and kc atoms."""
+    var index = Int(slot[].words[1])
+    var count = 0
+    if index == 2 or index == 3:
+        if slot[].words[2] >= 0.0:
+            count = Int(slot[].words[2])
+        else:
+            count = Int(min(max(Float64(m) / 10.0, Float64(1.0)), Float64(kc)))
+    return EncodeWords(index, count, slot[].words[3], Int(slot[].words[4]), Int(slot[].words[5]),
+                       slot[].words[6] != 0.0, slot[].words[7] != 0.0)
+
+
+def _fit_kit_begin(slot: _Slot, call: _Call, estimator: String) raises:
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member takes no sample_weight")
+    if call[].fit_output != 0 and call[].fit_output != MEMBER_OP_TRANSFORM:
+        member_unsupported(estimator, call[].fit_output)
+    # New components replace the old: their device copies go first.
+    _release(slot)
+    slot[].clear()
+
+
+def _kit_keep(slot: _Slot, mut kit: DKit, comps: Int, mean: Int, var scalars: List[Float64]) raises:
+    slot[].blocks.append(_kit_take(kit, comps))
+    if mean >= 0:
+        slot[].blocks.append(_kit_take(kit, mean))
+    slot[].count = kit.nrows(comps)
+    slot[].features = kit.ncols(comps)
+    slot[].scalars = scalars^
+    slot[].fitted = True
+
+
+def _fit_dl(slot: _Slot, call: _Call) raises:
+    """bindings/dict_learning_native_pack.mojo `dictionary_learning_fit` /
+    `minibatch_dictionary_fit` over the borrowed X (no code_init, dict_init
+    or callback: those settings keep the door). fit_output TRANSFORM: the
+    DictionaryLearning fit's own code (split by sign when asked), the
+    mini-batch fit's encode of X, as the doors' fit_transform."""
+    var estimator = _name(slot)
+    _fit_kit_begin(slot, call, estimator)
+    var kind = slot[].kind()
+    var project = call[].fit_output == MEMBER_OP_TRANSFORM
+    var n = call[].x.rows
+    var m = call[].x.cols
+    var kit = _kit(call)
+    try:
+        var x = kit.borrow(call[].x.data, n, m)
+        var nc = m if slot[].words[8] < 0.0 else Int(slot[].words[8])
+        var d = -1
+        var code = -1
+        var scalars = List[Float64]()
+        if kind == XDECOMP_KIND_DL:
+            var words = DictWords(nc, slot[].words[9], Int(slot[].words[10]), slot[].words[11], Int(slot[].words[12]),
+                                  Int(slot[].words[13]), slot[].words[14] != 0.0, slot[].words[15] != 0.0,
+                                  Int(slot[].words[16]))
+            var fit = dl_dict_learning(kit, x, words, -1, -1)
+            d = fit.d
+            if project:
+                code = dl_split_sign(kit, fit.code) if slot[].words[7] != 0.0 else fit.code
+            scalars = _four(kit.nrows(d), m, fit.done, 0)
+            for k in range(len(fit.errors)):  # driver-loop: over the fit's recorded errors (model structure)
+                scalars.append(fit.errors[k])
+        else:
+            var batch = min(Int(slot[].words[9]), n)
+            if batch <= 0:
+                raise Error("integer division or modulo by zero")
+            var per_pass = -((-n) // batch)
+            var mb = MiniBatchWords(batch, Int(slot[].words[10]), slot[].words[11] != 0.0,
+                                    Int(slot[].words[12] * Float64(per_pass)), Int(slot[].words[13]),
+                                    Int(slot[].words[14]), Int(slot[].words[15]), slot[].words[16] != 0.0,
+                                    slot[].words[17] != 0.0, slot[].words[18], slot[].words[19])
+            var fit = dl_minibatch_fit(kit, x, nc, -1, mb)
+            d = fit[0]
+            var steps = fit[1]
+            if project:
+                var gram = Gram(-1)
+                code = dl_encode_run(kit, x, d, _encode(slot, m, nc), gram)
+            scalars = _four(kit.nrows(d), m, -((-steps) // per_pass), steps)
+        _kit_keep(slot, kit, d, -1, scalars^)
+        if project:
+            _kit_out(call, kit, code, estimator)
+    finally:
+        kit.close()
+
+
+def _fit_coder(slot: _Slot, call: _Call) raises:
+    """bindings/dict_learning_native_pack.mojo `sparse_coder` fit: the
+    dictionary (the admitted float32 parameter the plan pins, words [8 ..
+    10]) checked against X's width and kept as components_."""
+    var estimator = _name(slot)
+    _fit_kit_begin(slot, call, estimator)
+    var rows = Int(slot[].words[9])
+    var cols = Int(slot[].words[10])
+    if call[].x.cols != cols:
+        raise Error("Dictionary and X have different numbers of features:dictionary.shape: (" + String(rows) + ", "
+                    + String(cols) + ") X.shape: (" + String(call[].x.rows) + ", " + String(call[].x.cols) + ")")
+    var words = List[Float32](length=rows * cols, fill=Float32(0))
+    if rows * cols > 0:
+        unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=Int(slot[].words[8])), count=rows * cols)
+    slot[].blocks.append(words^)
+    slot[].count = rows
+    slot[].features = cols
+    slot[].scalars = _four(rows, cols, 0, 0)
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _query_kit(slot, call, False)
+
+
+def _fit_spca(slot: _Slot, call: _Call) raises:
+    """bindings/dict_learning_native_pack.mojo `sparse_pca_fit` over the
+    borrowed X (no V_init / U_init: those keep the door); fit_output
+    TRANSFORM = its fit_transform's ridge projection."""
+    var estimator = _name(slot)
+    _fit_kit_begin(slot, call, estimator)
+    var minibatch = slot[].kind() == XDECOMP_KIND_MBSPCA
+    var project = call[].fit_output == MEMBER_OP_TRANSFORM
+    var n = call[].x.rows
+    var m = call[].x.cols
+    var kit = _kit(call)
+    try:
+        var x = kit.borrow(call[].x.data, n, m)
+        var nc = m if slot[].words[1] < 0.0 else Int(slot[].words[1])
+        var dict_words = DictWords(nc, 0.0, 0, 0.0, 0, 0, False, False, 0)
+        var mb = MiniBatchWords(1, 0, False, 0, -1, 0, 0, False, False, 0.0, 0.0)
+        var encode = EncodeWords(0, 0, 1.0, 0, 0, False, False)
+        var per_pass = 1
+        var ridge = Float32(0.0)
+        if not minibatch:
+            dict_words = DictWords(nc, slot[].words[2], Int(slot[].words[3]), slot[].words[4], Int(slot[].words[5]),
+                                   Int(slot[].words[6]), False, False, 1000)
+            if project:
+                ridge = Float32(slot[].words[7])
+        else:
+            # The fit runs on X^T: its rows are the m features.
+            var batch = min(Int(slot[].words[3]), m)
+            if batch <= 0:
+                raise Error("integer division or modulo by zero")
+            per_pass = -((-m) // batch)
+            mb = MiniBatchWords(batch, Int(slot[].words[4]), slot[].words[5] != 0.0,
+                                Int(slot[].words[6] * Float64(per_pass)), Int(slot[].words[7]), Int(slot[].words[8]),
+                                1000, False, False, slot[].words[2], slot[].words[9])
+            encode = EncodeWords(0, 0, slot[].words[2], 1000, 0, False, False)
+            if project:
+                ridge = Float32(slot[].words[10])
+        var fit = dl_spca_fit_run(kit, x, -1, -1, minibatch, dict_words, mb, encode, project, ridge)
+        var iterations = -((-fit.steps) // per_pass) if minibatch else fit.done
+        var scalars = _four(kit.nrows(fit.comps), m, iterations, fit.steps)
+        for k in range(len(fit.errors)):  # driver-loop: over the fit's recorded errors (model structure)
+            scalars.append(fit.errors[k])
+        _kit_keep(slot, kit, fit.comps, fit.mean, scalars^)
+        if project:
+            _kit_out(call, kit, fit.projected, estimator)
+    finally:
+        kit.close()
+
+
+def _query_kit(slot: _Slot, call: _Call, inverse: Bool) raises:
+    """The doors' transform / inverse_transform (`coding_transform`,
+    `sparse_coder`, `sparse_pca_transform`) over the kept operands."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: this " + estimator + " member is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    var kind = slot[].kind()
+    var kit = _kit(call)
+    try:
+        var x = kit.borrow(call[].x.data, call[].x.rows, call[].x.cols)
+        var comps = _kit_operand(slot, call, kit, 0, slot[].count, slot[].features)
+        var out = -1
+        if _is_spca(kind):
+            var mean = _kit_operand(slot, call, kit, 1, 1, slot[].features)
+            if inverse:
+                out = dl_spca_inverse(kit, x, mean, comps)
+            else:
+                var ridge = Float32(slot[].words[7] if kind == XDECOMP_KIND_SPCA else slot[].words[10])
+                var gram = _kit_gram(slot, kit, True)
+                out = dl_spca_project(kit, x, mean, comps, ridge, gram)
+                _kit_keep_gram(slot, call, kit, gram)
+        elif inverse:
+            out = dl_inverse_run(kit, x, comps, slot[].words[7] != 0.0)
+        else:
+            var words = _encode(slot, call[].x.cols, slot[].count)
+            var gram = _kit_gram(slot, kit, words.algorithm != 4)
+            out = dl_encode_run(kit, x, comps, words, gram)
+            _kit_keep_gram(slot, call, kit, gram)
+        _kit_out(call, kit, out, estimator)
+    finally:
+        kit.close()
+
+
+def _export_kit(slot: _Slot, call: _Call) raises:
+    var spca = _is_spca(slot[].kind())
+    var last = 2 if spca else 1
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block > last:
+            raise Error("member ABI: a " + _name(slot) + " member has no fitted block index " + String(block))
+        block = MEMBER_BLOCK_SCALARS if block == 0 else XDECOMP_BLOCK_COMPONENTS + block - 1
+    if block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif block == XDECOMP_BLOCK_COMPONENTS:
+        call[].dst = MemberMatrix(_address(slot, 0), slot[].count, slot[].features)
+    elif spca and block == XDECOMP_BLOCK_COMPONENTS + 1:
+        call[].dst = MemberMatrix(_address(slot, 1), 1, slot[].features)
+    else:
+        raise Error("member ABI: a " + _name(slot) + " member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = last + 1
+
+
+def _import_kit(slot: _Slot, call: _Call) raises:
+    var estimator = _name(slot)
+    var parts = 2 if _is_spca(slot[].kind()) else 1
+    var block = call[].block
+    if slot[].fitted or len(slot[].blocks) != parts:
+        slot[].clear()
+        for _ in range(parts):  # driver-loop: the fitted blocks
+            slot[].blocks.append(List[Float32]())
+    if block == MEMBER_BLOCK_SCALARS:
+        var count = call[].x.rows * call[].x.cols
+        if not call[].x.dense_host(MEMBER_F64) or count < 4:
+            raise Error("member ABI: the " + estimator + " scalars block is four or more host float64 words")
+        var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
+        slot[].scalars = List[Float64](length=count, fill=0.0)
+        for index in range(count):  # driver-loop: the fitted scalars and errors
+            slot[].scalars[index] = source[index]
+    elif block >= XDECOMP_BLOCK_COMPONENTS and block < XDECOMP_BLOCK_COMPONENTS + parts:
+        var size = call[].x.rows * call[].x.cols
+        var words = List[Float32](length=size, fill=0.0)
+        if size > 0:
+            _dense(call[].x, "a fitted block", estimator)
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=size)
+        slot[].blocks[block - XDECOMP_BLOCK_COMPONENTS] = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a " + estimator + " member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if len(slot[].scalars) < 4:
+        raise Error("member ABI: a fitted " + estimator + " state needs its scalars block")
+    var nc = Int(slot[].scalars[0])
+    var d = Int(slot[].scalars[1])
+    if nc < 1 or d < 1 or len(slot[].blocks[0]) != nc * d or (parts == 2 and len(slot[].blocks[1]) != d):
+        raise Error("member ABI: a fitted " + estimator + " state needs every fitted block, of the fitted sizes")
+    slot[].count = nc
+    slot[].features = d
+    slot[].fitted = True
+
+
+def _kit_width(words: MutPointer[Float64, MutUntrackedOrigin], asked: Int, features: Int,
+               fitted: Int) raises -> Int:
+    """transform: the atoms (n_components, n_features when None; the
+    dictionary's rows for SparseCoder), twice that with split_sign;
+    inverse_transform: n_features."""
+    var kind = Int(words[0])
+    if asked == MEMBER_OP_INVERSE_TRANSFORM:
+        return features
+    if asked != MEMBER_OP_TRANSFORM:
+        member_unsupported(_kind_name(kind), asked)
+    if _is_spca(kind):
+        if fitted >= 0:
+            return fitted
+        return Int(words[1]) if words[1] >= 0.0 else features
+    var atoms = fitted
+    if atoms < 0:
+        if kind == XDECOMP_KIND_CODER:
+            atoms = Int(words[9])
+        else:
+            atoms = Int(words[8]) if words[8] >= 0.0 else features
+    return 2 * atoms if words[7] != 0.0 else atoms
+
+
 # ---------------------------------------------------------------- random projections
 
 
@@ -1125,6 +1569,9 @@ def _export(slot: _Slot, call: _Call) raises:
     if slot[].kind() == XDECOMP_KIND_FA:
         _export_fa(slot, call)
         return
+    if _is_kit(slot[].kind()):
+        _export_kit(slot, call)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         block = _block_index(block)
@@ -1160,6 +1607,9 @@ def _import(slot: _Slot, call: _Call) raises:
         return
     if slot[].kind() == XDECOMP_KIND_FA:
         _import_fa(slot, call)
+        return
+    if _is_kit(slot[].kind()):
+        _import_kit(slot, call)
         return
     if slot[].fitted or len(slot[].blocks) != 6:
         slot[].clear()
@@ -1234,6 +1684,9 @@ def _outputs(call: _Call) raises:
         if kind == XDECOMP_KIND_FA:
             call[].out_cols = _fa_width(asked_first, words[1], call[].x.cols, -1)
             return
+        if _is_kit(kind):
+            call[].out_cols = _kit_width(words, asked_first, call[].x.cols, -1)
+            return
         if asked_first == MEMBER_OP_INVERSE_TRANSFORM:
             call[].out_cols = call[].x.cols
             return
@@ -1254,6 +1707,11 @@ def _outputs(call: _Call) raises:
     var asked = call[].flags
     if slot[].kind() == XDECOMP_KIND_FA:
         call[].out_cols = _fa_width(asked, slot[].words[1], call[].x.cols, slot[].count if slot[].fitted else -1)
+        return
+    if _is_kit(slot[].kind()):
+        var held_words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+        call[].out_cols = _kit_width(held_words, asked, slot[].features if slot[].fitted else call[].x.cols,
+                                     slot[].count if slot[].fitted else -1)
         return
     if asked != MEMBER_OP_TRANSFORM and asked != MEMBER_OP_INVERSE_TRANSFORM:
         member_unsupported(_name(slot), asked)
@@ -1312,6 +1770,19 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             if (call[].param_count < XDECOMP_FA_PARAM_COUNT
                     or call[].param_count != XDECOMP_FA_PARAM_COUNT + max(Int(source[5]), 0)):
                 raise Error("member ABI: a FactorAnalysis member takes six parameters and its noise_variance_init")
+        elif _is_kit(Int(source[0])) and source[0] == Float64(Int(source[0])):
+            var kind = Int(source[0])
+            var wanted = XDECOMP_DL_PARAM_COUNT
+            if kind == XDECOMP_KIND_MBDL:
+                wanted = XDECOMP_MBDL_PARAM_COUNT
+            elif kind == XDECOMP_KIND_CODER:
+                wanted = XDECOMP_CODER_PARAM_COUNT
+            elif kind == XDECOMP_KIND_SPCA:
+                wanted = XDECOMP_SPCA_PARAM_COUNT
+            elif kind == XDECOMP_KIND_MBSPCA:
+                wanted = XDECOMP_MBSPCA_PARAM_COUNT
+            if call[].param_count != wanted:
+                raise Error("member ABI: a " + _kind_name(kind) + " member takes " + String(wanted) + " parameters")
         else:
             raise Error("member ABI: unknown or unpublished XDecomp member kind")
         var words = List[Float64](length=call[].param_count, fill=0.0)
@@ -1337,6 +1808,12 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _fit_ica(slot, call)
         elif kind == XDECOMP_KIND_FA:
             _fit_fa(slot, call)
+        elif kind == XDECOMP_KIND_DL or kind == XDECOMP_KIND_MBDL:
+            _fit_dl(slot, call)
+        elif kind == XDECOMP_KIND_CODER:
+            _fit_coder(slot, call)
+        elif _is_spca(kind):
+            _fit_spca(slot, call)
         else:
             _fit_ipca(slot, call)
     elif kind == XDECOMP_KIND_FA and operation == MEMBER_OP_TRANSFORM:
@@ -1353,6 +1830,8 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _query_rp(slot, call, inverse)
         elif kind == XDECOMP_KIND_ICA:
             _query_ica(slot, call, inverse)
+        elif _is_kit(kind):
+            _query_kit(slot, call, inverse)
         else:
             _query(slot, call, inverse)
     elif operation == MEMBER_OP_EXPORT:
