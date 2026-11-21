@@ -104,6 +104,7 @@ class ModelMetadataSource(unittest.TestCase):
         for run, door, entry in (
             ("bindings/causal_model_config_run.mojo", "bindings/causal_model_config_door.mojo", "causal_config_plan("),
             ("bindings/causal_lm_construct_run.mojo", "bindings/causal_lm_construct_door.mojo", "causal_transformer_block("),
+            ("bindings/causal_checkpoint_run.mojo", "bindings/causal_checkpoint_door.mojo", "checkpoint_read_plan("),
         ):
             body = (ROOT / run).read_text()
             for word in ("PythonObject", "std.python", "py_call", "py_get", "GIL"):
