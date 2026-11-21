@@ -10,10 +10,13 @@ PolynomialFeatures (kind 4, `(35, 4)`), QuantileTransformer (kind 5,
 handles), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`),
 KBinsDiscretizer (kind 8, `(35, 8)`; admit answers False for a subsample
 or random_state that is not an integer), SplineTransformer (kind 9,
-`(35, 9)`). The family's other classes (OrdinalEncoder OneHotEncoder
-TargetEncoder IterativeImputer) carry no mark (each
-blocker in the lane's RESULT file): a caller keeps their own doors, and admit
-refuses their kinds in words.
+`(35, 9)`), OrdinalEncoder (kind 10, `(35, 10)`; admit answers False for
+categories other than 'auto', for infrequent grouping (min_frequency or
+max_categories set) and on the FAST image whose packed category route the
+door tries first: the caller keeps the door). The family's other classes
+(TargetEncoder IterativeImputer) carry no mark (each blocker in the lane's
+RESULT file): a caller keeps their own doors, and admit refuses their kinds
+in words.
 
   * `prep_member_admit` (UNPACK, once per member): the estimator's own route
     (`scaler_entries`, `scaler_route_held`: one record read; the x_prep
@@ -51,7 +54,11 @@ from bindings.prep_encode_native_door import (
     IDN_STATS_BLOCKED, _kbins_strategy as enc_kbins_strategy, _seed64 as enc_seed64,
     _spline_checks as enc_spline_checks, _extrapolation as enc_extrapolation, _spline_fused as enc_spline_fused,
     _knot_rows as enc_knot_rows, _f32 as enc_f32,
+    _check_infrequent_params as enc_check_infrequent, _fast_unique as enc_fast_unique, _cls2_cat as enc_cls2_cat,
+    _c08_route as enc_c08_route, _category_record as enc_category_record, _index_list as enc_index_list,
+    encode_auto_categories,
 )
+from bindings.prep_encode_cats_run import CatAuto
 from bindings.prep_stateless_native_door import _int_like as stateless_int_like
 from bindings.py_typed_call import py_call_typed
 from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT
@@ -76,7 +83,7 @@ from core.prep_member import (
     PREP_BLOCK_EXTRA, PREP_BLOCK_ANCHOR, PREP_BLOCK_ANCHOR_KIND,
     PREP_KIND_IMPUTER, PREP_IMPUTER_PARAM_COUNT,
     PREP_KIND_KBINS, PREP_KBINS_HEADER, PREP_KBINS_ONEHOT, PREP_KBINS_ONEHOT_DENSE, PREP_KBINS_ORDINAL,
-    PREP_KIND_SPLINE, PREP_SPLINE_HEADER,
+    PREP_KIND_SPLINE, PREP_SPLINE_HEADER, PREP_KIND_ORDINAL, PREP_ORDINAL_PARAM_COUNT,
     PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH, PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT, PREP_ROUTE_TAKE_ROWS,
 )
 from core.member_abi import (
@@ -400,6 +407,47 @@ def _spline_admit(model: PythonObject, fields: PythonObject, context: PythonObje
     owner.plan.params = words^
 
 
+def _ordinal_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    # The encode door's `_precheck` and `_ordinal_fit` UNPACK, in its order
+    # and words, read once here (the door per fit). False (the caller keeps
+    # the door): categories not 'auto', infrequent grouping, the FAST image's
+    # packed category route (`_auto_fit` tries it first).
+    var grouping = enc_check_infrequent(fields, context)
+    var handle = fields["handle_unknown"]
+    var handle_text = String(handle) if enc_is_str(handle) else String("")
+    if handle_text != "error" and handle_text != "use_encoded_value":
+        raise Error("mojolearn: invalid handle_unknown " + stateless_repr(handle))
+    var use = handle_text == "use_encoded_value"
+    var unknown_value = fields["unknown_value"]
+    if use and not enc_real_like(unknown_value, context):
+        raise Error("TypeError: mojolearn: unknown_value must be a number when handle_unknown='use_encoded_value'")
+    var emv = fields["encoded_missing_value"]
+    if not enc_real_like(emv, context):
+        raise Error("TypeError: mojolearn: encoded_missing_value must be a number (or NaN)")
+    var categories = fields["categories"]
+    if grouping or not (enc_is_str(categories) and String(categories) == "auto"):
+        return False
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = scaler_entries(model, mode, context)
+    var fast = enc_fast_unique(mode, entries)
+    if (enc_cls2_cat(mode, entries) & 1) != 0 and fast:
+        return False
+    var words = List[Float64](length=PREP_ORDINAL_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(PREP_KIND_ORDINAL)
+    words[1] = 1.0 if fast else 0.0  # CAT_FIT_SCAN, else CAT_FIT_UNIQUE
+    words[2] = 1.0 if enc_c08_route(mode, entries, 4) else 0.0
+    words[3] = 1.0 if xprep_r3("work") else 0.0
+    words[4] = 1.0 if use else 0.0
+    if use:
+        words[5] = enc_float(unknown_value)
+        words[6] = 1.0 if stateless_int_like(unknown_value, context) else 0.0
+    words[7] = enc_float(emv)
+    words[8] = 1.0 if stateless_int_like(emv, context) else 0.0
+    _route_admit(model, entries, context, owner, enc_caps(model, entries), False)
+    owner.plan.params = words^
+    return True
+
+
 def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -428,6 +476,8 @@ def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
     if kind == PREP_KIND_SPLINE:
         _spline_admit(model, fields, context, owner)
         return True
+    if kind == PREP_KIND_ORDINAL:
+        return _ordinal_admit(model, fields, context, owner)
     raise Error("ValueError: mojolearn: Prep member kind " + String(kind) + " is not published")
 
 
@@ -452,7 +502,7 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the door's fit does."""
-    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_SPLINE:
+    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_ORDINAL:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     var call = MemberCall(plan.route, state)
     var scalars = _export(plan, call, MEMBER_BLOCK_SCALARS)
@@ -466,6 +516,9 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
         return
     if plan.kind == PREP_KIND_SPLINE:
         _pack_spline(fields, context, plan, call, d, Int(words[1]), Int(words[2]), Int(words[3]))
+        return
+    if plan.kind == PREP_KIND_ORDINAL:
+        _pack_encoder(model, fields, context, plan, call, d, Int(words[1]))
         return
     if plan.kind == PREP_KIND_POLYNOMIAL or plan.kind == PREP_KIND_QUANTILE or plan.kind == PREP_KIND_POWER:
         _pack_stateless_fitted(fields, context, plan, call, d, Int(words[1]) if plan.kind != PREP_KIND_POWER else 0)
@@ -525,6 +578,38 @@ def _pack_kbins(fields: PythonObject, context: PythonObject, plan: MemberPlan, m
     py_setitem(fields, "_edges", _vector(edges, context))
     py_setitem(fields, "_ne", _vector(counts, context))
     py_setitem(fields, "_stride", stride)
+    py_setitem(fields, "numeric_mode_", context["backend_fields"]["_DEFAULT_MODE"])
+    py_setitem(fields, "n_features_in_", d)
+
+
+def _encoder_state_of(plan: MemberPlan, mut call: MemberCall, d: Int, kmax: Int) raises -> CatAuto:
+    # The fitted category state from the member's blocks (the docstring's table).
+    var block = _export(plan, call, PREP_BLOCK_CENTER)
+    var sizes = _export(plan, call, PREP_BLOCK_SCALE)
+    var missing = _export(plan, call, PREP_BLOCK_EXTRA)
+    if (block.rows * block.cols != max(d * kmax, 1) or sizes.rows * sizes.cols != d
+            or missing.rows * missing.cols != d):
+        raise Error("RuntimeError: mojolearn: a fitted encoder block has the wrong size")
+    var state = CatAuto()
+    state.d = d
+    state.kmax = kmax
+    state.block = List[Float32](length=block.rows * block.cols, fill=Float32(0))
+    unsafe_memcpy(dest=f32_ptr(Int(state.block.unsafe_ptr())), src=f32_ptr(block.data), count=len(state.block))
+    var sp = f32_ptr(sizes.data)
+    var mp = f32_ptr(missing.data)
+    for j in range(d):  # driver-loop: over the per-column category counts (feature metadata)
+        state.sizes.append(Int(sp[j]))
+        state.missing.append(Int(mp[j]))
+    return state^
+
+
+def _pack_encoder(model: PythonObject, fields: PythonObject, context: PythonObject, plan: MemberPlan,
+    mut call: MemberCall, d: Int, kmax: Int) raises:
+    """The encode door's restricted fit PACK (bindings/prep_encode_native_door.mojo
+    `encode_auto_categories`: categories_, the category record, `_missing`,
+    `_infrequent` / `_grouping` None), then its fields, in its order."""
+    var state = _encoder_state_of(plan, call, d, kmax)
+    encode_auto_categories(model, fields, state, context)
     py_setitem(fields, "numeric_mode_", context["backend_fields"]["_DEFAULT_MODE"])
     py_setitem(fields, "n_features_in_", d)
 
@@ -594,6 +679,49 @@ def _kbins_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) 
         member_free(plan, call)
         raise error
     _ = len(scalars)
+    return call.state
+
+
+def _encoder_state(model: PythonObject, fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    """The attributes the encode door's transform reads: the category record
+    of `categories_` (`_category_record`: kept in the prepared-owner registry,
+    never in the instance dictionary) and `_missing`. A fitted infrequent
+    grouping is not the restricted form: refused in the member ABI's words
+    (the caller keeps the door)."""
+    var d = _int_field(fields, "n_features_in_")
+    if not py_contains(fields, "categories_") or not py_contains(fields, "_missing"):
+        raise Error("NotFittedError: this member is not fitted yet")
+    if not py_contains(fields, "_grouping") or fields["_grouping"] is not None:
+        raise Error("NotImplementedError: member ABI: an encoder member serves no infrequent grouping")
+    var record = enc_category_record(model, fields["categories_"], context)
+    if len(record[4]) != d:
+        raise Error("RuntimeError: mojolearn: a fitted attribute does not match the fitted sizes")
+    var kmax = Int(py=record[3])
+    var missing_list = enc_index_list(fields["_missing"])
+    if len(missing_list) != d:
+        raise Error("RuntimeError: mojolearn: a fitted attribute does not match the fitted sizes")
+    var missing = List[Float32](capacity=d)
+    for j in range(d):  # driver-loop: over the per-column NaN slots (feature metadata)
+        missing.append(Float32(missing_list[j]))
+    var scalars: List[Float64] = [Float64(d), Float64(kmax)]
+    var call = member_new(plan)
+    try:
+        _import_vector(plan, call, record[2], PREP_BLOCK_CENTER, Int(py=record[6]), context)
+        _import_vector(plan, call, record[5], PREP_BLOCK_SCALE, d, context)
+        call.block = PREP_BLOCK_EXTRA
+        call.flags = 0
+        call.x = MemberMatrix(Int(missing.unsafe_ptr()), 1, d)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    _ = len(missing)
+    _ = record
     return call.state
 
 
@@ -725,6 +853,8 @@ def prep_member_state(model: PythonObject, fields: PythonObject, context: Python
         return _kbins_state(fields, context, plan)
     if plan.kind == PREP_KIND_SPLINE:
         return _spline_state(fields, context, plan)
+    if plan.kind == PREP_KIND_ORDINAL:
+        return _encoder_state(model, fields, context, plan)
     if plan.kind != PREP_KIND_ROBUST and not maxabs:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     if (not py_contains(fields, "n_features_in_")

@@ -2,9 +2,10 @@
 """The Prep family as MEMBERS (core/member_abi.mojo): RobustScaler (kind 0),
 MaxAbsScaler (kind 1), Binarizer (kind 2), Normalizer (kind 3),
 PolynomialFeatures (kind 4), QuantileTransformer (kind 5) and
-PowerTransformer (kind 6) and SimpleImputer (kind 7); the encoders,
-IterativeImputer, KBinsDiscretizer and SplineTransformer are not published
-(see the boundary file for each blocker).
+PowerTransformer (kind 6), SimpleImputer (kind 7), KBinsDiscretizer (kind 8),
+SplineTransformer (kind 9) and OrdinalEncoder (kind 10, the restricted form:
+categories='auto', no infrequent grouping); TargetEncoder and
+IterativeImputer are not published (see the boundary file for each blocker).
 
 One entry, `prep_member_v2`, published by each preprocessing image beside
 the scaler member (`prep_member_publish`, bindings/_mojolearn_preprocessing.mojo
@@ -108,6 +109,18 @@ column statistics 0 / 1, [10] R3 work region 0 / 1, [11] order 'F' 0 / 1
 rows, [13] c their columns (-1: rows of unequal lengths), then the r x c
 knots row-major (float32 values). sample_weight as KBinsDiscretizer's.
 Transform: n_features_out_ columns, float32.
+MEMBER_OP_NEW parameters, OrdinalEncoder (Float64 words, 9): [0] kind 10,
+[1] the category fit route: 0 CAT_FIT_UNIQUE, 1 CAT_FIT_SCAN (the fast
+image's unique scans; the admit refuses the image whose packed route the
+door tries first), [2] the C08 fit_transform route 0 / 1 (`x_prep_c08_routes`
+bit 4 on the identical image: with `fit_output` the transform reads the
+fit's inverse), [3] R3 work region 0 / 1, [4] handle_unknown
+'use_encoded_value' 0 / 1 (0: 'error'), [5] unknown_value (NaN allowed; 0
+unused), [6] unknown_value is an integer 0 / 1 (how a refusal prints it),
+[7] encoded_missing_value (NaN allowed), [8] it is an integer 0 / 1.
+Transform and inverse_transform: features columns, float32 (codes; NaN
+category -> [7], unknown -> [5]); X is every word a category (no finite
+refusal, MEMBER_CAN_TEST_ROWS: the estimator's rule, applied in full).
 
 The Apple fast direct fit entry (`x_prep_maxabs_fit_direct`, opt-in
 PREP3_MAXABS) is not a member route: the admit answers False there and the
@@ -172,6 +185,11 @@ KBinsDiscretizer:
 SplineTransformer:
   0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, `_nk`, `_k`, n_features_out_]
   1 `PREP_BLOCK_CENTER` float32 features x (`_nk` + 2 `_k`) (`_knots`; bsplines_, `_lo`, `_hi` are its words)
+OrdinalEncoder (the encode door's category record, bindings/prep_encode_cats_run.mojo `CatAuto`):
+  0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, kmax (the widest column's category count)]
+  1 `PREP_BLOCK_CENTER` float32 max(features x kmax, 1) (row j's first sizes[j] words: categories_[j])
+  2 `PREP_BLOCK_SCALE` float32 features (the category counts)
+  3 `PREP_BLOCK_EXTRA` float32 features (`_missing`: the NaN slot, -1 none)
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's store): a slot never moves once minted, the lock covers only
@@ -202,9 +220,14 @@ from bindings.prep_encode_spline_run import (
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, imputer_fit_stage, imputer_transform_stage, IMP_CONSTANT,
 )
+from bindings.prep_encode_cats_run import CatFit, CatFitPlan, CatBlock, CatAuto, cat_fit_stage, cat_auto_state, CAT_FIT_INVERSE
+from bindings.prep_encode_ordinal_run import (
+    OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage, ordinal_auto_clash,
+    ordinal_auto_refusal, ord_number_text,
+)
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64,
-    MEMBER_CAN_SCOPE, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SAMPLE_WEIGHT,
+    MEMBER_CAN_SCOPE, MEMBER_CAN_ROW_INDEX, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
     MEMBER_OP_TRANSFORM, MEMBER_OP_INVERSE_TRANSFORM, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_INVERSE_TRANSFORM, MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT,
@@ -244,6 +267,8 @@ comptime PREP_KBINS_ORDINAL = 2
 comptime PREP_KIND_SPLINE = 9
 #: SplineTransformer's fixed words; `words[12] * words[13]` given knot words follow.
 comptime PREP_SPLINE_HEADER = 14
+comptime PREP_KIND_ORDINAL = 10
+comptime PREP_ORDINAL_PARAM_COUNT = 9
 
 comptime PREP_BLOCK_CENTER = MEMBER_BLOCK_FAMILY
 comptime PREP_BLOCK_SCALE = MEMBER_BLOCK_FAMILY + 1
@@ -410,6 +435,8 @@ def _kind_name(kind: Int) -> String:
         return String("KBinsDiscretizer")
     if kind == PREP_KIND_SPLINE:
         return String("SplineTransformer")
+    if kind == PREP_KIND_ORDINAL:
+        return String("OrdinalEncoder")
     return String("RobustScaler")
 
 
@@ -425,12 +452,14 @@ def _block_count(kind: Int) -> Int:
         return 6
     if kind == PREP_KIND_IMPUTER:
         return 5
+    if kind == PREP_KIND_ORDINAL:
+        return 4
     return 3
 
 
 def _scalar_count(kind: Int) -> Int:
     if (kind == PREP_KIND_MAXABS or kind == PREP_KIND_POLYNOMIAL or kind == PREP_KIND_QUANTILE
-            or kind == PREP_KIND_IMPUTER or kind == PREP_KIND_KBINS):
+            or kind == PREP_KIND_IMPUTER or kind == PREP_KIND_KBINS or kind == PREP_KIND_ORDINAL):
         return 2
     if kind == PREP_KIND_SPLINE:
         return 4
@@ -438,7 +467,13 @@ def _scalar_count(kind: Int) -> Int:
 
 
 def _invertible(kind: Int) -> Bool:
-    return kind == PREP_KIND_QUANTILE or kind == PREP_KIND_POWER or kind == PREP_KIND_KBINS
+    return (kind == PREP_KIND_QUANTILE or kind == PREP_KIND_POWER or kind == PREP_KIND_KBINS
+            or kind == PREP_KIND_ORDINAL)
+
+
+def _encoder(kind: Int) -> Bool:
+    # The category encoders (the restricted form of the encode door).
+    return kind == PREP_KIND_ORDINAL
 
 
 def _name(slot: _Slot) -> String:
@@ -1739,6 +1774,166 @@ def _transform_imputer(slot: _Slot, call: _Call) raises:
     _ = len(prog.consts_f)  # the program's own input words live past the run
 
 
+# ---------------------------------------------------------------- the category encoders
+# The restricted form of the encode door (bindings/prep_encode_native_door.mojo
+# `_auto_fit`, `encode_auto_categories`): categories='auto' without
+# infrequent grouping. FIT runs the door's category program (the route word
+# the admit read: CAT_FIT_SCAN on the fast image with unique scans, else
+# CAT_FIT_UNIQUE; the C08 program for a fit_transform where the image has
+# it) and builds the SAME typed state the door builds from it
+# (bindings/prep_encode_cats_run.mojo `cat_auto_state`), with the door's
+# checks (`ordinal_auto_clash`). The slot keeps the (d, kmax) block in
+# `center`, the sizes in `scale`, the NaN slots in `extra` (float32 words,
+# the words the door's programs read), [d, kmax] in `scalars`. The state
+# OWNS them (copied from the fit's arena): MEMBER_BORROWS_FIT clear.
+def _cat_fit(slot: _Slot, call: _Call, capture: Bool, mut arena: List[Float32]) raises -> CatFitPlan:
+    """The restricted category program over the caller's X (owner 0), its
+    host words left in `arena`."""
+    var n = _rows(call)
+    var d = call[].x.cols
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var prog = EncProgram(w[3] != 0.0)
+    var plan = cat_fit_stage(prog, CatFit(n, d, 0, -1, CAT_FIT_INVERSE if capture else Int(w[1])))
+    arena = _enc_run(call, prog, List[Int](), 0)
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    return plan
+
+
+def _cat_keep(slot: _Slot, state: CatAuto):
+    # The fitted category state into the slot (the docstring's blocks).
+    slot[].clear()
+    slot[].center = state.block.copy()
+    slot[].scale = List[Float32](capacity=state.d)
+    slot[].extra = List[Float32](capacity=state.d)
+    for j in range(state.d):  # driver-loop: over the per-column category counts (feature metadata)
+        slot[].scale.append(Float32(state.sizes[j]))
+        slot[].extra.append(Float32(state.missing[j]))
+    slot[].features = state.d
+    slot[].scalars = [Float64(state.d), Float64(state.kmax)]
+    slot[].fitted = True
+
+
+def _cat_block(slot: _Slot, sizes: Bool) -> CatBlock:
+    # The fitted block as owner 1 (and the sizes as owner 2 with `sizes`).
+    return CatBlock(1, len(slot[].center), Int(slot[].scalars[1]), 2 if sizes else -1, len(slot[].scale) if sizes else 0)
+
+
+def _cat_words(values: List[Float32]) -> List[Int]:
+    # Per-column integer words (sizes, NaN slots) of the fitted state.
+    var out = List[Int](capacity=len(values))
+    for j in range(len(values)):  # driver-loop: over the per-column words (feature metadata)
+        out.append(Int(values[j]))
+    return out^
+
+
+def _unknown_text(arena: List[Float32], offset: Int, d: Int) -> String:
+    # The columns whose unknown count the program set, as the door prints them ("" when none).
+    var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+    var text = String("")
+    var count = 0
+    for j in range(d):  # driver-loop: over the per-column unknown flags (feature metadata)
+        if ap[offset + j] > 0:
+            text += (", " if count > 0 else "") + String(j)
+            count += 1
+    return String("[") + text + "]" if count > 0 else String("")
+
+
+def _fit_ordinal(slot: _Slot, call: _Call) raises:
+    """The encode door's `_ordinal_fit` in the restricted form: the category
+    program, `cat_auto_state`, `ordinal_auto_clash` in the door's words
+    (the numbers printed as integers when the parameter was an integer, else
+    in Mojo's shortest float form); with `fit_output` the transform reads the
+    C08 program's inverse when the image has it, as the door."""
+    _fit_begin(slot, call)
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var capture = call[].fit_output == MEMBER_OP_TRANSFORM and w[2] != 0.0
+    var n = _rows(call)
+    var d = call[].x.cols
+    var arena = List[Float32]()
+    var plan = _cat_fit(slot, call, capture, arena)
+    var state = cat_auto_state(Int(arena.unsafe_ptr()), plan, n, d)
+    var clash = ordinal_auto_clash(state, w[4] != 0.0, w[5], w[7])
+    if len(clash) > 0:
+        raise Error(ordinal_auto_refusal(clash, ord_number_text(w[5], w[6] != 0.0), ord_number_text(w[7], w[8] != 0.0)))
+    _cat_keep(slot, state)
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _transform_ordinal(slot, call, Int(arena.unsafe_ptr()) + 4 * plan.inverse if capture else 0)
+    _ = arena^  # the C08 inverse the transform read lives past it
+
+
+def _transform_ordinal(slot: _Slot, call: _Call, inverse: Int) raises:
+    """The encode door's `_ordinal_transform`: `ordinal_transform_stage`
+    (lookup, or the C08 fit's inverse at `inverse` when nonzero; where_neg,
+    where_code), the unknown refusal under handle_unknown='error' in the
+    door's words."""
+    var d = slot[].features
+    _apply_begin(slot, call, d)
+    var n = _rows(call)
+    if n * d == 0:
+        return
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var use = w[4] != 0.0
+    var missing = _cat_words(slot[].extra)
+    var any_missing = False
+    for j in range(len(missing)):  # driver-loop: checks for a NaN category slot (per-column NaN category slots)
+        any_missing = any_missing or missing[j] >= 0
+    var held = inverse != 0
+    var request = OrdinalApply(n, d, 0, _cat_block(slot, True), held, 1 if held else -1, False, List[List[Int]](),
+                               use, w[5] if use else 0.0, any_missing, missing^, w[7] if any_missing else 0.0)
+    var prog = EncProgram(w[3] != 0.0)
+    var plan = ordinal_transform_stage(prog, request)
+    var seconds: List[Int] = [Int(slot[].center.unsafe_ptr()), Int(slot[].scale.unsafe_ptr())]
+    if held:
+        seconds = [inverse]
+    var arena = _enc_run(call, prog, seconds, 0)
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    if not use:
+        var bad = _unknown_text(arena, plan.unknown, d)
+        if bad.byte_length() > 0:
+            raise Error("mojolearn: OrdinalEncoder found unknown categories in column(s) " + bad + " during transform")
+    unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+        src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + plan.encoded, count=n * d)
+    _ = arena^
+
+
+def _inverse_ordinal(slot: _Slot, call: _Call) raises:
+    """The encode door's `_ordinal_inverse`: `ordinal_inverse_stage`
+    (ord_inverse, cat_gather, the bad-row compaction), the rows naming no
+    category refused in the door's words (the first ten)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("RuntimeError: mojolearn: this " + estimator + " instance is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    _dense(call[].dst, "the output buffer", estimator)
+    var d = slot[].features
+    var n = _rows(call)
+    if call[].x.cols != d:
+        raise Error("mojolearn: X has " + String(call[].x.cols) + " features, " + estimator + " was fitted with "
+                    + String(d))
+    if call[].dst.rows != n or call[].dst.cols != d:
+        raise Error("ValueError: the output buffer holds " + String(d) + " values per row of X")
+    if n == 0:
+        return
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    var encoded = w[4] != 0.0
+    var request = OrdinalInverse(n, d, 0, _cat_block(slot, False), False, List[List[Int]](), _cat_words(slot[].scale),
+                                 _cat_words(slot[].extra), w[7], encoded, w[5] if encoded else 0.0)
+    var prog = EncProgram(w[3] != 0.0)
+    var plan = ordinal_inverse_stage(prog, request)
+    var arena = _enc_run(call, prog, Int(slot[].center.unsafe_ptr()), 0)
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    var k = _iword(arena, plan.bad_count)
+    if k > 0:
+        var text = String("[")
+        for i in range(min(k, 10)):  # driver-loop: over at most ten reported rows
+            text += (", " if i > 0 else "") + String(_iword(arena, plan.bad_rows + i))
+        raise Error("mojolearn: rows " + text + "] hold codes that name no category")
+    unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+        src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + plan.values, count=n * d)
+    _ = arena^
+
+
 def _block_view(slot: _Slot, block: Int) raises -> MemberMatrix:
     if block == PREP_BLOCK_CENTER:
         return MemberMatrix(Int(slot[].center.unsafe_ptr()), 1, len(slot[].center))
@@ -1834,6 +2029,14 @@ def _import(slot: _Slot, call: _Call) raises:
         complete = complete and stride >= 2 and len(slot[].center) == d * stride and len(slot[].scale) == d
         for j in range(len(slot[].scale)):  # driver-loop: over the fitted per-column edge counts
             complete = complete and Int(slot[].scale[j]) >= 2 and Int(slot[].scale[j]) <= stride
+    elif _encoder(kind):
+        var kmax = Int(slot[].scalars[1])
+        complete = (complete and kmax >= 0 and len(slot[].center) == max(d * kmax, 1) and len(slot[].scale) == d
+                    and len(slot[].extra) == d)
+        for j in range(min(len(slot[].scale), len(slot[].extra))):  # driver-loop: over the fitted per-column sizes
+            var size = Int(slot[].scale[j])
+            var nan_slot = Int(slot[].extra[j])
+            complete = complete and size >= 0 and size <= kmax and (nan_slot == -1 or (size > 0 and nan_slot == size - 1))
     elif kind == PREP_KIND_POWER:
         complete = (complete and len(slot[].extra) == d and len(slot[].center) == len(slot[].scale)
                     and (len(slot[].center) == 0 or len(slot[].center) == d)
@@ -1930,6 +2133,8 @@ def _new_count(kind: Int) raises -> Int:
         return PREP_KBINS_HEADER  # plus words[8] per-column n_bins words
     if kind == PREP_KIND_SPLINE:
         return PREP_SPLINE_HEADER  # plus words[12] * words[13] given knot words
+    if kind == PREP_KIND_ORDINAL:
+        return PREP_ORDINAL_PARAM_COUNT
     raise Error("member ABI: unknown or unpublished Prep member kind")
 
 
@@ -1941,7 +2146,7 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         var mask = (MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
                     | MEMBER_CAN_ROW_INDEX | MEMBER_CAN_SCOPE)
         if call[].state == 0:
-            return mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SAMPLE_WEIGHT  # the family's union
+            return mask | MEMBER_CAN_INVERSE_TRANSFORM | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_TEST_ROWS  # the family's union
         # Kind-exact: QuantileTransformer, PowerTransformer and
         # KBinsDiscretizer invert; KBinsDiscretizer and SplineTransformer
         # read weights; no kind reads a column index.
@@ -1950,6 +2155,12 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             mask |= MEMBER_CAN_INVERSE_TRANSFORM
         if held[].kind() == PREP_KIND_KBINS or held[].kind() == PREP_KIND_SPLINE:
             mask |= MEMBER_CAN_SAMPLE_WEIGHT
+        if _encoder(held[].kind()):
+            # The encoders' rule is the door's: every word of X is a category
+            # (NaN is the NaN category, an infinity a value; the door's X
+            # admission `xprep_values` scans nothing), and the RUN applies it
+            # in full, so a caller makes no finite scan.
+            mask |= MEMBER_CAN_TEST_ROWS
         return mask
     if operation == MEMBER_OP_NEW:
         if call[].param_count < 1 or not call[].params:
@@ -1979,6 +2190,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         if kind == PREP_KIND_SPLINE and (source[1] < 0.0 or source[1] > 7.0 or source[2] < 0.0 or source[2] > 2.0
                                          or source[4] < 0.0 or source[4] > 3.0):
             raise Error("member ABI: invalid SplineTransformer degree, knots or extrapolation code")
+        if _encoder(kind) and source[1] != 0.0 and source[1] != 1.0:
+            raise Error("member ABI: an encoder member's category fit route is CAT_FIT_UNIQUE or CAT_FIT_SCAN")
         var words = List[Float64](length=call[].param_count, fill=0.0)
         for index in range(call[].param_count):  # driver-loop: the parameter words
             words[index] = source[index]
@@ -2010,6 +2223,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _fit_kbins(slot, call)
         elif kind == PREP_KIND_SPLINE:
             _fit_spline(slot, call)
+        elif kind == PREP_KIND_ORDINAL:
+            _fit_ordinal(slot, call)
         else:
             _fit_robust(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
@@ -2029,6 +2244,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _transform_kbins(slot, call)
         elif kind == PREP_KIND_SPLINE:
             _transform_spline(slot, call)
+        elif kind == PREP_KIND_ORDINAL:
+            _transform_ordinal(slot, call, 0)
         else:
             _transform_robust(slot, call)
     elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_QUANTILE:
@@ -2037,6 +2254,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
         _apply_power(slot, call, True)
     elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_KBINS:
         _inverse_kbins(slot, call)
+    elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_ORDINAL:
+        _inverse_ordinal(slot, call)
     elif operation == MEMBER_OP_EXPORT:
         _export(slot, call)
     elif operation == MEMBER_OP_IMPORT:

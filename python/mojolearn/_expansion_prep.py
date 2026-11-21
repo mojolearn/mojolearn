@@ -556,6 +556,10 @@ class OrdinalEncoder(_PrepBase):
     >>> mojolearn.OrdinalEncoder().fit_transform(X)
     """
     fit_transform = _EncodeFitTransform.fit_transform
+    # Member ABI mark (family 35 Prep, kind 10; core/prep_member.mojo): callers
+    # run categories='auto' without infrequent grouping natively, else this
+    # class's own door.
+    _mojolearn_member = (35, 10)
     # One native call per public method; the native owner runs the whole
     # lifecycle (bindings/public_lifecycle_owner_door.mojo), so no `_mode` wrappers.
     _mojolearn_native_public = True
