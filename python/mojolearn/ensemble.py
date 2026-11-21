@@ -780,13 +780,13 @@ class GradientBoosting(_NumericModeMixin):
         prefix, and the exported model estimated on the last permutation. It
         supports every pointwise loss, Cosine and NewtonCosine scores, every
         bootstrap, ``random_strength``, every border type and NaN mode,
-        sample and class weights, one-hot categorical columns,
+        sample and class weights, categorical columns (one-hot and CTR,
+        with feature combinations when ``max_ctr_complexity`` is above 1),
         ``boost_from_average`` and eval sets. On a CPU-only install, sample
-        weights, class weights and one-hot columns are refused under Ordered.
+        weights and class weights are refused under Ordered.
         Refused, as in CatBoost: Depthwise and Lossguide, the multiclass
         losses, L2 and NewtonL2 scores, the Exact leaf estimator. Not
-        implemented, refused by name: CTR categorical columns and the ranking
-        losses. Its random streams are this library's, so an Ordered model
+        implemented, refused by name: the ranking losses. Its random streams are this library's, so an Ordered model
         matches CatBoost in behavior, not in bits.
     fold_len_multiplier : float, default 2.0
         Ordered only: the fold growth factor, greater than 1. Refused by a

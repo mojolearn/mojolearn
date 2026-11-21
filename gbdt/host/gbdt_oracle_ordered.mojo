@@ -98,6 +98,11 @@ from gbdt.grid_creator.binarization import (
 )
 from gbdt.options.data_processing_options import NAN_MODE_FORBIDDEN
 from gbdt.data.permutation import TRandom
+from gbdt.host.gbdt_oracle_tree_ctr import (
+    GbdtTreeCtrHost,
+    TreeU32Ptr,
+    _u32_ptr,
+)
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
     next_normal_f,
@@ -546,6 +551,43 @@ def _ordered_tree_structure(
     word_offset_of: List[Int],
     shift_of: List[UInt32],
     mask_of: List[UInt32],
+    one_hot_of: List[Bool],
+    plain_l2: Bool = False,
+    score_std_dev: Float32 = Float32(0.0),
+    seed: UInt64 = UInt64(0),
+    plain_cosine: Bool = False,
+) raises -> List[_OrdSplit]:
+    """The searcher without tree CTRs: `_ordered_tree_structure_levels` over
+    `cindex` with no tree-CTR state (its arguments are documented there)."""
+    var no_tree_ctr = List[GbdtTreeCtrHost]()
+    var no_indexes = List[List[UInt32]]()
+    var no_test = List[UInt32]()
+    return _ordered_tree_structure_levels(
+        _u32_ptr(cindex), helpers, max_depth, sw, sg, doc_ids, part_bounds,
+        fold_count, fold_bits, fixed_scale, l2, word_offset_of, shift_of,
+        mask_of, one_hot_of, no_tree_ctr, 0, no_indexes, no_test,
+        plain_l2, score_std_dev, seed, plain_cosine,
+    )
+
+
+def _ordered_tree_structure_levels(
+    # the search index's words (`_u32_ptr` of the list; with tree CTRs it is
+    # `tree_cindexes[tree_p]`, whose slots the level driver rewrites in
+    # place)
+    cindex: TreeU32Ptr,
+    mut helpers: List[_PwHelper],
+    max_depth: Int,
+    sw: List[Float32],
+    sg: List[Float32],
+    doc_ids: List[Int],
+    part_bounds: List[Int],
+    fold_count: Int,
+    fold_bits: Int,
+    fixed_scale: Float32,
+    l2: Float32,
+    word_offset_of: List[Int],
+    shift_of: List[UInt32],
+    mask_of: List[UInt32],
     # one flag per layout feature, or empty for none: a ONE-HOT feature's
     # candidates are equality tests (`TBinarizedFeature::OneHotFeature`).
     # Its histogram cells are the per-bin sums as filed (the scan skips its
@@ -555,6 +597,20 @@ def _ordered_tree_structure(
     # update sends `bin == split bin` right (`pw_split_resolve`'s take-bin
     # arm).
     one_hot_of: List[Bool],
+    # TREE CTRS UNDER ORDERED (the device's level driver,
+    # `fit_oblivious_tree_structure_levels`): empty for none, else the
+    # fit's state, the index of the search index in `tree_cindexes` (every
+    # permutation's index, or the one they share) and the held-out index.
+    # With it: the slots are cleared before the tree, EVERY level's
+    # histograms are built from scratch over zeroed slots, an accepted
+    # winner goes through `take_winner` (a won candidate is recorded as the
+    # persist column it became, which is also what later levels' repeat
+    # test compares) and the next level's candidates are minted after the
+    # partition.
+    mut tree_ctr: List[GbdtTreeCtrHost],
+    tree_p: Int,
+    mut tree_cindexes: List[List[UInt32]],
+    mut tree_test_cindex: List[UInt32],
     plain_l2: Bool = False,
     # the per-tree noise (`fit_oblivious_tree_structure`'s `score_std_dev`
     # and `seed`): a `TRandom(seed)` draw per LEVEL is the level's
@@ -575,6 +631,14 @@ def _ordered_tree_structure(
     # TCosineScoreCalcer, not the paired-fold dynamic cosine formula.
     if plain_cosine and (fold_count != 1 or plain_l2):
         raise Error("plain cosine needs one fold and cannot select L2")
+    var level_driver = len(tree_ctr) > 0
+    if level_driver:
+        if fold_count < 2 or plain_l2:
+            raise Error("the tree-CTR level driver needs the ordered fold arm")
+        if tree_p < 0 or tree_p >= len(tree_cindexes):
+            raise Error("tree CTR tree: the learn permutation has no index")
+        tree_ctr[0].begin_tree(tree_p, tree_cindexes[tree_p])
+        tree_ctr[0].learn_changed = False
     var doc_count = len(doc_ids)
     var have_one_hot = len(one_hot_of) != 0
     var max_parts = 1 << (fold_bits + max_depth)
@@ -622,7 +686,19 @@ def _ordered_tree_structure(
         for i in range(doc_count):
             docs[i] = doc_ids[s.indices[i]]
         var part_count = 1 << depth
-        var full_pass = depth == 0
+        var full_pass = depth == 0 or level_driver
+        if level_driver and depth > 0:
+            # the device's per-level `reset_for_tree`: every slot back to
+            # +0.0 before a from-scratch level
+            for h in range(len(helpers)):
+                ref hl = helpers[h]
+                var line2_l = hl.hist_line * 2
+                for k in range(len(hl.dirty)):
+                    var slot_l = hl.dirty[k]
+                    for c in range(slot_l * line2_l, (slot_l + 1) * line2_l):
+                        hl.hist[c] = Float32(0.0)
+                    hl.dirty_flag[slot_l] = False
+                hl.dirty.clear()
         var ny = part_count if full_pass else part_count // 2
         var best_fid = GBDT_ORD_SENTINEL
         var best_bin = UInt32(0)
@@ -932,7 +1008,15 @@ def _ordered_tree_structure(
                 seen = True
         if seen:
             break
-        structure.append(_OrdSplit(fid, Int(best_bin)))
+        var kept_fid = fid
+        if level_driver:
+            kept_fid = tree_ctr[0].take_winner(
+                tree_p, tree_cindexes, tree_test_cindex, fid, Int(best_bin)
+            )
+            if kept_fid < 0:
+                # the winner sits on a slot that holds no column: no split
+                break
+        structure.append(_OrdSplit(kept_fid, Int(best_bin)))
         if depth + 1 == max_depth:
             break
         var bit = UInt32(1) << UInt32(depth + fold_bits)
@@ -962,6 +1046,13 @@ def _ordered_tree_structure(
         s.bins = new_bins^
         s.indices = new_indices^
         _update_subsets_stats(s, 1 << (depth + 1 + fold_bits), sw, sg)
+        if level_driver:
+            # the next level's candidates on the search index (the
+            # partition above read the won slot before this rewrites it)
+            tree_ctr[0].mint_level(tree_p, tree_cindexes[tree_p])
+            tree_ctr[0].learn_changed = False
+    if level_driver:
+        tree_ctr[0].end_tree()
     return structure^
 
 
@@ -1537,7 +1628,6 @@ from gbdt.host.gbdt_oracle_ctr import (
     gbdt_ctr_host_prelude,
 )
 from gbdt.host.gbdt_oracle_rmse import gbdt_text_with_bias
-from gbdt.host.gbdt_oracle_tree_ctr import GbdtTreeCtrHost
 from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.ctr_value_table import TCtrValueTable
 from gbdt.overfitting_detector.overfitting_detector import (
@@ -1837,6 +1927,7 @@ def gbdt_ordered_host_fit(
     opts: GbdtOrderedHostOptions,
     eval: GbdtOrderedHostEval,
     flags: List[UInt32],
+    max_ctr_complexity: Int = 1,
 ) raises -> GbdtOrderedHostFit:
     """Train `params.n_estimators` trees by Ordered boosting on the host and
     return the model text (bias included), the learn and held-out losses,
@@ -1853,7 +1944,12 @@ def gbdt_ordered_host_fit(
     permutation's index, and every permutation's leaves are read off that
     permutation's own index (`fit_ordered`'s `dep_bins`). A one-hot column
     (flagged, or categorical at or below `one_hot_max_size`) is searched and
-    applied as equality splits, as on the device."""
+    applied as equality splits, as on the device.
+
+    `max_ctr_complexity` above 1 turns on feature combinations (tree CTRs)
+    when a column feeds CTRs: every tree is then grown by the level driver
+    of `_ordered_tree_structure_levels`, as the device's Ordered fit grows
+    it, and the model gains one column per combination the trees chose."""
     if n_rows < 4:
         raise Error(
             "Error: pool has just " + String(n_rows) + " groups or docs,"
@@ -1876,17 +1972,18 @@ def gbdt_ordered_host_fit(
     var cat_tables = List[TCtrValueTable]()
     var cat_tree_state = List[GbdtTreeCtrHost]()
     var cat_ctr_columns = 0
+    var cat_base_columns = n_features
     if cat_on:
-        # the estimation permutation is the last (-1), the orders take the
-        # fold permutation block, and tree CTRs are off (complexity 1: the
-        # binding refuses feature combinations under Ordered by name)
+        # the estimation permutation is the last (-1) and the orders take
+        # the fold permutation block
         var shape = gbdt_ctr_host_prelude(
             x_colmajor, y, n_rows, n_features, params, flags,
             opts.permutation_count, -1, opts.permutation_block,
-            eval.x_colmajor, eval.n_rows, 1, grid, pidx, test_cindex,
-            cat_one_hot, cat_tables, cat_tree_state,
+            eval.x_colmajor, eval.n_rows, max_ctr_complexity, grid, pidx,
+            test_cindex, cat_one_hot, cat_tables, cat_tree_state,
         )
         n_cols = shape.n_columns
+        cat_base_columns = shape.n_base_columns
         cat_ctr_columns = shape.ctr_column_count
     else:
         grid = gbdt_host_grid(
@@ -1894,6 +1991,7 @@ def gbdt_ordered_host_fit(
             params.border_build_max_samples, params.random_seed,
             params.nan_mode, params.border_type,
         )
+    var tree_on = len(cat_tree_state) > 0
     # the prelude's own layout rule (`build_layout(fold_counts, one_hot)`);
     # `cat_one_hot` is empty for a float-only fit
     var layout = build_layout(grid.fold_counts, cat_one_hot)
@@ -1975,6 +2073,17 @@ def gbdt_ordered_host_fit(
         )
     var dep_on = perm_count > 1 and len(pidx) == perm_count
     var est_ix = est_p if dep_on else 0
+    if tree_on and not dep_on:
+        # `fit_ordered`'s own refusal: over one shared index only
+        # FeatureFreq combinations (a Borders one needs an index per
+        # permutation)
+        if len(cat_tree_state[0].dirty_persist) != 1 or (
+            perm_count > 1 and cat_tree_state[0].has_borders
+        ):
+            raise Error(
+                "ordered boosting: a tree-CTR fit over one shared index"
+                " takes FeatureFreq combinations only"
+            )
     #: a learn permutation's leaves under `dep_on` (`dep_bins[p]`), one
     #: buffer for the fit, rewritten per permutation per tree
     var lp_bins = List[Int](length=n if dep_on else 1, fill=0)
@@ -2126,11 +2235,15 @@ def gbdt_ordered_host_fit(
         # ---- the structure ----
         # the structure is searched on the learn permutation's own index
         # when the fit has permutation-dependent columns (`search_idx`)
-        var splits = _ordered_tree_structure(
-            pidx[learn_p if dep_on else 0], helpers, max_depth, sw, sg,
+        # (tree CTRs on: the level driver, which rewrites the indexes'
+        # slots in place; off: the same body with no tree-CTR state)
+        var search_ix = learn_p if dep_on else 0
+        var splits = _ordered_tree_structure_levels(
+            _u32_ptr(pidx[search_ix]), helpers, max_depth, sw, sg,
             doc_ids, part_bounds,
             fold_count, fold_bits, scale, l2, feat_offset, feat_shift,
-            feat_mask, cat_one_hot, False, score_std, tree_seed,
+            feat_mask, cat_one_hot, cat_tree_state, search_ix, pidx,
+            test_cindex, False, score_std, tree_seed,
         )
         # the estimation permutation's leaves (the model's), rows across
         # the workers
@@ -2222,6 +2335,34 @@ def gbdt_ordered_host_fit(
             split_features.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
             split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
             model_leaves.resize(tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0))
+    # TREE CTRS: the model's columns are the base columns followed by one
+    # column per combination the trees chose, and the trees' persist-slot
+    # splits are renumbered to them (`gbdt_ctr_host_fit`'s own tail)
+    var combination_ctrs = TCombinationCtrs()
+    if tree_on:
+        var chosen = cat_tree_state.pop()
+        var section = chosen.assemble()
+        var split_offsets = tree_split_offsets.copy()
+        chosen.rewrite_splits(split_offsets, split_features, section.column_of)
+        var m_folds = List[Int]()
+        var m_one_hot = List[Bool]()
+        var m_borders = List[List[Float32]]()
+        var m_nan = List[Int]()
+        for c in range(cat_base_columns):
+            m_folds.append(grid.fold_counts[c])
+            m_one_hot.append(cat_one_hot[c])
+            m_borders.append(grid.borders[c].copy())
+            m_nan.append(grid.nan_treatment[c])
+        for i in range(len(section.borders)):
+            m_folds.append(len(section.borders[i]))
+            m_one_hot.append(False)
+            m_borders.append(section.borders[i].copy())
+            m_nan.append(NAN_TREATMENT_AS_IS)
+        grid.fold_counts = m_folds^
+        grid.borders = m_borders^
+        grid.nan_treatment = m_nan^
+        cat_one_hot = m_one_hot^
+        combination_ctrs = section.ctrs.copy()
     var model = GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
@@ -2235,7 +2376,7 @@ def gbdt_ordered_host_fit(
     if cat_on:
         base_text = gbdt_ctr_host_model_text_of(
             model, cat_one_hot, cat_tables, cat_ctr_columns,
-            TCombinationCtrs(),
+            combination_ctrs,
         )
     else:
         base_text = gbdt_host_model_text(model)

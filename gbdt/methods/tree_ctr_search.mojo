@@ -38,6 +38,13 @@ ONE LEVEL.
 Then the leaf tail (`finish_synchronized_symmetric_tree`): the fused path's
 own leaf kernels.
 
+UNDER `boosting_type='Ordered'` the same `TreeCtrFit` is driven by the fold
+searcher's level driver (`fit_oblivious_tree_structure_levels`,
+oblivious_tree_doc_parallel_structure_searcher.mojo): steps 2 and 4 are the
+calls above, step 1 is the fold searcher's own level (fold histograms built
+from scratch, the fold scores, its gate walk read once per level) and the
+leaves are the Ordered fit's estimation over every permutation's index.
+
 PERMUTATIONS. The search runs on the tree's learn permutation. A won
 FeatureFreq column is the same on every permutation and is copied; a won
 Borders column is recomputed on each other permutation in that
@@ -202,6 +209,10 @@ struct TreeCtrFit(Movable):
     var d_test_bins: List[DeviceBuffer[DType.uint32]]
     #: per tree, the accepted entry of each persist slot it used
     var tree_persist: List[List[Int]]
+    #: the Ordered fold searcher's fold-order copy of the search index (its
+    #: level driver allocates it once and gathers it after every slot
+    #: write); empty in a Plain fit
+    var d_fold_index: List[DeviceBuffer[DType.uint32]]
 
     def __init__(
         out self,
@@ -320,6 +331,7 @@ struct TreeCtrFit(Movable):
         self.accepted = List[TreeCtrAccepted]()
         self.d_test_bins = List[DeviceBuffer[DType.uint32]]()
         self.tree_persist = List[List[Int]]()
+        self.d_fold_index = List[DeviceBuffer[DType.uint32]]()
         self.plan = plan^
         self.configs = configs^
         self.border_counts = border_counts^
