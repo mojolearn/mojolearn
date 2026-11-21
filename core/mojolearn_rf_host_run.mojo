@@ -65,7 +65,8 @@ comptime N_RF_FIT_PARAMS = 16
 same order (that docstring is the contract)."""
 
 
-comptime RF_HOST_EXPORTS = SharedSlot[ForestExportRegistry[RfHostForest], "MojolearnRFFitExportHostV1"]
+# V2 (lane fx-gil, 2026-11-25): the registry gained its lock word.
+comptime RF_HOST_EXPORTS = SharedSlot[ForestExportRegistry[RfHostForest], "MojolearnRFFitExportHostV2", 2]
 
 
 def _check_criterion(who: String, criterion: Int, classification: Bool) raises:
@@ -336,25 +337,48 @@ def _rf_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outp
     var cp = i32_ptr(dst[1])
     var tp = f32_ptr(dst[2])
     var lp = i32_ptr(dst[3])
-    rf_host_export_into(registry[].entries[id].model, op, cp, tp, lp, dst[4])
+    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # no lock held and put back on every path.
+    var entry = registry[].take(id)
+    var failed = False
+    var words = String("")
+    try:
+        rf_host_export_into(entry.model, op, cp, tp, lp, dst[4])
+    except problem:
+        failed = True
+        words = String(problem)
+    registry[].put_back(id, entry^)
+    if failed:
+        raise Error(words)
 
 
 def _rf_export_verify_native(id: Int, dst: List[Int]) raises -> Int:
     """XF_EXPORT_VERIFY (MOJOLEARN_FOREST_EXPORT=verify): the diagnostic
     lists `forest_export_legacy` returns, against the exported arrays."""
     var registry = RF_HOST_EXPORTS.get_or_create_ptr()
-    if id not in registry[].entries:
-        raise Error("unknown or released fitted forest export handle")
-    ref entry = registry[].entries[id]
-    if (len(entry.meta) != 3 or Int(entry.meta[0]) != entry.model.n_trees
-            or Int(entry.meta[1]) != entry.model.num_outputs or Int(entry.meta[2]) != entry.model.notices):
-        return -1
+    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # no lock held and put back on every path.
+    var entry = registry[].take(id)
+    var same = (len(entry.meta) == 3 and Int(entry.meta[0]) == entry.model.n_trees
+                and Int(entry.meta[1]) == entry.model.num_outputs and Int(entry.meta[2]) == entry.model.notices)
     var offsets = List[Int64]()
     var colid = List[Int64]()
     var quesval = List[Float64]()
     var left_child = List[Int64]()
     var leaves = List[Float64]()
-    rf_host_forest_lists(entry.model, offsets, colid, quesval, left_child, leaves)
+    var failed = False
+    var words = String("")
+    if same:
+        try:
+            rf_host_forest_lists(entry.model, offsets, colid, quesval, left_child, leaves)
+        except problem:
+            failed = True
+            words = String(problem)
+    registry[].put_back(id, entry^)
+    if failed:
+        raise Error(words)
+    if not same:
+        return -1
     return forest_export_verify_lists(offsets, colid, quesval, left_child, leaves, dst)
 
 
