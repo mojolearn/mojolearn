@@ -73,6 +73,12 @@ NUMPY_ORACLES = {
     # name, routed lazily, and `estimator.check(X)` (_mode.CheckMixin) imports
     # it inside the method, so `import mojolearn` still loads neither file.
     "mojolearn/_check_both.py", "mojolearn/_verify_check.py",
+    # The receipt and `reproduce` (2026-11-20): the same kind of testing tool.
+    # It fingerprints the user's arrays and the outputs the product returned
+    # with the check's own forms and loads the user's data files; NumPy is
+    # imported inside those functions. Routed lazily (`mojolearn.reproduce`)
+    # and imported inside `estimator.receipt` (_mode.CheckMixin).
+    "mojolearn/_reproduce.py",
 }
 
 

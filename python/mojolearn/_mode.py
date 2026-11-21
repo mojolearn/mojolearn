@@ -528,6 +528,56 @@ class CheckMixin:
         print(format_check(result))
         return result
 
+    def receipt(self, X, y=None, *, path=None, method=None):
+        """Write down this fit so that it can be compared with a later one.
+
+        Call it after `fit`, with the data the model was fitted on. In
+        `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA and
+        AMD GPUs, so the same estimator fitted on the same data is the same
+        model on any machine. The receipt records what that model is;
+        `mojolearn.reproduce(receipt, X, y)` and `python -m mojolearn
+        reproduce RECEIPT.json --X X.npy --y y.npy` fit again and say whether
+        the new fit is the recorded one, and which part differs when it is
+        not. It runs in `identical` mode only, and a receipt holds within one
+        Mojolearn version.
+
+        Parameters
+        ----------
+        X : array-like
+            The training rows this model was fitted on.
+        y : array-like, optional
+            The targets it was fitted with.
+        path : str, optional
+            Also save the receipt to this file, as JSON.
+        method : str, optional
+            The method whose answer for `X` is recorded, for example
+            `'predict_proba'`. Default: `predict` when the estimator has it,
+            else `transform`.
+
+        Returns
+        -------
+        dict
+            `mojolearn_version`, `numeric_mode`, `estimator` (the class
+            name), `parameters` (every constructor parameter), `data` (shape,
+            dtype and SHA-256 of the bytes of `X` and of `y`),
+            `fitted_state` (the SHA-256 of the saved model; `present` is
+            False, with the reason, for an estimator that cannot be saved)
+            and `predictions` (the method and the SHA-256 of its answer for
+            `X`).
+
+        Examples
+        --------
+        >>> import numpy as np, mojolearn
+        >>> X = np.random.default_rng(0).random((1000, 8), dtype=np.float32)
+        >>> model = mojolearn.Ridge(alpha=1.0).fit(X, X[:, 0])
+        >>> receipt = model.receipt(X, X[:, 0], path="ridge-receipt.json")    # doctest: +SKIP
+        >>> mojolearn.reproduce(receipt, X, X[:, 0])["same"]    # doctest: +SKIP
+        True
+        """
+        # Loaded here, on the first call only, like the check above.
+        from ._reproduce import receipt
+        return receipt(self, X, y, method=method, path=path)
+
 
 class PublicOutputsMixin(CheckMixin):
     """NumPy results for callers outside the package: the public result
@@ -537,7 +587,8 @@ class PublicOutputsMixin(CheckMixin):
     view of the same memory when NumPy is loaded and the reader is not
     mojolearn's own code; the instance keeps the `Array`.
 
-    Every estimator also gets `check(X)` from here (`CheckMixin`)."""
+    Every estimator also gets `check(X)` and `receipt(X, y)` from here
+    (`CheckMixin`)."""
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)

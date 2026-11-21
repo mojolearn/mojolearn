@@ -129,3 +129,5 @@ Session.lstm	added 2026-11-19, not yet in a release verification
 Session.gru	added 2026-11-19, not yet in a release verification
 Session.rnn	added 2026-11-19, not yet in a release verification
 check	added 2026-11-20, not yet run from an installed wheel on a GPU (also skips the estimator method `.check`, conf.py _skip_member by name)
+reproduce	added 2026-11-20, first GPU run owed (not yet run from an installed wheel on the L40S)
+receipt	added 2026-11-20, first GPU run owed (the estimator method `.receipt`, skipped by name in conf.py _skip_member)

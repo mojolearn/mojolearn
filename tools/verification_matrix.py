@@ -121,6 +121,9 @@ NOT_ALGORITHMS = frozenset({
     # the GPU-versus-CPU check of a user's fitted estimator (2026-11-20): it runs
     # the estimator's own method on each side and compares bytes; no compute of its own
     "check",
+    # fit again and compare with the receipt of a recorded fit (2026-11-20): it runs
+    # the estimator's own fit and hashes what the product returned; no compute of its own
+    "reproduce",
     # the numeric profile SELECTOR (lane/lowbit-flag, 2026-09-29): it names
     # which arithmetic a model's products run and computes nothing itself;
     # the arithmetic it names is covered by the lane gemm-int15

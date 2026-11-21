@@ -390,7 +390,10 @@ _NOT_CORPUS = SELECTION_MACHINERY + HARNESS_RUNTIME_IMPORTS
 #: edge. Any OTHER import added to the def still counts, and a renamed def or module simply widens again.
 #: {file: {(class or "", def): (dotted modules, package-relative)}}
 VERIFICATION_DOORS = {
-    os.path.join(PKG, "_mode.py"): {("CheckMixin", "check"): ("_verify_check",)},
+    os.path.join(PKG, "_mode.py"): {("CheckMixin", "check"): ("_verify_check",),
+                                    # `estimator.receipt(X, y)` (2026-11-20): the same kind of door, onto
+                                    # the receipt and `reproduce` tool; no lane runs it
+                                    ("CheckMixin", "receipt"): ("_reproduce",)},
 }
 
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")
