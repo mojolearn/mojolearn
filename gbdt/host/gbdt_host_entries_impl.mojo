@@ -33,11 +33,169 @@ from checks.soft_f64 import (
     sf64_to_f32,
 )
 from core.gbdt_host_predict import GBDT_HOST_SABOTAGE, gbdt_host_predict
+from core.host_parallel import host_nested_units, host_parallelize
+from core.host_predict_threads import (
+    host_predict_chunk,
+    host_predict_task_count_work,
+)
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_FALSE,
     NAN_TREATMENT_AS_IS,
     NAN_TREATMENT_AS_TRUE,
 )
+
+
+# ===========================================================================
+# THE ENTRIES' ROW SPLITS (lane gbdt-host-par)
+# ===========================================================================
+
+
+#: the pointers an entry's host task reads and writes through
+comptime _EntryF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
+comptime _EntryF64Ptr = MutPointer[Float64, MutUntrackedOrigin]
+comptime _EntryU32Ptr = MutPointer[UInt32, MutUntrackedOrigin]
+comptime _EntryIntPtr = MutPointer[Int, MutUntrackedOrigin]
+
+
+def _entry_units(items: Int, work: Int) -> Int:
+    """The task count of an entry's split over `items` independent rows or
+    elements of `work` scalar operations in all: the host GBDT rule
+    (`gbdt/host/gbdt_oracle.mojo::_gbdt_units`, restated because this
+    module does not import the oracle): one task per core, never more than
+    the items, the grain floor, and ONE while a host region is open (the
+    nested rule: a member's predict or fit inside a pool task)."""
+    return host_nested_units(host_predict_task_count_work(items, work))
+
+
+def _entry_copy_f32(src: List[Float32], count: Int, dst: _EntryF32Ptr):
+    """`dst[i] = src[i]` for `count` elements (a move), in contiguous
+    ranges across the tasks."""
+    var units = _entry_units(count, count)
+    var chunk = host_predict_chunk(count, units)
+    var src_p = rebind[_EntryF32Ptr](src.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm count, imm src_p, imm dst}:
+        for i in range(unit * chunk, min(count, (unit + 1) * chunk)):
+            dst[i] = src_p[i]
+
+    host_parallelize(rows, units)
+    _ = len(src)
+
+
+def _entry_softmax_range(
+    lo: Int, hi: Int, eff: Int, margins: _EntryF32Ptr, op: _EntryF32Ptr
+):
+    """`resident_link_kernel`'s softmax for the rows `[lo, hi)`: a row's
+    maximum, its sum of exponentials and its quotients in class order, in
+    soft binary64 (integers): one device thread a row."""
+    for r in range(lo, hi):
+        # lane hr2-gbdt-host: `resident_link_kernel`'s softmax row,
+        # in soft binary64 (checks/soft_f64.mojo), so this column
+        # and every GPU column compute the same words
+        var mx = SF64_ZERO
+        for k in range(eff):
+            var v = sf64_from_f32(margins[r * eff + k])
+            if sf64_gt(v, mx):
+                mx = v
+        var se = SF64_ZERO
+        for k in range(eff):
+            se = sf64_add(se, sf64_exp(sf64_sub(sf64_from_f32(margins[r * eff + k]), mx)))
+        var e_pin = sf64_exp(sf64_neg(mx))
+        se = sf64_add(se, e_pin)
+        for k in range(eff):
+            op[r * (eff + 1) + k] = ftz(sf64_to_f32(sf64_div(sf64_exp(sf64_sub(sf64_from_f32(margins[r * eff + k]), mx)), se)))
+        op[r * (eff + 1) + eff] = ftz(sf64_to_f32(sf64_div(e_pin, se)))
+
+
+def _entry_softmax(margins: List[Float32], n_rows: Int, eff: Int, op: _EntryF32Ptr):
+    """The softmax link over every row, the rows in contiguous ranges
+    across the tasks (`_entry_softmax_range`)."""
+    var units = _entry_units(n_rows, 64 * n_rows * (eff + 1))
+    var chunk = host_predict_chunk(n_rows, units)
+    var margins_p = rebind[_EntryF32Ptr](margins.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm eff, imm margins_p, imm op}:
+        _entry_softmax_range(
+            unit * chunk, min(n_rows, (unit + 1) * chunk), eff, margins_p, op
+        )
+
+    host_parallelize(rows, units)
+    _ = len(margins)
+
+
+def _entry_sigmoid(margins: List[Float32], count: Int, op: _EntryF32Ptr):
+    """The sigmoid link per element (soft binary64, one device thread an
+    element), the elements in contiguous ranges across the tasks."""
+    var units = _entry_units(count, 64 * count)
+    var chunk = host_predict_chunk(count, units)
+    var margins_p = rebind[_EntryF32Ptr](margins.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm count, imm margins_p, imm op}:
+        for i in range(unit * chunk, min(count, (unit + 1) * chunk)):
+            op[i] = ftz(sf64_to_f32(sf64_sigmoid_f32(margins_p[i])))
+
+    host_parallelize(rows, units)
+    _ = len(margins)
+
+
+def _entry_row_weights_range(
+    lo: Int,
+    hi: Int,
+    y: _EntryF32Ptr,
+    has_sample: Bool,
+    sample_weights: _EntryF32Ptr,
+    has_class: Bool,
+    class_weights: _EntryF32Ptr,
+    row_weights: _EntryF32Ptr,
+) -> Int:
+    """`gbdt_host_binary_row_weights` for the rows `[lo, hi)`; returns the
+    first row whose sample weight is negative, or -1."""
+    var bad = -1
+    for r in range(lo, hi):
+        var weight = Float32(1.0)
+        if has_sample:
+            weight = sample_weights[r]
+            if weight < Float32(0.0):
+                if bad < 0:
+                    bad = r
+        if has_class:
+            var cls = 1 if y[r] > Float32(0.5) else 0
+            weight = weight * class_weights[cls]
+        row_weights[r] = weight
+    return bad
+
+
+def _sigmoid_pair_range(rp: _EntryF64Ptr, op: _EntryF64Ptr, lo: Int, hi: Int):
+    for i in range(lo, hi):
+        var r = rp.unsafe_load(i)
+        # lane hr2-gbdt-host: `resident_link_kernel`'s pair, soft binary64
+        var pb = sf64_ftz(sf64_sigmoid_f64(bitcast[DType.uint64](r)))
+        var p = bitcast[DType.float64](pb)
+        var q = bitcast[DType.float64](sf64_sub(SF64_ONE, pb))
+        comptime if GBDT_HOST_SABOTAGE:
+            op.unsafe_store(2 * i, p)
+            op.unsafe_store(2 * i + 1, q)
+        else:
+            op.unsafe_store(2 * i, q)
+            op.unsafe_store(2 * i + 1, p)
+
+
+def _binary_prediction_range[probabilities: Bool, dtype: DType](
+    rp: MutPointer[Float32, MutUntrackedOrigin],
+    op: MutPointer[Scalar[dtype], MutUntrackedOrigin],
+    lo: Int,
+    hi: Int,
+):
+    for i in range(lo, hi):
+        var margin = rp.unsafe_load(i)
+        comptime if probabilities:
+            var positive = ftz(identical_sigmoid(ftz(margin)))
+            op.unsafe_store(2 * i, Scalar[dtype](ftz(Float32(1) - positive)))
+            op.unsafe_store(2 * i + 1, Scalar[dtype](positive))
+        else:
+            var bits = bitcast[DType.uint32](margin)
+            var is_positive = (bits & UInt32(0x80000000)) == 0 and (bits & UInt32(0x7fffffff)) != 0
+            op.unsafe_store(i, Scalar[dtype](Int32(1) if is_positive else Int32(0)))
 
 
 # ===========================================================================
@@ -139,6 +297,9 @@ def _parse_model(text: String) raises -> _HostModelArrays:
     var want_leaves = 0
     var want_weights = 0
     var shape_kind = 0  # 1 oblivious, 2 non-symmetric; one file, one shape
+    # SERIAL BY NATURE (lane gbdt-host-par): the model text is read record
+    # by record; each record appends to the arrays the next one indexes
+    # (the token, digit and border loops inside are one record's parse)
     for raw in text.split("\n"):
         var line = String(raw)
         if line.byte_length() == 0 or line.startswith("#"):
@@ -346,6 +507,8 @@ def gbdt_host_eval_const(ey: List[Float32], n_eval_rows: Int) -> Bool:
     """`UpdateUseBestModel` (`options_helper.cpp:100-113`): every eval target
     equals the first."""
     var eval_const = True
+    # KEPT SERIAL, named (lane gbdt-host-par): an early-exit scan, once per
+    # fit; it stops at the first target that differs
     for r in range(1, n_eval_rows):
         if ey[r] != ey[0]:
             eval_const = False
@@ -376,6 +539,8 @@ def gbdt_host_group_sizes(
     unless it covers every row (`gbdt/train.mojo::train`'s words)."""
     var host_group_sizes = List[Int]()
     var covered = 0
+    # SERIAL BY NATURE (admission, once per fit): the refusal names the
+    # FIRST empty group and the cover is a running sum
     for g in range(n_groups):
         var size = gp.unsafe_load(g)
         if size == UInt32(0):
@@ -399,10 +564,29 @@ def gbdt_host_read_pairs(
     mut host_pair_weights: List[Float32],
 ):
     """The PairLogit pairs tail: (winner, loser) word pairs and one weight each."""
-    for q in range(n_pairs):
-        host_pair_winners.append(pp.unsafe_load(2 * q))
-        host_pair_losers.append(pp.unsafe_load(2 * q + 1))
-        host_pair_weights.append(pw.unsafe_load(q))
+    # one pair a unit (three moves), the pairs in contiguous ranges
+    var win_at = len(host_pair_winners)
+    var lose_at = len(host_pair_losers)
+    var weight_at = len(host_pair_weights)
+    host_pair_winners.resize(win_at + n_pairs, UInt32(0))
+    host_pair_losers.resize(lose_at + n_pairs, UInt32(0))
+    host_pair_weights.resize(weight_at + n_pairs, Float32(0.0))
+    var units = _entry_units(n_pairs, 3 * n_pairs)
+    var chunk = host_predict_chunk(n_pairs, units)
+    var win_p = rebind[_EntryU32Ptr](host_pair_winners.unsafe_ptr())
+    var lose_p = rebind[_EntryU32Ptr](host_pair_losers.unsafe_ptr())
+    var weight_p = rebind[_EntryF32Ptr](host_pair_weights.unsafe_ptr())
+
+    def pair_rows(unit: Int) {imm chunk, imm n_pairs, imm pp, imm pw, imm win_at, imm lose_at, imm weight_at, imm win_p, imm lose_p, imm weight_p}:
+        for q in range(unit * chunk, min(n_pairs, (unit + 1) * chunk)):
+            win_p[win_at + q] = pp.unsafe_load(2 * q)
+            lose_p[lose_at + q] = pp.unsafe_load(2 * q + 1)
+            weight_p[weight_at + q] = pw.unsafe_load(q)
+
+    host_parallelize(pair_rows, units)
+    _ = len(host_pair_winners)
+    _ = len(host_pair_losers)
+    _ = len(host_pair_weights)
 
 
 def gbdt_host_binary_row_weights(
@@ -418,16 +602,34 @@ def gbdt_host_binary_row_weights(
     if len(class_weights) != 0 and len(class_weights) != 2:
         raise Error("class_weights takes 2 entries for loss 'Logloss'")
     var row_weights = List[Float32](length=n_rows, fill=Float32(0.0))
-    for r in range(n_rows):
-        var weight = Float32(1.0)
-        if len(sample_weights) != 0:
-            weight = sample_weights[r]
-            if weight < Float32(0.0):
-                raise Error("sample_weight at row " + String(r) + " is negative")
-        if len(class_weights) != 0:
-            var cls = 1 if y[r] > Float32(0.5) else 0
-            weight = weight * class_weights[cls]
-        row_weights[r] = weight
+    # one statement per row, the rows in contiguous ranges; a negative
+    # sample weight is reported by its task and the FIRST one in row order
+    # (the ranges ascend) is the refusal, as the serial loop raised it
+    var units = _entry_units(n_rows, 4 * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var bad = List[Int](length=max(units, 1), fill=-1)
+    var has_sample = len(sample_weights) != 0
+    var has_class = len(class_weights) != 0
+    var y_p = rebind[_EntryF32Ptr](y.unsafe_ptr())
+    var sw_p = rebind[_EntryF32Ptr](sample_weights.unsafe_ptr())
+    var cw_p = rebind[_EntryF32Ptr](class_weights.unsafe_ptr())
+    var rw_p = rebind[_EntryF32Ptr](row_weights.unsafe_ptr())
+    var bad_p = rebind[_EntryIntPtr](bad.unsafe_ptr())
+
+    def weight_rows(unit: Int) {imm chunk, imm n_rows, imm y_p, imm has_sample, imm sw_p, imm has_class, imm cw_p, imm rw_p, imm bad_p}:
+        bad_p[unit] = _entry_row_weights_range(
+            min(n_rows, unit * chunk), min(n_rows, (unit + 1) * chunk), y_p,
+            has_sample, sw_p, has_class, cw_p, rw_p,
+        )
+
+    host_parallelize(weight_rows, units)
+    for u in range(len(bad)):  # driver-loop: over the tasks, the first refusal in row order
+        if bad[u] >= 0:
+            raise Error("sample_weight at row " + String(bad[u]) + " is negative")
+    _ = len(y)
+    _ = len(sample_weights)
+    _ = len(class_weights)
+    _ = len(bad)
     return row_weights^
 
 
@@ -504,8 +706,7 @@ def gbdt_host_predict_into(
     _ = leaves^
     _ = x^
     _ = m^
-    for i in range(n_rows):
-        op[i] = out[i]
+    _entry_copy_f32(out, n_rows, op)
 
 
 def gbdt_host_predict_multi_into(
@@ -569,30 +770,11 @@ def gbdt_host_predict_multi_into(
     _ = x^
     _ = m^
     if mode == 0:
-        for i in range(n_rows * dim):
-            op[i] = out[i]
+        _entry_copy_f32(out, n_rows * dim, op)
     elif mode == 1:
-        var eff = dim
-        for r in range(n_rows):
-            # lane hr2-gbdt-host: `resident_link_kernel`'s softmax row,
-            # in soft binary64 (checks/soft_f64.mojo), so this column
-            # and every GPU column compute the same words
-            var mx = SF64_ZERO
-            for k in range(eff):
-                var v = sf64_from_f32(out[r * eff + k])
-                if sf64_gt(v, mx):
-                    mx = v
-            var se = SF64_ZERO
-            for k in range(eff):
-                se = sf64_add(se, sf64_exp(sf64_sub(sf64_from_f32(out[r * eff + k]), mx)))
-            var e_pin = sf64_exp(sf64_neg(mx))
-            se = sf64_add(se, e_pin)
-            for k in range(eff):
-                op[r * (eff + 1) + k] = ftz(sf64_to_f32(sf64_div(sf64_exp(sf64_sub(sf64_from_f32(out[r * eff + k]), mx)), se)))
-            op[r * (eff + 1) + eff] = ftz(sf64_to_f32(sf64_div(e_pin, se)))
+        _entry_softmax(out, n_rows, dim, op)
     else:
-        for i in range(n_rows * dim):
-            op[i] = ftz(sf64_to_f32(sf64_sigmoid_f32(out[i])))
+        _entry_sigmoid(out, n_rows * dim, op)
 
 
 # ===========================================================================
@@ -606,25 +788,36 @@ def gbdt_host_predict_multi_into(
 
 
 def gbdt_host_sigmoid_pair_into(rp: MutPointer[Float64, MutUntrackedOrigin], op: MutPointer[Float64, MutUntrackedOrigin], count: Int):
-    """`out[2 * i] = 1 - p`, `out[2 * i + 1] = p`, swapped under the sabotage define."""
-    for i in range(count):
-        var r = rp.unsafe_load(i)
-        # lane hr2-gbdt-host: `resident_link_kernel`'s pair, soft binary64
-        var pb = sf64_ftz(sf64_sigmoid_f64(bitcast[DType.uint64](r)))
-        var p = bitcast[DType.float64](pb)
-        var q = bitcast[DType.float64](sf64_sub(SF64_ONE, pb))
-        comptime if GBDT_HOST_SABOTAGE:
-            op.unsafe_store(2 * i, p)
-            op.unsafe_store(2 * i + 1, q)
-        else:
-            op.unsafe_store(2 * i, q)
-            op.unsafe_store(2 * i + 1, p)
+    """`out[2 * i] = 1 - p`, `out[2 * i + 1] = p`, swapped under the sabotage
+    define. One element a unit, in contiguous ranges across the tasks."""
+    var units = _entry_units(count, 64 * count)
+    var chunk = host_predict_chunk(count, units)
+
+    def pairs(unit: Int) {imm chunk, imm count, imm rp, imm op}:
+        _sigmoid_pair_range(rp, op, unit * chunk, min(count, (unit + 1) * chunk))
+
+    host_parallelize(pairs, units)
 
 
 def gbdt_host_binary_margins_check(rp: MutPointer[Float32, MutUntrackedOrigin], n: Int) raises:
-    # `binary_prediction_device`'s own refusal (`gbdt/binary_prediction.mojo`)
-    for i in range(n):
-        if not isfinite(rp.unsafe_load(i)):
+    # `binary_prediction_device`'s own refusal (`gbdt/binary_prediction.mojo`):
+    # one refusal for any non-finite margin, so the elements are tested in
+    # contiguous ranges across the tasks, one flag a task
+    var units = _entry_units(n, n)
+    var chunk = host_predict_chunk(n, units)
+    var bad = List[Int](length=max(units, 1), fill=0)
+    var bad_p = rebind[_EntryIntPtr](bad.unsafe_ptr())
+
+    def scan(unit: Int) {imm chunk, imm n, imm rp, imm bad_p}:
+        var found = 0
+        for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
+            if not isfinite(rp.unsafe_load(i)):
+                found = 1
+        bad_p[unit] = found
+
+    host_parallelize(scan, units)
+    for u in range(len(bad)):  # driver-loop: over the tasks' flags
+        if bad[u] != 0:
             raise Error("binary prediction: finite Float32 margins required")
 
 
@@ -633,14 +826,14 @@ def gbdt_host_binary_prediction_into[probabilities: Bool, dtype: DType](
     op: MutPointer[Scalar[dtype], MutUntrackedOrigin],
     n: Int,
 ):
-    """`binary_prediction_kernel` per element: the probability pair or the class code."""
-    for i in range(n):
-        var margin = rp.unsafe_load(i)
-        comptime if probabilities:
-            var positive = ftz(identical_sigmoid(ftz(margin)))
-            op.unsafe_store(2 * i, Scalar[dtype](ftz(Float32(1) - positive)))
-            op.unsafe_store(2 * i + 1, Scalar[dtype](positive))
-        else:
-            var bits = bitcast[DType.uint32](margin)
-            var is_positive = (bits & UInt32(0x80000000)) == 0 and (bits & UInt32(0x7fffffff)) != 0
-            op.unsafe_store(i, Scalar[dtype](Int32(1) if is_positive else Int32(0)))
+    """`binary_prediction_kernel` per element: the probability pair or the
+    class code. One element a unit, in contiguous ranges across the tasks."""
+    var units = _entry_units(n, 16 * n)
+    var chunk = host_predict_chunk(n, units)
+
+    def elements(unit: Int) {imm chunk, imm n, imm rp, imm op}:
+        _binary_prediction_range[probabilities, dtype](
+            rp, op, unit * chunk, min(n, (unit + 1) * chunk)
+        )
+
+    host_parallelize(elements, units)
