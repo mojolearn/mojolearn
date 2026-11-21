@@ -75,6 +75,7 @@ from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.linear_entry_table_ext import XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS
 from core.member_abi import (
+    MEMBER_GIL_FREE,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_OP_DECISION,
@@ -256,7 +257,17 @@ def _weighted(kind: Int) -> Bool:
 
 def _capabilities(kind: Int, probability: Bool) -> Int:
     """The bits `kind` honors; kind -1: the family's union."""
-    var bits = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_COEF
+    # MEMBER_GIL_FREE, every kind (THE GIL RULE, core/member_abi.mojo; the
+    # trace is in fx-gil-RESULT.md, round 4): the store has its own lock;
+    # every operation is calls of the x_linear operations entry (fit, class
+    # prep, decisions, and for the expansion kinds the Spearman, Huber and
+    # best-alpha words) on per-call buffers, never a device fold
+    # (XL_OP_FIT_FOLD is not sent: no model-selection store is read), and the
+    # metrics R^2 entry with no weights (no base helper is called). The entry
+    # touches no CPython or GIL; the state it reaches (the x_linear context,
+    # the pinned download stages) has its own lock. On a GPU route the
+    # callers run one worker.
+    var bits = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_COEF | MEMBER_GIL_FREE
     if kind != SGD_MEMBER_ONE_CLASS:
         # SGDOneClassSVM has no score method.
         bits |= MEMBER_CAN_SCORE
