@@ -171,6 +171,23 @@ in index order:
   6 `XDECOMP_BLOCK_RATIO` 1 x n_components_      (explained_variance_ratio_)
 An import needs every block.
 
+Isomap (kind 16) and LocallyLinearEmbedding (kind 17) run the manifold kit
+(bindings/mani_kit_run.mojo `MRun`), one image from the route: `entry` the
+x_decomp table of the estimator's binding. NEW words:
+  both [0] kind, [1] the image's x_decomp capability word, [2] the ordered-LLE
+    word (0 / 1: fast mode on Metal), [3] the binding key its pool ids carry
+  Isomap [4] n_neighbors (a radius model is not admitted), [5] metric code,
+    [6] Minkowski power, [7] top-k eigen solver (0 / 1), [8] n_components
+  LLE [4] method (0 standard, 1 ltsa, 2 hessian, 3 modified), [5] n_neighbors,
+    [6] n_components, [7] reg, [8] hessian_tol / modified_tol, [9] eigen_solver
+    'auto' (0 / 1), [10] max_iter, [11] the Philox seed word
+Operations: fit (fit_output TRANSFORM = embedding_), transform of new rows.
+Blocks: 0 scalars float64 [n, n_features_in_, n_components, Isomap
+n_connected_components_ / LLE reconstruction_error_, then (rows, cols) of
+every matrix], then float32 matrices: Isomap dist_matrix_m_, _k_col, _k_all,
+eigenvalues_m_, eigenvectors_m_, embedding_m_, _Kc, _iso_v_m_, _fit_X; LLE
+embedding_m_, _fit_X. The state owns them (no pointer into a fit buffer).
+
 The fitted state is OWNED here, in a process-wide store of fixed chunks
 (the linear member's store): a slot never moves once minted, the lock covers
 only mint, free and the handle lookup; resident handles are released after
@@ -217,6 +234,11 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from bindings.decomp_kit_run import DKit, DK_SCALE, DK_ADDS
 from bindings.mcd_run import mcd_fit_run, mcd_labels_run, mcd_mahal
 from core.decomp_native_impl import decomp_f32_to_i32, decomp_u8_to_f32
+from bindings.mani_kit_run import MRun, MImage, MFitted
+from bindings.mani_decomp_run import (
+    IsoPlan, IsoState, iso_fit_run, iso_transform_run, LlePlan, lle_fit_run, lle_transform_run, LLE_HESSIAN,
+    LLE_MODIFIED,
+)
 from bindings.dict_learning_run import (
     EncodeWords, Gram, DictWords, MiniBatchWords, SpcaFit, dl_split_sign, dl_encode_run, dl_inverse_run,
     dl_dict_learning, dl_minibatch_fit, dl_spca_project, dl_spca_inverse, dl_spca_fit_run,
@@ -249,6 +271,10 @@ comptime XDECOMP_KIND_ENVELOPE = 14
 comptime XDECOMP_ENVELOPE_PARAM_COUNT = 6
 comptime XDECOMP_KIND_LDA = 15
 comptime XDECOMP_LDA_PARAM_COUNT = 15
+comptime XDECOMP_KIND_ISOMAP = 16
+comptime XDECOMP_ISOMAP_PARAM_COUNT = 9
+comptime XDECOMP_KIND_LLE = 17
+comptime XDECOMP_LLE_PARAM_COUNT = 12
 
 comptime XDECOMP_BLOCK_COMPONENTS = MEMBER_BLOCK_FAMILY
 comptime XDECOMP_BLOCK_SINGULAR = MEMBER_BLOCK_FAMILY + 1
@@ -383,7 +409,8 @@ def _is_spca(kind: Int) -> Bool:
 
 def _pooled(kind: Int) -> Bool:
     """Handles of this kind are x_decomp pool ids (XD_DEV_FREE)."""
-    return _is_rp(kind) or _is_kit(kind) or kind == XDECOMP_KIND_ENVELOPE
+    return (_is_rp(kind) or _is_kit(kind) or kind == XDECOMP_KIND_ENVELOPE or kind == XDECOMP_KIND_ISOMAP
+            or kind == XDECOMP_KIND_LLE)
 
 
 def _free_handles(entry: EntryRef, handles: List[Int], pool: Bool) raises:
@@ -477,6 +504,10 @@ def _kind_name(kind: Int) -> String:
         return String("EllipticEnvelope")
     if kind == XDECOMP_KIND_LDA:
         return String("LatentDirichletAllocation")
+    if kind == XDECOMP_KIND_ISOMAP:
+        return String("Isomap")
+    if kind == XDECOMP_KIND_LLE:
+        return String("LocallyLinearEmbedding")
     return String("IncrementalPCA")
 
 
@@ -1864,6 +1895,397 @@ def _import_rp(slot: _Slot, call: _Call) raises:
     slot[].fitted = True
 
 
+# ---------------------------------------------------------------- Isomap (16), LocallyLinearEmbedding (17)
+# The other kit: bindings/mani_kit_run.mojo `MRun`, with ONE image built from
+# the route (the door's `mk_image`, read at admit): entry = call.route.entry
+# (the x_decomp table of the estimator's binding), params [1] the image's
+# capability word, [2] the ordered-LLE word, [3] the binding key its pool ids
+# are keyed by (so a pool id here is one the door's owners would accept).
+# The fitted matrices are the door's `_ManifoldMatrix` owners (mk_owner /
+# mk_fitted / mk_keep): each held as host words (`blocks[i]`) and / or an
+# x_decomp pool id on the route's image (`handles[i]`), the side the fit left
+# it on, plus the copy a query made for the other side (kept, as mk_keep
+# keeps it); handles[_MANI_ONE] = the image's 1-word device zero (the door
+# caches it per binding in its context). Freed at refit, import and free.
+# LIFETIME: the state OWNS every matrix. Training X is the kit's admission
+# copy (`from_snapshot`: a host copy or a device upload, the one copy the
+# door's fit makes too) exported into the state; nothing points into a fit
+# buffer after FIT returns (no MEMBER_BORROWS_FIT when that bit lands).
+# MEMBER_CAN_TEST_ROWS is NOT set: from_snapshot refuses non-finite X in
+# every fit / transform, but whether those are the estimator's first words
+# (the door's own admission runs before it) was not read; the caller scans.
+
+comptime _ISO_MATS = 9  # mk_owner order of the door's fit: d, col, allm, w, v, em, kc, iv, fit_x
+comptime _ISO_D = 0
+comptime _ISO_COL = 1
+comptime _ISO_ALL = 2
+comptime _ISO_W = 3
+comptime _ISO_V = 4
+comptime _ISO_EM = 5
+comptime _ISO_KC = 6
+comptime _ISO_IV = 7
+comptime _ISO_FITX = 8
+comptime _LLE_MATS = 2  # em, fit_x
+comptime _LLE_EM = 0
+comptime _LLE_FITX = 1
+comptime _MANI_HEAD = 4  # [n, features, n_components, components (Isomap) / reconstruction_error (LLE)]
+comptime _MANI_ONE = 9
+comptime _MANI_HANDLES = 10
+
+
+def _is_mani(kind: Int) -> Bool:
+    return kind == XDECOMP_KIND_ISOMAP or kind == XDECOMP_KIND_LLE
+
+
+def _mani_count(slot: _Slot) -> Int:
+    return _ISO_MATS if slot[].kind() == XDECOMP_KIND_ISOMAP else _LLE_MATS
+
+
+def _mani_ready(slot: _Slot):
+    """Handles sized for the kind's matrices and the device zero (a release
+    resets them to the family's five, all -1)."""
+    if len(slot[].handles) >= _MANI_HANDLES:
+        return
+    var grown = List[Int](length=_MANI_HANDLES, fill=-1)
+    for i in range(len(slot[].handles)):  # driver-loop: at most five handles
+        grown[i] = slot[].handles[i]
+    slot[].handles = grown^
+
+
+def _mani_image(slot: _Slot, call: _Call) -> MImage:
+    """bindings/mani_kit_door.mojo `mk_image` from the admitted words."""
+    return MImage(call[].route.entry, Int(slot[].words[3]), Int(slot[].words[1]), slot[].words[2] != 0.0,
+                  slot[].handles[_MANI_ONE])
+
+
+def _mani_hold(slot: _Slot, call: _Call, i: Int, handle: Int):
+    slot[].handles[i] = handle
+    slot[].handle_entry = call[].route.entry
+
+
+def _mani_take(slot: _Slot, call: _Call, mut run: MRun, a: Int, i: Int) raises:
+    """`mk_owner`: matrix a into fitted matrix i, on the side the fit left it."""
+    var ex = run.export(a)
+    slot[].scalars[_MANI_HEAD + 2 * i] = Float64(ex.rows)
+    slot[].scalars[_MANI_HEAD + 2 * i + 1] = Float64(ex.cols)
+    if ex.device >= 0:
+        _mani_hold(slot, call, i, ex.device)
+    else:
+        swap(slot[].blocks[i], ex.words)  # transfer the field, leaving `ex` whole
+
+
+def _mani_fitted(slot: _Slot, call: _Call, mut run: MRun, i: Int) raises -> Int:
+    """`mk_fitted`: fitted matrix i as the RUN reads a fitted owner (never moved)."""
+    var device = slot[].handles[i]
+    var host = Int(slot[].blocks[i].unsafe_ptr()) if len(slot[].blocks[i]) > 0 else 0
+    if device < 0 and host == 0:
+        raise Error("NotImplementedError: member ABI: this " + _name(slot) + " member state does not hold fitted "
+                    + "matrix " + String(i))
+    return run.fit(MFitted(Int(slot[].scalars[_MANI_HEAD + 2 * i]), Int(slot[].scalars[_MANI_HEAD + 2 * i + 1]),
+                           host, device, Int(slot[].words[3]), call[].route.entry, device >= 0))
+
+
+def _mani_keep(slot: _Slot, call: _Call, mut run: MRun, a: Int, i: Int) raises:
+    """`mk_keep`: the copies the RUN made of fitted matrix i for the side it
+    is not on, kept for every later call."""
+    var fi = run.mats[a].fitted
+    if fi < 0:
+        return
+    if len(slot[].blocks[i]) == 0:
+        var words = run.kept_host(fi)
+        if len(words) > 0:
+            slot[].blocks[i] = words^
+    if slot[].handles[i] < 0:
+        var handle = run.kept_device(fi)
+        if handle >= 0:
+            _mani_hold(slot, call, i, handle)
+
+
+def _mani_keep_one(slot: _Slot, call: _Call, mut run: MRun):
+    """`mk_finish`: a device zero this RUN made is kept for the next call."""
+    if len(run.images) > 0 and run.images[0].dev_one_made and run.images[0].dev_one >= 0:
+        _mani_hold(slot, call, _MANI_ONE, run.images[0].dev_one)
+        run.images[0].dev_one_made = False
+
+
+def _mani_out(call: _Call, mut run: MRun, a: Int, estimator: String) raises:
+    """`mk_out2` into the caller's buffer: a device result comes down once."""
+    _dense(call[].dst, "the output buffer", estimator)
+    if call[].dst.rows != run.r(a) or call[].dst.cols != run.c(a):
+        raise Error("ValueError: the output buffer holds " + String(run.c(a)) + " values per row of X")
+    var count = run.n(a)
+    if count > 0:
+        var src = run.addr(a)
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=_F32P(unsafe_from_address=src),
+                      count=count)
+
+
+def _mani_x(call: _Call, mut run: MRun, k: Int) raises -> Int:
+    """`_mani_x`: the caller's X admitted into the kit (`from_snapshot`)."""
+    return run.from_snapshot(k, call[].x.data, call[].x.rows, call[].x.cols, 2, "X")
+
+
+def _fit_mani_begin(slot: _Slot, call: _Call, estimator: String) raises:
+    _fit_kit_begin(slot, call, estimator)
+    _mani_ready(slot)
+    var count = _mani_count(slot)
+    for _ in range(count):  # driver-loop: the kind's fitted matrices
+        slot[].blocks.append(List[Float32]())
+    slot[].scalars = List[Float64](length=_MANI_HEAD + 2 * count, fill=0.0)
+
+
+def _fit_iso(slot: _Slot, call: _Call) raises:
+    """bindings/mani_decomp_native_door.mojo `_iso_fit` over the caller's X
+    (`iso_fit_run`, the plan of `mani_iso_plan` from params [4 .. 8]);
+    fit_output TRANSFORM = fit_transform's embedding_. The door's UserWarning
+    for a disconnected graph is raised at PACK (scalars[3] = components)."""
+    var estimator = String("Isomap")
+    _fit_mani_begin(slot, call, estimator)
+    var plan = IsoPlan()
+    plan.nn = Int(slot[].words[4])
+    plan.kind = Int(slot[].words[5])
+    plan.pw = slot[].words[6]
+    plan.topk = slot[].words[7] != 0.0
+    plan.nc = Int(slot[].words[8])
+    var run = MRun()
+    try:
+        var k = run.image(_mani_image(slot, call))
+        var m = _mani_x(call, run, k)
+        var rows = run.r(m)
+        var features = run.c(m)
+        var fit = iso_fit_run(run, k, m, plan)
+        var nc = run.c(fit.em)
+        if call[].fit_output == MEMBER_OP_TRANSFORM:
+            _mani_out(call, run, fit.em, estimator)
+        _mani_take(slot, call, run, fit.d, _ISO_D)
+        _mani_take(slot, call, run, fit.col, _ISO_COL)
+        _mani_take(slot, call, run, fit.allm, _ISO_ALL)
+        _mani_take(slot, call, run, fit.w, _ISO_W)
+        _mani_take(slot, call, run, fit.v, _ISO_V)
+        _mani_take(slot, call, run, fit.em, _ISO_EM)
+        _mani_take(slot, call, run, fit.kc, _ISO_KC)
+        _mani_take(slot, call, run, fit.iv, _ISO_IV)
+        _mani_take(slot, call, run, m, _ISO_FITX)
+        slot[].scalars[0] = Float64(rows)
+        slot[].scalars[1] = Float64(features)
+        slot[].scalars[2] = Float64(nc)
+        slot[].scalars[3] = Float64(fit.components)
+        slot[].count = nc
+        slot[].features = features
+        slot[].fitted = True
+        _mani_keep_one(slot, call, run)
+    finally:
+        run.close()
+
+
+def _query_iso(slot: _Slot, call: _Call) raises:
+    """`_iso_transform`: the embedding of the caller's rows (n_neighbors
+    models; a radius model is not admitted)."""
+    var estimator = String("Isomap")
+    if not slot[].fitted:
+        raise Error("NotFittedError: this Isomap member is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    _mani_ready(slot)
+    var run = MRun()
+    try:
+        var k = run.image(_mani_image(slot, call))
+        var q = _mani_x(call, run, k)
+        var st = IsoState()
+        st.fit_x = _mani_fitted(slot, call, run, _ISO_FITX)
+        st.d = _mani_fitted(slot, call, run, _ISO_D)
+        st.col = _mani_fitted(slot, call, run, _ISO_COL)
+        st.allm = _mani_fitted(slot, call, run, _ISO_ALL)
+        st.knn = Int(slot[].words[4])
+        st.kind = Int(slot[].words[5])
+        st.pw = slot[].words[6]
+        st.iv = _mani_fitted(slot, call, run, _ISO_IV)
+        var out = iso_transform_run(run, k, q, st)
+        _mani_out(call, run, out, estimator)
+        _mani_keep(slot, call, run, st.fit_x, _ISO_FITX)
+        _mani_keep(slot, call, run, st.d, _ISO_D)
+        _mani_keep(slot, call, run, st.col, _ISO_COL)
+        _mani_keep(slot, call, run, st.allm, _ISO_ALL)
+        _mani_keep(slot, call, run, st.iv, _ISO_IV)
+        _mani_keep_one(slot, call, run)
+    finally:
+        run.close()
+
+
+def _fit_lle(slot: _Slot, call: _Call) raises:
+    """bindings/mani_decomp_native_door.mojo `_lle_fit` over the caller's X
+    (`lle_fit_run` with the plan of `mani_lle_plan` from params [4 .. 11];
+    the admit takes the estimator only when its default-mode image is the
+    route's own, so the helper image is the same image); fit_output
+    TRANSFORM = fit_transform's embedding_. The n-dependent refusals are the
+    door's words; a refused subspace iteration prints its numbers with
+    Mojo's float format (the door formats them with Python's '.3g')."""
+    var estimator = String("LocallyLinearEmbedding")
+    _fit_mani_begin(slot, call, estimator)
+    var plan = LlePlan()
+    plan.method = Int(slot[].words[4])
+    plan.nn = Int(slot[].words[5])
+    plan.nc = Int(slot[].words[6])
+    plan.reg = slot[].words[7]
+    plan.tol = slot[].words[8]
+    plan.auto_solver = slot[].words[9] != 0.0
+    plan.max_iter = Int(slot[].words[10])
+    plan.seed = Int(slot[].words[11])
+    var run = MRun()
+    try:
+        var k = run.image(_mani_image(slot, call))
+        var m = _mani_x(call, run, k)
+        var n = run.r(m)
+        var features = run.c(m)
+        var nn = plan.nn
+        var nc = plan.nc
+        if nn >= n:
+            raise Error("Expected n_neighbors < n_samples, but n_samples = " + String(n) + ", n_neighbors = "
+                        + String(nn))
+        if plan.method == LLE_HESSIAN and nn <= nc + nc * (nc + 1) // 2:
+            raise Error("for method='hessian', n_neighbors must be greater than "
+                        + "[n_components * (n_components + 3) / 2]")
+        if plan.method == LLE_MODIFIED and nn < nc:
+            raise Error("modified LLE requires n_neighbors >= n_components")
+        var fit = lle_fit_run(run, k, k, m, plan)
+        if fit.refusal == 1:
+            raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in "
+                        + String(plan.max_iter) + " iterations (last subspace change " + String(fit.change)
+                        + "); pass eigen_solver='dense' for the full SVD. "
+                        + "An unconverged embedding is not returned as if it were one.")
+        if fit.refusal == 2:
+            var norms = String("[")
+            for i in range(len(fit.norms)):  # driver-loop: the refusal lists each column's squared norm (n_components)
+                if i > 0:
+                    norms += ", "
+                norms += String(fit.norms[i])
+            raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of "
+                        + "squared norm " + norms + "] (not unit); pass eigen_solver='dense' for the full SVD.")
+        var width = run.c(fit.em)
+        if call[].fit_output == MEMBER_OP_TRANSFORM:
+            _mani_out(call, run, fit.em, estimator)
+        _mani_take(slot, call, run, fit.em, _LLE_EM)
+        _mani_take(slot, call, run, m, _LLE_FITX)
+        slot[].scalars[0] = Float64(n)
+        slot[].scalars[1] = Float64(features)
+        slot[].scalars[2] = Float64(width)
+        slot[].scalars[3] = fit.reconstruction_error
+        slot[].count = width
+        slot[].features = features
+        slot[].fitted = True
+        _mani_keep_one(slot, call, run)
+    finally:
+        run.close()
+
+
+def _query_lle(slot: _Slot, call: _Call) raises:
+    """`_lle_transform`: barycentric weights of the caller's rows over their
+    training neighbors, applied to embedding_ (n_neighbors params [5], reg
+    params [7])."""
+    var estimator = String("LocallyLinearEmbedding")
+    if not slot[].fitted:
+        raise Error("NotFittedError: this LocallyLinearEmbedding member is not fitted yet")
+    _whole(call, estimator)
+    _dense(call[].x, "X", estimator)
+    _mani_ready(slot)
+    var run = MRun()
+    try:
+        var k = run.image(_mani_image(slot, call))
+        var q = _mani_x(call, run, k)
+        var fit_x = _mani_fitted(slot, call, run, _LLE_FITX)
+        var em = _mani_fitted(slot, call, run, _LLE_EM)
+        var out = lle_transform_run(run, k, q, fit_x, em, Int(slot[].words[5]), slot[].words[7])
+        _mani_out(call, run, out, estimator)
+        _mani_keep(slot, call, run, fit_x, _LLE_FITX)
+        _mani_keep(slot, call, run, em, _LLE_EM)
+        _mani_keep_one(slot, call, run)
+    finally:
+        run.close()
+
+
+def _mani_download(slot: _Slot, call: _Call, i: Int) raises:
+    """A device-only fitted matrix's host words, downloaded once and kept."""
+    var run = MRun()
+    try:
+        _ = run.image(_mani_image(slot, call))
+        var a = _mani_fitted(slot, call, run, i)
+        _ = run.addr(a)
+        _mani_keep(slot, call, run, a, i)
+    finally:
+        run.close()
+
+
+def _export_mani(slot: _Slot, call: _Call) raises:
+    """Blocks: scalars ([n, features, n_components, components or
+    reconstruction_error], then (rows, cols) per matrix), then the matrices
+    in kind order (Isomap: d, col, allm, w, v, em, kc, iv, fit_x; LLE: em,
+    fit_x) as host float32 (a device-only one comes down once). A state made
+    by IMPORT holds only what its transform reads: the others answer an
+    empty view."""
+    var count = _mani_count(slot)
+    _mani_ready(slot)
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block > count:
+            raise Error("member ABI: a " + _name(slot) + " member has no fitted block index " + String(block))
+        block = MEMBER_BLOCK_SCALARS if block == 0 else XDECOMP_BLOCK_COMPONENTS + block - 1
+    if block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif block >= XDECOMP_BLOCK_COMPONENTS and block < XDECOMP_BLOCK_COMPONENTS + count:
+        var i = block - XDECOMP_BLOCK_COMPONENTS
+        var rows = Int(slot[].scalars[_MANI_HEAD + 2 * i])
+        var cols = Int(slot[].scalars[_MANI_HEAD + 2 * i + 1])
+        if len(slot[].blocks[i]) == 0 and slot[].handles[i] >= 0:
+            _mani_download(slot, call, i)
+        if len(slot[].blocks[i]) == 0:
+            call[].dst = MemberMatrix(0, 0, cols)
+        else:
+            call[].dst = MemberMatrix(_address(slot, i), rows, cols)
+    else:
+        raise Error("member ABI: a " + _name(slot) + " member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = count + 1
+
+
+def _import_mani(slot: _Slot, call: _Call) raises:
+    var estimator = _name(slot)
+    var count = _mani_count(slot)
+    var wanted = _MANI_HEAD + 2 * count
+    _mani_ready(slot)
+    if slot[].fitted or len(slot[].blocks) != count:
+        slot[].clear()
+        for _ in range(count):  # driver-loop: the kind's fitted matrices
+            slot[].blocks.append(List[Float32]())
+    var block = call[].block
+    if block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != wanted:
+            raise Error("member ABI: the " + estimator + " scalars block is " + String(wanted) + " host float64 words")
+        var source = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call[].x.data)
+        slot[].scalars = List[Float64](length=wanted, fill=0.0)
+        for index in range(wanted):  # driver-loop: the fitted scalars and shapes
+            slot[].scalars[index] = source[index]
+    elif block >= XDECOMP_BLOCK_COMPONENTS and block < XDECOMP_BLOCK_COMPONENTS + count:
+        var size = call[].x.rows * call[].x.cols
+        var words = List[Float32](length=max(size, 1), fill=0.0)
+        if size > 0:
+            _dense(call[].x, "a fitted block", estimator)
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=size)
+        slot[].blocks[block - XDECOMP_BLOCK_COMPONENTS] = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a " + estimator + " member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    if len(slot[].scalars) != wanted:
+        raise Error("member ABI: an " + estimator + " import needs its scalars block")
+    for i in range(count):  # driver-loop: the kind's fitted matrices
+        var cells = Int(slot[].scalars[_MANI_HEAD + 2 * i]) * Int(slot[].scalars[_MANI_HEAD + 2 * i + 1])
+        if len(slot[].blocks[i]) > 0 and len(slot[].blocks[i]) != max(cells, 1):
+            raise Error("member ABI: an " + estimator + " fitted block does not match its shape")
+    slot[].count = Int(slot[].scalars[2])
+    slot[].features = Int(slot[].scalars[1])
+    slot[].fitted = True
+
+
 def _block_index(index: Int) raises -> Int:
     if index == 0:
         return MEMBER_BLOCK_SCALARS
@@ -1897,6 +2319,9 @@ def _export(slot: _Slot, call: _Call) raises:
         return
     if slot[].kind() == XDECOMP_KIND_LDA:
         _export_lda(slot, call)
+        return
+    if _is_mani(slot[].kind()):
+        _export_mani(slot, call)
         return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
@@ -1942,6 +2367,9 @@ def _import(slot: _Slot, call: _Call) raises:
         return
     if slot[].kind() == XDECOMP_KIND_LDA:
         _import_lda(slot, call)
+        return
+    if _is_mani(slot[].kind()):
+        _import_mani(slot, call)
         return
     if slot[].fitted or len(slot[].blocks) != 6:
         slot[].clear()
@@ -2027,6 +2455,11 @@ def _outputs(call: _Call) raises:
                 member_unsupported("LatentDirichletAllocation", asked_first)
             call[].out_cols = Int(words[1])
             return
+        if _is_mani(kind):
+            if asked_first != MEMBER_OP_TRANSFORM:
+                member_unsupported(_kind_name(kind), asked_first)
+            call[].out_cols = Int(words[8]) if kind == XDECOMP_KIND_ISOMAP else Int(words[6])
+            return
         if asked_first == MEMBER_OP_INVERSE_TRANSFORM:
             call[].out_cols = call[].x.cols
             return
@@ -2055,6 +2488,14 @@ def _outputs(call: _Call) raises:
         if asked != MEMBER_OP_TRANSFORM:
             member_unsupported(_name(slot), asked)
         call[].out_cols = slot[].count if slot[].fitted else Int(slot[].words[1])
+        return
+    if _is_mani(slot[].kind()):
+        if asked != MEMBER_OP_TRANSFORM:
+            member_unsupported(_name(slot), asked)
+        if slot[].fitted:
+            call[].out_cols = slot[].count
+        else:
+            call[].out_cols = Int(slot[].words[8]) if slot[].kind() == XDECOMP_KIND_ISOMAP else Int(slot[].words[6])
         return
     if _is_kit(slot[].kind()):
         var held_words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(slot[].words.unsafe_ptr()))
@@ -2095,6 +2536,10 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             return mask | MEMBER_CAN_SCORE | MEMBER_CAN_SCORE_SAMPLES
         if kind == XDECOMP_KIND_LDA:
             return mask | MEMBER_CAN_SCORE
+        if _is_mani(kind):
+            # transform of new rows only (no inverse, no score); no
+            # MEMBER_CAN_TEST_ROWS (see the Isomap / LLE section)
+            return mask
         if kind == XDECOMP_KIND_ENVELOPE:
             return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
                     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
@@ -2143,6 +2588,12 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
         elif source[0] == Float64(XDECOMP_KIND_ENVELOPE):
             if call[].param_count != XDECOMP_ENVELOPE_PARAM_COUNT:
                 raise Error("member ABI: an EllipticEnvelope member takes six parameters")
+        elif source[0] == Float64(XDECOMP_KIND_ISOMAP):
+            if call[].param_count != XDECOMP_ISOMAP_PARAM_COUNT:
+                raise Error("member ABI: an Isomap member takes nine parameters")
+        elif source[0] == Float64(XDECOMP_KIND_LLE):
+            if call[].param_count != XDECOMP_LLE_PARAM_COUNT:
+                raise Error("member ABI: a LocallyLinearEmbedding member takes twelve parameters")
         else:
             raise Error("member ABI: unknown or unpublished XDecomp member kind")
         var words = List[Float64](length=call[].param_count, fill=0.0)
@@ -2178,6 +2629,10 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
             _fit_mcd(slot, call)
         elif kind == XDECOMP_KIND_LDA:
             _fit_lda(slot, call)
+        elif kind == XDECOMP_KIND_ISOMAP:
+            _fit_iso(slot, call)
+        elif kind == XDECOMP_KIND_LLE:
+            _fit_lle(slot, call)
         else:
             _fit_ipca(slot, call)
     elif kind == XDECOMP_KIND_ENVELOPE and (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_DECISION
@@ -2189,6 +2644,12 @@ def _xdecomp_member(operation: Int, address: Int) raises -> Int:
     elif kind == XDECOMP_KIND_LDA and (operation == MEMBER_OP_TRANSFORM or operation == MEMBER_OP_SCORE):
         _query_lda(slot, call, _LDA_TRANSFORM if operation == MEMBER_OP_TRANSFORM else _LDA_SCORE)
     elif kind == XDECOMP_KIND_LDA and operation == MEMBER_OP_INVERSE_TRANSFORM:
+        member_unsupported(_name(slot), operation)
+    elif kind == XDECOMP_KIND_ISOMAP and operation == MEMBER_OP_TRANSFORM:
+        _query_iso(slot, call)
+    elif kind == XDECOMP_KIND_LLE and operation == MEMBER_OP_TRANSFORM:
+        _query_lle(slot, call)
+    elif _is_mani(kind) and operation == MEMBER_OP_INVERSE_TRANSFORM:
         member_unsupported(_name(slot), operation)
     elif kind == XDECOMP_KIND_FA and operation == MEMBER_OP_TRANSFORM:
         _query_fa(slot, call, _FA_TRANSFORM)
