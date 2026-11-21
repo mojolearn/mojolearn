@@ -7,11 +7,11 @@ Apple fast direct fit entry, where admit answers False and the caller keeps
 the door), Binarizer (kind 2, `(35, 2)`), Normalizer (kind 3, `(35, 3)`),
 PolynomialFeatures (kind 4, `(35, 4)`), QuantileTransformer (kind 5,
 `(35, 5)`; admit answers False for a subsample below 1, which only the door
-handles), PowerTransformer (kind 6, `(35, 6)`).
+handles), PowerTransformer (kind 6, `(35, 6)`), SimpleImputer (kind 7, `(35, 7)`).
 The family's other classes (OrdinalEncoder OneHotEncoder TargetEncoder
-SimpleImputer IterativeImputer KNNImputer KBinsDiscretizer SplineTransformer)
-carry no mark: their RUN is the encode door's (bindings/prep_owner_native_door.mojo),
-a caller keeps their own doors, and admit refuses their kinds in words.
+IterativeImputer KBinsDiscretizer SplineTransformer) carry no mark (each
+blocker in the lane's RESULT file): a caller keeps their own doors, and admit
+refuses their kinds in words.
 
   * `prep_member_admit` (UNPACK, once per member): the estimator's own route
     (`scaler_entries`, `scaler_route_held`: one record read; the x_prep
@@ -43,6 +43,12 @@ from bindings.prep_stateless_native_door import (
 from bindings.scaler_native_door import _input as scaler_input
 from bindings.classical_arrays_door import classical_typed
 from x_prep.prep_stateless_native_run import I64P, _poly_powers
+from bindings.prep_encode_native_door import (
+    enc_caps, _missing_mark as enc_missing_mark, _qselect as enc_qselect, _truth as enc_truth,
+    _float as enc_float, _is_str as enc_is_str, _real_like as enc_real_like, _int_list as enc_int_list,
+    IDN_STATS_BLOCKED,
+)
+from bindings.prep_encode_imputer_run import IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT
 from bindings.x_prep_native_owner_run import XprepCaps
 from bindings.scaler_route_unpack import (
     scaler_route_held, scaler_held_caps, scaler_held_flags, SCALER_CAP_MAXABS_DIRECT,
@@ -62,6 +68,7 @@ from core.prep_member import (
     PREP_KIND_POLYNOMIAL, PREP_KIND_QUANTILE, PREP_KIND_POWER,
     PREP_POLY_PARAM_COUNT, PREP_QUANTILE_PARAM_COUNT, PREP_POWER_PARAM_COUNT,
     PREP_BLOCK_EXTRA, PREP_BLOCK_ANCHOR, PREP_BLOCK_ANCHOR_KIND,
+    PREP_KIND_IMPUTER, PREP_IMPUTER_PARAM_COUNT,
     PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH, PREP_ROUTE_RANGES, PREP_ROUTE_DEV_PUT,
 )
 from core.member_abi import (
@@ -254,6 +261,41 @@ def _power_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     owner.plan.params = words^
 
 
+def _imputer_admit(model: PythonObject, fields: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
+    # The encode door's `_imputer_fit` UNPACK, in its order, read once here.
+    var strategy_field = fields["strategy"]
+    var name = String(strategy_field) if enc_is_str(strategy_field) else String("")
+    var strategy = IMP_MEAN
+    if name == "median":
+        strategy = IMP_MEDIAN
+    elif name == "most_frequent":
+        strategy = IMP_MOST_FREQUENT
+    elif name == "constant":
+        strategy = IMP_CONSTANT
+    elif name != "mean":
+        raise Error("mojolearn: SimpleImputer strategy " + stateless_repr(strategy_field) + " is not valid")
+    var konst = strategy == IMP_CONSTANT
+    var fill_value = fields["fill_value"]
+    if konst and fill_value is not None and not enc_real_like(fill_value, context):
+        raise Error("TypeError: mojolearn: SimpleImputer fill_value must be numeric")
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = scaler_entries(model, mode, context)
+    var mark = enc_missing_mark(fields["missing_values"])
+    var words = List[Float64](length=PREP_IMPUTER_PARAM_COUNT, fill=0.0)
+    words[0] = Float64(PREP_KIND_IMPUTER)
+    words[1] = Float64(strategy)
+    words[2] = 1.0 if mark[0] else 0.0
+    words[3] = mark[1]
+    words[4] = 1.0 if strategy == IMP_MEDIAN and enc_qselect(mode, entries, context) else 0.0
+    words[5] = 1.0 if (stateless_fam(mode, entries) & IDN_STATS_BLOCKED) != 0 else 0.0
+    words[6] = enc_float(fill_value) if konst and fill_value is not None else 0.0
+    words[7] = 1.0 if enc_truth(fields["keep_empty_features"]) else 0.0
+    words[8] = 1.0 if enc_truth(fields["add_indicator"]) else 0.0
+    words[9] = 1.0 if xprep_r3("work") else 0.0
+    _route_admit(model, entries, context, owner, enc_caps(model, entries), False)
+    owner.plan.params = words^
+
+
 def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -273,6 +315,9 @@ def prep_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
         return _quantile_admit(model, fields, context, owner)
     if kind == PREP_KIND_POWER:
         _power_admit(model, fields, context, owner)
+        return True
+    if kind == PREP_KIND_IMPUTER:
+        _imputer_admit(model, fields, context, owner)
         return True
     raise Error("ValueError: mojolearn: Prep member kind " + String(kind) + " is not published")
 
@@ -298,12 +343,15 @@ def prep_member_pack(model: PythonObject, fields: PythonObject, context: PythonO
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the door's fit does."""
-    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_POWER:
+    if plan.kind < PREP_KIND_ROBUST or plan.kind > PREP_KIND_IMPUTER:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     var call = MemberCall(plan.route, state)
     var scalars = _export(plan, call, MEMBER_BLOCK_SCALARS)
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=scalars.data)
     var d = Int(words[0])
+    if plan.kind == PREP_KIND_IMPUTER:
+        _pack_imputer(fields, context, plan, call, d, words[1] != 0.0)
+        return
     if plan.kind == PREP_KIND_POLYNOMIAL or plan.kind == PREP_KIND_QUANTILE or plan.kind == PREP_KIND_POWER:
         _pack_stateless_fitted(fields, context, plan, call, d, Int(words[1]) if plan.kind != PREP_KIND_POWER else 0)
         return
@@ -359,6 +407,28 @@ def _typed_words(view: MemberMatrix, context: PythonObject) raises -> PythonObje
     var out = classical_typed(Python.tuple(count), "<f4", context["output_context"])
     unsafe_memcpy(dest=f32_ptr(Int(py=classical_address(out))), src=f32_ptr(view.data), count=count)
     return out
+
+
+def _index_list(view: MemberMatrix) raises -> List[Int]:
+    var out = List[Int](capacity=view.rows * view.cols)
+    var words = f32_ptr(view.data)
+    for i in range(view.rows * view.cols):  # driver-loop: over fitted column indices (feature metadata)
+        out.append(Int(words[i]))
+    return out^
+
+
+def _pack_imputer(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall, d: Int,
+    shared: Bool) raises:
+    """The encode door's `_imputer_fit` PACK, in its order (statistics_ and
+    `_fill` are one object unless the strategy is constant or a column was
+    empty)."""
+    var statistics = _vector(_export(plan, call, PREP_BLOCK_CENTER), context)
+    py_setitem(fields, "statistics_", statistics)
+    py_setitem(fields, "_fill", statistics if shared else _vector(_export(plan, call, PREP_BLOCK_SCALE), context))
+    py_setitem(fields, "_keep", enc_int_list(_index_list(_export(plan, call, PREP_BLOCK_EXTRA))))
+    py_setitem(fields, "_indicator", enc_int_list(_index_list(_export(plan, call, PREP_BLOCK_ANCHOR))))
+    py_setitem(fields, "numeric_mode_", context["backend_fields"]["_DEFAULT_MODE"])
+    py_setitem(fields, "n_features_in_", d)
 
 
 def _pack_stateless_fitted(fields: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall,
@@ -438,6 +508,8 @@ def prep_member_state(model: PythonObject, fields: PythonObject, context: Python
         return _stateless_state(fields, plan)
     if plan.kind == PREP_KIND_POLYNOMIAL or plan.kind == PREP_KIND_QUANTILE or plan.kind == PREP_KIND_POWER:
         return _fitted_state(fields, context, plan)
+    if plan.kind == PREP_KIND_IMPUTER:
+        return _imputer_state(fields, context, plan)
     if plan.kind != PREP_KIND_ROBUST and not maxabs:
         raise Error("ValueError: mojolearn: Prep member kind " + String(plan.kind) + " is not published")
     if (not py_contains(fields, "n_features_in_")
@@ -549,6 +621,45 @@ def _fitted_state(fields: PythonObject, context: PythonObject, plan: MemberPlan)
             _import_vector(plan, call, fields["_scale"], PREP_BLOCK_SCALE, d, context)
             _import_vector(plan, call, py_get(fields, "_pt_anchor"), PREP_BLOCK_ANCHOR, d, context)
             _import_vector(plan, call, py_get(fields, "_pt_anchor_kind"), PREP_BLOCK_ANCHOR_KIND, d, context)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = len(scalars)
+    return call.state
+
+
+def _import_indices(plan: MemberPlan, mut call: MemberCall, value: PythonObject, block: Int, d: Int) raises:
+    # A fitted list of column indices (`_keep`, `_indicator`) as float32 words.
+    var b = native_loaded_module("builtins")
+    var items = py_call(b.list, value)
+    var words = List[Float32](capacity=len(items))
+    for i in range(len(items)):  # driver-loop: over fitted column indices (feature metadata)
+        var j = Int(py=py_call(b.int, items[i]))
+        if j < 0 or j >= d:
+            raise Error("RuntimeError: mojolearn: a SimpleImputer fitted column index is out of range")
+        words.append(Float32(j))
+    call.block = block
+    call.flags = 0
+    call.x = MemberMatrix(Int(words.unsafe_ptr()), 1, len(words))
+    _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    _ = len(words)
+
+
+def _imputer_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    # The attributes the encode door's `_imputer_transform` reads.
+    var d = _int_field(fields, "n_features_in_")
+    var shared = fields["statistics_"] is fields["_fill"]
+    var scalars: List[Float64] = [Float64(d), 1.0 if shared else 0.0]
+    var call = member_new(plan)
+    try:
+        _import_vector(plan, call, fields["statistics_"], PREP_BLOCK_CENTER, d, context)
+        _import_vector(plan, call, fields["_fill"], PREP_BLOCK_SCALE, d, context)
+        _import_indices(plan, call, fields["_keep"], PREP_BLOCK_EXTRA, d)
+        _import_indices(plan, call, fields["_indicator"], PREP_BLOCK_ANCHOR, d)
         call.block = MEMBER_BLOCK_SCALARS
         call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(scalars), MEMBER_F64)
         call.flags = MEMBER_IMPORT_DONE

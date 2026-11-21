@@ -876,6 +876,10 @@ class SimpleImputer(_PrepBase):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 35 Prep, kind 7): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/prep_member.mojo).
+    _mojolearn_member = (35, 7)
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
                  add_indicator=False, keep_empty_features=False, device=None):

@@ -2,8 +2,9 @@
 """The Prep family as MEMBERS (core/member_abi.mojo): RobustScaler (kind 0),
 MaxAbsScaler (kind 1), Binarizer (kind 2), Normalizer (kind 3),
 PolynomialFeatures (kind 4), QuantileTransformer (kind 5) and
-PowerTransformer (kind 6); the encoders, imputers, KBinsDiscretizer and
-SplineTransformer are not published (their RUN is the encode door's).
+PowerTransformer (kind 6) and SimpleImputer (kind 7); the encoders,
+IterativeImputer, KBinsDiscretizer and SplineTransformer are not published
+(see the boundary file for each blocker).
 
 One entry, `prep_member_v2`, published by each preprocessing image beside
 the scaler member (`prep_member_publish`, bindings/_mojolearn_preprocessing.mojo
@@ -31,6 +32,13 @@ same layouts, inputs and stages. PolynomialFeatures writes the caller's
 row-major dst: `order='F'` changes only the public array's memory order, so
 the member runs no p2m_transpose stage (the values are the door's).
 QuantileTransformer and PowerTransformer publish inverse_transform.
+SimpleImputer runs the encode door's typed stage builders
+(bindings/prep_encode_imputer_run.mojo `imputer_fit_stage` /
+`imputer_transform_stage` on an `EncProgram`, door
+bindings/prep_encode_native_door.mojo `_imputer_fit` / `_imputer_transform`):
+the member resolves the program's input records itself (owner 0 X, owner 1
+the fitted fill vector, -1 the program's own words) and runs it through the
+same transport, inout ranges and output region.
 
 Route slots read: `second` the x_prep transport entry; `flags`
 PREP_ROUTE_OUT (x_prep_run_out), PREP_ROUTE_SCRATCH (x_prep_run_scratch),
@@ -69,6 +77,13 @@ MEMBER_OP_NEW parameters, PowerTransformer (Float64 words, 8): [0] kind 6,
 family word (as QuantileTransformer [6]), [4] the fast binding's
 `x_prep_ptimpute_flags` (0 on another tier), [5] host-column binding 0 / 1,
 [6] identical tier 0 / 1, [7] R3 work region 0 / 1.
+MEMBER_OP_NEW parameters, SimpleImputer (Float64 words, 10): [0] kind 7,
+[1] strategy: 0 'mean', 1 'median', 2 'most_frequent', 3 'constant',
+[2] a numeric missing_values is marked NaN first 0 / 1, [3] that value,
+[4] median by radix select 0 / 1 (the door's `_qselect`), [5] blocked column
+statistics 0 / 1 (`x_prep_idn_fam` & IDN_STATS_BLOCKED), [6] fill_value
+(constant; 0 for None), [7] keep_empty_features 0 / 1, [8] add_indicator
+0 / 1, [9] R3 work region 0 / 1. Output width = kept + indicator columns.
 
 The Apple fast direct fit entry (`x_prep_maxabs_fit_direct`, opt-in
 PREP3_MAXABS) is not a member route: the admit answers False there and the
@@ -106,6 +121,12 @@ PowerTransformer:
   3 `PREP_BLOCK_EXTRA` float32 features (lambdas_)
   4 `PREP_BLOCK_ANCHOR` float32 features (`_pt_anchor`; 1 x 0 when not kept)
   5 `PREP_BLOCK_ANCHOR_KIND` float32 features (`_pt_anchor_kind`; 1 x 0 when not kept)
+SimpleImputer:
+  0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, statistics_ is _fill 0 / 1]
+  1 `PREP_BLOCK_CENTER` float32 features (statistics_)
+  2 `PREP_BLOCK_SCALE` float32 features (`_fill`)
+  3 `PREP_BLOCK_EXTRA` float32 kept column indices (`_keep`)
+  4 `PREP_BLOCK_ANCHOR` float32 indicator column indices (`_indicator`)
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks (the
 linear member's store): a slot never moves once minted, the lock covers only
@@ -124,6 +145,10 @@ from x_prep.prep_stateless_native_run import (
     _quantile_program, _power_program,
 )
 from core.preprocessing_program import prep_program_stage as _stage
+from bindings.prep_encode_prog_run import EncProgram
+from bindings.prep_encode_imputer_run import (
+    ImputerFit, ImputerApply, imputer_fit_stage, imputer_transform_stage, IMP_CONSTANT,
+)
 from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_OUTPUTS,
@@ -150,6 +175,8 @@ comptime PREP_KIND_POWER = 6
 comptime PREP_POLY_PARAM_COUNT = 5
 comptime PREP_QUANTILE_PARAM_COUNT = 8
 comptime PREP_POWER_PARAM_COUNT = 8
+comptime PREP_KIND_IMPUTER = 7
+comptime PREP_IMPUTER_PARAM_COUNT = 10
 
 comptime PREP_BLOCK_CENTER = MEMBER_BLOCK_FAMILY
 comptime PREP_BLOCK_SCALE = MEMBER_BLOCK_FAMILY + 1
@@ -308,6 +335,8 @@ def _kind_name(kind: Int) -> String:
         return String("QuantileTransformer")
     if kind == PREP_KIND_POWER:
         return String("PowerTransformer")
+    if kind == PREP_KIND_IMPUTER:
+        return String("SimpleImputer")
     return String("RobustScaler")
 
 
@@ -319,11 +348,14 @@ def _block_count(kind: Int) -> Int:
         return 4
     if kind == PREP_KIND_POWER:
         return 6
+    if kind == PREP_KIND_IMPUTER:
+        return 5
     return 3
 
 
 def _scalar_count(kind: Int) -> Int:
-    if kind == PREP_KIND_MAXABS or kind == PREP_KIND_POLYNOMIAL or kind == PREP_KIND_QUANTILE:
+    if (kind == PREP_KIND_MAXABS or kind == PREP_KIND_POLYNOMIAL or kind == PREP_KIND_QUANTILE
+            or kind == PREP_KIND_IMPUTER):
         return 2
     return 1
 
@@ -357,6 +389,12 @@ def _execute(call: _Call, mut arena: List[Float32], host: Int, scratch: Int, out
     program: List[Int32], inputs: List[XprepRunInput]) raises:
     """One program run through the route's transport (the door's
     `xprep_run_records` RUN and cleanup, without its Python records)."""
+    _execute_ranges(call, arena, host, scratch, output, out_words, program, inputs, List[Int]())
+
+
+def _execute_ranges(call: _Call, mut arena: List[Float32], host: Int, scratch: Int, output: Int, out_words: Int,
+    program: List[Int32], inputs: List[XprepRunInput], inout_ranges: List[Int]) raises:
+    # `_execute` with the program's inout ranges (an `EncProgram`'s).
     var flags = call[].route.flags
     var has_out = (flags & PREP_ROUTE_OUT) != 0
     var has_scratch = (flags & PREP_ROUTE_SCRATCH) != 0
@@ -365,7 +403,7 @@ def _execute(call: _Call, mut arena: List[Float32], host: Int, scratch: Int, out
     var key = call[].route.second
     var owned = List[Int](capacity=2 * len(inputs))
     try:
-        xprep_execute(key, Int(arena.unsafe_ptr()), host, scratch, output, out_words, program, inputs, List[Int](),
+        xprep_execute(key, Int(arena.unsafe_ptr()), host, scratch, output, out_words, program, inputs, inout_ranges,
             XprepRoute(ranges, device_scratch, has_out), owned)
     except error:
         var cleanup = xprep_release(key, owned)
@@ -946,6 +984,104 @@ def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
     _ = arena^
 
 
+def _enc_run(call: _Call, mut prog: EncProgram, fill: Int, output: Int) raises -> List[Float32]:
+    """The encode door's `EncProg.run_caps` over the member's own input
+    records: owner 0 is the caller's X (put on the device when the image has
+    the put and X is large, as `_x_input`), owner 1 the fitted vector at
+    `fill`, -1 the program's own words. `output`: the caller's buffer for the
+    program's output region (0: none). Returns the host arena."""
+    prog.check_bound()
+    var inputs = List[XprepRunInput](capacity=len(prog.inputs))
+    for i in range(len(prog.inputs)):  # driver-loop: over the program's input records
+        var record = prog.inputs[i]
+        if record.owner == 0:
+            var put = (call[].route.flags & PREP_ROUTE_DEV_PUT) != 0 and record.words >= _PUT_WORDS
+            inputs.append(XprepRunInput(record.offset, record.words, call[].x.data, -1, put, record.words, False, 0, 0,
+                0))
+        else:
+            var address = record.address if record.owner < 0 else fill
+            inputs.append(XprepRunInput(record.offset, record.words, address, -1, False, 0, False, 0, 0, 0))
+    var host = prog.host
+    var scratch = prog.scratch_size
+    var device_scratch = scratch > 0 and (call[].route.flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0
+    var arena = List[Float32](length=max(host + (0 if device_scratch else scratch), 1), fill=Float32(0))
+    _execute_ranges(call, arena, host, scratch, output if prog.out_words > 0 else 0, prog.out_words,
+        prog.stage_words(), inputs, prog.inout_ranges)
+    return arena^
+
+
+def _index_words(values: List[Float32]) -> List[Int]:
+    var out = List[Int](capacity=len(values))
+    for i in range(len(values)):  # driver-loop: over fitted column indices (feature metadata)
+        out.append(Int(values[i]))
+    return out^
+
+
+def _fit_imputer(slot: _Slot, call: _Call) raises:
+    """The door's `_imputer_fit` over the caller's X: `imputer_fit_stage`,
+    then the kept and indicator columns from the per-column counts."""
+    _fit_begin(slot, call)
+    var n = call[].x.rows
+    var d = call[].x.cols
+    var w = slot[].words.copy()
+    var strategy = Int(w[1])
+    var konst = strategy == IMP_CONSTANT
+    var keep_empty = w[7] != 0.0
+    var prog = EncProgram(w[9] != 0.0)
+    var request = ImputerFit(n, d, 0, w[2] != 0.0, w[3], strategy, w[4] != 0.0, w[5] != 0.0, w[6], keep_empty)
+    var plan = imputer_fit_stage(prog, request)
+    var arena = _enc_run(call, prog, 0, 0)
+    var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
+    var any_empty = False
+    for j in range(d):  # driver-loop: over the per-column non-missing counts (feature metadata)
+        any_empty = any_empty or Int(ap[plan.stats + j]) == 0
+    slot[].clear()
+    var shared = not (konst or any_empty)
+    if shared:
+        slot[].center = _take(arena, plan.source, d)
+        slot[].scale = slot[].center.copy()
+    else:
+        slot[].center = _take(arena, plan.statistics, d)
+        slot[].scale = _take(arena, plan.fill, d)
+    for j in range(d):  # driver-loop: over the kept columns (feature metadata)
+        if keep_empty or Int(ap[plan.stats + j]) != 0:
+            slot[].extra.append(Float32(j))
+    if w[8] != 0.0:
+        for j in range(d):  # driver-loop: over the indicator columns (feature metadata)
+            if Int(ap[plan.stats + j]) < n:
+                slot[].anchor.append(Float32(j))
+    _ = arena^
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+    slot[].features = d
+    slot[].scalars = [Float64(d), 1.0 if shared else 0.0]
+    slot[].fitted = True
+    if call[].fit_output == MEMBER_OP_TRANSFORM:
+        _transform_imputer(slot, call)
+
+
+def _transform_imputer(slot: _Slot, call: _Call) raises:
+    """The door's `_imputer_transform`: `imputer_transform_stage` (the filled
+    kept columns, then the indicator columns), its output region straight
+    into the caller's dst when the image has one and the output is large."""
+    var cols = len(slot[].extra) + len(slot[].anchor)
+    _apply_begin(slot, call, cols)
+    var n = call[].x.rows
+    var d = slot[].features
+    if n * cols == 0:
+        return
+    var prog = EncProgram(slot[].words[9] != 0.0)
+    var request = ImputerApply(n, d, 0, slot[].words[2] != 0.0, slot[].words[3], 1, len(slot[].scale),
+        _index_words(slot[].extra), _index_words(slot[].anchor))
+    var region = (call[].route.flags & PREP_ROUTE_OUT) != 0
+    var out = imputer_transform_stage(prog, request, region)
+    var arena = _enc_run(call, prog, Int(slot[].scale.unsafe_ptr()), call[].dst.data)
+    if prog.out_words == 0:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
+            src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=n * cols)
+    _ = arena^
+    _ = len(prog.consts_f)  # the program's own input words live past the run
+
+
 def _block_view(slot: _Slot, block: Int) raises -> MemberMatrix:
     if block == PREP_BLOCK_CENTER:
         return MemberMatrix(Int(slot[].center.unsafe_ptr()), 1, len(slot[].center))
@@ -1029,6 +1165,9 @@ def _import(slot: _Slot, call: _Call) raises:
         var nq = Int(slot[].scalars[1])
         complete = (complete and nq >= 1 and len(slot[].center) == nq * d and len(slot[].scale) == nq
                     and len(slot[].extra) == nq * d)
+    elif kind == PREP_KIND_IMPUTER:
+        complete = (complete and len(slot[].center) == d and len(slot[].scale) == d and len(slot[].extra) <= d
+                    and len(slot[].anchor) <= d)
     elif kind == PREP_KIND_POWER:
         complete = (complete and len(slot[].extra) == d and len(slot[].center) == len(slot[].scale)
                     and (len(slot[].center) == 0 or len(slot[].center) == d)
@@ -1066,6 +1205,11 @@ def _outputs(call: _Call) raises:
             _poly_table(words, call[].x.cols, index, start)
             call[].out_cols = len(start) - 1
             return
+        if kind == PREP_KIND_IMPUTER:
+            # keep_empty_features without add_indicator keeps every column;
+            # otherwise the width is chosen by the fit.
+            if call[].param_count != PREP_IMPUTER_PARAM_COUNT or source[7] == 0.0 or source[8] != 0.0:
+                raise Error("member ABI: a SimpleImputer member's output width is known after its fit")
         call[].out_cols = call[].x.cols
         return
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
@@ -1076,6 +1220,9 @@ def _outputs(call: _Call) raises:
         raise Error("NotFittedError: this " + _name(slot) + " member's output width is known after its fit")
     if slot[].kind() == PREP_KIND_POLYNOMIAL and call[].flags == MEMBER_OP_TRANSFORM:
         call[].out_cols = Int(slot[].scalars[1])
+        return
+    if slot[].kind() == PREP_KIND_IMPUTER:
+        call[].out_cols = len(slot[].extra) + len(slot[].anchor)
         return
     call[].out_cols = slot[].features
 
@@ -1093,6 +1240,8 @@ def _new_count(kind: Int) raises -> Int:
         return PREP_QUANTILE_PARAM_COUNT
     if kind == PREP_KIND_POWER:
         return PREP_POWER_PARAM_COUNT
+    if kind == PREP_KIND_IMPUTER:
+        return PREP_IMPUTER_PARAM_COUNT
     raise Error("member ABI: unknown or unpublished Prep member kind")
 
 
@@ -1124,6 +1273,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             raise Error("member ABI: invalid QuantileTransformer parameter words")
         if kind == PREP_KIND_POWER and source[1] != 0.0 and source[1] != 1.0:
             raise Error("member ABI: unknown PowerTransformer method code")
+        if kind == PREP_KIND_IMPUTER and (source[1] < 0.0 or source[1] > 3.0):
+            raise Error("member ABI: unknown SimpleImputer strategy code")
         var words = List[Float64](length=call[].param_count, fill=0.0)
         for index in range(call[].param_count):  # driver-loop: the parameter words
             words[index] = source[index]
@@ -1149,6 +1300,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _fit_quantile(slot, call)
         elif kind == PREP_KIND_POWER:
             _fit_power(slot, call)
+        elif kind == PREP_KIND_IMPUTER:
+            _fit_imputer(slot, call)
         else:
             _fit_robust(slot, call)
     elif operation == MEMBER_OP_TRANSFORM:
@@ -1162,6 +1315,8 @@ def _prep_member(operation: Int, address: Int) raises -> Int:
             _apply_quantile(slot, call, False)
         elif kind == PREP_KIND_POWER:
             _apply_power(slot, call, False)
+        elif kind == PREP_KIND_IMPUTER:
+            _transform_imputer(slot, call)
         else:
             _transform_robust(slot, call)
     elif operation == MEMBER_OP_INVERSE_TRANSFORM and kind == PREP_KIND_QUANTILE:
