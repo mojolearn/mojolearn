@@ -58,6 +58,49 @@ struct _ProbeImage(GbdtImage):
     def model_dim(text: String) raises -> Int:
         return text.byte_length()
 
+    # The predict, resident and ordered/feature-freq operations of GbdtImage
+    # (lane dw-trees-boost, 2026-11-21): this check image fits only, so each
+    # refuses in words.
+    @staticmethod
+    def predict(text: String, x: Int, n_rows: Int, dst: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt_predict")
+
+    @staticmethod
+    def predict_multi(text: String, x: Int, n_rows: Int, dst: Int, mode: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt_predict_multi")
+
+    @staticmethod
+    def binary(probabilities: Bool, raw: Int, dst: Int, n: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image has no binary prediction")
+
+    @staticmethod
+    def sigmoid_pair(raw: Int, dst: Int, n: Int) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt_sigmoid_pair")
+
+    @staticmethod
+    def resident() -> Bool:
+        return False
+
+    @staticmethod
+    def resident_prepare(text: String) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt_resident_prepare")
+
+    @staticmethod
+    def resident_predict(handle: Int, x: Int, n_rows: Int, dst: Int, mode: Int, row_major: Bool) raises -> Int:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt_resident_predict")
+
+    @staticmethod
+    def ordered_fit(x: Int, y: Int, weights: Int, permutation: Int, n_rows: Int, n_features: Int, n_weights: Int,
+                    n_permutation: Int, n_estimators: Int, max_depth: Int, border_count: Int,
+                    learning_rate: Float32, l2_leaf_reg: Float32) raises -> String:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt_fit_ordered_rmse")
+
+    @staticmethod
+    def feature_freq_fit(x: Int, y: Int, weights: Int, sources: Int, n_rows: Int, n_features: Int, n_weights: Int,
+                         n_sources: Int, learning_rate: Float32, l2_leaf_reg: Float32,
+                         random_seed: Int) raises -> String:
+        raise Error("AttributeError: mojolearn: this check image has no gbdt_fit_two_level_feature_freq")
+
 
 def _probe_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:

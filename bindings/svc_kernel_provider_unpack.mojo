@@ -42,7 +42,7 @@ def svc_connection(binding: PythonObject) raises -> SvcConnection:
         var shared = SvcDrivers(entry, entry, False)
         if shared.mode() != 1:
             raise Error("SVC native dispatch candidate requires identical mode")
-        return SvcConnection(table, PythonObject(None), shared, True)
+        return SvcConnection(table, PythonObject(None), shared^, True)
     var device_factory = neural_descriptor_entry(binding, "svc_device_api_v1", False)
     if device_factory is None:
         return SvcConnection(table, PythonObject(None), SvcDrivers(entry, entry, False), False)

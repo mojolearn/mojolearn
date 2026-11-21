@@ -248,4 +248,4 @@ def louvain_fit_run(driver: XnDriver, request: LouvainRequest) raises -> Louvain
     _ = raw^
     _ = info^
     _ = rinfo^
-    return outcome
+    return outcome^

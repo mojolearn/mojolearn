@@ -135,4 +135,4 @@ def publish_ivf_ops_device() raises -> IvfEntryKey:
         return IvfEntryKey(Int(GLOBAL_NUMERIC_MODE), -1, IVF_IMAGE_FULL)
     var api = IVF_OPS_DEVICE_API.get_or_create_ptr()
     ivf_ops_publish(key, Int(api[].entries.unsafe_ptr()), ivf_ops_device_v1)
-    return key
+    return key^

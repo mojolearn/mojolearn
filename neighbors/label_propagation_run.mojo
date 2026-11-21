@@ -174,7 +174,7 @@ def lp_fit_run(driver: XnDriver, request: LpFitRequest) raises -> LpFitOutcome:
     _ = vals^
     _ = affinity^
     _ = graph^
-    return outcome
+    return outcome^
 
 
 @fieldwise_init
