@@ -20,7 +20,11 @@ from training.causal_operation_owner_run import _causal_model_runtime_names, _ca
 from bindings.causal_keys_unpack import causal_keys, CausalKeys
 from bindings.py_balanced import py_item
 from providers.python.generation_metadata_pyapi_door import GenerationOperationSnapshot
-from core.causal_owner import CausalModelWords
+from core.causal_owner import (
+    CausalModelWords, CausalStateWords, CausalLayerStateWords, CausalBufferWords,
+    CAUSAL_STATE_BUFFERS, causal_state_buffer_used,
+)
+from bindings.generation_buffers_door import GENERATION_BOUNDARY
 from core.causal_layer_run import causal_layer_kind, CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1
 
 
@@ -241,6 +245,179 @@ def causal_model_owner(mut mods: NativeModules, model: PythonObject) raises -> P
         held = causal_model_owner_build(fields)
         py_setitem(fields, nk[].k__causal_native_model, held)
     return held
+
+
+comptime _CAUSAL_STATE_SLOT = "causal_state_owner_v1"
+
+
+struct CausalStateOwner(Movable, Writable):
+    """The native owner of one public decode state (lane dw-causal,
+    2026-11-21; design: the lane result, section 1.2 B).
+
+    Handle: Python-held (registered once, by the tokenizer host binding), kept
+    in the state's prepared record (`_CAUSAL_STATE_SLOT`, weakly keyed by the
+    public state) and handed to each operation's state capture under
+    `_causal_native_state`.
+
+    Generation check, once per public operation (`causal_state_owner_bind`):
+    the kept owner holds while it was bound to the model owner's current
+    generation and the state still has the same layer state objects in the
+    same order; otherwise a new owner is built and the old one dropped. Per
+    layer call, each buffer's words hold while the capture hands over the
+    same storage pin (`causal_state_layer_unpack`); a replaced buffer is
+    re-admitted alone.
+
+    Owns: the state words, and per unique layer state object (two layers may
+    share one) where each state buffer is and its shape, with the storage
+    pin the address was read from. The buffers stay the Arrays the user
+    sees: same storage, nothing copied.
+
+    Frees: CPython's reference count is the finaliser. The record lets go
+    when the public state dies or a new owner replaces this one, each capture
+    when its operation ends; the destructor then drops the pins (GIL held,
+    as every handle's). It holds the layer state objects, never the state
+    itself or a capture, so it cannot keep its own key alive."""
+
+    var words: CausalStateWords
+    # One per unique layer state object.
+    var layers: List[CausalLayerStateWords]
+    # Layer index -> index into `layers`.
+    var slots: List[Int]
+    # The public layer state objects, in layer order (the generation check).
+    var originals: List[PythonObject]
+    # `CAUSAL_STATE_BUFFERS` per entry of `layers`: the storage pin each
+    # buffer's words were read from (None: not admitted, or no buffer).
+    var pins: List[PythonObject]
+
+    def __init__(out self, generation: Int):
+        var words = CausalStateWords()
+        words.model_generation = generation
+        self.words = words^
+        self.layers = List[CausalLayerStateWords]()
+        self.slots = List[Int]()
+        self.originals = List[PythonObject]()
+        self.pins = List[PythonObject]()
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CausalStateOwner(layers=", self.words.layers, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+def _causal_state_owner_build(generation: Int, layers: PythonObject) raises -> PythonObject:
+    # Once per state generation: the slots (aliased layers share one). No
+    # buffer is read here; each is admitted at its first layer call.
+    var owner = CausalStateOwner(generation)
+    var seen = Dict[Int, Int]()
+    for i in range(len(layers)):  # driver-loop: over the state's layer state objects, once per state generation
+        var item = layers[i]
+        var identity = Int(item._obj_ptr)
+        var slot = seen.get(identity, -1)
+        if slot < 0:
+            slot = len(owner.layers)
+            owner.layers.append(CausalLayerStateWords())
+            for _ in range(CAUSAL_STATE_BUFFERS):  # small-loop(the fixed state buffer slots)
+                owner.pins.append(PythonObject(None))
+            seen[identity] = slot
+        owner.slots.append(slot)
+        owner.originals.append(item)
+    owner.words.layers = len(layers)
+    return PythonObject(alloc=owner^)
+
+
+def _causal_state_owner_kept(record: PythonObject, generation: Int, layers: PythonObject) -> Bool:
+    # The generation check: one word, then one pointer compare per layer.
+    # Returns from inside its try and its loop (no PythonObject reassigned).
+    if record is None:
+        return False
+    try:
+        var owner = record.downcast_value_ptr[CausalStateOwner]()
+        if owner[].words.model_generation != generation or len(owner[].originals) != len(layers):
+            return False
+        for i in range(len(layers)):  # driver-loop: over the state's layer state identities
+            if owner[].originals[i] is not layers[i]:
+                return False
+        return True
+    except:
+        return False
+
+
+def causal_state_owner_bind(mut mods: NativeModules, state: PythonObject, fields: PythonObject,
+                            layers: PythonObject, generation: Int) raises:
+    """UNPACK, once per public operation, at the end of the state capture:
+    put the state's native owner on the capture (`fields`). `layers` is the
+    public state's own layer list; `generation` the model owner's."""
+    var record = prepared_get(mods, _CAUSAL_STATE_SLOT, state)
+    var nk = causal_keys()
+    if _causal_state_owner_kept(record, generation, layers):
+        py_setitem(fields, nk[].k__causal_native_state, record)
+        return
+    var held = _causal_state_owner_build(generation, layers)
+    # Nothing is stored for a state that takes no weak reference: its owner
+    # then lives for this one operation.
+    prepared_put(mods, _CAUSAL_STATE_SLOT, state, held)
+    py_setitem(fields, nk[].k__causal_native_state, held)
+
+
+def causal_state_owner(mut mods: NativeModules, state: PythonObject) raises -> PythonObject:
+    """The native owner of a captured state, or None (an uncaptured state, a
+    parallel model's state): one interned-key read. The caller keeps the
+    handle named past its last use of the owner's words."""
+    if py_type(state) is not mods.module("types").SimpleNamespace:
+        return PythonObject(None)
+    var nk = causal_keys()
+    return py_get(causal_snapshot_fields(mods, state), nk[].k__causal_native_state)
+
+
+def causal_state_layer_unpack(mut mods: NativeModules, held: PythonObject, index: Int, st: PythonObject, kind: Int) raises -> PythonObject:
+    """UNPACK of one layer call's state: the captured layer state's field
+    dictionary when the owner's words of layer `index` are current for it,
+    else None (the layer then takes the object route: a layer whose capture
+    failed, a buffer that is not an Array and needs the copy-in / write-back
+    pair).
+
+    Per layer per forward: one pointer compare per buffer of the layer kind
+    (2 to 5). A buffer is read (layout, shape, span, address) only at its
+    first call and after the user replaced it. Before, every call rebuilt a
+    metadata snapshot of each state buffer (twice for a Transformer cache)
+    and re-read its layout and shape as text."""
+    if held is None or py_type(st) is not mods.module("types").SimpleNamespace:
+        return PythonObject(None)
+    var fields = causal_snapshot_fields(mods, st)
+    var nk = causal_keys()
+    if py_get(fields, nk[].k__causal_admission_failure) is not None:
+        return PythonObject(None)
+    var owner = held.downcast_value_ptr[CausalStateOwner]()
+    if index >= len(owner[].slots):
+        return PythonObject(None)
+    var slot = owner[].slots[index]
+    var base = slot * CAUSAL_STATE_BUFFERS
+    var names = CAUSAL_FIELD_NAMES.get_or_create_ptr()[].layer_buffers
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    for j in range(CAUSAL_STATE_BUFFERS):  # small-loop(the fixed state buffer slots)
+        if not causal_state_buffer_used(kind, j):
+            continue
+        var value = py_get(fields, names[j])
+        if owner[].layers[slot].buffers[j].admitted and value is owner[].pins[base + j]:
+            continue
+        var words = CausalBufferWords()
+        if value is not None:
+            if py_type(value) is not g[].array_cls:
+                return PythonObject(None)
+            var shape = value.shape
+            words.present = True
+            words.contiguous = String(value.order) == "C"
+            words.writable = String(value.dtype) == "<f4" and not Bool(py=value._readonly)
+            for k in range(len(shape)):  # small-loop(state buffer shape dims)
+                words.shape.append(Int(py=shape[k]))
+            words.shape_text = String(shape)
+            words.nbytes = Int(py=value._mv.nbytes)
+            words.address = Int(py=value._addr)
+        words.admitted = True
+        owner[].layers[slot].buffers[j] = words^
+        owner[].pins[base + j] = value
+    return fields
 
 
 # The plain (non-callable) values the CausalLM admission writes into the
@@ -959,6 +1136,14 @@ def causal_state_capture(mut mods: NativeModules, state: PythonObject, model: Py
     py_setitem(fields, nk[].k__causal_original, state)
     py_setitem(fields, nk[].k__native_state_identity, state)
     py_setitem(fields, nk[].k__causal_live_fields, live)
+    if parallel is None and py_type(model) is mods.module("types").SimpleNamespace:
+        # The state's native owner, bound to this model generation (`_owner
+        # is origin` was checked above for this very capture). A parallel
+        # model's layer states are the parallel door's.
+        var model_held = causal_model_owner(mods, model)
+        causal_state_owner_bind(mods, state, fields, layers,
+                                model_held.downcast_value_ptr[CausalModelOwner]()[].words.generation)
+        _ = model_held
     return captured_state
 
 
