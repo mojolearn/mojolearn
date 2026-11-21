@@ -469,7 +469,8 @@ def _xcnn_route_build(requested_device: Int, mode: PythonObject, default_mode: P
     through its own module. The owner pins the entries (`images`), the mode
     object recorded as `numeric_mode_` (`scope`), the image's numerical
     profile (`table`) and the sequence image of the same device and mode
-    (`cls`: the classifier's label provider, or its connection error text): a hit compares the layer's two records with them by
+    (`cls`: the classifier's label provider, or its connection error
+    text): a hit compares the layer's two records with the first two by
     identity. A metadata step with no independent units to split."""
     var owner = DeviceRouteOwner(requested_device)
     var profiled = False
