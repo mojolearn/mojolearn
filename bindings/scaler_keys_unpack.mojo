@@ -18,6 +18,7 @@ comptime SCALER_OPN_PARTIAL_FIT = 5
 comptime SCALER_OPN_FIT_TRANSFORM = 6
 comptime SCALER_OPN_SAVE = 7
 comptime SCALER_OPN_LOAD = 8
+comptime SCALER_OPN_VENDOR_USED = 9
 
 
 struct ScalerKeys(Defaultable, Movable):
@@ -31,6 +32,7 @@ struct ScalerKeys(Defaultable, Movable):
     var k_backend_fields: PythonObject
     var k_bool_types: PythonObject
     var k_copy: PythonObject
+    var k_device: PythonObject
     var k_mean_: PythonObject
     var k_minmax_transform: PythonObject
     var k_n_features_in_: PythonObject
@@ -65,6 +67,7 @@ struct ScalerKeys(Defaultable, Movable):
         self.k_backend_fields = PythonObject(None)
         self.k_bool_types = PythonObject(None)
         self.k_copy = PythonObject(None)
+        self.k_device = PythonObject(None)
         self.k_mean_ = PythonObject(None)
         self.k_minmax_transform = PythonObject(None)
         self.k_n_features_in_ = PythonObject(None)
@@ -103,6 +106,7 @@ def _scaler_keys_fill(nk: UnsafePointer[ScalerKeys, MutUntrackedOrigin]) raises:
     nk[].k_backend_fields = py_key("backend_fields")
     nk[].k_bool_types = py_key("bool_types")
     nk[].k_copy = py_key("copy")
+    nk[].k_device = py_key("device")
     nk[].k_mean_ = py_key("mean_")
     nk[].k_minmax_transform = py_key("minmax_transform")
     nk[].k_n_features_in_ = py_key("n_features_in_")
@@ -136,6 +140,7 @@ def _scaler_keys_fill(nk: UnsafePointer[ScalerKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "fit_transform", SCALER_OPN_FIT_TRANSFORM)
     py_op_add(ops, "save", SCALER_OPN_SAVE)
     py_op_add(ops, "load", SCALER_OPN_LOAD)
+    py_op_add(ops, "vendor_used", SCALER_OPN_VENDOR_USED)
     nk[].ops = ops
     nk[].ready = True
 

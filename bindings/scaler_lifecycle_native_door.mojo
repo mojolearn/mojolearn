@@ -47,6 +47,10 @@ from core.scaler_core import ScalerTransformSpec, scaler_transform_rows, scaler_
 from bindings.scaler_keys_unpack import (
     scaler_keys, SCALER_OPN_INIT, SCALER_OPN_GET_PARAMS, SCALER_OPN_SET_PARAMS, SCALER_OPN_IS_FITTED,
     SCALER_OPN_TRANSFORM, SCALER_OPN_PARTIAL_FIT, SCALER_OPN_FIT_TRANSFORM, SCALER_OPN_SAVE, SCALER_OPN_LOAD,
+    SCALER_OPN_VENDOR_USED,
+)
+from providers.python.prep_route_boundary_door import (
+    prep_route_context, prep_route_clear, prep_device_admit, prep_route_vendor_used,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -593,33 +597,63 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var nk = scaler_keys()
         var op = py_op_code(nk[].ops, all[1])
         var args = all[2]
-        var context = all[3]
-        var cls = model if py_type(model) is native_loaded_module("builtins").type else py_type(model)
-        var host = py_get(py_item(context, nk[].k_scaler_host_contexts),cls)
-        if host is not None:
-            context = host
+        var root = all[3]
+        var context = root
+        var is_class = py_type(model) is native_loaded_module("builtins").type
+        var cls = model if is_class else py_type(model)
+        if not is_class and (op == SCALER_OPN_TRANSFORM or op == SCALER_OPN_PARTIAL_FIT or op == SCALER_OPN_FIT_TRANSFORM):
+            # A data operation runs in the estimator's route
+            # (providers/python/prep_route_boundary_door.mojo): the process's
+            # context, the CPU one of `device="cpu"`, or an explicit Host*
+            # class's own. One record read and one pointer compare; the
+            # route's first resolution reads `device` and the host table.
+            context = prep_route_context(model, root)
+        else:
+            # Parameter, archive and class-level operations compute nothing
+            # on a device: the explicit host table by class, as before.
+            var host = py_get(py_item(context, nk[].k_scaler_host_contexts),cls)
+            if host is not None:
+                context = host
         classical_connect_numpy(context)
         classical_check_layout(model,context)
         var result = PythonObject(None)
         if op == SCALER_OPN_INIT:
+            # `device` is the fifth constructor argument (absent from a
+            # four-argument caller: this installation's device). Refused in
+            # words before any field changes.
+            var device = PythonObject(None)
+            if len(args) > 4:
+                device = args[4]
+            prep_device_admit(device, cls, root)
             result = scaler_initialize(model,args)
+            py_setitem(py_fields(model), nk[].k_device, device)
+            prep_route_clear(model)
         elif op == SCALER_OPN_GET_PARAMS:
             var fields = py_fields(model)
             result = Python.dict(copy=py_item(fields, nk[].k_copy),with_mean=py_item(fields, nk[].k_with_mean),with_std=py_item(fields, nk[].k_with_std),numeric_mode=py_item(fields, nk[].k_numeric_mode))
+            # None on an instance built before the parameter existed.
+            py_setitem(result, nk[].k_device, py_get(fields, nk[].k_device))
         elif op == SCALER_OPN_SET_PARAMS:
             var fields = py_fields(model)
             var options = args[0]
             var b = native_loaded_module("builtins")
             var names = py_call(b.list,options)
-            var known = Python.tuple(nk[].k_copy,nk[].k_with_mean,nk[].k_with_std,nk[].k_numeric_mode)
+            var known = Python.tuple(nk[].k_copy,nk[].k_with_mean,nk[].k_with_std,nk[].k_numeric_mode,nk[].k_device)
             for k in range(len(names)):  # driver-loop: proposed estimator parameter names
                 if py_type(names[k]) is not b.str or not py_contains(known,names[k]):
                     raise Error("Invalid StandardScaler parameters")
             if len(names):
+                var device = py_get(options,nk[].k_device,py_get(fields, nk[].k_device))
+                # Refused in words before the estimator changes.
+                prep_device_admit(device, cls, root)
                 var values = Python.tuple(py_get(options,nk[].k_copy,py_item(fields, nk[].k_copy)),py_get(options,nk[].k_with_mean,py_item(fields, nk[].k_with_mean)),py_get(options,nk[].k_with_std,py_item(fields, nk[].k_with_std)),py_get(options,nk[].k_numeric_mode,py_item(fields, nk[].k_numeric_mode)))
                 _ = py_call(fields.clear)
                 _ = scaler_initialize(model,values)
+                py_setitem(fields, nk[].k_device, device)
+                prep_route_clear(model)
             result = model
+        elif op == SCALER_OPN_VENDOR_USED:
+            result = prep_route_vendor_used(model, root)
         elif op == SCALER_OPN_IS_FITTED:
             result = PythonObject(_fitted(py_fields(model)))
         elif op == SCALER_OPN_TRANSFORM:

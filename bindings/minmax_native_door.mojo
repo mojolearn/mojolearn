@@ -35,8 +35,12 @@ from bindings.py_optional import py_or_none, py_present
 from bindings.minmax_keys_unpack import (
     minmax_keys, MINMAX_OPN_INIT, MINMAX_OPN_GET_PARAMS, MINMAX_OPN_SET_PARAMS, MINMAX_OPN_IS_FITTED, MINMAX_OPN_FIT,
     MINMAX_OPN_PARTIAL_FIT, MINMAX_OPN_FIT_TRANSFORM, MINMAX_OPN_TRANSFORM, MINMAX_OPN_SAVE, MINMAX_OPN_LOAD,
+    MINMAX_OPN_VENDOR_USED,
 )
 from bindings.py_keys import py_op_code
+from providers.python.prep_route_boundary_door import (
+    prep_route_context, prep_route_clear, prep_device_admit, prep_route_vendor_used,
+)
 from bindings.py_balanced import py_item
 # TOMBSTONE: P1_NATIVE_SKLEARN_TAGS (removed: native code importing sklearn.utils._tags and building its Tag dataclasses; the tags are built by the Python compatibility layer, _mode.sklearn_tags) deleted 2026-11-09 by lane p1-python-callbacks-worst; code recoverable at e68654a757.
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
@@ -389,37 +393,69 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var nk = minmax_keys()
         var operation = py_op_code(nk[].ops, all[1])
         var args = all[2]
-        var context = all[3]
+        var root = all[3]
+        var context = root
         var b = native_loaded_module("builtins")
-        var cls = model if py_type(model) is b.type else py_type(model)
+        var is_class = py_type(model) is b.type
+        var cls = model if is_class else py_type(model)
         if py_type(cls) is not b.type:
             raise Error("TypeError: native MinMaxScaler refuses Python metaclass hooks")
-        var host = py_get(py_item(context, nk[].k_scaler_host_contexts),cls)
-        if host is not None:
-            context = host
+        if not is_class and (operation == MINMAX_OPN_FIT or operation == MINMAX_OPN_PARTIAL_FIT
+                or operation == MINMAX_OPN_FIT_TRANSFORM or operation == MINMAX_OPN_TRANSFORM):
+            # A data operation runs in the estimator's route
+            # (providers/python/prep_route_boundary_door.mojo): the process's
+            # context, the CPU one of `device="cpu"`, or an explicit Host*
+            # class's own. One record read and one pointer compare; the
+            # route's first resolution reads `device` and the host table.
+            context = prep_route_context(model, root)
+        else:
+            # Parameter, archive and class-level operations compute nothing
+            # on a device: the explicit host table by class, as before.
+            var host = py_get(py_item(context, nk[].k_scaler_host_contexts),cls)
+            if host is not None:
+                context = host
         classical_connect_numpy(context)
         classical_check_layout(model,context)
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var result = Optional[PythonObject]()
         if operation == MINMAX_OPN_INIT:
+            # `device` is the fifth constructor argument (absent from a
+            # four-argument caller: this installation's device). Refused in
+            # words before any field changes.
+            var device = PythonObject(None)
+            if len(args) > 4:
+                device = args[4]
+            prep_device_admit(device, cls, root)
             result = py_present(minmax_initialize(model,args))
+            py_setitem(_fields(model), nk[].k_device, device)
+            prep_route_clear(model)
         elif operation == MINMAX_OPN_GET_PARAMS:
             var fields = _fields(model)
-            result = Python.dict(feature_range=py_item(fields, nk[].k_feature_range),copy=py_item(fields, nk[].k_copy),clip=py_item(fields, nk[].k_clip),numeric_mode=py_item(fields, nk[].k_numeric_mode))
+            var params = Python.dict(feature_range=py_item(fields, nk[].k_feature_range),copy=py_item(fields, nk[].k_copy),clip=py_item(fields, nk[].k_clip),numeric_mode=py_item(fields, nk[].k_numeric_mode))
+            # None on an instance built before the parameter existed.
+            py_setitem(params, nk[].k_device, py_get(fields, nk[].k_device))
+            result = params
+        elif operation == MINMAX_OPN_VENDOR_USED:
+            result = py_present(prep_route_vendor_used(model, root))
         elif operation == MINMAX_OPN_SET_PARAMS:
             var fields = _fields(model)
             var options = args[0]
             if py_type(options) is not b.dict:
                 raise Error("TypeError: MinMaxScaler parameters require an ordinary keyword dictionary")
             var names = py_call(b.list,options)
-            var known = Python.tuple(nk[].k_feature_range,nk[].k_copy,nk[].k_clip,nk[].k_numeric_mode)
+            var known = Python.tuple(nk[].k_feature_range,nk[].k_copy,nk[].k_clip,nk[].k_numeric_mode,nk[].k_device)
             for k in range(len(names)):  # driver-loop: proposed estimator parameter names
                 if py_type(names[k]) is not b.str or not py_contains(known,names[k]):
                     raise Error("Invalid MinMaxScaler parameters")
             if len(names):
+                var device = py_get(options,nk[].k_device,py_get(fields, nk[].k_device))
+                # Refused in words before the estimator changes.
+                prep_device_admit(device, cls, root)
                 var values = Python.tuple(py_get(options,nk[].k_feature_range,py_item(fields, nk[].k_feature_range)),py_get(options,nk[].k_copy,py_item(fields, nk[].k_copy)),py_get(options,nk[].k_clip,py_item(fields, nk[].k_clip)),py_get(options,nk[].k_numeric_mode,py_item(fields, nk[].k_numeric_mode)))
                 _ = py_call(fields.clear)
                 _ = minmax_initialize(model,values)
+                py_setitem(fields, nk[].k_device, device)
+                prep_route_clear(model)
             result = py_present(model)
         elif operation == MINMAX_OPN_IS_FITTED:
             result = PythonObject(_fitted(_fields(model)))

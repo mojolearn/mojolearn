@@ -33,6 +33,7 @@ from bindings.sequential_admission_door import _ordinary_torch, _one_of
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.prep_entry_cache_unpack import prep_mode_checked
 from bindings.scaler_keys_unpack import scaler_keys
+from providers.python.prep_route_boundary_door import prep_route_context
 from bindings.py_balanced import py_item
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -352,12 +353,11 @@ def scaler_fit_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         if len(args) != 5:
             raise Error("TypeError: StandardScaler.fit requires model, X, y, sample_weight and context")
         classical_check_layout(args[0], args[4])
-        var context = args[4]
-        var nk = scaler_keys()
-        var hosts = py_get(context, nk[].k_scaler_host_contexts)
-        var host = py_get(hosts, py_type(args[0])) if hosts is not None else PythonObject(None)
-        if host is not None:
-            context = host
+        # The estimator's route (providers/python/prep_route_boundary_door.mojo): the
+        # process's context, the CPU one of `device="cpu"`, or an explicit Host*
+        # class's own. One record read and one pointer compare; the route's
+        # first resolution reads `device` and the host table by class.
+        var context = prep_route_context(args[0], args[4])
         return scaler_fit(args[0], args[1], args[3], context).steal_data()
     except error:
         if String(error).startswith("TypeError:"):
