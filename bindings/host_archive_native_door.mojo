@@ -2589,6 +2589,20 @@ def host_archive_gbdt_state(text: PythonObject, context: PythonObject) raises ->
     return state
 
 
+def host_archive_category_map(arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The category map of a gradient-boosting file fitted with cat_features
+    (lane cat-ctr: the words of gbdt/data/category_map.mojo, as saved), or
+    None for a file without the member (a model that reads dense codes). The
+    ONE read of the member for both loaders: `GradientBoosting.load`
+    (host_archive_public_gbdt) and `HostGBDT.from_file` (host_archive_gbdt).
+    The map is checked against the fitted width at the first predict
+    (`category_block_columns`), which refuses a corrupt one by name."""
+    var nk = host_tree_archive_keys()
+    if not py_contains(arrays, nk[].k_category_map):
+        return PythonObject(None)
+    return _archive_exact(arrays, "category_map", "<i8", context)
+
+
 def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = host_tree_archive_keys()
     var estimator = _archive_string(arrays, "estimator", context)
@@ -2633,6 +2647,16 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     py_setitem(fields, nk[].k_is_classifier, py_contains(py_item(context, nk[].k_host_archive_gbdt_classification_losses), loss))
     py_setitem(fields, nk[].k_has_proba, py_contains(py_item(context, nk[].k_host_archive_gbdt_proba_losses), loss))
     py_setitem(fields, nk[].k__binding, module)
+    # fx-hostgbdt: the file's category map, read by the one reader the
+    # public loader uses; HostGBDT predict encodes the categorical columns
+    # through it (bindings/host_tree_native_door.mojo host_gbdt_predict).
+    # Before, this loader never read the member: raw categorical input was
+    # predicted on its Float32 words (wrong answers) and the digest lacked
+    # the map. Held only when the file has one: a file without it loads
+    # the same fields as before (no per-call cost in host_tree_fields).
+    var category_map = host_archive_category_map(arrays, context)
+    if category_map is not None:
+        py_setitem(fields, nk[].k_category_map_, category_map)
     return model
 
 
@@ -2725,16 +2749,7 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     py_setitem(fields, nk[].k_bias_, PythonObject(classical_f64(bias, 0)))
     py_setitem(fields, nk[].k_loss_curve_, PythonObject(None))
     py_setitem(fields, nk[].k_test_loss_curve_, PythonObject(None))
-    # lane cat-ctr: the category map of a model fitted with cat_features
-    # (the words of gbdt/data/category_map.mojo, as saved). A file without
-    # the member is a model that reads dense codes, as before. The map is
-    # checked against the fitted width at the first predict
-    # (`category_block_columns`), which refuses a corrupt one by name.
-    var category_key = PythonObject("category_map")
-    var category_map = PythonObject(None)
-    if py_contains(arrays, category_key):
-        category_map = _archive_exact(arrays, "category_map", "<i8", context)
-    py_setitem(fields, PythonObject("category_map_"), category_map)
+    py_setitem(fields, nk[].k_category_map_, host_archive_category_map(arrays, context))
     return model
 
 

@@ -175,12 +175,7 @@ def rf_forest_export_binding(handle: PythonObject, offsets: PythonObject,
 
 
 def rf_forest_export_legacy_binding(handle: PythonObject) raises -> PythonObject:
-    var registry = RF_EXPORTS.get_or_create_ptr()
-    var id = Int(py=handle)
-    if id not in registry[].entries:
-        raise Error("unknown or released fitted forest export handle")
-    ref entry = registry[].entries[id]
-    return _forest_out_trees(entry.model, Int(entry.meta[2]))
+    return _kept_forest_out(Int(py=handle))
 
 
 def rf_forest_export_release_binding(handle: PythonObject) raises -> PythonObject:
@@ -217,8 +212,21 @@ def _kept_forest_out(handle: Int) raises -> PythonObject:
     # lookup (DictKeyError) and the list build (Error) both raise Error to
     # the caller's try/finally, which cannot mix the two error types.
     var registry = RF_EXPORTS.get_or_create_ptr()
-    ref entry = registry[].entries[handle]
-    return _forest_out_trees(entry.model, Int(entry.meta[2]))
+    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # no lock held and put back on every path.
+    var entry = registry[].take(handle)
+    var out = PythonObject(None)
+    var failed = False
+    var words = String("")
+    try:
+        out = _forest_out_trees(entry.model, Int(entry.meta[2]))
+    except problem:
+        failed = True
+        words = String(problem)
+    registry[].put_back(handle, entry^)
+    if failed:
+        raise Error(words)
+    return out
 
 
 def _rf_handle_py(handle: Int, export: Bool) raises -> PythonObject:

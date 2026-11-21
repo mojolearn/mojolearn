@@ -11,10 +11,15 @@ state through Python objects. Here:
     member's estimator (`member_admit`: route, parameter words, resolved
     entry). X, the targets, the weights and the row / column draws are read
     once as addresses.
-  * RUN (`member_set_run`, GIL released): the members are fitted on
-    `workers` host tasks (`host_parallelize` over lanes; a lane takes
-    members lane, lane + workers, ...). Each member has its own
-    `MemberCall` and state. A member that draws rows or columns hands the
+  * RUN (`member_set_run`), TWO MODES per member (THE GIL RULE,
+    core/member_abi.mojo `MEMBER_GIL_FREE`). A member whose KIND has the bit
+    is fitted on `workers` host tasks with the GIL released
+    (`host_parallelize` over lanes; a lane takes every `workers`-th such
+    member). A member whose kind lacks it is fitted on the public thread
+    with the GIL held, one after the other, after the workers joined (its
+    route's entries release inside as they do for the family's own door and
+    may rely on the GIL as their lock): what the callers' loops did. Each
+    member has its own `MemberCall` and state. A member that draws rows or columns hands the
     draw to the family as an index view when the family reads one
     (`MEMBER_CAN_ROW_INDEX` / `MEMBER_CAN_COLUMN_INDEX`); otherwise the
     worker gathers the drawn block into its own buffers. A member over every
@@ -101,7 +106,7 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_CAN_TEST_ROWS,
-    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_BORROWS_FIT,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 from core.member_notices import member_notices_take
@@ -171,6 +176,12 @@ struct MemberSetRun(Movable):
     # (and by `member_set_release`). A kind that owns its state gathers into
     # the worker's own buffers, freed when its fit returns, as before.
     var borrows: List[UInt8]
+    # THE GIL RULE: per member, 1 when its KIND has `MEMBER_GIL_FREE` (asked
+    # with the same one question as `tests` and `borrows`); `parallel`: those
+    # members' numbers, the units of the workers' lanes. Every other member
+    # is fitted on the public thread with the GIL held.
+    var gil_free: List[UInt8]
+    var parallel: List[Int]
     var part_x: List[List[Float32]]
     var part_y: List[List[Int32]]
     var part_w: List[List[Float32]]
@@ -202,6 +213,8 @@ struct MemberSetRun(Movable):
         self.pin_tokens = List[Int]()
         self.notices = List[List[Float64]]()
         self.borrows = List[UInt8]()
+        self.gil_free = List[UInt8]()
+        self.parallel = List[Int]()
         self.part_x = List[List[Float32]]()
         self.part_y = List[List[Int32]]()
         self.part_w = List[List[Float32]]()
@@ -299,9 +312,12 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     # mask lacks the bit is never asked (no state is minted for the answer).
     # THE LIFETIME RULE: whether this member's KIND keeps a pointer into its
     # fit buffers (MEMBER_BORROWS_FIT), answered with the same one question.
+    # THE GIL RULE: whether this member's KIND may run on a worker with no GIL
+    # (MEMBER_GIL_FREE), the same one question; no answer = it may not.
     var tests = UInt8(0)
     var borrows = UInt8(0)
-    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT):
+    var gil_free = UInt8(0)
+    if owner.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_BORROWS_FIT | MEMBER_GIL_FREE):
         var asked = False
         var v = len(set.run.plans) - 1
         while v >= 0:  # driver-loop: over the members admitted before (one compare when they are clones)
@@ -311,6 +327,7 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                     and set.run.plans[v].route.mode == owner.plan.route.mode):
                 tests = set.run.tests[v]
                 borrows = set.run.borrows[v]
+                gil_free = set.run.gil_free[v]
                 asked = True
                 break
             v -= 1
@@ -321,11 +338,15 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
                     tests = UInt8(1)
                 if (kind_mask & MEMBER_BORROWS_FIT) != 0:
                     borrows = UInt8(1)
+                if (kind_mask & MEMBER_GIL_FREE) != 0:
+                    gil_free = UInt8(1)
             except:
-                # No answer: the caller scans the rows, and the gathered
-                # block is held as for a borrowing kind (the safe reading).
+                # No answer: the caller scans the rows, the gathered block is
+                # held as for a borrowing kind and the member is fitted on the
+                # public thread with the GIL held (the safe readings).
                 tests = UInt8(0)
                 borrows = UInt8(1)
+                gil_free = UInt8(0)
     set.run.tests.append(tests)
     set.run.plans.append(owner.plan.copy())
     set.run.targets.append(target)
@@ -343,6 +364,7 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     set.run.pin_tokens.append(0)
     set.run.notices.append(List[Float64]())
     set.run.borrows.append(borrows)
+    set.run.gil_free.append(gil_free)
     set.run.part_x.append(List[Float32]())
     set.run.part_y.append(List[Int32]())
     set.run.part_w.append(List[Float32]())
@@ -421,12 +443,17 @@ def _set_cores(set: MemberSet) -> Int:
 
 
 def member_set_workers(set: MemberSet) -> Int:
-    """The host cores (bounded by the caller's `cap`) bounded by the member
-    count when every member's route is the CPU; one when any member runs on
-    a GPU (module note)."""
+    """The host cores (bounded by the caller's `cap`) bounded by the count of
+    members whose kind runs on workers (`MEMBER_GIL_FREE`) when every
+    member's route is the CPU; one when any member runs on a GPU (module
+    note) or no member's kind runs on a worker."""
     if not member_set_host(set):
         return 1
-    return max(min(_set_cores(set), len(set.run.plans)), 1)
+    var free = 0
+    for u in range(len(set.run.gil_free)):  # driver-loop: over the members (one flag each)
+        if set.run.gil_free[u] != UInt8(0):
+            free += 1
+    return max(min(_set_cores(set), free), 1)
 
 
 def member_set_width(set: MemberSet) -> Int:
@@ -593,9 +620,14 @@ def _set_same_codes(run: MemberSetRun, u: Int, v: Int) -> Bool:
         and run.picks[4 * u + 1] == 0 and run.picks[4 * v + 1] == 0)
 
 
-def _member_set_unit(address: Int, u: Int) raises:
+def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
     """Fit member `u` in a new state of its own; the state stays in
-    `states[u]` for PACK. A failure releases it."""
+    `states[u]` for PACK. A failure releases it. `alone`: no other member
+    is being fitted (one worker, or the public thread's turn of a kind
+    without `MEMBER_GIL_FREE`), so a gather is split across the host cores.
+    THE GIL RULE: called on a worker with no GIL only for a kind with the
+    bit, else on the public thread with the GIL held; nothing here touches
+    CPython in either mode."""
     var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
     var own = run[].own_x[u] != 0
     var x_address = run[].own_x[u] if own else run[].x
@@ -656,7 +688,7 @@ def _member_set_unit(address: Int, u: Int) raises:
                 if run[].weights[u] != 0:
                     w_part = List[Float32](length=n, fill=0.0)
                     w_address = Int(w_part.unsafe_ptr())
-            _set_gather(address, u, n, width, x_at, y_at, w_address, run[].workers <= 1)
+            _set_gather(address, u, n, width, x_at, y_at, w_address, alone)
             call.x = MemberMatrix(x_at, n, width)
             call.y = MemberMatrix(y_at, n, 1, run[].y_dtype)
             if w_address != 0:
@@ -683,19 +715,39 @@ def _member_set_unit(address: Int, u: Int) raises:
 
 
 def _member_set_lane(address: Int, lane: Int):
-    """One worker: members lane, lane + workers, ... A failing member
-    records its words in its own slot; the others still run (each is
-    independent) and the caller raises the first in member order."""
+    """One worker (no GIL): entries lane, lane + workers, ... of `parallel`,
+    the members whose kind has `MEMBER_GIL_FREE`. A failing member records
+    its words in its own slot; the others still run (each is independent)
+    and the caller raises the first in member order."""
     var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
-    var count = len(run[].plans)
-    var u = lane
-    while u < count:  # driver-loop: over this worker's members
+    var count = len(run[].parallel)
+    var i = lane
+    while i < count:  # driver-loop: over this worker's members
+        var u = run[].parallel[i]
         try:
-            _member_set_unit(address, u)
+            _member_set_unit(address, u, run[].workers <= 1)
         except error:
             run[].errors[u] = String(error)
             run[].failed[u] = UInt8(1)
-        u += run[].workers
+        i += run[].workers
+
+
+def _member_set_held_turns(address: Int):
+    """THE GIL RULE, the mode of a kind WITHOUT `MEMBER_GIL_FREE`: those
+    members one after the other on the calling (public) thread, which holds
+    the GIL; each member's route entries release it inside around their
+    heavy work, as for the family's own door. SERIAL BY RULE, not by nature:
+    a kind becomes parallel when its trace earns the bit. A failing member
+    records its words; the others still run."""
+    var run = MutPointer[MemberSetRun, MutUntrackedOrigin](unsafe_from_address=address)
+    for u in range(len(run[].plans)):  # driver-loop: over the members whose kind lacks MEMBER_GIL_FREE
+        if run[].gil_free[u] != UInt8(0):
+            continue
+        try:
+            _member_set_unit(address, u, True)
+        except error:
+            run[].errors[u] = String(error)
+            run[].failed[u] = UInt8(1)
 
 
 def member_set_release(mut set: MemberSet):
@@ -710,8 +762,10 @@ def member_set_release(mut set: MemberSet):
 
 
 def member_set_run(mut set: MemberSet) raises:
-    """RUN: fit every member of the set, the GIL released, on
-    `member_set_workers` host tasks. After it every member holds a fitted
+    """RUN: fit every member of the set: the members whose kind has
+    `MEMBER_GIL_FREE` on `member_set_workers` host tasks with the GIL
+    released, then every other member on this thread with the GIL held, one
+    at a time (module note, RUN; THE GIL RULE). After it every member holds a fitted
     state for `member_set_pack`; on a failure every state is released and
     the first failing member's words (in member order) are raised.
 
@@ -724,6 +778,11 @@ def member_set_run(mut set: MemberSet) raises:
     if count == 0:
         return
     set.run.workers = member_set_workers(set)
+    set.run.parallel.clear()
+    for u in range(count):  # driver-loop: over the members (the workers' units)
+        if set.run.gil_free[u] != UInt8(0):
+            set.run.parallel.append(u)
+    var turns = len(set.run.parallel) < count
     set.run.cover_units.clear()
     if set.run.y_dtype == MEMBER_I32:
         for u in range(count):  # driver-loop: over the members (one cover pass per distinct target)
@@ -759,8 +818,11 @@ def member_set_run(mut set: MemberSet) raises:
                 for u in range(count):  # driver-loop: over the members (the cover verdicts)
                     if set.run.uncovered[u] != UInt8(0):
                         lacking = True
-            if not lacking:
+            if not lacking and len(set.run.parallel) > 0:
                 host_parallelize(_lane, lanes)
+        # GIL held again: the members whose kind may not run without it.
+        if not lacking and turns:
+            _member_set_held_turns(address)
     finally:
         for u in range(count):  # driver-loop: over the members (the references no cache took)
             if set.run.pin_tokens[u] != 0:
@@ -865,10 +927,13 @@ struct MemberHeldCall(Movable):
     proves the rows finite before `member_held_run`, or closes and takes its
     door. `cols` / `dtype`: the columns per row and the element type
     (MEMBER_F32 / F64 / I32 / I64) the member writes for `operation`.
-    `host`: the member's route is the CPU."""
+    `host`: the member's route is the CPU. `gil_free`: the member's kind
+    has `MEMBER_GIL_FREE` (THE GIL RULE): `member_held_run` releases the GIL
+    around its call; False: the call is made with the GIL held."""
     var held: MemberHeld
     var served: Bool
     var tests: Bool
+    var gil_free: Bool
     var host: Bool
     var operation: Int
     var cols: Int
@@ -878,6 +943,7 @@ struct MemberHeldCall(Movable):
         self.held = MemberHeld()
         self.served = False
         self.tests = False
+        self.gil_free = False
         self.host = False
         self.operation = MEMBER_OP_PREDICT
         self.cols = 0
@@ -940,8 +1006,11 @@ def _member_held_open(mut opened: MemberHeldCall, member: PythonObject, operatio
         return
     # Kind-exact, asked of the held state (no state is minted); a family
     # whose union mask lacks the bit is not asked.
-    if opened.held.plan.member.can(MEMBER_CAN_TEST_ROWS):
-        opened.tests = (member_call(opened.held.plan.member, MEMBER_OP_CAPABILITIES, call) & MEMBER_CAN_TEST_ROWS) != 0
+    # THE GIL RULE: the same answer says whether the call may run released.
+    if opened.held.plan.member.can(MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE):
+        var kind_mask = member_call(opened.held.plan.member, MEMBER_OP_CAPABILITIES, call)
+        opened.tests = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
+        opened.gil_free = (kind_mask & MEMBER_GIL_FREE) != 0
     opened.host = opened.held.plan.route.device == DEVICE_CPU
     opened.cols = cols
     opened.dtype = dtype
@@ -979,8 +1048,9 @@ def member_held_open(member: PythonObject, operation: Int, classifier: Bool, wid
 
 def member_held_run(mut opened: MemberHeldCall, x: Int, n: Int, d: Int, context: PythonObject) -> PythonObject:
     """PREDICT SIDE, RUN: the opened member's operation over the `n` x `d`
-    float32 C-order host rows at `x`: ONE member call, the GIL released,
-    written into a new Array of the member's element type, (n,) for one
+    float32 C-order host rows at `x`: ONE member call (the GIL released
+    around it for a kind with `MEMBER_GIL_FREE`; held for any other kind,
+    whose entries release inside as for the family's own door), written into a new Array of the member's element type, (n,) for one
     column per row, else (n, columns). A classifier's predict writes its
     class CODES (code c is the member's c-th class); the caller maps them.
     None when the call refuses (a member that tests its rows refuses a
@@ -1002,7 +1072,10 @@ def member_held_run(mut opened: MemberHeldCall, x: Int, n: Int, d: Int, context:
         call.dst = MemberMatrix(dst.addr, n, opened.cols, opened.dtype)
         var plan_member = opened.held.plan.member
         var operation = opened.operation
-        with GILReleased(Python()):
+        if opened.gil_free:
+            with GILReleased(Python()):
+                _ = member_call(plan_member, operation, call)
+        else:
             _ = member_call(plan_member, operation, call)
         _ = opened.served   # the hold (its plan words, its owner pin) outlives the call
         return dst.keep

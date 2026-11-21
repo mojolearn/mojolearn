@@ -340,7 +340,8 @@ def _rf_params_from(params: ForestFitArgs, criterion: Int) raises -> RF_params:
 comptime RFExportTrees = List[TreeMetaDataNode[DT]]
 
 
-comptime RF_EXPORTS = SharedSlot[ForestExportRegistry[RFExportTrees], ("MojolearnRFFitExportIdenticalV1" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFFitExportFastV1")]
+# V2 (lane fx-gil, 2026-11-25): the registry gained its lock word.
+comptime RF_EXPORTS = SharedSlot[ForestExportRegistry[RFExportTrees], ("MojolearnRFFitExportIdenticalV2" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFFitExportFastV2"), 2]
 
 
 def _retain_rf_handle(var trees: RFExportTrees, notices: Int) raises -> Int:
@@ -370,29 +371,49 @@ def _rf_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outp
     var cp = _i32_ptr(dst[1])
     var tp = _f32_ptr(dst[2])
     var lp = _i32_ptr(dst[3])
-    rf_export_trees_into(
-        registry[].entries[id].model, op, cp, tp, lp, dst[4],
-        registry[].entries[id].outputs,
-    )
+    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # no lock held and put back on every path.
+    var entry = registry[].take(id)
+    var failed = False
+    var words = String("")
+    try:
+        rf_export_trees_into(entry.model, op, cp, tp, lp, dst[4], entry.outputs)
+    except problem:
+        failed = True
+        words = String(problem)
+    registry[].put_back(id, entry^)
+    if failed:
+        raise Error(words)
 
 
 def _rf_export_verify_native(id: Int, dst: List[Int]) raises -> Int:
     """XF_EXPORT_VERIFY (MOJOLEARN_FOREST_EXPORT=verify): the diagnostic
     lists `forest_export_legacy` returns, against the exported arrays."""
     var registry = RF_EXPORTS.get_or_create_ptr()
-    if id not in registry[].entries:
-        raise Error("unknown or released fitted forest export handle")
-    ref entry = registry[].entries[id]
+    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
+    # no lock held and put back on every path.
+    var entry = registry[].take(id)
     var legacy_outputs = Int(entry.model[0].num_outputs) if len(entry.model) > 0 else 1
-    if (len(entry.meta) != 3 or Int(entry.meta[0]) != len(entry.model)
-            or Int(entry.meta[1]) != legacy_outputs):
-        return -1
+    var same = (len(entry.meta) == 3 and Int(entry.meta[0]) == len(entry.model)
+                and Int(entry.meta[1]) == legacy_outputs)
     var offsets = List[Int64]()
     var colid = List[Int64]()
     var quesval = List[Float64]()
     var left_child = List[Int64]()
     var leaves = List[Float64]()
-    rf_flatten_trees(entry.model, offsets, colid, quesval, left_child, leaves)
+    var failed = False
+    var words = String("")
+    if same:
+        try:
+            rf_flatten_trees(entry.model, offsets, colid, quesval, left_child, leaves)
+        except problem:
+            failed = True
+            words = String(problem)
+    registry[].put_back(id, entry^)
+    if failed:
+        raise Error(words)
+    if not same:
+        return -1
     return forest_export_verify_lists(offsets, colid, quesval, left_child, leaves, dst)
 
 

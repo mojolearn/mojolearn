@@ -23,16 +23,17 @@ def forest_export_descriptor_py[Model: Movable & Deinitable](
     registry: ForestExportRegistry[Model], handle: Int,
 ) raises -> PythonObject:
     """`[handle, trees, nodes, outputs, [meta...]]` (PACK)."""
-    if handle not in registry.entries:
-        raise Error("unknown or released fitted forest export handle")
-    ref entry = registry.entries[handle]
+    # Copies taken under the registry's own lock (core/forest_export_run.mojo,
+    # THE LOCK): no reference into its dictionary is held here.
+    var shape = registry.shape_of(handle)
+    var meta = registry.meta_of(handle)
     var descriptor = Python.list()
     descriptor.append(PythonObject(handle))
-    descriptor.append(PythonObject(entry.trees))
-    descriptor.append(PythonObject(entry.nodes))
-    descriptor.append(PythonObject(entry.outputs))
+    descriptor.append(PythonObject(shape[0]))
+    descriptor.append(PythonObject(shape[1]))
+    descriptor.append(PythonObject(shape[2]))
     var metadata = Python.list()
-    for m in range(len(entry.meta)):  # small-loop(meta: at most six export metadata words): descriptor glue, not data
-        metadata.append(PythonObject(Int(entry.meta[m])))
+    for m in range(len(meta)):  # small-loop(meta: at most six export metadata words): descriptor glue, not data
+        metadata.append(PythonObject(Int(meta[m])))
     descriptor.append(metadata)
     return descriptor

@@ -34,8 +34,11 @@ NewtonL2 for Lossguide (`python/mojolearn/ensemble.py`, their
 `catboost_options.cpp:980-991`), which is the lane's configuration.
 """
 from checks.numerics import ftz
+from core.host_parallel import host_parallelize
+from core.host_predict_threads import HostF32Ptr
 from gbdt.host.gbdt_oracle import (
     GBDT_MSE_BLOCK,
+    _gbdt_units,
     _cross_entropy_row,
     _halving_fold,
 )
@@ -51,7 +54,7 @@ def lossguide_find_best_leaf(
     is defined."""
     var best_leaf = -1
     var best_gain = Float32.MAX
-    for i in range(len(defined)):
+    for i in range(len(defined)):  # driver-loop: over one tree's leaves (a compare each)
         if defined[i]:
             if gains[i] < best_gain:
                 best_gain = gains[i]
@@ -102,23 +105,51 @@ def logloss_search_pass_newton(
     weights)."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var has_weights = len(weights) > 0
-    var weight = Float32(1.0)
-    for b in range(blocks):
+    # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
+    # one 256-thread device block owns its rows' two planes and its three
+    # partials, and its halving trees are the kernel's. Blocks go round
+    # robin to `_gbdt_units` tasks; a task holds three block slabs.
+    var units = _gbdt_units(blocks, 16 * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    # an empty `weights` is never read (`has_weights` guards it)
+    var weights_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+    var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm border, imm has_weights, imm targets_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p, imm mag_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
-        for t in range(GBDT_MSE_BLOCK):
-            var i = b * GBDT_MSE_BLOCK + t
-            if i < n_rows:
-                if has_weights:
-                    weight = weights[i]
-                var r = _cross_entropy_row(targets[i], cursor[i], border, weight)
-                var plane0 = r.weighted_scale
-                stats[i] = plane0
-                stats[n_rows + i] = r.weighted_direction
-                s_score[t] = r.score
-                s_w[t] = abs(plane0)
-                s_g[t] = abs(r.weighted_direction_raw)
-        fv_partials[b] = _halving_fold(s_score)
-        mag_partials[2 * b] = _halving_fold(s_w)
-        mag_partials[2 * b + 1] = _halving_fold(s_g)
+        var weight = Float32(1.0)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slabs are reused)
+                s_score[t] = Float32(0.0)
+                s_w[t] = Float32(0.0)
+                s_g[t] = Float32(0.0)
+                if i < n_rows:
+                    if has_weights:
+                        weight = weights_p[i]
+                    var r = _cross_entropy_row(targets_p[i], cursor_p[i], border, weight)
+                    var plane0 = r.weighted_scale
+                    stats_p[i] = plane0
+                    stats_p[n_rows + i] = r.weighted_direction
+                    s_score[t] = r.score
+                    s_w[t] = abs(plane0)
+                    s_g[t] = abs(r.weighted_direction_raw)
+            fv_p[b] = _halving_fold(s_score)
+            mag_p[2 * b] = _halving_fold(s_w)
+            mag_p[2 * b + 1] = _halving_fold(s_g)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(targets)
+    _ = len(cursor)
+    _ = len(weights)
+    _ = len(stats)
+    _ = len(fv_partials)
+    _ = len(mag_partials)
