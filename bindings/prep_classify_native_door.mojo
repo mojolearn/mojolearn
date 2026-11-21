@@ -48,6 +48,7 @@ from bindings.prep_classify_prog_door import ClsProg, NONE, f32_array, i32_array
 from bindings.prep_classify_prog_run import (
     cls_class_counts, cls_copy_block, cls_binary_difference, cls_gnb_fit_program, cls_score_program, cls_tail_stages,
     ClsScore, CLS_KIND_GNB, CLS_KIND_MNB, CLS_KIND_BNB, CLS_KIND_CNB, CLS_KIND_CAT, CLS_KIND_LDA, CLS_KIND_QDA,
+    ClsCounts, cls_dnb_counts, cls_dnb_params, cls_prior_stages, CLS_PRIOR_GIVEN, CLS_PRIOR_FIT, CLS_PRIOR_UNIFORM,
 )
 from bindings.prep_classify_common_door import (
     XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_requested_mode, cls_entry,
@@ -78,9 +79,6 @@ comptime OP_EIGH = 18
 comptime OP_GNB_EPS = 27
 comptime OP_GNB_PARAMS = 28
 comptime OP_CLASS_LOG_PRIOR = 30
-comptime OP_MNB_PARAMS = 31
-comptime OP_BNB_PARAMS = 32
-comptime OP_CNB_PARAMS = 33
 comptime OP_LDA_PREP = 36
 comptime OP_LDA_W = 37
 comptime OP_LDA_STAGE2 = 38
@@ -616,19 +614,41 @@ def _check_alpha(model: PythonObject, fields: PythonObject, context: PythonObjec
         raise Error("NotImplementedError: mojolearn: " + cls_name(model) + " needs alpha > 0 (alpha = 0 makes log(0) terms)")
 
 
-def _prior_stages(mut pr: ClsProg, model: PythonObject, fields: PythonObject, K: Int, cnt: Int, clp: Int,
-                  context: PythonObject) raises:
-    """`_DiscreteNB._prior_stages`."""
+struct DnbPrior(Movable):
+    """UNPACK of the class prior of a discrete naive Bayes fit: the typed
+    choice word and the checked `class_prior` list (empty unless given)."""
+    var choice: Int
+    var priors: List[Float64]
+
+    def __init__(out self, choice: Int, var priors: List[Float64]):
+        self.choice = choice
+        self.priors = priors^
+
+
+def _dnb_prior(model: PythonObject, fields: PythonObject, K: Int, context: PythonObject) raises -> DnbPrior:
     var nk = prep_keys()
     var given = py_get(fields, nk[].k_class_prior)
     if given is not None:
-        var po = pr.put_list(given_priors(given, K, cls_name(model), False, context), context)
-        pr.stage(OP_LOG, K, po, clp)
-    elif Bool(py=py_item(fields, nk[].k_fit_prior)):
-        pr.stage(OP_CLASS_LOG_PRIOR, K, cnt, K, clp)
-    else:
-        var ones = pr.put_list(_ones(K), context)
-        pr.stage(OP_CLASS_LOG_PRIOR, K, ones, K, clp)
+        return DnbPrior(CLS_PRIOR_GIVEN, given_priors(given, K, cls_name(model), False, context))
+    if Bool(py=py_item(fields, nk[].k_fit_prior)):
+        return DnbPrior(CLS_PRIOR_FIT, List[Float64]())
+    return DnbPrior(CLS_PRIOR_UNIFORM, List[Float64]())
+
+
+def _prior_stages(mut pr: ClsProg, model: PythonObject, fields: PythonObject, K: Int, cnt: Int, clp: Int,
+                  context: PythonObject) raises:
+    """`_DiscreteNB._prior_stages`: UNPACK of the prior, the typed stages
+    (`cls_prior_stages`)."""
+    var prior = _dnb_prior(model, fields, K, context)
+    cls_prior_stages(pr.program, prior.choice, prior.priors, K, cnt, clp)
+
+
+def _kind_word(kind: String) -> Int:
+    if kind == "mnb":
+        return CLS_KIND_MNB
+    if kind == "bnb":
+        return CLS_KIND_BNB
+    return CLS_KIND_CNB
 
 
 def _needs_min(kind: String) -> Bool:
@@ -645,45 +665,34 @@ def _binarize(kind: String, fields: PythonObject) raises -> PythonObject:
 def _fit_counts(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: String, X: PythonObject,
                 y: PythonObject, binarize: PythonObject, sample_weight: PythonObject, csr: CsrIn, has_csr: Bool,
                 context: PythonObject) raises -> Counts:
-    """`_DiscreteNB._fit_counts`."""
+    """`_DiscreteNB._fit_counts`. UNPACK: X (or the block the CSR arrays
+    build on the device), the class codes, the weights, the threshold, the
+    prior, the image's one-pass word. The stages are the typed
+    `cls_dnb_counts`; the owners follow in its record order."""
     var mode = cls_mode(context)
-    var xo = csr_dense_x(pr, csr, mode, context) if has_csr else -1
+    var xo = csr_dense_x(pr, csr, mode, context) if has_csr else NONE
     var n = csr.n
     var d = csr.d
-    if xo == -1:
+    var x_owner = PythonObject(None)
+    if xo == NONE:
         var arr = cls_x2d(py_call(X.toarray) if has_csr else X, context)
         n = arr.n
         d = arr.d
-        xo = pr.put(arr.value)
+        x_owner = arr.value
     var codes = encode_y(model, fields, y, n, context)
     var K = _n_classes(fields)
-    var wo = _put_weights(pr, _weights(sample_weight, n, context))
-    if nb_onepass(mode, context):
-        # lane idn-int-prep: one unit per (block, column) counts every class,
-        # binarizes (BernoulliNB) and flags a negative word
-        var yo = pr.put_codes(codes)
-        var st = pr.alloc(6 * d)
-        var cnt = pr.alloc(K)
-        var fc = pr.alloc(K * d)
-        var clp = pr.alloc(K)
-        var thr = NONE if binarize is None else pr.put_scalar(cls_float(binarize), context)
-        nb_counts(pr, wo, xo, n, d, yo, K, cnt, fc, thr, st + 3 * d if _needs_min(kind) else NONE)
-        _prior_stages(pr, model, fields, K, cnt, clp, context)
-        return Counts(mode, n, d, K, st, cnt, fc, clp)
-    if binarize is not None:
-        var thr = pr.put_scalar(cls_float(binarize), context)
-        var xb = pr.work(n * d)
-        pr.stage(OP_BINARIZE, n * d, xo, n * d, thr, xb)
-        xo = xb
-    var yo = pr.put_codes(codes)
-    var st = pr.alloc(6 * d)
-    var cnt = pr.alloc(K)
-    var fc = pr.alloc(K * d)
-    var clp = pr.alloc(K)
-    col_stats(pr, xo, n, d, st, False)
-    class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, NONE, NONE, fc, mode, context, False)
-    _prior_stages(pr, model, fields, K, cnt, clp, context)
-    return Counts(mode, n, d, K, st, cnt, fc, clp)
+    var w = _weights(sample_weight, n, context)
+    var has_threshold = binarize is not None
+    var threshold = cls_float(binarize) if has_threshold else 0.0
+    var prior = _dnb_prior(model, fields, K, context)
+    var c = cls_dnb_counts(pr.program, _kind_word(kind), xo, n, d, K, w is not None, has_threshold, threshold,
+                           nb_onepass(mode, context), blocked(), prior.choice, prior.priors)
+    if xo == NONE:
+        pr.own(x_owner)
+    if w is not None:
+        pr.own(w)
+    pr.own(codes)
+    return Counts(mode, n, d, K, c.st, c.cnt, c.fc, c.clp)
 
 
 def _fit_counts_csr(mut pr: ClsProg, model: PythonObject, fields: PythonObject, csr: CsrIn, y: PythonObject,
@@ -750,18 +759,12 @@ def _params(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
     var nk = prep_keys()
     var K = c.K
     var d = c.d
-    var a = pr.put_scalar(cls_float(py_item(fields, nk[].k_alpha)), context)
-    var flp = pr.alloc(K * d)
-    var w = NONE
-    var bias = NONE
-    if kind == "mnb":
-        pr.stage(OP_MNB_PARAMS, K, c.fc, K, d, a, flp)
-    elif kind == "bnb":
-        w = pr.alloc(K * d)
-        bias = pr.alloc(K)
-        pr.stage(OP_BNB_PARAMS, K, c.fc, c.cnt, K, d, a, c.clp, flp, w, bias)
-    else:
-        pr.stage(OP_CNB_PARAMS, K, c.fc, K, d, a, 1 if Bool(py=py_item(fields, nk[].k_norm)) else 0, flp)
+    var norm = kind == "cnb" and Bool(py=py_item(fields, nk[].k_norm))
+    var o = cls_dnb_params(pr.program, _kind_word(kind), ClsCounts(c.n, d, K, c.st, c.cnt, c.fc, c.clp),
+                           cls_float(py_item(fields, nk[].k_alpha)), norm)
+    var flp = o.flp
+    var w = o.w
+    var bias = o.bias
     pr.run(c.mode, context)
     partial_refuse(pr, neg, fields, pc, context)
     if kind == "mnb":
