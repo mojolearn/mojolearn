@@ -511,12 +511,16 @@ def _cls_borrowed_slot(mut resident: ClsResident, source: ClsBorrowed, mut kept:
     return put.store_id
 
 
-def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBorrowed], scope: Int) raises -> ClsBorrowedDone:
+def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBorrowed], scope: Int,
+                     mut kept: Int) raises -> ClsBorrowedDone:
     """UNPACK-free run of one program for a typed caller: the route words,
     the arena, the door's input choices (`cls_input_choice`; a pinned buffer
     in an active scope stays resident there, a gathered record takes its
     rows on the device out of that resident base) and `cls_prog_run`.
     `scope`: the caller's scope handle word, negative outside a scope.
+    `kept`: written with the pin token at the moment the scope's cache takes
+    a source's pin reference (left as given otherwise), so the caller knows
+    it whether this run returns or raises (the member ABI's pin rule).
     Raises the run's failure in the door's words."""
     var route = cls_run_route(plan, program)
     var resident = ClsResident()
@@ -524,7 +528,6 @@ def cls_borrowed_run(plan: ClsRunPlan, program: ClsProgram, sources: List[ClsBor
         resident = ClsResident(scope, arena_scope_floor(scope), plan.key)
     var arena = ClsArena(cls_host_words(program, route))
     var records = List[ClsRunInput](capacity=len(program.inputs))
-    var kept = 0
     var next_source = 0
     for k in range(len(program.inputs)):  # driver-loop: over the program's input records
         var record = program.inputs[k]

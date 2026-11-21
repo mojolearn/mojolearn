@@ -47,9 +47,9 @@ columns, read through the index. `call.scope` / `call.pin`
 NB_ROUTE_RANGES): with a scope and `pin != 0`, X (the whole base under a
 row index) stays resident in the scope's x_prep cache, the door's cache, so
 the next call of any member or door over the same buffer is one lookup. When
-the cache took the pin's reference the member writes `call.pin = 0`; a
-caller that still reads its own nonzero pin after the call drops that
-reference itself.
+the cache took the pin's reference the member writes `call.pin_kept`
+nonzero at that moment (THE PIN RULE, core/member_abi.mojo); the caller
+keeps and later drops every reference no cache took.
 
 Fitted-state blocks (MEMBER_OP_EXPORT / MEMBER_OP_IMPORT), GaussianNB:
   0 `MEMBER_BLOCK_SCALARS` float64 [n_features_in_, classes, epsilon_]
@@ -382,9 +382,10 @@ def _fit_gaussian(slot: _Slot, call: _Call) raises:
     sources.append(_plain(codes_address, n))
     if weighted:
         sources.append(_plain(weights_address, n))
-    var done = cls_borrowed_run(_run_plan(call), program, sources, call[].scope)
-    if done.kept_pin != 0:
-        call[].pin = 0  # the scope's cache holds the caller's reference now
+    # THE PIN RULE (core/member_abi.mojo `MemberCall.pin`): the run writes
+    # `call.pin_kept` at the moment the scope's cache takes the caller's
+    # reference, so the caller reads it even when a later stage raises.
+    var done = cls_borrowed_run(_run_plan(call), program, sources, call[].scope, call[].pin_kept)
     # The addressed words stay live through the run.
     _ = len(codes)
     _ = len(taken)
@@ -437,9 +438,10 @@ def _score_gaussian(slot: _Slot, call: _Call, operation: Int) raises:
     sources.append(_plain(Int(slot[].theta.unsafe_ptr()), K * d))
     sources.append(_plain(Int(slot[].variance.unsafe_ptr()), K * d))
     sources.append(_plain(Int(slot[].constant.unsafe_ptr()), K))
-    var done = cls_borrowed_run(_run_plan(call), program, sources, call[].scope)
-    if done.kept_pin != 0:
-        call[].pin = 0  # the scope's cache holds the caller's reference now
+    # THE PIN RULE (core/member_abi.mojo `MemberCall.pin`): the run writes
+    # `call.pin_kept` at the moment the scope's cache takes the caller's
+    # reference, so the caller reads it even when a later stage raises.
+    var done = cls_borrowed_run(_run_plan(call), program, sources, call[].scope, call[].pin_kept)
     if proba:
         # float64 probabilities are two arena words each
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=done.arena.f32(o.pp),
