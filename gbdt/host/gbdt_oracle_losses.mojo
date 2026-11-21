@@ -138,7 +138,6 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostParams,
     _binarize_columns,
     _choose_scale_from_magnitudes,
-    _cosine_gain,
     _cosine_gains,
     _gain_winner,
     _deterministic_sum_lanes,

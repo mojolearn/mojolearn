@@ -2439,50 +2439,6 @@ def _add_leaf_cosine(
     denum_sqr = ftz(identical_mul_add(ftz(weight * mu), mu, denum_sqr))
 
 
-def _cosine_gain(
-    hist: List[Float32],
-    hist_cells: Int,
-    part_stats: List[Float32],
-    n_live: Int,
-    bin_feature_id: Int,
-    lambda_l2: Float32,
-    score_std_dev: Float32 = Float32(0.0),
-    level_seed: UInt64 = 0,
-    feature_id: Int = 0,
-) -> Float32:
-    """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
-    (`compute_scores.mojo:140-224`): the leaves in dense order, the clamped
-    weights, the two `AddLeaf`s per leaf, the sqrt normalization, the score
-    noise when `score_std_dev` is not zero (one normal draw per FEATURE off
-    `advance_seed_k(level_seed + feature, 4)`, subtracted from the score and
-    from the zero score-before by the pinned fma, `:204-219`; lane/catboost-
-    parity), feature weight 1.0."""
-    var score = Float32(0.0)
-    var denum_sqr = Float32(1e-10)
-    for i in range(n_live):
-        var leaf_base = i * 2 * hist_cells
-        var weight_left = max(hist[leaf_base + bin_feature_id], Float32(0.0))
-        var weight_right = ftz(max(part_stats[i * 2] - weight_left, Float32(0.0)))
-        var sum_left = hist[leaf_base + hist_cells + bin_feature_id]
-        var part_stat = part_stats[i * 2 + 1]
-        var sum_right = ftz(part_stat - sum_left)
-        _add_leaf_cosine(sum_left, weight_left, lambda_l2, score, denum_sqr)
-        _add_leaf_cosine(sum_right, weight_right, lambda_l2, score, denum_sqr)
-    var final_score = score
-    var score_before = Float32(0.0)
-    if denum_sqr > Float32(1e-15):
-        final_score = ftz(score / identical_sqrt(denum_sqr))
-    else:
-        final_score = -GBDT_FLOAT32_MAX
-    if score_std_dev != Float32(0.0):
-        var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
-        var draw = next_normal_f(seed)
-        var neg_draw = -draw[0]
-        final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
-        score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
-    return ftz(ftz(final_score - score_before) * Float32(1.0))
-
-
 def _ftz_lanes[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
     """`ftz` lane by lane as bit operations: a subnormal becomes the zero of
     its sign, everything else passes (IDENTICAL builds only, as `ftz`)."""
@@ -2511,6 +2467,7 @@ def _split_leaves(
     mut p_off: List[Int],
     mut p_sz: List[Int],
     mut hist: List[Float32],
+    with_histograms: Bool = True,
 ):
     """The split chain of a set of leaves, each by its own split
     (`l_word_base`, `l_field`, `l_value`, `l_one_hot`, one per leaf): a row
@@ -2519,7 +2476,9 @@ def _split_leaves(
     zeros then ones, each side in its old order (the device's stable
     partition, `enqueue_post_winner`), with every stat plane
     (`stat_count`); `copy_histograms_kernel` copies the parent's histogram
-    into slot `right_ids[i]`; the sizes and offsets of both children are
+    into slot `right_ids[i]` (not when `with_histograms` is False: a
+    caller that rebuilds every leaf's histogram each level); the sizes and
+    offsets of both children are
     written (`update_partitions_and_plan_kernel` /
     `update_partitions_after_split_kernel`). The leaves' row ranges are
     disjoint and their slots distinct.
@@ -2662,7 +2621,8 @@ def _split_leaves(
                 hist_p[dst_base + c] = hist_p[src_base + c]
             i += copy_units
 
-    host_parallelize(copy_parent, copy_units)
+    if with_histograms:
+        host_parallelize(copy_parent, copy_units)
     # the tasks read these through pointers: named again past the joins
     _ = len(pc_lo)
     _ = len(pc_hi)
@@ -2740,7 +2700,7 @@ def _cosine_gains(
     level_seed: UInt64,
     bf_feature: List[Int],
 ) -> List[Float32]:
-    """`_cosine_gain` for every bin-feature at once: the same two
+    """`compute_optimal_splits_kernel[COSINE]` for every bin-feature at once: the same two
     `AddLeaf`s per leaf in dense leaf order for each candidate, turned so
     the leaf is the outer loop and 8 candidates run a step, lane by lane
     the scalar expressions (`_add_leaf_cosine`'s pinned fmas, `ftz` as bit
@@ -3513,7 +3473,7 @@ def gbdt_host_fit_eval(
     magnitudes then set the fixed-point scale), the tree's
     `compute_target_std_dev` over the bootstrapped planes times the
     strength and `calc_score_model_length_mult`, one `level_rand` draw per
-    level and the per-feature noise in `_cosine_gain`. The leaves are
+    level and the per-feature noise in `_cosine_gains`. The leaves are
     estimated on the learn target, not the bootstrapped planes, as the
     device's `_estimate_and_apply` does.
 

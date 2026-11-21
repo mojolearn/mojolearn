@@ -111,7 +111,6 @@ from gbdt.host.gbdt_oracle import (
     _bootstrap_pass,
     _choose_scale_from_magnitudes,
     _snap_gradients,
-    _cosine_gain,
     _cosine_gains,
     _gain_winner,
     _deterministic_sum_lanes,
