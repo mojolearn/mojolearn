@@ -33,7 +33,6 @@ from bindings.label_admission_native_unpack import labels_primitive_kind
 from bindings.host_sparse_native_door import host_sparse_format
 from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.family_common_unpack import (
-    FAMILY_F64P,
     family_repr,
     family_isinstance,
 )
@@ -55,15 +54,16 @@ from neighbors.neighbors_local_run import (
     lof_refuse_metric, lof_refuse_metric_params, lof_check_contamination, lof_check_fit_rows,
     lof_fit_neighbors, lof_plan, lof_refuse_fit_predict_novelty, lof_check_novelty,
     nc_refuse_metric, nc_check_label_rows, nc_check_classes, nc_check_priors_ndim, nc_check_priors_size,
-    nc_split_ops, nc_check_variance, nc_refuse_decision_metric, nc_fused, nc_proba_mode,
+    nc_check_variance, nc_refuse_decision_metric,
     imp_refuse_missing_values, imp_refuse_metric, imp_refuse_weights, imp_round_f32, imp_cells_length,
     imp_colmiss_length, imp_read_count, imp_fit_columns, imp_check_features, imp_cells_operation, imp_keep_plan,
 )
-from core.nearest_centroid_plan import (
-    NcLabelCodes,
-    NcFitPlan, NcQueryPlan, nc_uniform, nc_normalize_priors, nc_narrow_priors, nc_binary_decision, nc_scratch_address,
+from core.nearest_centroid_plan import NcLabelCodes, NcFitPlan
+from neighbors.nearest_centroid_run import (
+    NC_PRIORS_EMPIRICAL, NC_PRIORS_UNIFORM, NC_PRIORS_GIVEN,
+    NcFitRequest, NcFitOutcome, NcQueryRequest,
+    nc_fit_count_run, nc_fit_priors_run, nc_fit_run, nc_labels_run, nc_decision_run, nc_proba_wide, nc_proba_run,
 )
-from core.admitted_weights import admitted_fill
 from bindings.admitted_input_unpack import admitted_array, admitted_vector, admitted_storage_native, admit_c_view, admitted_dtype
 from bindings.admitted_input_unpack import admitted_finite_refuse
 
@@ -504,10 +504,41 @@ def _class_array(classes: PythonObject, codes: List[Int32], context: PythonObjec
     return labels_decode_i32_codes(classes, codes, context)
 
 
-def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    """NearestCentroid admission/publication around the native fit plan."""
+# NearestCentroid is UNPACK / RUN / PACK. UNPACK (`_nc_fit_unpack`,
+# `_nc_query_unpack`) reads every public value once into a typed request of
+# neighbors/nearest_centroid_run.mojo and keeps the Python owners as pins.
+# RUN is that module (no Python import), entered with the GIL released. PACK
+# publishes the arrays UNPACK allocated and turns a status word into the
+# public refusal.
+
+
+struct _NcFitOperands(Movable):
+    # Boundary owners only: lifetime pins of the storage the request addresses.
+    var x: PythonObject
+    var codes: PythonObject
+    var classes: PythonObject
+    var prior: PythonObject
+    var stats: PythonObject
+    var centroids: PythonObject
+    var deviations: PythonObject
+    var request: NcFitRequest
+
+    def __init__(out self, x: PythonObject, codes: PythonObject, classes: PythonObject, prior: PythonObject,
+                 stats: PythonObject, centroids: PythonObject, deviations: PythonObject, request: NcFitRequest):
+        self.x = x
+        self.codes = codes
+        self.classes = classes
+        self.prior = prior
+        self.stats = stats
+        self.centroids = centroids
+        self.deviations = deviations
+        self.request = request.copy()
+
+
+def _nc_fit_unpack(fields: PythonObject, args: PythonObject, context: PythonObject) raises -> _NcFitOperands:
+    """UNPACK of NearestCentroid.fit: parameters, rows, label codes, the
+    priors' kind (given priors cast to float64) and the four result arrays."""
     var b = _b()
-    var fields = py_fields(model)
     var metric = family_field(fields, "metric")
     if not py_contains(Python.tuple(PythonObject("euclidean"), PythonObject("manhattan")), metric):
         nc_refuse_metric()
@@ -520,119 +551,101 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     nc_check_label_rows(_size(lab), n)
     var C = len(classes)
     nc_check_classes(C)
-    var connection = NcConnection(args[0])
-    var plan = NcFitPlan(n, d, C)
-    var label_address = Int(py=classical_address(lab))
-    with GILReleased(Python()):
-        plan.count(connection.driver, label_address)
     var priors = family_field(fields, "priors")
+    var kind = NC_PRIORS_GIVEN
+    if py_type(priors) is b.str:
+        var word = String(priors)
+        if word == "empirical":
+            kind = NC_PRIORS_EMPIRICAL
+        elif word == "uniform":
+            kind = NC_PRIORS_UNIFORM
     var prior = admitted_storage_native([C], "<f8", context, as_array=True)
     var prior_address = Int(py=classical_address(prior))
-    if py_type(priors) is b.str and String(priors) == "empirical":
-        # Empirical priors retain mode 1: Float64(count) / Float64(n).
-        _ = labels_class_ratio_f64(context, Int(plan.wide_counts.unsafe_ptr()), C, n, 1, prior_address)
-    elif py_type(priors) is b.str and String(priors) == "uniform":
-        with GILReleased(Python()):
-            admitted_fill[DType.float64](FAMILY_F64P(unsafe_from_address=prior_address), C, 1.0 / Float64(C))
-    else:
+    if kind == NC_PRIORS_GIVEN:
         var given = admit_c_view(priors, "priors", context)
         nc_check_priors_ndim(Int(py=given.ndim))
         nc_check_priors_size(Int(py=given.size), C)
         labels_cast(Int(py=classical_address(given)), admitted_dtype(given, context), prior_address, "<f8", C, context)
-        with GILReleased(Python()):
-            nc_normalize_priors(prior_address, C)
         _ = given
-    # Preserve publication before the variance/shrinkage checks, including
-    # the established partial fitted-state behavior after a later refusal.
-    py_setitem(fields, "class_prior_", prior)
-    # Retain the original metadata-read stage after prior publication. The
-    # existing switch selects the same measured fused/split kernels.
-    plan.split = nc_split_ops()
-    plan.euclidean = _eq(metric, PythonObject("euclidean"))
+    var threshold = family_field(fields, "shrink_threshold")
+    var shrink = Float64(py=family_call(b.float, threshold)) if _truth(threshold) else 0.0
     var stats = admitted_storage_native([d], "<f4", context, as_array=True)
     var new_cent = admitted_storage_native([C, d], "<f4", context, as_array=True)
     var devs = admitted_storage_native([C, d], "<f4", context, as_array=True)
-    var x_address = Int(py=classical_address(x))
-    var stats_address = Int(py=classical_address(stats))
-    var cent_address = Int(py=classical_address(new_cent))
-    var dev_address = Int(py=classical_address(devs))
-    var status = 0
+    var request = NcFitRequest(Int(py=classical_address(x)), Int(py=classical_address(lab)), n, d, C,
+                               _eq(metric, PythonObject("euclidean")), kind, shrink)
+    request.prior = prior_address
+    request.stats = Int(py=classical_address(stats))
+    request.centroids = Int(py=classical_address(new_cent))
+    request.deviations = Int(py=classical_address(devs))
+    return _NcFitOperands(x, lab, classes, prior, stats, new_cent, devs, request)
+
+
+def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+    """NearestCentroid.fit: UNPACK, the typed RUN with the GIL released, PACK."""
+    var fields = py_fields(model)
+    var call = _nc_fit_unpack(fields, args, context)
+    var connection = NcConnection(args[0])
+    var plan = NcFitPlan(call.request.rows, call.request.features, call.request.classes)
+    var empirical = call.request.priors == NC_PRIORS_EMPIRICAL
     with GILReleased(Python()):
-        status = plan.statistics(connection.driver, x_address, label_address, stats_address)
-    admitted_finite_refuse(status, String(py_type(model).__name__))
-    var median = Float64(0)
-    var all_zero = False
+        nc_fit_count_run(connection.driver, call.request, plan)
+        if not empirical:
+            nc_fit_priors_run(call.request)
+    if empirical:
+        # Empirical priors are the label family's ratio step (mode 1:
+        # Float64(count) / Float64(n)), entered through its own boundary.
+        _ = labels_class_ratio_f64(context, Int(plan.wide_counts.unsafe_ptr()), call.request.classes,
+                                   call.request.rows, 1, call.request.prior)
+    # The priors are published before the finite and variance refusals: a
+    # refused fit leaves `class_prior_` set, as it always did.
+    py_setitem(fields, "class_prior_", call.prior)
+    var outcome = NcFitOutcome()
     with GILReleased(Python()):
-        var summary = plan.median_std(connection.driver, stats_address)
-        median = summary[0]
-        all_zero = summary[1]
-    if all_zero:
-        var constant = False
-        with GILReleased(Python()):
-            constant = plan.constant(connection.driver, x_address)
-        nc_check_variance(constant)
-    var threshold = family_field(fields, "shrink_threshold")
-    var shrink = Float64(py=family_call(b.float, threshold)) if _truth(threshold) else 0.0
-    with GILReleased(Python()):
-        plan.shrink(connection.driver, x_address, stats_address, cent_address, dev_address, median, shrink)
+        outcome = nc_fit_run(connection.driver, call.request, plan)
+    if outcome.status != 0:
+        admitted_finite_refuse(outcome.status, String(py_type(model).__name__))
+    nc_check_variance(outcome.constant)
     _ = plan^
     _ = connection^
-    _ = x
-    _ = lab
-    py_setitem(fields, "centroids_", new_cent)
-    py_setitem(fields, "deviations_", devs)
-    py_setitem(fields, "within_class_std_dev_", stats)
-    py_setitem(fields, "classes_", classes)
-    py_setitem(fields, "_codes_classes", classes)
-    py_setitem(fields, "n_features_in_", _i(d))
+    py_setitem(fields, "centroids_", call.centroids)
+    py_setitem(fields, "deviations_", call.deviations)
+    py_setitem(fields, "within_class_std_dev_", call.stats)
+    py_setitem(fields, "classes_", call.classes)
+    py_setitem(fields, "_codes_classes", call.classes)
+    py_setitem(fields, "n_features_in_", _i(call.request.features))
+    _ = call^  # the rows and label codes outlive every kernel above
 
 
-def _nc_uniform(fields: PythonObject, context: PythonObject) raises -> Bool:
-    var prior = family_field(fields, "class_prior_")
-    var count = _size(prior)
-    var address = Int(py=classical_address(prior))
-    var result = False
-    with GILReleased(Python()):
-        result = nc_uniform(address, count)
-    _ = prior
-    return result
-
-
-struct _NcOperands(Movable):
-    # Boundary owners only. Native execution consumes the typed request and
-    # the native narrowed-prior buffer; public objects supply lifetime pins.
+struct _NcQueryOperands(Movable):
+    # Boundary owners only: lifetime pins of the storage the request addresses.
     var query: PythonObject
     var centroids: PythonObject
     var std: PythonObject
-    var prior: List[Float32]
-    var request: NcQueryPlan
+    var prior: PythonObject
+    var request: NcQueryRequest
 
     def __init__(out self, query: PythonObject, centroids: PythonObject, std: PythonObject,
-                 var prior: List[Float32], request: NcQueryPlan):
+                 prior: PythonObject, request: NcQueryRequest):
         self.query = query
         self.centroids = centroids
         self.std = std
-        self.prior = prior^
+        self.prior = prior
         self.request = request.copy()
 
 
-def _nc_decision_inputs(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> _NcOperands:
-    if _ne(family_field(fields, "metric"), PythonObject("euclidean")):
-        nc_refuse_decision_metric()
-    var q = _f32(source, context)
-    var given = family_field(fields, "class_prior_")
-    var count = _size(given)
-    var prior = List[Float32](length=count, fill=0)
-    var source_address = Int(py=classical_address(given))
-    var prior_address = nc_scratch_address(prior)
-    with GILReleased(Python()):
-        nc_narrow_priors(source_address, prior_address, count)
-    _ = given
+def _nc_query_unpack(fields: PythonObject, q: PythonObject, euclidean: Bool,
+                     fused: Bool, wide: Bool) raises -> _NcQueryOperands:
+    """UNPACK of a NearestCentroid query: the admitted float32 rows `q` and
+    the fitted arrays as one typed request. The image's capabilities
+    (`fused`, `wide`) come from its connection."""
     var cent = family_field(fields, "centroids_")
     var std = family_field(fields, "within_class_std_dev_")
-    var request = NcQueryPlan(Int(py=classical_address(q)), Int(py=classical_address(cent)),
-        Int(py=classical_address(std)), prior_address, _rows(q), _cols(q), count)
-    return _NcOperands(q, cent, std, prior^, request)
+    var prior = family_field(fields, "class_prior_")
+    var request = NcQueryRequest(Int(py=classical_address(q)), Int(py=classical_address(cent)),
+        Int(py=classical_address(std)), Int(py=classical_address(prior)), _rows(q), _cols(q), _size(prior),
+        euclidean, fused, wide)
+    return _NcQueryOperands(q, cent, std, prior, request)
 
 
 def _nc_predict_values(model: PythonObject, binding: PythonObject, source: PythonObject,
@@ -641,38 +654,16 @@ def _nc_predict_values(model: PythonObject, binding: PythonObject, source: Pytho
     var q = _f32(source, context)
     var classes = labels if labels is not None else classifier_label_list(family_field(fields, "classes_"), context)
     var connection = NcConnection(binding)
-    var rows = _rows(q)
-    var fused = nc_fused(connection.fused, rows)
-    var codes = NcLabelCodes(rows)
-    var code_address = codes.address()
-    if _nc_uniform(fields, context):
-        var cent = family_field(fields, "centroids_")
-        var query_address = Int(py=classical_address(q))
-        var request = NcQueryPlan(query_address, Int(py=classical_address(cent)), query_address,
-                                  query_address, rows, _cols(q), _rows(cent))
-        var euclidean = _eq(family_field(fields, "metric"), PythonObject("euclidean"))
-        var status = 0
-        with GILReleased(Python()):
-            if fused:
-                status = request.fused(connection.driver, "nc_labels", code_address, 0 if euclidean else 1)
-            else:
-                request.distance_labels(connection.driver, code_address, euclidean)
-        if fused:
-            admitted_finite_refuse(status, String(py_type(model).__name__))
-        _ = cent
-    else:
-        var inputs = _nc_decision_inputs(fields, q, context)
-        var status = 0
-        with GILReleased(Python()):
-            if fused:
-                status = inputs.request.fused(connection.driver, "nc_labels", code_address, 2)
-            else:
-                inputs.request.score_labels(connection.driver, code_address)
-        if fused:
-            admitted_finite_refuse(status, String(py_type(model).__name__))
-        _ = inputs^
+    var call = _nc_query_unpack(fields, q, _eq(family_field(fields, "metric"), PythonObject("euclidean")),
+                                connection.fused, connection.wide)
+    var codes = NcLabelCodes(call.request.rows)
+    var status = 0
+    with GILReleased(Python()):
+        status = nc_labels_run(connection.driver, call.request, codes)
+    if status != 0:
+        admitted_finite_refuse(status, String(py_type(model).__name__))
+    _ = call^
     _ = connection^
-    _ = q
     var result = _class_array(classes, codes.values, context)
     _ = codes^  # code storage survives kernels, widening/gather and final label packing
     return result
@@ -683,31 +674,33 @@ def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
     return _nc_predict_values(model, args[0], args[1], context, labels)
 
 
+def _nc_scored_unpack(model: PythonObject, args: PythonObject, context: PythonObject,
+                      connection: NcConnection) raises -> _NcQueryOperands:
+    """UNPACK of decision_function / predict_proba: euclidean only, refused
+    before the rows are admitted."""
+    var fields = py_fields(model)
+    if _ne(family_field(fields, "metric"), PythonObject("euclidean")):
+        nc_refuse_decision_metric()
+    return _nc_query_unpack(fields, _f32(args[1], context), True, connection.fused, connection.wide)
+
+
 def _nc_decision(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var inputs = _nc_decision_inputs(py_fields(model), args[1], context)
     var connection = NcConnection(args[0])
-    var n = inputs.request.rows
-    var C = inputs.request.classes
-    var status = List[Int32](length=1, fill=0)
+    var call = _nc_scored_unpack(model, args, context, connection)
+    var n = call.request.rows
+    var C = call.request.classes
     var output: PythonObject
     if C == 2:
-        var scores = List[Float32](length=n * C, fill=0)
-        with GILReleased(Python()):
-            inputs.request.decision(connection.driver, nc_scratch_address(scores), Int(status.unsafe_ptr()))
-        admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
         output = admitted_storage_native([n], "<f4", context, as_array=True)
-        var dst = Int(py=classical_address(output))
-        with GILReleased(Python()):
-            nc_binary_decision(connection.driver, nc_scratch_address(scores), dst, n)
-        _ = scores^
     else:
         output = admitted_storage_native([n, C], "<f4", context, as_array=True)
-        var dst = Int(py=classical_address(output))
-        with GILReleased(Python()):
-            inputs.request.decision(connection.driver, dst, Int(status.unsafe_ptr()))
-        admitted_finite_refuse(Int(status[0]), String(py_type(model).__name__))
-    _ = status^
-    _ = inputs^
+    var dst = Int(py=classical_address(output))
+    var status = 0
+    with GILReleased(Python()):
+        status = nc_decision_run(connection.driver, call.request, dst)
+    if status != 0:
+        admitted_finite_refuse(status, String(py_type(model).__name__))
+    _ = call^
     _ = connection^
     return output
 
@@ -715,22 +708,16 @@ def _nc_decision(model: PythonObject, args: PythonObject, context: PythonObject)
 def _nc_probabilities(model: PythonObject, args: PythonObject, context: PythonObject,
                       logarithmic: Bool) raises -> PythonObject:
     var connection = NcConnection(args[0])
-    var mode = nc_proba_mode(logarithmic, connection.wide)
-    var inputs = _nc_decision_inputs(py_fields(model), args[1], context)
-    var rows = inputs.request.rows
-    var C = inputs.request.classes
-    var output = admitted_storage_native([rows, C], "<f8" if mode == 2 else "<f4", context, as_array=True)
+    var call = _nc_scored_unpack(model, args, context, connection)
+    var output = admitted_storage_native([call.request.rows, call.request.classes],
+        "<f8" if nc_proba_wide(call.request, logarithmic) else "<f4", context, as_array=True)
     var dst = Int(py=classical_address(output))
-    var fused = nc_fused(connection.fused, rows)
     var status = 0
     with GILReleased(Python()):
-        if fused:
-            status = inputs.request.fused(connection.driver, "nc_proba", dst, mode)
-        else:
-            inputs.request.probabilities(connection.driver, dst, mode)
-    if fused:
+        status = nc_proba_run(connection.driver, call.request, dst, logarithmic)
+    if status != 0:
         admitted_finite_refuse(status, String(py_type(model).__name__))
-    _ = inputs^
+    _ = call^
     _ = connection^
     return output
 
