@@ -12,6 +12,7 @@ the door (bindings/prep_encode_native_door.mojo `EncProg`) keeps alive.
 The run is the x_prep owner's typed run (bindings/x_prep_native_owner_run.mojo
 `xprep_execute`) on `stage_words()`. No Python import
 (tools/python_free_dirs.sh)."""
+from std.os import getenv
 from bindings.x_prep_native_owner_run import XprepInput
 from core.preprocessing_program import prep_program_stage
 
@@ -216,6 +217,58 @@ def enc_input(mut prog: EncProgram, words: Int, owner: Int) -> Int:
     if words <= 0:
         return prog.alloc(words)
     return prog.input(words, owner)
+
+
+# `_cs`: rows a block of the blocked column statistics.
+comptime ENC_ROW_BLOCK = 2048
+comptime ENC_OP_COL_STATS = 1
+comptime ENC_OP_MARK_MISSING = 23
+comptime ENC_OP_COLB_PART = 124
+comptime ENC_OP_COLB_FOLD = 125
+comptime ENC_OP_COLB_SS = 126
+comptime ENC_OP_COLB_VAR = 127
+
+
+def enc_col_stats(mut prog: EncProgram, family_blocked: Bool, xo: Int, n: Int, d: Int, dst: Int, variance: Bool = True):
+    """`_cs`: col_stats' six rows of d at `dst`, in x_prep/blocked.mojo's
+    blocked order when the image has it (`family_blocked`: the IDENTICAL
+    binding's IDN_STATS_BLOCKED word, read by the door) and
+    MOJOLEARN_XPREP_BLOCKED is not 0 (the run-time switch, read here as
+    before), else one thread per column; variance False skips the blocked
+    variance pass."""
+    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
+    if blocked and family_blocked:
+        var nb = (n + ENC_ROW_BLOCK - 1) // ENC_ROW_BLOCK
+        var part = prog.work(5 * nb * d)
+        prep_program_stage(prog.program, ENC_OP_COLB_PART, nb * d, xo, n, d, part, nb)
+        prep_program_stage(prog.program, ENC_OP_COLB_FOLD, d, part, nb, d, dst)
+        if variance:
+            var ss = prog.work(nb * d)
+            prep_program_stage(prog.program, ENC_OP_COLB_SS, nb * d, xo, n, d, dst, ss, nb)
+            prep_program_stage(prog.program, ENC_OP_COLB_VAR, d, ss, nb, d, dst)
+    else:
+        prep_program_stage(prog.program, ENC_OP_COL_STATS, d, xo, n, d, dst)
+
+
+def enc_mark_missing(mut prog: EncProgram, xo: Int, count: Int, mark: Bool, missing: Float64) -> Int:
+    """`_mark_missing`: a numeric missing_values marked NaN (mark_missing);
+    the input itself when there is nothing to mark (missing_values None or
+    NaN: `mark` False)."""
+    if not mark:
+        return xo
+    var words = List[Float64]()
+    words.append(missing)
+    var value = prog.put_floats(words)
+    var marked = prog.alloc(count)
+    prep_program_stage(prog.program, ENC_OP_MARK_MISSING, count, xo, count, value, marked)
+    return marked
+
+
+def enc_floats_of(values: List[Int]) -> List[Float64]:
+    var words = List[Float64]()
+    for i in range(len(values)):  # driver-loop: over parameter words
+        words.append(Float64(values[i]))
+    return words^
 
 
 def enc_label_chunk(n: Int) -> Int:
