@@ -184,6 +184,10 @@ class TransformerBlockInference(_TransformerBlock):
     >>> y = blk.forward(x)
     """
 
+    #: The CPU side by class: `check` compares a GPU block with it, never it
+    #: with itself (`_check_both.takes_device`).
+    _HOST_INFERENCE_ONLY = True
+
     def _extension(self):
         return _binding()
 
@@ -215,6 +219,10 @@ class _RecurrentBlockInference:
     state), and `tools/step_vs_full_check.py` measures on this column that
     a step-by-step decode is bitwise the one-shot prefill at every
     position."""
+
+    #: The CPU side by class: `check` compares a GPU block with it, never it
+    #: with itself (`_check_both.takes_device`).
+    _HOST_INFERENCE_ONLY = True
 
     def _extension(self):
         return _binding()
