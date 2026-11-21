@@ -1336,11 +1336,13 @@ def _owner_operation(operation: Int, name: PythonObject, args: PythonObject) rai
                 small_mlp_close(previous)
             py_setitem(fields, nk[].k__handle, handle)
             py_setitem(fields, "device", device)
-            device_route_clear(args[0])
-            _ = device_route_keep(args[0], built^)
         except error:
             small_mlp_close(handle)
             raise error^
+        # Outside the handle's failure path: a route that could not be kept
+        # is resolved again by the first operation.
+        device_route_clear(args[0])
+        _ = device_route_keep(args[0], built^)
         return PythonObject(None)
     var packed = Python.list(py_item(fields, nk[].k__handle))
     for i in range(1, len(args)):  # driver-loop: over native argument envelope
