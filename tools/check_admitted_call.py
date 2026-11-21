@@ -236,7 +236,6 @@ DEBT = {
     'bindings/kmeans_owner_boundary_door.mojo': {'cpython': 1, 'native_loaded_module': 1},
     'bindings/kmeans_variants_boundary_door.mojo': {'native_loaded_module': 3},
     'bindings/kpca_native_door.mojo': {'native_loaded_module': 3},
-    'bindings/kpss_host_test_unpack.mojo': {'native_loaded_module': 1},
     'bindings/label_admission_native_unpack.mojo': {'native_loaded_module': 2},
     'bindings/label_input_sources_pack.mojo': {'native_loaded_module': 1},
     'bindings/label_input_sources_unpack.mojo': {'cpython': 1, 'native_loaded_module': 1},
