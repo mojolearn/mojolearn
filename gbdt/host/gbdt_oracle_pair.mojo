@@ -41,6 +41,7 @@ from gbdt.host.gbdt_oracle import (
     GBDT_MSE_BLOCK,
     GbdtIntPtr,
     _gather_rows,
+    _invert_rows,
     _gbdt_units,
     _deterministic_sum_lanes,
     _halving_fold,
@@ -564,17 +565,10 @@ def pair_logit_eval(
     # `row_index` is a permutation, so the inverse's writes land on
     # distinct rows from any position range; the point is a gather by it.
     var inverse = List[Int](length=n_rows, fill=0)
+    _invert_rows(row_index, n_rows, inverse)
     var units = _gbdt_units(n_rows, 2 * n_rows)
     var chunk = host_predict_chunk(n_rows, units)
-    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
     var inv_p = rebind[GbdtIntPtr](inverse.unsafe_ptr())
-
-    def invert(unit: Int) {imm chunk, imm n_rows, imm row_p, imm inv_p}:
-        for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
-            inv_p[row_p[pos]] = pos
-
-    host_parallelize(invert, units)
-    _ = len(row_index)
     var point = List[Float32](length=n_rows, fill=Float32(0.0))
     _gather_rows(g_cursor, inverse, n_rows, point)
     var fv = List[Float32](length=pairs.blocks(), fill=Float32(0.0))

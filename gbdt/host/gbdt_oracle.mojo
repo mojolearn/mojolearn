@@ -3353,6 +3353,25 @@ def _gather_rows(
     _ = len(dst)
 
 
+def _invert_rows(row_index: List[Int], n_rows: Int, mut inverse: List[Int]):
+    """`inverse[row_index[pos]] = pos` (the device's scatter of the
+    sequence by the partition's row order). `row_index` is a permutation,
+    so the writes of any position range land on distinct rows: the
+    positions run in `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(n_rows, 2 * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
+    var inv_p = rebind[GbdtIntPtr](inverse.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm row_p, imm inv_p}:
+        for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            inv_p[row_p[pos]] = pos
+
+    host_parallelize(rows, units)
+    _ = len(row_index)
+    _ = len(inverse)
+
+
 def _leaf_bins(
     offsets: List[Int], sizes: List[Int], n_rows: Int, mut bins: List[Int]
 ):
