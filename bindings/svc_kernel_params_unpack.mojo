@@ -23,6 +23,7 @@ from bindings.svc_common_run import svc_isfinite
 from providers.python.svc_descriptor_pyapi_door import svc_epilogue_execute, svc_descriptor_execute, svc_descriptor_flags
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin
 from bindings.svm_keys_unpack import svm_keys
+from svm.operation_metadata import SvcOperationSettings
 from bindings.svc_kernel_rows_unpack import _GLUE_C_ROWS, _addr, _entry
 
 # `_scale_gamma`: the limb words and the py2mojo switch bit.
@@ -227,44 +228,42 @@ def _kernel_code(fields: PythonObject, context: PythonObject) raises -> Int:
     return Int(py=py_item(context, nk[].k_family_svc_kernels)[svc_field(fields, nk[].k__hp_kernel, "_hp_kernel")])
 
 
-def _resolve_gamma(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, context: PythonObject, native: PythonObject) raises -> Float64:
+def _resolve_gamma(hp: SvmSettings, binding: PythonObject, x_meta: ArrayMetadata, context: PythonObject, native: PythonObject) raises -> Float64:
     """`SVC._resolve_gamma`: 'auto' 1 / n_cols; 'scale' the exact variance's
-    once-rounded reciprocal (`_scale_gamma.scale_gamma_x`); else the float."""
-    var nk = svm_keys()
-    var g = svc_field(fields, nk[].k__hp_gamma, "_hp_gamma")
+    once-rounded reciprocal (`_scale_gamma.scale_gamma_x`); else the float.
+    The kind and the float are the operation's settings (`hp`), read once."""
     var n_cols = x_meta.shape[1]
-    if family_isinstance(g, svc_builtins().str):
-        if String(g) == "auto":
-            return 1.0 / Float64(n_cols)
-        if String(g) == "scale":
-            var bits = 0
-            if native is not None:
-                bits = svc_descriptor_flags(native)
-            else:
-                var flags = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
-                bits = 0 if flags is None else svc_int(family_call(flags))
-            if (bits & _PY2MOJO_SCALE_GAMMA) == 0:
-                raise Error("RuntimeError: mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
-                            + "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it")
-            var n = x_meta.count
-            if n == 0:
-                raise Error("gamma='scale' needs at least one cell of X")
-            var words = family_array(Python.tuple(PythonObject(_SG_SLOTS)), "<i8", context)
-            if native is not None:
-                _ = svc_descriptor_execute(native, 9, [x_meta.source.addr, _addr(words)], [n], [])
-            else:
-                _ = family_call(_entry(binding, "scale_gamma_limbs", context), PythonObject(x_meta.source.addr), PythonObject(n),
-                                classical_address(words))
+    if hp.gamma_kind == SVM_GAMMA_AUTO:
+        return 1.0 / Float64(n_cols)
+    if hp.gamma_kind == SVM_GAMMA_SCALE:
+        var bits = 0
+        if native is not None:
+            bits = svc_descriptor_flags(native)
+        else:
+            var flags = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
+            bits = 0 if flags is None else svc_int(family_call(flags))
+        if (bits & _PY2MOJO_SCALE_GAMMA) == 0:
+            raise Error("RuntimeError: mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
+                        + "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it")
+        var n = x_meta.count
+        if n == 0:
+            raise Error("gamma='scale' needs at least one cell of X")
+        var words = family_array(Python.tuple(PythonObject(_SG_SLOTS)), "<i8", context)
+        if native is not None:
+            _ = svc_descriptor_execute(native, 9, [x_meta.source.addr, _addr(words)], [n], [])
+        else:
+            _ = family_call(_entry(binding, "scale_gamma_limbs", context), PythonObject(x_meta.source.addr), PythonObject(n),
+                            classical_address(words))
+        _ = words  # keep the Python object alive through the native call above
+        var limbs = List[Int64](length=_SG_SLOTS, fill=Int64(0))
+        var wp = FAMILY_I64P(unsafe_from_address=_addr(words))
+        _ = words  # keep the Python object alive through the native call above
+        for i in range(_SG_SLOTS):  # small-loop(scale_gamma limbs: 28 fixed words)
+            limbs[i] = wp[i]
             _ = words  # keep the Python object alive through the native call above
-            var limbs = List[Int64](length=_SG_SLOTS, fill=Int64(0))
-            var wp = FAMILY_I64P(unsafe_from_address=_addr(words))
-            _ = words  # keep the Python object alive through the native call above
-            for i in range(_SG_SLOTS):  # small-loop(scale_gamma limbs: 28 fixed words)
-                limbs[i] = wp[i]
-                _ = words  # keep the Python object alive through the native call above
-            _ = words^
-            return scale_gamma_from_limbs(limbs, n, n_cols)
-    return Float64(py=g)
+        _ = words^
+        return scale_gamma_from_limbs(limbs, n, n_cols)
+    return hp.gamma
 
 
 def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight: PythonObject,
@@ -352,17 +351,84 @@ def _c_rows(binding: PythonObject, c_value: Float64, n_rows: Int, sample_weight:
     return out
 
 
+# ---------------------------------------------------------------- the settings record
 
-def _svm_device_gamma(fields: PythonObject, n_cols: Int) raises -> Tuple[Float64, Bool]:
-    """`_resolve_gamma` for the device-X entry: 'auto' 1 / n_cols, a float
-    as given, and 'scale' (True) resolved by the entry from its own device
-    copy of X (the same exact limbs, so the same gamma; 1.0 is the
-    placeholder the entry replaces)."""
-    var nk = svm_keys()
-    var g = svc_field(fields, nk[].k__hp_gamma, "_hp_gamma")
-    if family_isinstance(g, svc_builtins().str):
-        if String(g) == "auto":
+
+comptime SVM_GAMMA_VALUE = 0
+comptime SVM_GAMMA_AUTO = 1
+comptime SVM_GAMMA_SCALE = 2
+
+
+@fieldwise_init
+struct SvmSettings(Copyable, Movable):
+    """The checked parameters of one kernel SVM operation as plain words,
+    read ONCE after validation: no later step of the operation reads a
+    `_hp_*` field again. `gamma_kind` is SVM_GAMMA_VALUE (then `gamma` is
+    the float), SVM_GAMMA_AUTO or SVM_GAMMA_SCALE; `epsilon` is SVR's (0.0
+    for SVC); `probability` is SVC's (False for SVR)."""
+    var kernel: Int
+    var precomputed: Bool
+    var degree: Int
+    var coef0: Float64
+    var gamma_kind: Int
+    var gamma: Float64
+    var c: Float64
+    var tol: Float64
+    var epsilon: Float64
+    var max_iter: Int
+    var nochange_steps: Int
+    var cache_mib: Float64
+    var probability: Bool
+
+    def device_gamma(self, n_cols: Int) -> Tuple[Float64, Bool]:
+        """`_resolve_gamma` for the device-X entry: 'auto' 1 / n_cols, a
+        float as given, and 'scale' (True) resolved by the entry from its
+        own device copy of X (the same exact limbs, so the same gamma; 1.0
+        is the placeholder the entry replaces)."""
+        if self.gamma_kind == SVM_GAMMA_AUTO:
             return (1.0 / Float64(n_cols), False)
-        if String(g) == "scale":
+        if self.gamma_kind == SVM_GAMMA_SCALE:
             return (1.0, True)
-    return (Float64(py=g), False)
+        return (self.gamma, False)
+
+    def fit_operation(self, gamma: Float64, features: Int) -> SvcOperationSettings:
+        """The binary solver's operation words with the gamma the fit resolved."""
+        return SvcOperationSettings(self.kernel, self.degree, self.max_iter, self.nochange_steps, features, gamma,
+                                    self.c, self.tol, self.coef0, self.cache_mib)
+
+
+def svm_settings_unpack(model: PythonObject, fields: PythonObject, classifier: Bool,
+                        context: PythonObject) raises -> SvmSettings:
+    """`_validate_params` (its refusals, then the `_hp_*` working values it
+    publishes), then those values converted once. SVC converts degree and
+    coef0 for every kernel; SVR only for 'poly' and 'sigmoid' (3 and 0.0
+    otherwise), as each fit always did."""
+    _svm_validate(model, fields, classifier, context)
+    var nk = svm_keys()
+    var name = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel"))
+    var kernel = _kernel_code(fields, context)
+    var degree = 3
+    var coef0 = Float64(0)
+    if classifier or name == "poly" or name == "sigmoid":
+        degree = svc_int(svc_field(fields, nk[].k__hp_degree, "_hp_degree"))
+        coef0 = svc_float(svc_field(fields, nk[].k__hp_coef0, "_hp_coef0"))
+    var g = svc_field(fields, nk[].k__hp_gamma, "_hp_gamma")
+    var gamma_kind = SVM_GAMMA_VALUE
+    var gamma = 0.0
+    if family_isinstance(g, svc_builtins().str):
+        # validation left only these two names
+        gamma_kind = SVM_GAMMA_AUTO if String(g) == "auto" else SVM_GAMMA_SCALE
+    else:
+        gamma = Float64(py=g)
+    var epsilon = 0.0
+    var probability = False
+    if classifier:
+        probability = svc_truthy(svc_field(fields, nk[].k__hp_probability, "_hp_probability"))
+    else:
+        epsilon = Float64(py=svc_field(fields, nk[].k__hp_epsilon, "_hp_epsilon"))
+    return SvmSettings(kernel, name == "precomputed", degree, coef0, gamma_kind, gamma,
+                       svc_float(svc_field(fields, nk[].k__hp_C, "_hp_C")),
+                       svc_float(svc_field(fields, nk[].k__hp_tol, "_hp_tol")), epsilon,
+                       svc_int(svc_field(fields, nk[].k__hp_max_iter, "_hp_max_iter")),
+                       svc_int(svc_field(fields, nk[].k__hp_nochange_steps, "_hp_nochange_steps")),
+                       svc_float(svc_field(fields, nk[].k__hp_cache_size, "_hp_cache_size")), probability)

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # UNPACK of SVR `fit`, `predict` and `score`
 # (bindings/svc_kernel_native_door.mojo sequences the operations): the
-# parameter checks, the admitted X and targets with their owners, gamma and
+# parameter checks and the settings record (svm_settings_unpack), the admitted X and targets with their owners, gamma and
 # the per-row bounds, the provider connection, the resident lease of the
 # fitted state, and the typed requests RUN reads (core/svr_native_api.mojo:
 # SvrFitRequest, SvrQueryRequest). Every check and every field read of the
@@ -23,7 +23,7 @@ from bindings.svc_kernel_rows_unpack import (
     _SVR_RESIDENT_SLOT, _SvmQuery, _addr, _gather_support_columns, _svm_device_ok, _svm_fit_admit, _svm_fit_entry,
     _svm_fit_host_rows, _svm_query, _svm_query_refuse, _svm_x_scan,
 )
-from bindings.svc_kernel_params_unpack import _c_rows, _kernel_code, _resolve_gamma, _svm_device_gamma, _svm_validate
+from bindings.svc_kernel_params_unpack import _c_rows, _kernel_code, _resolve_gamma, svm_settings_unpack
 
 
 # ---------------------------------------------------------------- fit
@@ -72,7 +72,7 @@ def svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObjec
     """`SVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
     var binding = args[0]
     var fields = py_fields(model)
-    _svm_validate(model, fields, False, context)
+    var hp = svm_settings_unpack(model, fields, False, context)
     # Lane a8a: the GPU binding's fit takes X on the device (a fold gathered
     # there, host words copied once; never a host List) and tests it there;
     # every other route tests the host words here. One wording.
@@ -92,8 +92,7 @@ def svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObjec
                                refusal="Input y contains NaN or infinity (SVR).").array
     if Int(py=targets.shape[0]) != n_rows:
         raise Error("mojolearn SVR: y has " + String(Int(py=targets.shape[0])) + " entries, X has " + String(n_rows) + " rows")
-    var k = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel"))
-    var precomputed = k == "precomputed"
+    var precomputed = hp.precomputed
     if precomputed and n_cols != n_rows:
         raise Error("mojolearn SVR: kernel='precomputed' needs the square n x n "
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
@@ -104,36 +103,25 @@ def svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObjec
     var gamma = 1.0
     var scale_gamma = False
     if device_x:
-        var resolved = _svm_device_gamma(fields, n_cols)
+        var resolved = hp.device_gamma(n_cols)
         gamma = resolved[0]
         scale_gamma = resolved[1]
     else:
         _svm_x_scan(x_meta, "SVR")
-        gamma = _resolve_gamma(fields, binding, x_meta, context, native)
-    var c_rows = _c_rows(binding, svc_float(svc_field(fields, nk[].k__hp_C, "_hp_C")), n_rows, args[3], PythonObject(None),
+        gamma = _resolve_gamma(hp, binding, x_meta, context, native)
+    var c_rows = _c_rows(binding, hp.c, n_rows, args[3], PythonObject(None),
                          PythonObject(None), "SVR", context, native)
     var plan = SvrFitPlan(n_rows, n_cols)
-    var kernel = _kernel_code(fields, context)
-    var c = Float64(py=svc_field(fields, nk[].k__hp_C, "_hp_C"))
-    var epsilon = Float64(py=svc_field(fields, nk[].k__hp_epsilon, "_hp_epsilon"))
-    var tolerance = Float64(py=svc_field(fields, nk[].k__hp_tol, "_hp_tol"))
-    var max_iter = Int(py=svc_field(fields, nk[].k__hp_max_iter, "_hp_max_iter"))
-    var nochange_steps = Int(py=svc_field(fields, nk[].k__hp_nochange_steps, "_hp_nochange_steps"))
     var bounds_address = 0 if c_rows is None else _addr(c_rows)
-    var degree = 3
-    var coef0 = Float64(0)
-    if k == "poly" or k == "sigmoid":
-        degree = svc_int(svc_field(fields, nk[].k__hp_degree, "_hp_degree"))
-        coef0 = svc_float(svc_field(fields, nk[].k__hp_coef0, "_hp_coef0"))
     var target_address = _addr(targets)
     var connection = svr_connection(binding)
     var device_form = device_x and native is None
     var request = SvrFitRequest(x_meta.source.addr, target_address,
         Int(plan.dual.unsafe_ptr()), Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()),
-        Int(plan.info.unsafe_ptr()), bounds_address, n_rows, n_cols, kernel,
-        max_iter, nochange_steps, degree,
+        Int(plan.info.unsafe_ptr()), bounds_address, n_rows, n_cols, hp.kernel,
+        hp.max_iter, hp.nochange_steps, hp.degree,
         fold.base_id, fold.base_rows, fold.index_id, device_form,
-        scale_gamma, native is not None, gamma, c, epsilon, tolerance, coef0)
+        scale_gamma, native is not None, gamma, hp.c, hp.epsilon, hp.tol, hp.coef0)
     return SvrFitUnpacked(fields, x_pin^, x_meta^, targets, c_rows, connection^, plan^, request, fold,
                           device_form, copied, gamma)
 

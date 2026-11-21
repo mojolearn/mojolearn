@@ -60,7 +60,7 @@ from bindings.operation_names_svc import SVC_OPN_FAMILY_SVC_SVC_COEF, SVC_OPN_FA
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry, neural_descriptor_connect, neural_descriptor_execute, neural_descriptor_info
 from bindings.svm_keys_unpack import svm_keys
 from bindings.svc_kernel_rows_unpack import _EPI_BINARY, _EPI_LOG_PROBA, _EPI_OVO, _EPI_OVR, _EPI_PROBA, _EPI_VOTES, _GLUE_FOLD, _GLUE_FOLD_FINISH, _SVC_RESIDENT_SLOT, _addr, _entry, _gather, _gather_i32, _gather_support_columns, _pair_select, _query, _resident_entry, _svm_device_ok, _svm_fit_admit, _svm_fit_entry, _svm_fit_host_rows, _svm_fit_refuse, _svm_query_refuse, _svm_x_scan
-from bindings.svc_kernel_params_unpack import _c_rows, _kernel_code, _resolve_gamma, _svm_device_gamma, _svm_validate
+from bindings.svc_kernel_params_unpack import _c_rows, _kernel_code, _resolve_gamma, _svm_validate, svm_settings_unpack
 
 comptime _DEV636_Y = "mojolearn SVC: y contains a non-finite value (DEVIATION 636: a NaN or inf cannot be fitted; a computed NaN carries a vendor-specific payload and cannot sit in a hashed stage)"
 
@@ -91,15 +91,6 @@ def _svc_publish_dispatch(fields: PythonObject, native: PythonObject, context: P
         if py_contains(fields, nk[].k__native_svc_dispatch):
             native_release_admit(py_item(fields, nk[].k__native_svc_dispatch), context)
         py_setitem(fields, nk[].k__native_svc_dispatch, neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider))
-
-
-def _svc_fit_settings(fields: PythonObject, gamma: Float64, features: Int,
-                      context: PythonObject) raises -> SvcOperationSettings:
-    var nk = svm_keys()
-    return SvcOperationSettings(_kernel_code(fields, context), svc_int(svc_field(fields, nk[].k__hp_degree, "_hp_degree")),
-        svc_int(svc_field(fields, nk[].k__hp_max_iter, "_hp_max_iter")), svc_int(svc_field(fields, nk[].k__hp_nochange_steps, "_hp_nochange_steps")),
-        features, gamma, svc_float(svc_field(fields, nk[].k__hp_C, "_hp_C")), svc_float(svc_field(fields, nk[].k__hp_tol, "_hp_tol")),
-        svc_float(svc_field(fields, nk[].k__hp_coef0, "_hp_coef0")), svc_float(svc_field(fields, nk[].k__hp_cache_size, "_hp_cache_size")))
 
 
 def _svc_predict_settings(fields: PythonObject, context: PythonObject) raises -> SvcOperationSettings:
@@ -315,7 +306,7 @@ def _platt(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata, c
     var rs = svc_field(fields, nk[].k__hp_random_state, "_hp_random_state")
     var seed = PythonObject(0) if rs is None else family_call(b.int, rs)
     var mask = family_call(operator.sub, family_call(operator.lshift, PythonObject(1), PythonObject(64)), PythonObject(1))
-    var precomputed = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel")) == "precomputed"
+    var precomputed = settings.kernel == 4
     var n_all = Int(py=codes.shape[0])
     var x_rows = x_meta.shape[0]
     var x_cols = x_meta.shape[1]
@@ -478,7 +469,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x_meta: ArrayMetadata,
     var n_cols = x_meta.shape[1]
     var k = len(classes)
     var nk = svm_keys()
-    var precomputed = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel")) == "precomputed"
+    var precomputed = settings.kernel == 4
     var pairs = Python.list()
     var meta = Python.list(PythonObject(k), PythonObject(n_rows), PythonObject(k * (k - 1) // 2))
     var sup_addrs = Python.list()
@@ -611,7 +602,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     """`SVC.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
     var binding = args[0]
     var fields = py_fields(model)
-    _svm_validate(model, fields, True, context)
+    var hp = svm_settings_unpack(model, fields, True, context)
     # Lane a8a: the GPU binding's binary fit takes X on the device (a fold
     # gathered there, host words copied once) and tests it there; every
     # other route tests the host words here (`_svm_x_scan`). One wording.
@@ -633,7 +624,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var n_y = Int(py=pair.shape[0]) if labels is None else Int(py=labels.shape[0])
     if n_y != n_rows:
         raise Error("mojolearn SVC: y has " + String(n_y) + " entries, X has " + String(n_rows) + " rows")
-    var precomputed = String(svc_field(fields, nk[].k__hp_kernel, "_hp_kernel")) == "precomputed"
+    var precomputed = hp.precomputed
     if precomputed and n_cols != n_rows:
         raise Error("mojolearn SVC: kernel='precomputed' needs the square n x n "
                     + "kernel matrix as X, got " + String(n_rows) + " x " + String(n_cols))
@@ -641,7 +632,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     # one-vs-one pairs and Platt's folds gather host rows of X, and a
     # precomputed X is gathered by rows and columns: those read host words.
     var device_x = (entry and labels is not None and not precomputed
-                    and not svc_truthy(svc_field(fields, nk[].k__hp_probability, "_hp_probability")))
+                    and not hp.probability)
     if fold.active() and not device_x:
         x_meta = _svm_fit_host_rows(args[1], context, x_pin)
         x = x_pin.keep
@@ -649,15 +640,15 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     var gamma = 1.0
     var scale_gamma = False
     if device_x:
-        var resolved = _svm_device_gamma(fields, n_cols)
+        var resolved = hp.device_gamma(n_cols)
         gamma = resolved[0]
         scale_gamma = resolved[1]
     else:
         _svm_x_scan(x_meta, "SVC")
-        gamma = _resolve_gamma(fields, binding, x_meta, context, native)
-    var c_rows = _c_rows(binding, svc_float(svc_field(fields, nk[].k__hp_C, "_hp_C")), n_rows, args[3],
+        gamma = _resolve_gamma(hp, binding, x_meta, context, native)
+    var c_rows = _c_rows(binding, hp.c, n_rows, args[3],
                          py_get(fields, nk[].k_class_weight, PythonObject(None)), y, "SVC", context, native)
-    var settings = _svc_fit_settings(fields, gamma, n_cols, context)
+    var settings = hp.fit_operation(gamma, n_cols)
     if labels is None:
         _fit_ovo(fields, binding, x_meta, classes, pair, gamma, c_rows, context, settings, native)
         _svc_publish_dispatch(fields, native, context)
@@ -694,7 +685,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject, nat
     py_setitem(fields, nk[].k__gamma, PythonObject(gamma))
     py_setitem(fields, nk[].k__label0, PythonObject(label0))
     py_setitem(fields, nk[].k__label1, PythonObject(label1))
-    if svc_truthy(svc_field(fields, nk[].k__hp_probability, "_hp_probability")):
+    if hp.probability:
         var wide = svc_threshold_codes(labels, label0, True, 0, 1, context)
         var n = Int(py=wide.size)
         var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)

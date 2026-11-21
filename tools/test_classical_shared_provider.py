@@ -33,7 +33,8 @@ def test_repeated_binary_calls_do_not_reread_model_settings_or_query_shape():
         src = body(name)
         assert src.count('_svc_predict_settings(') == 1
         assert '_svc_provider(' not in src
-    assert body('_svc_fit').count('_svc_fit_settings(') == 1
+    # the fit's operation words come once from the settings record read after validation (SvmSettings)
+    assert body('_svc_fit').count('hp.fit_operation(') == 1 and body('_svc_fit').count('svm_settings_unpack(') == 1
     assert '_svc_provider(' not in body('_svc_fit')
     # One provider selection per call on each of the two exclusive paths: the
     # algorithm-only early return, and the public/fit lifecycle after it.
@@ -54,9 +55,9 @@ def test_common_provider_is_selected_without_new_provider_type():
     assert 'return PythonObject(None)' in src
     assert 'unavailable for this binding' in src
     # No provider type of its own: the only structs are the door's query record (_SvmQuery, its two storage
-    # owners) and the UNPACK records of the split operations (`*Unpacked`: the typed request and its owners).
+    # owners), the settings record (SvmSettings) and the UNPACK records of the split operations (`*Unpacked`).
     structs = re.findall(r'^struct (\w+)', PUBLIC, re.M)
-    assert '_SvmQuery' in structs and all(name == '_SvmQuery' or name.endswith('Unpacked') for name in structs), structs
+    assert '_SvmQuery' in structs and all(name in ('_SvmQuery', 'SvmSettings') or name.endswith('Unpacked') for name in structs), structs
     assert 'neural_descriptor_info(native.downcast_value_ptr[CompiledBindingSnapshot]()[].provider)' in body('_svc_publish_dispatch')
 
 
