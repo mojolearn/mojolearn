@@ -154,8 +154,9 @@ struct ArenaStoreEntry(Copyable, Movable):
 
 struct DeviceCacheState(Movable):
     """Device copies of host buffers in one binding's store, keyed by buffer
-    identity (address and item count). `route` is the index of the connected
-    put/free entry pair the owner was constructed on."""
+    identity (address and item count). `route` names the store entry the
+    owner was constructed on (its mode and vendor words,
+    `bindings/arena_cache_run.mojo` `arena_cache_route`)."""
     var route: Int
     var prefix: String
     var uploads: Int
@@ -230,6 +231,31 @@ struct DeviceCacheState(Movable):
             self.lock.release()
         return kept
 
+    def restore(mut self, entry: ArenaStoreEntry) raises -> Bool:
+        """Link again an entry `remove` or `drain` returned whose device free
+        failed, for a retry; no counter moves. False when another entry of
+        the same buffer was published meanwhile (the caller keeps `entry`)."""
+        self.lock.acquire()
+        var linked = False
+        try:
+            if self._find(entry.address, entry.words) < 0:
+                var head = -1
+                if entry.address in self.first:
+                    head = self.first[entry.address]
+                var again = ArenaStoreEntry(entry.address, entry.words, entry.store_id, head, entry.pin)
+                var slot = len(self.entries)
+                if len(self.vacant):
+                    slot = self.vacant.pop()
+                    self.entries[slot] = again.copy()
+                else:
+                    self.entries.append(again.copy())
+                self.first[entry.address] = slot
+                self.live += 1
+                linked = True
+        finally:
+            self.lock.release()
+        return linked
+
     def remove(mut self, address: Int, words: Int) raises -> ArenaStoreEntry:
         """Unlink the entry of (`address`, `words`) and return it for the
         caller to free on the device and unpin; `store_id` -1 when absent."""
@@ -276,31 +302,47 @@ struct DeviceCacheState(Movable):
         return drained^
 
 
+@fieldwise_init
+struct ArenaScopeCache(Copyable, Movable):
+    """One cache of a scope: the binding family (`prefix`), the store route
+    it was built on (`bindings/arena_cache_run.mojo` `arena_cache_route`) and
+    its handle word in `ARENA_CACHES`."""
+    var prefix: String
+    var route: Int
+    var cache: Int
+
+
 struct ArenaScopeState(Movable):
-    """One `resident()` scope of a thread: the size floor and the per-prefix
-    caches the runner created in it (handle words of `ARENA_CACHES`).
-    `depth` counts the nested `with` blocks sharing it."""
+    """One `resident()` scope of a thread: the size floor and the caches the
+    runner created in it, one per binding family and store route. A scope is
+    reached only through its thread's thread-local, so it carries no lock
+    word."""
     var min_words: Int
-    var depth: Int
-    var prefixes: List[String]
-    var caches: List[Int]
+    var caches: List[ArenaScopeCache]
 
     def __init__(out self, min_words: Int):
         self.min_words = min_words
-        self.depth = 1
-        self.prefixes = List[String]()
-        self.caches = List[Int]()
+        self.caches = List[ArenaScopeCache]()
 
-    def cache_of(self, prefix: String) -> Int:
-        """The scope's cache handle word for `prefix`, or `ARENA_HANDLE_NONE`."""
-        for i in range(len(self.prefixes)):  # driver-loop: over the scope's binding prefixes (a handful)
-            if self.prefixes[i] == prefix:
-                return self.caches[i]
+    def cache_of(self, prefix: String, route: Int) -> Int:
+        """The scope's cache handle word for (`prefix`, `route`), or
+        `ARENA_HANDLE_NONE`."""
+        for i in range(len(self.caches)):  # driver-loop: over the scope's caches (one per binding family and mode: a handful)
+            if self.caches[i].route == route and self.caches[i].prefix == prefix:
+                return self.caches[i].cache
         return ARENA_HANDLE_NONE
 
-    def add_cache(mut self, prefix: String, cache: Int):
-        self.prefixes.append(prefix)
-        self.caches.append(cache)
+    def add_cache(mut self, prefix: String, route: Int, cache: Int):
+        self.caches.append(ArenaScopeCache(prefix, route, cache))
+
+    def take_caches(mut self) -> List[ArenaScopeCache]:
+        """Unlink every cache (`close`) and return them for the caller to
+        close and release."""
+        var taken = List[ArenaScopeCache]()
+        for i in range(len(self.caches)):  # driver-loop: over the scope's caches
+            taken.append(self.caches[i].copy())
+        self.caches = List[ArenaScopeCache]()
+        return taken^
 
 
 @fieldwise_init
@@ -396,5 +438,5 @@ struct ArenaResidentState(Movable):
 
 comptime ARENA_ROWS = StateRegistry[DeviceRowsState, "MojolearnArenaRowsStatesV1"]
 comptime ARENA_CACHES = StateRegistry[DeviceCacheState, "MojolearnArenaCacheStatesV1"]
-comptime ARENA_SCOPES = StateRegistry[ArenaScopeState, "MojolearnArenaScopeStatesV1"]
+comptime ARENA_SCOPES = StateRegistry[ArenaScopeState, "MojolearnArenaScopeStatesV2"]
 comptime ARENA_RESIDENTS = StateRegistry[ArenaResidentState, "MojolearnArenaResidentStatesV1"]

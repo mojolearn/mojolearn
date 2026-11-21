@@ -79,6 +79,10 @@ def cache_identity() raises:
     require(lease[].publish(100, 8, 15, 0) == 15 and lease[].find(100, 8, False) == 15, "a vacated slot is reused")
     var drained = lease[].drain()
     require(len(drained) == 3 and lease[].live == 0 and lease[].find(200, 8, False) == -1, "drain empties the cache")
+    var uploads = lease[].uploads
+    require(lease[].restore(drained[0]) and lease[].live == 1 and lease[].uploads == uploads, "restore links an entry again and counts no upload")
+    require(lease[].find(drained[0].address, drained[0].words, False) == drained[0].store_id, "a restored entry is found")
+    require(not lease[].restore(drained[0]) and lease[].live == 1, "restore keeps an entry published meanwhile")
     ARENA_CACHES.release(arena_handle(word))
 
 
@@ -120,10 +124,13 @@ def resident_entries() raises:
 def scope_caches() raises:
     var word = arena_handle_word(ARENA_SCOPES.insert(ArenaScopeState(1 << 16)))
     var lease = ARENA_SCOPES.acquire(arena_handle(word))
-    require(lease[].cache_of("x_prep") == ARENA_HANDLE_NONE and lease[].depth == 1, "a fresh scope")
-    lease[].add_cache("x_prep", 41)
-    lease[].add_cache("x_metrics", 42)
-    require(lease[].cache_of("x_prep") == 41 and lease[].cache_of("x_metrics") == 42, "per-prefix caches")
+    require(lease[].cache_of("x_prep", 258) == ARENA_HANDLE_NONE and lease[].min_words == 1 << 16, "a fresh scope")
+    lease[].add_cache("x_prep", 258, 41)
+    lease[].add_cache("x_prep", 2, 42)
+    require(lease[].cache_of("x_prep", 258) == 41 and lease[].cache_of("x_prep", 2) == 42, "one cache per prefix and route")
+    require(lease[].cache_of("x_metrics", 258) == ARENA_HANDLE_NONE, "another prefix has no cache")
+    var taken = lease[].take_caches()
+    require(len(taken) == 2 and taken[1].cache == 42 and lease[].cache_of("x_prep", 258) == ARENA_HANDLE_NONE, "take_caches empties the scope")
     ARENA_SCOPES.release(arena_handle(word))
 
 
