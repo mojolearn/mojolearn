@@ -9,8 +9,9 @@ keeps both readings the former bodies made of it (`gbdt_fit_params_py`:
 an integer where `Int(py=)` succeeds and a float where `Float64(py=)`
 succeeds, with a flag for a reading that failed), so a body's read of that
 slot refuses as it did. Used by the forest bindings' Python entries (kept
-for the tests, `host_surface` and the unconverted boost-door session and
-AdaBoost fits) and by the forest door, which then calls the fit natively.
+for the tests and `host_surface`); the doors build `ForestFitArgs` from the
+typed configuration (bindings/forest_config_run.mojo) and call the fit
+natively.
 """
 from std.python import Python, PythonObject
 from bindings.gbdt_fit_boundary_unpack import gbdt_fit_params_py
@@ -35,25 +36,8 @@ def forest_fit_args_py(x_addr: PythonObject, y_addr: PythonObject, params: Pytho
     return ForestFitArgs(Int(py=x_addr), Int(py=y_addr), ints^, floats^, bad^, crit)
 
 
-def forest_params_py(params: PythonObject) raises -> ForestFitArgs:
-    """A params list alone as native views (the session, DART and AdaBoost
-    Python entries, whose other arguments they read themselves)."""
-    var ints = List[Int]()
-    var floats = List[Float64]()
-    var bad = List[UInt8]()
-    gbdt_fit_params_py(params, ints, floats, bad)
-    return ForestFitArgs(0, 0, ints^, floats^, bad^, -1)
-
-
-def forest_fit_request_py(x: Int, y: Int, params: PythonObject, criterion: PythonObject) raises -> ForestFitArgs:
-    """The forest door's request: X and y addresses it already holds, its
-    params list (UNPACK) and the criterion (None for the ET fits)."""
-    var ints = List[Int]()
-    var floats = List[Float64]()
-    var bad = List[UInt8]()
-    gbdt_fit_params_py(params, ints, floats, bad)
-    var crit = -1 if criterion is None else Int(py=criterion)
-    return ForestFitArgs(x, y, ints^, floats^, bad^, crit)
+# TOMBSTONE: forest_params_py (a params list alone as native views: the session, AdaBoost and data-session Python entries of the rf images) / forest_fit_request_py (the forest door's request from its Python params list) deleted 2026-11-21 by lane dw-trees-boost: no caller (the entries are typed forest operations; every door builds `ForestFitArgs` from `ForestConfig`); code recoverable at cc2c81eb61.
+# Restore: git apply experiments/removed/dead_entries_rf_session_ada_calls.patch
 
 
 def forest_request_from_words_py(words: PythonObject, x: Int, y: Int, trees: Int) raises -> ForestFitArgs:

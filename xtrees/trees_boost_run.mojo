@@ -10,6 +10,8 @@ per-call scalar decision; there is no independent work to split across
 cores.
 """
 from std.math import ceil
+from core.entry_table import EntryRef
+from xtrees.glue_calls import xt_apply, xt_leaf_numbering, xt_onehot_leaves, xt_uniform
 from xtrees.trees_forest_run import trees_refuse
 
 comptime BOOST_DART_VALUES_CAP = 1 << 26
@@ -88,3 +90,32 @@ def _dart_thr(v: Float64) -> Int:
     if v >= 1.0:
         return 1 << 53
     return Int(ceil(v * 9007199254740992.0))
+
+
+# ---------------------------------------------------- RandomTreesEmbedding
+# RUN of the embedding's operations: typed glue calls over addresses the
+# door's UNPACK admitted and its PACK publishes. Each is one synchronous
+# launch (or two) of the x_trees image; the parallelism is inside the image.
+
+
+def rte_targets_run(glue: EntryRef, targets: Int, n: Int, seed: Int) raises:
+    """The embedding's uniform targets (float64, n words at `targets`):
+    stream 0 of the estimator's seed."""
+    _ = xt_uniform(glue, targets, n, seed, 0)
+
+
+def rte_numbering_run(glue: EntryRef, left_child: Int, node_col: Int, nodes: Int) raises -> Int:
+    """The leaf numbering of the fitted forest: the output column of every
+    leaf node (int32, `nodes` words at `node_col`) from the forest's
+    left-child array. Returns the embedding's width."""
+    return xt_leaf_numbering(glue, left_child, node_col, nodes)
+
+
+def rte_transform_run(glue: EntryRef, model: List[Int], x: Int, leaves: Int, tree_base: Int, node_col: Int,
+                      dst: Int, n: Int, d: Int, trees: Int, width: Int) raises:
+    """`apply`, then the one-hot: every row's leaf node per tree (int32,
+    n x trees at `leaves`) from the forest's offsets, column ids, thresholds
+    and left children (`model[0..3]`), then the dense one-hot (float64,
+    n x width at `dst`)."""
+    _ = xt_apply(glue, model[0], model[1], model[2], model[3], x, leaves, n, d, 0, trees)
+    _ = xt_onehot_leaves(glue, leaves, tree_base, node_col, dst, n, trees, width)

@@ -24,7 +24,8 @@ from core.forest_fit_request import (
     ForestFitArgs, FOREST_ENTRY_ABI, XF_OP_COUNT, XF_CAPS, XF_NUMERIC_MODE, XF_DT_DEFAULT_BINS, XF_FIT, XF_FIT_DART,
     XF_EXPORT_SIZES, XF_EXPORT_INTO, XF_EXPORT_VERIFY, XF_EXPORT_RELEASE, XF_PREDICT, XF_RESIDENT_PREPARE,
     XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_RESIDENT_RELEASE, XF_STRICT_PREPARE, XF_STRICT_PREDICT,
-    XF_STRICT_RELEASE, XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
+    XF_STRICT_RELEASE, XF_SESSION_OPEN, XF_SESSION_CLOSE, XF_FIT_SESSION, XF_ADA_OPEN, XF_FIT_ADA_ROUND,
+    XF_W_SHAPE, XF_SHAPE_CLASSIFIER, XF_SHAPE_ROWMAJOR, forest_fit_args_at,
 )
 
 
@@ -96,6 +97,29 @@ trait ForestImage:
     def strict_release(handle: Int) raises:
         ...
 
+    @staticmethod
+    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
+        """X kept for the member fits of one ensemble; the session handle."""
+        ...
+
+    @staticmethod
+    def session_close(handle: Int) raises:
+        ...
+
+    @staticmethod
+    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        """A member fit on `args.session`'s X; its export handle."""
+        ...
+
+    @staticmethod
+    def ada_open(handle: Int, w: Int, y: Int, cw: Int, n: Int, k: Int) raises:
+        ...
+
+    @staticmethod
+    def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        """One AdaBoost round on `args.session`; the member's export handle."""
+        ...
+
 
 def _words(address: Int, count: Int) -> List[Int]:
     var out = List[Int](capacity=count)
@@ -125,13 +149,28 @@ def _run[I: ForestImage](op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int) r
         return Int(GLOBAL_NUMERIC_MODE)
     if op == XF_DT_DEFAULT_BINS:
         return I.dt_default_bins()
-    if op == XF_FIT or op == XF_FIT_DART:
+    if op == XF_FIT or op == XF_FIT_DART or op == XF_FIT_SESSION or op == XF_FIT_ADA_ROUND:
         var args = forest_fit_args_at(aa, na, pp, np, ff)
         if op == XF_FIT_DART:
             return I.fit_dart(args)
         var shape = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=aa)[XF_W_SHAPE]
+        if op == XF_FIT_SESSION:
+            return I.fit_session((shape & XF_SHAPE_CLASSIFIER) != 0, args)
+        if op == XF_FIT_ADA_ROUND:
+            return I.fit_ada_round((shape & XF_SHAPE_CLASSIFIER) != 0, args)
         return I.fit((shape & XF_SHAPE_CLASSIFIER) != 0, (shape & XF_SHAPE_ROWMAJOR) != 0, args)
     var a = _words(aa, na)
+    if op == XF_SESSION_OPEN:
+        _need(na, np, 1, 4, "forest data session open")
+        return I.session_open(a[0], p[0], p[1], p[2] != 0, p[3] != 0)
+    if op == XF_SESSION_CLOSE:
+        _need(na, np, 0, 1, "forest data session close")
+        I.session_close(p[0])
+        return 0
+    if op == XF_ADA_OPEN:
+        _need(na, np, 3, 3, "forest AdaBoost open")
+        I.ada_open(p[0], a[0], a[1], a[2], p[1], p[2])
+        return 0
     if op == XF_EXPORT_SIZES:
         _need(na, np, 2, 0, "forest export sizes")
         I.export_sizes(a[0], a[1])

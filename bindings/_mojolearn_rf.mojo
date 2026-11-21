@@ -52,11 +52,13 @@ from core.forest_inference_run import (
     forest_prepare_gpu_native, forest_predict_resident_into_gpu_native,
     forest_predict_resident_labels_gpu_native, forest_gpu_resident_caps,
 )
-from bindings.forest_fit_boundary_unpack import forest_fit_args_py, forest_params_py
+from bindings.forest_fit_boundary_unpack import forest_fit_args_py
 from core.forest_fit_request import (
     ForestFitArgs,
     XF_CAP_DEVICE_SCAN,
     XF_CAP_DART,
+    XF_CAP_SESSION,
+    XF_CAP_ADA,
 )
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_RF
@@ -158,12 +160,6 @@ def _forest_out_trees(trees: List[TreeMetaDataNode[DT]], notices: Int) raises ->
 from forest_export_binding_unpack import (forest_export_py_list_f64, forest_export_py_list_i64,)
 from forest_export_binding_pack import (forest_export_descriptor_py,)
 from core.mojolearn_rf_impl import rf_flatten_trees
-
-
-def _retain_rf_export(var trees: RFExportTrees, notices: Int) raises -> PythonObject:
-    """`_retain_rf_handle`, then the export descriptor (the session, DART
-    and AdaBoost Python entries)."""
-    return _rf_handle_py(_retain_rf_handle(trees^, notices), True)
 
 
 def rf_forest_export_binding(handle: PythonObject, offsets: PythonObject,
@@ -298,20 +294,13 @@ def rf_regressor_fit_weighted_binding[EXPORT: Bool = False](
                                     weight_max=Float64(py=weight_max))
 
 
-def rf_data_session_open_binding(
-    x_addr: PythonObject, params_py: PythonObject
-) raises -> PythonObject:
-    """Stage X on the device for the member fits of one ensemble. `params`
-    is [n_rows, n_cols, row_major, share_tables]; `x` is float32, ROW-major
-    when `row_major` is 1 and COLUMN-major otherwise, borrowed through this
-    call only. Returns the session handle."""
-    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
-    if len(params) != 4:
-        raise Error("rf_data_session_open: params must hold 4 values")
-    var n_rows = params.i(0)
-    var n_cols = params.i(1)
-    var row_major = params.i(2) != 0
-    var share_tables = params.i(3) != 0
+# TOMBSTONE: rf_data_session_open / rf_data_session_close / rf_regressor_fit_session_rows_export / rf_classifier_fit_weighted_session_export / rf_ada_open / rf_classifier_fit_ada_round_export / rf_regressor_fit_ada_round_export (the Python entries of the data session and the AdaBoost rounds: superseded by the forest entry's typed XF_SESSION_OPEN / XF_SESSION_CLOSE / XF_FIT_SESSION / XF_ADA_OPEN / XF_FIT_ADA_ROUND, no caller left) deleted 2026-11-21 by lane dw-trees-boost; code recoverable at cc2c81eb61.
+# Restore: git apply experiments/removed/dead_entries_rf_session_ada_calls.patch
+def _rf_session_open_native(x_address: Int, n_rows: Int, n_cols: Int, row_major: Bool,
+                            share_tables: Bool) raises -> Int:
+    """XF_SESSION_OPEN: stage X on the device for the member fits of one
+    ensemble. `x` is float32, ROW-major when `row_major` and COLUMN-major
+    otherwise, borrowed through this call only. Returns the session handle."""
     if n_rows <= 0 or n_cols <= 0:
         raise Error("rf_data_session_open: invalid shape")
     comptime if GLOBAL_NUMERIC_MODE == 1:
@@ -320,7 +309,7 @@ def rf_data_session_open_binding(
                 "rf_data_session_open: shared quantile tables are a FAST"
                 " option; an IDENTICAL member draws its own sample"
             )
-    var xp = _f32_ptr(Int(py=x_addr))
+    var xp = _f32_ptr(x_address)
     var made = List[RfDataSession]()
     var bad = False
     with GILReleased(Python()):
@@ -333,12 +322,7 @@ def rf_data_session_open_binding(
     var session = made.pop()
     session.id = id
     reg[].sessions.append(session^)
-    return PythonObject(id)
-
-
-def rf_data_session_close_binding(handle: PythonObject) raises -> PythonObject:
-    _rf_data_session_close(Int(py=handle))
-    return PythonObject(None)
+    return id
 
 
 # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
@@ -420,18 +404,14 @@ def _rf_regressor_fit_dart(params: ForestFitArgs) raises -> Int:
     return _retain_rf_handle(export_trees^, forest.notices)
 
 
-def rf_regressor_fit_session_rows_binding(
-    handle: PythonObject, rows_addr: PythonObject, y_addr: PythonObject,
-    params_py: PythonObject, criterion: PythonObject,
-) raises -> PythonObject:
-    """`rf_regressor_fit_export` on the rows `rows` (int32 row ids of the
-    session's X, `params[0]` of them, repeats allowed) with `y` their
-    labels in that order: the member fit of a resampling ensemble
-    (AdaBoost.R2). The rows are gathered ON THE DEVICE from the staged X
-    into a fresh column-major matrix, the bytes a host gather of the same
-    rows stages, and the fit is `fit_forest` on it with its own quantile
-    table."""
-    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+def _rf_fit_session_rows_native(params: ForestFitArgs) raises -> Int:
+    """XF_FIT_SESSION, regressor: `rf_regressor_fit_export` on the rows
+    `params.x` (int32 row ids of the session's X, `params[0]` of them,
+    repeats allowed) with `params.y` their labels in that order: the member
+    fit of a resampling ensemble (AdaBoost.R2). The rows are gathered ON THE
+    DEVICE from the staged X into a fresh column-major matrix, the bytes a
+    host gather of the same rows stages, and the fit is `fit_forest` on it
+    with its own quantile table. Returns the export handle."""
     if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_session_rows: params must hold "
@@ -445,13 +425,13 @@ def rf_regressor_fit_session_rows_binding(
     var n_cols = params.i(1)
     if n_rows <= 0:
         raise Error("rf_regressor_fit_session_rows: no rows")
-    var rp = _i32_ptr(Int(py=rows_addr))
-    var yp = _f32_ptr(Int(py=y_addr))
-    var crit = Int(py=criterion)
+    var rp = _i32_ptr(params.x)
+    var yp = _f32_ptr(params.y)
+    var crit = params.criterion
     _check_criterion("rf_regressor_fit_session_rows", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
     _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
-    var session_id = Int(py=handle)
+    var session_id = params.session
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)
     var src_rows = reg[].sessions[si].n_rows
@@ -469,17 +449,13 @@ def rf_regressor_fit_session_rows_binding(
         )
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^, forest.notices)
+    return _retain_rf_handle(export_trees^, forest.notices)
 
 
-def rf_classifier_fit_weighted_session_binding(
-    handle: PythonObject, y_addr: PythonObject,
-    params_py: PythonObject, criterion: PythonObject, weights_addr: PythonObject,
-) raises -> PythonObject:
-    """`rf_classifier_fit_weighted_export` on a data session's X (its
-    COLUMN-major stage): same params, same weight checks, same export
-    descriptor."""
-    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+def _rf_fit_weighted_session_native(params: ForestFitArgs) raises -> Int:
+    """XF_FIT_SESSION, classifier: the weighted classifier fit on a data
+    session's X (its COLUMN-major stage): same params and weight checks as
+    the weighted XF_FIT. Returns the export handle."""
     if not _rf_params_len_ok(params):
         raise Error(
             "rf_classifier_fit_weighted_session: params must hold "
@@ -492,12 +468,12 @@ def rf_classifier_fit_weighted_session_binding(
     var n_classes = params.i(2)
     if n_classes < 2:
         raise Error("rf_classifier_fit_weighted_session: n_classes must be >= 2")
-    var yp = _i32_ptr(Int(py=y_addr))
-    var crit = Int(py=criterion)
+    var yp = _i32_ptr(params.y)
+    var crit = params.criterion
     _check_criterion("rf_classifier_fit_weighted_session", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
     var mw_frac = _rf_min_weight_fraction(params)
-    var weights_address = Int(py=weights_addr)
+    var weights_address = params.weights
     if weights_address == 0:
         raise Error("weighted RF requires a nonzero Float32 weight pointer")
 
@@ -506,7 +482,7 @@ def rf_classifier_fit_weighted_session_binding(
     var weights = list_f32(_f32_ptr(weights_address), n_rows)
     var weight_total = Float64(0)
 
-    var session_id = Int(py=handle)
+    var session_id = params.session
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)
     _session_shape_check(
@@ -536,7 +512,7 @@ def rf_classifier_fit_weighted_session_binding(
     _rf_session_restore_prep(session_id, prep)
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^, forest.notices)
+    return _retain_rf_handle(export_trees^, forest.notices)
 
 
 # ------------------------------------------------------------ AdaBoost --
@@ -553,32 +529,20 @@ def rf_classifier_fit_weighted_session_binding(
 # uploaded them with their targets.
 
 
-def rf_ada_open_binding(
-    handle: PythonObject, w_addr: PythonObject, y_addr: PythonObject,
-    cw_addr: PythonObject, params_py: PythonObject,
-) raises -> PythonObject:
-    """Keep an AdaBoost fit's state on a data session's device: `w` (float64,
-    the normalized starting weights), `y` (int32 class codes when
-    `params[1]` = k >= 2; float32 targets when k = 0), `cw` (float32
-    class_weight row weights, or 0 for none). `params` = [n, k]; n must be
-    the session's row count. Every array is borrowed through this call
-    only. Replaces an earlier state of the session."""
-    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
-    if len(params) != 2:
-        raise Error("rf_ada_open: params must hold [n, k]")
-    var n = params.i(0)
-    var k = params.i(1)
+def _rf_ada_open_native(session_id: Int, wa: Int, ya: Int, ca: Int, n: Int, k: Int) raises:
+    """XF_ADA_OPEN: keep an AdaBoost fit's state on a data session's device:
+    `w` (float64, the normalized starting weights), `y` (int32 class codes
+    when k >= 2; float32 targets when k = 0), `cw` (float32 class_weight row
+    weights, or 0 for none). n must be the session's row count. Every array
+    is borrowed through this call only. Replaces an earlier state of the
+    session."""
     if k == 1 or k < 0:
         raise Error("rf_ada_open: k must be 0 (regressor) or >= 2")
-    var wa = Int(py=w_addr)
-    var ya = Int(py=y_addr)
-    var ca = Int(py=cw_addr)
     var wp = _u64_ptr(wa)
     if ya == 0:
         raise Error("rf_ada_open: null label buffer address")
     if ca != 0 and k == 0:
         raise Error("rf_ada_open: class weights belong to a classifier")
-    var session_id = Int(py=handle)
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)
     if reg[].sessions[si].n_rows != n or n <= 0:
@@ -590,23 +554,19 @@ def rf_ada_open_binding(
     var bi = back[].find(session_id)
     back[].sessions[bi].ada = List[AdaState]()
     back[].sessions[bi].ada.append(made.pop())
-    return PythonObject(None)
 
 
-def rf_classifier_fit_ada_round_binding(
-    handle: PythonObject, params_py: PythonObject, criterion: PythonObject,
-    round_params: PythonObject, stats_addr: PythonObject,
-) raises -> PythonObject:
-    """One AdaBoostClassifier (SAMME) round on a data session holding the
-    fit's state (`rf_ada_open`): the member's weights from the resident
-    boosting weights, the weighted member fit on the session's X (same
-    params, checks and export descriptor as
-    `rf_classifier_fit_weighted_session_export`), its predictions of the
-    training X and the SAMME step, all on the device. `round_params` =
-    [learning_rate, last]; `stats` (float64, 4) gets [status, alpha, error,
-    total]. The weights are rescaled by the total in place when the round
-    moved them and the total is positive (the next round's start)."""
-    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+def _rf_ada_classifier_round_native(params: ForestFitArgs) raises -> Int:
+    """XF_FIT_ADA_ROUND, classifier: one AdaBoostClassifier (SAMME) round on
+    a data session holding the fit's state (XF_ADA_OPEN): the member's
+    weights from the resident boosting weights, the weighted member fit on
+    the session's X (same params and checks as the weighted session fit),
+    its predictions of the training X and the SAMME step, all on the device.
+    `params.rate` is the learning rate, `params.last` the last round;
+    `params.stats` (float64, 4) gets [status, alpha, error, total]. The
+    weights are rescaled by the total in place when the round moved them and
+    the total is positive (the next round's start). Returns the member's
+    export handle."""
     if not _rf_params_len_ok(params):
         raise Error(
             "rf_classifier_fit_ada_round: params must hold "
@@ -614,21 +574,19 @@ def rf_classifier_fit_ada_round_binding(
             + " values, got "
             + String(len(params))
         )
-    if len(round_params) != 2:
-        raise Error("rf_classifier_fit_ada_round: round_params must hold [learning_rate, last]")
     var n_rows = params.i(0)
     var n_cols = params.i(1)
     var n_classes = params.i(2)
     if n_classes < 2:
         raise Error("rf_classifier_fit_ada_round: n_classes must be >= 2")
-    var crit = Int(py=criterion)
+    var crit = params.criterion
     _check_criterion("rf_classifier_fit_ada_round", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
     var mw_frac = _rf_min_weight_fraction(params)
-    var lr = Float64(py=round_params[0])
-    var last = Int(py=round_params[1]) != 0
-    var stats = _f64_ptr(Int(py=stats_addr))
-    var session_id = Int(py=handle)
+    var lr = params.rate
+    var last = params.last != 0
+    var stats = _f64_ptr(params.stats)
+    var session_id = params.session
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)
     _session_shape_check(
@@ -656,24 +614,21 @@ def rf_classifier_fit_ada_round_binding(
     _rf_session_restore_prep(session_id, prep)
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^, forest.notices)
+    return _retain_rf_handle(export_trees^, forest.notices)
 
 
-def rf_regressor_fit_ada_round_binding(
-    handle: PythonObject, params_py: PythonObject, criterion: PythonObject,
-    round_params: PythonObject, stats_addr: PythonObject,
-) raises -> PythonObject:
-    """One AdaBoostRegressor (AdaBoost.R2) round on a data session holding
-    the fit's state (`rf_ada_open`, k = 0): n rows drawn with probability
-    w / sum(w) on the device (`x_trees_weighted_sample`'s cdf and draws,
-    stream = the round), the session's X and the targets gathered at them,
-    the squared-error member fit (as `rf_regressor_fit_session_rows_export`:
-    same params, checks and export descriptor), its predictions of the
-    training X and the R2 step, all on the device. `round_params` = [seed,
-    round, loss, learning_rate, last]; `stats` (float64, 4) gets [status,
-    alpha, error, total]; the weights are rescaled by the total in place
-    when the round moved them and the total is positive."""
-    var params = forest_params_py(params_py)  # UNPACK: the params list as native views
+def _rf_ada_regressor_round_native(params: ForestFitArgs) raises -> Int:
+    """XF_FIT_ADA_ROUND, regressor: one AdaBoostRegressor (AdaBoost.R2) round
+    on a data session holding the fit's state (XF_ADA_OPEN, k = 0): n rows
+    drawn with probability w / sum(w) on the device (`x_trees_weighted_sample`'s
+    cdf and draws, stream = the round), the session's X and the targets
+    gathered at them, the squared-error member fit (as the session rows
+    fit: same params and checks), its predictions of the training X and the
+    R2 step, all on the device. `params.round_seed`, `params.round`,
+    `params.loss`, `params.rate` and `params.last` are the round's words;
+    `params.stats` (float64, 4) gets [status, alpha, error, total]; the
+    weights are rescaled by the total in place when the round moved them and
+    the total is positive. Returns the member's export handle."""
     if not _rf_params_len_ok(params):
         raise Error(
             "rf_regressor_fit_ada_round: params must hold "
@@ -683,21 +638,19 @@ def rf_regressor_fit_ada_round_binding(
         )
     if params.i(2) != 0:
         raise Error("rf_regressor_fit_ada_round: n_classes (slot 2) must be 0")
-    if len(round_params) != 5:
-        raise Error("rf_regressor_fit_ada_round: round_params must hold [seed, round, loss, learning_rate, last]")
     var n_rows = params.i(0)
     var n_cols = params.i(1)
-    var crit = Int(py=criterion)
+    var crit = params.criterion
     _check_criterion("rf_regressor_fit_ada_round", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
     _rf_fold_min_weight_count(rf_params, _rf_min_weight_fraction(params), n_rows)
-    var seed = Int(py=round_params[0])
-    var round = Int(py=round_params[1])
-    var loss = Int(py=round_params[2])
-    var lr = Float64(py=round_params[3])
-    var last = Int(py=round_params[4]) != 0
-    var stats = _f64_ptr(Int(py=stats_addr))
-    var session_id = Int(py=handle)
+    var seed = params.round_seed
+    var round = params.round
+    var loss = params.loss
+    var lr = params.rate
+    var last = params.last != 0
+    var stats = _f64_ptr(params.stats)
+    var session_id = params.session
     var reg = RF_SESSIONS.get_or_create_ptr()
     var si = reg[].find(session_id)
     _session_shape_check(
@@ -713,7 +666,7 @@ def rf_regressor_fit_ada_round_binding(
         )
     var export_trees = forest.trees^
     forest.trees = RFExportTrees()
-    return _retain_rf_export(export_trees^, forest.notices)
+    return _retain_rf_handle(export_trees^, forest.notices)
 
 
 def _rf_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> Int:
@@ -826,7 +779,7 @@ struct RfGpuForest(ForestImage):
 
     @staticmethod
     def caps() -> Int:
-        var caps = forest_gpu_resident_caps() | XF_CAP_DART
+        var caps = forest_gpu_resident_caps() | XF_CAP_DART | XF_CAP_SESSION | XF_CAP_ADA
         comptime if FOREST_DEVICE_FINITE:
             caps |= XF_CAP_DEVICE_SCAN
         return caps
@@ -898,6 +851,30 @@ struct RfGpuForest(ForestImage):
     def strict_release(handle: Int) raises:
         raise Error("RuntimeError: rebuild the forest host binding")
 
+    @staticmethod
+    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
+        return _rf_session_open_native(x, rows, cols, row_major, share_tables)
+
+    @staticmethod
+    def session_close(handle: Int) raises:
+        _rf_data_session_close(handle)
+
+    @staticmethod
+    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        if classifier:
+            return _rf_fit_weighted_session_native(args)
+        return _rf_fit_session_rows_native(args)
+
+    @staticmethod
+    def ada_open(handle: Int, w: Int, y: Int, cw: Int, n: Int, k: Int) raises:
+        _rf_ada_open_native(handle, w, y, cw, n, k)
+
+    @staticmethod
+    def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        if classifier:
+            return _rf_ada_classifier_round_native(args)
+        return _rf_ada_regressor_round_native(args)
+
 
 def rf_gpu_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
@@ -962,15 +939,8 @@ def build__mojolearn_rf() -> PythonObject:
         m.def_function[forest_predict_resident_labels_gpu_binding[True]]("forest_predict_resident_labels_gpu")
         m.def_function[forest_stage_input_gpu_binding[True]]("forest_stage_input_gpu")
         m.def_function[forest_unstage_input_gpu_binding[True]]("forest_unstage_input_gpu")
-        m.def_function[rf_data_session_open_binding]("rf_data_session_open")
-        m.def_function[rf_data_session_close_binding]("rf_data_session_close")
         # TOMBSTONE: the legacy-arm rf fits, rf_regressor_fit_session_export, the forest comparison arms and probes, rf_*_gpu_parallel, rf_fused_bootstrap_gather (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_trees.patch
-        m.def_function[rf_regressor_fit_session_rows_binding]("rf_regressor_fit_session_rows_export")
-        m.def_function[rf_classifier_fit_weighted_session_binding]("rf_classifier_fit_weighted_session_export")
-        m.def_function[rf_ada_open_binding]("rf_ada_open")
-        m.def_function[rf_classifier_fit_ada_round_binding]("rf_classifier_fit_ada_round_export")
-        m.def_function[rf_regressor_fit_ada_round_binding]("rf_regressor_fit_ada_round_export")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         return m.finalize()
     except e:
