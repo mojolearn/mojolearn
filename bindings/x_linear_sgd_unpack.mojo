@@ -9,20 +9,28 @@
 # PACK is bindings/x_linear_sgd_pack.mojo.
 #
 # The class weights (`class_weight`) are computed by the binding
-# (XL_OP_CLASS_PREP, `_xl_class_prep`) while the request is assembled: SGD
-# takes them as float parameters, RidgeClassifier as row weights that the
-# weight admission then checks. That one native call per fit with
-# class_weight is made here, with the GIL released, before RUN.
-from bindings.x_linear_common_unpack import XlFit, xl_fit_build, xl_fit_build_x, _xl_class_prep
+# (XL_OP_CLASS_PREP). UNPACK builds that step's typed request
+# (`XlClassPrepRequest`: the class-weight words read from a dict, the codes,
+# the checked sample weights, where the row weights land) and RUN makes the
+# call before the fit (x_linear/door_run.mojo `xl_class_fit_run`): SGD takes
+# the k class weights as its last float parameters, RidgeClassifier reads
+# the row weights behind its class codes. No native call is made here.
+from bindings.x_linear_common_unpack import XlFit, xl_fit_build, xl_fit_build_x, xl_class_weights_unpack
 from std.python import Python, PythonObject
-from x_linear.door_run import ALGO_SGD, ALGO_RIDGE, xl_seed_halves, xl_sgd_class_floats
+from std.python._cpython import GILReleased
+from x_linear.door_run import (
+    ALGO_SGD, ALGO_RIDGE, xl_seed_halves, XlClassPrepRequest, xl_class_prep_none, xl_class_fit_run, xl_run_join,
+)
+from bindings.device_rows_door import door_rows_refuse
 from bindings.x_linear_route_unpack import XLinearOps, xl_ops_require
 from bindings.x_linear_common_unpack import (
-    _b, _op, _truth, _float, _int, _repr, _gt, _ge, _lt, _le, _eq, _isinstance, _is_int, _name, _attr, _sorted_repr,
-    _xl_matrix, _xl_vector, _xl_fold_matrix, _xl_with_weights,
+    _b, _op, _truth, _float, _int, _repr, _gt, _ge, _lt, _le, _eq, _isinstance, _is_int, _name, _attr,
+    _sorted_repr, _xl_matrix, _xl_vector, _xl_fold_matrix, _xl_with_weights,
 )
 from bindings.py_balanced import py_call, py_contains
-from bindings.admitted_input_unpack import admit_weight_words, admitted_words, admitted_vector
+from bindings.admitted_input_unpack import (
+    admit_weight_words, admitted_words, admitted_vector, admitted_storage_native,
+)
 from bindings.admitted_input_run import AdmittedXView
 from bindings.x_linear_keys_unpack import (
     x_linear_keys, X_LINEAR_OPN_FIT_PA_CLASSIFIER, X_LINEAR_OPN_FIT_PERCEPTRON, X_LINEAR_OPN_FIT_SGD_CLASSIFIER,
@@ -32,14 +40,38 @@ from bindings.classical_labels_door import ClassicalLabels, labels_address, labe
 
 
 struct XlClassFit(Movable):
-    """One admitted classifier fit: the fit call over the class codes and
-    the sorted class labels PACK publishes as `classes_`."""
+    """One admitted classifier fit: the fit call over the class codes, the
+    sorted class labels PACK publishes as `classes_`, and the class-weight
+    step RUN makes before the fit (`prep`; not active without
+    `class_weight`) with the objects whose words it addresses: the int32
+    class codes, the k class weights and the checked sample weights."""
     var fit: XlFit
     var classes: PythonObject
+    var prep: XlClassPrepRequest
+    var codes: PythonObject
+    var class_weight: PythonObject
+    var sample_weight: PythonObject
 
-    def __init__(out self, var fit: XlFit, var classes: PythonObject):
+    def __init__(out self, var fit: XlFit, var classes: PythonObject, var prep: XlClassPrepRequest,
+                 var codes: PythonObject, var class_weight: PythonObject, var sample_weight: PythonObject):
         self.fit = fit^
         self.classes = classes^
+        self.prep = prep^
+        self.codes = codes^
+        self.class_weight = class_weight^
+        self.sample_weight = sample_weight^
+
+
+def xl_class_fit_released(call: XlClassFit, model: PythonObject) raises:
+    """RUN of one classifier fit with the GIL released (the class-weight
+    step, then the fit); then the refusal of a device fold on its status
+    words (a host fit has none)."""
+    var words: Tuple[Int, Int] = (0, 0)
+    var py = Python()
+    with GILReleased(py):
+        words = xl_class_fit_run(call.fit.request, call.prep)
+    if call.fit.request.fold:
+        door_rows_refuse(words[0], words[1], _name(model), call.fit.request.base_rows)
 
 
 def _xl_sgd_refuse(model: PythonObject, early_stopping: PythonObject, average: PythonObject,
@@ -84,15 +116,16 @@ def _xl_sgd_build(model: PythonObject, entries: XLinearOps, x: AdmittedXView, x_
                   fit_intercept: PythonObject, max_iter: PythonObject, tol: PythonObject,
                   n_iter_no_change: PythonObject, shuffle: PythonObject, random_state: PythonObject,
                   sample_weight: PythonObject, class_weight: PythonObject, classes: PythonObject, codes: PythonObject,
-                  batch_size: PythonObject, var batch_sum: Bool, auto_cap: Int,
-                  context: PythonObject) raises -> XlFit:
+                  batch_size: PythonObject, var batch_sum: Bool, auto_cap: Int, mut prep: XlClassPrepRequest,
+                  mut class_keep: PythonObject, context: PythonObject) raises -> XlFit:
     """`_sgd_fit`, UNPACK: the refusals, the seed, the integer and float
     hyperparameters, the targets (then the checked weights) and the typed
     fit request. The n float32 targets or class codes are at `y_addr`
-    (`y_keep` owns them); 0 is no targets (SGDOneClassSVM: zeros). The k
-    class weights are the binding's (`_xl_class_prep`, XL_OP_CLASS_PREP):
-    they are float parameters of the request, so that one native call is
-    made here, before RUN."""
+    (`y_keep` owns them); 0 is no targets (SGDOneClassSVM: zeros). With
+    `class_weight`, `prep` becomes the class-weight step's request
+    (XL_OP_CLASS_PREP over the int32 `codes`; `class_keep` owns the k
+    class-weight words): RUN makes that call and appends the k weights to
+    the request's float parameters (`xl_class_fit_run`)."""
     var nk = x_linear_keys()
     var name = _name(model)
     var n = x.rows
@@ -124,11 +157,12 @@ def _xl_sgd_build(model: PythonObject, entries: XLinearOps, x: AdmittedXView, x_
     var yy = _xl_with_weights(t, sample_weight, n, has_sw, context)
     var has_cw = 0
     if class_weight is not None and n_classes >= 2:
-        # k scalars: the fit's parameters
-        var prep = _xl_class_prep(model, entries, class_weight, classes, codes, 0, False, False, context)
-        xl_sgd_class_floats(fp, labels_address(prep[0]), n_classes)
-        # The class-weight words are prep's Array: retained through the read.
-        _ = prep^
+        # k scalars: the fit's last float parameters, appended by RUN after
+        # the binding computed them
+        var weights = xl_class_weights_unpack(class_weight, classes, context)
+        class_keep = weights[0]
+        prep = XlClassPrepRequest(True, labels_address(codes), 0, labels_address(class_keep), 0, n, n_classes,
+                                  weights[1], False)
         has_cw = 1
     var auto = _isinstance(batch_size, _b().str) and _eq(batch_size, PythonObject("auto"))
     var batch = -1
@@ -168,6 +202,9 @@ def xl_fit_sgd_regressor_unpack(model: PythonObject, fields: PythonObject, args:
     xl_ops_require(entries)
     var x = _xl_matrix(args[0], _name(model), context)
     var y = _xl_vector(args[1], x.rows, context)
+    # a regressor has no class-weight step
+    var prep = xl_class_prep_none()
+    var class_keep = PythonObject(None)
     if passive:
         var lr = PythonObject("pa1") if _eq(loss, PythonObject("epsilon_insensitive")) else PythonObject("pa2")
         return _xl_sgd_build(model, entries, x.view(), x.array, y.array, y.address, 0, _int(py_item(losses, nk[].k_epsilon_insensitive)),
@@ -175,13 +212,13 @@ def xl_fit_sgd_regressor_unpack(model: PythonObject, fields: PythonObject, args:
                              py_item(fields, nk[].k_epsilon), py_item(fields, nk[].k_fit_intercept), py_item(fields, nk[].k_max_iter), py_item(fields, nk[].k_tol),
                              py_item(fields, nk[].k_n_iter_no_change), py_item(fields, nk[].k_shuffle), py_item(fields, nk[].k_random_state), PythonObject(None),
                              PythonObject(None), PythonObject(None), PythonObject(None), py_item(fields, nk[].k_batch_size), False, 256,
-                             context)
+                             prep, class_keep, context)
     return _xl_sgd_build(model, entries, x.view(), x.array, y.array, y.address, 0, _int(losses[loss]), py_item(fields, nk[].k_penalty),
                          py_item(fields, nk[].k_learning_rate), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_l1_ratio), py_item(fields, nk[].k_eta0), py_item(fields, nk[].k_power_t),
                          py_item(fields, nk[].k_epsilon), py_item(fields, nk[].k_fit_intercept), py_item(fields, nk[].k_max_iter), py_item(fields, nk[].k_tol),
                          py_item(fields, nk[].k_n_iter_no_change), py_item(fields, nk[].k_shuffle), py_item(fields, nk[].k_random_state), args[2],
                          PythonObject(None), PythonObject(None), PythonObject(None), py_item(fields, nk[].k_batch_size), False, 4096,
-                         context)
+                         prep, class_keep, context)
 
 
 def xl_fit_one_class_unpack(model: PythonObject, fields: PythonObject, args: PythonObject, entries: XLinearOps,
@@ -196,11 +233,15 @@ def xl_fit_one_class_unpack(model: PythonObject, fields: PythonObject, args: Pyt
         raise Error("mojolearn SGDOneClassSVM: learning_rate must be constant, optimal, invscaling or adaptive")
     xl_ops_require(entries)
     var x = _xl_matrix(args[0], _name(model), context)
+    # one class: no class-weight step
+    var prep = xl_class_prep_none()
+    var class_keep = PythonObject(None)
     return _xl_sgd_build(model, entries, x.view(), x.array, PythonObject(None), 0, 1, _int(py_item(py_item(context, nk[].k_xl_sgd_clf_loss), nk[].k_hinge)),
                              PythonObject("l2"), py_item(fields, nk[].k_learning_rate), nu, PythonObject(0.0), py_item(fields, nk[].k_eta0),
                              py_item(fields, nk[].k_power_t), PythonObject(0.1), py_item(fields, nk[].k_fit_intercept), py_item(fields, nk[].k_max_iter), py_item(fields, nk[].k_tol),
                              PythonObject(5), py_item(fields, nk[].k_shuffle), py_item(fields, nk[].k_random_state), args[2], PythonObject(None),
-                             PythonObject(None), PythonObject(None), py_item(fields, nk[].k_batch_size), False, 4096, context)
+                             PythonObject(None), PythonObject(None), py_item(fields, nk[].k_batch_size), False, 4096, prep,
+                             class_keep, context)
 
 
 def _xl_class_codes(model: PythonObject, source: PythonObject, n: Int, context: PythonObject) raises -> ClassicalLabels:
@@ -237,6 +278,8 @@ def xl_fit_sgd_classifier_unpack(model: PythonObject, fields: PythonObject, args
     var codes = admitted_vector(x.rows, "<f4", context)
     labels_cast(labels_address(labels.codes), "<i4", labels_address(codes), "<f4", x.rows, context)
     var k = len(labels.classes)
+    var prep = xl_class_prep_none()
+    var class_keep = PythonObject(None)
     if operation == X_LINEAR_OPN_FIT_SGD_CLASSIFIER:
         var batch_sum = _xl_sgd_auto_sum(py_item(fields, nk[].k_batch_size), py_item(fields, nk[].k_loss), py_item(fields, nk[].k_learning_rate), context)
         var sgd = _xl_sgd_build(model, entries, x.view(), x.array, codes, labels_address(codes), k, _int(losses[py_item(fields, nk[].k_loss)]),
@@ -244,23 +287,25 @@ def xl_fit_sgd_classifier_unpack(model: PythonObject, fields: PythonObject, args
                              py_item(fields, nk[].k_power_t), py_item(fields, nk[].k_epsilon), py_item(fields, nk[].k_fit_intercept), py_item(fields, nk[].k_max_iter), py_item(fields, nk[].k_tol),
                              py_item(fields, nk[].k_n_iter_no_change), py_item(fields, nk[].k_shuffle), py_item(fields, nk[].k_random_state), args[2],
                              py_item(fields, nk[].k_class_weight), labels.classes, labels.codes, py_item(fields, nk[].k_batch_size), batch_sum, 4096,
-                             context)
-        return XlClassFit(sgd^, labels.classes)
+                             prep, class_keep, context)
+        return XlClassFit(sgd^, labels.classes, prep^, labels.codes, class_keep, PythonObject(None))
     elif operation == X_LINEAR_OPN_FIT_PERCEPTRON:
         var perceptron = _xl_sgd_build(model, entries, x.view(), x.array, codes, labels_address(codes), k, _int(py_item(losses, nk[].k_perceptron)),
                              py_item(fields, nk[].k_penalty), PythonObject("constant"), py_item(fields, nk[].k_alpha), py_item(fields, nk[].k_l1_ratio), py_item(fields, nk[].k_eta0),
                              PythonObject(0.5), PythonObject(0.1), py_item(fields, nk[].k_fit_intercept), py_item(fields, nk[].k_max_iter), py_item(fields, nk[].k_tol),
                              py_item(fields, nk[].k_n_iter_no_change), py_item(fields, nk[].k_shuffle), py_item(fields, nk[].k_random_state), args[2],
-                             py_item(fields, nk[].k_class_weight), labels.classes, labels.codes, py_item(fields, nk[].k_batch_size), True, 256, context)
-        return XlClassFit(perceptron^, labels.classes)
+                             py_item(fields, nk[].k_class_weight), labels.classes, labels.codes, py_item(fields, nk[].k_batch_size), True, 256, prep,
+                             class_keep, context)
+        return XlClassFit(perceptron^, labels.classes, prep^, labels.codes, class_keep, PythonObject(None))
     var lr = PythonObject("pa1") if _eq(py_item(fields, nk[].k_loss), PythonObject("hinge")) else PythonObject("pa2")
     # scikit-learn's PassiveAggressive*.fit takes no sample_weight
     var passive = _xl_sgd_build(model, entries, x.view(), x.array, codes, labels_address(codes), k, _int(py_item(losses, nk[].k_hinge)),
                              PythonObject(None), lr, PythonObject(1.0), PythonObject(0.0), py_item(fields, nk[].k_C), PythonObject(0.5),
                              PythonObject(0.1), py_item(fields, nk[].k_fit_intercept), py_item(fields, nk[].k_max_iter), py_item(fields, nk[].k_tol),
                              py_item(fields, nk[].k_n_iter_no_change), py_item(fields, nk[].k_shuffle), py_item(fields, nk[].k_random_state), PythonObject(None),
-                             py_item(fields, nk[].k_class_weight), labels.classes, labels.codes, py_item(fields, nk[].k_batch_size), False, 256, context)
-    return XlClassFit(passive^, labels.classes)
+                             py_item(fields, nk[].k_class_weight), labels.classes, labels.codes, py_item(fields, nk[].k_batch_size), False, 256, prep,
+                             class_keep, context)
+    return XlClassFit(passive^, labels.classes, prep^, labels.codes, class_keep, PythonObject(None))
 
 
 def xl_fit_ridge_classifier_unpack(model: PythonObject, fields: PythonObject, args: PythonObject,
@@ -289,9 +334,16 @@ def xl_fit_ridge_classifier_unpack(model: PythonObject, fields: PythonObject, ar
         raise Error("mojolearn RidgeClassifier: y has one class")
     var T = 1 if k == 2 else k
     var sample_weight = args[2]
+    var ip: List[Int] = [T, 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, 1, 0, 1]
+    var fp: List[Float64] = [_float(alpha)]
+    var n_out = T * d + T + 2 + 1 + 1
+    var n_fw = 3 * d * d + 3 * d + T + d * T + 2 * n
     if py_item(fields, nk[].k_class_weight) is not None:
         # theirs: sample_weight * compute_sample_weight(class_weight, y),
-        # 'balanced' from the unweighted class counts
+        # 'balanced' from the unweighted class counts. The targets are the
+        # codes' 32-bit words, then the n row weights the class-weight step
+        # writes in RUN (`xl_class_fit_run`, which checks them as the weight
+        # admission did): one vector, no second copy of the weights.
         var sw_keep = PythonObject(None)
         var sw_addr = 0
         if sample_weight is not None:
@@ -299,17 +351,22 @@ def xl_fit_ridge_classifier_unpack(model: PythonObject, fields: PythonObject, ar
             sw_keep = w.array
             sw_addr = w.address
             _ = w^
-        var prep = _xl_class_prep(model, entries, py_item(fields, nk[].k_class_weight), labels.classes, labels.codes, sw_addr,
-                                  False, True, context)
-        sample_weight = prep[1]
-        _ = sw_keep^
+        var weights = xl_class_weights_unpack(py_item(fields, nk[].k_class_weight), labels.classes, context)
+        var targets = admitted_storage_native([2 * n], "<f4", context, as_array=True)
+        var t_addr = labels_address(targets)
+        xl_run_join(t_addr, labels_address(labels.codes), n, 0, 0)
+        var prep = XlClassPrepRequest(True, labels_address(labels.codes), sw_addr, labels_address(weights[0]),
+                                      t_addr + 4 * n, n, k, weights[1], False)
+        ip[3] = 1
+        var weighted = xl_fit_build_x(entries, ALGO_RIDGE, x.view(), x.array, t_addr, 2 * n, targets, ip^, fp^,
+                                      n_out, n_fw, 1, context)
+        return XlClassFit(weighted^, labels.classes, prep^, labels.codes, weights[0], sw_keep)
     # `_ridge_run(..., codes_mode=True)`: the codes' 32-bit words, then the
     # checked weights
     var has_sw = 0
     var y = admitted_words(labels.codes, labels_address(labels.codes), n, 1)
     var yy = _xl_with_weights(y, sample_weight, n, has_sw, context)
-    var ip: List[Int] = [T, 1 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0, 1, has_sw, 1]
-    var fp: List[Float64] = [_float(alpha)]
+    ip[3] = has_sw
     var fit = xl_fit_build_x(entries, ALGO_RIDGE, x.view(), x.array, yy.address, yy.rows, yy.array, ip^, fp^,
-                             T * d + T + 2 + 1 + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1, context)
-    return XlClassFit(fit^, labels.classes)
+                             n_out, n_fw, 1, context)
+    return XlClassFit(fit^, labels.classes, xl_class_prep_none(), labels.codes, PythonObject(None), PythonObject(None))
