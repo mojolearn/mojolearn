@@ -253,7 +253,7 @@ def _generation_same(generation: ForecastGeneration, token: String, width: Int, 
     """Whether the workers of `pool` hold the generation `token` (the token
     of the estimator's own record, whose key the caller compared): the same
     worker processes and the same shard width."""
-    if len(generation.token) == 0 or generation.token != token or generation.width != width or process_pool_closed(pool):
+    if generation.token.byte_length() == 0 or generation.token != token or generation.width != width or process_pool_closed(pool):
         return False
     var pids = process_pool_pids(pool)
     if len(pids) == 0 or len(pids) != len(generation.pids):
@@ -322,12 +322,12 @@ def _generation_released(kind: Int, token: String) raises:
     workers are asked to drop the models."""
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     if kind == _GENERATION_ARIMA:
-        if len(token) == 0 or f[].arima_generation.token != token:
+        if token.byte_length() == 0 or f[].arima_generation.token != token:
             return
         f[].arima_generation.token = String()
         f[].arima_generation.orphaned = True
     else:
-        if len(token) == 0 or f[].hw_generation.token != token:
+        if token.byte_length() == 0 or f[].hw_generation.token != token:
             return
         f[].hw_generation.token = String()
         f[].hw_generation.orphaned = True
@@ -403,13 +403,13 @@ def _generation_sweep() raises:
         var settled = _generation_drop(_GENERATION_ARIMA, pids)
         # The slot is read again: a wave releases the GIL.
         f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
-        if settled and len(f[].arima_generation.token) == 0:
+        if settled and f[].arima_generation.token.byte_length() == 0:
             f[].arima_generation.orphaned = False
     if f[].hw_generation.orphaned:
         var pids = f[].hw_generation.pids.copy()
         var settled = _generation_drop(_GENERATION_HW, pids)
         f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
-        if settled and len(f[].hw_generation.token) == 0:
+        if settled and f[].hw_generation.token.byte_length() == 0:
             f[].hw_generation.orphaned = False
 
 

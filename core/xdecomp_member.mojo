@@ -427,9 +427,9 @@ def _free_handles(entry: EntryRef, handles: List[Int], pool: Bool) raises:
                 else:
                     IPCANativeDriver(entry.call).free(handles[k])
             except error:
-                if len(failure) == 0:
+                if failure.byte_length() == 0:
                     failure = String(error)
-    if len(failure) > 0:
+    if failure.byte_length() > 0:
         raise Error(failure)
 
 
