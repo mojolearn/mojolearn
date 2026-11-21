@@ -60,7 +60,6 @@ from bindings.admitted_input_run import AdmittedXView
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from xtrees.trees_forest_run import ForestFit, trees_check_features, forest_export_dtype
 from core.forest_fit_request import ForestFitArgs
-from bindings.forest_fit_boundary_unpack import forest_fit_request_py
 from bindings.trees_dart_rounds_run import (
     DartRoundPlan, dart_round_admit, dart_rounds_run, dart_member_into, DART_M_OFF_N, DART_M_NODES,
     DART_M_LEAF_N, DART_M_VAL_N, DART_M_COLS, DART_M_TREES, DART_M_OUTPUTS,
@@ -1815,7 +1814,10 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32
         var tf = py_fields(first)
         var rf = trees_table(context, String(tf["_fit_numeric_mode"]), "_mojolearn_rf")
         forest = forest_key(rf)
-        request = forest_fit_request_py(0, 0, _rf_params(tf, "rf_regressor", n, d, 0, rf, context), tf["_cfg"]["criterion"])
+        # The typed request filled slot by slot (`forest_fit_request`): no
+        # 16-slot Python list is built and read back. Once per fit; the X, y
+        # and trailing words stay 0, as the list form left them.
+        request = forest_fit_request(tf, tf["_cfg"], "rf_regressor", n, d, 0, 0, 0, ForestFit(False), rf, context)
     var plan = DartRoundPlan(
         dart=dart, glue_key=_xk(xt), forest=forest, x=x.address, y=y32.address, inits=starts^, n=n, d=d, k=K,
         kind=kind, n_iters=n_iters, node_cap=node_cap, drop_seed=drop_seed, skip_thr=skip_thr, uniform=uniform,
