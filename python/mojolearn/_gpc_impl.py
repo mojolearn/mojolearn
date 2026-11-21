@@ -93,11 +93,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # each (bindings/gp_classifier_native_door.mojo). fit and predict also hand over
 # the base binding, whose label entries encode and decode the classes.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
-_native_family_bridge.connect_bindings("_mojolearn_gp", "_mojolearn")
-# The CPU images a `device="cpu"` estimator runs beside a GPU set, connected
-# once at import (providers/python/gp_device_route_pyapi_door.mojo).
-from ._native_gp_device_bridge import connect_cpu_device as _connect_cpu_device
-_connect_cpu_device(_NATIVE_CONTEXT, "_mojolearn_gp", "_mojolearn")
+_native_family_bridge.connect_bindings("_mojolearn_gp", "_mojolearn", "_mojolearn_x_metrics")
 
 
 class _SavedKernel(Kernel):
@@ -280,18 +276,6 @@ class GaussianProcessClassifier(NumericModeMixin):
         self.numeric_mode = numeric_mode
         self.device = device
 
-    # The route's read-back (providers/python/gp_public_lifecycle_pyapi_door.mojo
-    # gp_public_vendor_used): 'cpu' for a device="cpu" estimator beside a GPU set.
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
-            binary the estimator uses.
-        """
-        return _NATIVE(self, "family_gp_gpc_vendor_used", (), _NATIVE_CONTEXT)
 
 
     # -- the binding ----------------------------------------------------------
