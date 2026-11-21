@@ -495,9 +495,7 @@ class _BaggingBase(_TreesEnsembleBase):
     # staging of X, the trees batched) instead of a Python loop that draws,
     # gathers and stages X per member. The members' rows are drawn by the
     # forest's own bootstrap stream. `estimators_` slices the forest into
-    # per-tree members when it is read. The build define
-    # `-D MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS` keeps the per-member loop
-    # (the A/B arm; deleted once the gates pass).
+    # per-tree members when it is read.
     @property
     def estimators_(self):
         """The fitted members, as a list of estimators."""
