@@ -2363,12 +2363,15 @@ def _subtract_histograms(
     sub_from: List[Int],
     sub_what: List[Int],
     half: Int,
+    stat_count: Int = 2,
 ):
-    """`substract_histograms_kernel` at the two search planes: the larger
-    sibling in place, `ftz(from - what)` per cell, the weight plane (0)
-    clamped at 0.0. Every cell is its own statement; the unit is one
-    (sibling pair, plane), dealt round robin to `_gbdt_units` tasks."""
-    var items = 2 * half
+    """`substract_histograms_kernel` at `stat_count` planes (two by
+    default; the multiclass search has one per approx dimension and the
+    weight): the larger sibling in place, `ftz(from - what)` per cell, the
+    weight plane (0) clamped at 0.0. Every cell is its own statement; the
+    unit is one (sibling pair, plane), dealt round robin to `_gbdt_units`
+    tasks."""
+    var items = stat_count * half
     if items <= 0:
         return
     var units = _gbdt_units(items, items * hist_cells)
@@ -2376,13 +2379,13 @@ def _subtract_histograms(
     var what_p = rebind[GbdtIntPtr](sub_what.unsafe_ptr())
     var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
 
-    def subtract(unit: Int) {imm units, imm items, imm hist_cells, imm from_p, imm what_p, imm hist_p}:
+    def subtract(unit: Int) {imm units, imm items, imm stat_count, imm hist_cells, imm from_p, imm what_p, imm hist_p}:
         var item = unit
         while item < items:
-            var j = item // 2
-            var z = item % 2
-            var from_base = from_p[j] * 2 * hist_cells + z * hist_cells
-            var what_base = what_p[j] * 2 * hist_cells + z * hist_cells
+            var j = item // stat_count
+            var z = item % stat_count
+            var from_base = from_p[j] * stat_count * hist_cells + z * hist_cells
+            var what_base = what_p[j] * stat_count * hist_cells + z * hist_cells
             for bf in range(hist_cells):
                 var new_val = ftz(hist_p[from_base + bf] - hist_p[what_base + bf])
                 if z == 0:
@@ -2522,12 +2525,14 @@ def _split_level(
     mut ids_compute: List[Int],
     mut sub_from: List[Int],
     mut sub_what: List[Int],
+    stat_count: Int = 2,
 ):
     """The split chain of one symmetric level, every live leaf: a row goes
     right when its feature bits (`word & field`) exceed `value`, or equal it
     for a one-hot feature; a leaf's rows are reordered zeros then ones, each
     side in its old order (the device's stable partition, `enqueue_post_
-    winner`), with both stat planes; `copy_histograms_kernel` copies the
+    winner`), with every stat plane (`stat_count`, two by default; the
+    multiclass search has more); `copy_histograms_kernel` copies the
     parent's histogram into the right child's slot; `update_partitions_and_
     plan_kernel` writes the sizes, offsets and the next level's plan.
 
@@ -2543,7 +2548,7 @@ def _split_level(
     var live_rows = 0
     for i in range(n_live):
         live_rows += p_sz[i]
-    var units = _gbdt_units(max(live_rows, n_live), 4 * live_rows)
+    var units = _gbdt_units(max(live_rows, n_live), (2 + stat_count) * live_rows)
     var piece_rows = max(1, (live_rows + units - 1) // units)
     var pc_lo = List[Int]()
     var pc_hi = List[Int]()
@@ -2620,7 +2625,7 @@ def _split_level(
         sub_from[i] = big
         sub_what[i] = small
 
-    def scatter(unit: Int) {imm task_units, imm n_pieces, imm n_rows, imm word_base, imm field, imm value, imm one_hot, imm lo_p, imm hi_p, imm zero_at_p, imm one_at_p, imm row_p, imm stats_p, imm new_row_p, imm new_stats_p, imm cindex_p}:
+    def scatter(unit: Int) {imm task_units, imm n_pieces, imm n_rows, imm stat_count, imm word_base, imm field, imm value, imm one_hot, imm lo_p, imm hi_p, imm zero_at_p, imm one_at_p, imm row_p, imm stats_p, imm new_row_p, imm new_stats_p, imm cindex_p}:
         var piece = unit
         while piece < n_pieces:
             var zero_at = zero_at_p[piece]
@@ -2638,21 +2643,21 @@ def _split_level(
                 else:
                     zero_at += 1
                 new_row_p[slot] = row
-                new_stats_p[slot] = stats_p[pos]
-                new_stats_p[n_rows + slot] = stats_p[n_rows + pos]
+                for s in range(stat_count):
+                    new_stats_p[s * n_rows + slot] = stats_p[s * n_rows + pos]
             piece += task_units
 
     host_parallelize(scatter, task_units)
 
     # `copy_histograms_kernel`: parent into the right slot
-    var copy_units = _gbdt_units(n_live, 2 * n_live * hist_cells)
+    var copy_units = _gbdt_units(n_live, stat_count * n_live * hist_cells)
 
-    def copy_parent(unit: Int) {imm copy_units, imm n_live, imm hist_cells, imm hist_p}:
+    def copy_parent(unit: Int) {imm copy_units, imm n_live, imm stat_count, imm hist_cells, imm hist_p}:
         var i = unit
         while i < n_live:
-            var src_base = i * 2 * hist_cells
-            var dst_base = (n_live + i) * 2 * hist_cells
-            for c in range(2 * hist_cells):
+            var src_base = i * stat_count * hist_cells
+            var dst_base = (n_live + i) * stat_count * hist_cells
+            for c in range(stat_count * hist_cells):
                 hist_p[dst_base + c] = hist_p[src_base + c]
             i += copy_units
 
