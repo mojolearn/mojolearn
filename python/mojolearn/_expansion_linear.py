@@ -1339,6 +1339,10 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XLINEAR = 2) and core/xlinear_member.mojo.
+    _mojolearn_member = (2, 8)
+
     def __init__(self, *, quantile=0.5, alpha=1.0, fit_intercept=True, solver="highs",
                  solver_options=None, max_iter=5000, tol=1e-4, numeric_mode=None, device=None):
         self.quantile, self.alpha, self.fit_intercept = quantile, alpha, fit_intercept

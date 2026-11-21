@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XLinear family; RUN is core/xlinear_member.mojo.
 Published kinds: 0 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor,
-3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
+3 HuberRegressor, 4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor (`_mojolearn_member = (MEMBER_FAMILY_XLINEAR, kind)` on
 each class).
 
   * `xlinear_member_admit` (UNPACK, once per member): the estimator's own
@@ -31,7 +31,7 @@ from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_lists import py_list_int
 from bindings.py_balanced import py_get, py_item, py_contains, py_setitem
-from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _class_attr, _attr, _xl_bayes_refuse, _xl_or
+from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _class_attr, _attr, _lt, _xl_bayes_refuse, _xl_or
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_regressors_unpack import _xl_tweedie_link
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require
@@ -42,7 +42,7 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from core.xlinear_member import (
-    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
+    XL_MEMBER_HUBER, XL_MEMBER_BAYES, XL_MEMBER_ARD, XL_MEMBER_LARS, XL_MEMBER_LASSO_LARS, XL_MEMBER_QUANTILE, XL_MEMBER_BLOCK_OUTLIERS, XL_MEMBER_BLOCK_LAMBDA,
     XL_MEMBER_BLOCK_ACTIVE,
 )
 from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
@@ -122,6 +122,18 @@ def _xl_lars_words(model: PythonObject, fields: PythonObject, lasso: Bool) raise
     return words^
 
 
+def _xl_quantile_words(fields: PythonObject) raises -> List[Float64]:
+    """Kind 8: `xl_fit_quantile_unpack`'s refusals, then the six words."""
+    var nk = x_linear_keys()
+    var q = py_item(fields, nk[].k_quantile)
+    if not (_lt(PythonObject(0), q) and _lt(q, PythonObject(1))):
+        raise Error("mojolearn QuantileRegressor: quantile must be strictly between 0 and 1")
+    if not _ge(py_item(fields, nk[].k_alpha), PythonObject(0)):
+        raise Error("mojolearn QuantileRegressor: alpha must be >= 0")
+    return [Float64(XL_MEMBER_QUANTILE), _intercept_word(fields), Float64(_int(py_item(fields, nk[].k_max_iter))),
+        _float(q), _float(py_item(fields, nk[].k_alpha)), _float(py_item(fields, nk[].k_tol))]
+
+
 def _intercept_word(fields: PythonObject) raises -> Float64:
     var nk = x_linear_keys()
     return 1.0 if _truth(py_item(fields, nk[].k_fit_intercept)) else 0.0
@@ -143,6 +155,8 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         words = _xl_ard_words(model, fields)
     elif kind == XL_MEMBER_LARS or kind == XL_MEMBER_LASSO_LARS:
         words = _xl_lars_words(model, fields, kind == XL_MEMBER_LASSO_LARS)
+    elif kind == XL_MEMBER_QUANTILE:
+        words = _xl_quantile_words(fields)
     else:
         raise Error("RuntimeError: mojolearn: unknown XLinear member kind " + String(kind))
     var ops = xl_route(model, fields, context, False)
@@ -248,7 +262,9 @@ def xlinear_member_pack(model: PythonObject, fields: PythonObject, context: Pyth
         return
     py_setitem(fields, nk[].k_n_iter_, PythonObject(Int(scalars[1])))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
-    py_setitem(fields, nk[].k__link, PythonObject(LINK_EXP if plan.params[3] == 1.0 else LINK_IDENTITY))
+    if kind <= 2:
+        # the GLM's prediction link; QuantileRegressor keeps the class's identity
+        py_setitem(fields, nk[].k__link, PythonObject(LINK_EXP if plan.params[3] == 1.0 else LINK_IDENTITY))
 
 
 def _count_word(fields: PythonObject, key: PythonObject) raises -> Float64:

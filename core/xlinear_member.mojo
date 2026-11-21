@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The XLinear family as MEMBERS (core/member_abi.mojo, schema v2): the
 generalized linear regressors PoissonRegressor, GammaRegressor and
-TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression, Lars and LassoLars.
+TweedieRegressor, HuberRegressor, BayesianRidge, ARDRegression, Lars, LassoLars and QuantileRegressor.
 
 One entry, `xlinear_member_v2`, published by each x_linear image
 (`xlinear_member_publish`, beside its operations table). It runs the family's
@@ -15,7 +15,7 @@ metric). No kernel is touched.
 
 Kinds (the second word of each class's `_mojolearn_member`): 0
 PoissonRegressor, 1 GammaRegressor, 2 TweedieRegressor, 3 HuberRegressor,
-4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars.
+4 BayesianRidge, 5 ARDRegression, 6 Lars, 7 LassoLars, 8 QuantileRegressor.
 
 MEMBER_OP_NEW parameters (Float64 words; word 0 is the kind, the count is
 the kind's):
@@ -33,8 +33,10 @@ the kind's):
     [3] positive (0 / 1).
   * kind 7, 5 words: [0] 7, [1] fit_intercept, [2] max_iter, [3] positive,
     [4] alpha.
+  * kind 8, 6 words: [0] 8, [1] fit_intercept, [2] max_iter, [3] quantile,
+    [4] alpha, [5] tol.
 The estimator's own checks (solver, warm_start, alpha >= 0, Tweedie's power
-and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter, LassoLars' alpha >= 0) run at the caller's admission.
+and link words, Huber's epsilon >= 1, BayesianRidge's compute_score, Lars' jitter, LassoLars' alpha >= 0, the quantile in (0, 1)) run at the caller's admission.
 
 Views: X dense row-major host float32; y and sample weights host float32
 vectors (one target); kinds 5..7 take no sample weights (a given weight is
@@ -81,7 +83,7 @@ from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from x_linear.door_run import (
-    ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, LINK_IDENTITY, LINK_EXP, XlFitRequest, XlDecisionRequest, xl_fit_run,
+    ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD, ALGO_LARS, ALGO_QUANTILE, LINK_IDENTITY, LINK_EXP, XlFitRequest, XlDecisionRequest, xl_fit_run,
     xl_huber_fit_run, xl_decision_run, xl_r2_run, xl_lbfgs_work,
 )
 
@@ -92,6 +94,7 @@ comptime XL_MEMBER_BAYES = 4
 comptime XL_MEMBER_ARD = 5
 comptime XL_MEMBER_LARS = 6
 comptime XL_MEMBER_LASSO_LARS = 7
+comptime XL_MEMBER_QUANTILE = 8
 comptime XL_MEMBER_BLOCK_LAMBDA = MEMBER_BLOCK_FAMILY + 1
 comptime XL_MEMBER_BLOCK_ACTIVE = MEMBER_BLOCK_FAMILY + 2
 comptime XL_MEMBER_BLOCK_OUTLIERS = MEMBER_BLOCK_FAMILY
@@ -115,6 +118,8 @@ def xl_member_param_count(kind: Int) -> Int:
         return 4
     if kind == XL_MEMBER_LASSO_LARS:
         return 5
+    if kind == XL_MEMBER_QUANTILE:
+        return 6
     return 0
 
 
@@ -271,7 +276,9 @@ def _name(slot: _SlotP) -> String:
         return String("ARDRegression")
     if kind == XL_MEMBER_LARS:
         return String("Lars")
-    return String("LassoLars")
+    if kind == XL_MEMBER_LASSO_LARS:
+        return String("LassoLars")
+    return String("QuantileRegressor")
 
 
 def _loss_name(slot: _SlotP) -> String:
@@ -413,6 +420,14 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
         n_out = 2 * d + 4
         n_fw = 3 * d * d + 4 * d + n
         n_iw = 2 * d
+    elif kind == XL_MEMBER_QUANTILE:
+        # `xl_fit_quantile_unpack`: fp [quantile, alpha, tol / 100, tol, 1 (unread)]
+        algo = ALGO_QUANTILE
+        var m = d + 1
+        ip = [Int(p[2]), intercept, has_sw]
+        fp = [p[3], p[4], p[5] / 100.0, p[5], 1.0]
+        n_out = d + 3
+        n_fw = m * m + 3 * m + 4 * n + 3 * d
     elif _lars(kind):
         # `xl_fit_lars_unpack`: [n_nonzero_coefs, fit_intercept, lasso 0, positive], [alpha_min 0]
         algo = ALGO_LARS
@@ -439,6 +454,9 @@ def _plain_fit(slot: _SlotP, call: _CallP, kind: Int, p: List[Float64], intercep
         slot[].scalars = [Float64(result[d]), Float64(result[d + 1]), Float64(Int(result[2 * d + 2]))]
         slot[].record = List[Float32](length=d, fill=0.0)
         unsafe_memcpy(dest=slot[].record.unsafe_ptr(), src=result.unsafe_ptr() + d + 2, count=d)
+    elif kind == XL_MEMBER_QUANTILE:
+        # [coef | intercept | n_iter]
+        slot[].scalars = [Float64(result[d]), Float64(Int(result[d + 1]))]
     else:
         # LARS: [coef | intercept | n_iter | alpha_ | k | k active indices]
         slot[].scalars = [Float64(result[d]), Float64(Int(result[d + 1])), Float64(result[d + 2])]
