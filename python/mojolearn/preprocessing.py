@@ -124,8 +124,11 @@ class MinMaxScaler(_ScalerProtocol):
     >>> scaler = mojolearn.MinMaxScaler().fit(X)
     >>> Z = scaler.transform(X)
     """
-    _parameters = ('feature_range', 'copy', 'clip', 'numeric_mode')
+    _parameters = ('feature_range', 'copy', 'clip', 'numeric_mode', 'device')
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -164,9 +167,22 @@ class MinMaxScaler(_ScalerProtocol):
         """
         return _MINMAX_CALL(self, "fit_transform", (X, y, fit_params), _MINMAX_CONTEXT)
 
-    def __init__(self, feature_range=(0, 1), *, copy=True, clip=False, numeric_mode=None):
+    def __init__(self, feature_range=(0, 1), *, copy=True, clip=False, numeric_mode=None, device=None):
         # Stored as given; fit and partial_fit check them (`_configuration`), scikit-learn's convention.
-        return _MINMAX_CALL(self, "init", (feature_range, copy, clip, numeric_mode), _MINMAX_CONTEXT)
+        # `device` alone is checked here: an unknown value, and 'gpu' on a CPU-only installation,
+        # are refused in words. None is this installation's device.
+        return _MINMAX_CALL(self, "init", (feature_range, copy, clip, numeric_mode, device), _MINMAX_CONTEXT)
+
+    def vendor_used(self):
+        """The backend this scaler runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the scaler uses.
+        """
+        return _MINMAX_CALL(self, "vendor_used", (), _MINMAX_CONTEXT)
 
     def fit(self, X, y=None):
         """Compute the per-feature minimum and maximum.
@@ -353,8 +369,11 @@ class StandardScaler(_ScalerProtocol):
     >>> scaler = mojolearn.StandardScaler().fit(X)
     >>> Z = scaler.transform(X)
     """
-    _parameters = ('copy', 'with_mean', 'with_std', 'numeric_mode')
+    _parameters = ('copy', 'with_mean', 'with_std', 'numeric_mode', 'device')
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -372,9 +391,22 @@ class StandardScaler(_ScalerProtocol):
     def __sklearn_is_fitted__(self):
         return _STANDARD_CALL(self, "is_fitted", (), _STANDARD_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this scaler runs on.
 
-    def __init__(self, *, copy=True, with_mean=True, with_std=True, numeric_mode=None):
-        return _STANDARD_CALL(self, "init", (copy, with_mean, with_std, numeric_mode), _STANDARD_CONTEXT)
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the scaler uses.
+        """
+        return _STANDARD_CALL(self, "vendor_used", (), _STANDARD_CONTEXT)
+
+
+    def __init__(self, *, copy=True, with_mean=True, with_std=True, numeric_mode=None, device=None):
+        # `device` alone is checked here: an unknown value, and 'gpu' on a CPU-only installation,
+        # are refused in words. None is this installation's device.
+        return _STANDARD_CALL(self, "init", (copy, with_mean, with_std, numeric_mode, device), _STANDARD_CONTEXT)
         # Stored as given; fit and partial_fit check them (`_configuration`), scikit-learn's convention.
 
 

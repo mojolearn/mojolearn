@@ -65,7 +65,7 @@ def test_checkpoint_statistics_keep_writable_independent_owners_after_input_clos
 def test_constructor_params_and_fitted_predicate_are_native():
     m = audit_native_call(ml.MinMaxScaler, (-2, 3), copy=False, clip=True).assert_native()
     assert audit_native_call(m.get_params).assert_native() == dict(
-        feature_range=(-2, 3), copy=False, clip=True, numeric_mode=None)
+        feature_range=(-2, 3), copy=False, clip=True, numeric_mode=None, device=None)
     assert not audit_native_call(m.__sklearn_is_fitted__).assert_native()
     audit_native_call(m.fit, _data()).assert_native()
     assert audit_native_call(m.__sklearn_is_fitted__).assert_native()

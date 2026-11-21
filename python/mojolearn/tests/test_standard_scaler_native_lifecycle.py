@@ -30,7 +30,7 @@ def _bits(value):
 def test_constructor_params_and_fitted_state_are_native():
     model = audit_native_call(ml.StandardScaler, copy=False).assert_native()
     assert audit_native_call(model.get_params).assert_native() == dict(
-        copy=False, with_mean=True, with_std=True, numeric_mode=None)
+        copy=False, with_mean=True, with_std=True, numeric_mode=None, device=None)
     assert audit_native_call(model.__sklearn_is_fitted__).assert_native() is False
     audit_native_call(model.fit, _data()).assert_native()
     assert audit_native_call(model.__sklearn_is_fitted__).assert_native() is True

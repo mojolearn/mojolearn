@@ -2,6 +2,28 @@
 """Import-time connection of MinMaxScaler's compiled owner and fixed ABI."""
 
 
+def _entries(prep, xprep):
+    # glue: the compiled preprocessing and x_prep exports of one pair of images, connected during import
+    from types import BuiltinFunctionType
+    entries = {}
+    for name in ("minmax_fit", "minmax_fit_direct", "minmax_transform", "minmax_transform_direct", "minmax_fit_transform", "preprocessing_numeric_mode"):  # glue: compiled preprocessing exports
+        try:
+            entry = getattr(prep, name)
+        except (AttributeError, ImportError):
+            if name in ("minmax_fit_direct", "minmax_transform_direct", "minmax_fit_transform"):
+                continue
+            raise
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"MinMaxScaler requires compiled {name}")
+        entries[name] = entry
+    for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor"):  # glue: native missing-value and running-extrema executor
+        entry = getattr(xprep, name)
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"MinMaxScaler requires compiled {name}")
+        entries[name] = entry
+    return entries
+
+
 def connect(scaler_class):
     # glue: retain compiled ABI entries and metadata during package setup
     from types import BuiltinFunctionType, MethodType
@@ -15,25 +37,8 @@ def connect(scaler_class):
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI setup
         try:
-            prep = _backend.binding("_mojolearn_preprocessing", mode)
-            xprep = _backend.binding("_mojolearn_x_prep", mode)
-            entries = {}
-            for name in ("minmax_fit", "minmax_fit_direct", "minmax_transform", "minmax_transform_direct", "minmax_fit_transform", "preprocessing_numeric_mode"):  # glue: compiled preprocessing exports
-                try:
-                    entry = getattr(prep, name)
-                except (AttributeError, ImportError):
-                    if name in ("minmax_fit_direct", "minmax_transform_direct", "minmax_fit_transform"):
-                        continue
-                    raise
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"MinMaxScaler requires compiled {name}")
-                entries[name] = entry
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor"):  # glue: native missing-value and running-extrema executor
-                entry = getattr(xprep, name)
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"MinMaxScaler requires compiled {name}")
-                entries[name] = entry
-            connected[mode] = entries
+            connected[mode] = _entries(_backend.binding("_mojolearn_preprocessing", mode),
+                                       _backend.binding("_mojolearn_x_prep", mode))
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
     module = _binding()._module
@@ -48,6 +53,10 @@ def connect(scaler_class):
     context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
                    classical_public_installed=True)
     context["classical_public_layouts"][scaler_class] = _layout(scaler_class, descriptor)
+    # The CPU context of `device="cpu"`: the host preprocessing and x_prep images beside the device ones.
+    from ._native_prep_device import connect_cpu_device
+    connect_cpu_device(context, lambda load: _entries(load("_mojolearn_preprocessing_host"),
+                                                      load("_mojolearn_x_prep_host")))
     return call, context
 
 

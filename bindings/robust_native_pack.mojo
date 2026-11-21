@@ -29,6 +29,9 @@ from bindings.x_prep_native_owner_run import xprep_r3
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run
 from gemm.f16_widen import f16_bits_to_f32
 from bindings.py_optional import py_or_none, py_present
+from providers.python.prep_route_boundary_door import (
+    prep_route_context, prep_route_clear, prep_device_admit, prep_route_vendor_used,
+)
 
 from bindings.robust_native_unpack import (
     _number,
@@ -248,24 +251,40 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
         var result = Optional[PythonObject]()
         if operation == "init":
+            # `device` is the seventh constructor argument (absent from a
+            # six-argument caller: this installation's device). Refused in
+            # words before any field changes.
+            var device = PythonObject(None)
+            if len(args) > 6:
+                device = args[6]
+            prep_device_admit(device,py_type(model),context)
             for k in range(5):  # small-loop(params: the five stored constructor parameters)
                 py_setitem(fields,names[k],args[k])
             py_setitem(fields,"numeric_mode",args[5])
+            py_setitem(fields,"device",device)
+            prep_route_clear(model)
         elif operation == "get_params":
             result = Python.dict()
             for k in range(5):  # small-loop(params: the five constructor parameters)
                 py_setitem(result.value(),names[k],fields[names[k]])
             # None on an instance pickled before the parameter existed.
             py_setitem(result.value(),"numeric_mode",py_get(fields,"numeric_mode"))
+            py_setitem(result.value(),"device",py_get(fields,"device"))
+        elif operation == "vendor_used":
+            result = py_present(prep_route_vendor_used(model,context))
         elif operation == "set_params":
             var options = args[0]
             var builtins = native_loaded_module("builtins")
             var string_type = builtins.str
             var keys = py_call(builtins.list,options)
+            # A given `device` is refused in words before the estimator changes.
+            prep_device_admit(py_get(options,"device"),py_type(model),context)
             for k in range(len(keys)):  # driver-loop: proposed parameter names in caller order
-                if py_type(keys[k]) is not string_type or (not py_contains(names,keys[k]) and String(keys[k]) != "numeric_mode"):
+                if py_type(keys[k]) is not string_type or (not py_contains(names,keys[k]) and String(keys[k]) != "numeric_mode" and String(keys[k]) != "device"):
                     raise Error("mojolearn: invalid parameter for RobustScaler")
                 py_setitem(fields,keys[k],options[keys[k]])
+            if len(keys):
+                prep_route_clear(model)
             result = py_present(model)
         elif operation == "is_fitted":
             result = py_present(classical_is_fitted(model))
@@ -281,13 +300,18 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                     raise Error("TypeError: native fit_transform requires native fit and transform; call application operations explicitly")
                 if fit.__func__ is not context["robust_fit_method"] or transform.__func__ is not context["robust_transform_method"]:
                     raise Error("TypeError: native fit_transform cannot invoke Python estimator overrides; call application operations explicitly")
-            result = py_present(robust_fit(model,args[0],args[1],context,operation == "fit_transform"))
+            # The estimator's route (providers/python/prep_route_boundary_door.mojo):
+            # the process's context or the CPU one of `device="cpu"`. One
+            # record read and one pointer compare per data operation.
+            var run = prep_route_context(model,context)
+            result = py_present(robust_fit(model,args[0],args[1],run,operation == "fit_transform"))
             if operation == "fit_transform":
                 if not result:
-                    result = py_present(robust_transform(model,args[0],context))
-                result = py_present(_public_result(py_or_none(result),context))
+                    result = py_present(robust_transform(model,args[0],run))
+                result = py_present(_public_result(py_or_none(result),run))
         elif operation == "transform":
-            result = py_present(_public_result(robust_transform(model,args[0],context),context))
+            var run = prep_route_context(model,context)
+            result = py_present(_public_result(robust_transform(model,args[0],run),run))
         else:
             raise Error("unknown native RobustScaler operation")
         return py_or_none(result).steal_data()

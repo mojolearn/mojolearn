@@ -2,6 +2,37 @@
 """Import-time ABI connection for StandardScaler's native fit owner."""
 
 
+def _entries(prep, xprep):
+    # glue: the compiled scaler and x_prep exports of one pair of images, connected during import
+    from types import BuiltinFunctionType
+    from . import _backend
+    # The provider admission (providers/python/neural_descriptor_pyapi_door.mojo
+    # `neural_descriptor_entry`) takes an exact module that owns its
+    # entry. On a CPU-only install `_backend.binding` returns the lazy
+    # `_HostBinding` facade; resolve it to its host module here, as
+    # _native_family_bridge.connect_bindings does, or GP normalize_y
+    # refused "native provider requires an exact compiled module"
+    # (smoke-triage 2026-11-15: lanes gp-normalize-y, gp-sample-y-normalize).
+    entries = {"native_scaler_provider": _backend.exact_host_module(prep),
+               "native_program_provider": _backend.exact_host_module(xprep)}
+    for name in ("standard_fit", "standard_fit_direct", "standard_transform", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform", "preprocessing_numeric_mode"):  # glue: cache compiled scaler symbols
+        try:
+            entry = getattr(prep, name)
+        except (AttributeError, ImportError):
+            if name in ("standard_fit_direct", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform"):
+                continue
+            raise
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"StandardScaler requires compiled {name}")
+        entries[name] = entry
+    for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor"):  # glue: cache the existing native weighted-statistics executor
+        entry = getattr(xprep, name)
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"StandardScaler requires compiled {name}")
+        entries[name] = entry
+    return entries
+
+
 def connect(scaler_class):
     # glue: retain compiled ABI entries and buffer metadata once at import
     from types import BuiltinFunctionType, ModuleType, MethodType
@@ -15,33 +46,8 @@ def connect(scaler_class):
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI connection
         try:
-            prep = _backend.binding("_mojolearn_preprocessing", mode)
-            xprep = _backend.binding("_mojolearn_x_prep", mode)
-            # The provider admission (providers/python/neural_descriptor_pyapi_door.mojo
-            # `neural_descriptor_entry`) takes an exact module that owns its
-            # entry. On a CPU-only install `_backend.binding` returns the lazy
-            # `_HostBinding` facade; resolve it to its host module here, as
-            # _native_family_bridge.connect_bindings does, or GP normalize_y
-            # refused "native provider requires an exact compiled module"
-            # (smoke-triage 2026-11-15: lanes gp-normalize-y, gp-sample-y-normalize).
-            entries = {"native_scaler_provider": _backend.exact_host_module(prep),
-                       "native_program_provider": _backend.exact_host_module(xprep)}
-            for name in ("standard_fit", "standard_fit_direct", "standard_transform", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform", "preprocessing_numeric_mode"):  # glue: cache compiled scaler symbols
-                try:
-                    entry = getattr(prep, name)
-                except (AttributeError, ImportError):
-                    if name in ("standard_fit_direct", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform"):
-                        continue
-                    raise
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"StandardScaler requires compiled {name}")
-                entries[name] = entry
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor"):  # glue: cache the existing native weighted-statistics executor
-                entry = getattr(xprep, name)
-                if not isinstance(entry, BuiltinFunctionType):
-                    raise TypeError(f"StandardScaler requires compiled {name}")
-                entries[name] = entry
-            connected[mode] = entries
+            connected[mode] = _entries(_backend.binding("_mojolearn_preprocessing", mode),
+                                       _backend.binding("_mojolearn_x_prep", mode))
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
     context["scaler_bindings"] = connected
@@ -61,6 +67,10 @@ def connect(scaler_class):
     context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
                    classical_public_installed=True)
     context["classical_public_layouts"][scaler_class] = _layout(scaler_class, descriptor)
+    # The CPU context of `device="cpu"`: the host preprocessing and x_prep images beside the device ones.
+    from ._native_prep_device import connect_cpu_device
+    connect_cpu_device(context, lambda load: _entries(load("_mojolearn_preprocessing_host"),
+                                                      load("_mojolearn_x_prep_host")))
     return entry, call, context
 
 
