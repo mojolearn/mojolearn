@@ -870,6 +870,9 @@ class KernelPCA(_XNeighbors):
     #: the estimator's native route (bindings/kpca_native_door.mojo); the check
     #: runs the same estimator on the other device, in this process.
     _mojolearn_device = True
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 3)
 
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
                  kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver="auto",

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XNeighbors family (UNPACK / PACK of
 core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
-LocalOutlierFactor (kind 1), OneClassSVM (kind 2). Not yet published (admit
-refuses with the kind): KernelPCA PolynomialCountSketch AdditiveChi2Sampler SkewedChi2Sampler
+LocalOutlierFactor (kind 1), OneClassSVM (kind 2), KernelPCA (kind 3). Not
+yet published (admit refuses with the kind): PolynomialCountSketch AdditiveChi2Sampler SkewedChi2Sampler
 LabelPropagation LabelSpreading KNNImputer SVGP.
 
   * `xneighbors_member_admit` (UNPACK): the estimator's own parameter checks
@@ -28,6 +28,10 @@ LabelPropagation LabelSpreading KNNImputer SVGP.
     False: the caller keeps the doors), the solve the door picks for the
     image (the resident solve's entry in `route.second`), the image's fused
     labels and `family_svc_xn_old_items`; pack = `oc_fit_pack`'s fields.
+    KernelPCA: admit = `kpca_fit`'s checks with the door's own helpers on
+    `_expansion_neighbors._KPCA_CONTEXT` and its resolved decomposition
+    route (`_kpca_route`); a precomputed kernel answers False; pack =
+    `kpca_fit`'s fields on that context's output arrays.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
@@ -52,6 +56,16 @@ from bindings.svc_ocsvm_boundary_unpack import (
     _oc_float, _oc_int, _oc_kernel_code, _fast_tier_native, _ocsvm_labels_available,
 )
 from bindings.svc_common_pack import svc_scalar_array
+from bindings.kpca_native_door import (
+    _kpca_route, _kpca_decomp_refused, _field as _kp_field, _int as _kp_int, _float as _kp_float,
+    _name as _kp_name, _kernels as _kp_kernels, _kind as _kp_kind, _f32 as _kp_f32,
+)
+from bindings.decomp_device_route_door import decomp_route_expected_vendor
+from bindings.decomp_scalar_admission_unpack import decomp_scalar_repr
+from bindings.decomp_truth_boundary_unpack import decomp_truth
+from core.kpca_native_api import KPCA_NATIVE_COUNT
+from x_decomp.descriptor_schema import XD_OPERATION_COUNT
+from x_decomp.kpca_descriptor_boundary_run import kpca_near_driver, kpca_decomp_driver, kpca_decomp_reduction, kpca_resident
 from bindings.svc_common_unpack import svc_truthy
 from core.ocsvm_resident_api import OCSVM_RESIDENT_COUNT
 from svm.svc_ocsvm_native_run import OC_SOLVE_GRAM, OC_SOLVE_RESIDENT, OC_SOLVE_DESCRIPTOR
@@ -67,7 +81,8 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_IMPORT_DONE, MEMBER_F64, MEMBER_I32,
 )
 from core.xneighbors_member import (
-    XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF, XNEIGHBORS_KIND_OCSVM,
+    XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF, XNEIGHBORS_KIND_OCSVM, XNEIGHBORS_KIND_KERNEL_PCA,
+    KP_BLOCK_ROWS, KP_BLOCK_VALUES, KP_BLOCK_VECTORS, KP_BLOCK_COLUMNS, KP_BLOCK_TOTAL, KP_BLOCK_GAMMA,
     OC_BLOCK_VECTORS, OC_BLOCK_DUAL, OC_BLOCK_SUPPORT, OC_BLOCK_SCALARS, OC_GAMMA_VALUE, OC_GAMMA_SCALE, OC_GAMMA_AUTO,
     NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
     LOF_BLOCK_ROWS, LOF_BLOCK_DISTANCES, LOF_BLOCK_DENSITIES, LOF_BLOCK_SCORES, LOF_BLOCK_OFFSET,
@@ -225,12 +240,84 @@ def _ocsvm_admit(model: PythonObject, fields: PythonObject, context: PythonObjec
     return True
 
 
+def _kpca_context() raises -> PythonObject:
+    """The context KernelPCA's own doors are called with:
+    `_expansion_neighbors._KPCA_CONTEXT` (the decomposition owner's public
+    connection, holding `kpca_kernels`, `kpca_old_items`, the route keys)."""
+    var module = py_fields(native_loaded_module("mojolearn._expansion_neighbors"))
+    var kcontext = py_get(module, PythonObject("_KPCA_CONTEXT"), PythonObject(None))
+    if kcontext is None:
+        raise Error("ImportError: mojolearn: KernelPCA's owner is not connected")
+    return kcontext
+
+
+def _kpca_admit(model: PythonObject, fields: PythonObject, b: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """`kpca_fit`'s checks and words, in its order, with the door's own
+    helpers on KernelPCA's own context, and its resolved decomposition route
+    (`_kpca_route`: the neighbors connection -> `route.entry`, the
+    eigensolver -> `route.second` / `route.third`). False: a precomputed
+    kernel, or a route whose vendor publishes no member entry."""
+    var kcontext = _kpca_context()
+    var kernel = _kp_field(fields, "kernel")
+    if Bool(py=py_call(b.callable, kernel)):
+        raise Error("NotImplementedError: KernelPCA: callable kernels require a native kernel name")
+    var precomputed = _kp_name(kernel, "precomputed", kcontext)
+    if not py_contains(_kp_kernels(kcontext), kernel) and not precomputed:
+        raise Error("NotImplementedError: KernelPCA: kernel=" + decomp_scalar_repr(kernel, kcontext)
+            + " is not implemented")
+    if decomp_truth(_kp_field(fields, "fit_inverse_transform"), kcontext):
+        raise Error("NotImplementedError: KernelPCA: fit_inverse_transform=True is not implemented (the learned "
+            + "pre-image map that inverse_transform needs); construct KernelPCA with fit_inverse_transform=False")
+    if decomp_truth(_kp_field(fields, "kernel_params"), kcontext):
+        raise Error("NotImplementedError: KernelPCA: kernel_params is not implemented")
+    if precomputed:
+        return False
+    var gamma_source = _kp_field(fields, "gamma")
+    var gamma_given = gamma_source is not None
+    var gamma = _kp_float(gamma_source, kcontext) if gamma_given else 0.0
+    var decomp_route = _kpca_route(model, fields, kcontext)
+    var near = decomp_route.connection
+    var decomp = decomp_route.extra
+    if decomp < 0:
+        decomp = _kpca_decomp_refused(decomp_route, kcontext)
+    var requested_source = _kp_field(fields, "n_components")
+    var requested = -1 if requested_source is None else _kp_int(requested_source, kcontext)
+    var auto = _kp_name(_kp_field(fields, "eigen_solver"), "auto", kcontext)
+    var code = _kp_kind(kernel, kcontext)
+    var degree = _kp_int(_kp_field(fields, "degree"), kcontext)
+    var coef0 = _kp_float(_kp_field(fields, "coef0"), kcontext)
+    var remove_zero = decomp_truth(_kp_field(fields, "remove_zero_eig"), kcontext)
+    var old_items = decomp_truth(kcontext["kpca_old_items"], kcontext)
+    var vendor = device_vendor_code(decomp_route_expected_vendor(decomp_route.device, kcontext))
+    if vendor < 0:
+        return False
+    var route = DeviceRoute(decomp_route.device)
+    route.mode = decomp_route.mode
+    route.vendor = vendor
+    route.entry = EntryRef(kpca_near_driver(near).native.entry, entry_ref_word(route.mode, vendor, XN_OPERATION_COUNT))
+    route.second = EntryRef(kpca_decomp_driver(decomp).entry, entry_ref_word(route.mode, vendor, KPCA_NATIVE_COUNT))
+    route.third = EntryRef(kpca_decomp_reduction(decomp), entry_ref_word(route.mode, vendor, XD_OPERATION_COUNT))
+    route.has_second = True
+    route.has_third = True
+    owner.plan.route = route
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_KERNEL_PCA), Float64(code), Float64(requested),
+        1.0 if auto else 0.0, 1.0 if kpca_resident(near) else 0.0, 1.0 if gamma_given else 0.0, gamma,
+        Float64(degree), coef0, 1.0 if remove_zero else 0.0, 1.0 if old_items else 0.0]
+    owner.plan.params = words^
+    # The connections' providers stay pinned in the process-wide KernelPCA
+    # pin table (bindings/kpca_descriptor_boundary_door.mojo); the context pins its tables.
+    owner.pins = kcontext
+    return True
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False: its image publishes no member entry."""
     if kind == XNEIGHBORS_KIND_OCSVM:
         return _ocsvm_admit(model, fields, context, b, owner)
+    if kind == XNEIGHBORS_KIND_KERNEL_PCA:
+        return _kpca_admit(model, fields, b, owner)
     if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
     if kind == XNEIGHBORS_KIND_LOF:
@@ -516,6 +603,93 @@ def _ocsvm_state(fields: PythonObject, context: PythonObject, b: PythonObject, p
     return call.state
 
 
+def _kpca_block(call: MemberCall, kcontext: PythonObject, vector: Bool) raises -> PythonObject:
+    """A new float32 Array (the door's `_f32`, on KernelPCA's output context)
+    holding the exported block."""
+    var rows = call.dst.rows
+    var cols = call.dst.cols
+    var array = _kp_f32(cols if vector else rows, 0 if vector else cols, kcontext, vector)
+    if rows * cols > 0:
+        unsafe_memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(array))),
+            src=_F32P(unsafe_from_address=call.dst.data), count=rows * cols)
+    return array
+
+
+def _kpca_pack(fields: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`kpca_fit`'s fields, in its order."""
+    var kcontext = _kpca_context()
+    var call = MemberCall(plan.route, state)
+    call.block = KP_BLOCK_GAMMA
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var gamma = _F64P(unsafe_from_address=call.dst.data)[0]
+    call.block = KP_BLOCK_VALUES
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var values = _kpca_block(call, kcontext, True)
+    call.block = KP_BLOCK_VECTORS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var vectors = _kpca_block(call, kcontext, False)
+    call.block = KP_BLOCK_ROWS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var fit_x = _kpca_block(call, kcontext, False)
+    var features = call.dst.cols
+    call.block = KP_BLOCK_COLUMNS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var columns = _kpca_block(call, kcontext, True)
+    call.block = KP_BLOCK_TOTAL
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var total = _kpca_block(call, kcontext, True)
+    py_setitem(fields, "_gamma", PythonObject(gamma))
+    py_setitem(fields, "eigenvalues_", values)
+    py_setitem(fields, "eigenvectors_", vectors)
+    py_setitem(fields, "_fit_X", fit_x)
+    py_setitem(fields, "_fit_cols", columns)
+    py_setitem(fields, "_fit_all", total)
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+
+
+def _kpca_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan) raises -> Int:
+    var fit_x = _f32_block(fields, "_fit_X", 2, context)
+    var values = _f32_block(fields, "eigenvalues_", 1, context)
+    var vectors = _f32_block(fields, "eigenvectors_", 2, context)
+    var columns = _f32_block(fields, "_fit_cols", 1, context)
+    var total = _f32_block(fields, "_fit_all", 1, context)
+    var gamma_source = py_get(fields, PythonObject("_gamma"))
+    if gamma_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var gamma: List[Float64] = [Float64(py=py_call(b.float, gamma_source))]
+    var call = member_new(plan)
+    try:
+        call.block = KP_BLOCK_ROWS
+        call.x = MemberMatrix(Int(py=classical_address(fit_x)), Int(py=fit_x.shape[0]), Int(py=fit_x.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = KP_BLOCK_VALUES
+        call.x = MemberMatrix(Int(py=classical_address(values)), 1, Int(py=values.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = KP_BLOCK_VECTORS
+        call.x = MemberMatrix(Int(py=classical_address(vectors)), Int(py=vectors.shape[0]), Int(py=vectors.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = KP_BLOCK_COLUMNS
+        call.x = MemberMatrix(Int(py=classical_address(columns)), 1, Int(py=columns.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = KP_BLOCK_TOTAL
+        call.x = MemberMatrix(Int(py=classical_address(total)), 1, Int(py=total.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = KP_BLOCK_GAMMA
+        call.x = MemberMatrix(Int(gamma.unsafe_ptr()), 1, 1, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = fit_x
+    _ = values
+    _ = vectors
+    _ = columns
+    _ = total
+    _ = gamma^
+    return call.state
+
+
 def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -524,6 +698,8 @@ def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: P
         _lof_pack(fields, context, plan, state)
     elif plan.kind == XNEIGHBORS_KIND_OCSVM:
         _ocsvm_pack(fields, context, plan, state)
+    elif plan.kind == XNEIGHBORS_KIND_KERNEL_PCA:
+        _kpca_pack(fields, plan, state)
     else:
         _nc_pack(fields, context, b, plan, state)
 
@@ -536,4 +712,6 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
         return _lof_state(fields, context, b, plan)
     if plan.kind == XNEIGHBORS_KIND_OCSVM:
         return _ocsvm_state(fields, context, b, plan)
+    if plan.kind == XNEIGHBORS_KIND_KERNEL_PCA:
+        return _kpca_state(fields, context, b, plan)
     return _nc_state(fields, context, plan)

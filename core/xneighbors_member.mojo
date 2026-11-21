@@ -10,7 +10,7 @@ route resolved to (`x_neighbors_native_api_v1`, the `XnDriver` entry every
 x_neighbors door uses). No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor,
-2 OneClassSVM. The other classes of the family are not published yet
+2 OneClassSVM, 3 KernelPCA. The other classes of the family are not published yet
 (MEMBER-ABI-V2.md family 12). OUTPUTS with no state answers from the kind
 word and `call.classes` (NearestCentroid: proba `classes`, decision 1 for two
 classes else `classes`, predict 1; the outlier detectors: 1 column).
@@ -81,6 +81,27 @@ indices int32 1 x supports, 67 scalars float64 1 x 4 (gamma used, offset
 (rho), n_iter, features). A fit reads X only during the call (the support
 vectors it keeps are gathered into the slot).
 
+KernelPCA (kind 3). RUN: core/kpca_native_plan.mojo (`KPCADenseFit`,
+`KPCANeighborDriver.alpha` / `.fused_query`, `KPCACenteredQuery`) and the
+eigensolver `KPCANativeDriver.eigen`, as bindings/kpca_native_door.mojo
+runs them. Route slots: `entry` = the x_neighbors native operations entry of
+the estimator's decomposition route (its neighbors connection), `second` =
+the eigensolver image's KernelPCA entry, `third` = that image's reduction
+entry. MEMBER_OP_NEW parameters (count 11): [0] kind 3, [1] kernel code (the
+`kpca_kernels` table), [2] n_components (-1 None), [3] eigen_solver 'auto'
+(0 / 1), [4] the image's resident route (0 / 1), [5] gamma given (0: 1 /
+features), [6] gamma, [7] degree, [8] coef0, [9] remove_zero_eig, [10] the
+old-items switch (`kpca_old_items`). A precomputed kernel is not a member.
+Views: X float32 rows x features (host, dense; no y, weights, index or
+device view). FIT with `fit_output = MEMBER_OP_TRANSFORM` writes
+fit_transform's rows x kept float32. TRANSFORM: rows x kept float32 (the
+scaled alphas are computed once per fitted state). OUTPUTS needs a fitted
+state (the kept count is the fit's). Blocks: 64 the fitted rows float32 rows
+x features, 65 eigenvalues float32 1 x kept, 66 eigenvectors float32 rows x
+kept, 67 the fitted column means float32 1 x rows, 68 their total float32
+1 x 1, 69 gamma used (float64 1 x 1). A fit BORROWS X as its fitted rows
+(LIFETIME below, as LocalOutlierFactor).
+
 LIFETIME: a NearestCentroid fit reads X and y only during the call (its
 fitted state is the centroids it computes); nothing of X is kept or copied.
 A LocalOutlierFactor fit BORROWS X as its fitted rows, as the estimator's
@@ -104,7 +125,7 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
-    MEMBER_OP_SCORE_SAMPLES, MEMBER_I64, MEMBER_CAN_SCORE_SAMPLES,
+    MEMBER_OP_SCORE_SAMPLES, MEMBER_I64, MEMBER_CAN_SCORE_SAMPLES, MEMBER_OP_TRANSFORM, MEMBER_CAN_TRANSFORM,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
     MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_CLASSIFIER,
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
@@ -121,6 +142,11 @@ from neighbors.lof_run import (
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 from core.ocsvm_resident_api import OcResidentDriver
 from core.ocsvm_plan import oc_take_rows_into
+from core.kpca_native_api import KPCAEigenRequest, KPCANativeDriver
+from core.kpca_native_plan import (
+    KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCADenseFit, KPCAFitPrepareRequest, KPCAAlphaRequest,
+    KPCAQueryRequest, KPCACenteredQuery, KPCANeighborDriver,
+)
 from svm.svc_ocsvm_native_run import (
     OC_SOLVE_RESIDENT, OC_QUERY_FUSED_LABELS, OC_QUERY_KERNEL_PRODUCT, OC_QUERY_GRAM_KERNEL,
     OcFitRequest, OcQueryRequest, oc_fit_run, oc_query_run, oc_decision_run, oc_labels_run,
@@ -142,7 +168,8 @@ comptime _INDEX_SPAN = 16777216
 comptime XNEIGHBORS_KIND_NEAREST_CENTROID = 0
 comptime XNEIGHBORS_KIND_LOF = 1
 comptime XNEIGHBORS_KIND_OCSVM = 2
-comptime XNEIGHBORS_KIND_COUNT = 3
+comptime XNEIGHBORS_KIND_KERNEL_PCA = 3
+comptime XNEIGHBORS_KIND_COUNT = 4
 comptime NC_BLOCK_CENTROIDS = MEMBER_BLOCK_FAMILY
 comptime NC_BLOCK_STD = MEMBER_BLOCK_FAMILY + 1
 comptime NC_BLOCK_DEVIATIONS = MEMBER_BLOCK_FAMILY + 2
@@ -159,6 +186,13 @@ comptime OC_BLOCK_DUAL = MEMBER_BLOCK_FAMILY + 1
 comptime OC_BLOCK_SUPPORT = MEMBER_BLOCK_FAMILY + 2
 comptime OC_BLOCK_SCALARS = MEMBER_BLOCK_FAMILY + 3
 comptime _OC_BLOCKS = 4
+comptime KP_BLOCK_ROWS = MEMBER_BLOCK_FAMILY
+comptime KP_BLOCK_VALUES = MEMBER_BLOCK_FAMILY + 1
+comptime KP_BLOCK_VECTORS = MEMBER_BLOCK_FAMILY + 2
+comptime KP_BLOCK_COLUMNS = MEMBER_BLOCK_FAMILY + 3
+comptime KP_BLOCK_TOTAL = MEMBER_BLOCK_FAMILY + 4
+comptime KP_BLOCK_GAMMA = MEMBER_BLOCK_FAMILY + 5
+comptime _KP_BLOCKS = 6
 #: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
 comptime OC_GAMMA_VALUE = 0
 comptime OC_GAMMA_SCALE = 1
@@ -230,6 +264,26 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var oc_vectors: List[Float32]
     var oc_dual: List[Float32]
     var oc_scalars: List[Float64]
+    # KernelPCA words (kind 3) and its fitted state; the fitted X is the
+    # borrowed `rows_addr` (or `fit_rows`), as for LocalOutlierFactor.
+    var kp_kernel: Int
+    var kp_requested: Int
+    var kp_auto: Bool
+    var kp_resident: Bool
+    var kp_gamma_given: Bool
+    var kp_gamma_value: Float64
+    var kp_degree: Int
+    var kp_coef0: Float64
+    var kp_remove_zero: Bool
+    var kp_old_items: Bool
+    var kp_gamma: Float64
+    var kp_kept: Int
+    var kp_values: List[Float32]
+    var kp_vectors: List[Float32]
+    var kp_columns: List[Float32]
+    var kp_total: List[Float32]
+    var kp_alphas: List[Float32]
+    var kp_alphas_ready: Bool
 
     def __init__(out self):
         self.generation = 0
@@ -285,6 +339,24 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.oc_vectors = List[Float32]()
         self.oc_dual = List[Float32]()
         self.oc_scalars = List[Float64](length=4, fill=0.0)
+        self.kp_kernel = 0
+        self.kp_requested = -1
+        self.kp_auto = True
+        self.kp_resident = False
+        self.kp_gamma_given = False
+        self.kp_gamma_value = 0.0
+        self.kp_degree = 3
+        self.kp_coef0 = 1.0
+        self.kp_remove_zero = False
+        self.kp_old_items = False
+        self.kp_gamma = 0.0
+        self.kp_kept = 0
+        self.kp_values = List[Float32]()
+        self.kp_vectors = List[Float32]()
+        self.kp_columns = List[Float32]()
+        self.kp_total = List[Float32]()
+        self.kp_alphas = List[Float32]()
+        self.kp_alphas_ready = False
 
 
 struct XNeighborsMemberStore(Defaultable, Movable):
@@ -330,6 +402,12 @@ def _clear(slot: _SlotPtr):
     slot[].oc_support = List[Int32]()
     slot[].oc_vectors = List[Float32]()
     slot[].oc_dual = List[Float32]()
+    slot[].kp_values = List[Float32]()
+    slot[].kp_vectors = List[Float32]()
+    slot[].kp_columns = List[Float32]()
+    slot[].kp_total = List[Float32]()
+    slot[].kp_alphas = List[Float32]()
+    slot[].kp_alphas_ready = False
 
 
 def _mint(words: _F64P, count: Int) raises -> Int:
@@ -373,6 +451,17 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].oc_fast = words[10] != 0.0
             slot[].oc_labels = words[11] != 0.0
             slot[].oc_old_items = words[12] != 0.0
+        elif slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
+            slot[].kp_kernel = Int(words[1])
+            slot[].kp_requested = Int(words[2])
+            slot[].kp_auto = words[3] != 0.0
+            slot[].kp_resident = words[4] != 0.0
+            slot[].kp_gamma_given = words[5] != 0.0
+            slot[].kp_gamma_value = words[6]
+            slot[].kp_degree = Int(words[7])
+            slot[].kp_coef0 = words[8]
+            slot[].kp_remove_zero = words[9] != 0.0
+            slot[].kp_old_items = words[10] != 0.0
         else:
             slot[].k = Int(words[1])
             slot[].novelty = words[2] != 0.0
@@ -413,6 +502,8 @@ def _name(slot: _SlotPtr) -> String:
         return String("NearestCentroid")
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         return String("OneClassSVM")
+    if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
+        return String("KernelPCA")
     return String("LocalOutlierFactor")
 
 
@@ -1009,6 +1100,192 @@ def _oc_import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------ KernelPCA
+
+
+def _f32_scalar(value: Float64) -> Float64:
+    # x_decomp/kpca_run.mojo `_f32_scalar`: the float32 rounding the door applies.
+    return Float64(Float32(value))
+
+
+def _kp_neighbor(call: _CallPtr) -> KPCANeighborDriver:
+    return KPCANeighborDriver(XnDriver(call[].route.entry.call))
+
+
+def _kp_fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """`KernelPCA.fit` (bindings/kpca_native_door.mojo `kpca_fit`): the
+    dense prepare (unless the resident route), the eigensolve, the kept
+    eigenpairs, in the door's order. fit_transform: the door's unscaled
+    alpha step into `dst`."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    var transformed = call[].fit_output == MEMBER_OP_TRANSFORM
+    if call[].fit_output != 0 and not transformed:
+        member_unsupported(estimator, call[].fit_output)
+    if not call[].route.has_second or not call[].route.has_third:
+        raise Error("member ABI: a KernelPCA member needs the route's eigensolver entries (second, third)")
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var rows = call[].x.rows
+    var features = call[].x.cols
+    var gamma = _f32_scalar(1.0 / Float64(features) if not slot[].kp_gamma_given else slot[].kp_gamma_value)
+    var near = _kp_neighbor(call)
+    var decomp = KPCANativeDriver(call[].route.second.call)
+    var reduction = call[].route.third.call
+    var route = KPCAFitRoute(rows, slot[].kp_requested, slot[].kp_kernel, slot[].kp_auto, slot[].kp_resident)
+    slot[].fitted = False
+    slot[].kp_alphas_ready = False
+    # The fitted column means and total (the door's `_fit_cols`, `_fit_all`).
+    slot[].kp_columns = List[Float32](length=max(rows, 1), fill=Float32(0.0))
+    slot[].kp_total = List[Float32](length=1, fill=Float32(0.0))
+    var prepared: Optional[KPCADenseFit] = None
+    var centered = Int(slot[].kp_columns.unsafe_ptr())  # the door's unread resident-route dummy
+    if not route.resident:
+        var options = KPCAKernelOptions(slot[].kp_kernel, slot[].kp_degree, gamma, _f32_scalar(slot[].kp_coef0))
+        var prepare = KPCAFitPrepareRequest(call[].x.data, Int(slot[].kp_columns.unsafe_ptr()),
+            Int(slot[].kp_total.unsafe_ptr()), rows, features, options^)
+        prepared = Optional[KPCADenseFit](KPCADenseFit(near, reduction, prepare))
+        centered = prepared.value().address()
+    var room = KPCAEigenRoom(rows, route.room)
+    var request = KPCAEigenRequest(centered, call[].x.data, room.values_address(), room.vectors_address(),
+        Int(slot[].kp_columns.unsafe_ptr()), Int(slot[].kp_total.unsafe_ptr()), route.resident, rows, features,
+        slot[].kp_requested, route.lanczos, slot[].kp_remove_zero, gamma)
+    var kept = decomp.eigen(request)
+    _ = prepared^
+    slot[].kp_values = List[Float32](length=kept, fill=Float32(0.0))
+    slot[].kp_vectors = List[Float32](length=rows * kept, fill=Float32(0.0))
+    if kept:
+        unsafe_memcpy(dest=slot[].kp_values.unsafe_ptr(), src=room.values.unsafe_ptr(), count=kept)
+        unsafe_memcpy(dest=slot[].kp_vectors.unsafe_ptr(), src=room.vectors.unsafe_ptr(), count=rows * kept)
+    _ = room^
+    # Borrow the rows as the fitted X (LIFETIME); a copy a previous import or export left is dropped.
+    slot[].fit_rows = List[Float32]()
+    slot[].rows_addr = call[].x.data
+    slot[].rows = rows
+    slot[].features = features
+    slot[].kp_gamma = gamma
+    slot[].kp_kept = kept
+    slot[].fitted = True
+    if transformed:
+        _dense(call[].dst, MEMBER_F32, "the transform buffer", estimator)
+        if call[].dst.rows != rows or call[].dst.cols != kept:
+            raise Error("ValueError: the transform buffer holds " + String(kept) + " components per row of X")
+        near.alpha(KPCAAlphaRequest(Int(slot[].kp_vectors.unsafe_ptr()), Int(slot[].kp_values.unsafe_ptr()),
+            call[].dst.data, rows, kept, False))
+
+
+def _kp_transform(slot: _SlotPtr, call: _CallPtr) raises:
+    """`KernelPCA.transform` (`kpca_transform`): the scaled alphas (computed
+    once per fitted state here; the door recomputes them per call), then the
+    fused query, or the centered query and its finish (the old-items switch,
+    an empty query or no components)."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before transform")
+    _whole(call, estimator)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    if call[].x.cols != slot[].features:
+        raise Error("KernelPCA: query and fitted input feature counts differ")
+    var rows = call[].x.rows
+    var count = slot[].kp_kept
+    _dense(call[].dst, MEMBER_F32, "the transform buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != count:
+        raise Error("ValueError: the transform buffer holds " + String(count) + " components per row of X")
+    var near = _kp_neighbor(call)
+    if not slot[].kp_alphas_ready:
+        slot[].kp_alphas = List[Float32](length=max(slot[].rows * count, 1), fill=Float32(0.0))
+        near.alpha(KPCAAlphaRequest(Int(slot[].kp_vectors.unsafe_ptr()), Int(slot[].kp_values.unsafe_ptr()),
+            Int(slot[].kp_alphas.unsafe_ptr()), slot[].rows, count, True))
+        slot[].kp_alphas_ready = True
+    var options = KPCAKernelOptions(slot[].kp_kernel, slot[].kp_degree, slot[].kp_gamma, slot[].kp_coef0)
+    var alphas = Int(slot[].kp_alphas.unsafe_ptr())
+    if rows != 0 and count != 0 and not slot[].kp_old_items:
+        near.fused_query(KPCAQueryRequest(call[].x.data, slot[].rows_addr, Int(slot[].kp_columns.unsafe_ptr()),
+            Int(slot[].kp_total.unsafe_ptr()), alphas, call[].dst.data, rows, slot[].rows, call[].x.cols, count,
+            options^))
+    else:
+        var request = KPCAQueryRequest(call[].x.data, slot[].rows_addr, Int(slot[].kp_columns.unsafe_ptr()),
+            Int(slot[].kp_total.unsafe_ptr()), alphas, 0, rows, slot[].rows, call[].x.cols, count, options^)
+        var centered = KPCACenteredQuery(near, request)
+        centered.finish(near, alphas, call[].dst.data, count)
+        _ = centered^
+
+
+def _kp_export(slot: _SlotPtr, call: _CallPtr) raises:
+    """A view of one fitted block; the slot owns the words until this
+    state's next fit, import or free (the borrowed rows are copied here)."""
+    if not slot[].fitted:
+        raise Error("NotFittedError: this KernelPCA member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block < 0 or block >= _KP_BLOCKS:
+            raise Error("member ABI: a KernelPCA member has six fitted blocks")
+        block = KP_BLOCK_ROWS + block
+    if block == KP_BLOCK_ROWS:
+        _lof_own_rows(slot)
+        call[].dst = MemberMatrix(slot[].rows_addr, slot[].rows, slot[].features)
+    elif block == KP_BLOCK_VALUES:
+        call[].dst = MemberMatrix(Int(slot[].kp_values.unsafe_ptr()), 1, slot[].kp_kept)
+    elif block == KP_BLOCK_VECTORS:
+        call[].dst = MemberMatrix(Int(slot[].kp_vectors.unsafe_ptr()), slot[].rows, slot[].kp_kept)
+    elif block == KP_BLOCK_COLUMNS:
+        call[].dst = MemberMatrix(Int(slot[].kp_columns.unsafe_ptr()), 1, slot[].rows)
+    elif block == KP_BLOCK_TOTAL:
+        call[].dst = MemberMatrix(Int(slot[].kp_total.unsafe_ptr()), 1, 1)
+    elif block == KP_BLOCK_GAMMA:
+        slot[].offset_word[0] = slot[].kp_gamma
+        call[].dst = MemberMatrix(Int(slot[].offset_word.unsafe_ptr()), 1, 1, MEMBER_F64)
+    else:
+        raise Error("member ABI: a KernelPCA member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _KP_BLOCKS
+
+
+def _kp_import(slot: _SlotPtr, call: _CallPtr) raises:
+    """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state."""
+    var estimator = _name(slot)
+    var block = call[].block
+    var count = call[].x.rows * call[].x.cols
+    if block == KP_BLOCK_GAMMA:
+        _dense(call[].x, MEMBER_F64, "gamma", estimator)
+        if count != 1:
+            raise Error("member ABI: a KernelPCA gamma is one float64 word")
+        slot[].fitted = False
+        slot[].kp_gamma = _F64P(unsafe_from_address=call[].x.data)[0]
+    elif block >= KP_BLOCK_ROWS and block <= KP_BLOCK_TOTAL:
+        _dense(call[].x, MEMBER_F32, "a fitted block", estimator)
+        slot[].fitted = False
+        slot[].kp_alphas_ready = False
+        var words = List[Float32](length=count, fill=Float32(0.0))
+        if count > 0:
+            unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
+        if block == KP_BLOCK_ROWS:
+            slot[].fit_rows = words^
+            slot[].rows_addr = Int(slot[].fit_rows.unsafe_ptr())
+            slot[].rows = call[].x.rows
+            slot[].features = call[].x.cols
+        elif block == KP_BLOCK_VALUES:
+            slot[].kp_values = words^
+        elif block == KP_BLOCK_VECTORS:
+            slot[].kp_vectors = words^
+            slot[].kp_kept = call[].x.cols
+        elif block == KP_BLOCK_COLUMNS:
+            slot[].kp_columns = words^
+        else:
+            slot[].kp_total = words^
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a KernelPCA member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    var rows = slot[].rows
+    if (rows == 0 or len(slot[].fit_rows) != rows * slot[].features or len(slot[].kp_values) < slot[].kp_kept
+            or len(slot[].kp_vectors) != rows * slot[].kp_kept or len(slot[].kp_columns) < rows
+            or len(slot[].kp_total) < 1):
+        raise Error("KernelPCA: fitted query buffers do not cover the fitted row count")
+    slot[].fitted = True
+
+
 # ------------------------------------------------------------ dispatch
 
 
@@ -1020,6 +1297,7 @@ comptime _NC_MANHATTAN = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT
 comptime _LOF_NOVELTY = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 comptime _LOF_OUTLIER = MEMBER_CAN_FIT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT   # fit_predict: FIT + fit_output
+comptime _KERNEL_PCA = MEMBER_CAN_FIT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
 comptime _OCSVM = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | MEMBER_CAN_SCORE_SAMPLES
     | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
 
@@ -1029,6 +1307,8 @@ def _capabilities(slot: _SlotPtr) -> Int:
         return _LOF_NOVELTY if slot[].novelty else _LOF_OUTLIER
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         return _OCSVM
+    if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
+        return _KERNEL_PCA
     return _NC_EUCLIDEAN if slot[].euclidean else _NC_MANHATTAN
 
 
@@ -1055,6 +1335,10 @@ def _new(call: _CallPtr) raises:
                 + "coef0, gamma mode, gamma, max_iter cap, tol, solve, fast, fused labels, old_items)")
         if words[5] != 0.0 and words[5] != 1.0 and words[5] != 2.0:
             raise Error("member ABI: unknown OneClassSVM gamma code")
+    elif kind == XNEIGHBORS_KIND_KERNEL_PCA:
+        if call[].param_count != 11:
+            raise Error("member ABI: a KernelPCA member takes eleven parameters (kind, kernel, n_components, "
+                + "auto solver, resident, gamma given, gamma, degree, coef0, remove_zero_eig, old_items)")
     else:
         if call[].param_count != 7:
             raise Error("member ABI: a LocalOutlierFactor member takes seven parameters (kind, n_neighbors, "
@@ -1086,7 +1370,7 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM
+            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _KERNEL_PCA
         return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False)))
     if operation == MEMBER_OP_NEW:
         _new(call)
@@ -1100,11 +1384,33 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
         # and `call.classes`, as a state made from them and fitted would.
         if call[].param_count < 1 or not call[].params:
             raise Error("member ABI: an XNeighbors member takes its kind as the first parameter")
-        _outputs(Int(_F64P(unsafe_from_address=call[].params)[0]), call[].classes, call)
+        var asked = Int(_F64P(unsafe_from_address=call[].params)[0])
+        if asked == XNEIGHBORS_KIND_KERNEL_PCA:
+            # The kept component count is chosen by the fit (rank, zero eigenvalues).
+            raise Error("member ABI: a KernelPCA member's transform width is chosen by its fit; ask a fitted state")
+        _outputs(asked, call[].classes, call)
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup(call[].state, False))
     if operation == MEMBER_OP_OUTPUTS:
+        if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
+            if not slot[].fitted:
+                raise Error("member ABI: a KernelPCA member's transform width is chosen by its fit; fit it first")
+            call[].classes = 0
+            call[].out_cols = slot[].kp_kept
+            return 0
         _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
+        return 0
+    if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA:
+        if operation == MEMBER_OP_FIT:
+            _kp_fit(slot, call)
+        elif operation == MEMBER_OP_TRANSFORM:
+            _kp_transform(slot, call)
+        elif operation == MEMBER_OP_EXPORT:
+            _kp_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _kp_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         if operation == MEMBER_OP_FIT:
