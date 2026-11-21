@@ -1064,6 +1064,19 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
                 _ = py_call(names.append, method)
         except:
             return False
+    if len(responses) > 0:
+        # Placed responses are a regressor's float32 values or a classifier's
+        # codes. Any other kind (a clusterer's int32 ids, a transformer) keeps
+        # the Python units BEFORE any fit is spent on it.
+        try:
+            var kind = py_get(model, "estimator_type")
+            if py_type(kind) is not b.str:
+                return False
+            var word = String(py=kind)
+            if word != "classifier" and word != "regressor":
+                return False
+        except:
+            return False
     var member_y = rows.y if run.y is None else run.y
     var native = msel_member_units(run.base, run.candidates, member_y, rows.x, rows.folds, run.return_train,
                                    run.return_estimator, workers, context, b, responses, tolerate)
