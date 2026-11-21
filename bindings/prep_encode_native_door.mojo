@@ -19,7 +19,6 @@ from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_setattr
-from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_warnings_unpack import classical_warning
 from bindings.native_caller_frame_pack import native_frame_globals
@@ -45,11 +44,15 @@ from bindings.prep_encode_kbins_run import (
     enc_weights_stage, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage, enc_seed_words)
 from bindings.prep_encode_cats_run import (
     CatFit, CatFitPlan, CatBlock, InfrequentFit, CAT_FIT_UNIQUE, CAT_FIT_SCAN, CAT_FIT_PACK_SORT,
-    CAT_FIT_PACK_PRESENT, CAT_FIT_INVERSE, cat_fit_stage, cat_codes_stage, cat_grouped_sizes, cat_infrequent_stage)
+    CAT_FIT_PACK_PRESENT, CAT_FIT_INVERSE, cat_fit_stage, cat_codes_stage, cat_i2f_stage, cat_grouped_sizes,
+    cat_infrequent_stage)
 from bindings.prep_encode_onehot_run import (
     OneHotApply, OneHotInverse, onehot_transform_stage, onehot_inverse_stage)
 from bindings.prep_encode_ordinal_run import (
     OrdinalApply, OrdinalInverse, ordinal_transform_stage, ordinal_inverse_stage)
+from bindings.prep_encode_target_run import (
+    TargetFit, TargetApply, TE_FOLDS_NONE, TE_FOLDS_STAGED, TE_FOLDS_GIVEN, target_fit_stage,
+    target_transform_stage)
 from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end, lifecycle_complete, lifecycle_result
 from bindings.classical_validate_unpack import classical_estimator_name
@@ -71,19 +74,10 @@ comptime OP_COL_STATS = 1
 comptime OP_QUANTILE = 2
 comptime OP_UNIQUE_COLS = 5
 comptime OP_LOOKUP = 7
-comptime OP_I2F = 10
 comptime OP_CLASS_STATS = 16
-comptime OP_TE_GLOBAL = 20
-comptime OP_TE_ENC = 21
-comptime OP_LABEL_BINARIZE = 51
 comptime OP_F_CLASSIF = 63
 comptime OP_F_REGRESSION = 64
 comptime OP_CHI2 = 65
-comptime OP_TE_GATHER = 114
-comptime OP_TE_HIST = 115
-comptime OP_TE_HSUM = 116
-comptime OP_TE_HSTART = 117
-comptime OP_TE_HSCATTER = 118
 comptime OP_CSB_PART = 129
 comptime OP_CSB_FOLD = 130
 comptime OP_CSB1_PART = 162
@@ -93,14 +87,6 @@ comptime OP_FRB_PART1 = 168
 comptime OP_FRB_MEAN = 169
 comptime OP_FRB_PART2 = 170
 comptime OP_FRB_FIN = 171
-comptime OP_CCOUNT = 200
-comptime OP_CSCAN = 201
-comptime OP_CSTART = 202
-comptime OP_CWRITE = 203
-comptime OP_KFOLD = 243
-comptime OP_STRAT_META = 244
-comptime OP_STRAT_FLAG = 245
-comptime OP_STRAT_FOLD = 246
 comptime OP_INTEGRAL = 247
 comptime OP_ISUM = 248
 comptime OP_KEY64 = 253
@@ -110,14 +96,12 @@ comptime IDN_CLASS_ONEPASS = 2
 comptime IDN_SELECT_BLOCKED = 4
 # `_CLS_BLOCK_WORDS`: the most partial words a blocked class_stats keeps.
 comptime CLS_BLOCK_WORDS = 67108864
-comptime OP_TE_APPLY = 22
 comptime OP_KBINS_GW = 96
 comptime OP_KBINS_WQ = 97
 comptime OP_COLB_PART = 124
 comptime OP_COLB_FOLD = 125
 comptime OP_SPLINE_KNOTS = 49
 comptime OP_SPLINE_APPLY = 50
-comptime OP_CAT_ZERO = 157
 comptime OP_RGATHER = 204
 comptime OP_TRANSPOSE = 209
 comptime OP_GRID = 263
@@ -128,7 +112,6 @@ comptime IDN_STATS_BLOCKED = 1
 # Row blocks of the blocked column statistics (_expansion_prep._XB).
 comptime ROW_BLOCK = 2048
 # `_II_CH`: the most chunks of a chunk-parallel p2m selection.
-comptime SEL_CHUNKS = 1024
 
 
 # ---------------------------------------------------------------- programs
@@ -1334,12 +1317,6 @@ def _fit_infrequent(model: PythonObject, values: PythonObject, entries: PythonOb
     _ = ran^
 
 
-def _scalar(mut p: EncProg, value: Float64, context: PythonObject) raises -> Int:
-    var words = List[Float64]()
-    words.append(value)
-    return p.put_floats(words, context)
-
-
 def _num_text(value: PythonObject) raises -> String:
     # A number in an f-string (format(value, "")).
     return String(py_call(native_loaded_module("builtins").format, value, ""))
@@ -1804,22 +1781,32 @@ def _target_scratch(mode: PythonObject, entries: PythonObject) raises -> Bool:
 def _target_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     """TargetEncoder.transform: lookup (device-only codes when the binding
     keeps them in scratch) and te_apply over the fitted encodings."""
+    # UNPACK: the fitted fields, read once into the typed request; X, the
+    # category block and the fitted encodings as owners of the program.
     var fields = py_fields(model)
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     _check_width(model, d)
     var mode = fields["numeric_mode_"]
     var entries = scaler_entries(model, mode, context)
+    var caps = enc_caps(model, entries)
     var T = Int(py=fields["_T"])
     var cmax = Int(py=fields["_cmax"])
+    var record = _category_record(model, fields["categories_"], context)
+    var enc = _fitted_flat(model, "_enc", fields["_enc"], context)
+    var meta = _fitted_flat(model, "_meta", fields["_meta"], context)
+    var enc_words = Int(py=enc[2])
+    var meta_words = Int(py=meta[2])
     var p = EncProg()
-    var codes = _codes(p, values, fields["categories_"], context, _target_scratch(mode, entries), model)[0]
-    var enc = p.put_fitted(model, "_enc", fields["_enc"], context)
-    var meta = p.put_fitted(model, "_meta", fields["_meta"], context)
-    var out = p.output(n * d * T, entries)
-    _stage(p.prog.program, OP_TE_APPLY, n * d * T, codes, n, d, T, NONE, enc, cmax, meta, 0, out)
-    var ran = p.run(entries, context, model)
-    return _take2(ran, out, n, d * T, context)
+    var x = p.own_x(values)
+    var block = _cat_block(p, record, True)
+    var request = TargetApply(n, d, T, cmax, x, block.copy(), _target_scratch(mode, entries), p.own(enc[1], enc_words),
+                              enc_words, p.own(meta[1], meta_words), meta_words)
+    # RUN: the typed stages (bindings/prep_encode_target_run.mojo), then the typed run.
+    var result = target_transform_stage(p.prog, request, caps.has_out)
+    var ran = p.run_caps(entries, context, caps)
+    # PACK
+    return _take2(ran, result, n, d * T, context)
 
 
 # ---------------------------------------------------------------- SplineTransformer
@@ -2319,50 +2306,11 @@ def _target_check(fields: PythonObject, context: PythonObject) raises:
         raise Error("mojolearn: TargetEncoder cv must be an integer >= 2, a splitter or an iterable")
 
 
-def _class_rows_chunks(n: Int, per: Int) -> Tuple[Int, Int]:
-    # `_p2m_chunks(n, per)`.
-    var ch = max(SEL_CHUNKS, (n + SEL_CHUNKS - 1) // SEL_CHUNKS, (n * per + 16777215) // 16777216, 1)
-    return (ch, max(1, (n + ch - 1) // ch))
-
-
 def _put_codes(mut p: EncProg, codes: PythonObject) raises -> Int:
-    # `_Prog.put_codes`: int32 codes as words, then their floats (i2f).
+    # `_Prog.put_codes`: int32 codes as words, then their floats (i2f):
+    # UNPACK of the codes as an owner, then the typed stage.
     var count = Int(py=codes.size)
-    var bits = p.put(codes, count)
-    var out = p.alloc(count)
-    _stage(p.prog.program, OP_I2F, count, bits, out)
-    return out
-
-
-def _stage_folds(mut p: EncProg, n: Int, n_folds: Int, lo: Int, hi: Int, shuffle: Bool, codes: Int, n_classes: Int,
-                 context: PythonObject) raises -> Tuple[Int, Int]:
-    """`_stage_folds`: KFold (c2_kfold) without class codes, else
-    StratifiedKFold over them (p2m_ccount .. p2m_cwrite, c2_strat_meta,
-    c2_strat_flag, c2_strat_fold). Returns (folds, flag or -1)."""
-    var fo = p.alloc(max(n, 1))
-    if codes == NONE:
-        var seed = p.put_ints(_seed_words(lo, hi), context)
-        _stage(p.prog.program, OP_KFOLD, n, seed, n, n_folds, 1 if shuffle else 0, fo)
-        return (fo, -1)
-    var K = n_classes
-    var chunks = _class_rows_chunks(n, K)
-    var ch = chunks[0]
-    var nch = chunks[1]
-    var cnt = p.alloc(nch * K)
-    var tot = p.alloc(K)
-    _stage(p.prog.program, OP_CCOUNT, nch, codes, n, K, ch, cnt)
-    _stage(p.prog.program, OP_CSCAN, K, cnt, nch, K, tot)
-    var start = p.alloc(K)
-    var ro = p.alloc(n)
-    _stage(p.prog.program, OP_CSTART, 1, tot, K, start, NONE)
-    _stage(p.prog.program, OP_CWRITE, nch, codes, n, K, ch, cnt, start, ro)
-    var meta = p.alloc(2 * K)
-    var flag = p.alloc(1)
-    _stage(p.prog.program, OP_STRAT_META, K, start, tot, ro, K, meta)
-    _stage(p.prog.program, OP_STRAT_FLAG, 1, tot, K, n_folds, flag)
-    var seed = p.put_ints(_seed_words(lo, hi), context)
-    _stage(p.prog.program, OP_STRAT_FOLD, n, ro, start, tot, codes, meta, n_folds, seed, 1 if shuffle else 0, fo)
-    return (fo, flag)
+    return cat_i2f_stage(p.prog, count, p.own(codes, count))
 
 
 def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, folds: PythonObject, n_folds: Int,
@@ -2393,86 +2341,52 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
         cats = _fit_categories_caps(values, mode, entries, caps, context)
     else:
         cats = _given_categories(fields["categories"], values, entries, caps, False, "TargetEncoder", context)
-    var sizes = _sizes(cats)
-    var cmax = 0
-    for j in range(len(sizes)):  # driver-loop: largest category count (per-column category arrays)
-        cmax = max(cmax, sizes[j])
     var F = n_folds
     var p = EncProg()
-    var scratch = _target_scratch(mode, entries)
-    var codes = 0
-    if not inverse:
-        codes = _codes(p, values, cats, context, scratch, PythonObject(None))[0]
+    var from_inverse = Bool(inverse)
+    var x = NONE
+    var held = NONE
+    var block = CatBlock(NONE, 0, 0, NONE, 0)
+    var sizes = List[Int]()
+    if from_inverse:
+        var coded = inverse.value()
+        held = p.own(coded, Int(py=coded.size))
+        sizes = _sizes(cats)
     else:
-        codes = p.put_array2(inverse.value())
-    var yo = 0
-    var co = 0
-    if info.kind == "continuous":
-        yo = p.put(info.target, n)
-    elif T == 1:
-        yo = _put_codes(p, info.target)
+        # The category record of the lists this fit stores as `categories_`
+        # (kept for the model: its transforms reuse it).
+        var record = _category_record(model, cats, context)
+        sizes = _record_sizes(record)
+        x = p.own_x(values)
+        block = _cat_block(p, record, True)
+    var cmax = 0
+    for j in range(len(sizes)):  # driver-loop: largest category count (per-column category counts)
+        cmax = max(cmax, sizes[j])
+    var continuous = info.kind == "continuous"
+    var target_words = n if continuous else Int(py=info.target.size)
+    var target = p.own(info.target, target_words)
+    var folds_kind = TE_FOLDS_GIVEN
+    var folds_owner = NONE
+    var folds_words = 0
+    if folds is None:
+        folds_kind = TE_FOLDS_STAGED if F > 0 else TE_FOLDS_NONE
     else:
-        # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c
-        co = _put_codes(p, info.target)
-        yo = p.alloc(n * T)
-        _stage(p.prog.program, OP_LABEL_BINARIZE, n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
-    var fo = 0
-    var flag = -1
-    if folds is None and F > 0:
-        var codes_off = NONE if info.kind == "continuous" else (yo if T == 1 else co)
-        var staged = _stage_folds(p, n, F, lo, hi, shuffle, codes_off, len(info.classes) if info.classes is not None else 0, context)
-        fo = staged[0]
-        flag = staged[1]
-    elif folds is None:
-        # every row in no fold (`full((max(n, 1),), -1, "<i4")`: all-ones words)
-        var b = native_loaded_module("builtins")
-        var m = max(n, 1)
-        var ones = py_call(py_attr(py_call(b.bytes, Python.list(255)), "__mul__"), PythonObject(4 * m))
-        var store = py_call(context["array_type"], "i", ones)
-        fo = _put_codes(p, classical_wrap_array(store, Python.tuple(m), "<i4", "C", context))
-    else:
-        fo = _put_codes(p, folds)
-    var nco = p.put_floats(_to_floats(sizes), context)
-    var meta = p.alloc(2 * (F + 1) * T)
+        folds_words = Int(py=folds.size)
+        folds_owner = p.own(folds, folds_words)
     var smooth = fields["smooth"]
-    var smo = _scalar(p, Float64(-1.0) if (_is_str(smooth) and String(smooth) == "auto") else _float(smooth), context)
-    var enc = p.alloc((F + 1) * d * cmax * T)
-    _stage(p.prog.program, OP_TE_GLOBAL, (F + 1) * T, yo, n, T, fo, meta)
-    if py_get(entries, "x_prep_host_column") is not None:
-        # the host binding groups te_enc its own way
-        _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
-    else:
-        # each category's rows, ascending: te_enc walks one bucket, not every row
-        var bstart = 0
-        var brows = 0
-        if scratch:
-            bstart = p.scratch(d * (cmax + 1))
-            brows = p.scratch(n * d)
-            # te_gather also visits unused bucket tails: keep their zero row indices
-            _stage(p.prog.program, OP_CAT_ZERO, n * d, brows)
-        else:
-            bstart = p.alloc(d * (cmax + 1))
-            brows = p.alloc(n * d)
-        # TOMBSTONE: MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF (B arm loses: te_bucket, one thread per column; A/B abn9 NVIDIA L40S, target-encoder fit 1.76 and 2.02 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
-        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF.patch; record in docs/TOMBSTONES.md.
-        var ch = max(1, min(256, (n + 4095) // 4096))
-        var hh = p.scratch(d * ch * cmax)
-        var tot = p.scratch(d * cmax)
-        _stage(p.prog.program, OP_TE_HIST, d * ch, codes, n, d, cmax, ch, hh)
-        _stage(p.prog.program, OP_TE_HSUM, d * cmax, cmax, ch, hh, tot)
-        _stage(p.prog.program, OP_TE_HSTART, d, cmax, bstart, tot)
-        _stage(p.prog.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
-        # TOMBSTONE: MOJOLEARN_XPREP_FAST_TE_GATHER_OFF (NOISE: B staged te_enc on the bucket rows without te_gather; A/B abn9 NVIDIA L40S, 4 cells 0.98-1.01 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
-        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
-        var gb = p.scratch(n * d * (1 + T))
-        _stage(p.prog.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
-        _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
-               bstart + 1, brows, gb + 1)
-    var out = NONE
-    if apply:
-        out = p.output(n * d * T, entries)
-        _stage(p.prog.program, OP_TE_APPLY, n * d * T, codes, n, d, T, fo, enc, cmax, meta, F, out)
-    var ran = p.run(entries, context, model)
+    var smooth_value = Float64(-1.0) if (_is_str(smooth) and String(smooth) == "auto") else _float(smooth)
+    var request = TargetFit(n, d, T, x, block.copy(), _target_scratch(mode, entries), from_inverse, held, continuous,
+                            target, target_words, len(info.classes) if info.classes is not None else 0, folds_kind, F,
+                            folds_owner, folds_words, lo, hi, shuffle, sizes.copy(), cmax, smooth_value,
+                            py_get(entries, "x_prep_host_column") is not None, apply)
+    # RUN: the typed stages (bindings/prep_encode_target_run.mojo), then the typed run.
+    var plan = target_fit_stage(p.prog, request, caps.has_out)
+    var enc = plan.enc
+    var meta = plan.meta
+    var flag = plan.flag
+    var out = plan.applied
+    var ran = p.run_caps(entries, context, caps)
+    # PACK: the refusal of too few class members, then the fitted fields.
     if flag >= 0 and _word(ran, flag) != 0:
         raise Error("mojolearn: n_splits=" + String(F) + " cannot be greater than the number of members in "
                     + "each class")
