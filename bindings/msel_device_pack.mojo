@@ -8,11 +8,9 @@ The core host binding exports the same names and signatures from
 Every IDENTICAL and FAST GPU build takes these; there is no host fallback in
 this binding.
 
-    msel_put(addr, nbytes) -> id          resident copy of host bytes
     msel_alloc(nbytes) -> id              resident zero bytes
     msel_read(id, dst_addr, nbytes)       download
-    msel_free(id) / msel_live() -> count
-    msel_take_rows(src_id, n_src, row_bytes, idx_id, n_idx, dst_addr)
+    msel_free(id) / msel_live() -> count  (release-test fault injection and counts)
     msel_scatter_rows(dst_id, n_dst, dst_code, src_addr, src_code, n_src, width, idx_id)
     msel_proba_column(src_addr, code, n, k, col, dst_addr)
     msel_rebase_offsets_i32(raw_addr, n_raw, lens_addr, parts, n_out, dst_addr)
@@ -24,9 +22,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.msel_device import device_take_rows
-from core.neural_context import process_ctx
-from core.msel_device_x import msel_fold_entry_context, msel_store, MSEL_CONTEXT_SLOT
+from core.msel_device_x import msel_fold_entry_context, msel_store
 # lane calltable-msel: the store, scatter, column, split-table and
 # group-fold bodies are the runs the model-selection helper table publishes
 # (core/msel_helpers_device.mojo); these exports unpack and call them.
@@ -44,23 +40,10 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_caps
 from cluster.kmeans_fold import kmeans_query_fold
 from core.msel_device_run import _mdx_f32_ptr, _mdx_u32_ptr, kmeans_fit_fold_run, pca_fit_fold_run
 
-#: The store's own context slot (core/msel_device_x.mojo MSEL_CONTEXT_SLOT,
-#: the base binding's `_DEVCTX_SLOT`): one definition, so every reader of the
-#: store's buffers runs on the context that made them. The store itself is
-#: `msel_store()` there, one process-wide SharedSlot with a layout word.
-comptime _MSEL_SLOT = MSEL_CONTEXT_SLOT
-
-
-def msel_put_binding(addr: PythonObject, nbytes: PythonObject) raises -> PythonObject:
-    var a = Int(py=addr)
-    var n = Int(py=nbytes)
-    var ctx = process_ctx[_MSEL_SLOT]()
-    var id: Int
-    with GILReleased(Python()):
-        id = msel_store()[].put(ctx, a, n)
-    return PythonObject(id)
-
-
+# Deleted (arena unit E, 2026-11-21): `msel_put` and
+# `msel_take_rows` had no caller since the resident owner calls the
+# model-selection helper table as typed RUN (core/msel_entry_table.mojo);
+# `msel_free` stays as the release tests' fault-injection entry.
 def msel_free_binding(id: PythonObject) raises -> PythonObject:
     """`core/msel_helpers_device.mojo::msel_store_free_device_run`."""
     var i = Int(py=id)
@@ -72,28 +55,6 @@ def msel_free_binding(id: PythonObject) raises -> PythonObject:
 
 def msel_live_binding() raises -> PythonObject:
     return PythonObject(msel_store()[].live)
-
-
-def msel_take_rows_binding(
-    src_id: PythonObject, n_src: PythonObject, row_bytes: PythonObject,
-    idx_id: PythonObject, n_idx: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """Rows idx of the resident source into host memory (a fold's rows)."""
-    var s = Int(py=src_id)
-    var ns = Int(py=n_src)
-    var rb = Int(py=row_bytes)
-    var ix = Int(py=idx_id)
-    var ni = Int(py=n_idx)
-    var d = Int(py=dst_addr)
-    if ns < 0 or rb < 0 or ni < 0:
-        raise Error("msel_take_rows: dimensions must be non-negative")
-    var ctx = process_ctx[_MSEL_SLOT]()
-    var ok = True
-    with GILReleased(Python()):
-        ok = device_take_rows(ctx, msel_store()[], s, ns, rb, ix, ni, d)
-    if not ok:
-        raise Error("msel_take_rows: row index out of bounds")
-    return PythonObject(0)
 
 
 # Lane a6: the device-X entries of family and classical estimators live in

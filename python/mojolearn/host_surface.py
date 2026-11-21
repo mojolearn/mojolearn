@@ -2016,9 +2016,9 @@ FAMILIES = (
             # lane cpu2-l4-modelsel (2026-10-04): model selection's fold store,
             # fold-row gather, prediction scatter, proba column and forest
             # offset merge (bindings/msel_host_pack.mojo, the host column)
-            "msel_put", "msel_free", "msel_live",
+            # (msel_put and msel_take_rows deleted, arena unit E 2026-11-21: no caller)
+            "msel_free", "msel_live",
             # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
-            "msel_take_rows",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
             # lane migrate-shared-labels: the shared argument-and-label entry

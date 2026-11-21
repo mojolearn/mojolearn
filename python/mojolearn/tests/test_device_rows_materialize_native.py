@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The public row materializer owns typed native resident snapshots."""
+"""The public row materializer owns typed native resident snapshots.
+
+The resident's entries are native; `_Resident._entry(values)` answers
+(owner, prepared Array, store id) of an entry without a second put, and the
+model-selection store's live count shows what was put.
+
+Deleted with the instance dictionaries (2026-11-21, arena unit E): the
+pre-set `rows._host` cached-object test (a DeviceRows is read-only), and
+the hook cases that replaced `rows._take` or `owner._take`, rebuilt the
+rows' `__dict__` with a hooked key or wrote a hooked key into
+`owner._entries`; none of that state exists any more. A foreign `take` is
+now given at construction and refused by `materialize` in words.
+"""
 from array import array
 import struct
 import json
@@ -12,6 +24,10 @@ from mojolearn._arena_io import DeviceRows
 from mojolearn._buffer import _native
 from mojolearn.model_selection import _Resident
 from mojolearn._verify_native_runtime import audit_native_call
+
+
+def _live():
+    return int(_native('msel_live')())
 
 
 def _refused(audit, category=TypeError):
@@ -49,10 +65,11 @@ def test_materialize_preserves_typed_bytes_and_cached_identity(owner, dtype, lay
     assert output.dtype == expected_dtype and output.shape == (3, base.shape[1])
     assert output.tobytes() == base[indices].astype(expected_dtype).tobytes()
     assert audit_native_call(rows.materialize).assert_native() is output
-    assert len(owner._entries) == 2
-    assert owner._entries[id(base)][0] is base and owner._entries[id(indices)][0] is indices
+    live = _live()
+    entry = owner._entry(base)
+    assert entry[0] is base and owner._entry(indices, '<i8')[0] is indices and _live() == live
     if layout == 'contiguous' and dtype not in natural:
-        assert owner._entries[id(base)][1]._store is base
+        assert entry[1]._store is base
 
 
 @pytest.mark.parametrize('shape', [(4, 3), (4, 1)])
@@ -63,7 +80,7 @@ def test_array_storage_preserves_alias_and_order_contract(owner, shape, order):
     indices = Array.from_list([3, 0], '<i8')
     output = audit_native_call(DeviceRows(base, indices, owner.take).materialize).assert_native()
     assert output.tobytes() == values[[3, 0]].tobytes()
-    prepared = owner._entries[id(base)][1]
+    prepared = owner._entry(base)[1]
     if order == 'C':
         assert prepared is base
     elif shape[1] == 1:
@@ -119,7 +136,7 @@ def test_materialize_converts_native_indices(owner, dtype):
     indices = np.array([True, False] if dtype == 'bool' else [3.9, 0.1] if dtype == 'f4' else [3, 0], dtype=dtype)
     output = audit_native_call(DeviceRows(base, indices, owner.take).materialize).assert_native()
     assert output.tobytes() == base[indices.astype('i8')].tobytes()
-    assert owner._entries[id(indices)][1].dtype == '<i8'
+    assert owner._entry(indices, '<i8')[1].dtype == '<i8'
 
 
 @pytest.mark.parametrize('dtype', ['i8', 'f4', 'O'])
@@ -128,7 +145,7 @@ def test_scalar_index_keeps_existing_prepared_shape(owner, dtype):
     indices = np.array(1, dtype=dtype)
     output = audit_native_call(DeviceRows(base, indices, owner.take).materialize).assert_native()
     assert output.tobytes() == base[[1]].tobytes()
-    assert owner._entries[id(indices)][1].shape == (() if dtype == 'O' else (1,))
+    assert owner._entry(indices, '<i8')[1].shape == (() if dtype == 'O' else (1,))
 
 
 @pytest.mark.parametrize('dtype,values,category', [
@@ -141,18 +158,19 @@ def test_scalar_index_keeps_existing_prepared_shape(owner, dtype):
 def test_materialize_preserves_native_conversion_and_gather_errors(owner, dtype, values, category):
     rows = DeviceRows(np.arange(12, dtype='f4').reshape(4, 3), np.array(values, dtype=dtype), owner.take)
     _refused(audit_native_call(rows.materialize), category)
-    assert rows._host is None
+    # Nothing was cached: a second materialize refuses the same way.
+    _refused(audit_native_call(rows.materialize), category)
 
 
 def test_materialize_reuses_resident_uploads_after_host_mutation(owner):
     base = Array.from_list([[1., 2.], [3., 4.], [5., 6.]], '<f4')
     indices = Array.from_list([0, 2], '<i8')
     first = audit_native_call(DeviceRows(base, indices, owner.take).materialize).assert_native()
-    count = int(_native('msel_live')())
+    count = _live()
     base._mv[0], indices._mv[0] = 99., 1
     second = audit_native_call(DeviceRows(base, indices, owner.take).materialize).assert_native()
     assert first.tobytes() == second.tobytes()
-    assert len(owner._entries) == 2 and int(_native('msel_live')()) == count
+    assert _live() == count
 
 
 def test_materialize_does_not_call_python_resident_helpers(owner, monkeypatch):
@@ -168,15 +186,7 @@ def test_materialize_does_not_call_python_resident_helpers(owner, monkeypatch):
     assert not calls and result.tobytes() == np.array([[6., 7., 8.], [0., 1., 2.]], dtype='f4').tobytes()
 
 
-def test_materialize_preserves_preexisting_cached_object(owner):
-    rows = DeviceRows(np.arange(6, dtype='f4').reshape(2, 3), np.array([0]), owner.take)
-    value = object()
-    rows._host = value
-    assert audit_native_call(rows.materialize).assert_native() is value
-    assert not owner._entries
-
-
-@pytest.mark.parametrize('hook', ['take', 'object_float', 'resident_entry', 'array_slot', 'row_key', 'cache_key'])
+@pytest.mark.parametrize('hook', ['take', 'object_float', 'array_slot'])
 def test_materialize_refuses_application_hooks_before_execution(owner, hook, monkeypatch):
     calls = []
     def forbidden(*args):
@@ -185,58 +195,31 @@ def test_materialize_refuses_application_hooks_before_execution(owner, hook, mon
     class Foreign:
         def __float__(self):
             forbidden()
-    class ForeignKey(str):
-        __hash__ = str.__hash__
-        def __eq__(self, other):
-            forbidden()
-    class ForeignIdentity(int):
-        __hash__ = int.__hash__
-        def __eq__(self, other):
-            forbidden()
     base = Array.from_list([[1., 2.], [3., 4.]], '<f4')
     indices = np.array([1, 0])
-    rows = DeviceRows(base, indices, owner.take)
+    before = _live()
+    take = forbidden if hook == 'take' else owner.take
+    if hook == 'object_float':
+        base = np.array([[Foreign()]], dtype='O')
+    rows = DeviceRows(base, indices, take)
     with monkeypatch.context() as patch:
-        if hook == 'take':
-            rows._take = forbidden
-        elif hook == 'object_float':
-            rows.base = np.array([[Foreign()]], dtype='O')
-        elif hook == 'resident_entry':
-            # through the patch context, so the fixture's close sees its
-            # connected entry again
-            patch.setattr(owner, '_take', forbidden)
-        elif hook == 'array_slot':
+        if hook == 'array_slot':
             patch.setattr(Array, '_mv', property(forbidden))
-        elif hook == 'row_key':
-            # An instance's shared-key dictionary can retain the ordinary
-            # 'base' key after pop, so reinsertion itself calls __eq__ before
-            # the product boundary. Build the malformed dictionary afresh,
-            # keeping the foreign key first, and retain the actual no-hook
-            # rejection check below against the public materialize call.
-            malformed = {ForeignKey('base'): rows.base}
-            malformed.update((key, value) for key, value in vars(rows).items()
-                             if key != 'base')
-            object.__setattr__(rows, '__dict__', malformed)
-            assert type(next(iter(vars(rows)))) is ForeignKey
-            assert calls == []
-        else:
-            owner._entries[ForeignIdentity(id(base))] = None
         calls.clear()
         audit = audit_native_call(rows.materialize)
     _refused(audit)
-    assert not calls
-    if hook == 'cache_key':
-        owner._entries.clear()  # controller teardown of deliberately malformed cache
+    assert not calls and _live() == before
 
 
 @pytest.mark.parametrize('field,value', [('itemsize', 1), ('shape', (100, 3)), ('size', 300)])
 def test_materialize_refuses_inconsistent_array_metadata_before_pointer_use(owner, field, value):
     base = Array.from_list([[1., 2., 3.], [4., 5., 6.]], '<f8')
+    before = _live()
     rows = DeviceRows(base, np.array([0]), owner.take)
     setattr(base, field, value)
     audit = audit_native_call(rows.materialize)
     _refused(audit, ValueError)
-    assert not owner._entries
+    assert _live() == before
 
 
 _ARRAY_CONSTRUCTOR_POISON = r"""
@@ -319,9 +302,10 @@ def test_materialize_scalar_admission_uses_connected_native_identities(owner, mo
     # A genuine float keeps the old conversion's float64 branch selected, so
     # incorrectly admitting ForeignScalar would invoke its __float__ slot.
     base = np.array([[value, 1.0]], dtype='O')
+    before = _live()
     rows = DeviceRows(base, np.array([0]), owner.take)
     with monkeypatch.context() as patch:
         patch.setattr(builtins, name, cls)
         audit = audit_native_call(rows.materialize)
     _refused(audit)
-    assert not calls and not owner._entries
+    assert not calls and _live() == before

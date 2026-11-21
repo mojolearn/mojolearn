@@ -258,7 +258,8 @@ def msel_store_put_device_run(src: Int, n: Int) raises -> Int:
 def msel_store_take_rows_device_run(src_id: Int, n_src: Int, row_bytes: Int, idx_id: Int, n_idx: Int,
                                     dst: Int) raises -> Int:
     """Rows idx of the resident source into host memory (a fold's rows): one
-    device gather and one download, the body of the `msel_take_rows` export."""
+    device gather and one download, the take-rows op of the model-selection
+    helper table."""
     if n_src < 0 or row_bytes < 0 or n_idx < 0:
         raise Error("msel_take_rows: dimensions must be non-negative")
     var ctx = process_ctx[MSEL_CONTEXT_SLOT]()
