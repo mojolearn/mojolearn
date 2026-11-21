@@ -51,7 +51,8 @@ from bindings.device_plan_binding_pack import device_plan_enter_binding, device_
 from bindings.py_lists import py_list_int
 from bindings.gbdt_fit_boundary_unpack import gbdt_fit_args_py
 from bindings.gbdt_fit_boundary_pack import gbdt_fit_outcome_py
-from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, GbdtImage
+from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, gbdt_entry_releases, GbdtImage
+from core.native_descriptor_call import native_descriptor_report
 from core.native_descriptor_abi import NativeDescriptorError
 from gbdt.fit_request import GbdtFitArgs, GbdtFitOutcome
 from gbdt.methods.ordered_fast_switches import ordered_doc_count
@@ -129,20 +130,20 @@ def gbdt_per_round_paths_binding() raises -> PythonObject:
 def gbdt_binary_native(probabilities: Bool, raw_address: Int, address: Int, n: Int) raises -> Int:
     """The adapters' binary transforms (XG_BINARY): n Float32 margins to the
     Float32 pair `[1 - p, p]` (2 n values) or the Int32 class code (n).
-    Both perform the arithmetic/selection on GPU, GIL released."""
+    Both perform the arithmetic/selection on GPU. GIL-free (see
+    `gbdt_gpu_entry_v1`): the caller released it or holds none."""
     if n <= 0 or n > 2147483647:
         raise Error("binary prediction: positive n<=Int32.max required")
     if raw_address == 0:
         raise Error("mojolearn: null buffer address")
     if address == 0:
         raise Error("binary prediction: null output")
-    with GILReleased(Python()):
-        # cpu2-l6-bindings: upload from the caller's pointer, device
-        # finiteness scan, output copied straight into the caller's buffer
-        if probabilities:
-            binary_prediction_device[True, DType.float32](raw_address, address, n)
-        else:
-            binary_prediction_device[False, DType.int32](raw_address, address, n)
+    # cpu2-l6-bindings: upload from the caller's pointer, device
+    # finiteness scan, output copied straight into the caller's buffer
+    if probabilities:
+        binary_prediction_device[True, DType.float32](raw_address, address, n)
+    else:
+        binary_prediction_device[False, DType.int32](raw_address, address, n)
     return 2 * n if probabilities else n
 
 
@@ -156,7 +157,12 @@ def gbdt_binary_prediction_binding[probabilities: Bool](
     if len(params) != 1:
         raise Error("binary prediction: params must contain n")
     var n = Int(py=params[0])
-    return PythonObject(gbdt_binary_native(probabilities, Int(py=raw_addr), Int(py=out_addr), n))
+    var raw = Int(py=raw_addr)
+    var dst = Int(py=out_addr)
+    var wrote = 0
+    with GILReleased(Python()):
+        wrote = gbdt_binary_native(probabilities, raw, dst, n)
+    return PythonObject(wrote)
 
 
 # TOMBSTONE: gbdt_sigmoid_pair, gbdt_predict, gbdt_predict_multi, gbdt_resident_predict, gbdt_resident_binary_classes (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_BINARY, XG_SIGMOID_PAIR, XG_PREDICT, XG_PREDICT_MULTI, XG_RESIDENT_PREDICT of this image's native entry; kernels unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 5544c66aae.
@@ -187,32 +193,29 @@ def gbdt_sigmoid_pair_native(raw_address: Int, out_address: Int, count: Int) rai
         raise Error("gbdt_sigmoid_pair: n must be non-negative")
     if count > 0 and (raw_address == 0 or out_address == 0):
         raise Error("mojolearn: null buffer address")
-    with GILReleased(Python()):
-        # cpu2-l6-bindings: `resident_link_kernel`'s pair, soft binary64,
-        # on the device (`sigmoid_f64_kernel`); same words as the host loop
-        sigmoid_f64_device(
-            raw_address, out_address, count, True, GBDT_PAIR_SABOTAGE
-        )
+    # cpu2-l6-bindings: `resident_link_kernel`'s pair, soft binary64,
+    # on the device (`sigmoid_f64_kernel`); same words as the host loop
+    sigmoid_f64_device(
+        raw_address, out_address, count, True, GBDT_PAIR_SABOTAGE
+    )
     return count
 
 
 def _gbdt_locked_insert(var entry: ResidentGbdtModel) raises -> Int:
-    """`gbdt_resident_prepare`'s registry step, under the lock word: the
-    lock is taken with the GIL released, the insert is RUN."""
+    """`gbdt_resident_prepare`'s registry step, under the lock word. The
+    caller holds no GIL here (the entry released it, or a member's worker
+    never had it), so the lock is never waited on with the GIL held."""
     var word = _gbdt_lock_word()
-    with GILReleased(Python()):
-        _gbdt_lock(word)
+    _gbdt_lock(word)
     return _gbdt_locked_insert_run(word, entry^)
 
 
 def gbdt_fit_native(row_major: Bool, params: GbdtFitArgs) raises -> GbdtFitOutcome:
     """Fit a gradient-boosted ensemble: `gbdt_fit_native_run`
-    (gbdt/mojolearn_gbdt_run.mojo, which documents the slots) with the GIL
-    released around the whole typed call."""
-    var outcome: GbdtFitOutcome
-    with GILReleased(Python()):
-        outcome = gbdt_fit_native_run(row_major, params)
-    return outcome^
+    (gbdt/mojolearn_gbdt_run.mojo, which documents the slots). GIL-free:
+    the image's entry (`gbdt_gpu_entry_v1`) or the Python entry below
+    releases it around the whole typed call; a member's worker holds none."""
+    return gbdt_fit_native_run(row_major, params)
 
 
 def gbdt_fit_binding(
@@ -229,7 +232,10 @@ def gbdt_fit_binding(
     UNPACK and PACK only (bindings/gbdt_fit_boundary.mojo); the GBDT doors
     call the fit natively through this image's table entry."""
     var args = gbdt_fit_args_py(x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr, eval_y_addr, params, strs)
-    return gbdt_fit_outcome_py(gbdt_fit_native(False, args))
+    var outcome: GbdtFitOutcome
+    with GILReleased(Python()):
+        outcome = gbdt_fit_native(False, args)
+    return gbdt_fit_outcome_py(outcome^)
 
 
 def gbdt_fit_rowmajor_binding(
@@ -249,7 +255,10 @@ def gbdt_fit_rowmajor_binding(
     `gbdt_fit_row_major_available()` says so (raw float columns only, so
     `params[3]` must be 0); the Python layer asks first."""
     var args = gbdt_fit_args_py(x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr, eval_y_addr, params, strs)
-    return gbdt_fit_outcome_py(gbdt_fit_rowmajor_native(args))
+    var outcome: GbdtFitOutcome
+    with GILReleased(Python()):
+        outcome = gbdt_fit_rowmajor_native(args)
+    return gbdt_fit_outcome_py(outcome^)
 
 
 def gbdt_fit_rowmajor_native(args: GbdtFitArgs) raises -> GbdtFitOutcome:
@@ -283,11 +292,9 @@ def gbdt_predict_native(text: String, x_address: Int, n_rows: Int, out_address: 
     """
     var xp = _f32_ptr(x_address)
     var op = _f32_ptr(out_address)
-    var wrote: Int
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        wrote = gbdt_predict(ctx, text, xp, n_rows, op)
-        ctx.synchronize()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var wrote = gbdt_predict(ctx, text, xp, n_rows, op)
+    ctx.synchronize()
     return wrote
 
 
@@ -317,20 +324,16 @@ def gbdt_predict_multi_native(text: String, x_address: Int, n_rows: Int, out_add
     """
     var xp = _f32_ptr(x_address)
     var op = _f32_ptr(out_address)
-    var width: Int
-    with GILReleased(Python()):
-        var ctx = process_ctx[_DEVCTX_SLOT]()
-        width = gbdt_predict_multi(ctx, text, xp, n_rows, op, mode)
-        ctx.synchronize()
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var width = gbdt_predict_multi(ctx, text, xp, n_rows, op, mode)
+    ctx.synchronize()
     return width
 
 
 def gbdt_resident_prepare_native(text: String) raises -> Int:
-    """XG_RESIDENT_PREPARE: parse, pack and upload with the GIL released and
-    outside the registry lock; only the insert is locked."""
-    var entry: ResidentGbdtModel
-    with GILReleased(Python()):
-        entry = ResidentGbdtModel(text)
+    """XG_RESIDENT_PREPARE: parse, pack and upload outside the registry
+    lock; only the insert is locked. GIL-free (see `gbdt_gpu_entry_v1`)."""
+    var entry = ResidentGbdtModel(text)
     return _gbdt_locked_insert(entry^)
 
 
@@ -344,21 +347,47 @@ def gbdt_resident_prepare_binding(model: PythonObject) raises -> PythonObject:
     the uploads, as `gbdt_predict` releases it for its work. Every
     registry step takes the registry lock word (see `_GbdtRegistryLock`)."""
     var text = String(py=model)
-    return PythonObject(gbdt_resident_prepare_native(text))
+    var handle = 0
+    with GILReleased(Python()):
+        handle = gbdt_resident_prepare_native(text)
+    return PythonObject(handle)
+
+
+def _gbdt_registry_release(handle: Int) raises:
+    """The registry's release under its lock word. GIL-free."""
+    var word = _gbdt_lock_word()
+    _gbdt_lock(word)
+    try:
+        gbdt_resident_release(handle)
+    except error:
+        _gbdt_unlock(word)
+        raise error^
+    _gbdt_unlock(word)
+
+
+def _gbdt_registry_info(handle: Int) raises -> List[Int]:
+    """The registry's info words under its lock word. GIL-free."""
+    var word = _gbdt_lock_word()
+    _gbdt_lock(word)
+    var info: List[Int]
+    try:
+        info = gbdt_resident_info(handle)
+    except error:
+        _gbdt_unlock(word)
+        raise error^
+    _gbdt_unlock(word)
+    return info^
 
 
 def gbdt_resident_release_binding(handle: PythonObject) raises -> PythonObject:
     """Drop a prepared model. A released or unknown handle raises."""
     var h = Int(py=handle)
-    var word = _gbdt_lock_word()
+    # The lock is taken AND dropped with the GIL released (lane fx-gil): a
+    # member's release may run on a thread that holds the GIL
+    # (`_GbdtMemberGpuImage.release` at PACK), so no thread may wait for the
+    # GIL while it holds the registry lock.
     with GILReleased(Python()):
-        _gbdt_lock(word)
-    try:
-        gbdt_resident_release(h)
-    except error:
-        _gbdt_unlock(word)
-        raise error^
-    _gbdt_unlock(word)
+        _gbdt_registry_release(h)
     return PythonObject(None)
 
 
@@ -366,16 +395,10 @@ def gbdt_resident_info_binding(handle: PythonObject) raises -> PythonObject:
     """`[approx_dim, n_input_features, workspace_rows, oblivious, n_trees]`
     of a live handle."""
     var h = Int(py=handle)
-    var word = _gbdt_lock_word()
-    with GILReleased(Python()):
-        _gbdt_lock(word)
     var info: List[Int]
-    try:
-        info = gbdt_resident_info(h)
-    except error:
-        _gbdt_unlock(word)
-        raise error^
-    _gbdt_unlock(word)
+    # Locked and unlocked with the GIL released, as the release above.
+    with GILReleased(Python()):
+        info = _gbdt_registry_info(h)
     return py_list_int(info)
 
 
@@ -399,10 +422,7 @@ def gbdt_resident_predict_native(h: Int, x_address: Int, n_rows: Int, addr: Int,
     var op32 = _f32_ptr(addr)
     var op64 = _f64_ptr(addr)
     var op64i = _i64_ptr(addr)
-    var width: Int
-    with GILReleased(Python()):
-        width = _gbdt_locked_predict(h, xp, n_rows, op32, op64, op64i, mode, row_major)
-    return width
+    return _gbdt_locked_predict(h, xp, n_rows, op32, op64, op64i, mode, row_major)
 
 
 def gbdt_vendor_binding() raises -> PythonObject:
@@ -429,14 +449,11 @@ def gbdt_fit_two_level_feature_freq_native(
     var wp = _f32_ptr(weights_address)
     var sp = _u32_ptr(sources_address)
     var random_seed = UInt64(seed)
-    var text: String
     var device_plan = _gbdt_device_plan()
-    with GILReleased(Python()):
-        text = gbdt_fit_two_level_feature_freq_run(
-            xp, n_rows, n_features, yp, wp, n_weights, sp, n_sources,
-            learning_rate, l2_leaf_reg, random_seed, device_plan,
-        )
-    return text^
+    return gbdt_fit_two_level_feature_freq_run(
+        xp, n_rows, n_features, yp, wp, n_weights, sp, n_sources,
+        learning_rate, l2_leaf_reg, random_seed, device_plan,
+    )
 
 
 def gbdt_fit_ordered_rmse_native(
@@ -456,15 +473,12 @@ def gbdt_fit_ordered_rmse_native(
     var yp = _f32_ptr(y_address)
     var wp = _f32_ptr(weights_address)
     var pp = _u32_ptr(permutation_address)
-    var text: String
     var device_plan = _gbdt_device_plan()
-    with GILReleased(Python()):
-        text = gbdt_fit_ordered_rmse_run(
-            x_address, yp, wp, pp, n_rows, n_features, n_weights,
-            n_estimators, max_depth, border_count, learning_rate,
-            l2_leaf_reg, device_plan,
-        )
-    return text^
+    return gbdt_fit_ordered_rmse_run(
+        x_address, yp, wp, pp, n_rows, n_features, n_weights,
+        n_estimators, max_depth, border_count, learning_rate,
+        l2_leaf_reg, device_plan,
+    )
 
 
 # TOMBSTONE: gbdt_fit_ordered_rmse, gbdt_fit_two_level_feature_freq (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT of this image's native entry; fits unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 9c65b76827.
@@ -482,14 +496,7 @@ struct _GbdtMemberGpuImage(GbdtMemberImage):
 
     @staticmethod
     def release(handle: Int) raises:
-        var word = _gbdt_lock_word()
-        _gbdt_lock(word)
-        try:
-            gbdt_resident_release(handle)
-        except error:
-            _gbdt_unlock(word)
-            raise error^
-        _gbdt_unlock(word)
+        _gbdt_registry_release(handle)
 
 # of the Python entries above, which remain for the unconverted Python
 # callers (python/mojolearn/ensemble*.py) and only UNPACK and PACK.
@@ -557,8 +564,25 @@ struct _GbdtGpuImage(GbdtImage):
 
 def gbdt_gpu_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    """This image's gbdt entry (`GBDT_ENTRY_ABI`, gbdt/fit_request.mojo)."""
-    return gbdt_entry_dispatch[_GbdtGpuImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    """This image's gbdt entry (`GBDT_ENTRY_ABI`, gbdt/fit_request.mojo).
+
+    ONE BODY, TWO ENTRIES (lane fx-gil, 2026-11-21). The operations of
+    `_GbdtGpuImage` never touch the GIL. A door calls on the Python thread
+    with the GIL held: the long operations (`gbdt_entry_releases`) run with
+    it released around the whole dispatch, as each released it inside
+    before. A member's worker (core/gbdt_member.mojo) holds no GIL and says
+    so with `ENTRY_OP_GIL_FREE`: the same dispatch runs with no release and
+    no CPython call."""
+    if not gbdt_entry_releases(operation):
+        return gbdt_entry_dispatch[_GbdtGpuImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    var status = 1
+    try:
+        with GILReleased(Python()):
+            status = gbdt_entry_dispatch[_GbdtGpuImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+    return status
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gbdt.mojo
