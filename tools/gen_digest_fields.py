@@ -5,7 +5,7 @@ Read from the sources the compiled walk reads (bindings/fitted_digest_door.mojo)
 in an installed Mojolearn:
 
 - `mojolearn._digest_fields`: REFUSED (no digest yet, with the reason), EXTRA
-  (private fitted fields added) and SKIP (public fields left out);
+  (private fitted fields added);
 - the save schemas the classes registered (`_native_archive_bridge`, the
   context's `archive_save_schemas`): the members `save` writes;
 - the rule for every other class: its public fitted attributes.
@@ -81,10 +81,7 @@ def rows(ml):
             out.append((name, "save schema", listed))
             continue
         extra = lookup(cls, fields.EXTRA) or ()
-        skip = lookup(cls, fields.SKIP) or ()
         text = "every public fitted attribute (name ends in `_`, value not None)"
-        if skip:
-            text += "; without " + ", ".join(f"`{n}`" for n in skip)
         if extra:
             text += "; plus " + ", ".join(f"`{n}`" for n in extra)
         out.append((name, "public fitted attributes", text))

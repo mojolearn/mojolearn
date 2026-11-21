@@ -22,8 +22,7 @@
 #   2. Any other class: its public fitted attributes, the rule `is_fitted`
 #      reads (instance fields whose name ends in "_" and does not start with
 #      "_", value not None), plus the private fields its class names in
-#      `digest_extra` and minus the public fields it names in `digest_skip`
-#      (wall times; python/mojolearn/_digest_fields.py), each described by
+#      `digest_extra` (python/mojolearn/_digest_fields.py), each described by
 #      the npz codec's `_npz_value` (dtype, shape, C-order bytes).
 #      A list, tuple or dict that is not one flat run of scalars is entered:
 #      `name[i]`, `name{key}` and `name.len`. A member estimator contributes
@@ -174,17 +173,10 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
         var work_names = List[String]()
         var work_values = List[PythonObject]()
         var work_depths = List[Int]()
-        # Public fields that are not fitted state (wall times), named per class.
-        var skipped = PythonObject(None)
-        var skip_table = py_get(context, "digest_skip")
-        if skip_table is not None:
-            skipped = archive_schema_lookup(cls, skip_table)
         var keys = py_call(b.list, fields.keys())
         for i in range(len(keys)):  # driver-loop: over the model's stored field names
             var name = String(py=keys[i])
             if name.endswith("_") and not name.startswith("_"):
-                if skipped is not None and py_contains(skipped, keys[i]):
-                    continue
                 var value = fields[keys[i]]
                 if value is not None:
                     work_names.append(name)
