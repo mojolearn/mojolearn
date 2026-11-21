@@ -9,6 +9,9 @@ disagree.
 
 The field source of a class, first match in its ancestry:
 
+0. The class name hashed is the public estimator's: a CPU twin (`CANONICAL`)
+   is hashed under the name of the class it loads, and takes that class's
+   field source through its ancestry.
 1. `REFUSED`: no digest yet; the read raises AttributeError with the reason.
 2. A connected save schema (`_native_archive_bridge.register`): the members
    `save` writes.
@@ -51,9 +54,9 @@ EXTRA_BY_NAME = {
     "_DiscreteNB": ("_w", "_bias", "_cc", "_flp", "_cmax"),
     "LinearDiscriminantAnalysis": ("_coef", "_inter", "_rank", "_scal_full", "_max_components"),
     "QuadraticDiscriminantAnalysis": ("_rot", "_logc"),
-    # linear models: the centering of the fit (providers/python/linear_fit_boundary_unpack.mojo)
-    "LinearRegression": ("_x_mean", "_y_mean"),
-    "Ridge": ("_x_mean", "_y_mean"),
+    # linear models: `coef_` and `intercept_` decide every answer. The centering of the fit (`_x_mean`,
+    # `_y_mean`) is not listed: predict never reads it, a saved file does not hold it, and a loaded copy
+    # (which has the same answers) must have the same digest.
     # the stacked weights predict reads (bindings/qn_boundary_pack.mojo, bindings/svc_linear_boundary_pack.mojo)
     "QNRegressor": ("_w",),
     "_LinearSVMBase": ("_w",),
@@ -141,6 +144,13 @@ REFUSED_BY_NAME = {}
 EXTRA = {}
 REFUSED = {}
 
+#: CPU twin class -> the name of the public class it is hashed under. A `Host*`
+#: class is the same estimator bound to the CPU binding (a saved file loaded by
+#: `host_model`), so it has the digest of the class that wrote the file: the
+#: name in the hash and in the save schema's `estimator` member is the public
+#: one. Filled by `twin` where the twins are defined (_classical_host.py).
+CANONICAL = {}
+
 #: The one connection of the `digest_` property: the property object, the
 #: compiled entry and its context. Filled in place by `connect`; `_mode` puts
 #: this dictionary in its metadata context, where
@@ -157,6 +167,13 @@ def declare(cls):
         EXTRA[cls] = EXTRA_BY_NAME[name]
     if name in REFUSED_BY_NAME:
         REFUSED[cls] = REFUSED_BY_NAME[name]
+
+
+def twin(cls, name):
+    """Declare `cls` a CPU twin of the public class called `name` (called
+    once per twin, where the twins are defined)."""
+    if cls.__name__ != name:
+        CANONICAL[cls] = name
 
 
 def layer(cls):
@@ -177,7 +194,7 @@ def connect(base):
     entry, context = connect_archive()
     if "archive_unavailable" not in context:
         context.update(digest_base=base, digest_extra=EXTRA, digest_refused=REFUSED, digest_skip=NOT_STATE,
-                       digest_layers=LAYERS)
+                       digest_layers=LAYERS, digest_canonical=CANONICAL)
         CONNECTION["entry"] = entry
     CONNECTION["context"] = context
     return entry, context

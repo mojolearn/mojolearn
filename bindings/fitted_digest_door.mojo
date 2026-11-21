@@ -37,6 +37,12 @@
 # array, a scalar, text, a container of those or an estimator) is refused by
 # name: never skipped, never hashed by address or repr.
 #
+# ONE MODEL, ONE DIGEST. Nothing of the route, the device or the binary is
+# hashed: the class name is the public estimator's (a CPU twin is hashed under
+# the name of the class it loads), fields go in name order, a device-resident
+# array is described by its dtype, shape and bytes exactly as a host array is,
+# and the public names that record how a call ran are skipped (`digest_skip`).
+#
 # Refusals are AttributeError, in words: an unfitted model (like any fitted
 # attribute), a model in `fast` mode (fast promises no identical bits), and
 # the two above. `hasattr(model, "digest_")` is then False.
@@ -105,6 +111,15 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
     var b = native_loaded_module("builtins")
     var cls = py_type(model)
     var class_name = _archive_class_name_unpack(cls)
+    # The name that is hashed: the public estimator's. A CPU twin (a `Host*`
+    # class, python/mojolearn/_digest_fields.py CANONICAL) is hashed under the
+    # name of the class whose file it loads, in the hash head and in the save
+    # schema's `estimator` member, so a model and its loaded copy have one
+    # digest on any device. `class_name` stays the real class for refusals.
+    var hashed_name = class_name
+    var canonical = py_get(context, "digest_canonical")
+    if canonical is not None and py_contains(canonical, cls):
+        hashed_name = String(py=py_item(canonical, cls))
     var refused = py_get(context, "digest_refused")
     if refused is not None:
         var reason = archive_schema_lookup(cls, refused)
@@ -127,7 +142,7 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
                 failure = "fast"
             else:
                 _schema_gp_state(fields, steps, context)
-                _schema_run(model, fields, steps, values, class_name, context)
+                _schema_run(model, fields, steps, values, hashed_name, context)
         except problem:
             failure = String(problem)
             if failure == PYTHON_ERROR_PENDING:
@@ -307,7 +322,7 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
     var result = String("")
     try:
         with GILReleased(Python()):
-            result = fitted_digest_hex(class_name, members)
+            result = fitted_digest_hex(hashed_name, members)
     finally:
         _ = pins
     _ = members
