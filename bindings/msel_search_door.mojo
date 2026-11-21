@@ -47,6 +47,7 @@ from bindings.msel_common_door import (
 from bindings.msel_split_door import msel_truth, msel_flag_truth, msel_field, msel_cls, msel_sabotage
 from bindings.msel_common_door import msel_signed32
 from bindings.msel_helpers_key_unpack import msel_helpers_key
+from bindings.msel_member_device_unpack import msel_member_host_folds, msel_params_name_device
 from bindings.msel_helpers_released_unpack import msel_gather_i64
 # lane calltable-msel: the score-table passes both base bindings exported,
 # linked into this door instead of called through CPython.
@@ -300,6 +301,19 @@ def msel_candidates(model: PythonObject, context: PythonObject) raises -> Python
     raise Error("TypeError: Python candidate callbacks are not supported; use GridSearchCV or RandomizedSearchCV")
 
 
+def _search_host_folds(fields: PythonObject, candidates: PythonObject, context: PythonObject) raises -> Bool:
+    """True when a search gathers its fold rows on the host: the search's
+    own `device` is `'cpu'` in a process with a GPU set, or a candidate sets
+    a `device`. `fields` is the search's admitted instance dictionary; its
+    `device` reads through the same rule as a member's."""
+    if msel_member_host_folds(fields, context):
+        return True
+    for k in range(len(candidates)):  # driver-loop: over the candidates' parameter dicts, names only
+        if msel_params_name_device(candidates[k]):
+            return True
+    return False
+
+
 def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_BaseSearch.fit(X, y, groups=...)`."""
     var b = msel_b()
@@ -334,7 +348,17 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var trains = List[List[List[Float64]]]()
     var names = List[String]()
     var n_splits = 0
-    var rows = MselFoldRows(xf, yf, folds, msel_device_rows_ok(estimator, scoring, context), context)
+    # The search's own fold rows (device wave, 2026-11-21). They stay
+    # resident on the device only when the base estimator runs there
+    # (msel_device_rows_ok reads the member's device), the search itself
+    # does not say device="cpu", and no candidate sets a `device`: a
+    # candidate that moves a member to the CPU must not be handed rows that
+    # live on the device. Read once per search fit, and only when the rows
+    # would be resident.
+    var device_rows = msel_device_rows_ok(estimator, scoring, context)
+    if device_rows and _search_host_folds(fields, candidates, context):
+        device_rows = False
+    var rows = MselFoldRows(xf, yf, folds, device_rows, context)
     try:
         # Every (candidate, fold) is one unit (msel_cv_units): the base
         # estimator cloned once per unit with the candidate's parameters set
@@ -434,7 +458,15 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     var count = 0
     var k = 0
     var param_range = msel_parameter_values(args[4], context)
-    var rows = MselFoldRows(xf, yf, folds, msel_device_rows_ok(estimator, scoring, context), context)
+    # A curve over the estimator's `device` (or a nested member's) hands
+    # every value host rows (device wave, 2026-11-21): one of its values is
+    # the CPU. The name was admitted as an exact str above.
+    var device_rows = msel_device_rows_ok(estimator, scoring, context)
+    if device_rows:
+        var param_name = String(args[3])
+        if param_name == "device" or param_name.endswith("__device"):
+            device_rows = False
+    var rows = MselFoldRows(xf, yf, folds, device_rows, context)
     try:
         # Every (value, fold) is one unit (msel_cv_units); each unit clones
         # the base once and sets {param_name: value} on its clone.
