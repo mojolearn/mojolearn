@@ -399,6 +399,8 @@ VERIFICATION_DOORS = {
     # import put `_verify_reference.py`, and with it verify_reference/table.json, in every lane's reach
     # (tools/test_lane_select.py::test_package_modules_the_verifier_alone_uses_are_unreachable, 2026-11-21).
     os.path.join(PKG, "model_selection.py"): {("_BaseSearch", "check"): ("_verify_check",)},
+    # `model.check(ids)` on a causal language model (lane dw-neural-models, 2026-11-21): the same door.
+    os.path.join(PKG, "models", "causal_lm.py"): {("CausalLM", "check"): ("_verify_check",)},
 }
 
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")
