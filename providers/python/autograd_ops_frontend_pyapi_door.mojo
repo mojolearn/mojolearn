@@ -7,6 +7,8 @@ from bindings.py_balanced import py_call, py_item, py_setattr, py_setitem, py_ty
 from providers.python.autograd_python_errors_pyapi_pack import graph_int
 from sequence.exec_trait import Exec
 from bindings.autograd_keys_unpack import autograd_keys
+from bindings.py_keys import py_op_add, py_op_code
+from core.shared_slot import SharedSlot
 from sequence.ops import FP
 from autograd.ops_api import ops_session, ops_session_registry_token
 from autograd.optimizer_requests import OpsOptimizerExtras
@@ -45,7 +47,7 @@ from providers.python.autograd_gradient_diagnostics_pyapi_pack import gradient_r
 # name table: the RUN half of this file, autograd/autograd_ops_frontend_run.mojo
 # (wave 8 run split). The dispatch below compares the integer codes.
 from autograd.autograd_ops_frontend_run import (
-    _session_op_code, _append,
+    _SESSION_OP_CODES, _append,
     _SOP_PROGRAM_PUBLIC, _SOP_PROGRAM_INIT, _SOP_ENTER, _SOP_FREE_PROGRAM, _SOP_CLOSE, _SOP_EXIT,
     _SOP_PROFILE_RESET, _SOP_PROFILE_REPORT, _SOP_LOAD_PARTITIONED, _SOP_LOAD_DISTRIBUTED,
     _SOP_PROGRAM_RUN, _SOP_FIT, _SOP_FIT_IF, _SOP_GRADIENT_REPORT, _SOP_EXECUTION_PROFILE_BEGIN,
@@ -72,6 +74,32 @@ from autograd.autograd_ops_frontend_run import (
     _SOP_LM_HEAD_LOSS, _SOP_LM_ROWS, _SOP_LM_PICK, _SOP_LM_ALIVE, _SOP_LM_EMBEDDING, _SOP_CONV_BLOCK,
     _SOP_CONV_LINEAR, _SOP_LSTM, _SOP_GRU, _SOP_RNN,
 )
+
+
+struct _SessionOpNames(Defaultable, Movable):
+    # The Session operation names as one Python dictionary (interned name ->
+    # code), built once per process from the native table of the RUN half.
+    var ready: Bool
+    var ops: PythonObject
+
+    def __init__(out self):
+        self.ready = False
+        self.ops = PythonObject(None)
+
+
+comptime _SESSION_OP_NAMES = SharedSlot[_SessionOpNames, "MojolearnSessionOpNamesV1"]
+
+
+def _session_op_names() raises -> PythonObject:
+    var held = _SESSION_OP_NAMES.get_or_create_ptr()
+    if not held[].ready:
+        var ops = Python.dict()
+        var native = _SESSION_OP_CODES.get_or_create_ptr()
+        for item in native[].codes.items():  # driver-loop: over the fixed Session operation names, once per process
+            py_op_add(ops, item.key, item.value)
+        held[].ops = ops
+        held[].ready = True
+    return held[].ops
 
 
 def _nil(x: PythonObject) -> Bool:
@@ -189,8 +217,13 @@ def ops_session_call_fields_py[E: Exec & Movable & Deinitable, KIND: Int](
 def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
     session: PythonObject, operation: PythonObject, args: PythonObject, fields: PythonObject,
 ) raises -> PythonObject:
-    var name = String(operation)
-    var op = _session_op_code(name)
+    # The code of the caller's own operation str (bindings/py_keys.mojo): one
+    # dictionary read. The former door copied the name into a String and
+    # hashed the copy on every Session operation. An unknown name is 0, as
+    # before, and is refused at the end of the chain in the same words.
+    var op = py_op_code(_session_op_names(), operation)
+    if op < 0:
+        op = 0
     # Held keys: every operation read `_id` by name twice (two Python strs
     # built, hashed and freed); it is read once, with the held key.
     var nk = autograd_keys()
@@ -225,7 +258,7 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
     if _nil(sid):
         raise Error("ValueError: this session is closed")
     if op == _SOP_LOAD_PARTITIONED or op == _SOP_LOAD_DISTRIBUTED:
-        return ops_owned_program_create_request_py(fields, 0, name, args)
+        return ops_owned_program_create_request_py(fields, 0, String(operation), args)
     if op == _SOP_PROGRAM_RUN:
         if len(args) != 4:
             raise Error("TypeError: Session.run requires a Program, arrays and two flags")
@@ -460,7 +493,7 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
             return state
         var state = args[2]
         program_admit_value(state)
-        var step = _int(state["step"], "step", 0)
+        var step = _int(py_item(state, nk[].k_step), "step", 0)
         var first = 0
         var second = 0
         var beta1 = Float32(1)
@@ -469,31 +502,31 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var opt_kind = s[].opts[oi].cfg.kind
         var third = 0
         if opt_kind == 0:
-            if py_contains(state, "momentum_buffer"):
-                first = _int(state["momentum_buffer"], "momentum_buffer", 1)
+            if py_contains(state, nk[].k_momentum_buffer):
+                first = _int(py_item(state, nk[].k_momentum_buffer), "momentum_buffer", 1)
         elif opt_kind == 3 or opt_kind == 4:
-            if py_contains(state, "momentum_buffer"):
-                first = _int(state["momentum_buffer"], "momentum_buffer", 1)
+            if py_contains(state, nk[].k_momentum_buffer):
+                first = _int(py_item(state, nk[].k_momentum_buffer), "momentum_buffer", 1)
             if opt_kind == 3:
-                if py_contains(state, "square_avg"):
-                    second = _int(state["square_avg"], "square_avg", 1)
-            elif py_contains(state, "sum"):
-                second = _int(state["sum"], "sum", 1)
-            if py_contains(state, "grad_avg"):
-                third = _int(state["grad_avg"], "grad_avg", 1)
+                if py_contains(state, nk[].k_square_avg):
+                    second = _int(py_item(state, nk[].k_square_avg), "square_avg", 1)
+            elif py_contains(state, nk[].k_sum):
+                second = _int(py_item(state, nk[].k_sum), "sum", 1)
+            if py_contains(state, nk[].k_grad_avg):
+                third = _int(py_item(state, nk[].k_grad_avg), "grad_avg", 1)
         else:
-            if py_contains(state, "exp_avg"):
-                first = _int(state["exp_avg"], "exp_avg", 1)
+            if py_contains(state, nk[].k_exp_avg):
+                first = _int(py_item(state, nk[].k_exp_avg), "exp_avg", 1)
             if opt_kind == 8:
                 # Adamax: the keys `optimizer_state` returns for it
-                if py_contains(state, "exp_inf"):
-                    second = _int(state["exp_inf"], "exp_inf", 1)
-            elif py_contains(state, "exp_avg_sq"):
-                second = _int(state["exp_avg_sq"], "exp_avg_sq", 1)
+                if py_contains(state, nk[].k_exp_inf):
+                    second = _int(py_item(state, nk[].k_exp_inf), "exp_inf", 1)
+            elif py_contains(state, nk[].k_exp_avg_sq):
+                second = _int(py_item(state, nk[].k_exp_avg_sq), "exp_avg_sq", 1)
             beta1 = Float32(py=state["beta1_power"])
             beta2 = Float32(py=state["beta2_power"])
             if opt_kind == 9:
-                mu = Float32(py=state["mu_product"])
+                mu = Float32(py=py_item(state, nk[].k_mu_product))
         var request = OpsOptimizerRestoreRequest(step, first, second, third, beta1, beta2, mu)
         s[].load_optimizer_state(opt, _int(args[1], "param", 1), request)
         return PythonObject(None)
@@ -552,12 +585,12 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
                 var scaling = args[8]
                 if py_type(scaling) is not types[].dict_type:
                     raise Error("TypeError: rope_scaling must be None or a dict")
-                scaling_kind = String(scaling["type"]) if py_contains(scaling, "type") else String(scaling["rope_type"])
-                scaling_factor = _float(scaling["factor"], "rope_scaling factor")
+                scaling_kind = String(py_item(scaling, nk[].k_type)) if py_contains(scaling, nk[].k_type) else String(py_item(scaling, nk[].k_rope_type))
+                scaling_factor = _float(py_item(scaling, nk[].k_factor), "rope_scaling factor")
                 if scaling_kind == "llama3":
-                    scaling_low = _float(scaling["low_freq_factor"], "low_freq_factor")
-                    scaling_high = _float(scaling["high_freq_factor"], "high_freq_factor")
-                    scaling_original = _int(scaling["original_max_position_embeddings"],
+                    scaling_low = _float(py_item(scaling, nk[].k_low_freq_factor), "low_freq_factor")
+                    scaling_high = _float(py_item(scaling, nk[].k_high_freq_factor), "high_freq_factor")
+                    scaling_original = _int(py_item(scaling, nk[].k_original_max_position_embeddings),
                                             "original_max_position_embeddings", 1)
             var option_words = session_attention_option_words(
                 block_ints[4], block_ints[6], String(args[12]), String(args[15]), _float(args[7], "rope_theta"),
@@ -591,14 +624,14 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         var builtin_types = program_builtin_types()
         if py_type(block) is not builtin_types[].dict_type:
             raise Error("TypeError: the block must be the dict mamba_block or attention_block returned")
-        var config = _ints(block["config"], "block", 0)
+        var config = _ints(py_item(block, nk[].k_config), "block", 0)
         var words = 0
-        if not _nil(block["words"]):
-            words = _int(block["words"], "words", 1)
+        if not _nil(py_item(block, nk[].k_words)):
+            words = _int(py_item(block, nk[].k_words), "words", 1)
         return PythonObject(session_block_step[E, KIND](
-            Int(py=sid), _int(args[0], "handle", 1), _int(block["weights"], "weights", 1),
-            _int(block["state"], "state", 1), words, config, _float(block["dt_lo"], "dt_limit"),
-            _float(block["dt_hi"], "dt_limit"), op == _SOP_ATTENTION_STEP))
+            Int(py=sid), _int(args[0], "handle", 1), _int(py_item(block, nk[].k_weights), "weights", 1),
+            _int(py_item(block, nk[].k_state), "state", 1), words, config, _float(py_item(block, nk[].k_dt_lo), "dt_limit"),
+            _float(py_item(block, nk[].k_dt_hi), "dt_limit"), op == _SOP_ATTENTION_STEP))
     if op == _SOP_LSTM or op == _SOP_GRU or op == _SOP_RNN:
         # args (x, weight_ih, weight_hh, bias_ih, bias_hh): tensor handles
         var cell = CELL_LSTM if op == _SOP_LSTM else (CELL_GRU if op == _SOP_GRU else CELL_RNN_TANH)
@@ -1033,5 +1066,5 @@ def ops_session_call_admitted_py[E: Exec & Movable & Deinitable, KIND: Int](
         hs = [_int(args[0], "handle", 1), _int(args[1], "handle", 1)]
         return PythonObject(Float64(s[].metric(metric, hs)))
     if code == 0:
-        raise Error("unknown native session operation: " + name)
+        raise Error("unknown native session operation: " + String(operation))
     return PythonObject(s[].op(code, hs, ints, fs))

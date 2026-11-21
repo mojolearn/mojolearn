@@ -269,7 +269,6 @@ from checks.native_tests.labels_driver import register as register_labels_driver
 from checks.native_tests.labels_score_keys import register as register_labels_score_keys
 from checks.native_tests.linear_boundary_contracts import register as register_linear_boundary_contracts
 from checks.native_tests.linear_entry_production import register as register_linear_entry_production
-from checks.native_tests.trees_route import register as register_trees_route
 from checks.native_tests.linear_model_state import register as register_linear_model_state
 from checks.native_tests.lof_plan_contract import register as register_lof_plan_contract
 from checks.native_tests.logistic_config import register as register_logistic_config
@@ -280,7 +279,6 @@ from checks.native_tests.lr_schedule_check import register as register_lr_schedu
 from checks.native_tests.mani_tsne_run import register as register_mani_tsne_run
 from checks.native_tests.mani_umap_run import register as register_mani_umap_run
 from checks.native_tests.msel_helpers_entry import register as register_msel_helpers_entry
-from checks.native_tests.member_device_rule import register as register_member_device_rule
 from checks.native_tests.native_array_layout_check import register as register_native_array_layout_check
 from checks.native_tests.native_device_concurrency import register as register_native_device_concurrency
 from checks.native_tests.nearest_centroid_plan import register as register_nearest_centroid_plan
@@ -853,7 +851,6 @@ def all_checks() -> List[Check]:
     checks.append(register_labels_score_keys())
     checks.append(register_linear_boundary_contracts())
     checks.append(register_linear_entry_production())
-    checks.append(register_trees_route())
     checks.append(register_linear_model_state())
     checks.append(register_lof_plan_contract())
     checks.append(register_logistic_config())
@@ -864,7 +861,6 @@ def all_checks() -> List[Check]:
     checks.append(register_mani_tsne_run())
     checks.append(register_mani_umap_run())
     checks.append(register_msel_helpers_entry())
-    checks.append(register_member_device_rule())
     checks.append(register_native_array_layout_check())
     checks.append(register_native_device_concurrency())
     checks.append(register_nearest_centroid_plan())

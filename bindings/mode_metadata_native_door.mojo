@@ -16,7 +16,7 @@ from bindings.mode_keys_unpack import (
     mode_keys, MODE_OPN_IS_FITTED, MODE_OPN_NUMERIC_MODE_USED, MODE_OPN_VENDOR_USED, MODE_OPN_DEVICE_ADMIT,
 )
 from core.device_route import DEVICE_CPU
-from providers.python.device_route_boundary_door import device_admit_class, device_request
+from providers.python.device_route_boundary_door import device_admit_class, device_request, device_route_resolved
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
@@ -368,15 +368,21 @@ def _readback(model: PythonObject, operation: Int, context: PythonObject) raises
     var requested = _configuration_value(mods, model, fields, nk[].k_numeric_mode, "numeric_mode")
     var route = String(py_item(plan, nk[].k_route))
     if route != "host" and route != "host_gp":
-        # An estimator constructed with device="cpu" on a GPU installation
-        # runs the CPU identical modules its binding route resolves
-        # (providers/python/estimator_binding_pyapi_door.mojo); the class's
-        # read-back plan below names the device modules. The constructor
-        # admitted the value (only for a class whose operations take their
-        # modules from the route), so the answer is the route's.
-        if (py_get(py_item(context, nk[].k_backend_fields), "_CPU_ONLY") is None
-                and device_request(fields, b) == DEVICE_CPU):
-            return PythonObject("identical" if operation == MODE_OPN_NUMERIC_MODE_USED else "cpu")
+        # DEVICE-AWARE: the class's read-back plan below names the device
+        # binaries. An estimator whose device route resolved to the CPU
+        # beside a GPU set runs the CPU identical binaries
+        # (providers/python/device_route_boundary_door.mojo), so the answer is
+        # the route's. Before its first operation the estimator holds no
+        # route yet: the answer is then what its admitted `device` will
+        # resolve to (the one read a route miss makes; the constructor
+        # accepted 'cpu' only for a class whose operations take their
+        # binaries from the route).
+        if py_get(py_item(context, nk[].k_backend_fields), "_CPU_ONLY") is None:
+            var resolved = device_route_resolved(model)
+            if resolved < 0 and device_request(fields, b) == DEVICE_CPU:
+                resolved = DEVICE_CPU
+            if resolved == DEVICE_CPU:
+                return PythonObject("identical" if operation == MODE_OPN_NUMERIC_MODE_USED else "cpu")
     var selected = String()
     if route == "host" or route == "host_gp":
         if requested is not None and (py_type(requested) is not b.str or String(requested) != "identical"):

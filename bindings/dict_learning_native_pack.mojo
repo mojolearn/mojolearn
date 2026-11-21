@@ -32,7 +32,7 @@ from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.decomp_kit_native_door import (
     DecompDoor, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode,
-    decomp_entries, decomp_input, decomp_shape, XD_SPARSE_ALGOS, decomp_kit_unpack, decomp_kit_publish,
+    decomp_entries, decomp_entries_routed, decomp_kit_device_operation, decomp_input, decomp_shape, XD_SPARSE_ALGOS, decomp_kit_unpack, decomp_kit_publish,
     decomp_kit_out_shape, decomp_door_borrow, decomp_door_input, decomp_door_resident_hit,
     decomp_door_resident_input, decomp_door_resident_derived, decomp_door_resident_keep,
 )
@@ -60,6 +60,8 @@ from bindings.dict_keys_unpack import (
     DICT_OPN_SPCA_TRANSFORM,
     DICT_OPN_SPCA_INVERSE,
     DICT_OPN_SPARSE_ENCODE,
+    DICT_OPN_DEVICE_SET,
+    DICT_OPN_VENDOR_USED,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -103,7 +105,7 @@ def dictionary_learning_fit(model: PythonObject, args: PythonObject, project: Bo
     _check_algos(py_item(fields, nk[].k_fit_algorithm), py_item(fields, nk[].k_transform_algorithm))
     if py_get(fields, nk[].k_callback) is not None:
         raise Error("NotImplementedError: callback is not carried")
-    var entries = decomp_entries(mode, context)
+    var entries = decomp_entries_routed(model, fields, mode, context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -147,7 +149,7 @@ def minibatch_dictionary_fit(model: PythonObject, args: PythonObject, project: B
     _check_algos(py_item(fields, nk[].k_fit_algorithm), py_item(fields, nk[].k_transform_algorithm))
     if py_get(fields, nk[].k_callback) is not None:
         raise Error("NotImplementedError: callback is not carried")
-    var entries = decomp_entries(mode, context)
+    var entries = decomp_entries_routed(model, fields, mode, context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -211,7 +213,7 @@ def sparse_coder(model: PythonObject, operation: Int, args: PythonObject, contex
         py_setitem(fields, nk[].k_n_features_in_, PythonObject(cols))
         return model
     var dictionary = _coder_dictionary(fields, context)
-    var entries = decomp_entries(py_item(fields, nk[].k_numeric_mode), context)
+    var entries = decomp_entries_routed(model, fields, py_item(fields, nk[].k_numeric_mode), context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -245,7 +247,7 @@ def sparse_pca_fit(model: PythonObject, args: PythonObject, project: Bool, conte
     var minibatch = _is_a(model, py_item(context, nk[].k_minibatch_sparse_pca_class))
     if not minibatch and not _is_str(py_item(fields, nk[].k_method), "lars") and not _is_str(py_item(fields, nk[].k_method), "cd"):
         raise Error("method must be 'lars' or 'cd'")
-    var entries = decomp_entries(mode, context)
+    var entries = decomp_entries_routed(model, fields, mode, context)
     var door = DecompDoor(entries, py_item(context, nk[].k_output_context))
     var kit = decomp_kit_unpack(entries)
     try:
@@ -347,7 +349,10 @@ def dict_learning_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var depth = decomp_public_begin(model, method, args, True, not coder, context)
         var result = PythonObject(None)
         try:
-            result = _dict_learning_dispatch(model, operation, args, context)
+            if operation == DICT_OPN_DEVICE_SET or operation == DICT_OPN_VENDOR_USED:
+                result = decomp_kit_device_operation(model, operation == DICT_OPN_DEVICE_SET, args, context)
+            else:
+                result = _dict_learning_dispatch(model, operation, args, context)
         finally:
             lifecycle_end(model, method, depth)
         result = decomp_public_finish(model, method, args, result, "", context)

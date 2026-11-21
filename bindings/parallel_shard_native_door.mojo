@@ -46,10 +46,7 @@ from bindings.minmax_metadata_unpack import _flag as _minmax_flag
 from bindings.minmax_metadata_pack import minmax_range_pair
 from core.scaler_core import ScalerTransformSpec, scaler_standard_fit_core, scaler_minmax_fit_core, scaler_transform_core
 from bindings.parallel_public_result_door import parallel_public_result
-from bindings.parallel_member_device_unpack import parallel_member_says_cpu
-from core.device_route_dw_msel_parallel import (
-    MEMBER_DEVICE_CPU, MEMBER_VENDOR_UNKNOWN, member_multi_gpu_refused, member_multi_gpu_refusal,
-)
+from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common_pack import family_call
 from bindings.native_process_pool_door import (
@@ -194,17 +191,18 @@ def _worker_binding(name: String) raises -> PythonObject:
 def _member_device(fields: PythonObject, driver: String) raises:
     """A driver takes its estimator on the GPUs in `devices=` only: a member
     that says device='cpu' in a process with a GPU set is refused in words
-    before any partition or worker request (bindings/parallel_member_device_unpack.mojo).
-    The process's vendor word is the base image's recorded table key (0 CPU
-    only), read only for a member that says 'cpu'."""
-    if not parallel_member_says_cpu(fields):
+    before any partition or worker request (the shared read and words,
+    bindings/msel_member_device_unpack.mojo). The process's vendor word is
+    the base image's recorded table key (0 CPU only, where 'cpu' is the
+    installation's device and nothing is refused), read only for a member
+    that says 'cpu'."""
+    if not member_says_cpu(fields, shard_b()):
         return
     var key = py_get(_t("table_keys"), PythonObject("base"))
-    var vendor: Int = MEMBER_VENDOR_UNKNOWN
     if key is not None:
-        vendor = Int(py=key[1])
-    if member_multi_gpu_refused(MEMBER_DEVICE_CPU, vendor):
-        member_multi_gpu_refusal(driver)
+        if Int(py=key[1]) == 0:
+            return
+    member_multi_gpu_refusal(driver)
 
 
 def _identical(fields: PythonObject) raises -> Bool:

@@ -7,6 +7,10 @@ ENTRY = _binding()._module.declared_params_native_call
 if type(ENTRY) is not BuiltinFunctionType:
     raise TypeError('declared parameter assignment requires a compiled native entry')
 CONTEXT = dict(ready=False, plans={}, missing=object())
+# The compiled device check of the declared setter (a `device` keyword is
+# refused in the shared words before it is written).
+from ._device_table import connect_context as _connect_device_context
+_connect_device_context(CONTEXT)
 
 
 def connect(package, estimator_context, parameter_metadata):

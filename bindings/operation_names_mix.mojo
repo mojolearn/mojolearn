@@ -39,10 +39,6 @@ comptime MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE = 20
 comptime MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE = 21
 comptime MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING = 22
 comptime MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE = 23
-# `vendor_used()` of GaussianMixture and BayesianGaussianMixture, which take
-# `device=` (lane dw-neighbors-cluster): answered from the estimator's route,
-# before the public range test of `mixture_operation`.
-comptime MIX_OPN_FAMILY_MIX_VENDOR_USED = 24
 
 
 def operation_names_mix(mut names: List[String], mut leaves: List[Int]):
@@ -95,5 +91,3 @@ def operation_names_mix(mut names: List[String], mut leaves: List[Int]):
     leaves.append(MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING)
     names.append("family_mix_gmm_public_sample")
     leaves.append(MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE)
-    names.append("family_mix_vendor_used")
-    leaves.append(MIX_OPN_FAMILY_MIX_VENDOR_USED)

@@ -41,6 +41,8 @@ def answer(cls):
     global _ROUTES
     if getattr(cls, "_mojolearn_device", False) is True:
         return True
+    if getattr(cls, "_HOST_INFERENCE_ONLY", False):
+        return True  # an explicit host class runs on the CPU by class
     if _ROUTES is None:
         _ROUTES = host_surface.cpu_training_routes()
     binding = getattr(cls, "_BINDING", None)
@@ -52,3 +54,11 @@ def answer(cls):
 def record(cls):
     # glue: one row per estimator class, at its class statement
     CPU_CLASSES[cls] = answer(cls)
+
+
+def connect_context(context):
+    """Give a compiled constructor or setter door's context what its device
+    check reads: this table and the backend's fields (CPU-only or not)."""
+    # glue: import-time context of a shared constructor door
+    from . import _backend
+    context.update(device_cpu=CPU_CLASSES, backend_fields=vars(_backend))

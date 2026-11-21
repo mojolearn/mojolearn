@@ -169,7 +169,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
     device : {None, "gpu", "cpu"}, default=None
         Where the tree is fitted and predicts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
-        installation. Other values raise ``ValueError`` at fit.
+        installation. Other values raise ``ValueError``.
     inference_engine : {"auto", "sequential", "parallel_groves"}, default="auto"
         Prediction kernel. ``"auto"`` lets the library choose; in identical
         mode it predicts as ``"sequential"``.
@@ -319,7 +319,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
     device : {None, "gpu", "cpu"}, default=None
         Where the tree is fitted and predicts. None uses this installation's
         device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
-        installation. Other values raise ``ValueError`` at fit.
+        installation. Other values raise ``ValueError``.
     inference_engine : {"auto", "sequential", "parallel_groves"}, default="auto"
         Prediction kernel. ``"auto"`` lets the library choose; in identical
         mode it predicts as ``"sequential"``.

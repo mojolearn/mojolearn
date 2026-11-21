@@ -19,6 +19,10 @@ from core.kpca_native_plan import (
     KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCAScratch, KPCADenseFit,
     KPCAFitPrepareRequest, KPCAAlphaRequest, KPCAQueryRequest, KPCA_PRECOMPUTED, kpca_shape,
 )
+from bindings.decomp_device_route_door import (
+    DecompRoute, decomp_route_hit, decomp_route_keep, decomp_route_resolve_device, decomp_route_on_cpu_image,
+    decomp_route_expected_vendor,
+)
 from bindings.kpca_descriptor_boundary_door import (
     kpca_near_connection,
     kpca_decomp_connection,
@@ -81,6 +85,51 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     return name^
 
 
+def _kpca_route(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> DecompRoute:
+    """The estimator's resolved route (bindings/decomp_device_route_door.mojo,
+    the one `DeviceRouteOwner`): `connection` is the neighbors image pair,
+    `extra` the eigensolver image (-1 when it did not connect), of the device
+    set or of the CPU image. A hit is the mode read, one record read and
+    three pointer compares; the device is read once, on a miss. Replaces the
+    per-call mode word, three table reads, provider lookups and vendor
+    compares of `kpca_near_connection` / `kpca_decomp_connection`."""
+    var mode = py_get(fields, "numeric_mode")
+    if mode is None:
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var hit = decomp_route_hit(model, mode, context)
+    if hit.found:
+        return hit.route
+    var name = _mode(fields, context)
+    var tier = 1 if name == "identical" else 0
+    var device = decomp_route_resolve_device(fields, tier, context)
+    var cpu_image = decomp_route_on_cpu_image(device, context)
+    var vendor = decomp_route_expected_vendor(device, context)
+    var near = kpca_near_connection(name, cpu_image, vendor, context)
+    var decomp = -1
+    try:
+        decomp = kpca_decomp_connection(name, cpu_image, vendor, context)
+    except ignored:
+        decomp = -1
+    var route = DecompRoute(device, near, tier, decomp)
+    decomp_route_keep(model, route, mode, context, PythonObject(None))
+    return route
+
+
+def _kpca_decomp_refused(route: DecompRoute, context: PythonObject) raises -> Int:
+    """The refusal path of a fit whose route holds no eigensolver image."""
+    var name = String("identical") if route.mode == 1 else String("fast")
+    return kpca_decomp_connection(name, decomp_route_on_cpu_image(route.device, context),
+        decomp_route_expected_vendor(route.device, context), context)
+
+
+def kpca_route_vendor(model: PythonObject, context: PythonObject) raises -> String:
+    """`vendor_used`: `cpu` for an estimator whose route is the CPU image,
+    else this installation's vendor word (the route's images were admitted
+    against it at resolution)."""
+    var route = _kpca_route(model, py_fields(model), context)
+    return decomp_route_expected_vendor(route.device, context)
+
+
 def _kernels(context: PythonObject) raises -> PythonObject:
     var table = context["kpca_kernels"]
     lifecycle_admit_fields(table)
@@ -114,9 +163,13 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     var gamma_value = _field(fields, "gamma")
     var gamma = _f32_scalar(1.0 / Float64(x.cols) if gamma_value is None else _float(gamma_value, context))
     py_setitem(fields, "_gamma", PythonObject(gamma))
-    var mode = _mode(fields, context)
-    var near = kpca_near_connection(mode, context)
-    var decomp = kpca_decomp_connection(mode, context)
+    var route = _kpca_route(model, fields, context)
+    var near = route.connection
+    var decomp = route.extra
+    if decomp < 0:
+        # The eigensolver image did not connect at resolution: say why, in
+        # the words and at the stage the per-call connection said it.
+        decomp = _kpca_decomp_refused(route, context)
     var requested_value = _field(fields, "n_components")
     var requested = -1 if requested_value is None else _int(requested_value, context)
     var auto = _name(_field(fields, "eigen_solver"), "auto", context)
@@ -182,7 +235,7 @@ def _alpha_inputs(model: PythonObject, fields: PythonObject, context: PythonObje
 def kpca_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = kpca_fit(model, source, context)
     var fields = py_fields(model)
-    var near = kpca_near_connection(_mode(fields, context), context)
+    var near = _kpca_route(model, fields, context).connection
     var alpha = _alpha_inputs(model, fields, context)
     var dst = _f32(alpha.vectors.rows, alpha.vectors.cols, context)
     var request = KPCAAlphaRequest(alpha.vectors.address, alpha.values.address, _address(dst),
@@ -198,7 +251,7 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
     var fields = py_fields(model)
     var q = decomp_admit(source, "KernelPCA", context)
     var fitted = admit_f32(_attr(model, fields, "_fit_X"), 2, "_fit_X", context)
-    var near = kpca_near_connection(_mode(fields, context), context)
+    var near = _kpca_route(model, fields, context).connection
     var alpha = _alpha_inputs(model, fields, context)
     var alphas = KPCAScratch(alpha.vectors.rows, alpha.vectors.cols)
     var count = alpha.vectors.cols

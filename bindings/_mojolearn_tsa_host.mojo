@@ -52,11 +52,7 @@ from checks.kernel_matrix import (
 )
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from bindings.holtwinters_host_predict_door import (
-    HW_PREDICT_SABOTAGE,
-    holtwinters_forecast_binding,
-    holtwinters_predict_binding,
-)
+from core.holtwinters_host_predict_impl import HW_PREDICT_SABOTAGE
 from holtwinters.host.hw_oracle import (
     HW_ORACLE_HOST_SABOTAGE,
     oracle_fit,
@@ -66,30 +62,9 @@ from holtwinters.impl.runner import (
     holtwinters_validate_params,
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
-from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from bindings.kpss_host_test_unpack import KPSS_DECISION_SABOTAGE, kpss_test_binding, select_d_host_binding
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 from tsa.tsa_ops_host import publish_tsa_hw_ops_host
-
-
-def _index(value: PythonObject) raises -> Int:
-    # p3-cnn-sequence-tsa: an exact int (every argument the public wrapper
-    # builds) is read directly: no class-name reads, no operator module
-    # lookup, no Python call. Anything else keeps the checks below.
-    ref cpy = Python().cpython()
-    var zero = PythonObject(0)
-    var cls = PythonObject(from_owned=cpy.PyObject_Type(value._obj_ptr))
-    var int_type = PythonObject(from_owned=cpy.PyObject_Type(zero._obj_ptr))
-    if cls is int_type:
-        return Int(py=value)
-    var type_name = String(py=value.__class__.__name__)
-    if type_name == "bool" or type_name == "bool_":
-        raise Error("tsa host: integers expected, not booleans")
-    var operator_module = native_loaded_module("operator")
-    # operator.index through the balanced call: PythonObject.__call__ keeps one
-    # reference on each argument (bindings/py_balanced.mojo), which leaked every
-    # buffer address passed to a host entry.
-    return Int(py=_balanced_call(operator_module.index, value))
 
 
 def tsa_host_numeric_mode_binding() raises -> PythonObject:
@@ -133,68 +108,6 @@ def tsa_host_sabotage_binding() raises -> PythonObject:
 # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
 
 
-def holtwinters_fit_binding(
-    data_addr: PythonObject,
-    comps_addr: PythonObject,
-    stats_addr: PythonObject,
-    flags_addr: PythonObject,
-    params: PythonObject,
-    seasonal: PythonObject,
-) raises -> PythonObject:
-    """`ExponentialSmoothing(...).fit()` on the host by
-    `oracle_fit[DType.float32]`. Returns `components_len = (n - frequency)
-    * batch_size`.
-
-    `params` is, in this exact order (mirrored in
-    `python/mojolearn/_tsa_impl.py` and in the GPU binding):
-
-        0  n              observations per series
-        1  batch_size     cuML's ts_num
-        2  frequency      cuML's seasonal_periods
-        3  start_periods
-        4  eps            (float)
-        5  init_method    OPTIONAL: 0 heuristic (absent), 1 estimated
-
-    `data_addr` reads `batch_size * n` float32, SERIES-MAJOR. `comps_addr`
-    is written with `3 * components_len` float32 (level, trend, season,
-    each TIME-MAJOR: series `s` at step `i` is `[s + i * batch_size]`),
-    `stats_addr` with `4 * batch_size` float32 (sse, alpha, beta, gamma),
-    `flags_addr` with `2 * batch_size` int32 (niter, criterion)."""
-    if len(params) != 5 and len(params) != 6:
-        raise Error(
-            "holtwinters_fit: params must contain 5 or 6 values (n, batch_size,"
-            " frequency, start_periods, eps[, init_method]), got " + String(len(params))
-        )
-    var data_address = _index(data_addr)
-    var cp = f32_ptr(_index(comps_addr))
-    var sp = f32_ptr(_index(stats_addr))
-    var fp = i32_ptr(_index(flags_addr))
-    var n = _index(params[0])
-    var batch_size = _index(params[1])
-    var frequency = _index(params[2])
-    var start_periods = _index(params[3])
-    var eps = Float32(Float64(py=params[4]))
-    var init_method = _index(params[5]) if len(params) == 6 else 0
-    if init_method != 0 and init_method != 1:
-        raise Error("holtwinters_fit: init_method must be 0 (heuristic) or 1 (estimated), got " + String(init_method))
-    var sname = String(py=seasonal)
-    var components_len = 0
-    with GILReleased(Python()):
-        components_len = holtwinters_fit_host_into(
-            data_address, n, batch_size, frequency, start_periods, eps, init_method, sname, cp, sp, fp,
-        )
-    return PythonObject(components_len)
-
-
-# `holtwinters_forecast` and `holtwinters_predict` are registered from
-# `bindings/holtwinters_host_predict.mojo` (lane/inference-holtwinters,
-# 2026-09-15), the source the shipped forecast inference binding registers
-# them from; the forecast body is `oracle_forecast`'s, one spelling.
-
-
-# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_tsa_host.mojo
-# (the per-binding build) and in the merged roots tools/merged_bindings.py
-# writes from bindings/merged_groups.json (one shared file per directory set).
 def build__mojolearn_tsa_host() -> PythonObject:
     comptime assert SERIES_GUARDS_OK, "invalid integrated experiment configuration (series guards)"
     try:
@@ -205,9 +118,8 @@ def build__mojolearn_tsa_host() -> PythonObject:
         module.def_function[tsa_host_sabotage_binding]("tsa_host_sabotage")
         # TOMBSTONE: hdbscan_host_predict_sabotage and the host tsa_vendor aliases (dead native entries: the host loader reads <prefix>_sabotage / <prefix>_vendor) deleted 2026-10-26 by 2013bdd1e; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_host_aliases.patch
-        module.def_function[holtwinters_fit_binding]("holtwinters_fit")
-        module.def_function[holtwinters_forecast_binding]("holtwinters_forecast")
-        module.def_function[holtwinters_predict_binding]("holtwinters_predict")
+        # TOMBSTONE: dead Python exports holtwinters_fit, holtwinters_forecast, holtwinters_predict (no product caller: the ExponentialSmoothing owner reaches these kernels through the published Holt-Winters operations table, core/tsa_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at 8e1fedd052.
+        # Restore: git apply experiments/removed/dead_entries_tsa_hw_calls.patch
         module.def_function[kpss_test_binding]("kpss_test")
         module.def_function[select_d_host_binding]("select_d")
         # The Holt-Winters operations table (core/tsa_entry_table.mojo): the

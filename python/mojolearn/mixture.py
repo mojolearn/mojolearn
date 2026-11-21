@@ -162,17 +162,6 @@ class GaussianMixture(_NumericModeMixin):
     def _extension(self):
         return _NATIVE(self, "family_mix_gmm_public_binding", (), _NATIVE_CONTEXT)
 
-    def vendor_used(self):
-        """The backend this estimator runs on.
-
-        Returns
-        -------
-        str
-            ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for an estimator
-            that runs on the CPU.
-        """
-        return _NATIVE(self, "family_mix_vendor_used", (), _NATIVE_CONTEXT)
-
     def fit(self, X, y=None):
         """Fit the mixture to `X` by expectation-maximization.
 
@@ -426,14 +415,8 @@ __all__ += _SKLEARN_LAYOUT["mixture"]
 from ._native_owner_lifetime import connect_owner_context as _connect_gmm_owner_context
 _connect_gmm_owner_context(_NATIVE_CONTEXT)
 _native_family_bridge.connect_bindings("_mojolearn_mixture", "_mojolearn_x_cluster")
-# The CPU images of `device="cpu"`, connected once at import beside the device
-# images: on a GPU installation both exist in the process and an estimator's
-# route holds one of them (providers/python/device_route_dw_neighbors_cluster_door.mojo).
-from ._native_device_bindings import connect_cpu_device as _connect_cpu_device
-_connect_cpu_device("_mojolearn_mixture", "_mojolearn_x_cluster")
 _native_family_bridge.tables(
     gmm_public_class=GaussianMixture,
-    gmm_retained_cluster_bindings=[],
     gmm_public_parameters=(
         "n_components", "covariance_type", "tol", "reg_covar", "max_iter",
         "init_params", "random_state", "n_init", "warm_start", "means_init",
