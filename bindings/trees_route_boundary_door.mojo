@@ -49,8 +49,11 @@ from bindings.py_balanced import py_call, py_type, py_get, py_item, py_setitem, 
 from bindings.trees_keys_unpack import trees_keys
 from bindings.trees_public_inputs_door import trees_builtins
 from core.linear_route import (
-    LINEAR_DEVICE_GPU, LINEAR_DEVICE_CPU, LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal,
-    linear_device_gpu_absent,
+    LINEAR_DEVICE_INSTALL, linear_device_code, linear_device_refusal, linear_device_gpu_absent,
+)
+from core.trees_route import (
+    TREES_FITTED_UNRECORDED, TREES_FITTED_INSTALL, TREES_FITTED_CPU, TREES_ROUTE_RUNS, TREES_ROUTE_GPU_ABSENT,
+    TREES_ROUTE_FITTED_ON_CPU, trees_route_fits, trees_route_lifecycle, trees_route_strict, trees_route_plan,
 )
 
 
@@ -59,35 +62,16 @@ struct TreesRouteCall(Movable):
     end records on the estimator (the table set of a fit)."""
     var context: PythonObject
     var fields: PythonObject
-    # The operation builds fitted state (its end records the table set).
-    var fit: Bool
+    # The operation's end writes the marker.
+    var record: Bool
     # The operation runs on the CPU table set of a GPU installation.
     var cpu: Bool
-    # The marker is already what this fit would record.
-    var recorded: Bool
 
     def __init__(out self, context: PythonObject):
         self.context = context
         self.fields = PythonObject(None)
-        self.fit = False
+        self.record = False
         self.cpu = False
-        self.recorded = True
-
-
-def _route_fits(name: String) -> Bool:
-    """Whether operation `name` builds fitted state in the table set it runs
-    on (`*_fit*`, an archive `load`); `is_fitted` only asks."""
-    if name.find("is_fitted") >= 0:
-        return False
-    return name.find("fit") >= 0 or name.endswith("_load")
-
-
-def _route_lifecycle(name: String) -> Bool:
-    """Operations that read or replace parameters and never use fitted
-    state: they run whatever the stored device and marker say."""
-    return (name.find("params") >= 0 or name.find("construct") >= 0 or name.find("_init") >= 0
-            or name.find("refresh") >= 0 or name.find("is_fitted") >= 0 or name.find("setstate") >= 0
-            or name.find("vendor_used") >= 0)
 
 
 def trees_device_unpack(value: PythonObject, strict: Bool) raises -> Int:
@@ -179,37 +163,29 @@ def trees_route_enter(model: PythonObject, name: String, context: PythonObject) 
             return route^
         if marker is None:
             # Never recorded: a fit on this installation's set records it.
-            if _route_fits(name):
+            if trees_route_fits(name):
                 route.fields = fields
-                route.fit = True
-                route.recorded = False
+                route.record = True
             return route^
     # From here on: an explicit device, or a model fitted on the CPU table
     # set of a GPU installation. Never the default path.
-    var fits = _route_fits(name)
-    var device = trees_device_unpack(stored, fits or name.find("validate_params") >= 0)
-    var fitted_cpu = marker is not None and marker is not install_set and Bool(py=marker)
-    var fitted_install = marker is install_set
-    if _process_cpu_only(context):
-        # A CPU-only installation: its one table set is the CPU's. An
-        # explicit 'gpu' is refused in words at fit; the marker of a model
-        # unpickled here names a table set this process does not have.
-        if device == LINEAR_DEVICE_GPU and fits:
+    var device = trees_device_unpack(stored, trees_route_strict(name))
+    var fitted = TREES_FITTED_UNRECORDED
+    if marker is install_set:
+        fitted = TREES_FITTED_INSTALL
+    elif marker is not None and Bool(py=marker):
+        fitted = TREES_FITTED_CPU
+    var plan = trees_route_plan(device, fitted, _process_cpu_only(context), trees_route_fits(name),
+                                trees_route_lifecycle(name))
+    if plan.refusal != TREES_ROUTE_RUNS:
+        if plan.refusal == TREES_ROUTE_GPU_ABSENT:
             linear_device_gpu_absent()
-        if fits and not fitted_install:
-            route.fields = fields
-            route.fit = True
-            route.recorded = False
-        return route^
-    route.cpu = device == LINEAR_DEVICE_CPU
-    if not fits and not _route_lifecycle(name):
-        if (route.cpu and fitted_install) or (not route.cpu and fitted_cpu):
-            _route_refit(model, fitted_cpu)
-    if fits:
+        _route_refit(model, plan.refusal == TREES_ROUTE_FITTED_ON_CPU)
+    route.cpu = plan.cpu
+    if plan.record:
         route.fields = fields
-        route.fit = True
-        route.recorded = fitted_cpu if route.cpu else fitted_install
-    if route.cpu:
+        route.record = True
+    if plan.cpu:
         route.context = trees_cpu_context(context)
     return route^
 
@@ -218,7 +194,7 @@ def trees_route_leave(route: TreesRouteCall) raises:
     """After a fit that returned: record the table set that fitted. Nothing
     is written when the marker already says so (every fit after an
     estimator's first, on the default path)."""
-    if not route.fit or route.recorded:
+    if not route.record:
         return
     var nk = trees_keys()
     py_setitem(route.fields, nk[].k_device_fit_cpu, PythonObject(route.cpu))
