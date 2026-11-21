@@ -23,6 +23,9 @@ class _Croston(ParamsMixin):
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
     # bindings/xseq_forecast_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: fit and predict run on the estimator's device, resolved once into its
+    #: one native route (bindings/xseq_native_common_door.mojo `xseq_route`).
+    _mojolearn_device = True
 
     def __init__(self, alias=None, numeric_mode=None):
         _XSEQ(self, "croston_initialize", (alias, numeric_mode), _XSEQ_CONTEXT)
