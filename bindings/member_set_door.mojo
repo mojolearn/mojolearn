@@ -56,6 +56,19 @@ door runs and raises the estimator's own words. A kind without the bit reads
 admitted words: the caller proves the rows finite first (one host scan per
 distinct block) and takes its doors when they are not.
 
+THE RESIDENT SCOPE (`member_set_resident`; THE PIN RULE at core/member_abi.mojo
+`MemberCall.pin`). A caller that fits its set inside `resident()` names, per
+member, the Python object that owns the member's X words. For a member whose
+family reads a scope (`MEMBER_CAN_SCOPE`) the thread's scope is read once per
+set; `member_set_run` then takes one reference per such member with the
+interpreter held, the member's fit carries the scope word and offers the
+reference (never for a block the worker gathered itself), the member's
+cache keeps X on the device for the set's other members and for the doors
+that follow, and the references no cache took are dropped after the workers
+joined. Outside `resident()`, or for a member without the bit, nothing is
+read, pinned or offered: the member puts X per fit, as its own door does
+there.
+
 THE PREDICT SIDE (`member_held_open` / `member_held_run` /
 `member_held_close`): one member call on the
 fitted state the estimator holds (bindings/member_held_door.mojo), written
@@ -71,7 +84,9 @@ from bindings.member_held_door import MemberHeld, member_held, member_held_relea
 from bindings.admitted_input_unpack import admitted_unfilled
 from bindings.native_unit_os_threads_run import native_unit_cores
 from bindings.prep_native_estimator_door import prep_estimator_plan
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.prep_native_estimator_door import prep_native_context
+from bindings.member_scope_door import member_scope_word, member_pin_take, member_pin_return
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
 from core.member_abi import (
@@ -82,6 +97,7 @@ from core.member_abi import (
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION,
     MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_ROW_INDEX, MEMBER_CAN_COLUMN_INDEX, MEMBER_CAN_TEST_ROWS,
+    MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
 )
 from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST, MEMBER_FAMILY_EXTRA_TREES
 
@@ -136,6 +152,11 @@ struct MemberSetRun(Movable):
     # refuses non-finite X, y and weights itself: the caller scans nothing
     # for it). Read once per member class at admission.
     var tests: List[UInt8]
+    # THE RESIDENT SCOPE (module note): the caller's scope handle word
+    # (MEMBER_SCOPE_NONE: none) and, per member, the pin token its fit offers
+    # (0: none; the worker writes 0 when the member's cache took it).
+    var scope: Int
+    var pin_tokens: List[Int]
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -157,6 +178,8 @@ struct MemberSetRun(Movable):
         self.cover_units = List[Int]()
         self.uncovered = List[UInt8]()
         self.tests = List[UInt8]()
+        self.scope = MEMBER_SCOPE_NONE
+        self.pin_tokens = List[Int]()
 
 
 struct MemberSet(Movable):
@@ -181,6 +204,10 @@ struct MemberSet(Movable):
     # After PACK: every packed member's state stayed with its estimator (a
     # later `member_held_open` of it is a hit: no admission, no IMPORT).
     var kept_all: Bool
+    # THE RESIDENT SCOPE: per member, the object that owns its X words (None:
+    # nothing is offered), and whether the thread's scope was read.
+    var sources: PythonObject
+    var scope_read: Bool
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int) raises:
         self.run = MemberSetRun(x, rows, cols, y_dtype, index_dtype)
@@ -192,6 +219,8 @@ struct MemberSet(Movable):
         self.adopt = False
         self.adopt_trees = False
         self.kept_all = True
+        self.sources = Python.list()
+        self.scope_read = False
 
     def count(self) -> Int:
         return len(self.run.plans)
@@ -268,6 +297,8 @@ def member_set_admit(mut set: MemberSet, estimator: PythonObject, target: Int, w
     set.run.failed.append(UInt8(0))
     set.run.errors.append(String(""))
     set.run.uncovered.append(UInt8(0))
+    set.run.pin_tokens.append(0)
+    _ = py_call(set.sources.append, PythonObject(None))
     _ = py_call(set.estimators.append, estimator)
     _ = py_call(set.contexts.append, member_context)
     _ = py_call(set.fields.append, fields)
@@ -288,6 +319,30 @@ def member_set_own_block(mut set: MemberSet, x: Int, rows: Int):
         return
     set.run.own_x[last] = x
     set.run.own_rows[last] = rows
+
+
+def member_set_resident(mut set: MemberSet, source: PythonObject, context: PythonObject) raises:
+    """UNPACK, after the admit (and `member_set_own_block`) of the member
+    admitted last: `source` is the Python object whose buffer holds that
+    member's X words (the set's X, or its own block). Inside the calling
+    thread's `resident()` scope a member whose family reads a scope then
+    keeps that X on the device across the set's fits (module note, THE
+    RESIDENT SCOPE). Nothing is read or recorded for a member without
+    `MEMBER_CAN_SCOPE`; the scope is read once per set, at the first member
+    that has it. `context` is the caller's context, as `member_set_admit`
+    takes it. Raises what the scope's own doors raise for a thread-local
+    that holds something else: the caller then keeps its own loop, whose
+    doors refuse in their own words."""
+    var last = len(set.run.plans) - 1
+    if last < 0 or not set.run.plans[last].member.can(MEMBER_CAN_SCOPE):
+        return
+    if not set.scope_read:
+        var rows_context = prep_native_context(context)["family_msel_rows_context"]
+        set.run.scope = member_scope_word(rows_context)
+        set.scope_read = True
+    if set.run.scope < 0:
+        return
+    py_setitem(set.sources, PythonObject(last), source)
 
 
 def member_set_tests(set: MemberSet, u: Int) -> Bool:
@@ -507,6 +562,13 @@ def _member_set_unit(address: Int, u: Int) raises:
     var y_part = List[Int32]()
     var w_part = List[Float32]()
     var call = member_new(run[].plans[u])
+    call.scope = run[].scope
+    call.pin = 0
+    # THE PIN RULE: the member's X object is offered unless the worker
+    # gathers the drawn block into its own buffer below.
+    var offer = run[].pin_tokens[u]
+    if drawn and not by_index:
+        offer = 0
     var done = False
     try:
         call.x = MemberMatrix(x_address, rows, cols)
@@ -533,7 +595,15 @@ def _member_set_unit(address: Int, u: Int) raises:
             call.y = MemberMatrix(Int(y_part.unsafe_ptr()), n, 1, run[].y_dtype)
             if w_address != 0:
                 call.weights = MemberMatrix(w_address, n, 1)
-        _ = member_call(member, MEMBER_OP_FIT, call)
+        call.pin = offer
+        if offer == 0:
+            _ = member_call(member, MEMBER_OP_FIT, call)
+        else:
+            try:
+                _ = member_call(member, MEMBER_OP_FIT, call)
+            finally:
+                if member_pin_settle(call) != 0:
+                    run[].pin_tokens[u] = 0  # the scope's cache holds this reference now
         run[].states[u] = call.state
         done = True
     finally:
@@ -606,6 +676,13 @@ def member_set_run(mut set: MemberSet) raises:
 
     var lacking = False
     var py = Python()
+    # THE PIN RULE: one reference per member that offers its X object, taken
+    # with the interpreter held; what no cache took is dropped below.
+    for u in range(count):  # driver-loop: over the members (one reference each)
+        set.run.pin_tokens[u] = 0
+        var source = set.sources[u]
+        if source is not None:
+            set.run.pin_tokens[u] = member_pin_take(source, 1)
     try:
         with GILReleased(py):
             if len(set.run.cover_units) > 0:
@@ -616,6 +693,10 @@ def member_set_run(mut set: MemberSet) raises:
             if not lacking:
                 host_parallelize(_lane, lanes)
     finally:
+        for u in range(count):  # driver-loop: over the members (the references no cache took)
+            if set.run.pin_tokens[u] != 0:
+                member_pin_return(set.run.pin_tokens[u], 1)
+                set.run.pin_tokens[u] = 0
         _ = set.pins
     if lacking:
         raise Error("ValueError: a member's rows do not hold every class of the ensemble: its own fit decides")
