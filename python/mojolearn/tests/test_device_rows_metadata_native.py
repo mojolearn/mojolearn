@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-"""DeviceRows constructor metadata preserves aliases without Python work."""
+"""DeviceRows constructor metadata preserves aliases without Python work.
+
+The view's metadata and its base / indices pins are native state behind the
+instance's one `_owner` slot; every public attribute is read-only.
+
+Rewritten with the native state (2026-11-21, arena unit E): `_take` and
+`_host` are gone (a `take` other than `model_selection._Resident.take` is
+not kept, and `materialize` refuses it in words). Reinitialization no
+longer refuses an old base whose release would run a finalizer: it
+releases the previous view's pins when it returns. The tests below hold
+the old base themselves, so no finalizer runs inside the audited call, and
+then show the pin was released.
+"""
 from array import array
 import numpy as np
 import pytest
@@ -17,7 +29,7 @@ def test_reinitialization_preserves_native_longlong_owner_aliases(dtype, storage
     indices = Array.from_list([0], '<i8')
     rows = DeviceRows(base, indices, old)
     assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
-    assert rows.base is base and rows.indices is indices and rows._take is None
+    assert rows.base is base and rows.indices is indices
 
 
 @pytest.mark.parametrize('source', ['array', 'numpy'])
@@ -33,8 +45,7 @@ def test_constructor_and_length_preserve_native_metadata_and_aliases(source, dty
         calls.append(True)
         raise AssertionError('opaque materializer was called by constructor')
     rows = audit_native_call(DeviceRows, base, indices, forbidden).assert_native()
-    assert rows.base is base and rows.indices is indices and rows._take is forbidden
-    assert rows._host is None and not calls
+    assert rows.base is base and rows.indices is indices and not calls
     assert rows.shape == (2, *shape[1:])
     assert rows.dtype == base.dtype and rows.ndim == base.ndim and rows.itemsize == base.itemsize
     assert rows.size == np.prod(rows.shape)
@@ -102,27 +113,30 @@ def _fresh_rows(source='array', take=None):
 
 
 @pytest.mark.parametrize('source', ['array', 'numpy'])
-def test_reinitialization_preserves_native_aliases_and_resets_snapshot(source):
+def test_reinitialization_preserves_native_aliases_and_stays_read_only(source):
     calls = []
     def materializer(*args):
         calls.append('take')
     rows = _fresh_rows(source, materializer)
-    rows._host = Array.from_list([[4.,5.,6.]], '<f4')
-    marker = object()
-    rows.application_state = marker
+    for name in ('_host', '_take', 'application_state', 'base'):
+        with pytest.raises(AttributeError, match='read-only view'):
+            setattr(rows, name, object())
     if source == 'numpy':
         base, indices = np.arange(8, dtype='f8').reshape(4, 2), np.array([3, 0], dtype='i8')
     else:
         base, indices = Array.from_list([[1.,2.],[3.,4.],[5.,6.],[7.,8.]], '<f8'), Array.from_list([3,0], '<i8')
     assert audit_native_call(rows.__init__, base, indices, materializer).assert_native() is None
-    assert rows.base is base and rows.indices is indices and rows._take is materializer
-    assert rows._host is None and rows.application_state is marker and not calls
+    assert rows.base is base and rows.indices is indices and not calls
     assert rows.shape == (2, 2) and rows.size == 4 and rows.row_words == 2
     assert rows.dtype == base.dtype and rows.itemsize == 8 and rows.ndim == 2
     assert audit_native_call(rows.__len__).assert_native() == 2
+    # A Python gather callback is never invoked.
+    with pytest.raises(TypeError, match='_Resident.take'):
+        rows.materialize()
+    assert not calls
 
 
-def test_reinitialization_preserves_a_renewed_bound_method_owner():
+def test_reinitialization_with_a_foreign_bound_method_never_calls_it():
     calls = []
     class Materializer:
         def take(self, *args):
@@ -131,79 +145,80 @@ def test_reinitialization_preserves_a_renewed_bound_method_owner():
     rows = _fresh_rows(take=owner.take)
     base, indices = Array.from_list([[1.,2.],[3.,4.]], '<f4'), Array.from_list([0], '<i8')
     assert audit_native_call(rows.__init__, base, indices, owner.take).assert_native() is None
-    assert rows._take.__self__ is owner and rows._take.__func__ is Materializer.take and not calls
+    with pytest.raises(TypeError, match='_Resident.take'):
+        rows.materialize()
+    assert not calls
 
 
-@pytest.mark.parametrize('field', ['base', 'indices', '_take', '_host', 'shape', 'dtype', 'itemsize', 'ndim', 'size', 'row_words'])
-def test_reinitialization_refuses_last_owned_finalizers_before_any_replacement(field):
-    calls = []
-    class Finalizer:
-        def __del__(self):
-            calls.append('finalizer')
-    rows = _fresh_rows()
-    setattr(rows, field, Finalizer())  # the rows dictionary is the only owner
-    previous_ids = {key: id(value) for key, value in vars(rows).items()}
+class _Finalizer:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def __del__(self):
+        self.calls.append('finalizer')
+
+
+def _reinitialize_holding_the_old_base(rows):
+    # The caller's reference keeps the old base alive: the audited call
+    # releases only the view's own pin, and no finalizer runs inside it.
+    old = rows.base
     base, indices = Array.from_list([[9.,8.]], '<f4'), Array.from_list([0], '<i8')
-    audit = audit_native_call(rows.__init__, base, indices, None)
-    assert isinstance(audit.exception, TypeError), audit.report()
-    assert 'reinitialization' in str(audit.exception)
-    assert not calls and not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
-    assert {key: id(value) for key, value in vars(rows).items()} == previous_ids
-    setattr(rows, field, None)  # application cleanup, outside the audited product operation
-    assert calls == ['finalizer']
+    assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
+    assert rows.base is base and rows.base is not old
+    return old
+
+
+@pytest.mark.parametrize('field', ['base', 'indices'])
+def test_reinitialization_releases_the_previous_view_pins(field):
+    calls = []
+    held = _Finalizer(calls)
+    previous = (np.array([[held, 1.]], dtype='O') if field == 'base' else np.array([0], dtype='i8'))
+    rows = (DeviceRows(previous, np.array([0], dtype='i8'), None) if field == 'base' else
+            DeviceRows(np.zeros((2, 3), dtype='f4'), previous, None))
+    del held
+    base, indices = Array.from_list([[9.,8.]], '<f4'), Array.from_list([0], '<i8')
+    assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
+    assert calls == []
+    del previous
+    # The view held the old buffer; it is released, nothing leaks.
+    assert calls == (['finalizer'] if field == 'base' else [])
 
 
 @pytest.mark.parametrize('slot', ['_pin', '_store', 'strides', 'order'])
-def test_reinitialization_admits_all_previous_array_slot_owners(slot):
+def test_reinitialization_releases_all_previous_array_slot_owners(slot):
     calls = []
-    class Finalizer:
-        def __del__(self):
-            calls.append('finalizer')
     rows = _fresh_rows()
-    setattr(rows.base, slot, Finalizer())
-    previous_base_id = id(rows.base)
-    base, indices = Array.from_list([[9.,8.]], '<f4'), Array.from_list([0], '<i8')
-    audit = audit_native_call(rows.__init__, base, indices, None)
-    assert isinstance(audit.exception, TypeError), audit.report()
-    assert not calls and id(rows.base) == previous_base_id
-    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
-    setattr(rows.base, slot, None)
+    setattr(rows.base, slot, _Finalizer(calls))
+    old = _reinitialize_holding_the_old_base(rows)
+    assert calls == []
+    setattr(old, slot, None)
     assert calls == ['finalizer']
 
 
 @pytest.mark.parametrize('source', ['array', 'numpy'])
-def test_reinitialization_refuses_owned_buffer_weakref_callbacks(source):
+def test_reinitialization_releases_owned_buffer_weakref_targets(source):
     import weakref
     calls = []
     rows = _fresh_rows(source)
     owner = rows.base._store if source == 'array' else rows.base
     reference = weakref.ref(owner, lambda unused: calls.append('weakref'))
     del owner
-    previous_base_id = id(rows.base)
-    base, indices = Array.from_list([[9.,8.]], '<f4'), Array.from_list([0], '<i8')
-    audit = audit_native_call(rows.__init__, base, indices, None)
-    assert isinstance(audit.exception, TypeError), audit.report()
-    assert 'weak-reference' in str(audit.exception)
-    assert not calls and id(rows.base) == previous_base_id and reference() is not None
-    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
-    rows.base = None
+    old = _reinitialize_holding_the_old_base(rows)
+    assert not calls and reference() is not None
+    del old
     assert reference() is None and calls == ['weakref']
 
 
-def test_reinitialization_refuses_nested_dtype_metadata_without_releasing_it():
+def test_reinitialization_releases_nested_dtype_metadata():
     calls = []
-    class Finalizer:
-        def __del__(self):
-            calls.append('finalizer')
-    rows = DeviceRows(np.zeros((2, 3), dtype=np.dtype('f4', metadata={'owner': Finalizer()})), np.array([0], dtype='i8'), None)
-    previous_base_id, previous_dtype_id = id(rows.base), id(rows.dtype)
+    rows = DeviceRows(np.zeros((2, 3), dtype=np.dtype('f4', metadata={'owner': _Finalizer(calls)})),
+                      np.array([0], dtype='i8'), None)
+    old = rows.base
     base, indices = np.zeros((2, 2), dtype='f8'), np.array([1], dtype='i8')
-    audit = audit_native_call(rows.__init__, base, indices, None)
-    assert isinstance(audit.exception, TypeError), audit.report()
-    assert not calls and id(rows.base) == previous_base_id and id(rows.dtype) == previous_dtype_id
-    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
-    rows.base = None
-    rows.dtype = None
+    assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
+    # The dtype is read from the base at each read.
+    assert not calls and rows.dtype == np.dtype('f8')
+    del old
     assert calls == ['finalizer']
 
 
@@ -222,31 +237,28 @@ def test_reinitialization_preserves_native_dtype_layouts_and_owned_metadata(layo
     elif layout == 'structured_object':
         base['name'][0, 0] = ['native', 3]
     rows = DeviceRows(base, np.array([1], dtype='i8'), None)
-    del base, dtype  # rows owns the old buffer and dtype references
+    old = rows.base
+    del base, dtype
     replacement = np.arange(4, dtype='f8').reshape(2, 2)
     indices = np.array([0], dtype='i8')
     assert audit_native_call(rows.__init__, replacement, indices, None).assert_native() is None
     assert rows.base is replacement and rows.indices is indices
     assert rows.dtype == np.dtype('f8') and rows.shape == (1, 2)
+    del old
 
 
 @pytest.mark.parametrize('structured', [False, True])
-def test_reinitialization_refuses_owned_object_buffer_finalizers(structured):
+def test_reinitialization_releases_owned_object_buffer_finalizers(structured):
     calls = []
-    class Finalizer:
-        def __del__(self):
-            calls.append('finalizer')
     dtype = np.dtype([('owner', 'O'), ('value', 'f8')]) if structured else np.dtype('O')
     rows = DeviceRows(np.zeros((2, 3), dtype=dtype), np.array([1], dtype='i8'), None)
     if structured:
-        rows.base['owner'][0, 0] = Finalizer()
+        rows.base['owner'][0, 0] = _Finalizer(calls)
     else:
-        rows.base[0, 0] = Finalizer()
-    previous_base_id = id(rows.base)
+        rows.base[0, 0] = _Finalizer(calls)
+    old = rows.base
     replacement = np.zeros((2, 2), dtype='f8')
-    audit = audit_native_call(rows.__init__, replacement, np.array([0], dtype='i8'), None)
-    assert isinstance(audit.exception, TypeError), audit.report()
-    assert not calls and id(rows.base) == previous_base_id
-    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
-    rows.base = None
+    assert audit_native_call(rows.__init__, replacement, np.array([0], dtype='i8'), None).assert_native() is None
+    assert not calls and rows.base is replacement
+    del old
     assert calls == ['finalizer']

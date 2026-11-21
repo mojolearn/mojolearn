@@ -521,7 +521,16 @@ struct IForestHostEntry(Movable):
 struct _IForestHostStore(Defaultable, Movable):
     var synchronization: List[Int64]
     """[0] the store's lock word (lane ma-pub-trees unit 3): the native
-    iforest entry runs with the GIL released."""
+    iforest entry runs with the GIL released.
+
+    LOCK DISCIPLINE (round 4; isolation_forest/estimator.mojo
+    `_IFResidentStore` states the same rule): held only for mint
+    (`if_host_resident_new_token`), the one lookup that removes the entry
+    (`if_host_resident_take`), the insert after the run
+    (`if_host_resident_put`) and free (`if_host_resident_release`); the
+    host fit, import and scoring run on the taken entry unlocked; one take
+    per public operation (save / pickle: two IF_OP_EXPORT calls, sizes then
+    copy, one take each)."""
     var entries: List[IForestHostEntry]
     var next: Int
     var nonce: Int

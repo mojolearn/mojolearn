@@ -2,6 +2,9 @@
 """Preserve native file exceptions across the checkpoint's Mojo unwind."""
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from std.ffi import c_int, external_call
+from core.native_string import unsafe_string_from_utf8_cstr
+from bindings.py_balanced import py_call, py_type
 
 
 struct ByteCheckpointIOError(Movable):
@@ -55,3 +58,26 @@ struct ByteCheckpointIOError(Movable):
         # https://docs.python.org/3/c-api/exceptions.html#c.PyErr_Restore
         cpy.PyErr_Restore(kind.steal_data(), value_ptr, traceback_ptr)
         return PyObjectPtr()
+
+
+def byte_io_file_error(mut io_error: ByteCheckpointIOError, os_error: PythonObject, number: Int, operation: String,
+                       path: String, second: String) raises:
+    """PACK a failed typed file call (bindings/byte_checkpoint_native_run.mojo
+    `ByteCheckpointWriteFailure`: errno, the call's name, its file names) as
+    the exact OSError subclass of its errno, for the C entry to raise.
+    `os_error` is the builtin `OSError`. The words the Python file calls
+    gave: `open` names the file (the temporary one of a write; a directory
+    given to a read); `replace` names both files; a failed read, write,
+    fsync or close carries no file name."""
+    var message = unsafe_string_from_utf8_cstr(external_call["strerror", Pointer[Int8, ImmUntrackedOrigin]](c_int(number)))
+    var value = py_call(os_error, number, PythonObject(message))
+    if operation == "open":
+        value = py_call(os_error, number, PythonObject(message), PythonObject(path))
+    elif operation == "replace":
+        value = py_call(os_error, number, PythonObject(message), PythonObject(path),
+                        PythonObject(None), PythonObject(second))
+    io_error.pending = True
+    io_error.has_value = True
+    io_error.has_traceback = False
+    io_error.kind = py_type(value)
+    io_error.value = value

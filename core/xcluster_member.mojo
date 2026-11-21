@@ -11,13 +11,14 @@ existing typed RUN over the entries of the `DeviceRoute` it is handed:
 tree descent, the centers queries, the resident centers), `route.flags` that
 entry's capability word (`VARIANTS_CAP_*`, read once by the caller's
 UNPACK). `route.second` (MeanShift, AffinityPropagation) is the image's centroid-fit entry
-(core/cluster_centroid_fit_api.mojo `CentroidFitDriver`). No other route
-slot is read by the kinds published here. No kernel is touched.
+(core/cluster_centroid_fit_api.mojo `CentroidFitDriver`). `route.third`
+(BayesianGaussianMixture) is the image's typed BGMM entry
+(core/bgmm_native_api.mojo `BgmmDriver`: ENTRY_BGMM fit, ENTRY_BGMM_SCORE).
+No other route slot is read by the kinds published here. No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word [0]): 0 MiniBatchKMeans, 1 BisectingKMeans,
-2 MeanShift, 4 AffinityPropagation. Kind 3 OPTICS (the class has no
-predict: not a member) and kind 5 BayesianGaussianMixture are reserved for
-this family and refused.
+2 MeanShift, 4 AffinityPropagation, 5 BayesianGaussianMixture. Kind 3
+OPTICS (the class has no predict: not a member) is reserved and refused.
 
 MEMBER_OP_NEW parameters (Float64 words):
   kind 0 MiniBatchKMeans (11 words): [0] 0, [1] n_clusters, [2] init
@@ -44,6 +45,22 @@ MEMBER_OP_NEW parameters (Float64 words):
   words are tied to the training rows): the class keeps its own doors. No
   sample weights, no transform or score (refused in words). Predict writes
   -1 for every row when the fit found no exemplar, as the class does.
+  kind 5 BayesianGaussianMixture (13 words): [0] 5, [1] n_components,
+  [2] covariance_type (0 'full', 1 'tied', 2 'diag', 3 'spherical'),
+  [3] init_params (0 'kmeans', 1 'random', 2 'k-means++',
+  3 'random_from_data'), [4] weight_concentration_prior_type
+  (1 'dirichlet_process', 0 'dirichlet_distribution'),
+  [5] weight_concentration_prior (-1 for None), [6] mean_precision_prior
+  (-1 for None), [7] degrees_of_freedom_prior (-1 for None), [8] reg_covar,
+  [9] tol, [10] max_iter, [11] n_init, [12] random_state as int64 BITS (the
+  estimator's own seed rule). An array mean_prior or covariance_prior and
+  warm_start=True are not words: the class keeps its own doors for them.
+  No sample weights, no transform (refused in words). Predict writes the
+  first largest log responsibility per row (int32), predict_proba the
+  responsibilities (float32 rows x n_components), score_samples the
+  per-row log likelihood (float32 rows x 1) and score `call.value` = the
+  entry's float-float fold of the per-row log likelihoods over the row
+  count, as the class's own `score`.
 A clusterer, not a classifier: `y` is not read, `classes` is 0.
 
 Views: X dense row-major host float32, BORROWED for the call (never copied:
@@ -81,6 +98,17 @@ import needs 0 and 1.
 kind 1: 3 `MEMBER_BLOCK_FAMILY + 2` float32 nodes x features, the tree
 centers; 4 `MEMBER_BLOCK_FAMILY + 3` int32 nodes x 3, the tree (left, right,
 label). An import needs blocks 0, 1, 3 and 4.
+kind 5 (18 blocks): index j = 0 .. 15 is `MEMBER_BLOCK_FAMILY + 8 + j`, the
+entry's float block f[j] as float32 1 x len (bgmm_entry's order: weights,
+means, full covariances, full precision factors, wc0, wc1, mean_precision,
+degrees_of_freedom, log constants, mean_prior, full covariance_prior, nk,
+log_det_chol, then covariances, precision factors and covariance prior in
+the covariance type's shape); 16 `MEMBER_BLOCK_SCALARS` float64 [lower_bound,
+n_iter, converged, weight_concentration_prior, mean_precision_prior,
+degrees_of_freedom_prior]; 17 `MEMBER_BLOCK_FAMILY + 1` int32 1 x rows, the
+training labels. An import needs f[1] (means, as n_components x features),
+f[3] (full precision factors), f[8] (log constants) and the scalars; the
+other blocks are empty after an import that did not give them.
 Not published: MEMBER_OP_PARTIAL_FIT of kind 0 (the class's own
 `partial_fit` door keeps its stream state on the model).
 
@@ -98,6 +126,7 @@ from core.kmeans_variants_api import (
     BisectPredictRequest, MiniBatchFitRequest, VARIANTS_CAP_RESIDENT, VARIANTS_CAP_DEVSCAN,
 )
 from core.admitted_weights import admitted_fill
+from core.bgmm_native_api import BgmmDriver, BgmmFitRequest, BgmmResultSlot
 from core.cluster_centroid_fit_api import (
     CentroidFitDriver, CentroidFitResultSlot, MeanShiftFitRequest, AffinityFitRequest,
 )
@@ -105,8 +134,9 @@ from core.member_abi import (
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_HOME_DEVICE,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_TRANSFORM, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
+    MEMBER_OP_PREDICT_PROBA, MEMBER_OP_SCORE_SAMPLES,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_TRANSFORM, MEMBER_CAN_SCORE, MEMBER_CAN_EXPORT,
-    MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT,
+    MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_SCORE_SAMPLES,
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
@@ -121,6 +151,12 @@ comptime _KIND_MINIBATCH = 0
 comptime _KIND_BISECT = 1
 comptime _KIND_MEANSHIFT = 2
 comptime _KIND_AFFINITY = 4
+comptime _KIND_BGMM = 5
+# BayesianGaussianMixture: the entry's sixteen float blocks f[0 .. 15], named
+# _BLOCK_BGMM + j; f[1] means, f[3] full precision factors, f[8] constants.
+comptime _BGMM_BLOCKS = 16
+comptime _BLOCK_BGMM = MEMBER_BLOCK_FAMILY + 8
+comptime _BGMM_SCALARS = 6
 comptime _BLOCK_CENTERS = MEMBER_BLOCK_FAMILY
 comptime _BLOCK_LABELS = MEMBER_BLOCK_FAMILY + 1
 comptime _BLOCK_TREE_CENTERS = MEMBER_BLOCK_FAMILY + 2
@@ -153,6 +189,12 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
     var affinity: List[Float32]
     var messages: List[Float32]
     var scalars: List[Float64]
+    # BayesianGaussianMixture: the entry's float blocks (f[0 .. 15]) and the
+    # score entry's model words (means, full precision factors, constants
+    # end to end), laid out ONCE per fitted state (the door lays them out on
+    # every query).
+    var mixture: List[List[Float32]]
+    var score_words: List[Float32]
 
     def __init__(out self):
         self.generation = 0
@@ -171,6 +213,8 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
         self.affinity = List[Float32]()
         self.messages = List[Float32]()
         self.scalars = List[Float64]()
+        self.mixture = List[List[Float32]]()
+        self.score_words = List[Float32]()
 
     def clear(mut self):
         self.fitted = False
@@ -184,6 +228,8 @@ struct XClusterMemberSlot(Copyable, Movable, Defaultable):
         self.affinity = List[Float32]()
         self.messages = List[Float32]()
         self.scalars = List[Float64]()
+        self.mixture = List[List[Float32]]()
+        self.score_words = List[Float32]()
 
 
 struct XClusterMemberStore(Defaultable, Movable):
@@ -215,6 +261,8 @@ def _name(kind: Int) -> String:
         return "MeanShift"
     if kind == _KIND_AFFINITY:
         return "AffinityPropagation"
+    if kind == _KIND_BGMM:
+        return "BayesianGaussianMixture"
     return "an x_cluster estimator"
 
 
@@ -228,6 +276,8 @@ def _param_count(kind: Int) raises -> Int:
         return 6
     if kind == _KIND_AFFINITY:
         return 7
+    if kind == _KIND_BGMM:
+        return 13
     raise Error("member ABI: x_cluster member kind " + String(kind) + " is not published")
 
 
@@ -483,6 +533,167 @@ def _affinity_predict(slot: _Slot, call: _Call) raises:
     _centers_query(slot, call, _RES_PREDICT)
 
 
+# ---------------------------------------------------------------- BayesianGaussianMixture
+def _bgmm_driver(call: _Call) raises -> BgmmDriver:
+    if not call[].route.has_third:
+        raise Error("member ABI: a BayesianGaussianMixture member's route holds no mixture entry")
+    return BgmmDriver(call[].route.third.call)
+
+
+def _bgmm_ready(slot: _Slot) raises:
+    """Check the scoring blocks and lay out the score entry's model words
+    (means, full precision factors, constants) once for this state."""
+    var k = Int(slot[].words[1])
+    var d = slot[].features
+    var whole = len(slot[].mixture) == _BGMM_BLOCKS and d > 0 and len(slot[].scalars) == _BGMM_SCALARS
+    if whole:
+        whole = (len(slot[].mixture[1]) == k * d and len(slot[].mixture[3]) == k * d * d
+            and len(slot[].mixture[8]) == k)
+    if not whole:
+        raise Error("member ABI: a fitted BayesianGaussianMixture state needs its means, precision factors,"
+            + " constants and scalars blocks")
+    var words = List[Float32](length=k * d + k * d * d + k, fill=0.0)
+    _copy_f32(Int(words.unsafe_ptr()), slot[].mixture[1], k * d)
+    _copy_f32(Int(words.unsafe_ptr()) + 4 * k * d, slot[].mixture[3], k * d * d)
+    _copy_f32(Int(words.unsafe_ptr()) + 4 * (k * d + k * d * d), slot[].mixture[8], k)
+    slot[].score_words = words^
+    slot[].fitted = True
+
+
+def _bgmm_fit(slot: _Slot, call: _Call) raises:
+    """ENTRY_BGMM on the borrowed X: the words `bgmm_fit_stage` reads, laid
+    out as `bgmm_entry_ints` / `bgmm_entry_floats` (mixture/mixture_door_run.mojo)
+    lay them out, with no mean or covariance prior, no warm state and no
+    plain-mode init words (the admit refused those instances)."""
+    var kind = slot[].kind
+    _whole_x(call, kind)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: BayesianGaussianMixture takes no sample_weight")
+    var rows = call[].x.rows
+    var cols = call[].x.cols
+    var output = call[].fit_output
+    if output == MEMBER_OP_PREDICT:
+        _destination(call, rows, 1, MEMBER_I32, "the label buffer")
+    elif output != 0:
+        member_unsupported(_name(kind), output)
+    var driver = _bgmm_driver(call)
+    var w = slot[].words.unsafe_ptr()
+    var k = Int(w[1])
+    if k < 1 or rows < k:
+        raise Error("Expected n_samples >= n_components but got n_components = " + String(k)
+            + ", n_samples = " + String(rows))
+    slot[].clear()
+    # ORDER MATCHES x_cluster/entries.mojo::bgmm_entry (ip, then fp).
+    var ints: List[Int] = [rows, cols, k, 1 if w[4] != 0.0 else 0, Int(w[10]), Int(w[11]), Int(w[3]),
+        Int(bitcast[DType.int64](w[12])), 0, 0, Int(w[2]), 0, 0, 0, 0, 0]
+    var floats: List[Float64] = [w[5], w[6], w[7], w[8], w[9], 0.0]
+    var request = BgmmFitRequest(VariantsSpan(call[].x.data, rows * cols), VariantsSpan(0, 0), ints^, floats^)
+    var result = BgmmResultSlot()
+    driver.fit(request, result)
+    if len(result.storage[0].f) < _BGMM_BLOCKS or len(result.storage[0].i) < 1:
+        raise Error("member ABI: the BGMM entry returned fewer blocks than bgmm_entry documents")
+    # The entry's result lists become the state's blocks (no copy).
+    swap(slot[].mixture, result.storage[0].f)
+    swap(slot[].labels, result.storage[0].i[0])
+    swap(slot[].scalars, result.storage[0].s)
+    slot[].features = cols
+    _bgmm_ready(slot)
+    if output == MEMBER_OP_PREDICT:
+        _copy_i32(call[].dst.data, slot[].labels, rows)
+
+
+def _bgmm_query(slot: _Slot, call: _Call, operation: Int) raises:
+    """ENTRY_BGMM_SCORE on the borrowed X and the state's model words, the
+    flags of the class's own query: predict 0 (labels), predict_proba 1
+    (f[2]), score_samples 0 (f[1]), score 2 (s[0] over the row count)."""
+    var rows = _query_rows(slot, call)
+    var k = Int(slot[].words[1])
+    var flags = 0
+    if operation == MEMBER_OP_PREDICT:
+        _destination(call, rows, 1, MEMBER_I32, "the label buffer")
+    elif operation == MEMBER_OP_PREDICT_PROBA:
+        _destination(call, rows, k, MEMBER_F32, "the responsibility buffer")
+        flags = 1
+    elif operation == MEMBER_OP_SCORE_SAMPLES:
+        _destination(call, rows, 1, MEMBER_F32, "the log-likelihood buffer")
+    else:
+        if call[].weights.rows > 0:
+            raise Error("TypeError: the score of a BayesianGaussianMixture member counts every row once"
+                + " (no sample_weight)")
+        flags = 2
+    var result = BgmmResultSlot()
+    _bgmm_driver(call).score(VariantsSpan(call[].x.data, rows * slot[].features),
+        VariantsSpan(Int(slot[].score_words.unsafe_ptr()), len(slot[].score_words)), rows, slot[].features, k,
+        flags, result)
+    if operation == MEMBER_OP_PREDICT:
+        _copy_i32(call[].dst.data, result.storage[0].i[0], rows)
+    elif operation == MEMBER_OP_PREDICT_PROBA:
+        _copy_f32(call[].dst.data, result.storage[0].f[2], rows * k)
+    elif operation == MEMBER_OP_SCORE_SAMPLES:
+        _copy_f32(call[].dst.data, result.storage[0].f[1], rows)
+    else:
+        call[].value = result.storage[0].s[0] / Float64(rows)
+
+
+def _bgmm_block_at(index: Int) raises -> Int:
+    if index < 0 or index >= _BGMM_BLOCKS + 2:
+        raise Error("member ABI: a BayesianGaussianMixture member has " + String(_BGMM_BLOCKS + 2)
+            + " fitted blocks")
+    if index < _BGMM_BLOCKS:
+        return _BLOCK_BGMM + index
+    return MEMBER_BLOCK_SCALARS if index == _BGMM_BLOCKS else _BLOCK_LABELS
+
+
+def _bgmm_export(slot: _Slot, call: _Call, block: Int) raises:
+    if block >= _BLOCK_BGMM and block < _BLOCK_BGMM + _BGMM_BLOCKS:
+        var j = block - _BLOCK_BGMM
+        if j == 1:
+            var d = slot[].features
+            call[].dst = _f32_view(slot[].mixture[1], len(slot[].mixture[1]) // d, d)
+        else:
+            call[].dst = _f32_view(slot[].mixture[j], 1, len(slot[].mixture[j]))
+    elif block == MEMBER_BLOCK_SCALARS:
+        call[].dst = MemberMatrix(Int(slot[].scalars.unsafe_ptr()), 1, len(slot[].scalars), MEMBER_F64)
+    elif block == _BLOCK_LABELS:
+        call[].dst = _i32_view(slot[].labels, 1, len(slot[].labels))
+    else:
+        raise Error("member ABI: a BayesianGaussianMixture member has no fitted block " + String(block))
+    call[].block = block
+    call[].out_cols = _BGMM_BLOCKS + 2
+
+
+def _bgmm_import(slot: _Slot, call: _Call) raises:
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        block = _bgmm_block_at(block)
+    if len(slot[].mixture) != _BGMM_BLOCKS:
+        slot[].fitted = False
+        slot[].mixture = List[List[Float32]]()
+        for _ in range(_BGMM_BLOCKS):  # driver-loop: the sixteen fitted blocks
+            slot[].mixture.append(List[Float32]())
+    if block >= _BLOCK_BGMM and block < _BLOCK_BGMM + _BGMM_BLOCKS:
+        slot[].fitted = False
+        var j = block - _BLOCK_BGMM
+        slot[].mixture[j] = _take_f32(call, "mixture")
+        if j == 1:
+            slot[].features = call[].x.cols
+            slot[].labels = List[Int32]()
+    elif block == MEMBER_BLOCK_SCALARS:
+        if not call[].x.dense_host(MEMBER_F64) or call[].x.rows * call[].x.cols != _BGMM_SCALARS:
+            raise Error("member ABI: the BayesianGaussianMixture scalars block is " + String(_BGMM_SCALARS)
+                + " host float64 words")
+        var source = _Words(unsafe_from_address=call[].x.data)
+        slot[].scalars = List[Float64](length=_BGMM_SCALARS, fill=0.0)
+        for i in range(_BGMM_SCALARS):  # driver-loop: six scalar words
+            slot[].scalars[i] = source[i]
+    elif block == _BLOCK_LABELS:
+        slot[].labels = _take_i32(call, "labels")
+    elif block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: a BayesianGaussianMixture member has no fitted block " + String(block))
+    if (call[].flags & MEMBER_IMPORT_DONE) != 0:
+        _bgmm_ready(slot)
+
+
 # ---------------------------------------------------------------- BisectingKMeans
 def _bisect_fit(slot: _Slot, call: _Call) raises:
     var kind = slot[].kind
@@ -631,6 +842,11 @@ def _export(slot: _Slot, call: _Call) raises:
     if not slot[].fitted:
         raise Error("NotFittedError: this " + _name(kind) + " member is not fitted yet")
     var block = call[].block
+    if kind == _KIND_BGMM:
+        if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+            block = _bgmm_block_at(block)
+        _bgmm_export(slot, call, block)
+        return
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         block = _block_at(kind, block)
     var d = slot[].features
@@ -684,6 +900,9 @@ def _take_i32(call: _Call, what: String) raises -> List[Int32]:
 def _import(slot: _Slot, call: _Call) raises:
     """Copy one fitted block in; MEMBER_IMPORT_DONE completes the state."""
     var kind = slot[].kind
+    if kind == _KIND_BGMM:
+        _bgmm_import(slot, call)
+        return
     var block = call[].block
     if block == _BLOCK_CENTERS:
         _release_resident(slot, call)
@@ -735,8 +954,15 @@ def _capabilities(kind: Int) -> Int:
     # A state's kind, or (kind -1, state 0) the family's union.
     if kind == _KIND_MEANSHIFT or kind == _KIND_AFFINITY:
         return MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-    return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT
-        | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT)
+    var bgmm = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_SCORE_SAMPLES
+        | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT)
+    if kind == _KIND_BGMM:
+        return bgmm
+    var centers = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_TRANSFORM | MEMBER_CAN_SCORE
+        | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT)
+    if kind < 0:
+        return centers | bgmm
+    return centers
 
 
 def _xcluster_member(operation: Int, address: Int) raises -> Int:
@@ -755,6 +981,10 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
             raise Error("member ABI: a " + _name(kind) + " member takes " + String(count) + " parameter words")
         if _fixed_k(kind) and words[1] < 1.0:
             raise Error("ValueError: n_clusters must be at least 1, got " + String(Int(words[1])))
+        if kind == _KIND_BGMM and words[1] < 1.0:
+            raise Error("ValueError: n_components must be at least 1, got " + String(Int(words[1])))
+        if kind == _KIND_BGMM and (words[10] < 1.0 or words[11] < 1.0):
+            raise Error("n_init and max_iter must be >= 1")
         if _fixed_k(kind) and words[3] < 1.0:
             raise Error("ValueError: n_init must be at least 1, got " + String(Int(words[3])))
         call[].state = _mint(words, count)
@@ -768,17 +998,24 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         call[].state = 0
         return 0
     if operation == MEMBER_OP_OUTPUTS:
-        # Only the k-means kinds transform, with n_clusters columns.
+        # Only the k-means kinds transform, with n_clusters columns; only
+        # BayesianGaussianMixture answers predict_proba, n_components columns.
         var clusters = 0
+        var asked = MEMBER_OP_TRANSFORM
+        var which = -1
         if call[].state != 0:
             var held = _Slot(unsafe_from_address=_lookup(call[].state, False))
-            if _fixed_k(held[].kind):
+            which = held[].kind
+            if _fixed_k(which) or which == _KIND_BGMM:
                 clusters = Int(held[].words[1])
         elif call[].params and call[].param_count >= 2:
             var words = _Words(unsafe_from_address=call[].params)
-            if _fixed_k(Int(words[0])):
+            which = Int(words[0])
+            if _fixed_k(which) or which == _KIND_BGMM:
                 clusters = Int(words[1])
-        call[].out_cols = clusters if call[].flags == MEMBER_OP_TRANSFORM else 1
+        if which == _KIND_BGMM:
+            asked = MEMBER_OP_PREDICT_PROBA
+        call[].out_cols = clusters if call[].flags == asked else 1
         call[].classes = 0
         return 0
     var slot = _Slot(unsafe_from_address=_lookup(call[].state, False))
@@ -799,6 +1036,11 @@ def _xcluster_member(operation: Int, address: Int) raises -> Int:
         _bisect_fit(slot, call)
     elif operation == MEMBER_OP_PREDICT and kind == _KIND_BISECT:
         _bisect_predict(slot, call)
+    elif operation == MEMBER_OP_FIT and kind == _KIND_BGMM:
+        _bgmm_fit(slot, call)
+    elif kind == _KIND_BGMM and (operation == MEMBER_OP_PREDICT or operation == MEMBER_OP_PREDICT_PROBA
+            or operation == MEMBER_OP_SCORE_SAMPLES or operation == MEMBER_OP_SCORE):
+        _bgmm_query(slot, call, operation)
     elif operation == MEMBER_OP_TRANSFORM and _fixed_k(kind):
         _centers_query(slot, call, _RES_TRANSFORM)
     elif operation == MEMBER_OP_SCORE and _fixed_k(kind):

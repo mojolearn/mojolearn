@@ -144,8 +144,8 @@ def msel_group_fold_perm_host_run(ca: Int, mm: Int, K: Int, pa: Int, da: Int, sa
 
 def msel_store_take_rows_host_run(src_id: Int, n_src: Int, row_bytes: Int, idx_id: Int, n_idx: Int,
                                   dst: Int) raises -> Int:
-    """Rows idx of the resident source into host memory: the body of the
-    core host binding's `msel_take_rows` export."""
+    """Rows idx of the resident source into host memory: the host column's
+    take-rows op of the model-selection helper table."""
     if n_src < 0 or row_bytes < 0 or n_idx < 0:
         raise Error("msel_take_rows: dimensions must be non-negative")
     if not host_take_rows(MSEL_HOST_STORE.get_or_create_ptr()[], src_id, n_src, row_bytes, idx_id, n_idx, dst):

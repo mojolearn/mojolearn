@@ -8,11 +8,9 @@ The core host binding exports the same names and signatures from
 Every IDENTICAL and FAST GPU build takes these; there is no host fallback in
 this binding.
 
-    msel_put(addr, nbytes) -> id          resident copy of host bytes
     msel_alloc(nbytes) -> id              resident zero bytes
     msel_read(id, dst_addr, nbytes)       download
-    msel_free(id) / msel_live() -> count
-    msel_take_rows(src_id, n_src, row_bytes, idx_id, n_idx, dst_addr)
+    msel_free(id) / msel_live() -> count  (release-test fault injection and counts)
     msel_scatter_rows(dst_id, n_dst, dst_code, src_addr, src_code, n_src, width, idx_id)
     msel_proba_column(src_addr, code, n, k, col, dst_addr)
     msel_rebase_offsets_i32(raw_addr, n_raw, lens_addr, parts, n_out, dst_addr)

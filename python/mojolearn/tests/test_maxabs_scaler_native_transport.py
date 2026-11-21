@@ -65,7 +65,10 @@ def test_resident_snapshot_counters_and_slot_lifetime_are_preserved(rows, monkey
         # remain. Scope cleanup is application/test control outside the call.
         assert int(binding.x_prep_dev_live()) == initial + 2
         if rows:
-            assert source._host is None and not calls
+            # The device path made no host snapshot and never called the gather.
+            assert not calls
+            with pytest.raises(TypeError, match='_Resident.take'):
+                source.materialize()
     assert int(binding.x_prep_dev_live()) == initial
 
 
@@ -142,37 +145,28 @@ def test_large_transform_output_retains_mapping_until_consumed(off, monkeypatch)
     assert result[0, 0] == 0 and result[-1, 0] == ((1 << 20)-1)/4
 
 
-@pytest.mark.parametrize('hook', ['dict', 'finalizer', 'base'])
-def test_resident_class_hooks_are_refused_before_cache_allocation(hook, monkeypatch):
-    _ranges()
+@pytest.mark.parametrize('hook', ['finalizer', 'getattribute'])
+def test_resident_scope_caches_are_native_and_reach_no_class_hook(hook, monkeypatch):
+    # The scope's caches are native state (no DeviceCache object is built
+    # for them): a hook on the public class is never reached. The old cache
+    # class context key and its foreign-class cases are gone (2026-11-21,
+    # arena unit E).
+    binding = _ranges()
     monkeypatch.setenv('MOJOLEARN_ARENA_RANGES', '1')
     calls = []
     def forbidden(*args):
         calls.append(True)
         raise AssertionError('cache metadata hook ran')
     model = ml.MaxAbsScaler().fit(np.ones((3,2), dtype='f4'))
+    initial = int(binding.x_prep_dev_live())
     with _arena_io.resident(min_words=1):
-        cls = _arena_io.DeviceCache
-        if hook == 'dict':
-            class ForeignCache:
-                __dict__ = property(forbidden)
-            from mojolearn import _expansion_prep
-            monkeypatch.setitem(_expansion_prep._MAXABS_CONTEXT, 'arena_cache_class', ForeignCache)
-        elif hook == 'finalizer':
-            monkeypatch.setattr(cls, '__del__', forbidden, raising=False)
-        else:
-            class Foreign:
-                __del__ = forbidden
-            # Changing __bases__ is rejected by CPython for object-backed
-            # heap classes on some versions; test an existing cache class
-            # subclass replacement through scope metadata instead.
-            class ForeignCache(cls, Foreign):
-                pass
-            from mojolearn import _expansion_prep
-            monkeypatch.setitem(_expansion_prep._MAXABS_CONTEXT, 'arena_cache_class', ForeignCache)
-        audit = audit_native_call(model.transform, np.ones((3,2), dtype='f4'))
-        assert isinstance(audit.exception, TypeError), audit.report()
-        assert not audit.report()['python_frames'] and not calls
+        with monkeypatch.context() as patch:
+            patch.setattr(_arena_io.DeviceCache, '__del__' if hook == 'finalizer' else '__getattribute__',
+                          forbidden, raising=False)
+            audit = audit_native_call(model.transform, np.ones((3,2), dtype='f4'))
+        audit.assert_native()
+        assert not calls and _arena_io.resident.stats()['x_prep'][0] >= 1
+    assert int(binding.x_prep_dev_live()) == initial and not calls
 
 
 @pytest.mark.parametrize('blocked', ['0', '1'])

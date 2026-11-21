@@ -70,11 +70,15 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     var classifier = kind == 0
     if kind != 0 and kind != 1:
         raise Error("ValueError: mojolearn: unknown kernel SVM member kind " + String(kind))
-    var hp = svm_settings_unpack(model, fields, classifier, context)
+    # The estimator's own checks, on a SCRATCH copy of its fields: the private
+    # settings they write (`_hp_kernel`, `_hp_C`, ...) never reach the caller's
+    # template estimator; PACK writes them into the clone it packs.
+    var scratch = py_call(native_loaded_module("builtins").dict, fields)
+    var hp = svm_settings_unpack(model, scratch, classifier, context)
     var nk = svm_keys()
     if hp.precomputed:
         return False
-    if classifier and py_get(fields, nk[].k_class_weight, PythonObject(None)) is not None:
+    if classifier and py_get(scratch, nk[].k_class_weight, PythonObject(None)) is not None:
         return False
     var binding = estimator_binding(model, "_mojolearn_svm", context)
     var connection = svc_connection(binding)
@@ -107,7 +111,7 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     var low = 0
     var high = 0
     if classifier and hp.probability:
-        var rs = svc_field(fields, nk[].k__hp_random_state, "_hp_random_state")
+        var rs = svc_field(scratch, nk[].k__hp_random_state, "_hp_random_state")
         if rs is not None:
             var operator = native_loaded_module("operator")
             low = Int(py=family_call(operator.and_, rs, PythonObject(0xFFFFFFFF)))
@@ -115,9 +119,9 @@ def kernel_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     var shape_ovo = 0.0
     var break_ties = 0.0
     if classifier:
-        if String(svc_field(fields, nk[].k_decision_function_shape, "decision_function_shape")) == "ovo":
+        if String(svc_field(scratch, nk[].k_decision_function_shape, "decision_function_shape")) == "ovo":
             shape_ovo = 1.0
-        if Bool(py=svc_field(fields, nk[].k__hp_break_ties, "_hp_break_ties")):
+        if Bool(py=svc_field(scratch, nk[].k__hp_break_ties, "_hp_break_ties")):
             break_ties = 1.0
     var words = List[Float64](length=17, fill=0.0)
     words[0] = Float64(kind)
