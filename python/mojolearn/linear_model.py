@@ -312,6 +312,9 @@ class LinearRegression(_NumericModeMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LINEAR = 0) and core/linear_member.mojo.
+    _mojolearn_member = (0, 0)
 
     #: The methods below are one call each into the compiled classical owner
     #: (bindings/classical_native_pack.mojo), connected once at import. It
@@ -495,6 +498,9 @@ class Ridge(_NumericModeMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LINEAR = 0) and core/linear_member.mojo.
+    _mojolearn_member = (0, 1)
 
     #: The methods below are one call each into the compiled classical owner
     #: (bindings/classical_native_pack.mojo), connected once at import. It
