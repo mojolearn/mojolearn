@@ -987,7 +987,8 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     if py_type(args[4]) is not b.bool:
         raise Error("TypeError: return_distance must be a bool")
     var cell_limit = reference_cell_limit(n, d)
-    var n_devices = len(process_pool_devices(pool))
+    var devices = process_pool_devices(pool)
+    var n_devices = len(devices)
     var width_obj = py_item(holder, nk[].k_reference_rows_per_shard)
     var width_given = width_obj is not None
     var width_exact = width_given and py_type(width_obj) is b.int
@@ -1082,7 +1083,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
                 py_setitem(record, nk[].k_reference_start, ranges[2 * r])
                 py_setitem(record, nk[].k_reference_end, ranges[2 * r + 1])
                 py_setitem(record, nk[].k_reference_bytes, (ranges[2 * r + 1] - ranges[2 * r]) * d * 4)
-                py_setitem(record, nk[].k_device, devices[r % n_devices])
+                py_setitem(record, nk[].k_device, PythonObject(devices[r % n_devices]))
                 _ = py_call(diagnostics.append, record)
             first = end
     finally:
