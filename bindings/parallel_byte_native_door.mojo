@@ -13,14 +13,25 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from std.memory import bitcast, unsafe_memcpy
+from std.memory import unsafe_memcpy
 from std.math import isfinite
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_array, py_ints
 from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
 from bindings.native_json_door import native_json_parse
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_transport_door import _transport_json, transport_initialize
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect, neural_descriptor_execute
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect, neural_descriptor_provider_id
+from bindings.parallel_byte_native_run import (
+    ParallelByteSession,
+    PARALLEL_SCHEDULE_ABI_NAME, PARALLEL_SCHEDULE_OPERATIONS,
+    PARALLEL_REPLICA, PARALLEL_MODEL_POOL, PARALLEL_OFFLOAD, PARALLEL_SCALAR_LR,
+    parallel_session_apply_gradient, parallel_session_close, parallel_session_export,
+    parallel_session_fold, parallel_session_fold_export, parallel_session_open,
+    parallel_session_openable, parallel_session_ownership, parallel_session_ownership_capacity,
+    parallel_session_ownership_width, parallel_session_require_split, parallel_session_rollback,
+    parallel_session_schedule_name, parallel_session_set_lr, parallel_session_shard_gradient,
+    parallel_session_step_begin, parallel_session_step_commit,
+)
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from training.parallel_byte_impl import (
     _parallel_span,
@@ -68,25 +79,8 @@ from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
 
 
-# The byte-LM schedule descriptor ABI (bindings/_mojolearn_byte_lm.mojo).
-comptime PARALLEL_SCHEDULE_ABI_NAME = "mojolearn.training.byte_lm_schedule.v1"
-comptime PARALLEL_SCHEDULE_OPERATIONS = 15
-comptime PARALLEL_REPLICA = 0
-comptime PARALLEL_MODEL_POOL = 1
-comptime PARALLEL_OFFLOAD = 2
-comptime PARALLEL_OP_CLOSE = 0
-comptime PARALLEL_OP_OPEN = 1
-comptime PARALLEL_OP_STEP = 2
-comptime PARALLEL_OP_EXPORT = 3
-comptime PARALLEL_OP_ROLLBACK = 4
-comptime PARALLEL_OP_OWNERSHIP = 5
-comptime PARALLEL_OP_SET_LR = 6
-comptime PARALLEL_OP_SHARD_GRADIENT = 7
-comptime PARALLEL_OP_APPLY_GRADIENT = 8
-comptime PARALLEL_OP_FOLD_RESET = 9
-comptime PARALLEL_OP_SHARD_GRADIENT_FOLD = 10
-comptime PARALLEL_OP_FOLD_ADD = 11
-comptime PARALLEL_OP_FOLD_EXPORT = 12
+# The schedule descriptor ABI words and the typed session are in
+# bindings/parallel_byte_native_run.mojo (RUN); this file is UNPACK and PACK.
 
 
 struct ParallelByteBoundary(Defaultable, Movable):
@@ -120,26 +114,22 @@ comptime PARALLEL_BYTE_BOUNDARY = SharedSlot[ParallelByteBoundary, "MojolearnPar
 
 
 struct ParallelByteOwner(Movable, Writable):
-    """One trainer's native state. Stored once in the instance dictionary as
+    """One trainer's native owner. Stored once in the instance dictionary as
     `_native`; every operation reads this record, never instance attributes.
+    `native` is the typed state RUN works on (bindings/parallel_byte_native_run.mojo).
+    The Python objects here are boundary pins only: the schedule provider and
+    its factory entries, the live session object, the caller's device values
+    and the admitted state dictionary (a boundary copy of the step and the
+    learning rate, refreshed by `_parallel_publish` before it is read).
     `devices`, `logical_shards`, `pool_optimizer`, `_shape` and `_session`
     on the instance are read-only mirrors for callers."""
     var owner_id: Int
-    var schedule: Int
+    var native: ParallelByteSession
     var provider: PythonObject
     var create: PythonObject
     var handle_entry: PythonObject
     var session: PythonObject
-    var handle: Int
-    var closed: Bool
-    var lost: Bool
-    var pool_optimizer: Bool
-    var devices: List[Int]
     var device_objects: PythonObject
-    var logical_shards: Int
-    var dims: List[Int]
-    var n_total: Int
-    var n_tensors: Int
     var state: PythonObject
     var state_addresses: List[Int]
     var shape: PythonObject
@@ -148,25 +138,33 @@ struct ParallelByteOwner(Movable, Writable):
                  var devices: List[Int], device_objects: PythonObject, logical_shards: Int,
                  shape: PythonObject, state: PythonObject) raises:
         self.owner_id = owner_id
-        self.schedule = schedule
         var nk = parallel_keys()
-        self.provider = py_item(table, nk[].k_provider)
+        var provider = py_item(table, nk[].k_provider)
+        # UNPACK, once per trainer: the provider id word, the shape words, the
+        # optimizer scalars and the committed step leave their Python objects
+        # here; no operation reads them from Python again.
+        var provider_id = 0
+        if provider is not None:
+            provider_id = neural_descriptor_provider_id(provider)
+        var dims = List[Int]()
+        var shape_dims = py_item(shape, nk[].k_dims)
+        for i in range(len(shape_dims)):  # driver-loop: over dims: nine or ten admitted shape words
+            dims.append(Int(py=shape_dims[i]))
+        var config = py_item(state, nk[].k_config)
+        var scalars = List[Float64]()
+        for key in [String("lr"), String("beta1"), String("beta2"), String("eps"),  # driver-loop: over keys: eight optimizer scalars
+                    String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:
+            scalars.append(Float64(py=config[key]))
+        self.native = ParallelByteSession(
+            provider_id, schedule, pool_optimizer, devices^, logical_shards, dims^,
+            Int(py=py_item(shape, nk[].k_n_total)), Int(py=py_item(shape, nk[].k_n_tensors)),
+            Int(py=py_item(state, nk[].k_completed_steps)),
+            Int(py=py_item(config, nk[].k_kind)), Bool(py=py_item(config, nk[].k_nesterov)), scalars^)
+        self.provider = provider
         self.create = py_item(table, nk[].k_create)
         self.handle_entry = py_item(table, nk[].k_handle)
         self.session = PythonObject(None)
-        self.handle = 0
-        self.closed = False
-        self.lost = False
-        self.pool_optimizer = pool_optimizer
-        self.devices = devices^
         self.device_objects = device_objects
-        self.logical_shards = logical_shards
-        self.dims = List[Int]()
-        var dims = py_item(shape, nk[].k_dims)
-        for i in range(len(dims)):  # driver-loop: over dims: nine or ten admitted shape words
-            self.dims.append(Int(py=dims[i]))
-        self.n_total = Int(py=py_item(shape, nk[].k_n_total))
-        self.n_tensors = Int(py=py_item(shape, nk[].k_n_tensors))
         self.state = state
         # Captured once from the freshly admitted native copies.
         self.state_addresses = List[Int]()
@@ -175,7 +173,7 @@ struct ParallelByteOwner(Movable, Writable):
         self.shape = shape
 
     def write_to(self, mut writer: Some[Writer]):
-        writer.write("ParallelByteOwner(schedule=", self.schedule, ", open=", self.handle != 0, ")")
+        writer.write("ParallelByteOwner(schedule=", self.native.schedule, ", open=", self.native.handle != 0, ")")
 
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
@@ -341,7 +339,7 @@ def _parallel_record(owner: PythonObject) raises -> PythonObject:
     var owner_id = Int(py=py_call(p[].bi.id, owner))
     try:
         var rec = record.downcast_value_ptr[ParallelByteOwner]()
-        if rec[].owner_id != owner_id or rec[].schedule != schedule:
+        if rec[].owner_id != owner_id or rec[].native.schedule != schedule:
             raise Error("foreign")
     except:
         raise Error("TypeError: parallel trainer storage does not belong to this trainer")
@@ -842,26 +840,10 @@ def _parallel_mirror_session(owner: PythonObject, session: PythonObject) raises:
     py_setitem(py_fields(owner), nk[].k__session, session)
 
 
-def _parallel_execute(record: PythonObject, op: Int, var addresses: List[Int], ints: List[Int],
-                      floats: List[Float64]) raises -> Int:
-    var rec = record.downcast_value_ptr[ParallelByteOwner]()
-    if rec[].handle == 0:
-        raise Error("RuntimeError: parallel trainer has no open session")
-    var words: List[Int] = [rec[].handle]
-    for value in addresses:  # driver-loop: over addresses: the operation's admitted buffer descriptors
-        words.append(value)
-    # Retain the GIL: it is also the native session's exclusion lock.
-    var result = neural_descriptor_execute(rec[].provider, op, words, ints, floats, False)
-    _ = record
-    return result
-
-
 def parallel_byte_open(owner: PythonObject) raises:
     var record = _parallel_record(owner)
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
-    if rec[].closed or rec[].lost:
-        raise Error("RuntimeError: parallel trainer is closed or lost; restore a state export")
-    if rec[].handle != 0:
+    if not parallel_session_openable(rec[].native):
         return
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     if rec[].provider is None:
@@ -869,83 +851,60 @@ def parallel_byte_open(owner: PythonObject) raises:
             # The declared by-design sentence (python/mojolearn/_parallel_pool.py
             # `_cpu_refusal`): the identity harness reads a par-* host cell
             # N/A by it (tools/identity_break.py CPU_BY_DESIGN_REFUSAL).
-            var name = String("parallel") if rec[].schedule == PARALLEL_REPLICA else (
-                String("model_pool") if rec[].schedule == PARALLEL_MODEL_POOL else String("offload"))
             raise Error("NotImplementedError: no CPU implementation of the cooperative multi-GPU driver byte_lm_"
-                        + name + " yet: its sessions live inside the GPU byte-LM binding, "
+                        + parallel_session_schedule_name(rec[].native) + " yet: its sessions live inside the GPU byte-LM binding, "
                         + "which no host binding restates")
         raise Error("NotImplementedError: installed binding has no cooperative GPU byte-LM session")
+    # UNPACK: the schedule factory makes the session object and names its
+    # handle word. RUN admits the four state arrays by address.
+    var session = py_call(rec[].create, PythonObject(rec[].native.schedule))
+    var handle = Int(py=py_call(rec[].handle_entry, session))
+    rec[].session = session
+    var state_addresses = rec[].state_addresses.copy()
+    try:
+        parallel_session_open(rec[].native, handle, state_addresses)
+    except error:
+        rec[].session = PythonObject(None)
+        raise error
+    # PACK: the session mirror, and the host arrays leave the retained state.
+    _parallel_mirror_session(owner, session)
     var state = rec[].state
     var nk = parallel_keys()
-    var config = py_item(state, nk[].k_config)
-    var completed = Int(py=py_item(state, nk[].k_completed_steps))
-    var ints: List[Int] = [completed, Int(py=py_item(config, nk[].k_kind)), 1 if Bool(py=py_item(config, nk[].k_nesterov)) else 0,
-                           1 if rec[].pool_optimizer else 0, len(rec[].dims)]
-    for value in rec[].dims:  # driver-loop: over dims: nine or ten admitted shape words
-        ints.append(value)
-    ints.append(rec[].logical_shards)
-    ints.append(len(rec[].devices))
-    for value in rec[].devices:  # driver-loop: over devices: admitted device indices
-        ints.append(value)
-    var floats = List[Float64]()
-    for key in [String("lr"), String("beta1"), String("beta2"), String("eps"),  # driver-loop: over keys: eight optimizer scalars
-                String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:
-        floats.append(Float64(py=config[key]))
-    var session = py_call(rec[].create, PythonObject(rec[].schedule))
-    var handle = Int(py=py_call(rec[].handle_entry, session))
-    if handle == 0:
-        raise Error("RuntimeError: byte-LM schedule factory returned a null session")
-    rec[].session = session
-    rec[].handle = handle
-    try:
-        var opened = _parallel_execute(record, PARALLEL_OP_OPEN, rec[].state_addresses.copy(), ints, floats)
-        if opened != completed:
-            raise Error("RuntimeError: parallel admission returned wrong step")
-    except error:
-        try:
-            _ = _parallel_execute(record, PARALLEL_OP_CLOSE, List[Int](), List[Int](), List[Float64]())
-        except:
-            pass
-        rec[].session = PythonObject(None)
-        rec[].handle = 0
-        raise error
-    _parallel_mirror_session(owner, session)
     var retained = py_call(p[].bi.dict, state)
     py_setitem(retained, nk[].k_parameters, PythonObject(None))
     py_setitem(retained, nk[].k_m, PythonObject(None))
     py_setitem(retained, nk[].k_v, PythonObject(None))
     rec[].state = retained
     rec[].state_addresses = List[Int]()
+    _ = record
 
 
-def _parallel_require_split(record: PythonObject, entry: String) raises:
+def _parallel_publish(record: PythonObject) raises:
+    """PACK: refresh the boundary state dictionary from the typed session.
+    Called where the dictionary is read (state, checkpoint, admitted_state)
+    and after set_lr; a step no longer writes it."""
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
-    if rec[].schedule != PARALLEL_REPLICA:
-        raise Error(entry + " requires ParallelByteLanguageModelTrainer")
-    if rec[].pool_optimizer or len(rec[].devices) != 1:
-        raise Error(entry + " requires devices=(d,) and pool_optimizer=False")
-    if rec[].provider is None:
-        raise Error("RuntimeError: installed byte-LM binding lacks " + entry)
-
-
-def _parallel_completed(record: PythonObject) raises -> Int:
     var nk = parallel_keys()
-    return Int(py=py_item(record.downcast_value_ptr[ParallelByteOwner]()[].state, nk[].k_completed_steps))
-
-
-def _parallel_commit(record: PythonObject, completed: Int) raises:
-    var state = record.downcast_value_ptr[ParallelByteOwner]()[].state
-    var nk = parallel_keys()
-    py_setitem(state, nk[].k_completed_steps, PythonObject(completed))
-    py_setitem(state, nk[].k_next_batch_index, PythonObject(completed))
+    var completed = rec[].native.completed
+    if rec[].native.mirror_completed != completed:
+        py_setitem(rec[].state, nk[].k_completed_steps, PythonObject(completed))
+        py_setitem(rec[].state, nk[].k_next_batch_index, PythonObject(completed))
+        rec[].native.mirror_completed = completed
+    if rec[].native.lr_stale:
+        var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
+        var config = py_call(p[].bi.dict, py_item(rec[].state, nk[].k_config))
+        py_setitem(config, nk[].k_lr, PythonObject(rec[].native.scalars[PARALLEL_SCALAR_LR]))
+        py_setitem(rec[].state, nk[].k_config, config)
+        rec[].native.lr_stale = False
+    _ = record
 
 
 def _parallel_export(owner: PythonObject, rank: PythonObject, into: PythonObject, gradients: Bool = False) raises -> PythonObject:
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var record = _parallel_record(owner)
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
-    var n = rec[].n_total
-    var nt = rec[].n_tensors
+    var n = rec[].native.n_total
+    var nt = rec[].native.n_tensors
     var replica_rank = _parallel_int(rank, 0, 2147483647, "rank")
     var output = into
     var addresses = List[Int]()
@@ -967,11 +926,9 @@ def _parallel_export(owner: PythonObject, rank: PythonObject, into: PythonObject
                 raise Error("into is missing " + key)
             addresses.append(_parallel_target(output[key], nt if key == "flags" else n, key == "flags", pins))
     parallel_byte_open(owner)
-    var ints: List[Int] = [replica_rank, 1 if gradients else 0]
-    var step = _parallel_execute(record, PARALLEL_OP_EXPORT, addresses^, ints, List[Float64]())
-    if step != _parallel_completed(record):
-        raise Error("RuntimeError: parallel export returned wrong step")
+    parallel_session_export(rec[].native, replica_rank, gradients, addresses)
     _ = pins^
+    _ = record
     return output
 
 
@@ -979,6 +936,7 @@ def parallel_byte_state(owner: PythonObject, rank: PythonObject) raises -> Pytho
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var arrays = _parallel_export(owner, rank, PythonObject(None))
     var rec = _parallel_record(owner)
+    _parallel_publish(rec)
     var state = py_call(p[].bi.dict, rec.downcast_value_ptr[ParallelByteOwner]()[].state)
     _ = py_call(state.update, arrays)
     return _parallel_validate_state(state, rec.downcast_value_ptr[ParallelByteOwner]()[].shape, True)
@@ -988,7 +946,7 @@ def parallel_byte_shard_words(owner: PythonObject) raises -> List[Int]:
     """[logical_shards, batch, length] of an admitted trainer: what one step
     consumes (logical_shards buffers of int32[batch, length + 1])."""
     var rec = _parallel_record(owner).downcast_value_ptr[ParallelByteOwner]()
-    var words: List[Int] = [rec[].logical_shards, rec[].dims[0], rec[].dims[1]]
+    var words: List[Int] = [rec[].native.logical_shards, rec[].native.dims[0], rec[].native.dims[1]]
     return words^
 
 
@@ -1001,24 +959,19 @@ def parallel_byte_step_shards(owner: PythonObject, shard_addresses: List[Int]) r
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var record = _parallel_record(owner)
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
-    var count = rec[].logical_shards
+    var count = rec[].native.logical_shards
     if len(shard_addresses) != count:
         raise Error("logical shard count mismatch")
     var losses = List[Float64](length=count, fill=0)
-    var addresses: List[Int] = [Int(losses.unsafe_ptr())]
-    for address in shard_addresses:  # driver-loop: over count: one admitted buffer per logical shard
-        addresses.append(address)
     parallel_byte_open(owner)
-    var before = _parallel_completed(record)
-    # An entry failure already rolled back inside the native GPU session.
+    # RUN. An entry failure already rolled back inside the native GPU
+    # session; a wrong loss count is rolled back by the step itself.
     # Do not roll back a prior committed step on an admission refusal.
-    var ints: List[Int] = [before, count]
-    var written = _parallel_execute(record, PARALLEL_OP_STEP, addresses^, ints, List[Float64]())
+    var before = parallel_session_step_begin(rec[].native, shard_addresses, losses)
+    # PACK. A result that cannot be built returns the session to `before`.
     var result = p[].bi.dict()
     var nk = parallel_keys()
     try:
-        if written != count:
-            raise Error("RuntimeError: parallel step returned wrong loss count")
         var values = p[].bi.list()
         for i in range(count):  # driver-loop: over count: one loss per logical shard
             _ = py_call(values.append, PythonObject(losses[i]))
@@ -1027,14 +980,11 @@ def parallel_byte_step_shards(owner: PythonObject, shard_addresses: List[Int]) r
         py_setitem(result, nk[].k_logical_shards, PythonObject(count))
         py_setitem(result, nk[].k_reduction, PythonObject("ordered_sum"))
     except error:
-        try:
-            if _parallel_execute(record, PARALLEL_OP_ROLLBACK, List[Int](), List[Int](), List[Float64]()) != before:
-                rec[].lost = True
-        except:
-            rec[].lost = True
+        parallel_session_rollback(rec[].native, before)
         raise error
-    _parallel_commit(record, before + 1)
+    parallel_session_step_commit(rec[].native, before)
     _ = losses^
+    _ = record
     return result
 
 
@@ -1044,11 +994,11 @@ def parallel_byte_train_step(owner: PythonObject, shards: PythonObject) raises -
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
     if py_type(shards) is not p[].bi.list and py_type(shards) is not p[].bi.tuple:
         raise Error("TypeError: shards must be a list or tuple of microbatches")
-    var count = rec[].logical_shards
+    var count = rec[].native.logical_shards
     if len(shards) != count:
         raise Error("logical shard count mismatch")
-    var b = rec[].dims[0]
-    var length = rec[].dims[1]
+    var b = rec[].native.dims[0]
+    var length = rec[].native.dims[1]
     # pass 3 (N102): each shard is read in place when it already is
     # C-contiguous int32 (pinned for the step); only other layouts copy.
     var pins = List[AdmittedBorrowedBuffer]()
@@ -1075,28 +1025,23 @@ def _parallel_ownership(owner: PythonObject) raises -> PythonObject:
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
     var record = _parallel_record(owner)
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
-    if rec[].schedule == PARALLEL_OFFLOAD:
+    if rec[].native.schedule == PARALLEL_OFFLOAD:
         raise Error("NotImplementedError: offloaded state lives on the host; no resident GPU optimizer owners")
     parallel_byte_open(owner)
-    var width = 5 if rec[].schedule == PARALLEL_REPLICA else 7
-    var capacity = width * (rec[].dims[7] + 2 + len(rec[].devices))
-    var words = List[Int](length=capacity, fill=0)
-    var addresses: List[Int] = [Int(words.unsafe_ptr())]
-    var ints: List[Int] = [capacity]
-    var written = _parallel_execute(record, PARALLEL_OP_OWNERSHIP, addresses^, ints, List[Float64]())
-    if written < 0 or written % width != 0 or written > capacity:
-        raise Error("RuntimeError: native ownership returned a malformed record")
-    var rows = written // width
+    var width = parallel_session_ownership_width(rec[].native)
+    var words = List[Int](length=parallel_session_ownership_capacity(rec[].native), fill=0)
+    var rows = parallel_session_ownership(rec[].native, words)
+    var device_count = len(rec[].native.devices)
     var result = p[].bi.list()
     var nk = parallel_keys()
-    if rec[].schedule == PARALLEL_MODEL_POOL:
+    if rec[].native.schedule == PARALLEL_MODEL_POOL:
         # Rows are [owner index, first, count, parameter, moment, rollback,
         # gradient bytes] (byte_lm_model_pool ownership).
         var pool_fields = [String("first"), String("count"), String("parameter_bytes"),
                            String("moment_bytes"), String("rollback_bytes"), String("gradient_bytes")]
         for i in range(rows):  # driver-loop: over the model chunks each device owns
             var device = words[i * width]
-            if device < 0 or device >= len(rec[].devices):
+            if device < 0 or device >= device_count:
                 raise Error("RuntimeError: native ownership names an unknown device owner")
             var row = p[].bi.dict()
             py_setitem(row, nk[].k_device, rec[].device_objects[device])
@@ -1104,9 +1049,10 @@ def _parallel_ownership(owner: PythonObject) raises -> PythonObject:
                 py_setitem(row, pool_fields[j], PythonObject(words[i * width + j + 1]))
             _ = py_call(result.append, row)
         _ = words^
+        _ = record
         return py_call(p[].bi.tuple, result)
     var fields = [String("first"), String("count"), String("moment_bytes"), String("rollback_bytes"), String("reduction_bytes")]
-    if rows != len(rec[].devices):
+    if rows != device_count:
         raise Error("RuntimeError: native ownership row count differs from devices")
     for i in range(rows):  # driver-loop: over actual physical device ownership records
         var row = p[].bi.dict()
@@ -1115,6 +1061,7 @@ def _parallel_ownership(owner: PythonObject) raises -> PythonObject:
             py_setitem(row, fields[j], PythonObject(words[i * width + j]))
         _ = py_call(result.append, row)
     _ = words^
+    _ = record
     return py_call(p[].bi.tuple, result)
 
 
@@ -1122,6 +1069,7 @@ def _parallel_state_snapshot(record: PythonObject) raises -> PythonObject:
     """A detached copy of the admitted state metadata and any host arrays
     still held before the session opens; mutating it changes nothing."""
     var p = PARALLEL_BYTE_BOUNDARY.get_or_create_ptr()
+    _parallel_publish(record)
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
     var state = rec[].state
     var result = py_call(p[].bi.dict, state)
@@ -1133,9 +1081,9 @@ def _parallel_state_snapshot(record: PythonObject) raises -> PythonObject:
     py_setitem(result, nk[].k_parameter_offsets, py_call(p[].bi.list, py_item(state, nk[].k_parameter_offsets)))
     for key in [String("parameters"), String("m"), String("v")]:  # small-loop(keys: three state arrays)
         if state[key] is not None:
-            py_setitem(result, key, _parallel_array(state[key], [rec[].n_total]))
+            py_setitem(result, key, _parallel_array(state[key], [rec[].native.n_total]))
     if py_item(state, nk[].k_flags) is not None:
-        py_setitem(result, nk[].k_flags, _parallel_array(py_item(state, nk[].k_flags), [rec[].n_tensors], True))
+        py_setitem(result, nk[].k_flags, _parallel_array(py_item(state, nk[].k_flags), [rec[].native.n_tensors], True))
     return result
 
 
@@ -1172,21 +1120,16 @@ def parallel_byte_call(operation: Int, name: PythonObject, args: PythonObject) r
     var record = _parallel_record(owner)
     var rec = record.downcast_value_ptr[ParallelByteOwner]()
     if operation == PARALLEL_BYTE_OPN_STEP:
-        return PythonObject(_parallel_completed(record))
+        return PythonObject(rec[].native.completed)
     if operation == PARALLEL_BYTE_OPN_ENTER:
         return owner
     if operation == PARALLEL_BYTE_OPN_ADMITTED_STATE:
         return _parallel_state_snapshot(record)
     if operation == PARALLEL_BYTE_OPN_CLOSE:
-        rec[].closed = True
-        if rec[].handle != 0:
-            var failure = String()
-            try:
-                _ = _parallel_execute(record, PARALLEL_OP_CLOSE, List[Int](), List[Int](), List[Float64]())
-            except error:
-                failure = String(error)
+        var was_open = rec[].native.handle != 0
+        var failure = parallel_session_close(rec[].native)
+        if was_open:
             rec[].session = PythonObject(None)
-            rec[].handle = 0
             _parallel_mirror_session(owner, PythonObject(None))
             if failure.byte_length() > 0:
                 raise Error(failure)
@@ -1205,60 +1148,49 @@ def parallel_byte_call(operation: Int, name: PythonObject, args: PythonObject) r
     if operation == PARALLEL_BYTE_OPN_CHECKPOINT:
         var result = p[].bi.dict()
         py_setitem(result, nk[].k_schema, PythonObject("mojolearn.parallel-byte-lm.v1"))
-        py_setitem(result, nk[].k_logical_shards, PythonObject(rec[].logical_shards))
+        py_setitem(result, nk[].k_logical_shards, PythonObject(rec[].native.logical_shards))
         py_setitem(result, nk[].k_reduction, PythonObject("ordered_sum"))
         py_setitem(result, nk[].k_state, parallel_byte_state(owner, PythonObject(0)))
         return result
     if operation == PARALLEL_BYTE_OPN_SET_LR:
         var lr = _parallel_float(args[1], "lr")
-        if lr <= 0:
-            raise Error("Byte-LM requires lr > 0")
-        if rec[].handle != 0:
-            if rec[].schedule != PARALLEL_REPLICA:
-                raise Error("RuntimeError: installed byte-LM binding lacks set_lr")
-            var floats: List[Float64] = [Float64(lr)]
-            var stored = _parallel_execute(record, PARALLEL_OP_SET_LR, List[Int](), List[Int](), floats)
-            if UInt32(stored) != bitcast[DType.uint32](lr):
-                raise Error("RuntimeError: native set_lr stored different float32 bits")
-        var config = py_call(p[].bi.dict, py_item(rec[].state, nk[].k_config))
-        py_setitem(config, nk[].k_lr, PythonObject(Float64(lr)))
-        py_setitem(rec[].state, nk[].k_config, config)
+        parallel_session_set_lr(rec[].native, lr)
+        # PACK: the retained configuration carries the new rate at once.
+        _parallel_publish(record)
         return PythonObject(Float64(lr))
     if operation == PARALLEL_BYTE_OPN_REQUIRE_FOLD:
-        _parallel_require_split(record, "shard_gradient")
+        parallel_session_require_split(rec[].native, "shard_gradient")
         return PythonObject(None)
     if operation == PARALLEL_BYTE_OPN_HAS_DEVICE_FOLD:
         parallel_byte_open(owner)
-        return PythonObject(rec[].schedule == PARALLEL_REPLICA)
+        return PythonObject(rec[].native.schedule == PARALLEL_REPLICA)
     if operation == PARALLEL_BYTE_OPN_OWNERSHIP:
         return _parallel_ownership(owner)
     if operation == PARALLEL_BYTE_OPN_MODEL_OWNERSHIP:
-        if rec[].schedule != PARALLEL_MODEL_POOL:
+        if rec[].native.schedule != PARALLEL_MODEL_POOL:
             raise Error("model_ownership requires PooledByteLanguageModelTrainer")
         return _parallel_ownership(owner)
-    var n = rec[].n_total
+    var n = rec[].native.n_total
     if operation == PARALLEL_BYTE_OPN_SHARD_GRADIENT or operation == PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD:
         var fold = operation == PARALLEL_BYTE_OPN_SHARD_GRADIENT_FOLD
-        # pass 3 (N102): the shard is read in place when it already is
+        # UNPACK. pass 3 (N102): the shard is read in place when it already is
         # C-contiguous int32 (pinned for the call); only other layouts copy.
         var pins = List[AdmittedBorrowedBuffer]()
         var copies = List[PythonObject]()
-        var ids_address = _parallel_borrow(args[1], [rec[].dims[0], rec[].dims[1] + 1], True, pins, copies)
+        var ids_address = _parallel_borrow(args[1], [rec[].native.dims[0], rec[].native.dims[1] + 1], True, pins, copies)
         parallel_byte_open(owner)
-        _parallel_require_split(record, "shard_gradient_fold" if fold else "shard_gradient")
-        var loss = List[Float64](length=1, fill=0)
+        parallel_session_require_split(rec[].native, "shard_gradient_fold" if fold else "shard_gradient")
         var gradient = PythonObject(None)
-        var addresses: List[Int] = [ids_address]
+        var gradient_address = 0
         if not fold:
             gradient = generation_array([n])
-            addresses.append(Int(py=gradient._addr))
-        addresses.append(Int(loss.unsafe_ptr()))
-        var ints: List[Int] = [_parallel_completed(record)]
-        _ = _parallel_execute(record, PARALLEL_OP_SHARD_GRADIENT_FOLD if fold else PARALLEL_OP_SHARD_GRADIENT,
-                              addresses^, ints, List[Float64]())
+            gradient_address = Int(py=gradient._addr)
+        # RUN
+        var loss = parallel_session_shard_gradient(rec[].native, ids_address, gradient_address, fold)
         _parallel_release(pins)
         _ = copies^
-        var value = PythonObject(loss[0])
+        # PACK
+        var value = PythonObject(loss)
         if fold:
             return value
         var result = p[].bi.list()
@@ -1276,33 +1208,31 @@ def parallel_byte_call(operation: Int, name: PythonObject, args: PythonObject) r
         var copies = List[PythonObject]()
         var total_address = _parallel_borrow(args[1], [n], False, pins, copies, False)
         parallel_byte_open(owner)
-        _parallel_require_split(record, "apply_gradient")
-        var before = _parallel_completed(record)
-        var addresses: List[Int] = [total_address]
-        var ints: List[Int] = [before]
-        var completed = _parallel_execute(record, PARALLEL_OP_APPLY_GRADIENT, addresses^, ints, List[Float64]())
+        parallel_session_require_split(rec[].native, "apply_gradient")
+        var completed = 0
+        try:
+            completed = parallel_session_apply_gradient(rec[].native, total_address)
+        except error:
+            _parallel_release(pins)
+            raise error
         _parallel_release(pins)
         _ = copies^
-        if completed != before + 1:
-            rec[].lost = True
-            raise Error("RuntimeError: apply_gradient returned wrong step")
-        _parallel_commit(record, completed)
         return PythonObject(completed)
     if operation == PARALLEL_BYTE_OPN_FOLD_RESET or operation == PARALLEL_BYTE_OPN_FOLD_ADD:
         # pass 3 (N111, N157): a held gradient or received prefix is read in
         # place; the device scan in fold_reset/fold_add refuses non-finite
         # values before the fold changes (no host copy, no host scan).
+        var add = operation == PARALLEL_BYTE_OPN_FOLD_ADD
         var pins = List[AdmittedBorrowedBuffer]()
         var copies = List[PythonObject]()
-        var addresses = List[Int]()
+        var address = 0
         if args[1] is not None:
-            addresses.append(_parallel_borrow(args[1], [n], False, pins, copies, False))
-        elif operation == PARALLEL_BYTE_OPN_FOLD_ADD:
+            address = _parallel_borrow(args[1], [n], False, pins, copies, False)
+        elif add:
             raise Error("fold_add requires a gradient")
         parallel_byte_open(owner)
-        _parallel_require_split(record, "fold_reset" if operation == PARALLEL_BYTE_OPN_FOLD_RESET else "fold_add")
-        _ = _parallel_execute(record, PARALLEL_OP_FOLD_RESET if operation == PARALLEL_BYTE_OPN_FOLD_RESET else PARALLEL_OP_FOLD_ADD,
-                              addresses^, List[Int](), List[Float64]())
+        parallel_session_require_split(rec[].native, "fold_add" if add else "fold_reset")
+        parallel_session_fold(rec[].native, add, address)
         _parallel_release(pins)
         _ = copies^
         return PythonObject(None)
@@ -1310,10 +1240,10 @@ def parallel_byte_call(operation: Int, name: PythonObject, args: PythonObject) r
         var into = args[1]
         var output = generation_array([n]) if into is None else into
         var pins = List[PythonObject]()
-        var addresses: List[Int] = [_parallel_target(output, n, False, pins)]
+        var address = _parallel_target(output, n, False, pins)
         parallel_byte_open(owner)
-        _parallel_require_split(record, "fold_export")
-        _ = _parallel_execute(record, PARALLEL_OP_FOLD_EXPORT, addresses^, List[Int](), List[Float64]())
+        parallel_session_require_split(rec[].native, "fold_export")
+        parallel_session_fold_export(rec[].native, address)
         var result = py_call(output._mv.cast, "B").tobytes() if into is None else output
         _ = pins^
         return result
