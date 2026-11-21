@@ -694,6 +694,30 @@ def _estimate_multi(
 # ===========================================================================
 
 
+def _class_weight_rows(
+    y: List[Float32], class_weights: List[Float32], n_rows: Int,
+    mut weights: List[Float32],
+):
+    """The weight plane of a class-weighted fit: `weights[r] = 1.0 *
+    class_weights[label]`, the labels admitted by the caller (dense integer
+    codes below the class count). One statement per row, the rows in
+    `_gbdt_units` contiguous ranges."""
+    var units = _gbdt_units(n_rows, 2 * n_rows)
+    var chunk = host_predict_chunk(n_rows, units)
+    var y_p = rebind[HostF32Ptr](y.unsafe_ptr())
+    var cw_p = rebind[HostF32Ptr](class_weights.unsafe_ptr())
+    var w_p = rebind[HostF32Ptr](weights.unsafe_ptr())
+
+    def rows(unit: Int) {imm chunk, imm n_rows, imm y_p, imm cw_p, imm w_p}:
+        for r in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
+            w_p[r] = Float32(1.0) * cw_p[Int(y_p[r])]
+
+    host_parallelize(rows, units)
+    _ = len(y)
+    _ = len(class_weights)
+    _ = len(weights)
+
+
 def gbdt_multi_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -759,8 +783,7 @@ def gbdt_multi_host_fit(
         )
     var weights = List[Float32](length=n_rows, fill=Float32(1.0))
     if has_weights:
-        for r in range(n_rows):
-            weights[r] = Float32(1.0) * class_weights[Int(y[r])]
+        _class_weight_rows(y, class_weights, n_rows, weights)
     var is_mc = objective == GBDT_OBJ_MULTICLASS
     var dim = num_classes - 1 if is_mc else num_classes
     var stat_count = 1 + dim

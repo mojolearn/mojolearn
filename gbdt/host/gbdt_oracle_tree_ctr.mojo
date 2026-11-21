@@ -245,6 +245,10 @@ def _level_words(
         else:
             var sorted = List[Float32](unsafe_uninit_length=max(n_rows, 1))
             var sp = TreeF32Ptr(unsafe_from_address=Int(sorted.unsafe_ptr()))
+            # SERIAL INSIDE THE UNIT (lane gbdt-host-par): this copy, the
+            # range scan above and the sort run inside one column's task;
+            # the columns are the split, and a split launched from a task
+            # would run on this thread anyway (the nested rule)
             for r in range(n_rows):
                 sp[r] = col[r]
             var span = Span(unsafe_ptr=sp, length=n_rows)
