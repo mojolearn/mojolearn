@@ -37,7 +37,7 @@ def connect(family, prog_class, scratch_class=None, op_names=None):
     import mmap
     from types import BuiltinFunctionType
     from . import _backend
-    from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
+    from ._arena_io import DeviceRows, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context
     from .tokenizer import _binding
 
@@ -71,9 +71,8 @@ def connect(family, prog_class, scratch_class=None, op_names=None):
                    prog_mmap=mmap.mmap, prog_op_names=dict(op_names or {}),
                    prog_types=dict(int=int, str=str, bytes=bytes, memoryview=memoryview),
                    arena_mmap=mmap.mmap, arena_local=_LOCAL,
-                   arena_scope_class=_Scope, arena_cache_class=DeviceCache,
-                   arena_scope_dict=vars(_Scope)["__dict__"], arena_cache_dict=vars(DeviceCache)["__dict__"],
-                   maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)["__dict__"],
+                   arena_scope_class=_Scope, arena_scope_owner=vars(_Scope)["_owner"].__get__,
+                   maxabs_rows_class=DeviceRows, maxabs_rows_owner=vars(DeviceRows)['_owner'].__get__,
                    maxabs_gather_rows=gather, maxabs_finite_f32=finite32, maxabs_finite_f64=finite64)
     if scratch_class is not None:
         context.update(prog_scratch_class=scratch_class,

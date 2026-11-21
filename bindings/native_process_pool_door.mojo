@@ -700,24 +700,31 @@ def process_worker_connect(argv: PythonObject) raises -> PythonObject:
 struct WorkerTurn(Movable):
     """One request a worker received: `open` is False for the coordinator's
     close (the worker then leaves its loop), `sequence` is echoed in the
-    reply and `value` is the request's PACKed record."""
+    reply, `request` holds the frame's request words (one encoded
+    `WorkerRequest`; empty for a request sent without words) and `value` is
+    the request's PACKed record."""
     var open: Bool
     var sequence: Int
+    var request: List[Int64]
     var value: PythonObject
 
-    def __init__(out self, open: Bool, sequence: Int, value: PythonObject):
+    def __init__(out self, open: Bool, sequence: Int, var request: List[Int64], value: PythonObject):
         self.open = open
         self.sequence = sequence
+        self.request = request^
         self.value = value
 
 
 def process_worker_next(socket: PythonObject) raises -> WorkerTurn:
     var message = wire_receive(socket)
+    var words = List[Int64]()
     if message.kind == WIRE_CLOSE:
-        return WorkerTurn(False, -1, PythonObject(None))
+        return WorkerTurn(False, -1, words^, PythonObject(None))
     if message.kind != WIRE_REQUEST:
         raise Error("process: worker received an invalid request kind")
-    return WorkerTurn(True, message.sequence, message.value)
+    # The received words change owner (no copy); the message keeps an empty list.
+    swap(words, message.request)
+    return WorkerTurn(True, message.sequence, words^, message.value)
 
 
 def process_worker_reply(socket: PythonObject, sequence: Int, value: PythonObject) raises:

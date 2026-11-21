@@ -85,6 +85,8 @@ from kernel_methods.krr_resident import (
 from providers.python.kernel_methods_rbf_resident_pyapi_pack import rbf_sampler_fit_transform_binding, rbf_staged_binding
 
 from kernel_methods.native_descriptor_dispatch import KERNEL_METHOD_NATIVE_API
+from core.kernel_ridge_member import kernel_ridge_member_publish
+from core.kernel_approx_member import kernel_approx_member_publish
 from kernel_methods.kernel_methods_binding_run import (
     kernel_ridge_fit_ptr_run,
     nystroem_transform_model_run,
@@ -830,6 +832,13 @@ def build__mojolearn_kernel_methods() -> PythonObject:
             m.def_function[rbf_staged_binding]("km_rbf_staged")
         m.def_function[km_scale_gamma_limbs_binding]("scale_gamma_limbs")
         m.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
+        # The family's member entries (core/member_abi.mojo): KernelRidge, Nystroem
+        # and RBFSampler run as members of a meta-estimator through them. A build with no GPU
+        # vendor ("none") publishes nothing.
+        var member_vendor = (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1)
+        if member_vendor > 0:
+            kernel_ridge_member_publish(GLOBAL_NUMERIC_MODE, member_vendor, Int(KERNEL_METHOD_NATIVE_API.get_or_create_ptr()))
+            kernel_approx_member_publish(GLOBAL_NUMERIC_MODE, member_vendor, Int(KERNEL_METHOD_NATIVE_API.get_or_create_ptr()))
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_kernel_methods: ", e))

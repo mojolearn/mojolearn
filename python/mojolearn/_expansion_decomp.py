@@ -208,6 +208,10 @@ class IncrementalPCA(_DeviceDoor, _Base):
 
     _device_door = "ipca"
     _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode", "device")
+    #: The member ABI mark (family 32 XDecomp, kind 0): model selection and
+    #: the meta-estimators run this class through its native member entry
+    #: (core/xdecomp_member.mojo).
+    _mojolearn_member = (32, 0)
 
 
     def __init__(self, n_components=None, *, whiten=False, copy=True, batch_size=None, numeric_mode=None,
@@ -666,6 +670,10 @@ class NMF(_DeviceDoor, _Base):
     _device_door = "decomp"
     _parameters = ("n_components", "init", "solver", "beta_loss", "tol", "max_iter", "random_state",
                    "alpha_W", "alpha_H", "l1_ratio", "verbose", "shuffle", "numeric_mode", "device")
+    #: The member ABI mark (family 32 XDecomp, kind 3): model selection and
+    #: the meta-estimators run this class through its native member entry
+    #: (core/xdecomp_member.mojo). init='custom' is refused as a member.
+    _mojolearn_member = (32, 3)
 
 
     def __init__(self, n_components="auto", *, init=None, solver="cd", beta_loss="frobenius", tol=1e-4,

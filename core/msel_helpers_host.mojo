@@ -24,6 +24,7 @@ from core.msel_entry_table import (
     MH_INDICES_OVERLAP_I64, MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32, MH_STORE_FREE_BYTES,
+    MH_STORE_PUT, MH_STORE_TAKE_ROWS,
 )
 from core.hotpath_impl import (
     arange_i64, count_mask_u8, fold_ids, indices_overlap_i64, leave_range_i64, mask_from_indices_u8,
@@ -35,6 +36,7 @@ from core.labels_native_host import LabelsHostKernels
 from core.msel_convert import MSEL_F32, MSEL_F64, MSEL_I64, msel_is_int, msel_valid_code
 from core.msel_host import (
     MselHostStore, host_group_fold_perm_i32, host_proba_column, host_scatter_rows, host_split_table_i32,
+    host_take_rows,
 )
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -140,6 +142,17 @@ def msel_group_fold_perm_host_run(ca: Int, mm: Int, K: Int, pa: Int, da: Int, sa
     return 0
 
 
+def msel_store_take_rows_host_run(src_id: Int, n_src: Int, row_bytes: Int, idx_id: Int, n_idx: Int,
+                                  dst: Int) raises -> Int:
+    """Rows idx of the resident source into host memory: the body of the
+    core host binding's `msel_take_rows` export."""
+    if n_src < 0 or row_bytes < 0 or n_idx < 0:
+        raise Error("msel_take_rows: dimensions must be non-negative")
+    if not host_take_rows(MSEL_HOST_STORE.get_or_create_ptr()[], src_id, n_src, row_bytes, idx_id, n_idx, dst):
+        raise Error("msel_take_rows: row index out of bounds")
+    return 0
+
+
 def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     """One model-selection helper by its `MH_*` code over admitted spans."""
     if op == MH_ARANGE_I64:
@@ -198,6 +211,11 @@ def msel_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
         # The host column has no device memory to bound concurrent
         # cross-validation units by (bindings/msel_cv_door.mojo msel_cv_units).
         return -1
+    if op == MH_STORE_PUT:
+        return MSEL_HOST_STORE.get_or_create_ptr()[].put(msel_word(aa, 0), msel_word(pp, 0))
+    if op == MH_STORE_TAKE_ROWS:
+        return msel_store_take_rows_host_run(msel_word(pp, 0), msel_word(pp, 1), msel_word(pp, 2),
+                                             msel_word(pp, 3), msel_word(pp, 4), msel_word(aa, 0))
     raise Error("model-selection helpers: unknown operation " + String(op))
 
 

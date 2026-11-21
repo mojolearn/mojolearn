@@ -42,6 +42,8 @@ one (an empty side, no codes, no permutation).
   MH_SPLIT_TABLE_I32       a [perm, counts, table, sums]  p [m, n_test, n_train] -> 0
   MH_GROUP_FOLD_PERM_I32   a [counts, perm, dst, sizes]   p [m, n_folds]         -> 0
   MH_STORE_FREE_BYTES      a []                           p []                   -> free device bytes, -1 on the host
+  MH_STORE_PUT             a [src]                        p [nbytes]             -> block id (a resident copy of host bytes)
+  MH_STORE_TAKE_ROWS       a [dst]                        p [src_id, n_src, row_bytes, idx_id, n_idx] -> 0 (rows idx of block src to host)
 Each operation is the former Python export of the same name after its
 arguments were unpacked: the same checks, kernels, words and refusals.
 
@@ -52,7 +54,7 @@ numerical work to split.
 from core.entry_table import entry_table_publish, entry_table_read
 from core.native_descriptor_abi import NativeDescriptorCall
 
-comptime MSEL_HELPERS_ABI = "mojolearn.msel.helpers.v1"
+comptime MSEL_HELPERS_ABI = "mojolearn.msel.helpers.v2"
 
 comptime MH_ARANGE_I64 = 0
 comptime MH_COUNT_MASK_U8 = 1
@@ -75,7 +77,12 @@ comptime MH_PROBA_COLUMN = 17
 comptime MH_SPLIT_TABLE_I32 = 18
 comptime MH_GROUP_FOLD_PERM_I32 = 19
 comptime MH_STORE_FREE_BYTES = 20
-comptime MH_OP_COUNT = 21
+#: Layout V2 (lane arena, 2026-11-21): the two fold-store entries the arena
+#: resident owner calls as typed RUN (formerly the Python exports `msel_put`
+#: and `msel_take_rows` called through the instance dictionary).
+comptime MH_STORE_PUT = 21
+comptime MH_STORE_TAKE_ROWS = 22
+comptime MH_OP_COUNT = 23
 
 
 @fieldwise_init
@@ -109,35 +116,35 @@ def msel_table_publish(key: MselEntryKey, publisher: Int,
     schemas: List[String], operations: List[Int], entries: List[NativeDescriptorCall]) raises:
     _msel_entry_key_check(key)
     if key.vendor == 0 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV1"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV2"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 0 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV1"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV2"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 1 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV1"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV2"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 1 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV1"
+        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV2"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 2 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV1"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV2"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 2 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV1"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV2"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 3 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV1"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV2"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     if key.vendor == 3 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV1"
+        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV2"
         entry_table_publish[NAME](key.mode, key.vendor, publisher, schemas, operations, entries)
         return
     raise Error("native model-selection helpers: unsupported execution key")
@@ -147,28 +154,28 @@ def msel_table_entry(key: MselEntryKey, index: Int,
     schema: String, operations: Int) raises -> NativeDescriptorCall:
     _msel_entry_key_check(key)
     if key.vendor == 0 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV1"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCPUV2"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 0 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV1"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCPUV2"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 1 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV1"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalMetalV2"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 1 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV1"
+        comptime NAME = "MojolearnEntriesMselHelpersFastMetalV2"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 2 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV1"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalCUDAV2"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 2 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV1"
+        comptime NAME = "MojolearnEntriesMselHelpersFastCUDAV2"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 3 and key.mode == 1:
-        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV1"
+        comptime NAME = "MojolearnEntriesMselHelpersIdenticalHIPV2"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     if key.vendor == 3 and key.mode == 0:
-        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV1"
+        comptime NAME = "MojolearnEntriesMselHelpersFastHIPV2"
         return entry_table_read[NAME](key.mode, key.vendor, index, schema, operations)
     raise Error("native model-selection helpers: unsupported execution key")
 
@@ -211,6 +218,10 @@ def _msel_span_shape(operation: Int) -> Tuple[Int, Int]:
         return (4, 3)
     if operation == MH_STORE_FREE_BYTES:
         return (0, 0)
+    if operation == MH_STORE_PUT:
+        return (1, 1)
+    if operation == MH_STORE_TAKE_ROWS:
+        return (1, 5)
     return (4, 2)  # MH_GROUP_FOLD_PERM_I32
 
 

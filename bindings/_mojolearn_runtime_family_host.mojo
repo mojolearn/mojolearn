@@ -30,6 +30,7 @@ from bindings.dbscan_native_boundary_unpack import DBSCANReferenceOwner, DBSCANH
 from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.agglo_native_boundary_door import AggloReferenceOwner, AggloHolder, agglo_reference_owner_pins, agglo_holder_pins
 from bindings.kde_admission_boundary_unpack import KDEAdmissionOwner
+from bindings.parallel_public_native_door import ParallelForestOwner
 
 comptime RUNTIME_FAMILY_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -228,11 +229,25 @@ def register_GPPreparedClassTable(mut module: PythonModuleBuilder) raises:
     py_type_attach(module.module, "_GPPreparedClassTable", existing)
 
 
+# The pooled forest predictor's native owner (bindings/parallel_public_native_door.mojo).
+def register_ParallelForestOwner(mut module: PythonModuleBuilder) raises:
+    var existing = PythonObject(None)
+    try:
+        existing = lookup_py_type_object[ParallelForestOwner]()
+    except error:
+        if not py_type_absent(error):
+            raise error
+        _ = module.add_type[ParallelForestOwner]("_ParallelForestOwner")
+        return
+    py_type_attach(module.module, "_ParallelForestOwner", existing)
+
+
 def build__mojolearn_runtime_family_host() -> PythonObject:
     comptime assert LINEAR_GUARDS_OK, "invalid integrated experiment configuration (linear guards)"
     try:
         var module = PythonModuleBuilder("_mojolearn_runtime_family_host")
         register_kmeans_resident_owner(module)
+        register_ParallelForestOwner(module)
         register_hdbscan_query_record(module)
         register_KDEResidentOwner(module)
         register_KDEAdmissionOwner(module)

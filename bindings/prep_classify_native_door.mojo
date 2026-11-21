@@ -877,11 +877,10 @@ def resident_enter_min(context: PythonObject, min_words: PythonObject) raises ->
     enclosing scope the enclosing one is used and this one closes nothing."""
     var nk = prep_keys()
     var scope = py_call(cls_builtins().object.__new__, py_item(context, nk[].k_resident_class))
-    var fields = py_fields(scope)
-    py_setitem(fields, nk[].k_min_words, min_words)
-    py_setitem(fields, nk[].k__scope, PythonObject(None))
+    # the floor goes to the native scope state with the enter call; no
+    # attribute of the `resident` object is written
     # the arena rows owner connects its context when model_selection imports
-    _ = arena_cache_release_operation(scope, "scope_enter", Python.tuple(), py_item(py_item(context, nk[].k_arena_io_fields), nk[].k__ROWS_CONTEXT))
+    _ = arena_cache_release_operation(scope, "scope_enter", Python.tuple(min_words), py_item(py_item(context, nk[].k_arena_io_fields), nk[].k__ROWS_CONTEXT))
     return scope
 
 

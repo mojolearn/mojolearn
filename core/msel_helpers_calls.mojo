@@ -19,6 +19,7 @@ from core.msel_entry_table import (
     MH_INDICES_OVERLAP_I64, MH_FOLD_IDS, MH_SELECT_FOLD_I64, MH_SELECT_FOLDS_I64, MH_GATHER_I32, MH_GATHER_I64,
     MH_FIRST_SEEN_I32, MH_STRAT_FOLD_ASSIGN_I32, MH_STORE_ALLOC, MH_STORE_READ, MH_STORE_FREE, MH_SCATTER_ROWS,
     MH_PROBA_COLUMN, MH_SPLIT_TABLE_I32, MH_GROUP_FOLD_PERM_I32, MH_STORE_FREE_BYTES,
+    MH_STORE_PUT, MH_STORE_TAKE_ROWS,
 )
 from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
 
@@ -198,3 +199,20 @@ def msel_store_free_bytes(entry: EntryRef) raises -> Int:
     the host column."""
     var none: Array[Int, 0] = []
     return msel_helper(entry, MH_STORE_FREE_BYTES, none, none)
+
+
+def msel_store_put(entry: EntryRef, src: Int, nbytes: Int) raises -> Int:
+    """A resident copy of `nbytes` host bytes at `src` in the publisher's
+    fold store; returns its id."""
+    var addrs: Array[Int, 1] = [src]
+    var ints: Array[Int, 1] = [nbytes]
+    return msel_helper(entry, MH_STORE_PUT, addrs, ints)
+
+
+def msel_store_take_rows(entry: EntryRef, src_id: Int, n_src: Int, row_bytes: Int, idx_id: Int, n_idx: Int,
+                         dst: Int) raises -> Int:
+    """Rows `idx_id[0:n_idx]` (a resident int64 block) of resident block
+    `src_id` (`n_src` rows of `row_bytes` bytes) into host memory at `dst`."""
+    var addrs: Array[Int, 1] = [dst]
+    var ints: Array[Int, 5] = [src_id, n_src, row_bytes, idx_id, n_idx]
+    return msel_helper(entry, MH_STORE_TAKE_ROWS, addrs, ints)

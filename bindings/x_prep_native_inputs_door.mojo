@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared native scaler admission and typed row-snapshot ownership.
 from bindings.native_array_storage_door import native_array_from_bytes, native_array_unfilled
-from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
-from bindings.p3_array_arena_records_unpack import P3_ROWS_EXACT_LAYOUT, p3_layout_admitted, p3_layout_admit
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.arena_owner_door import ArenaRows, arena_rows, arena_rows_publish_host
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_fields
 from bindings.classical_arrays_door import classical_input, classical_address, classical_typed, classical_is_array, classical_c_order, classical_kind, classical_wrap_array, _store_code
 from bindings.classical_pandas_door import classical_admit_value, native_pandas_exact, native_pandas_f32, _pd_class, _pd_fields, _pd_get
 from bindings.classical_validate_unpack import classical_refuse_sparse
@@ -240,45 +240,21 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
     return output
 
 
-def _rows_fields(source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _rows_fields(source: PythonObject, context: PythonObject) raises -> ArenaRows:
+    # The fold view of an exact DeviceRows: its native state, resolved once
+    # (one slot read through the class's own member descriptor, one lease).
+    # No instance dictionary exists, so no foreign key or descriptor can run.
     var nk = x_prep_keys()
-    # Even an exact DeviceRows can contain foreign dictionary keys. Native
-    # dict lookup would invoke their Python equality before buffer admission.
-    # Resolve its native dictionary slot without application descriptors.
-    var b = native_loaded_module("builtins")
     var cls = py_item(context, nk[].k_maxabs_rows_class)
-    if py_type(source) is not cls or py_type(cls) is not b.type:
+    if py_type(source) is not cls:
         raise Error("TypeError: native row selection requires its ordinary metadata class")
-    var descriptor = py_item(context, nk[].k_maxabs_rows_dict)
-    # p3-array-arena: the class rows are admitted once per class state (type
-    # watcher); a class modification re-runs the full check.
-    if not p3_layout_admitted(P3_ROWS_EXACT_LAYOUT, cls, descriptor):
-        var ancestry = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__,cls)
-        if len(ancestry) != 2 or ancestry[1] is not b.object:
-            raise Error("TypeError: native row selection cannot inherit Python lifecycle hooks")
-        var mapping = py_call(py_item(b.type.__dict__, nk[].k___dict__).__get__,cls)
-        var keys = py_call(b.list,mapping)
-        for k in range(len(keys)):  # driver-loop: class keys precede dictionary-descriptor lookup
-            if py_type(keys[k]) is not b.str:
-                raise Error("TypeError: native row selection class keys must be native strings")
-        if py_get(mapping,nk[].k___dict__) is not descriptor or py_type(descriptor) is not py_type(py_item(b.object.__dict__, nk[].k___class__)) or descriptor.__objclass__ is not cls:
-            raise Error("TypeError: native row selection requires a native instance dictionary slot")
-        if py_get(mapping,nk[].k___del__) is not None or py_get(mapping,nk[].k___getattribute__) is not None:
-            raise Error("TypeError: native row selection cannot install Python lifecycle hooks")
-        p3_layout_admit(P3_ROWS_EXACT_LAYOUT, cls, descriptor)
-    var fields = py_call(descriptor.__get__,source,cls)
-    if py_type(fields) is not b.dict:
-        raise Error("TypeError: native row selection requires native metadata storage")
-    # Instance keys: one native dictionary walk, no key list.
-    if not native_namespace_string_keys(fields._obj_ptr, b.str):
-        raise Error("TypeError: native row selection metadata keys must be native strings")
-    return fields
+    return arena_rows(source, py_item(context, nk[].k_maxabs_rows_owner), cls)
 
 
 def _values(source: PythonObject, context: PythonObject, force_host_rows: Bool = False) raises -> PythonObject:
     var nk = x_prep_keys()
     if py_type(source) is py_item(context, nk[].k_maxabs_rows_class):
-        var fields = _rows_fields(source,context)
+        var fold = _rows_fields(source,context)
         # DeviceRows.materialize's host-route contract is a single retained
         # snapshot. A later mutation of base/indices must not silently
         # replace an already materialized selection.
@@ -290,17 +266,18 @@ def _values(source: PythonObject, context: PythonObject, force_host_rows: Bool =
         # switch MOJOLEARN_ARENA_RANGES) and the unretained host gather it
         # selected had no caller left and are removed (lane dw-prep, round 3):
         # a row selection here is the host snapshot, on every device.
-        if py_type(py_item(fields, nk[].k_dtype)) is not native_loaded_module("builtins").str:
+        if fold.dtype == "":
             raise Error("TypeError: native row selection requires native dtype metadata")
-        if py_get(fields,nk[].k__host) is not None:
-            return _dense_values(py_item(fields, nk[].k__host),context)
-        var indices = py_item(fields, nk[].k_indices)
+        if fold.host is not None:
+            return _dense_values(fold.host,context)
+        var indices = fold.indices
         classical_admit_value(indices,context)
         if not classical_is_array(indices,context) or String(indices.dtype) != "<i8" or Int(py=indices.ndim) != 1 or not classical_c_order(indices,context):
             raise Error("TypeError: native row selection requires a contiguous int64 index buffer")
-        var snapshot = _rows_snapshot(py_item(fields, nk[].k_base),indices,context)
-        py_setitem(fields,nk[].k__host,snapshot)
-        return _dense_values(snapshot,context)
+        var snapshot = _rows_snapshot(fold.base,indices,context)
+        # Published once on the fold's native state (the first snapshot is kept).
+        var kept = arena_rows_publish_host(fold.word, snapshot, Int(py=classical_address(snapshot)))
+        return _dense_values(kept,context)
     return _dense_values(source,context)
 
 
