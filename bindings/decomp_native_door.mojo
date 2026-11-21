@@ -28,6 +28,7 @@ from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.nmf_native_door import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 from bindings.nmf_descriptor_boundary_door import nmf_route_vendor
 from bindings.decomp_device_route_door import decomp_device_admit, decomp_route_clear
+from bindings.decomp_kit_native_door import decomp_kit_device_operation
 
 
 comptime _DECOMP_FAMILY_SLOT = "decomp_family_class_v1"
@@ -100,6 +101,11 @@ def _decomp_dispatch(model: PythonObject, family: String, operation: String, arg
         decomp_device_admit(args[0], context)
         decomp_route_clear(model)
         return result
+    if operation == "vendor_used" and family != "NMF":
+        # FastICA, FactorAnalysis, LatentDirichletAllocation and the random
+        # projections: the vendor of the x_decomp image the estimator's route
+        # names (`cpu` for a `device="cpu"` estimator).
+        return decomp_kit_device_operation(model, False, args, context)
     if family == "FastICA":
         if operation == "fit":
             result = ica_fit(model, args[0], False, context)

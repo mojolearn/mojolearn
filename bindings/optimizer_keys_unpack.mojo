@@ -152,8 +152,6 @@ struct OptimizerKeys(Defaultable, Movable):
     var k_buffer_types: PythonObject
     var k_ce_loss: PythonObject
     var k_ce_loss_dev: PythonObject
-    var k_chunked_lm_head_v2_loss: PythonObject
-    var k_chunked_lm_head_v2_train: PythonObject
     var k_container_types: PythonObject
     var k_cross_entropy: PythonObject
     var k_dampening: PythonObject
@@ -182,7 +180,6 @@ struct OptimizerKeys(Defaultable, Movable):
     var k_max_lr: PythonObject
     var k_maximize: PythonObject
     var k_min_lr: PythonObject
-    var k_mlp_sessions: PythonObject
     var k_module: PythonObject
     var k_module_type: PythonObject
     var k_modules: PythonObject
@@ -203,10 +200,6 @@ struct OptimizerKeys(Defaultable, Movable):
     var k_peak_lr: PythonObject
     var k_profile_defaults: PythonObject
     var k_profiles: PythonObject
-    var k_residual_dropout: PythonObject
-    var k_residual_dropout_backward: PythonObject
-    var k_residual_dropout_backward_dev: PythonObject
-    var k_residual_dropout_dev: PythonObject
     var k_scalar_types: PythonObject
     var k_schedules: PythonObject
     var k_shape: PythonObject
@@ -261,8 +254,6 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k_buffer_types = PythonObject(None)
         self.k_ce_loss = PythonObject(None)
         self.k_ce_loss_dev = PythonObject(None)
-        self.k_chunked_lm_head_v2_loss = PythonObject(None)
-        self.k_chunked_lm_head_v2_train = PythonObject(None)
         self.k_container_types = PythonObject(None)
         self.k_cross_entropy = PythonObject(None)
         self.k_dampening = PythonObject(None)
@@ -291,7 +282,6 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k_max_lr = PythonObject(None)
         self.k_maximize = PythonObject(None)
         self.k_min_lr = PythonObject(None)
-        self.k_mlp_sessions = PythonObject(None)
         self.k_module = PythonObject(None)
         self.k_module_type = PythonObject(None)
         self.k_modules = PythonObject(None)
@@ -312,10 +302,6 @@ struct OptimizerKeys(Defaultable, Movable):
         self.k_peak_lr = PythonObject(None)
         self.k_profile_defaults = PythonObject(None)
         self.k_profiles = PythonObject(None)
-        self.k_residual_dropout = PythonObject(None)
-        self.k_residual_dropout_backward = PythonObject(None)
-        self.k_residual_dropout_backward_dev = PythonObject(None)
-        self.k_residual_dropout_dev = PythonObject(None)
         self.k_scalar_types = PythonObject(None)
         self.k_schedules = PythonObject(None)
         self.k_shape = PythonObject(None)
@@ -374,8 +360,6 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     nk[].k_buffer_types = py_key("buffer_types")
     nk[].k_ce_loss = py_key("ce_loss")
     nk[].k_ce_loss_dev = py_key("ce_loss_dev")
-    nk[].k_chunked_lm_head_v2_loss = py_key("chunked_lm_head_v2_loss")
-    nk[].k_chunked_lm_head_v2_train = py_key("chunked_lm_head_v2_train")
     nk[].k_container_types = py_key("container_types")
     nk[].k_cross_entropy = py_key("cross_entropy")
     nk[].k_dampening = py_key("dampening")
@@ -404,7 +388,6 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     nk[].k_max_lr = py_key("max_lr")
     nk[].k_maximize = py_key("maximize")
     nk[].k_min_lr = py_key("min_lr")
-    nk[].k_mlp_sessions = py_key("mlp_sessions")
     nk[].k_module = py_key("module")
     nk[].k_module_type = py_key("module_type")
     nk[].k_modules = py_key("modules")
@@ -425,10 +408,6 @@ def _optimizer_keys_fill(nk: UnsafePointer[OptimizerKeys, MutUntrackedOrigin]) r
     nk[].k_peak_lr = py_key("peak_lr")
     nk[].k_profile_defaults = py_key("profile_defaults")
     nk[].k_profiles = py_key("profiles")
-    nk[].k_residual_dropout = py_key("residual_dropout")
-    nk[].k_residual_dropout_backward = py_key("residual_dropout_backward")
-    nk[].k_residual_dropout_backward_dev = py_key("residual_dropout_backward_dev")
-    nk[].k_residual_dropout_dev = py_key("residual_dropout_dev")
     nk[].k_scalar_types = py_key("scalar_types")
     nk[].k_schedules = py_key("schedules")
     nk[].k_shape = py_key("shape")

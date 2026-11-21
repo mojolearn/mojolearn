@@ -260,15 +260,76 @@ def _native_function(module: PythonObject, name: String) raises -> PythonObject:
     return _native_function(mods, module, name)
 
 
+struct CausalAdmission(Movable):
+    # The typed owner of one admission (lane dw-neural-models, 2026-11-21).
+    # UNPACK fills the first six words from whichever record asks: a model's
+    # construction record (`causal_lm_admit_binding`) or a standalone block's
+    # snapshot (bindings/neural_block_public_door.mojo
+    # `_neural_block_owner_typed`, which no longer builds a SimpleNamespace
+    # owner to carry them). `causal_lm_admit` reads only these words and
+    # answers the last four; no attribute of a Python owner is read or
+    # written inside it.
+    var gpu: Bool                  # the route word is "gpu"
+    var kind: String
+    var packed: Bool               # the head / block holds fixed15 planes
+    var weight_names: PythonObject  # None: read from `first_block`'s class
+    var first_block: PythonObject
+    var context: PythonObject
+    # Answers. `reported` is set once the images' vendor and mode agreed, so a
+    # caller publishes them on a later failure exactly as before.
+    var reported: Bool
+    var vendor: String
+    var mode: Int
+    var entries: PythonObject
+
+    def __init__(out self, gpu: Bool, kind: String, packed: Bool, weight_names: PythonObject,
+                 first_block: PythonObject, context: PythonObject):
+        self.gpu = gpu
+        self.kind = kind.copy()
+        self.packed = packed
+        self.weight_names = weight_names
+        self.first_block = first_block
+        self.context = context
+        self.reported = False
+        self.vendor = String("")
+        self.mode = 0
+        self.entries = PythonObject(None)
+
+
 def causal_lm_admit_binding(mut mods: NativeModules,
     model: PythonObject, block_binding: PythonObject, primitives: PythonObject,
     int15_binding: PythonObject,
 ) raises -> PythonObject:
+    # The admission of an object owner (a model's construction record, the
+    # parallel worker's layer holder): UNPACK its words, admit, PACK the
+    # answers onto it. The reads and writes are the ones the single function
+    # made on the owner.
+    var local_blocks = py_get(_standalone_record_fields(mods, model), "_native_block_fields")
+    var admission = CausalAdmission(String(model.device) == "gpu", String(model.kind), model._head_int15 is not None,
+        local_blocks[0]["_neural_weight_names"] if local_blocks is not None else PythonObject(None),
+        model._blocks[0], _causal_context_for(mods, model))
+    try:
+        causal_lm_admit(mods, admission, block_binding, primitives, int15_binding)
+    except problem:
+        if admission.reported:
+            py_setattr(model, "_native_vendor", PythonObject(admission.vendor))
+            py_setattr(model, "_native_numeric_mode", PythonObject(admission.mode))
+        raise problem
+    py_setattr(model, "_native_vendor", PythonObject(admission.vendor))
+    py_setattr(model, "_native_numeric_mode", PythonObject(admission.mode))
+    py_setattr(model, "_native_entries", admission.entries)
+    causal_pin_entries(mods, _standalone_record_fields(mods, model), admission.entries)
+    return PythonObject(None)
+
+
+def causal_lm_admit(mut mods: NativeModules, mut admission: CausalAdmission,
+    block_binding: PythonObject, primitives: PythonObject, int15_binding: PythonObject,
+) raises:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var entries = g[].bi.dict()
-    var requested_gpu = String(model.device) == "gpu"
+    var requested_gpu = admission.gpu
     py_setitem(entries, CAUSAL_ENTRY_CPU, PythonObject(not requested_gpu))
-    var kind = String(model.kind)
+    var kind = admission.kind.copy()
     var block_prefix = ("transformer" if kind == "transformer" else "mamba") if requested_gpu else "neural_host"
     var primitive_prefix = "training" if requested_gpu else "neural_host"
     var vendor = String(_native_function(mods, block_binding, block_prefix + "_vendor")())
@@ -293,8 +354,9 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         mods.released()
         if packed_vendor != vendor or packed_mode != mode:
             raise Error("CausalLM: native packed arithmetic differs in vendor or numeric mode")
-    py_setattr(model, "_native_vendor", PythonObject(vendor))
-    py_setattr(model, "_native_numeric_mode", PythonObject(mode))
+    admission.vendor = vendor.copy()
+    admission.mode = mode
+    admission.reported = True
     # The CausalLM entry table key (core/causal_lm_entry_table.mojo). The
     # embedding, norm and head projections, the int15 head, every CPU
     # Transformer layer and every Mamba layer call their image's descriptor
@@ -305,8 +367,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     py_setitem(entries, CAUSAL_ENTRY_MODE, PythonObject(key.mode))
     py_setitem(entries, CAUSAL_ENTRY_VENDOR, PythonObject(key.vendor))
     causal_tables_admit(key, CAUSAL_TABLE_BLOCK if kind == "transformer" else (CAUSAL_TABLE_MAMBA if kind == "mamba1" or kind == "mamba2" else -1), int15_binding is not None)
-    var local_blocks = py_get(_standalone_record_fields(mods, model), "_native_block_fields")
-    py_setitem(entries, CAUSAL_ENTRY_WEIGHT_NAMES, local_blocks[0]["_neural_weight_names"] if local_blocks is not None else neural_block_weight_names(mods, model._blocks[0]))
+    py_setitem(entries, CAUSAL_ENTRY_WEIGHT_NAMES, admission.weight_names if admission.weight_names is not None else neural_block_weight_names(mods, admission.first_block))
     if kind == "transformer":
         py_setitem(entries, "forward", _native_function(mods, block_binding, "transformer_forward"))
         py_setitem(entries, "decode", _native_function(mods, block_binding, "transformer_decode_step"))
@@ -325,7 +386,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
         if requested_gpu:
             _ = neural_table_entry[NEURAL_TABLE_BLOCK_FORWARD](NeuralEntryKey(key.mode, key.vendor))
             py_setitem(entries, CAUSAL_ENTRY_BLOCK_SESSION, PythonObject(True))
-            if model._head_int15 is not None:
+            if admission.packed:
                 py_setitem(entries, CAUSAL_ENTRY_FORWARD15, PythonObject(True))
         # The resident GPU route for fixed-length greedy generation and the
         # resident forward: every session operation is the transformer
@@ -367,7 +428,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
     # forward is the block table's op 11 on the session handle, the same
     # transformer_session_forward_native body with the same words.
     if mode == NUMERIC_IDENTICAL and NEURAL_NATIVE_DISPATCH:
-        var owner_fields = neural_block_fields(mods, model._blocks[0], _causal_context_for(mods, model))
+        var owner_fields = neural_block_fields(mods, admission.first_block, admission.context)
         var primitive_provider = neural_descriptor_reuse(py_get(owner_fields, "_native_primitives_provider_cache"),
             _native_function(mods, primitives, "neural_primitives_api_v1"), String(PRIMITIVE_ABI_NAME), 29)
         mods.released()
@@ -385,9 +446,7 @@ def causal_lm_admit_binding(mut mods: NativeModules,
             mods.released()
             py_setitem(owner_fields, "_native_mamba_provider_cache", mamba_provider)
             py_setitem(entries, "native_mamba", mamba_provider)
-    py_setattr(model, "_native_entries", entries)
-    causal_pin_entries(mods, _standalone_record_fields(mods, model), entries)
-    return PythonObject(None)
+    admission.entries = entries
 
 
 def _block(mut mods: NativeModules, model: PythonObject, index: Int) raises -> PythonObject:

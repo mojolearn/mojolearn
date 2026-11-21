@@ -17,7 +17,9 @@ from bindings.family_common_pack import family_call
 from bindings.msel_common_door import msel_get_scorer, msel_score, msel_admit, msel_flatten, msel_numeric_vector
 from bindings.msel_scorer_native_door import msel_metric_plan, msel_scorer_call, msel_scorer_create
 from bindings.msel_estimator_native_door import msel_estimator_call, msel_estimator_plan, msel_native_clone
-from bindings.msel_member_device_unpack import msel_own_device_admit
+from bindings.msel_member_device_unpack import msel_own_device_admit, msel_process_vendor, member_says_cpu
+from core.device_route import DEVICE_CPU, device_vendor_word
+from providers.python.device_route_boundary_door import device_route_resolved
 from bindings.parallel_cv_native_door import msel_parallel_operation
 from bindings.msel_cv_door import msel_cross_validate, msel_cross_val_score, msel_cross_val_predict, msel_split_descriptor
 from bindings.msel_search_door import (
@@ -138,6 +140,24 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         if py_type(args[0]) is not b.str:
             raise Error("TypeError: native delegated method must be an exact string")
         return msel_estimator_call(best, String(args[0]), Python.tuple(args[1]), context)
+    if operation == "family_msel_search_vendor_used":
+        # A fitted search answers with its best estimator, so the vendor it
+        # used is the one that estimator answers on: "cpu" when the best
+        # estimator's device route resolved to the CPU beside a GPU set (or,
+        # before its first operation, when its admitted `device` says so),
+        # else this process's vendor. A metadata answer: two record reads,
+        # no member method is called.
+        var best = _msel_best(model, context)
+        var vendor = msel_process_vendor(context)
+        if vendor != 0:
+            var resolved = device_route_resolved(best)
+            if resolved < 0:
+                var member = msel_estimator_plan(best, context)
+                if member_says_cpu(py_call(member["fields_get"], best, py_type(best)), b):
+                    resolved = DEVICE_CPU
+            if resolved == DEVICE_CPU:
+                return PythonObject("cpu")
+        return PythonObject(device_vendor_word(vendor))
     if operation == "family_msel_search_score":
         # The scorer is resolved first, as `score` resolved it before
         # reaching the best estimator.

@@ -36,7 +36,7 @@ from core.qn_single_fit import QnSingleFitPlan
 from core.logistic_native_api import QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS, QN_NATIVE_MULTICLASS_AVAILABLE
 from core.labels_native_api import LabelsThresholdRequest
 from bindings.labels_descriptor_boundary_door import labels_threshold, labels_argmax_rows
-from bindings.svc_common_door import svc_field, svc_has
+from bindings.svc_common_unpack import svc_field, svc_has
 from bindings.svm_keys_unpack import svm_keys
 
 comptime _PY2MOJO_ROWS = 2

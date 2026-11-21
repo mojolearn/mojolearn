@@ -23,7 +23,15 @@ def test_descriptor_default_fold_route_reaches_native_helpers():
     assert descriptor_ops == {'family_msel_split_descriptor'}
     owner = (ROOT / 'bindings/msel_split_door.mojo').read_text()
     body = owner[owner.index('def msel_default_folds('):owner.index('# ---', owner.index('def msel_default_folds('))]
-    assert 'msel_fold_ids(' in body and '_select_folds(' in body and 'msel_sabotage()' in body
+    # The door is UNPACK / RUN / PACK (2026-11-21): it hands typed values to the
+    # RUN plan, which calls core's fold helpers; the rows are one selection.
+    assert 'msel_plan_default_folds(' in body and 'msel_split_finish(' in body and 'msel_sabotage()' in body
+    run = (ROOT / 'bindings/msel_split_plan_run.mojo').read_text()
+    assert 'std.python' not in run and 'PythonObject' not in run
+    plan = run[run.index('def msel_plan_default_folds('):]
+    assert 'msel_fold_ids(' in plan.split('\ndef ', 1)[0]
+    fill = run[run.index('def _fill_folds('):]
+    assert 'msel_select_folds_i64(' in fill.split('\ndef ', 1)[0]
     door = (ROOT / 'bindings/model_selection_native_door.mojo').read_text()
     route = door[door.index('if operation == "family_msel_default_folds":'):]
     assert 'return msel_default_folds(' in route.split('raise Error', 1)[0]

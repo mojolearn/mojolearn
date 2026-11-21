@@ -171,6 +171,105 @@ def test_search_check_is_the_best_estimators_check_on_both_devices_in_this_proce
     assert "MATCH" in printed
 
 
+@pytest.mark.parametrize("make", SEARCHES, ids=IDS)
+def test_search_classes_carry_the_device_marker(make):
+    assert type(make())._mojolearn_device is True
+
+
+@pytest.mark.parametrize("make", SEARCHES, ids=IDS)
+def test_search_vendor_used_is_the_best_estimators(make):
+    x, y = data()
+    search = make().fit(x, y)
+    assert search.vendor_used() == mojolearn.vendor() == search.best_estimator_.vendor_used()
+    with pytest.raises(AttributeError, match="refit=False or is not fitted"):
+        make().vendor_used()
+
+
+@two_devices
+def test_search_vendor_used_follows_a_cpu_member():
+    x, y = data()
+    search = GridSearchCV(Ridge(device="cpu"), {"alpha": [0.1, 1.0]}, cv=3).fit(x, y)
+    assert search.vendor_used() == "cpu"
+
+
+@two_devices
+@pytest.mark.parametrize("make", SEARCHES, ids=IDS)
+def test_the_members_follow_the_search_onto_the_other_device(make):
+    # the check's twin of a search: the search on the other device, its base
+    # estimator and its fitted best estimator moved there with it
+    from mojolearn import _check_both as cb
+    x, y = data()
+    search = make().fit(x, y)
+    assert cb.takes_device(search) and cb.on_device(search, "gpu") is search
+    twin = cb.on_device(search, "cpu")
+    assert type(twin) is type(search) and twin is not search
+    assert twin.get_params()["device"] == "cpu"
+    assert twin.estimator.get_params()["device"] == "cpu"
+    assert twin.best_estimator_.get_params()["device"] == "cpu"
+    assert twin.best_params_ == search.best_params_
+    assert same_bits(twin.predict(x), search.predict(x))
+    assert twin.vendor_used() == "cpu" and search.vendor_used() == mojolearn.vendor()
+    # the search handed in is untouched
+    assert search.get_params()["device"] is None and search.estimator.get_params()["device"] is None
+    assert search.best_estimator_.get_params()["device"] is None
+
+
+@two_devices
+@pytest.mark.parametrize("make", SEARCHES, ids=IDS)
+def test_check_of_a_search_runs_the_search_on_both_devices_in_this_process(make):
+    x, y = data()
+    search = make().fit(x, y)
+    result = mojolearn.check(search, x)
+    assert result["ran"] and result["verdict"]["verdict"] == "MATCH"
+    assert result["estimator"] == type(search).__name__ and result.get("transfer") == "device"
+    assert result["sides"]["cpu"]["route"] == dict(device="cpu", vendor_used="cpu")
+    assert result["sides"]["gpu"]["route"]["vendor_used"] == mojolearn.vendor()
+
+
+@two_devices
+@pytest.mark.parametrize("make", SEARCHES, ids=IDS)
+def test_check_fits_a_search_once_on_each_device(make):
+    x, y = data()
+    result = mojolearn.check(make(), x, fit=(x, y), fit_both=True)
+    assert result["ran"] and result["verdict"]["verdict"] == "MATCH"
+    assert result["sides"]["cpu"]["route"]["vendor_used"] == "cpu"
+    assert result["sides"]["gpu"]["route"]["vendor_used"] == mojolearn.vendor()
+
+
+# ------------------------------------------------------------------ scoring on the member's device
+
+@two_devices
+@pytest.mark.parametrize("scoring", ["r2", "neg_mean_squared_error", "neg_mean_absolute_error"])
+def test_a_scorer_of_a_cpu_member_gives_the_gpu_members_bits(scoring):
+    # the scorer's metric runs on the metrics binary of the member's device
+    x, y = data()
+    cv = KFold(4)
+    gpu, cpu = Ridge(alpha=0.5), Ridge(alpha=0.5, device="cpu")
+    assert same_bits(cross_val_score(cpu, x, y, cv=cv, scoring=scoring),
+                     cross_val_score(gpu, x, y, cv=cv, scoring=scoring))
+    a = cross_validate(cpu, x, y, cv=cv, scoring=("r2", "neg_mean_squared_error"), return_train_score=True)
+    b = cross_validate(gpu, x, y, cv=cv, scoring=("r2", "neg_mean_squared_error"), return_train_score=True)
+    for key in ("test_r2", "train_r2", "test_neg_mean_squared_error", "train_neg_mean_squared_error"):
+        assert same_bits(a[key], b[key])
+
+
+@two_devices
+def test_a_search_scores_each_candidate_on_the_candidates_device():
+    x, y = data()
+    search = GridSearchCV(Ridge(alpha=0.5), {"device": ["gpu", "cpu"]}, cv=3, scoring="r2").fit(x, y)
+    scores = np.asarray(search.cv_results_["mean_test_score"])
+    assert scores[0].tobytes() == scores[1].tobytes()
+
+
+@two_devices
+def test_a_scorer_called_on_a_cpu_member_gives_the_gpu_members_bits():
+    from mojolearn.model_selection import get_scorer
+    x, y = data()
+    scorer = get_scorer("r2")
+    gpu, cpu = Ridge(alpha=0.5).fit(x, y), Ridge(alpha=0.5, device="cpu").fit(x, y)
+    assert np.float64(scorer(cpu, x, y)).tobytes() == np.float64(scorer(gpu, x, y)).tobytes()
+
+
 def test_search_check_without_a_fitted_best_estimator_says_why(capsys):
     x, y = data()
     search = GridSearchCV(Ridge(), {"alpha": [0.1, 1.0]}, cv=3, refit=False).fit(x, y)

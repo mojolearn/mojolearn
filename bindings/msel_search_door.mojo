@@ -8,7 +8,7 @@
 # size or permutation (`MselFoldRows`); the loops over candidates, folds,
 # sizes and permutations are this owner's; the estimator and the scorers are
 # the caller's objects. The score tables use the `row_means_f64` /
-# `row_stds_f64` passes linked in and the permutations the same counter
+# `row_stds_f64` passes (through bindings/msel_search_stats_run.mojo) and the permutations the same counter
 # draws, so every result is unchanged.
 from std.memory import unsafe_memcpy
 from core.admitted_convert import admitted_convert_vector
@@ -51,7 +51,9 @@ from bindings.msel_member_device_unpack import msel_member_host_folds, msel_para
 from bindings.msel_helpers_released_unpack import msel_gather_i64
 # lane calltable-msel: the score-table passes both base bindings exported,
 # linked into this door instead of called through CPython.
-from core.array_helpers_impl import row_means_f64, row_stds_f64
+from bindings.msel_search_stats_run import (
+    msel_row_means, msel_row_stds, msel_score_column, msel_rank_scores, msel_rank_best, msel_pvalue,
+)
 from bindings.family_common_unpack import FAMILY_I32P
 from bindings.msel_cv_door import (
     msel_clone,
@@ -207,80 +209,9 @@ def msel_sampler_len(dists: PythonObject, n_iter: PythonObject, context: PythonO
 # ---------------------------------------------------------------- score tables
 
 
-def _score_ptr(values: List[Float64]) -> MutPointer[Float64, MutUntrackedOrigin]:
-    """The address of a score buffer the caller keeps alive past the pass."""
-    return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(values.unsafe_ptr()))
-
-
-def msel_row_means(rows: List[List[Float64]], context: PythonObject) raises -> List[Float64]:
-    """`_row_means`: `fsum(row) / len(row)` of each row, by `row_means_f64`
-    (the host pass both base bindings exported, linked into this door over
-    native buffers: no cross-module call, no Python array)."""
-    var m = len(rows)
-    var k = len(rows[0]) if m else 0
-    var res = List[Float64](length=m, fill=0.0)
-    if m and k:
-        var flat = List[Float64](length=m * k, fill=0.0)
-        for i in range(m):  # driver-loop: over candidates
-            for j in range(k):  # driver-loop: over folds
-                flat[i * k + j] = rows[i][j]
-        if row_means_f64(_score_ptr(flat),
-                         _score_ptr(res), m, k):
-            raise Error("-inf + inf in fsum")
-        _ = flat  # keep the storage alive through the pass above
-    return res^
-
-
-def msel_row_stds(rows: List[List[Float64]], means: List[Float64], context: PythonObject) raises -> List[Float64]:
-    """`_row_stds`: each row's population standard deviation about its mean
-    (`row_stds_f64`, the host pass both base bindings exported, linked into
-    this door over native buffers)."""
-    var m = len(rows)
-    var res = List[Float64](length=m, fill=0.0)
-    if m == 0:
-        return res^
-    var k = len(rows[0])
-    if k == 0:
-        return res^
-    var flat = List[Float64](length=m * k, fill=0.0)
-    for i in range(m):  # driver-loop: over candidates
-        for j in range(k):  # driver-loop: over folds
-            flat[i * k + j] = rows[i][j]
-    var mu = means.copy()
-    row_stds_f64(_score_ptr(flat),
-                 _score_ptr(mu),
-                 _score_ptr(res), m, k)
-    _ = flat  # keep the storage alive through the pass above
-    _ = mu
-    return res^
-
-
-def _floats(values: List[Float64]) raises -> PythonObject:
-    var out = Python.list()
-    for i in range(len(values)):  # driver-loop: over candidates
-        _ = py_call(out.append, PythonObject(values[i]))
-    return out
-
-
-def msel_rank(values: PythonObject) raises -> PythonObject:
-    """`_rank(values)`: scikit-learn's 'min' ranking, descending (1 best),
-    with Python's own set, sort and count over the candidate scores."""
-    var b = msel_b()
-    var keywords = Python.dict()
-    py_setitem(keywords, "reverse", PythonObject(True))
-    var order = family_call_kw(b.sorted, keywords, py_call(b.set, values))
-    var pos = Python.dict()
-    var start = 1
-    for i in range(len(order)):  # driver-loop: over distinct candidate scores
-        py_setitem(pos, order[i], PythonObject(start))
-        start += Int(py=py_call(values.count, order[i]))
-    return py_call(b.list, py_call(b.map, py_call(b.getattr, pos, PythonObject("__getitem__")), values))
-
-
-def _i32_from_list(values: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`Array.from_list(values, '<i4')` of a list of Python ints."""
-    var store = family_call(native_loaded_module("array").array, PythonObject("i"), values)
-    return classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
+# RUN: bindings/msel_search_stats_run.mojo (row means and deviations, the
+# candidates' ranks, the best candidate, the p-value) on native tables; this
+# door packs its answers into `cv_results_`.
 
 
 # ---------------------------------------------------------------- search
@@ -388,8 +319,8 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         var getter = py_call(native_loaded_module("operator").methodcaller, PythonObject("get"), keys[i])
         py_setitem(results, family_call(msel_op("add"), PythonObject("param_"), family_call(b.str, keys[i])),
                    py_call(b.list, py_call(b.map, getter, candidates)))
-    var best_means = Python.list()
-    var best_ranks = Python.list()
+    var best_index = -1
+    var best_score = 0.0
     var key_index = -1
     if multi is None:
         key_index = 0
@@ -400,30 +331,27 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     for k in range(len(names)):  # driver-loop: over scorer names
         var suffix = String("") if multi is None else "_" + names[k]
         for i in range(n_splits):  # driver-loop: over folds
-            var column = List[Float64]()
-            for c in range(len(candidates)):  # driver-loop: over candidates
-                column.append(per[k][c][i])
-            py_setitem(results, PythonObject("split" + String(i) + "_test_score" + suffix), msel_f64_list(column, context))
-        var means = msel_row_means(per[k], context)
-        var stds = msel_row_stds(per[k], means, context)
-        var ranks = msel_rank(_floats(means))
+            py_setitem(results, PythonObject("split" + String(i) + "_test_score" + suffix),
+                       msel_f64_list(msel_score_column(per[k], i), context))
+        var means = msel_row_means(per[k])
+        var stds = msel_row_stds(per[k], means)
+        var ranks = msel_rank_scores(means)
         py_setitem(results, PythonObject("mean_test_score" + suffix), msel_f64_list(means, context))
         py_setitem(results, PythonObject("std_test_score" + suffix), msel_f64_list(stds, context))
-        py_setitem(results, PythonObject("rank_test_score" + suffix), _i32_from_list(ranks, context))
+        py_setitem(results, PythonObject("rank_test_score" + suffix), msel_i32_list(ranks, context))
         if return_train:
-            py_setitem(results, PythonObject("mean_train_score" + suffix), msel_f64_list(msel_row_means(trains[k], context), context))
+            py_setitem(results, PythonObject("mean_train_score" + suffix), msel_f64_list(msel_row_means(trains[k]), context))
         if k == key_index:
-            best_means = _floats(means)
-            best_ranks = ranks
+            best_index = msel_rank_best(ranks)
+            best_score = means[best_index]
     var updates = Python.dict()
     py_setitem(updates, "cv_results_", results)
     py_setitem(updates, "n_splits_", PythonObject(n_splits))
     py_setitem(updates, "multimetric_", PythonObject(multi is not None))
     var best_params = PythonObject(None)
     if key_index >= 0:
-        var best_index = family_call(best_ranks.index, PythonObject(1))
-        py_setitem(updates, "best_index_", best_index)
-        py_setitem(updates, "best_score_", best_means[best_index])
+        py_setitem(updates, "best_index_", PythonObject(best_index))
+        py_setitem(updates, "best_score_", PythonObject(best_score))
         best_params = candidates[best_index]
         py_setitem(updates, "best_params_", best_params)
     if not refit_false:
@@ -681,7 +609,7 @@ def _mean_test(estimator: PythonObject, x: PythonObject, y: PythonObject, folds:
                                     context, jobs)
     var one = List[List[Float64]]()
     one.append(r.test[0].copy())
-    return msel_row_means(one, context)[0]
+    return msel_row_means(one)[0]
 
 
 def _nan() -> Float64:
@@ -804,14 +732,6 @@ def _group_index(mut rng: MselRng, order: PythonObject, sizes: List[Int], n: Int
     return idx
 
 
-def _pvalue(scores: List[Float64], score: Float64, n_permutations: Int) -> Float64:
-    var hits = 0
-    for i in range(len(scores)):  # driver-loop: over permutations
-        if scores[i] >= score:
-            hits += 1
-    return (Float64(hits) + 1.0) / Float64(n_permutations + 1)
-
-
 def msel_permutation_test_score(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`permutation_test_score(estimator, X, y, groups, cv, n_permutations,
     n_jobs, random_state, verbose, scoring, fit_params, params)`."""
@@ -889,7 +809,7 @@ def msel_permutation_test_score(args: PythonObject, context: PythonObject) raise
     finally:
         rows0.close(context)
     return Python.tuple(PythonObject(score), msel_f64_list(perm_scores, context),
-                        PythonObject(_pvalue(perm_scores, score, n_permutations)))
+                        PythonObject(msel_pvalue(perm_scores, score, n_permutations)))
 
 
 def _permutation_definition(args: PythonObject, n_permutations: Int, random_state: PythonObject,
@@ -935,7 +855,7 @@ def _permutation_definition(args: PythonObject, n_permutations: Int, random_stat
                 _ = py_call(b.list, py_call(b.map, py_call(b.getattr, yp, PythonObject("__setitem__")), rows, src))
         perm_scores.append(_definition_mean(estimator, xa, yp, groups, cv, sc, jobs, context))
     return Python.tuple(PythonObject(score), msel_f64_list(perm_scores, context),
-                        PythonObject(_pvalue(perm_scores, score, n_permutations)))
+                        PythonObject(msel_pvalue(perm_scores, score, n_permutations)))
 
 
 def _definition_mean(estimator: PythonObject, xa: PythonObject, yv: PythonObject, groups: PythonObject, cv: PythonObject,
