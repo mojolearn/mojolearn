@@ -5,7 +5,7 @@
 # registered under the same names. bindings/_mojolearn_tokenizer_host.mojo keeps a native refusal under each
 # name, and import setup replaces it with this module's entry (python/mojolearn/host_surface.py
 # HOST_IMPORT_ALIASES). The Python types these entries allocate stay registered by their existing owner, which
-# import setup loads first.
+# import setup loads first; the one type this module registers itself is the scalers' device route owner.
 from core.experiment_guards_linear import LINEAR_GUARDS_OK
 from std.os import abort
 from std.python import PythonObject
@@ -23,6 +23,7 @@ from bindings.prep_owner_native_door import prep_owner_c
 from bindings.str_labels_native_door import str_labels_c
 from bindings.labels_native_entry_pack import labels_native_c
 from bindings.robust_native_pack import robust_lifecycle_c
+from providers.python.prep_route_boundary_door import register_prep_route_owner, register_prep_route_owner_identity
 
 comptime RUNTIME_PREP_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
@@ -68,6 +69,15 @@ def build__mojolearn_runtime_prep_host() -> PythonObject:
         module.def_function[runtime_prep_host_vendor_binding]("runtime_prep_host_vendor")
         module.def_function[runtime_prep_host_column_binding]("runtime_prep_host_column")
         module.def_function[runtime_prep_host_sabotage_binding]("runtime_prep_host_sabotage")
-        return module.finalize()
+        # The scalers' per-estimator device route owner (device=None | "gpu" | "cpu"), allocated by the
+        # scaler doors above (providers/python/prep_route_boundary_door.mojo). This is the one binding
+        # that registers it. This PyInit can run twice in one process; a second run attaches the
+        # existing type object (bindings/py_type_registry.mojo).
+        register_prep_route_owner(module)
+        # Owner identities need the finalized type object (Mojo 1.2 creates it in finalize(); see
+        # bindings/native_owner_registry.mojo).
+        var published = module.finalize()
+        register_prep_route_owner_identity(published)
+        return published
     except error:
         abort(String("failed to create _mojolearn_runtime_prep_host: ", error))
