@@ -440,5 +440,5 @@ def svc_linear_operation(model: PythonObject, operation: Int, args: PythonObject
     if operation == SVC_OPN_FAMILY_SVC_LINEAR_SVC_SCORE:
         var result = _linear_svc_prediction(model, args[0], args[1], context)
         var prediction = svc_decode_score(model, result.classes, result.codes, context)
-        return PythonObject(svc_accuracy_native(args[2], prediction, context))
+        return PythonObject(svc_accuracy_native(model, args[2], prediction, context))
     raise Error("RuntimeError: unknown linear SVM operation " + String(operation))
