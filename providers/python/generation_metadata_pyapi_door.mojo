@@ -1,8 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-# Operation-local Python ownership/admission for native generation metadata.
-# No snapshot survives a public forward/generate/read call. A stream's next
-# read recaptures current model fields and owners; this adds no thread-safety
-# promise for concurrent model mutation during execution.
+# Python ownership/admission for native generation metadata.
+# Lane dw-causal (2026-11-21): the model's weight snapshot
+# (`GenerationOperationSnapshot`) is held by the model's native owner
+# (bindings/causal_operation_owner_door.mojo `CausalModelOwner`) for one model
+# GENERATION: it is built once, at the first local forward, and dropped with
+# the owner when the model's identity key no longer matches (a replaced
+# weight, field, block or Array store). What belongs to one call (the block
+# captures and their arithmetic profile words) is `GenerationCallLayers`,
+# built per public operation and never kept. A stream's next read still
+# recaptures the model and the state; this adds no thread-safety promise for
+# concurrent model mutation during execution.
 from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -305,9 +312,39 @@ struct GenerationHeadSnapshot(Copyable, Movable):
         self.weights = GenerationWeightSnapshot(values)
 
 
+struct GenerationCallLayers(Copyable, Movable):
+    """What one public operation reads of the model's blocks: each layer's
+    captured block fields (where a run writes its session, lock and report
+    words) and, for a Transformer, its arithmetic profile words. Built once
+    per operation (once per read, not per token) from that operation's
+    capture; the weights and layer words live in the model owner's
+    `GenerationOperationSnapshot`."""
+    var blocks: List[PythonObject]
+    var profiles: List[PythonObject]
+    var changed: List[Bool]
+
+    def __init__(out self, blocks: List[PythonObject], transformer: Bool) raises:
+        self.blocks = List[PythonObject](capacity=len(blocks))
+        self.profiles = List[PythonObject](capacity=len(blocks))
+        self.changed = List[Bool](capacity=len(blocks))
+        for i in range(len(blocks)):  # driver-loop: over the model's layers, once per public operation
+            var block = blocks[i]
+            model_dict(block)
+            self.blocks.append(block)
+            # The two words GenerationLayerSnapshot.__init__ / rebind read.
+            if transformer:
+                self.profiles.append(model_plain(py_get(block, "_arithmetic_profile", PythonObject(None))))
+                self.changed.append(_generation_bool(py_get(block, "_arithmetic_profile_changed", PythonObject(False))))
+            else:
+                self.profiles.append(PythonObject(None))
+                self.changed.append(False)
+
+
 struct GenerationOperationSnapshot(Copyable, Movable):
-    var model: PythonObject
-    var model_fields: PythonObject
+    # Held by the model's native owner for one model generation (see the file
+    # header). It keeps NO capture: not the model record (a capture holds the
+    # public model, and the owner lives in a record weakly keyed by that
+    # model) and, after `detach`, no block capture.
     var entries: PythonObject
     var native: PythonObject
     var kind: String
@@ -327,15 +364,14 @@ struct GenerationOperationSnapshot(Copyable, Movable):
     var layer_route: CausalLayerRoute
 
     def __init__(out self, model: PythonObject, entries: PythonObject, blocks: List[PythonObject]) raises:
-        self.model = model
-        self.model_fields = _generation_fields(model, Python.tuple("kind", "d_model", "vocab_size", "_embed", "max_positions"))
+        var model_fields = _generation_fields(model, Python.tuple("kind", "d_model", "vocab_size", "_embed", "max_positions"))
         model_dict(entries)
         self.entries = entries
         self.native = py_get(entries, "native_primitives")
-        self.kind = model_string(self.model_fields["kind"])
-        self.width = model_integer(self.model_fields["d_model"])
-        self.vocab = model_integer(self.model_fields["vocab_size"])
-        self.embedding = GenerationWeightSnapshot(Python.list(self.model_fields["_embed"]))
+        self.kind = model_string(model_fields["kind"])
+        self.width = model_integer(model_fields["d_model"])
+        self.vocab = model_integer(model_fields["vocab_size"])
+        self.embedding = GenerationWeightSnapshot(Python.list(model_fields["_embed"]))
         self.head = GenerationHeadSnapshot(model, entries, self.width, self.vocab, True, True)
         self.planes = self.head.packed and py_contains(entries, "forward15")
         self.layers = List[GenerationLayerSnapshot]()
@@ -348,6 +384,15 @@ struct GenerationOperationSnapshot(Copyable, Movable):
         (bindings/causal_lm_public_door.mojo `_run_snapshot`); the engine
         admission never runs them and never resolves it."""
         self.layer_route = causal_layer_route(self.kind, self.entries)
+
+    def detach(mut self):
+        """Drop the block captures and profile words of the operation that
+        built this snapshot: an owner-held snapshot is read with each
+        operation's own `GenerationCallLayers`."""
+        for i in range(len(self.layers)):  # driver-loop: over the model's layers, once per model generation
+            self.layers[i].block = PythonObject(None)
+            self.layers[i].profile = PythonObject(None)
+            self.layers[i].profile_changed = False
 
 
 def causal_layer_route(kind: String, entries: PythonObject) raises -> CausalLayerRoute:
@@ -459,7 +504,14 @@ def _generation_engine_state(value: PythonObject, expected: List[Int], label: St
 
 
 struct GenerationEngineAdmission(Movable):
-    var snapshot: GenerationOperationSnapshot
+    # `held` is the model's native owner (the Python handle): it pins the
+    # snapshot whose weight addresses `native` reads, for the whole call. The
+    # admission copies nothing of the snapshot (before lane dw-causal it kept
+    # a deep copy of a snapshot built for this one call).
+    var held: PythonObject
+    var call: GenerationCallLayers
+    var kind: String
+    var heads: List[Int]
     var state: PythonObject
     var states: List[PythonObject]
     var owners: List[AdmittedNativeExecution]
@@ -470,8 +522,14 @@ struct GenerationEngineAdmission(Movable):
     var native: NativeGenerationModel
     var published: Bool
 
-    def __init__(out self, snapshot: GenerationOperationSnapshot, state: PythonObject, batch: Int, length: Int) raises:
-        self.snapshot = snapshot.copy()
+    def __init__(out self, snapshot: GenerationOperationSnapshot, held: PythonObject, var call: GenerationCallLayers,
+                 limited: Bool, max_positions: Int, state: PythonObject, batch: Int, length: Int) raises:
+        self.held = held
+        self.call = call^
+        self.kind = snapshot.kind
+        self.heads = List[Int](capacity=len(snapshot.layers))
+        for i in range(len(snapshot.layers)):  # driver-loop: over the model's layers, once per engine forward
+            self.heads.append(snapshot.layers[i].words.heads)
         self.state = _generation_fields(state, Python.tuple("positions", "max_tokens", "layers", "_usable", "_native_execution_route", "_native_engine_forwards"), True)
         self.states = List[PythonObject]()
         self.owners = List[AdmittedNativeExecution]()
@@ -485,12 +543,10 @@ struct GenerationEngineAdmission(Movable):
         if snapshot.head.packed or snapshot.planes or provider is None or snapshot.native is None:
             raise Error("CausalLM: native generation engine requires admitted nonresident fp32 model descriptors")
         self.owners.append(AdmittedNativeExecution(snapshot.native, PythonObject(None), 0, -1, -1, PythonObject(None), 0))
-        var model_limit = snapshot.model_fields["max_positions"]
-        var limited = model_limit is not None
         self.native = NativeGenerationModel(self.owners[0].endpoint(), snapshot.embedding.addresses[0],
             snapshot.head.weights.addresses[0], snapshot.head.weights.addresses[1], snapshot.head.norm_eps,
             batch, snapshot.width, snapshot.vocab, model_integer(self.state["positions"]), model_integer(self.state["max_tokens"]),
-            limited, model_integer(model_limit) if limited else 0)
+            limited, max_positions if limited else 0)
         try:
             var embedding = _generation_engine_weights(snapshot.embedding, self.storage,
                 self.native.embedding_refresh, self.native.embedding_targets)
@@ -506,7 +562,7 @@ struct GenerationEngineAdmission(Movable):
             self.native.head_failure = String(problem)
         var layers = self.state["layers"]
         model_sequence(layers)
-        if len(layers) != len(snapshot.layers):
+        if len(layers) != len(snapshot.layers) or len(self.call.blocks) != len(snapshot.layers):
             raise Error("CausalLM: state layer count differs from the captured model")
         var cpu = _generation_bool(entries["cpu"])
         # The field schema is constant across layers; retain one tuple rather
@@ -532,9 +588,9 @@ struct GenerationEngineAdmission(Movable):
                     var old_profile = model_plain(py_get(fields, "arithmetic_profile"))
                     cached = model_integer(fields["cached_tokens"])
                     native_layer.cached = cached
-                    if old_profile is None and cached != 0 and layer.profile_changed:
+                    if old_profile is None and cached != 0 and self.call.changed[i]:
                         raise Error("CausalLM: cached state requires arithmetic profile metadata")
-                    if old_profile is not None and layer.profile is not None and not Bool(py=old_profile == layer.profile):
+                    if old_profile is not None and self.call.profiles[i] is not None and not Bool(py=old_profile == self.call.profiles[i]):
                         raise Error("CausalLM: state arithmetic profile differs")
                     native_layer.profile_admitted = True
                     var capacity = model_integer(fields["max_tokens"])
@@ -549,7 +605,7 @@ struct GenerationEngineAdmission(Movable):
                         self.pins, self.storage, self.buffers, native_layer)
                     var value_address = _generation_engine_state(value, [cache_count], "v_cache",
                         self.pins, self.storage, self.buffers, native_layer)
-                    var block = layer.block
+                    var block = self.call.blocks[i]
                     var lock_owner = block["_runtime_lock"]
                     var lock = OperationLockLease(lock_owner)
                     if lock.handle == 0:
@@ -659,19 +715,19 @@ struct GenerationEngineAdmission(Movable):
                     counter_value = self.native.state_counters[identity]
                 py_setitem(self.states[i], counter, PythonObject(counter_value))
             if self.native.layers[i].kind == 2 and self.native.layers[i].completed:
-                var heads = self.snapshot.layers[i].words.heads
+                var heads = self.heads[i]
                 var report = generation_array([self.native.batch, heads, 64, 128])
                 unsafe_memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=report._addr)),
                     src=self.native.layers[i].report.unsafe_ptr(), count=self.native.layers[i].report_size)
-                py_setitem(self.snapshot.layers[i].block, "h_last_", report)
-            if self.native.layers[i].visited and self.native.layers[i].profile_admitted and self.snapshot.layers[i].profile is not None:
-                py_setitem(self.states[i], "arithmetic_profile", self.snapshot.layers[i].profile)
+                py_setitem(self.call.blocks[i], "h_last_", report)
+            if self.native.layers[i].visited and self.native.layers[i].profile_admitted and self.call.profiles[i] is not None:
+                py_setitem(self.states[i], "arithmetic_profile", self.call.profiles[i])
         py_setitem(self.state, "positions", PythonObject(self.native.position))
-        py_setitem(self.state, "_native_execution_route", PythonObject(self.snapshot.kind + "-nonresident-native-engine-v1"))
+        py_setitem(self.state, "_native_execution_route", PythonObject(self.kind + "-nonresident-native-engine-v1"))
         py_setitem(self.state, "_native_engine_forwards", PythonObject(self.native.forwards))
         if self.native.failed:
             py_setitem(self.state, "_usable", PythonObject(False))
         self.published = True
         _ = self.buffers
         _ = self.owners
-        _ = self.snapshot
+        _ = self.held
