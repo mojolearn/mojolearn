@@ -395,7 +395,7 @@ _POLICY_MASK_ENTRIES = (
 
 #: Row names by bit of the mask, as in checks/mode_policy.mojo.
 _POLICY_ROWS = ("fold_free", "contract_free", "flush_off", "vendor_math",
-                "matrix_units", "waits_elided", "tile_free", "bf16_units")
+                "matrix_units", "waits_elided", "tile_free")
 
 
 def _read_policy_mask(module, entry):
