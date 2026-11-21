@@ -30,7 +30,8 @@ from bindings.classical_arrays_door import classical_address, classical_typed, c
 from bindings.scaler_native_door import _ptr, _input
 from core.preprocessing_program import prep_program_stage as _stage
 from bindings.scaler_lifecycle_native_door import _entries, scaler_entries
-from bindings.prep_owner_route_unpack import prep_route_context, prep_route_caps, prep_route_refuse_cpu_table
+from bindings.prep_owner_route_unpack import (
+    prep_route_context, prep_route_caps, prep_route_refuse_cpu_table, prep_route_vendor_used)
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records, xprep_caps
 from bindings.prep_encode_prog_run import (
@@ -3342,6 +3343,9 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
         # lifecycle (bindings/public_lifecycle_owner.mojo) around the owner.
         if not (operation == "fit" or operation == "fit_transform" or operation == "transform"
                 or operation == "inverse_transform"):
+            if operation == "vendor_used":
+                # the image of this estimator's device route, read back
+                return prep_route_vendor_used(model, root).steal_data()
             return _encode_dispatch(model, kind, operation, args, context).steal_data()
         var depth = lifecycle_begin(model, operation, args[0], True, False, True, context)
         var result = PythonObject(None)

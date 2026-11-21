@@ -20,7 +20,7 @@ from bindings.py_balanced import py_call, py_type, py_get
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.prep_encode_native_door import prep_encode_c, prep_encode_scores_call
 from bindings.prep_labels_native_door import prep_labels_call
-from bindings.prep_owner_route_unpack import prep_route_context
+from bindings.prep_owner_route_unpack import prep_route_context, prep_route_vendor_used
 from bindings.prep_iterimp_native_door import prep_iterimp_call
 from bindings.prep_select_native_door import prep_rfe_call, prep_mutual_info_call
 from bindings.prep_composition_lifecycle_door import composition_before, composition_after_fit
@@ -110,7 +110,11 @@ def prep_owner_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
                 classical_connect_numpy(run)
             var depth = lifecycle_begin(model, operation, args[0], False, False, True, run) if public else 0
             try:
-                result = prep_labels_call(model, kind, op, operation, args, run)
+                if not public and operation == "vendor_used":
+                    # the image of this estimator's device route, read back
+                    result = prep_route_vendor_used(model, context)
+                else:
+                    result = prep_labels_call(model, kind, op, operation, args, run)
             finally:
                 if public:
                     lifecycle_end(model, operation, depth)

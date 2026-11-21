@@ -40,6 +40,7 @@ from bindings.scaler_route_unpack import (
     SCALER_ROUTE_CPU_TABLE, scaler_route_held, scaler_held_caps,
 )
 from bindings.x_prep_native_owner_run import XprepCaps
+from bindings.prep_entry_cache_unpack import prep_entry_text
 from core.device_route import DEVICE_GPU, DEVICE_CPU, device_installed, device_cpu_absent
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_request, device_route_owner, device_route_keep,
@@ -126,3 +127,27 @@ def prep_route_refuse_cpu_table(model: PythonObject, shown: String, reason: Stri
     var native = owner.downcast_value_ptr[DeviceRouteOwner]()
     if native[].resolved and (native[].route.flags & SCALER_ROUTE_CPU_TABLE) != 0:
         device_cpu_absent(shown, reason)
+
+
+def prep_route_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`vendor_used()`: the vendor word the compiled x_prep image of this
+    estimator's route reports about itself (`cpu`, `metal`, `cuda`, `hip`),
+    or None for an image built before the read-back. The image is the one
+    of the numeric mode the estimator was fitted in, else of the process
+    mode. A metadata operation, in no loop."""
+    var run = prep_route_context(model, context)
+    var str_type = context["prep_builtins"].str
+    var mode = py_get(py_fields(model), "numeric_mode_")
+    if mode is None:
+        mode = run["backend_fields"]["_DEFAULT_MODE"]
+    if py_type(mode) is not str_type:
+        raise Error("numeric_mode must be fast, identical or None")
+    var entries = py_get(run["scaler_bindings"], mode)
+    if entries is None:
+        raise Error("numeric_mode must be fast, identical or None")
+    if py_type(entries) is str_type:
+        raise Error("ImportError: " + String(entries))
+    var text = prep_entry_text(entries, "x_prep_vendor")
+    if text.byte_length() == 0:
+        return PythonObject(None)
+    return PythonObject(text)

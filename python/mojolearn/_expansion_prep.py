@@ -570,6 +570,17 @@ class OrdinalEncoder(_PrepBase):
         self.max_categories = max_categories
         self.device = device
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
+
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
@@ -662,6 +673,17 @@ class OneHotEncoder(_PrepBase):
         self.max_categories = max_categories
         self.feature_name_combiner = feature_name_combiner
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -761,6 +783,17 @@ class TargetEncoder(_PrepBase):
         self.random_state = random_state
         self.device = device
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
+
     def fit(self, X, y):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
@@ -845,6 +878,17 @@ class SimpleImputer(_PrepBase):
         self.add_indicator = add_indicator
         self.keep_empty_features = keep_empty_features
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None):
         return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
@@ -933,6 +977,17 @@ class KBinsDiscretizer(_PrepBase):
         self.subsample = subsample
         self.random_state = random_state
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, X, y=None, sample_weight=None):
         return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
@@ -1891,6 +1946,17 @@ class SplineTransformer(_PrepBase):
         self.sparse_output = sparse_output
         self.device = device
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
+
 
     #: handle_missing='zeros' takes NaN (its rows' spline features are 0): a
     #: class constant `_sk_validate._nan_rule` reads once per class (was a
@@ -2001,6 +2067,17 @@ class LabelEncoder(_PrepBase):
     def __init__(self, *, device=None):
         self.device = device
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
+
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
 
@@ -2076,6 +2153,17 @@ class LabelBinarizer(_PrepBase):
         self.sparse_output = sparse_output
         self.device = device
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
+
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
 
@@ -2140,6 +2228,17 @@ class MultiLabelBinarizer(_PrepBase):
         self.classes = classes
         self.sparse_output = sparse_output
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _ENCODE_CALL(self, "vendor_used", (), _ENCODE_CONTEXT)
 
     def fit(self, y):
         return _ENCODE_CALL(self, "fit", (y,), _ENCODE_CONTEXT)
