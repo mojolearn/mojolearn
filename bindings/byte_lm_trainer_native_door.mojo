@@ -1734,6 +1734,12 @@ def _session_info(mut mods: NativeModules, s: ByteLmTrainerState) raises -> Pyth
     reads of the trainer's former `_state` / `_session_open` fields)."""
     var info = _b(mods).dict()
     py_setitem(info, "session", s.has_session())
+    # The session's handle words (index, generation): a new session differs.
+    var session_id = PythonObject(None)
+    if s.has_session():
+        var held = s.session.value().copy()
+        session_id = Python.tuple(held[].index, Int(held[].generation))
+    py_setitem(info, "session_id", session_id)
     py_setitem(info, "open", s.session_open)
     py_setitem(info, "lost", s.lost)
     py_setitem(info, "host_state", len(s.data.parameters) == s.data.n_total)

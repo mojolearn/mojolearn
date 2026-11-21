@@ -507,8 +507,8 @@ def byte_trainer_export_gradients(mut s: ByteLmTrainerState, flat: Int, named: L
                                   sizes: List[Int]) raises:
     """The last completed step's gradient into `flat` and, when given, one
     buffer per tensor (`sizes` their element counts): from the open session
-    (operation 10), or the copy a lean stateless step kept."""
-    byte_trainer_gradients_check(s)
+    (operation 10), or the copy a lean stateless step kept. The caller has
+    run `byte_trainer_gradients_check` (before allocating the outputs)."""
     if not s.session_open:
         unsafe_memcpy(dest=_F32(unsafe_from_address=flat), src=_F32(unsafe_from_address=Int(s.grad_flat.unsafe_ptr())),
                       count=s.data.n_total)
