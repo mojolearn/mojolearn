@@ -181,12 +181,16 @@ def _connect_cpu_device(context, with_solver):
             raise TypeError("the CPU metrics image has no compiled r2_score")
     except errors as error:
         r2 = _refusal(error)
+    from ._native_labels_bridge import cpu_metrics_entries as _labels_cpu_metrics_entries
     scope = dict(context)
     scope.pop("classical_metric_vendor", None)
     # device="cpu" is identical only: both mode words name the CPU identical tables.
     scope.update(vendor="cpu", classical_metrics={"identical": x_metrics, "fast": x_metrics},
                  labels_base_binding=False,  # the label steps of this scope run the host kernels (label door: the context decides)
-                 labels_bindings={"identical": {"_mojolearn_metrics": r2}, "fast": {"_mojolearn_metrics": r2}})
+                 labels_bindings={"identical": {"_mojolearn_metrics": r2}, "fast": {"_mojolearn_metrics": r2}},
+                 # the accuracy COUNT tail of a classifier's score runs on the CPU
+                 # x_metrics image (bindings/classical_labels_door.mojo `_accuracy_codes`)
+                 labels_metrics_entries=_labels_cpu_metrics_entries())
     context.update(xl_cpu_bindings={"identical": linear}, cd_solver_cpu=cd, xl_cpu_scope=scope)
 
 

@@ -15,9 +15,12 @@ from bindings.native_loaded_module_door import native_loaded_module, NativeModul
 from bindings.causal_checkpoint_door import checkpoint_open_binding, checkpoint_close_binding
 from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.native_json_door import native_path, native_path_exists
-from bindings.native_process_pool_door import process_pool_create, process_pool_start, process_pool_request, process_pool_close, process_worker_connect
+from bindings.native_process_pool_door import (
+    process_pool_create, process_pool_start, process_pool_request, process_pool_close, process_worker_connect,
+    process_pool_pids,
+)
 from bindings.native_process_wire_door import WireOutgoing, wire_unpack, wire_append, wire_key, wire_text, wire_send, wire_receive
-from bindings.native_transport_door import transport_close, _transport_state
+from bindings.native_transport_door import transport_close
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from core.parallel_worker_request import (
     WorkerRequest, worker_request_decode, parallel_causal_op_code, WORKER_NO_HANDLE,
@@ -181,23 +184,20 @@ def _parallel_pool_capture(mut mods: NativeModules, pool: PythonObject) raises -
     py_setitem(copy, nk[].k_closed, _parallel_flag(py_item(pool, nk[].k_closed)))
     py_setitem(copy, nk[].k_sequence, _parallel_word(py_item(pool, nk[].k_sequence)))
     py_setitem(copy, nk[].k_module, model_string(mods, py_item(pool, nk[].k_module)))
-    if py_contains(pool, nk[].k_typed):
-        py_setitem(copy, nk[].k_typed, _parallel_flag(py_item(pool, nk[].k_typed)))
+    # The pool's state is its native record (bindings/native_process_pool_door.mojo);
+    # the operation's record shares it. The other entries copied here are the
+    # door's published mirror and the spawn configuration.
+    py_setitem(copy, nk[].k_record, py_item(pool, nk[].k_record))
     if py_contains(pool, nk[].k_environment):
         py_setitem(copy, nk[].k_environment, model_plain(mods, py_item(pool, nk[].k_environment)))
     var workers = py_item(pool, nk[].k_workers)
     model_sequence(mods, workers)
     var captured = Python.list()
-    for i in range(len(workers)):  # driver-loop: retain native sockets and snapshot each worker record
+    for i in range(len(workers)):  # driver-loop: snapshot each published worker record (the sockets are pinned by the pool's record)
         var worker = workers[i]
         model_dict(mods, worker)
         var item = Python.dict()
         py_setitem(item, nk[].k_pid, _parallel_word(py_item(worker, nk[].k_pid)))
-        var socket = py_item(worker, nk[].k_socket)
-        if socket is not None:
-            _ = _transport_state(socket, False)
-            mods.released()
-        py_setitem(item, nk[].k_socket, socket)
         var group = py_item(worker, nk[].k_devices)
         model_sequence(mods, group)
         for j in range(len(group)):  # driver-loop: over physical device indices owned by one worker group
@@ -777,7 +777,7 @@ def _parallel_causal_send(mut mods: NativeModules, owner: PythonObject, device: 
     if pool is None:
         raise Error("RuntimeError: ParallelCausalLM has no process owner")
     var result = PythonObject(None)
-    var started = len(py_item(pool, nk[].k_workers)) != 0
+    var started = len(process_pool_pids(pool)) != 0
     var wire = request.encode()
     try:
         result = process_pool_request(pool, index, wire, outgoing)
@@ -785,7 +785,7 @@ def _parallel_causal_send(mut mods: NativeModules, owner: PythonObject, device: 
     except error:
         mods.released()
         _parallel_pool_publish(mods, fields)
-        if len(py_item(pool, nk[].k_workers)) == 0:
+        if len(process_pool_pids(pool)) == 0:
             py_setitem(fields, nk[].k__failed, True)
             var live = py_item(fields, nk[].k__causal_live_fields)
             model_dict(mods, live)
@@ -909,8 +909,8 @@ def _parallel_causal_init(mut mods: NativeModules, owner: PythonObject, input_pl
     py_setitem(fields, nk[].k__worker_index, indices)
     var pool = process_pool_create(py_call(bi.tuple, unique), False, child_module)
     mods.released()
-    # Requests and replies travel as typed frames (bindings/native_process_wire.mojo).
-    py_setitem(pool, nk[].k_typed, PythonObject(True))
+    # Requests and replies travel as typed frames, as every pool's do
+    # (bindings/native_process_wire_door.mojo).
     _model_construction_set(mods, live, fields, "_pool", pool)
     var pools = Python.dict()
     for i in range(len(unique)):  # driver-loop: selected process ownership aliases

@@ -477,6 +477,7 @@ struct ParallelKeys(Defaultable, Movable):
     var k_random_weights_: PythonObject
     var k_rbf_rows: PythonObject
     var k_recipe: PythonObject
+    var k_record: PythonObject
     var k_reduction: PythonObject
     var k_reference_bytes: PythonObject
     var k_reference_end: PythonObject
@@ -505,7 +506,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_shard: PythonObject
     var k_shard_release: PythonObject
     var k_shard_store: PythonObject
-    var k_socket: PythonObject
     var k_sort_results: PythonObject
     var k_stages: PythonObject
     var k_start: PythonObject
@@ -522,7 +522,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k_trees_context: PythonObject
     var k_trees_entry: PythonObject
     var k_ts_num: PythonObject
-    var k_typed: PythonObject
     var k_v: PythonObject
     var k_vendor: PythonObject
     var k_version: PythonObject
@@ -824,6 +823,7 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_random_weights_ = PythonObject(None)
         self.k_rbf_rows = PythonObject(None)
         self.k_recipe = PythonObject(None)
+        self.k_record = PythonObject(None)
         self.k_reduction = PythonObject(None)
         self.k_reference_bytes = PythonObject(None)
         self.k_reference_end = PythonObject(None)
@@ -852,7 +852,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_shard = PythonObject(None)
         self.k_shard_release = PythonObject(None)
         self.k_shard_store = PythonObject(None)
-        self.k_socket = PythonObject(None)
         self.k_sort_results = PythonObject(None)
         self.k_stages = PythonObject(None)
         self.k_start = PythonObject(None)
@@ -869,7 +868,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k_trees_context = PythonObject(None)
         self.k_trees_entry = PythonObject(None)
         self.k_ts_num = PythonObject(None)
-        self.k_typed = PythonObject(None)
         self.k_v = PythonObject(None)
         self.k_vendor = PythonObject(None)
         self.k_version = PythonObject(None)
@@ -1163,6 +1161,7 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_random_weights_ = py_key("random_weights_")
     nk[].k_rbf_rows = py_key("rbf_rows")
     nk[].k_recipe = py_key("recipe")
+    nk[].k_record = py_key("record")
     nk[].k_reduction = py_key("reduction")
     nk[].k_reference_bytes = py_key("reference_bytes")
     nk[].k_reference_end = py_key("reference_end")
@@ -1191,7 +1190,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_shard = py_key("shard")
     nk[].k_shard_release = py_key("shard_release")
     nk[].k_shard_store = py_key("shard_store")
-    nk[].k_socket = py_key("socket")
     nk[].k_sort_results = py_key("sort_results")
     nk[].k_stages = py_key("stages")
     nk[].k_start = py_key("start")
@@ -1208,7 +1206,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k_trees_context = py_key("trees_context")
     nk[].k_trees_entry = py_key("trees_entry")
     nk[].k_ts_num = py_key("ts_num")
-    nk[].k_typed = py_key("typed")
     nk[].k_v = py_key("v")
     nk[].k_vendor = py_key("vendor")
     nk[].k_version = py_key("version")

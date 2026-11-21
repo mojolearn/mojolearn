@@ -24,6 +24,7 @@ from std.python._cpython import GILReleased
 from bindings.ocsvm_provider_unpack import OcConnection
 from core.ocsvm_plan import oc_take_rows_into
 from bindings.classical_attributes_door import classical_connect_numpy
+from bindings.labels_descriptor_boundary_door import labels_scope
 from svm.svc_ocsvm_native_run import OcFitRun, oc_fit_run, oc_query_run, oc_decision_run, oc_labels_run
 from bindings.svc_ocsvm_boundary_unpack import oc_binding_unpack, oc_fit_unpack, oc_query_unpack
 from bindings.svc_ocsvm_boundary_pack import oc_fit_outputs, oc_fit_pack, oc_public_vector
@@ -39,7 +40,8 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var run = OcFitRun()
     with GILReleased(Python()):
         run = oc_fit_run(unpacked.driver, unpacked.resident, unpacked.request)
-    var outputs = oc_fit_outputs(unpacked, run, context)
+    # The weight-row gather is a label step on the estimator's device (labels_scope).
+    var outputs = oc_fit_outputs(unpacked, run, labels_scope(model, context))
     if not unpacked.request.precomputed:
         # The support vectors: the support rows of X, gathered into the public array.
         with GILReleased(Python()):

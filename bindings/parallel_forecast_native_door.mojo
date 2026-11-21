@@ -33,7 +33,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
     process_pool_create, process_pool_map, process_pool_close,
-    process_worker_connect, process_worker_next, process_send,
+    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
 )
 from bindings.native_transport_door import transport_close
 from bindings.tsa_hw_native_door import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted, _commit
@@ -528,17 +528,15 @@ def forecast_worker_dispatch(request: PythonObject) raises -> PythonObject:
 
 def forecast_worker(argv: PythonObject) raises:
     var socket = process_worker_connect(argv)
-    var nk = parallel_keys()
     try:
         while True:  # driver-loop: over native local forecast shard requests
-            var request = process_worker_next(socket)
-            if request is None:
+            var turn = process_worker_next(socket)
+            if not turn.open:
                 break
-            var sequence = Int(py=py_get(request[0], nk[].k_sequence, -1))
             try:
-                process_send(socket, "result", sequence, forecast_worker_dispatch(request[1]))
+                process_worker_reply(socket, turn.sequence, forecast_worker_dispatch(turn.value))
             except error:
-                process_send(socket, "error", sequence, PythonObject(String(error)))
+                process_worker_refuse(socket, turn.sequence, String(error))
     except error:
         transport_close(socket)
         raise error^

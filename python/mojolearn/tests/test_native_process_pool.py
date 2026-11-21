@@ -96,10 +96,13 @@ record.write_text(json.dumps({"pid": os.getpid(), "hello": hello}))
 with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=10) as sock:
     raw = json.dumps(hello).encode("ascii")
     sock.sendall(struct.pack("!I", len(raw)) + raw)
+    # The coordinator answers a refused hello with one typed close frame: 11
+    # native int64 header words, kind in word 2 (4 is close), no body.
     with sock.makefile("rb") as reader:
-        prefix = reader.read(4)
-        received = json.loads(reader.read(struct.unpack("!I", prefix)[0])) if len(prefix) == 4 else {}
-    record.write_text(json.dumps({"pid": os.getpid(), "hello": hello, "received_kind": received.get("kind")}))
+        head = reader.read(88)
+    words = struct.unpack("<11q", head) if len(head) == 88 else ()
+    kind = {1: "request", 2: "result", 3: "error", 4: "close"}.get(words[2]) if words else None
+    record.write_text(json.dumps({"pid": os.getpid(), "hello": hello, "received_kind": kind}))
 ''')
     record = tmp_path / "child.json"
     monkeypatch.setenv("NATIVE_POOL_VENDOR_RECORD", str(record))
@@ -247,8 +250,10 @@ def test_interrupted_wave_does_not_drain_hung_peers_and_reaps_children(tmp_path)
                     raise SystemExit(0)
                 result += part
             return result
-        header = json.loads(exact(struct.unpack('>I', exact(4))[0]))
-        exact(header['nbytes'])
+        # One typed request frame: 11 native int64 header words (4..7 and 9
+        # count the body's words, 10 the tensor bytes), the body, the tensors.
+        header = struct.unpack('<11q', exact(88))
+        exact(8 * (sum(header[4:8]) + header[9]) + header[10])
         Path(os.environ['MOJOLEARN_TEST_READY'], str(os.getpid())).write_text('request received')
         # Even a failing regression is bounded and cannot leave immortal peers.
         time.sleep(12)

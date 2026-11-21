@@ -462,7 +462,7 @@ def mode_metadata_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
             var admit_context = args[2]
             var cpu_only = py_get(py_item(admit_context, nk[].k_backend_fields), "_CPU_ONLY") is not None
             device_admit_class(args[0], args[3], cpu_only, py_get(admit_context, "device_cpu"),
-                               native_loaded_module("builtins"))
+                               native_loaded_module("builtins"), py_get(admit_context, "device_cpu_connect"))
         elif len(args) != 3:
             raise Error("TypeError: mode metadata expects model, operation and native context")
         elif operation == MODE_OPN_IS_FITTED:
