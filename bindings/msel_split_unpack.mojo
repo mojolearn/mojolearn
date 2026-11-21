@@ -57,13 +57,11 @@ struct MselRoutePin(Movable):
         self.entries = PythonObject(None)
 
 
-def msel_split_route(context: PythonObject, base: Bool, program: Bool,
-                     program_inputs: Bool) raises -> MselRoutePin:
+def msel_split_route(context: PythonObject, base: Bool, program: Bool) raises -> MselRoutePin:
     """The entries of one split operation. `base`: the splitter calls the
-    base helper table; `program`: it runs x_metrics programs;
-    `program_inputs`: one of them reads a caller-sized buffer (no longer
-    read: an x_metrics image has no resident store, so the thread's resident
-    scope is not consulted; the parameter goes with its callers' next change).
+    base helper table; `program`: it runs x_metrics programs. (An x_metrics
+    image has no resident store, so the thread's resident scope is not
+    consulted; the unread `program_inputs` flag went in arena unit E.)
 
     The program runner is the default-mode x_metrics image's, connected
     once per factory: what `metric_door_run(prog, None, context)` resolved
