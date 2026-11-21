@@ -46,6 +46,7 @@ and in the wheel audit (packaging/portable_math/wheel.py).
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -95,8 +96,28 @@ def approx_sites(text):
     return out
 
 
-def approx_allowed(function):
-    """The APPROX_ALLOW reason for `function`, or None."""
+#: The vendor-math row (checks/mode_policy.mojo ROW_VENDOR_MATH, -D MOJOLEARN_MODE_FAST_VENDOR_MATH) puts the
+#: vendor's math forms in every kernel ON PURPOSE: it is a fast-rows measurement build (MOJOLEARN_MODE_FAST_ROWS;
+#: mode_policy's comptime assert refuses the row in any build that promises identical bits), never shipped, built
+#: in the identical set's directory only to time the cost of exact math. Its approximate instructions are counted
+#: and allowed; a build without the row is audited exactly as before. Lane fx-small, 2026-11-21: arm
+#: fast-vendor-math failed assemble sm_89 twice (run 44876740092, full46-build exit 1) on this refusal.
+_VENDOR_MATH_ROW = "MOJOLEARN_MODE_FAST_VENDOR_MATH"
+_VENDOR_MATH_WHY = "fast-rows measurement build with the vendor-math row (" + _VENDOR_MATH_ROW + "): not shipped"
+
+
+def vendor_math_build(defines=None):
+    """True when the build's defines (MOJOLEARN_BUILD_DEFINES, bindings/build_defines.sh: comma-separated NAME or
+    NAME=VALUE) carry both the vendor-math row and MOJOLEARN_MODE_FAST_ROWS."""
+    raw = os.environ.get("MOJOLEARN_BUILD_DEFINES", "") if defines is None else defines
+    names = {d.split("=", 1)[0] for d in raw.split(",") if d}
+    return _VENDOR_MATH_ROW in names and "MOJOLEARN_MODE_FAST_ROWS" in names
+
+
+def approx_allowed(function, vendor_math=False):
+    """The APPROX_ALLOW reason for `function`, or None (every function in a vendor-math build)."""
+    if vendor_math:
+        return _VENDOR_MATH_WHY
     return next((why for rx, why in APPROX_ALLOW if rx.search(function)), None)
 
 
@@ -167,6 +188,7 @@ def audit_bytes(data):
     """{modules, plain: [first offending lines], plain_count, approx: {op: count},
     approx_refused: ["function: op"] (not in APPROX_ALLOW), approx_allowed: {function: reason}}."""
     report = {"modules": 0, "plain_count": 0, "plain": [], "approx": {}, "approx_refused": [], "approx_allowed": {}}
+    vendor_math = vendor_math_build()  # once per binary, not per site
     for start, end in modules(data):
         text = data[start:end]
         report["modules"] += 1
@@ -175,7 +197,7 @@ def audit_bytes(data):
         report["plain"].extend(bad[:max(0, 5 - len(report["plain"]))])
         for function, op in approx_sites(text):
             report["approx"][op] = report["approx"].get(op, 0) + 1
-            why = approx_allowed(function)
+            why = approx_allowed(function, vendor_math)
             if why:
                 report["approx_allowed"][function] = why
             elif f"{function}: {op}" not in report["approx_refused"]:
