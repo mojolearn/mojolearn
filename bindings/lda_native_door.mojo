@@ -88,10 +88,19 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
         state_e = admit_x(decomp_attr(model, fields, "exp_dirichlet_component_"), 2,
                                      "exp_dirichlet_component_", context)
         nc = Int(py=state_c.value().shape[0])
-    var comps = decomp_f32(Python.tuple(nc, v), context)
-    var exp_dir = decomp_f32(Python.tuple(nc, v), context)
+    # Only a fit writes comps_out / exp_out (x_decomp/lda_owner.mojo: the
+    # LDA_FIT / LDA_PARTIAL arms copy_out into them; the query arms write
+    # out_buf or nothing). A query (transform / score / perplexity) passes
+    # the state's own words as those never-written slots, as the member
+    # does (core/xdecomp_member.mojo `_query_lda`), instead of two fresh
+    # (nc x v) arrays per call (lane ma-pub-transform round 9). Same RUN,
+    # same words read: bits unchanged.
+    var writes = op == _FIT or op == _PARTIAL
+    var comps = decomp_f32(Python.tuple(nc, v), context) if writes else PythonObject(None)
+    var exp_dir = decomp_f32(Python.tuple(nc, v), context) if writes else PythonObject(None)
     var out = decomp_f32(Python.tuple(n, nc), context) if op == _TRANSFORM else PythonObject(None)
-    var spare = _address(comps)
+    var spare = _address(comps) if writes else _address(state_c.value())
+    var exp_slot = _address(exp_dir) if writes else _address(state_e.value())
     var online = decomp_eq(py_item(fields, nk[].k_learning_method), PythonObject("online"))
     var bs = 1
     if op == _PARTIAL or (op == _FIT and online):
@@ -100,7 +109,7 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
         op, _address(x),
         _address(state_c.value()) if Bool(state_c) else spare,
         _address(state_e.value()) if Bool(state_e) else spare,
-        spare, _address(exp_dir), _address(out) if out is not None else spare,
+        spare, exp_slot, _address(out) if out is not None else spare,
         n, v, nc, fresh, flag,
         decomp_int(py_item(fields, nk[].k_max_iter)), op == _FIT and online, bs,
         decomp_int(py_item(fields, nk[].k_max_doc_update_iter)),
