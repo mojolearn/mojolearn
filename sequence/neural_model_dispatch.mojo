@@ -44,7 +44,32 @@ comptime MODEL_VERIFY_FILE_SHA256 = 26
 comptime MODEL_VERIFY_MODEL_INFO = 27
 comptime MODEL_N_PARAMS = 28
 comptime MODEL_IMPORT_PARAMS = 29
-comptime MODEL_OPERATION_COUNT = 30
+# lane dw-autograd-seq (2026-11-21, continuation): the sequence layer and
+# resident-tensor operations (LayerNorm, the sparse MoE block, the resident
+# sequence tensors and the MoE resident weights) are operations of this
+# descriptor in both images. SEQ_LAYER_NORM, SEQ_MOE_FORWARD and
+# SEQ_MOE_BACKWARD run on either executor (sequence/sequence_ops_dispatch.mojo);
+# SEQ_TENSOR_ALLOC .. SEQ_MOE_WEIGHTS_FREE need device tensors and are served
+# by the device image only (sequence/sequence_ops_device_dispatch.mojo): the
+# host image has no host kernel for them and refuses each in words. Before,
+# the doors reached each through the binding's Python entry of the same name
+# and decided device against host by whether that NAME was present. The same
+# typed functions run: no bit changes.
+comptime SEQ_LAYER_NORM = 30
+comptime SEQ_MOE_FORWARD = 31
+comptime SEQ_MOE_BACKWARD = 32
+comptime SEQ_TENSOR_ALLOC = 33
+comptime SEQ_TENSOR_FREE = 34
+comptime SEQ_TENSOR_UPLOAD = 35
+comptime SEQ_TENSOR_DOWNLOAD = 36
+comptime SEQ_TENSOR_COPY = 37
+comptime SEQ_LAYER_NORM_DEV = 38
+comptime SEQ_LAYER_NORM_DEV_ALLOC = 39
+comptime SEQ_MOE_FORWARD_DEV = 40
+comptime SEQ_MOE_FORWARD_DEV_ALLOC = 41
+comptime SEQ_MOE_WEIGHTS_PUT = 42
+comptime SEQ_MOE_WEIGHTS_FREE = 43
+comptime MODEL_OPERATION_COUNT = 44
 
 
 struct NeuralModelRequest(Movable):

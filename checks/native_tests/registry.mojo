@@ -260,6 +260,7 @@ from checks.native_tests.kde_state import register as register_kde_state
 from checks.native_tests.kmeans_contract import register as register_kmeans_contract
 from checks.native_tests.kmeans_variants_contract import register as register_kmeans_variants_contract
 from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
+from checks.native_tests.parallel_byte_session import register as register_parallel_byte_session
 from checks.native_tests.kpca_contract import register as register_kpca_contract
 from checks.native_tests.kpca_state import register as register_kpca_state
 from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
@@ -278,6 +279,7 @@ from checks.native_tests.lr_schedule_check import register as register_lr_schedu
 from checks.native_tests.mani_tsne_run import register as register_mani_tsne_run
 from checks.native_tests.mani_umap_run import register as register_mani_umap_run
 from checks.native_tests.msel_helpers_entry import register as register_msel_helpers_entry
+from checks.native_tests.msel_search_stats import register as register_msel_search_stats
 from checks.native_tests.msel_split_plan import register as register_msel_split_plan
 from checks.native_tests.native_array_layout_check import register as register_native_array_layout_check
 from checks.native_tests.native_device_concurrency import register as register_native_device_concurrency
@@ -843,6 +845,7 @@ def all_checks() -> List[Check]:
     checks.append(register_kmeans_contract())
     checks.append(register_kmeans_variants_contract())
     checks.append(register_kmeans_variants_lease())
+    checks.append(register_parallel_byte_session())
     checks.append(register_kpca_contract())
     checks.append(register_kpca_state())
     checks.append(register_label_score_keys_stress())
@@ -861,6 +864,7 @@ def all_checks() -> List[Check]:
     checks.append(register_mani_tsne_run())
     checks.append(register_mani_umap_run())
     checks.append(register_msel_helpers_entry())
+    checks.append(register_msel_search_stats())
     checks.append(register_msel_split_plan())
     checks.append(register_native_array_layout_check())
     checks.append(register_native_device_concurrency())

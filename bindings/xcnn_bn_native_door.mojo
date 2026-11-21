@@ -21,7 +21,7 @@ from bindings.mode_metadata_native_door import _fields
 from bindings.neural_block_admission_door import neural_plain_value
 from bindings.native_loaded_module_door import NativeModules
 from bindings.sequential_admission_door import sequential_admit_value
-from bindings.xcnn_common_door import xcnn_out_new, xcnn_dev_fields, xcnn_ref
+from bindings.xcnn_common_door import xcnn_out_new, xcnn_dev_fields, xcnn_ref, xcnn_device_init
 from bindings.xcnn_common_door import xcnn_plain_scalar, xcnn_exact, xcnn_dev_get_f, XT_BOOL
 from std.python._cpython import GILReleased
 from x_cnn.door_run import xcnn_run_fill_f32
@@ -86,6 +86,7 @@ def _ones(count: Int, context: PythonObject) raises -> PythonObject:
 def _bn_init(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     neural_plain_value(args, 0, context)
     var fields = _fields(layer)
+    xcnn_device_init(layer, fields, args[7], context)
     var count = Int(py=args[0])
     if count < 0:
         raise Error("ValueError: num_features must be nonnegative")

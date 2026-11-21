@@ -25,7 +25,7 @@ from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from bindings.generation_buffers_door import generation_initialize_binding, generation_array, py_ints
 from bindings.causal_lm_construct_door import _model_block, _model_profile, _model_bindings, _model_f32, _model_shape, model_recurrent_weights_check
-from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_layer_allocate, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless_plan, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
+from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_lm_admit, CausalAdmission, causal_layer_allocate, causal_layer_allocate_fields, causal_layer_run_fields, causal_layer_stateless_plan, _addr, _weight_addr, _native_function, _native_has_entry, _native_entry_fields, _standalone_record_fields, causal_prepared_layer
 from core.hostptr import f32_ptr
 from core.host_helpers_impl import all_finite_f32
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, MAMBA_BLOCK_ABI_NAME, MAMBA_STATE_ABI_NAME
@@ -83,6 +83,35 @@ comptime TRANSFORMER_LEGACY_SETUP = is_defined["MOJOLEARN_TRANSFORMER_LEGACY_SET
 comptime TRANSFORMER_SESSION_FRESH = not is_defined["MOJOLEARN_TRANSFORMER_SESSION_FRESH_OFF"]()
 
 
+struct NeuralBlockOwner(Movable):
+    # The typed owner of a standalone block's plan build (lane
+    # dw-neural-models, 2026-11-21): what the plan and its prepared layer
+    # need from the setup snapshot and from admission. It replaces the
+    # SimpleNamespace owner that was built, written attribute by attribute
+    # and read back at every owner-record miss.
+    var fields: PythonObject           # the setup snapshot of this operation
+    var context: PythonObject
+    var kind: String
+    var d_model: Int
+    var numeric_profile: PythonObject
+    var packed: Bool                   # the block holds fixed15 planes
+    var entries: PythonObject          # the admitted entry dictionary
+    var vendor: String                 # what the admitted image reported
+    var mode: Int
+
+    def __init__(out self, fields: PythonObject, context: PythonObject, kind: String, d_model: Int,
+                 numeric_profile: PythonObject, packed: Bool, entries: PythonObject, vendor: String, mode: Int):
+        self.fields = fields
+        self.context = context
+        self.kind = kind.copy()
+        self.d_model = d_model
+        self.numeric_profile = numeric_profile
+        self.packed = packed
+        self.entries = entries
+        self.vendor = vendor.copy()
+        self.mode = mode
+
+
 struct NativeBlockPlan(Movable, Writable):
     var context: PythonObject
     var entries: PythonObject
@@ -132,20 +161,20 @@ struct NativeBlockPlan(Movable, Writable):
     # CausalLM layer (Mamba-3) resolves nothing.
     var layer_route: CausalLayerRoute
 
-    def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
-        self.context = owner._native_context
-        self.entries = owner._native_entries
-        self.kind = String(owner.kind)
-        self.vendor = String(py=owner._native_vendor)
-        self.mode = Int(py=owner._native_numeric_mode)
+    def __init__(out self, owner: NeuralBlockOwner, layer: PythonObject) raises:
+        self.context = owner.context
+        self.entries = owner.entries
+        self.kind = owner.kind.copy()
+        self.vendor = owner.vendor.copy()
+        self.mode = owner.mode
         # Only a Transformer block's forward calls the forward table.
         self.forward_entry = entry_ref_unresolved()
         if self.kind == "transformer":
             self.forward_entry = neural_ref[NEURAL_TABLE_BLOCK_FORWARD](
-                NeuralEntryKey(Int(py=owner._native_numeric_mode), neural_entry_vendor(String(py=owner._native_vendor))))
-        self.d_model = Int(py=owner.d_model)
+                NeuralEntryKey(owner.mode, neural_entry_vendor(owner.vendor)))
+        self.d_model = owner.d_model
         self.numeric_profile = owner.numeric_profile
-        self.packed = owner._head_int15 is not None
+        self.packed = owner.packed
         self.planes = self.kind == "transformer" and self.packed and py_contains(self.entries, "forward15")
         self.block_session = py_contains(self.entries, "block_session")
         self.session_fresh = py_contains(self.entries, "transformer_session_forward_fresh")
@@ -240,14 +269,15 @@ def _neural_default_mode(mut mods: NativeModules, context: PythonObject) raises 
     return mode
 
 
-def _neural_block_owner_full(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = mods.module("builtins")
+def _neural_block_owner_setup(mut mods: NativeModules, block: PythonObject, context: PythonObject, mut bindings: PythonObject) raises -> PythonObject:
+    # The setup both owner forms share: the operation snapshot, the route's
+    # binding connections (answered in `bindings`) and the arithmetic profile
+    # words of the block image.
     var fields = neural_block_snapshot(mods, block, context)
-    var live = fields["_neural_live_fields"]
     var kind = String(fields["_native_kind"])
     var route = fields["_native_route"]
     var mode = py_get(fields, "numeric_mode")
-    var bindings = _model_bindings(mods, route, kind, context, mode)
+    bindings = _model_bindings(mods, route, kind, context, mode)
     if kind == "transformer" and _native_has_entry(mods, bindings[kind], "transformer_arithmetic_profile"):
         var next_profile = _native_function(mods, bindings[kind], "transformer_arithmetic_profile")()
         mods.released()
@@ -259,9 +289,40 @@ def _neural_block_owner_full(mut mods: NativeModules, block: PythonObject, conte
         py_setitem(fields, "_arithmetic_profile_mode", want_mode)
         py_setitem(fields, "_arithmetic_profile_changed", PythonObject(Bool(py=_native_function(mods, bindings[kind], "transformer_arithmetic_profile_changed")())))
         mods.released()
+    return fields
+
+
+def _neural_block_owner_typed(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> NeuralBlockOwner:
+    # The owner of a standalone block's plan build (`neural_block_execution`
+    # at an owner-record miss): typed words, no SimpleNamespace, no attribute
+    # written or read back. Admission answers into `CausalAdmission`; the
+    # plan retains the entry dictionary itself, so the namespace form's entry
+    # pin (`causal_pin_entries`, read only by a model capture) is not built.
+    var bindings = PythonObject(None)
+    var fields = _neural_block_owner_setup(mods, block, context, bindings)
+    var kind = String(fields["_native_kind"])
+    var int15 = py_get(fields, "_int15")
+    var packed = int15 is not None
+    var admission = CausalAdmission(String(fields["_native_route"]) == "gpu", kind, packed,
+        fields["_neural_weight_names"], block, context)
+    causal_lm_admit(mods, admission, bindings[kind], bindings["primitives"], bindings["linalg"] if packed else PythonObject(None))
+    return NeuralBlockOwner(fields, context, kind, Int(py=fields["d_model"]),
+        py_get(fields, "numeric_profile", PythonObject("fp32_v1")), packed,
+        admission.entries, admission.vendor, admission.mode)
+
+
+def _neural_block_owner_full(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The object owner: only the parallel worker's layer holder
+    # (`neural_block_owner`, one build per layer at worker construction),
+    # which keeps the holder and reads its fields. A standalone block's plan
+    # build takes `_neural_block_owner_typed`.
+    var bi = mods.module("builtins")
+    var bindings = PythonObject(None)
+    var fields = _neural_block_owner_setup(mods, block, context, bindings)
+    var kind = String(fields["_native_kind"])
+    var route = fields["_native_route"]
     var owner = py_call(mods.module("types").SimpleNamespace)
     py_setattr(owner, "_native_block_fields", Python.list(fields))
-    py_setattr(owner, "_native_block_live", live)
     py_setattr(owner, "_native_context", context)
     py_setattr(owner, "kind", PythonObject(kind))
     py_setattr(owner, "device", route)
@@ -488,10 +549,10 @@ def neural_block_execution(mut mods: NativeModules, block: PythonObject, context
         key = _neural_owner_key(mods, block, live, context, binding_key, uses_default)
     except:
         key = PythonObject(None)
-    var owner = _neural_block_owner_full(mods, block, context)
-    var snapshot = owner._native_block_fields[0]
-    var kind = String(snapshot["_native_kind"])
-    var planes = kind == "transformer" and owner._head_int15 is not None and py_contains(owner._native_entries, "forward15")
+    var owner = _neural_block_owner_typed(mods, block, context)
+    var snapshot = owner.fields
+    var kind = owner.kind.copy()
+    var planes = kind == "transformer" and owner.packed and py_contains(owner.entries, "forward15")
     var layer = causal_prepared_layer(mods, snapshot, kind, planes)
     var plan = PythonObject(alloc=NativeBlockPlan(owner, layer))
     var reusable = key is not None and _neural_owner_reusable(mods, snapshot, live, context)
