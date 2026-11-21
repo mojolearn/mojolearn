@@ -111,6 +111,8 @@ from core.forest_fit_request import (
     XF_CAP_DART,
     XF_CAP_SESSION,
 )
+from core.tree_member import tree_member_publish_image
+from core.forest_member import forest_member_publish_image
 from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
 from core.forest_entry_table import FOREST_TABLE_RF
 from core.native_descriptor_abi import NativeDescriptorError
@@ -782,6 +784,9 @@ def build__mojolearn_rf_host() -> PythonObject:
         var module = PythonModuleBuilder("_mojolearn_rf_host")
         # The native forest entry (core/forest_entry_table.mojo) under the cpu key.
         forest_entry_publish["MojolearnForestEntryOwnerRfHostV1"](FOREST_TABLE_RF, "cpu", rf_host_forest_entry_v1)
+        # The families' member entries (core/member_abi.mojo) over this forest entry.
+        tree_member_publish_image("cpu")
+        forest_member_publish_image("cpu")
         module.def_function[rf_host_numeric_mode_binding]("rf_host_numeric_mode")
         module.def_function[rf_host_vendor_binding]("rf_host_vendor")
         module.def_function[rf_host_column_binding]("rf_host_column")
