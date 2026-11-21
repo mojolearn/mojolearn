@@ -214,6 +214,62 @@ def test_causal_lm_parameters_are_torch_iterators(tmp_path):
     assert len(arrays) == len(named)
 
 
+# ---- round 3: CausalLM state_dict / load_state_dict ---------------------------
+
+def _causal_logits(model):
+    ids = np.array([[1, 2, 3, 4]], dtype=np.int32)
+    return np.asarray(model.forward(ids)).tobytes()
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_causal_lm_state_dict_is_named_parameters(tmp_path, family):
+    config, tensors = family_fixture(family, False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    sd = model.state_dict()
+    assert isinstance(sd, dict)
+    assert sorted(sd) == sorted(dict(model.named_parameters()))
+
+
+@pytest.mark.parametrize("family", FAMILIES)
+def test_causal_lm_load_state_dict_round_trips_and_moves_the_weights(tmp_path, family):
+    config, tensors = family_fixture(family, False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    before = _causal_logits(model)
+    sd = {k: np.array(np.asarray(v), dtype=np.float32) for k, v in model.state_dict().items()}
+    assert model.load_state_dict(sd) is None
+    assert _causal_logits(model) == before
+    name = sorted(sd)[0]
+    sd[name] = sd[name] * np.float32(0.5)
+    model.load_state_dict(sd)
+    assert np.asarray(model.state_dict()[name]).tobytes() == sd[name].tobytes()
+    # The same weights from a checkpoint give the same bits.
+    fresh = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    fresh.load_state_dict(sd)
+    assert _causal_logits(fresh) == _causal_logits(model)
+
+
+def test_causal_lm_load_state_dict_is_strict_and_all_or_nothing(tmp_path):
+    config, tensors = family_fixture("llama", False)
+    _write_checkpoint(str(tmp_path), config, tensors)
+    model = CausalLM.load(tmp_path, device="cpu", numeric_profile="fp32_v1")
+    before = _causal_logits(model)
+    sd = {k: np.array(np.asarray(v), dtype=np.float32) for k, v in model.state_dict().items()}
+    name = sorted(sd)[0]
+    with pytest.raises(ValueError, match="missing key"):
+        model.load_state_dict({k: v for k, v in sd.items() if k != name})
+    with pytest.raises(ValueError, match="unexpected key"):
+        model.load_state_dict({**sd, "extra.weight": sd[name]})
+    bad = dict(sd)
+    bad[name] = np.zeros((1, 1), dtype=np.float32)
+    with pytest.raises((ValueError, TypeError)):
+        model.load_state_dict(bad)
+    with pytest.raises(TypeError):
+        model.load_state_dict(list(sd.items()))
+    assert _causal_logits(model) == before
+
+
 # ---- round 2: CNN layer state_dict / load_state_dict --------------------------
 
 def test_conv_state_dict_round_trips_and_matches_torch_names():

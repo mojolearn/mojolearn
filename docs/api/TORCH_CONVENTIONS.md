@@ -85,7 +85,7 @@ The neural models run float32 only, in both modes; `identical` defines its bits 
 | PyTorch | Mojolearn | Note |
 |---|---|---|
 | `parameters()`, `named_parameters()` | yes (round 2) | iterators over the existing `causal_lm_parameters` entry (unchanged; `bindings/torch_parameters_pack.mojo` shapes its result); was `{name: array}`: use `dict(model.named_parameters())` |
-| `state_dict()` / `load_state_dict()` | owed | doors are lane causal-doors'; no existing entry rebuilds from a dict |
+| `state_dict()` / `load_state_dict()` | new (round 3) | `state_dict()` is the `{checkpoint name: array}` mapping of the `causal_lm_parameters` entry (the model's own arrays; a fused Phi-3 tensor joined, a copy). `load_state_dict(sd)` is torch's `strict=True` (missing / unexpected keys refused in words) and all or nothing: native `causal_model_load_state_dict` (`bindings/causal_lm_construct_door.mojo`) reads the weight record from the mapping through the checkpoint reader's own plan walk (fused rows split, the weight format packed as a checkpoint load packs it), constructs a complete model of the same type with this model's plan and options, and only then gives this model its fields; it drops the prepared model record, so the model generation moves on and the checkpoint fingerprint is hashed again. Differs from torch: returns None (no `(missing_keys, unexpected_keys)`, since only strict loads exist), no `strict=False`, and arrays taken earlier keep the old values (the weights are replaced, not copied into in place). Refused while a resident generation runs |
 | `eval()` | no | inference only: there is no training mode |
 
 ### Optimizers: `SGD`, `Adam`, `AdamW`

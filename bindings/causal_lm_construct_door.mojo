@@ -15,7 +15,7 @@ from std.os import getenv
 from providers.python.operation_lock_pyapi_door import operation_lock_create
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_array_snapshot, generation_address, py_ints
 from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry, _causal_array_guard, causal_entry_key
-from bindings.causal_operation_owner_door import _causal_namespace, causal_snapshot_fields
+from bindings.causal_operation_owner_door import _causal_namespace, causal_snapshot_fields, causal_model_record_drop
 from bindings.causal_model_config_door import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_checkpoint_names_snapshot, causal_plan_layer_map, model_plain, model_record_fields
 from bindings.causal_model_config_run import causal_layer_weights
 from bindings.causal_checkpoint_door import checkpoint_array, checkpoint_zeros, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
@@ -954,35 +954,57 @@ def _causal_model_init(mut mods: NativeModules, model: PythonObject, input_plan:
 def causal_model_read_weights_binding(mut mods: NativeModules, checkpoint: PythonObject, input_plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
     causal_public_connect(context)
     var plan = model_plan_snapshot(mods, input_plan)
-    return _causal_model_read_weights(mods, checkpoint, plan, format, route, context)
+    return _causal_model_read_weights(mods, checkpoint, PythonObject(None), plan, format, route, context)
 
 
-def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject, plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
-    # `plan` is the caller's model_plan_snapshot (row N203).
+def _causal_weight_read(mut mods: NativeModules, checkpoint: PythonObject, state: PythonObject, name: PythonObject, ck: PythonObject) raises -> PythonObject:
+    # One tensor by checkpoint name: from the open checkpoint, or (lane
+    # api-torch round 3, `load_state_dict`) from the admitted state mapping,
+    # whose float32 values `_model_f32` admits at the caller (a C view is kept,
+    # not copied; F / foreign layouts are copied by that admission).
+    if state is not None:
+        return py_item(state, name)
+    return checkpoint_read_binding(mods, checkpoint, name, PythonObject("widen"), ck)
+
+
+def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject, state: PythonObject, plan: PythonObject, format: PythonObject, route: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `plan` is the caller's model_plan_snapshot (row N203). The tensors come
+    # from `checkpoint` (an open checkpoint) or, when `state` is not None, from
+    # `state`: a `{checkpoint name: array}` mapping (`load_state_dict`), whose
+    # key set must be exactly the plan's names (torch's strict load).
     var bi = mods.module("builtins")
     causal_public_connect(context)
     if py_type(format) is not bi.str:
         raise Error("TypeError: CausalLM weight format requires an ordinary string")
     var nk = causal_keys()
     var ck = py_item(context, nk[].k_checkpoint_context)
-    var infos = checkpoint_index_binding(mods, checkpoint, ck)
+    var from_state = state is not None
+    var infos = state if from_state else checkpoint_index_binding(mods, checkpoint, ck)
     var captured_infos = Python.dict()
     # Row N203: the captured shape/dtype metadata is read only by the
     # bfloat16 packed-projection test below; other formats skip the capture.
-    if String(format) == "bfloat16":
+    # A state mapping holds float32 arrays: no bfloat16 bits to keep.
+    if String(format) == "bfloat16" and not from_state:
         var info_names = py_call(bi.list, infos.keys())
         for i in range(len(info_names)):  # driver-loop: retain checkpoint shape/dtype metadata before execution
             py_setitem(captured_infos, info_names[i], _info_snapshot(mods, infos[info_names[i]]))
     var need = model_checkpoint_names_snapshot(mods, plan)
     for i in range(len(need)):  # driver-loop: over checkpoint tensor names
         if not py_contains(infos, need[i]):
+            if from_state:
+                raise Error("CausalLM.load_state_dict: missing key " + String(need[i]))
             raise Error("UnsupportedModel: checkpoint lacks tensor " + String(need[i]))
+    if from_state and len(infos) != len(need):
+        var given = py_call(bi.list, infos)
+        for i in range(len(given)):  # driver-loop: over the state mapping's names (refusal text only)
+            if not py_contains(need, given[i]):
+                raise Error("CausalLM.load_state_dict: unexpected key " + String(given[i]))
     var out = bi.dict()
-    py_setitem(out, nk[].k_embed, checkpoint_read_binding(mods, checkpoint, py_item(plan, nk[].k_embed_name), PythonObject("widen"), ck))
+    py_setitem(out, nk[].k_embed, _causal_weight_read(mods, checkpoint, state, py_item(plan, nk[].k_embed_name), ck))
     if py_item(plan, nk[].k_norm_name) is not None:
-        py_setitem(out, nk[].k_norm, checkpoint_read_binding(mods, checkpoint, py_item(plan, nk[].k_norm_name), PythonObject("widen"), ck))
+        py_setitem(out, nk[].k_norm, _causal_weight_read(mods, checkpoint, state, py_item(plan, nk[].k_norm_name), ck))
     if py_item(plan, nk[].k_head_name) is not None:
-        py_setitem(out, nk[].k_head, checkpoint_read_binding(mods, checkpoint, py_item(plan, nk[].k_head_name), PythonObject("widen"), ck))
+        py_setitem(out, nk[].k_head, _causal_weight_read(mods, checkpoint, state, py_item(plan, nk[].k_head_name), ck))
     var bindings = _model_bindings(mods, route, String(py_item(plan, nk[].k_kind)), context)
     # The route's (tier, vendor) table key, read once for every packed tensor.
     var pack_key = causal_entry_key(bindings)
@@ -1001,10 +1023,10 @@ def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject
             var key = PythonObject(entry.key)
             var name = PythonObject(entry.name)
             var packed = not float32 and py_contains(projections, key)
-            if packed and bfloat16 and not entry.has_rows and String(py_item(captured_infos[name], nk[].k_dtype)) == "BF16" and len(py_item(captured_infos[name], nk[].k_shape)) == 2:
+            if packed and bfloat16 and not from_state and not entry.has_rows and String(py_item(captured_infos[name], nk[].k_dtype)) == "BF16" and len(py_item(captured_infos[name], nk[].k_shape)) == 2:
                 py_setitem(weights, key, checkpoint_read_binding(mods, checkpoint, name, PythonObject("bits"), ck))
                 continue
-            var value = _model_f32(checkpoint_read_binding(mods, checkpoint, name, PythonObject("widen"), ck), entry.name, context)
+            var value = _model_f32(_causal_weight_read(mods, checkpoint, state, name, ck), entry.name, context)
             if entry.has_rows:
                 var begin = entry.begin
                 var end = entry.end
@@ -1031,10 +1053,11 @@ def _causal_model_read_weights(mut mods: NativeModules, checkpoint: PythonObject
         _ = py_call(layers.append, weights)
     py_setitem(out, nk[].k_layers, layers)
     var unused = bi.list()
-    var names = py_call(bi.list, infos)
-    for i in range(len(names)):  # driver-loop: over checkpoint metadata names
-        if not py_contains(need, names[i]):
-            _ = py_call(unused.append, names[i])
+    if not from_state:
+        var names = py_call(bi.list, infos)
+        for i in range(len(names)):  # driver-loop: over checkpoint metadata names
+            if not py_contains(need, names[i]):
+                _ = py_call(unused.append, names[i])
     py_setitem(out, nk[].k_unused, unused)
     return out
 
@@ -1064,7 +1087,7 @@ def causal_model_load_binding(mut mods: NativeModules, cls: PythonObject, path_v
     try:
         # Row N203: the one plan snapshot of this load serves the weight
         # read and the init (formerly rebuilt in each).
-        weights = _causal_model_read_weights(mods, checkpoint, plan_fields, options[0], route, context)
+        weights = _causal_model_read_weights(mods, checkpoint, PythonObject(None), plan_fields, options[0], route, context)
     except error:
         mods.released()
         _ = checkpoint_close_binding(mods, checkpoint)
@@ -1132,6 +1155,53 @@ def causal_model_twin_binding(mut mods: NativeModules, model: PythonObject, devi
     return twin
 
 
+def causal_model_load_state_dict_binding(mut mods: NativeModules, model: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `CausalLM.load_state_dict(state_dict)` (lane api-torch round 3): torch's
+    # strict load of a `{checkpoint name: array}` mapping, the names
+    # `state_dict()` / `named_parameters()` give. All or nothing: the weight
+    # record is read from the mapping by the checkpoint reader's own plan walk
+    # (`_causal_model_read_weights`: fused rows split, the weight format
+    # packed as a checkpoint load packs it), and a complete second model of
+    # the same type is constructed from it, with this model's plan and
+    # options, by the one constructor (every shape, value and derived plane,
+    # the fixed15_v1 int15 planes included, admitted and built there). Only
+    # when that construction succeeded does this model take the new model's
+    # fields; a refused load leaves it untouched.
+    # The prepared model record is then dropped: the next operation builds a
+    # new model owner, so the model generation moves on and the checkpoint
+    # fingerprint is hashed again from the new weights; decode states bound to
+    # the old generation are re-bound (core/causal_owner.mojo
+    # `causal_state_admit`). Arrays handed out earlier by `parameters()` /
+    # `state_dict()` keep the old values (the weights are replaced, not
+    # written in place).
+    # UNPACK / PACK only, once per call: the loops run over layers and names.
+    causal_public_connect(context)
+    var bi = mods.module("builtins")
+    if py_type(state) is not bi.dict:
+        raise Error("TypeError: CausalLM.load_state_dict requires a dict of arrays by checkpoint name")
+    var fields = _causal_model_fields(mods, model)
+    neural_string_keys(mods, fields)
+    neural_string_keys(mods, state)
+    var nk = causal_keys()
+    var input_plan = py_get(fields, nk[].k_plan)
+    if input_plan is None or py_get(fields, nk[].k__blocks) is None or py_get(fields, nk[].k__embed) is None:
+        raise Error("CausalLM: the model was not constructed")
+    if Bool(py=py_get(fields, "_resident_busy", PythonObject(False))):
+        raise Error("CausalLM.load_state_dict: the model is generating; load after the generation ends")
+    var plan = model_plan_snapshot(mods, input_plan)
+    var options = Python.tuple(py_item(fields, nk[].k_weight_format), py_item(fields, nk[].k_max_positions),
+                               py_item(fields, nk[].k_device), py_item(fields, nk[].k_numeric_profile))
+    var route = _model_route(mods, py_item(fields, nk[].k_device), context)
+    var weights = _causal_model_read_weights(mods, PythonObject(None), state, plan, options[0], route, context)
+    var fresh = py_call(bi.object.__new__, py_type(model))
+    _ = _causal_model_init(mods, fresh, input_plan, plan, weights, options, context)
+    var loaded = _causal_model_fields(mods, fresh)
+    _ = py_call(fields.clear)
+    _ = py_call(fields.update, loaded)
+    causal_model_record_drop(mods, model)
+    return PythonObject(None)
+
+
 def causal_model_vendor_binding(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
     # What the block image admitted at construction reported
     # (`causal_lm_admit_binding` publishes it): one stored word, no device
@@ -1156,6 +1226,8 @@ def causal_model_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             result = causal_model_read_weights_binding(mods, args[0], args[1], args[2], _model_route(mods, PythonObject("auto"), args[3]), args[3])
         elif operation == 3:
             result = causal_model_twin_binding(mods, args[0], args[1], args[2])
+        elif operation == 5:
+            result = causal_model_load_state_dict_binding(mods, args[0], args[1], args[2])
         else:
             result = causal_model_vendor_binding(mods, args[0])
         return result.steal_data()
@@ -1170,7 +1242,7 @@ def causal_model_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
         if message.startswith("UnsupportedModel:"):
             try:
                 ref cpy = Python().cpython()
-                var context = cpy.PyTuple_GetItem(args_ptr, 4 if operation == 0 else (2 if operation == 3 else 3))
+                var context = cpy.PyTuple_GetItem(args_ptr, 4 if operation == 0 else (2 if operation == 3 or operation == 5 else 3))
                 var config = causal_borrowed_item(context, "config_context")
                 var cls = causal_borrowed_item(config, "unsupported_class")
                 return causal_set_exception(error_without_class(error, "UnsupportedModel"), cls)
