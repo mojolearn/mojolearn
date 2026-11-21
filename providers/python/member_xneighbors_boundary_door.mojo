@@ -2,8 +2,8 @@
 """The member boundary of the XNeighbors family (UNPACK / PACK of
 core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
 LocalOutlierFactor (kind 1), OneClassSVM (kind 2), KernelPCA (kind 3),
-PolynomialCountSketch (kind 4). Not yet published (admit refuses with the kind): PolynomialCountSketch AdditiveChi2Sampler SkewedChi2Sampler
-LabelPropagation LabelSpreading KNNImputer SVGP.
+PolynomialCountSketch (kind 4), AdditiveChi2Sampler (kind 5). Not yet published
+(admit refuses with the kind): SkewedChi2Sampler LabelPropagation LabelSpreading KNNImputer SVGP.
 
   * `xneighbors_member_admit` (UNPACK): the estimator's own parameter checks
     (bindings/neighbors_local_native_door.mojo `_nc_fit_unpack`), its route
@@ -35,6 +35,8 @@ LabelPropagation LabelSpreading KNNImputer SVGP.
     `kpca_fit`'s fields on that context's output arrays.
     PolynomialCountSketch: admit = the door's parameter reads and the seed
     word of an exact int random_state (else False); pack = `_pcs_fit`'s fields.
+    AdditiveChi2Sampler: admit = the door's steps / interval words and the
+    image's device-scan bit; pack = n_features_in_.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
     estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
     length).
@@ -64,6 +66,7 @@ from bindings.neighbors_native_unpack import _pcs_int, _pcs_real, _pcs_hash
 from providers.python.array_metadata_pyapi_door import ArrayPin
 from bindings.pcs_native_boundary_unpack import pcs_seed_unpack
 from bindings.pcs_native_boundary_pack import pcs_array
+from bindings.neighbors_semi_native_door import _achi2_interval_unpack, _semi_kfeat_flags
 from core.pcs_native_api import pcs_options
 from bindings.kpca_native_door import (
     _kpca_route, _kpca_decomp_refused, _field as _kp_field, _int as _kp_int, _float as _kp_float,
@@ -92,6 +95,7 @@ from core.member_abi import (
 from core.xneighbors_member import (
     XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF, XNEIGHBORS_KIND_OCSVM, XNEIGHBORS_KIND_KERNEL_PCA,
     XNEIGHBORS_KIND_PCS, PC_BLOCK_INDEX_HASH, PC_BLOCK_BIT_HASH, PC_BLOCK_FEATURES,
+    XNEIGHBORS_KIND_ACHI2, AC_BLOCK_FEATURES,
     KP_BLOCK_ROWS, KP_BLOCK_VALUES, KP_BLOCK_VECTORS, KP_BLOCK_COLUMNS, KP_BLOCK_TOTAL, KP_BLOCK_GAMMA,
     OC_BLOCK_VECTORS, OC_BLOCK_DUAL, OC_BLOCK_SUPPORT, OC_BLOCK_SCALARS, OC_GAMMA_VALUE, OC_GAMMA_SCALE, OC_GAMMA_AUTO,
     NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
@@ -347,6 +351,22 @@ def _pcs_admit(model: PythonObject, fields: PythonObject, context: PythonObject,
     return True
 
 
+def _achi2_admit(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    mut owner: MemberOwner) raises -> Bool:
+    """The door's words: sample_steps (`int`), the interval and whether it is
+    valid (`_achi2_interval_unpack`), the image's device scan
+    (`_semi_kfeat_flags` bit 1, on the shared family context)."""
+    var steps = Int(py=py_call(b.int, family_field(fields, "sample_steps")))
+    var interval = _achi2_interval_unpack(fields)
+    if not _route(model, context, b, owner):
+        return False
+    var scan = (_semi_kfeat_flags(owner.pins[1], _family_context()) & 1) != 0
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_ACHI2), Float64(steps), interval[0],
+        1.0 if interval[1] else 0.0, 1.0 if scan else 0.0]
+    owner.plan.params = words^
+    return True
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
@@ -357,6 +377,8 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         return _kpca_admit(model, fields, b, owner)
     if kind == XNEIGHBORS_KIND_PCS:
         return _pcs_admit(model, fields, context, b, owner)
+    if kind == XNEIGHBORS_KIND_ACHI2:
+        return _achi2_admit(model, fields, context, b, owner)
     if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
     if kind == XNEIGHBORS_KIND_LOF:
@@ -788,6 +810,32 @@ def _pcs_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) ra
     return call.state
 
 
+def _achi2_pack(fields: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`_achi2_fit`'s field: n_features_in_."""
+    var call = MemberCall(plan.route, state)
+    call.block = AC_BLOCK_FEATURES
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    py_setitem(fields, "n_features_in_", PythonObject(Int(_F64P(unsafe_from_address=call.dst.data)[0])))
+
+
+def _achi2_state(fields: PythonObject, b: PythonObject, plan: MemberPlan) raises -> Int:
+    var source = py_get(fields, PythonObject("n_features_in_"))
+    if source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var features: List[Float64] = [Float64(Int(py=py_call(b.int, source)))]
+    var call = member_new(plan)
+    try:
+        call.block = AC_BLOCK_FEATURES
+        call.x = MemberMatrix(Int(features.unsafe_ptr()), 1, 1, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = features^
+    return call.state
+
+
 def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
@@ -800,6 +848,8 @@ def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: P
         _kpca_pack(fields, plan, state)
     elif plan.kind == XNEIGHBORS_KIND_PCS:
         _pcs_pack(fields, context, plan, state)
+    elif plan.kind == XNEIGHBORS_KIND_ACHI2:
+        _achi2_pack(fields, plan, state)
     else:
         _nc_pack(fields, context, b, plan, state)
 
@@ -816,4 +866,6 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
         return _kpca_state(fields, context, b, plan)
     if plan.kind == XNEIGHBORS_KIND_PCS:
         return _pcs_state(fields, context, plan)
+    if plan.kind == XNEIGHBORS_KIND_ACHI2:
+        return _achi2_state(fields, b, plan)
     return _nc_state(fields, context, plan)

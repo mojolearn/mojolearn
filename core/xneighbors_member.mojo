@@ -10,7 +10,8 @@ route resolved to (`x_neighbors_native_api_v1`, the `XnDriver` entry every
 x_neighbors door uses). No kernel is touched.
 
 Kinds (MEMBER_OP_NEW word 0): 0 NearestCentroid, 1 LocalOutlierFactor,
-2 OneClassSVM, 3 KernelPCA, 4 PolynomialCountSketch. The other classes of the family are not published yet
+2 OneClassSVM, 3 KernelPCA, 4 PolynomialCountSketch, 5 AdditiveChi2Sampler.
+The other classes of the family are not published yet
 (MEMBER-ABI-V2.md family 12). OUTPUTS with no state answers from the kind
 word and `call.classes` (NearestCentroid: proba `classes`, decision 1 for two
 classes else `classes`, predict 1; the outlier detectors: 1 column).
@@ -115,6 +116,17 @@ rows x n_components (host, dense). OUTPUTS answers n_components with no
 state. Blocks: 64 indexHash int32 degree x augmented, 65 bitHash int32 degree
 x augmented, 66 n_features_in (float64 1 x 1).
 
+AdditiveChi2Sampler (kind 5). RUN: neighbors/chi2_run.mojo `achi2_fit_run`
+(the negative-entry refusal), `achi2_interval_check`, `achi2_transform_run`
+over the x_neighbors entry, as bindings/neighbors_semi_native_door.mojo runs
+them. MEMBER_OP_NEW parameters (count 5): [0] kind 5, [1] sample_steps, [2]
+the interval (given, or the steps' default), [3] interval valid (0: refused
+at fit, as the estimator refuses), [4] the image's device scan (kfeat bit 1).
+Views: X float32 rows x features (host, dense; sparse input is not a
+member) -> float32 rows x features * (2 steps - 1). OUTPUTS answers from
+`x.cols` with no state. Block: 64 n_features_in (float64 1 x 1). A fit reads
+X only during the call.
+
 LIFETIME: a NearestCentroid fit reads X and y only during the call (its
 fitted state is the centroids it computes); nothing of X is kept or copied.
 A LocalOutlierFactor fit BORROWS X as its fitted rows, as the estimator's
@@ -157,6 +169,8 @@ from core.ocsvm_resident_api import OcResidentDriver
 from core.ocsvm_plan import oc_take_rows_into
 from core.kpca_native_api import KPCAEigenRequest, KPCANativeDriver
 from core.pcs_native_api import PCSFitPlan, PCSNativeDriver, pcs_options, pcs_feature_width
+from neighbors.chi2_run import Achi2FitRequest, Achi2Request, achi2_fit_run, achi2_interval_check, achi2_transform_run
+from neighbors.neighbors_semi_run import xn_achi2_width
 from core.kpca_native_plan import (
     KPCAKernelOptions, KPCAFitRoute, KPCAEigenRoom, KPCADenseFit, KPCAFitPrepareRequest, KPCAAlphaRequest,
     KPCAQueryRequest, KPCACenteredQuery, KPCANeighborDriver,
@@ -184,7 +198,8 @@ comptime XNEIGHBORS_KIND_LOF = 1
 comptime XNEIGHBORS_KIND_OCSVM = 2
 comptime XNEIGHBORS_KIND_KERNEL_PCA = 3
 comptime XNEIGHBORS_KIND_PCS = 4
-comptime XNEIGHBORS_KIND_COUNT = 5
+comptime XNEIGHBORS_KIND_ACHI2 = 5
+comptime XNEIGHBORS_KIND_COUNT = 6
 comptime NC_BLOCK_CENTROIDS = MEMBER_BLOCK_FAMILY
 comptime NC_BLOCK_STD = MEMBER_BLOCK_FAMILY + 1
 comptime NC_BLOCK_DEVIATIONS = MEMBER_BLOCK_FAMILY + 2
@@ -212,6 +227,7 @@ comptime PC_BLOCK_INDEX_HASH = MEMBER_BLOCK_FAMILY
 comptime PC_BLOCK_BIT_HASH = MEMBER_BLOCK_FAMILY + 1
 comptime PC_BLOCK_FEATURES = MEMBER_BLOCK_FAMILY + 2
 comptime _PC_BLOCKS = 3
+comptime AC_BLOCK_FEATURES = MEMBER_BLOCK_FAMILY
 #: OneClassSVM gamma words (MEMBER_OP_NEW word 5).
 comptime OC_GAMMA_VALUE = 0
 comptime OC_GAMMA_SCALE = 1
@@ -313,6 +329,11 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
     var pc_augmented: Int
     var pc_indices: List[Int32]
     var pc_signs: List[Int32]
+    # AdditiveChi2Sampler words (kind 5); its fitted state is the width.
+    var ac_steps: Int
+    var ac_interval: Float64
+    var ac_valid: Bool
+    var ac_scan: Bool
 
     def __init__(out self):
         self.generation = 0
@@ -395,6 +416,10 @@ struct XNeighborsMemberSlot(Copyable, Movable, Defaultable):
         self.pc_augmented = 0
         self.pc_indices = List[Int32]()
         self.pc_signs = List[Int32]()
+        self.ac_steps = 2
+        self.ac_interval = 0.5
+        self.ac_valid = True
+        self.ac_scan = False
 
 
 struct XNeighborsMemberStore(Defaultable, Movable):
@@ -509,6 +534,11 @@ def _mint(words: _F64P, count: Int) raises -> Int:
             slot[].pc_coef0 = words[4]
             slot[].pc_seed = Int(words[5])
             slot[].pc_old_items = words[6] != 0.0
+        elif slot[].kind == XNEIGHBORS_KIND_ACHI2:
+            slot[].ac_steps = Int(words[1])
+            slot[].ac_interval = words[2]
+            slot[].ac_valid = words[3] != 0.0
+            slot[].ac_scan = words[4] != 0.0
         else:
             slot[].k = Int(words[1])
             slot[].novelty = words[2] != 0.0
@@ -553,6 +583,8 @@ def _name(slot: _SlotPtr) -> String:
         return String("KernelPCA")
     if slot[].kind == XNEIGHBORS_KIND_PCS:
         return String("PolynomialCountSketch")
+    if slot[].kind == XNEIGHBORS_KIND_ACHI2:
+        return String("AdditiveChi2Sampler")
     return String("LocalOutlierFactor")
 
 
@@ -1452,6 +1484,83 @@ def _pc_import(slot: _SlotPtr, call: _CallPtr) raises:
     slot[].fitted = True
 
 
+# ------------------------------------------------------------ AdditiveChi2Sampler
+
+
+def _ac_fit(slot: _SlotPtr, call: _CallPtr) raises:
+    """`AdditiveChi2Sampler.fit` (bindings/neighbors_semi_native_door.mojo
+    `_achi2_fit`): the negative-entry refusal (the device scan when the image
+    has it), the interval check, the width. fit_transform: then the map of the
+    same rows without the transform's second scan (the door's `checked`)."""
+    var estimator = _name(slot)
+    _whole(call, estimator)
+    if call[].weights.rows > 0:
+        raise Error("TypeError: a " + estimator + " member fits no sample_weight")
+    var transformed = call[].fit_output == MEMBER_OP_TRANSFORM
+    if call[].fit_output != 0 and not transformed:
+        member_unsupported(estimator, call[].fit_output)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var count = call[].x.rows * call[].x.cols
+    slot[].fitted = False
+    achi2_fit_run(XnDriver(call[].route.entry.call),
+        Achi2FitRequest(call[].x.data, count, count != 0 and slot[].ac_scan))
+    achi2_interval_check(slot[].ac_valid)
+    slot[].features = call[].x.cols
+    slot[].rows = call[].x.rows
+    slot[].fitted = True
+    if transformed:
+        _ac_transform(slot, call, True)
+
+
+def _ac_transform(slot: _SlotPtr, call: _CallPtr, checked: Bool) raises:
+    """`_achi2_transform` of a dense X: rows x features * (2 steps - 1) float32."""
+    var estimator = _name(slot)
+    if not slot[].fitted:
+        raise Error("NotFittedError: mojolearn: call fit before transform")
+    _whole(call, estimator)
+    _dense(call[].x, MEMBER_F32, "X", estimator)
+    var rows = call[].x.rows
+    var features = call[].x.cols
+    var width = xn_achi2_width(features, slot[].ac_steps)
+    _dense(call[].dst, MEMBER_F32, "the transform buffer", estimator)
+    if call[].dst.rows != rows or call[].dst.cols != width:
+        raise Error("ValueError: the transform buffer holds " + String(width) + " columns per row of X")
+    _ = achi2_transform_run(XnDriver(call[].route.entry.call), Achi2Request(call[].x.data, call[].dst.data, rows,
+        features, slot[].ac_steps, slot[].ac_interval, slot[].ac_valid, checked, False))
+
+
+def _ac_export(slot: _SlotPtr, call: _CallPtr) raises:
+    if not slot[].fitted:
+        raise Error("NotFittedError: this AdditiveChi2Sampler member is not fitted yet")
+    var block = call[].block
+    if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
+        if block != 0:
+            raise Error("member ABI: an AdditiveChi2Sampler member has one fitted block")
+        block = AC_BLOCK_FEATURES
+    if block != AC_BLOCK_FEATURES:
+        raise Error("member ABI: an AdditiveChi2Sampler member has no fitted block " + String(block))
+    slot[].offset_word[0] = Float64(slot[].features)
+    call[].dst = MemberMatrix(Int(slot[].offset_word.unsafe_ptr()), 1, 1, MEMBER_F64)
+    call[].block = block
+    call[].out_cols = 1
+
+
+def _ac_import(slot: _SlotPtr, call: _CallPtr) raises:
+    var estimator = _name(slot)
+    if call[].block == AC_BLOCK_FEATURES:
+        _dense(call[].x, MEMBER_F64, "n_features_in_", estimator)
+        if call[].x.rows * call[].x.cols != 1:
+            raise Error("member ABI: an AdditiveChi2Sampler feature count is one float64 word")
+        slot[].fitted = False
+        slot[].features = Int(_F64P(unsafe_from_address=call[].x.data)[0])
+    elif call[].block != 0 or (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        raise Error("member ABI: an AdditiveChi2Sampler member has no fitted block " + String(call[].block))
+    if (call[].flags & MEMBER_IMPORT_DONE) == 0:
+        return
+    achi2_interval_check(slot[].ac_valid)
+    slot[].fitted = True
+
+
 # ------------------------------------------------------------ dispatch
 
 
@@ -1474,7 +1583,8 @@ def _capabilities(slot: _SlotPtr) -> Int:
         return _LOF_NOVELTY if slot[].novelty else _LOF_OUTLIER
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         return _OCSVM
-    if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA or slot[].kind == XNEIGHBORS_KIND_PCS:
+    if (slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA or slot[].kind == XNEIGHBORS_KIND_PCS
+            or slot[].kind == XNEIGHBORS_KIND_ACHI2):
         return _TRANSFORMER
     return _NC_EUCLIDEAN if slot[].euclidean else _NC_MANHATTAN
 
@@ -1511,6 +1621,10 @@ def _new(call: _CallPtr) raises:
             raise Error("member ABI: a PolynomialCountSketch member takes seven parameters (kind, degree, "
                 + "n_components, gamma, coef0, seed word, old_items)")
         _ = pcs_options(Int(words[1]), Int(words[2]))
+    elif kind == XNEIGHBORS_KIND_ACHI2:
+        if call[].param_count != 5:
+            raise Error("member ABI: an AdditiveChi2Sampler member takes five parameters (kind, sample_steps, "
+                + "interval, interval valid, device scan)")
     else:
         if call[].param_count != 7:
             raise Error("member ABI: a LocalOutlierFactor member takes seven parameters (kind, n_neighbors, "
@@ -1560,6 +1674,12 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
         if asked == XNEIGHBORS_KIND_KERNEL_PCA:
             # The kept component count is chosen by the fit (rank, zero eigenvalues).
             raise Error("member ABI: a KernelPCA member's transform width is chosen by its fit; ask a fitted state")
+        if asked == XNEIGHBORS_KIND_ACHI2:
+            if call[].param_count != 5:
+                raise Error("member ABI: an AdditiveChi2Sampler member takes five parameters")
+            call[].classes = 0
+            call[].out_cols = xn_achi2_width(call[].x.cols, Int(_F64P(unsafe_from_address=call[].params)[1]))
+            return 0
         if asked == XNEIGHBORS_KIND_PCS:
             if call[].param_count != 7:
                 raise Error("member ABI: a PolynomialCountSketch member takes seven parameters")
@@ -1580,7 +1700,23 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
             call[].classes = 0
             call[].out_cols = slot[].pc_components
             return 0
+        if slot[].kind == XNEIGHBORS_KIND_ACHI2:
+            call[].classes = 0
+            call[].out_cols = xn_achi2_width(slot[].features if slot[].fitted else call[].x.cols, slot[].ac_steps)
+            return 0
         _outputs(slot[].kind, slot[].classes if slot[].fitted else call[].classes, call)
+        return 0
+    if slot[].kind == XNEIGHBORS_KIND_ACHI2:
+        if operation == MEMBER_OP_FIT:
+            _ac_fit(slot, call)
+        elif operation == MEMBER_OP_TRANSFORM:
+            _ac_transform(slot, call, False)
+        elif operation == MEMBER_OP_EXPORT:
+            _ac_export(slot, call)
+        elif operation == MEMBER_OP_IMPORT:
+            _ac_import(slot, call)
+        else:
+            member_unsupported(_name(slot), operation)
         return 0
     if slot[].kind == XNEIGHBORS_KIND_PCS:
         if operation == MEMBER_OP_FIT:

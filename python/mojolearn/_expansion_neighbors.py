@@ -1162,6 +1162,10 @@ class AdditiveChi2Sampler(_XNeighbors):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 5)
+
     def __init__(self, *, sample_steps=2, sample_interval=None, numeric_mode=None, device=None):
         self.sample_steps = sample_steps
         self.sample_interval = sample_interval
