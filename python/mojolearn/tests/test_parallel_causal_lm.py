@@ -226,7 +226,7 @@ def test_native_owners_match_independent_blocks_and_continue_states(tmp_path, mo
         want = np.concatenate((np.asarray(ids), np.stack(continuations, axis=1)), axis=1)
         bits(checked(split.generate, ids, 4), want)
         actual_params = checked(split.parameters)
-        expected_params = plain.parameters()
+        expected_params = dict(plain.named_parameters())
         assert set(actual_params) == set(expected_params)
         for key in actual_params:
             bits(actual_params[key], expected_params[key])
@@ -267,7 +267,7 @@ def test_packed_checkpoint_weights_keep_native_owner_semantics(tmp_path, monkeyp
         bits(checked(split.forward, ids), block_reference(plain, ids))
         assert all(block.weight_format == weight_format for block in split.blocks)
         for key, value in checked(split.parameters).items():
-            bits(value, plain.parameters()[key])
+            bits(value, dict(plain.named_parameters())[key])
 
 
 def test_analytic_residual_head_oracle_and_ephemeral_cleanup(tmp_path, monkeypatch):

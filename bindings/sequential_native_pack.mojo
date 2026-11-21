@@ -6,13 +6,15 @@ from bindings.native_loaded_module_door import NativeModules
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_setitem, py_item
+from bindings.py_balanced import py_call, py_setitem, py_item, py_type
 
 
 from bindings.sequential_description_unpack import sequential_fields, sequential_append
 from bindings.sequential_description_pack import sequential_add, sequential_compile, sequential_program, sequential_table, sequential_layers, _shape
 from bindings.sequential_execution_pack import sequential_entries, sequential_fit, sequential_forward, sequential_predict, sequential_targets
-from bindings.sequential_weights_pack import sequential_load_weights
+from bindings.sequential_weights_pack import sequential_load_weights, sequential_export_weights
+from bindings.torch_to_unpack import torch_to_device
+from bindings.py_model_records import bump_model_generation
 from bindings.sequential_checkpoint_door import sequential_save, sequential_load_checkpoint
 from providers.python.autograd_program_arrays_pyapi_door import initialize_program_arrays
 from bindings.sequential_admission_door import sequential_admit
@@ -30,6 +32,8 @@ from bindings.sequential_keys_unpack import (
     SEQUENTIAL_OPN_LAYERS,
     SEQUENTIAL_OPN_LOAD_CHECKPOINT,
     SEQUENTIAL_OPN_VENDOR_USED,
+    SEQUENTIAL_OPN_EXPORT_WEIGHTS,
+    SEQUENTIAL_OPN_TO,
     SEQUENTIAL_OPN_LOAD_WEIGHTS,
     SEQUENTIAL_OPN_PREDICT,
     SEQUENTIAL_OPN_PREDICT_PROBA,
@@ -101,6 +105,27 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             # `device="cpu"` model, this installation's vendor otherwise.
             # A metadata read: resolves the route like any first operation.
             result = py_item(sequential_entries(model, context), nk[].k__sequential_checked_vendor)
+        elif operation == SEQUENTIAL_OPN_EXPORT_WEIGHTS:
+            # args[0]: 0 state_dict, 1 parameters, 2 named_parameters
+            result = sequential_export_weights(mods, model, Int(py=args[0]), context)
+        elif operation == SEQUENTIAL_OPN_TO:
+            # `to(device, dtype)`: the arguments admitted by the shared UNPACK
+            # (bindings/torch_to_unpack.mojo), the device word by the one
+            # device rule, as the constructor admits it. params_ is a host
+            # array on every route, so only the route is forgotten: the next
+            # operation resolves it on the new device (as `__init__` does).
+            var device = torch_to_device(mods, args[0], args[1], "Sequential")
+            result = model
+            if device is not None:
+                var b = native_loaded_module("builtins")
+                var fields = sequential_fields(model)
+                var held = py_item(fields, nk[].k_device)
+                if not (held is not None and py_type(held) is b.str and py_type(device) is b.str
+                        and String(held) == String(device)):
+                    sequential_device_admit(device, context)
+                    _ = bump_model_generation(model)
+                    sequential_route_clear(model)
+                    py_setitem(fields, nk[].k_device, device)
         else:
             raise Error("Sequential: unknown native operation")
         return result.steal_data()

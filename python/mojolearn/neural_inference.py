@@ -339,9 +339,14 @@ class SambaInference:
             "inference_checkpoint", (cls, path), _native_samba_bridge.CONTEXT)
 
     def parameters(self):
-        """An independent copy of every weight, keyed by registry name."""
+        """An iterator over independent copies of the weights, in registry order."""
         return _native_samba_bridge.RUNTIME.samba_native_call(
-            "inference_parameters", (self,), _native_samba_bridge.CONTEXT)
+            "inference_parameters", (self, 1), _native_samba_bridge.CONTEXT)
+
+    def named_parameters(self):
+        """An iterator over ``(name, array)`` pairs of independent weight copies, in registry order."""
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "inference_parameters", (self, 2), _native_samba_bridge.CONTEXT)
 
     def forward(self, inputs, state=None, *, lengths=None):
         """Logits for token ids; also available as `logits` and by calling the model.

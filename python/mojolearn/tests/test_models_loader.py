@@ -416,7 +416,7 @@ def test_load_llama_checkpoint_shapes_names_and_greedy_generate_is_deterministic
             assert blk.d_model == 32 and blk.n_heads == 2 and blk.n_kv_heads == 1 and blk.head_dim == 16
             assert blk.intermediate == 64 and blk.weight_format == "float32"
         assert len(lm.blocks) == 2 and lm.blocks[0] is lm.blocks[0]  # built once, kept
-        params = lm.parameters()
+        params = dict(lm.named_parameters())
         assert "model.layers.1.self_attn.k_proj.weight" in params and params["model.layers.1.self_attn.k_proj.weight"].shape == (16, 32)
         assert "lm_head.weight" in params and params["model.embed_tokens.weight"].shape == (64, 32)
         ids = Array.from_list([[1, 2, 3, 4, 5], [9, 8, 7, 6, 5]], "<i4")

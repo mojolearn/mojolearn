@@ -125,7 +125,7 @@ def test_cpu_samba_checkpoint_load_matches_host_weight_recipe(tmp_path, monkeypa
     else:
         reference_format.save(path, state)
     config = training_model.config
-    weights = training_model.parameters()
+    weights = dict(training_model.named_parameters())
     layer = {name: weights[f"layers.0.{name}"] for name, _ in config.block_shapes("attention")}
     blocks = [inference.TransformerBlockInference(layer, n_heads=2, n_kv_heads=1)]
     expected = _reference(config, weights, blocks, inputs)

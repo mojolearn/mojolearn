@@ -72,7 +72,7 @@ def test_samba_save_checkpoint_round_trip_and_missing_directory(tmp_path):
 def test_samba_inference_parameters_and_allocate_state():
     config, weights = _samba()
     inference = SambaInference(config, weights)
-    params = inference.parameters()
+    params = dict(inference.named_parameters())
     assert sorted(params) == sorted(weights)
     for name, value in weights.items():
         np.testing.assert_array_equal(np.asarray(params[name]), value)
