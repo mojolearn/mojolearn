@@ -3661,18 +3661,13 @@ def _hash_scalar(mut hash: Sha256, value: PythonObject) raises:
 
 
 def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
-    """The checkpoint fingerprint of a captured model: the model owner's word
-    (continuation 4), hashed at the first snapshot or resume of the model
-    generation and kept (before: every weight hashed again at every snapshot
-    and every resume). A parallel model's owner is built per call, so it is
-    hashed per call, as before."""
-    var held = causal_model_owner(mods, model)
-    var owner = held.downcast_value_ptr[CausalModelOwner]()
-    if owner[].fingerprint == "":
-        owner[].fingerprint = String(_fingerprint_hash(mods, model))
-    var windowed_fingerprint = PythonObject(owner[].fingerprint)
-    _ = held
-    return windowed_fingerprint
+    """The checkpoint fingerprint of a captured model: the hash of its settings
+    and every weight, taken again at every snapshot and every resume (once per
+    call, off the token path). It is never kept: the weights are the caller's
+    Arrays and can be edited in place without changing the model's identity
+    key, so a kept word could accept a checkpoint the edited weights no longer
+    match (fx-audit 21)."""
+    return _fingerprint_hash(mods, model)
 
 
 def _fingerprint_hash(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
