@@ -42,7 +42,10 @@ def _none_f(n: Int = 0) -> List[Float64]:
 
 def _call(key: EntryRef, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
     # `entry_ref_op`: a ref marked GIL-free (a member's worker) says so with
-    # the operation (core/entry_table.mojo, lane fx-gil).
+    # the operation (core/entry_table.mojo, lane fx-gil). NOT IN USE YET: the
+    # forest images do not read the bit (their fits and host predicts still
+    # release the GIL inside and their registries are serialized by the GIL),
+    # so no caller marks a forest ref and this adds 0 to every operation.
     return entry_ref_call(key, entry_ref_op(key, op), addrs, ints, _none_f(len(ints)))
 
 
