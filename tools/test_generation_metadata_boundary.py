@@ -63,7 +63,9 @@ def test_snapshot_is_lazy_and_scoped_to_one_public_operation():
     capture = run.index('snapshot = GenerationOperationSnapshot(')
     assert capture > run.index('py_call(parallel,')
     assert capture > run.index('return logits')
-    assert run.index('_state(mods, model, state, b, l)') < capture
+    # dw-causal (2026-11-21): the state check reads the model owner's typed words
+    assert run.index('_state(mods, words, model, state, b, l)') < capture
+    assert 'model.max_positions' not in function('_positions')
     read = function('_read')
     declaration = 'var snapshot: Optional[GenerationOperationSnapshot] = None'
     assert read.index('try:') < read.index(declaration) < read.index('while wrote')

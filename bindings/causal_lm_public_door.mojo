@@ -433,7 +433,7 @@ def _block_at(mut mods: NativeModules, model: PythonObject, blocks: List[PythonO
 def _positions(words: CausalModelWords, state: PythonObject, length: Int) raises:
     # UNPACK of the position check: the state's two words. The rule and the
     # model's limit are typed (core/causal_owner.mojo `causal_positions_admit`;
-    # before: `model.max_positions` read twice from the model record per call).
+    # before: the model record's position limit read twice per call).
     if state is None:
         causal_positions_admit(words, False, 0, 0, length)
     else:
