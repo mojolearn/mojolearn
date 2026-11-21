@@ -52,29 +52,30 @@ def test_binding_admits_once_and_runs_every_step_in_one_call():
     # lane byte-lm-sessions-native: the resident session runs through the
     # image's native session entry (core/byte_lm_entry_table_sessions.mojo)
     # 39a067f5c7: the session owner resolves the entry once at construction; every step calls through it
-    session = native.split('def _session_call(')[1].split('\ndef ')[0]
     # lane dw-neural-c: the typed call is the door's RUN file; the door releases or keeps the GIL around it
     run = _read('bindings/byte_lm_trainer_native_run.mojo')
-    assert 'var entry = session.entry' in run and run.count('byte_lm_resident_run(entry, handle, operation,') == 1
+    session = run.split('def _session_run(')[1].split('\ndef ')[0]
+    assert 'var entry = lease[].entry' in session and run.count('byte_lm_resident_run(entry, handle, operation,') == 1
     assert 'std.python' not in run and 'PythonObject' not in run
-    assert session.count('byte_lm_run_resident(native[], operation,') == 2   # GIL released / held
-    assert 'native_loaded_module(' not in session and 'py_get(' not in session
+    # lane byte-state: the trainer state is one native owner; the door leases it once per operation
+    # (one generation check) and the admit-once records of the Python-held state are gone
     entry = native.split('def byte_lm_train_steps(')[1].split('def _logits_input(')[0]
     assert entry.count('py_call(lock.acquire)') == 1
-    assert entry.count('byte_state_admit(') == 1 and entry.count('_admitted_shape(') == 1
-    run = native.split('def _run_steps(')[1].split('def byte_lm_train_steps(')[0]
-    assert 'while k < n_steps' not in run
-    assert run.count('_run_resident(mods, fields, stack, shape, binding, context, True, n_steps, True)') == 1
-    resident = native.split('def _run_resident(')[1].split('def _run_stateless(')[0]
+    assert entry.count('_lease(fields)') == 1
+    assert 'byte_state_admit(' not in native and '_admitted_shape(' not in native and 'fields["_state"]' not in native
+    steps = native.split('def _run_steps(')[1].split('def byte_lm_train_steps(')[0]
+    assert 'while k < n_steps' not in steps
+    assert steps.count('_run_resident(mods, s, stack, shape, context, True, n_steps, True)') == 1
+    resident = run.split('def byte_trainer_step(')[1].split('def byte_trainer_export(')[0]
     assert '_steps_reconcile(' in resident
     assert 'if operation == "train_steps":' in native
 
 
 def test_step_descriptors_are_native_words():
-    native = _read('bindings/byte_lm_trainer_native_door.mojo')
-    resident = native.split('def _run_resident(')[1].split('def _run_stateless(')[0]
-    assert '_native_execute(fields, 1, a,' in resident
-    assert 'var a = List[Int]()' in resident
+    run = _read('bindings/byte_lm_trainer_native_run.mojo')
+    resident = run.split('def byte_trainer_step(')[1].split('def byte_trainer_export(')[0]
+    assert '_session_run(s, 1, a,' in resident
+    assert 'var a = List[Int](capacity=8 + len(named))' in resident
 
 
 def test_teardown_switch_is_read_once():

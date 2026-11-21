@@ -50,8 +50,8 @@ from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu
 from bindings.parallel_neighbor_worker_door import parallel_neighbor_worker, parallel_ivf_admit, neighbor_radius_rows
 from bindings.family_common_pack import family_call
 from bindings.native_process_pool_door import (
-    process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
-    process_pool_close,
+    process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
+    process_pool_create, process_pool_map, process_pool_close, process_pool_closed, process_pool_pids, process_pool_devices,
 )
 from bindings.native_transport_door import transport_close
 from core.entry_table import EntryRef
@@ -850,8 +850,7 @@ def _reference_query(args: PythonObject) raises -> PythonObject:
     if py_type(args[4]) is not b.bool:
         raise Error("TypeError: return_distance must be a bool")
     var cell_limit = reference_cell_limit(n, d)
-    var devices = py_item(pool, nk[].k_devices)
-    var n_devices = len(devices)
+    var n_devices = len(process_pool_devices(pool))
     var width_obj = py_item(holder, nk[].k_reference_rows_per_shard)
     var width_given = width_obj is not None
     var width_exact = width_given and py_type(width_obj) is b.int
@@ -1009,7 +1008,7 @@ def _release_reference(pool: PythonObject, tokens: PythonObject, workers: Int) r
     worker r % workers, where it was stored); a failed release closes the
     pool, as `_release_query_state` does."""
     var nk = parallel_keys()
-    if Bool(py=py_item(pool, nk[].k_closed)):
+    if process_pool_closed(pool):
         return
     var b = shard_b()
     try:
@@ -1025,22 +1024,22 @@ def _release_reference(pool: PythonObject, tokens: PythonObject, workers: Int) r
 
 
 def _pool_pids(pool: PythonObject) raises -> PythonObject:
+    # PACK of the record's process ids (the prepared-registry slot keeps them
+    # as a Python list beside the pool).
     var b = shard_b()
     var pids = b.list()
-    var nk = parallel_keys()
-    var workers = py_item(pool, nk[].k_workers)
-    for i in range(len(workers)):  # driver-loop: over the pool's worker processes
-        _ = py_call(pids.append, py_item(workers[i], nk[].k_pid))
+    var words = process_pool_pids(pool)
+    for i in range(len(words)):  # driver-loop: over the pool's worker processes
+        _ = py_call(pids.append, PythonObject(words[i]))
     return pids
 
 
 def _pool_pids_same(recorded: PythonObject, pool: PythonObject) raises -> Bool:
-    var nk = parallel_keys()
-    var workers = py_item(pool, nk[].k_workers)
+    var workers = process_pool_pids(pool)
     if len(workers) != len(recorded) or len(workers) == 0:
         return False
     for i in range(len(workers)):  # driver-loop: over the pool's worker processes
-        if Int(py=py_item(workers[i], nk[].k_pid)) != Int(py=recorded[i]):
+        if workers[i] != Int(py=recorded[i]):
             return False
     return True
 
@@ -1049,7 +1048,7 @@ def _release_query_state(pool: PythonObject, token: String, name: PythonObject, 
     # Best-effort release of a stored query snapshot on every worker; a
     # failed release closes the pool, exactly as the per-query release did.
     var nk = parallel_keys()
-    if Bool(py=py_item(pool, nk[].k_closed)):
+    if process_pool_closed(pool):
         return
     var b = shard_b()
     var releases = b.list()
@@ -1137,7 +1136,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     var index_object = PythonObject(None)
     if index is not None and py_contains(fields, PythonObject("_index")) and not py_contains(state, PythonObject("_index")):
         index_object = index
-    var devices = py_item(pool, nk[].k_devices)
+    var devices = process_pool_devices(pool)
     var workers = len(devices)
     var name = py_type(model).__name__
     # Resident fitted state: the workers keep the snapshot stored under the
@@ -1165,7 +1164,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
     var driver = args[0]
     var resident = prepared_get(mods, _QUERY_RESIDENT_SLOT, driver)
     var token = String()
-    if (resident is not None and resident[1] is pool and not Bool(py=py_item(pool, nk[].k_closed))
+    if (resident is not None and resident[1] is pool and not process_pool_closed(pool)
             and _pool_pids_same(resident[2], pool) and prepared_key_same(resident[3], key)):
         token = String(resident[0])
     else:
@@ -1219,7 +1218,7 @@ def _parallel_queries(args: PythonObject) raises -> PythonObject:
         var record = b.dict()
         py_setitem(record, nk[].k_start, ranges[2 * r])
         py_setitem(record, nk[].k_end, ranges[2 * r + 1])
-        py_setitem(record, nk[].k_device, devices[r % workers])
+        py_setitem(record, nk[].k_device, PythonObject(devices[r % workers]))
         _ = py_call(record.update, results[r][1])
         _ = py_call(diagnostics.append, record)
     var output = _join(outputs, String(method) == "radius_neighbors", context)
@@ -1386,7 +1385,7 @@ def _ivf_close(obj: PythonObject) raises:
     var nk = parallel_keys()
     py_setitem(own, nk[].k__closed, True)
     var pool = py_get(own, PythonObject("_pool"), PythonObject(None))
-    if pool is not None and not Bool(py=py_item(pool, nk[].k_closed)):
+    if pool is not None and not process_pool_closed(pool):
         process_pool_close(pool)
 
 
@@ -1511,17 +1510,15 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
 
 def shard_worker(argv: PythonObject) raises:
     var socket = process_worker_connect(argv)
-    var nk = parallel_keys()
     try:
         while True:  # driver-loop: over native local shard requests
-            var request = process_worker_next(socket)
-            if request is None:
+            var turn = process_worker_next(socket)
+            if not turn.open:
                 break
-            var sequence = Int(py=py_get(request[0], nk[].k_sequence, -1))
             try:
-                process_send(socket, "result", sequence, shard_worker_dispatch(request[1]))
+                process_worker_reply(socket, turn.sequence, shard_worker_dispatch(turn.value))
             except error:
-                process_send(socket, "error", sequence, PythonObject(String(error)))
+                process_worker_refuse(socket, turn.sequence, String(error))
     except error:
         transport_close(socket)
         raise error^
@@ -1586,7 +1583,7 @@ def parallel_shard_call(operation: Int, name: PythonObject, args: PythonObject) 
         # no pool: close is safe and idempotent there, as _ivf_close is
         # (cpu-surface-defects, 2026-11-16).
         var pool = py_get(py_fields(args[0]), PythonObject("_pool"), PythonObject(None))
-        if pool is not None and not Bool(py=py_item(pool, nk[].k_closed)):
+        if pool is not None and not process_pool_closed(pool):
             process_pool_close(pool)
         return PythonObject(None)
     if operation == PARALLEL_SHARD_OPN_IVF_INIT:

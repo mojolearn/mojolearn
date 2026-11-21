@@ -2725,6 +2725,16 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     py_setitem(fields, nk[].k_bias_, PythonObject(classical_f64(bias, 0)))
     py_setitem(fields, nk[].k_loss_curve_, PythonObject(None))
     py_setitem(fields, nk[].k_test_loss_curve_, PythonObject(None))
+    # lane cat-ctr: the category map of a model fitted with cat_features
+    # (the words of gbdt/data/category_map.mojo, as saved). A file without
+    # the member is a model that reads dense codes, as before. The map is
+    # checked against the fitted width at the first predict
+    # (`category_block_columns`), which refuses a corrupt one by name.
+    var category_key = PythonObject("category_map")
+    var category_map = PythonObject(None)
+    if py_contains(arrays, category_key):
+        category_map = _archive_exact(arrays, "category_map", "<i8", context)
+    py_setitem(fields, PythonObject("category_map_"), category_map)
     return model
 
 

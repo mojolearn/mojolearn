@@ -26,6 +26,7 @@ from neighbors.knn_imputer_run import (
     ImpFitRequest, ImpTransformRequest, imp_fit_run, imp_transform_run, imp_result_columns,
 )
 from bindings.admitted_family_door import admit_family
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, prepared_drop, prepared_key_add, prepared_key_same
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
@@ -509,7 +510,8 @@ struct _NcFitOperands(Movable):
         self.request = request.copy()
 
 
-def _nc_fit_unpack(fields: PythonObject, args: PythonObject, context: PythonObject) raises -> _NcFitOperands:
+def _nc_fit_unpack(fields: PythonObject, args: PythonObject, context: PythonObject,
+                   label_context: PythonObject) raises -> _NcFitOperands:
     """UNPACK of NearestCentroid.fit: parameters, rows, label codes, the
     priors' kind (given priors cast to float64) and the four result arrays."""
     var b = _b()
@@ -519,7 +521,7 @@ def _nc_fit_unpack(fields: PythonObject, args: PythonObject, context: PythonObje
     var x = _f32(args[1], context)
     var n = _rows(x)
     var d = _cols(x)
-    var encoded = classical_encode_labels(args[2], context)
+    var encoded = classical_encode_labels(args[2], label_context)
     var classes = encoded.classes
     var lab = encoded.codes
     nc_check_label_rows(_size(lab), n)
@@ -558,7 +560,9 @@ def _nc_fit_unpack(fields: PythonObject, args: PythonObject, context: PythonObje
 def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     """NearestCentroid.fit: UNPACK, the typed RUN with the GIL released, PACK."""
     var fields = py_fields(model)
-    var call = _nc_fit_unpack(fields, args, context)
+    # The label steps run on the estimator's device (labels_scope), read once.
+    var label_context = labels_scope(model, context)
+    var call = _nc_fit_unpack(fields, args, context, label_context)
     var connection = NcConnection(args[0])
     var plan = NcFitPlan(call.request.rows, call.request.features, call.request.classes)
     var empirical = call.request.priors == NC_PRIORS_EMPIRICAL
@@ -569,7 +573,7 @@ def _nc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     if empirical:
         # Empirical priors are the label family's ratio step (mode 1:
         # Float64(count) / Float64(n)), entered through its own boundary.
-        _ = labels_class_ratio_f64(context, Int(plan.wide_counts.unsafe_ptr()), call.request.classes,
+        _ = labels_class_ratio_f64(label_context, Int(plan.wide_counts.unsafe_ptr()), call.request.classes,
                                    call.request.rows, 1, call.request.prior)
     # The priors are published before the finite and variance refusals: a
     # refused fit leaves `class_prior_` set, as it always did.
@@ -623,7 +627,10 @@ def _nc_query_unpack(fields: PythonObject, q: PythonObject, euclidean: Bool,
 
 
 def _nc_predict_values(model: PythonObject, binding: PythonObject, source: PythonObject,
-                       context: PythonObject, labels: PythonObject) raises -> PythonObject:
+                       context: PythonObject, labels: PythonObject,
+                       label_context: PythonObject) raises -> PythonObject:
+    # `label_context`: the estimator's label scope (labels_scope), read once
+    # by the public operation and shared by predict's decode and score.
     var fields = py_fields(model)
     var q = _f32(source, context)
     var classes = labels if labels is not None else classifier_label_list(family_field(fields, "classes_"), context)
@@ -638,14 +645,14 @@ def _nc_predict_values(model: PythonObject, binding: PythonObject, source: Pytho
         admitted_finite_refuse(status, String(py_type(model).__name__))
     _ = call^
     _ = connection^
-    var result = _class_array(classes, codes.values, context)
+    var result = _class_array(classes, codes.values, label_context)
     _ = codes^  # code storage survives kernels, widening/gather and final label packing
     return result
 
 
 def _nc_predict(model: PythonObject, args: PythonObject, context: PythonObject,
                 labels: PythonObject) raises -> PythonObject:
-    return _nc_predict_values(model, args[0], args[1], context, labels)
+    return _nc_predict_values(model, args[0], args[1], context, labels, labels_scope(model, context))
 
 
 def _nc_scored_unpack(model: PythonObject, args: PythonObject, context: PythonObject,
@@ -706,8 +713,9 @@ def _nc_predict_log_proba(model: PythonObject, args: PythonObject, context: Pyth
 
 def _nc_score(model: PythonObject, args: PythonObject, context: PythonObject,
               labels: PythonObject) raises -> PythonObject:
-    var prediction = _nc_predict_values(model, args[0], args[1], context, labels)
-    return PythonObject(classical_accuracy(args[2], prediction, args[3], PythonObject(None), context))
+    var label_context = labels_scope(model, context)
+    var prediction = _nc_predict_values(model, args[0], args[1], context, labels, label_context)
+    return PythonObject(classical_accuracy(args[2], prediction, args[3], PythonObject(None), label_context))
 
 
 # ------------------------------------------------------------- KNNImputer

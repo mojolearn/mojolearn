@@ -140,6 +140,12 @@ class NearestNeighbors(_NumericModeMixin):
         ``metric='minkowski', p=2`` runs the Minkowski computation rather
         than switching to Euclidean; the two agree to a few units in the last
         place.
+    leaf_size : int, default 30
+        Accepted for scikit-learn compatibility; ignored. The search is exact
+        brute force, so there is no tree whose leaves it would size.
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; ignored. The work runs on the
+        device, not in host worker processes.
     numeric_mode : {'identical', 'fast'}, optional
         Numeric mode for this estimator; ``None`` uses the process default
         (`mojolearn.set_numeric_mode`). 'fast' is available on Apple GPUs
@@ -176,6 +182,12 @@ class NearestNeighbors(_NumericModeMixin):
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
 
+    # scikit-learn's no-op keywords, at the class too: a model the archive door loads
+    # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
+    # get_params reads these defaults (as `device` does).
+    leaf_size = 30
+    n_jobs = None
+
     def __init__(
         self,
         n_neighbors=5,
@@ -184,6 +196,8 @@ class NearestNeighbors(_NumericModeMixin):
         metric="euclidean",
         algorithm="brute",
         p=2,
+        leaf_size=30,
+        n_jobs=None,
         device=None,
     ):
         self.n_neighbors = n_neighbors
@@ -193,6 +207,8 @@ class NearestNeighbors(_NumericModeMixin):
         self.p = p
         self._index = None
         self.device = device
+        self.leaf_size = leaf_size
+        self.n_jobs = n_jobs
         # `used_query_tile_` is set by the first query, not here: a public
         # attribute ending in an underscore marks a fitted estimator.
 
@@ -407,6 +423,12 @@ class KNeighborsClassifier(NearestNeighbors):
         result instead.
     p : float, default 2
         As in `NearestNeighbors`.
+    leaf_size : int, default 30
+        Accepted for scikit-learn compatibility; ignored. The search is exact
+        brute force, so there is no tree whose leaves it would size.
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; ignored. The work runs on the
+        device, not in host worker processes.
     numeric_mode : {'identical', 'fast'}, optional
         As in `NearestNeighbors`. 'fast' is available on Apple GPUs only.
 
@@ -451,10 +473,13 @@ class KNeighborsClassifier(NearestNeighbors):
         metric="euclidean",
         algorithm="brute",
         p=2,
+        leaf_size=30,
+        n_jobs=None,
         device=None,
     ):
         super().__init__(
-            n_neighbors, query_tile, metric=metric, algorithm=algorithm, p=p, device=device
+            n_neighbors, query_tile, metric=metric, algorithm=algorithm, p=p,
+            leaf_size=leaf_size, n_jobs=n_jobs, device=device
         )
         self.weights = weights
         self._y_cols = None
@@ -633,6 +658,12 @@ class KNeighborsRegressor(NearestNeighbors):
         ``NearestNeighbors(algorithm='rbc').kneighbors`` instead.
     p : float, default 2
         As in `NearestNeighbors`.
+    leaf_size : int, default 30
+        Accepted for scikit-learn compatibility; ignored. The search is exact
+        brute force, so there is no tree whose leaves it would size.
+    n_jobs : int or None, default None
+        Accepted for scikit-learn compatibility; ignored. The work runs on the
+        device, not in host worker processes.
     numeric_mode : {'identical', 'fast'}, optional
         As in `NearestNeighbors`. 'fast' is available on Apple GPUs only.
 
@@ -673,10 +704,13 @@ class KNeighborsRegressor(NearestNeighbors):
         metric="euclidean",
         algorithm="brute",
         p=2,
+        leaf_size=30,
+        n_jobs=None,
         device=None,
     ):
         super().__init__(
-            n_neighbors, query_tile, metric=metric, algorithm=algorithm, p=p, device=device
+            n_neighbors, query_tile, metric=metric, algorithm=algorithm, p=p,
+            leaf_size=leaf_size, n_jobs=n_jobs, device=device
         )
         self.weights = weights
         self._y_cols = None

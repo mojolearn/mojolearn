@@ -56,7 +56,7 @@ def test_invalid_restore_preserves_live_session_and_state():
     model = _model()
     model.train_step(np.array([[1, 3, 5, 7, 9]], dtype='i4'))
     before = _detached(model.export_state())
-    session = model._native_session
+    session = model._session_info()['session_id']
     mutations = (
         lambda s: s['v'].__setitem__(0, -1),
         lambda s: s['flags'].__setitem__(0, 2),
@@ -70,7 +70,7 @@ def test_invalid_restore_preserves_live_session_and_state():
         mutate(state)
         with pytest.raises((TypeError, ValueError)):
             model.load_state_dict(state)
-        assert model._native_session is session
+        assert model._session_info()['session_id'] == session
         _same(model.export_state(), before)
 
 

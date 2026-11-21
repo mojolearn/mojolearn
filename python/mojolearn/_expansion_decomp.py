@@ -3136,7 +3136,7 @@ class EllipticEnvelope(MinCovDet):
     ----------
     offset_ : float
         Threshold on the decision function.
-    location_, covariance_, precision_, support_, dist_
+    location_, covariance_, precision_, support_, dist_, n_features_in_
         As in :class:`MinCovDet`.
 
     Raises

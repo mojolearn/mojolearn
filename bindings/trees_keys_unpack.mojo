@@ -89,6 +89,7 @@ struct TreesKeys(Defaultable, Movable):
     var k_border_count: PythonObject
     var k_border_types: PythonObject
     var k_cat_features: PythonObject
+    var k_category_map_: PythonObject
     var k_catboost_bootstrap: PythonObject
     var k_catboost_iterations: PythonObject
     var k_catboost_learning_rate: PythonObject
@@ -369,6 +370,7 @@ struct TreesKeys(Defaultable, Movable):
         self.k_border_count = PythonObject(None)
         self.k_border_types = PythonObject(None)
         self.k_cat_features = PythonObject(None)
+        self.k_category_map_ = PythonObject(None)
         self.k_catboost_bootstrap = PythonObject(None)
         self.k_catboost_iterations = PythonObject(None)
         self.k_catboost_learning_rate = PythonObject(None)
@@ -653,6 +655,7 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_border_count = py_key("border_count")
     nk[].k_border_types = py_key("border_types")
     nk[].k_cat_features = py_key("cat_features")
+    nk[].k_category_map_ = py_key("category_map_")
     nk[].k_catboost_bootstrap = py_key("catboost_bootstrap")
     nk[].k_catboost_iterations = py_key("catboost_iterations")
     nk[].k_catboost_learning_rate = py_key("catboost_learning_rate")

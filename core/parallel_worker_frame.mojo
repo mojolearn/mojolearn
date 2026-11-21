@@ -23,7 +23,10 @@ The record is a prefix-order tree of (tag, value) node pairs:
   NONE 0 | BOOL 0/1 | INT value | FLOAT the Float64 bits | TEXT text index |
   TENSOR tensor index | BF16 tensor index of its uint16 bits |
   INT8 tensor index of its int8 codes (its int32 exponents are the next
-  tensor) | LIST/TUPLE child count | MAP pair count (key node, value node).
+  tensor) | LIST/TUPLE child count | MAP pair count (key node, value node) |
+  BYTES / BYTEARRAY tensor index of the byte string's bytes (a one-dimensional
+  "<u1" descriptor; the receiver rebuilds an immutable or a mutable byte
+  string from them).
 
 Encoding and decoding walk a few header words and one node pair per value:
 no independent work to split across cores. The tensor bytes are one
@@ -32,7 +35,8 @@ transfer per tensor.
 from std.memory import unsafe_memcpy, bitcast
 
 comptime WIRE_FRAME_MAGIC = 0x46574C4D  # "MLWF": low byte nonzero, unlike a JSON frame's length prefix
-comptime WIRE_FRAME_LAYOUT = 1
+# 2 (lane pools-frame, 2026-11-21): the BYTES and BYTEARRAY record nodes.
+comptime WIRE_FRAME_LAYOUT = 2
 comptime WIRE_FRAME_HEADER_WORDS = 11
 # Bounds a decoded body before allocation (512 MiB of descriptor words).
 comptime WIRE_FRAME_MAX_BODY_WORDS = 1 << 26
@@ -57,6 +61,10 @@ comptime WIRE_INT8 = 7
 comptime WIRE_LIST = 8
 comptime WIRE_TUPLE = 9
 comptime WIRE_MAP = 10
+# A raw byte string (a serialized member state, a packed model): its bytes
+# travel as one "<u1" tensor, written from and read into the string's storage.
+comptime WIRE_BYTES = 11
+comptime WIRE_BYTEARRAY = 12
 
 # Tensor dtype words (the native Array dtype strings they stand for).
 comptime WIRE_F4 = 1   # "<f4"
@@ -186,6 +194,13 @@ struct WireRecord(Copyable, Movable):
     def text(mut self, value: String):
         self.node(WIRE_TEXT, len(self.texts))
         self.texts.append(value.copy())
+
+    def byte_string(mut self, byte_count: Int, mutable: Bool) raises:
+        """A byte string of `byte_count` bytes: its descriptor and its node.
+        The sender writes the bytes in descriptor order, as for a tensor."""
+        var shape = List[Int](length=1, fill=byte_count)
+        self.tensors.append(WireTensor(WIRE_U1, 0, not mutable, shape^))
+        self.node(WIRE_BYTEARRAY if mutable else WIRE_BYTES, len(self.tensors) - 1)
 
     def tensor(mut self, var value: WireTensor) -> Int:
         """Appends a tensor descriptor (no node); returns its index."""
