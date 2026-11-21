@@ -31,6 +31,14 @@ def connect(context, selection):
             bindings[mode] = module
         except (ImportError, AttributeError, TypeError, RuntimeError, ValueError) as error:
             bindings[mode] = type(error).__name__ + ': ' + str(error)
+    # The CPU identical metrics module beside the device one (module, or the
+    # refusal text): what a scorer hands the metric of an estimator that says
+    # device="cpu" on a GPU installation (bindings/msel_scorer_native_door.mojo).
+    from . import _native_family_bridge
+    cpu_connections = _native_family_bridge.shared_context().setdefault('family_binding_connections_cpu', {})
+    if '_mojolearn_metrics' not in cpu_connections:
+        _native_family_bridge.connect_bindings('_mojolearn_metrics')
+    context['family_msel_metric_bindings_cpu'] = cpu_connections['_mojolearn_metrics'][0]
     cls = selection._Scorer
     descriptor = vars(cls)['__dict__']
     if type(descriptor) is not GetSetDescriptorType:
