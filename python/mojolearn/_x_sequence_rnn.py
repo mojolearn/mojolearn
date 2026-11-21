@@ -334,6 +334,8 @@ class LSTMClassifier(_RecurrentClassifier):
     >>> pred = model.predict(X)
     """
     _CELL = "lstm"
+    # The member ABI (core/member_abi.mojo): family 20 (Sequence), kind 1.
+    _mojolearn_member = (20, 1)
 
 
 class GRURegressor(_RecurrentRegressor):
