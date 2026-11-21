@@ -2530,6 +2530,10 @@ class VarianceThreshold(_SelectorMixin):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: The member ABI mark (family 36 Select, kind 0): model selection and the
+    #: meta-estimators run this class through its native member entry
+    #: (core/select_member.mojo).
+    _mojolearn_member = (36, 0)
 
     def __init__(self, threshold=0.0, device=None):
         self.threshold = threshold
