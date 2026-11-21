@@ -181,6 +181,7 @@ bookkeeping; the programs are the family's.
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
 from bindings.x_prep_native_owner_run import XprepRunInput, XprepRoute, xprep_execute, xprep_release
+from core.host_zero_arena import HostZeroArena
 from x_prep.robust_native_run import _robust_fit_program as robust_fit_program
 from x_prep.maxabs_native_run import _maxabs_fit_program as maxabs_fit_program
 from core.scaler_fit_impl import scaler_refuse_infinite
@@ -595,14 +596,14 @@ def _x_input(call: _Call, words: Int) -> XprepRunInput:
     return XprepRunInput(0, words, call[].x.data, -1, put, words, False, 0, 0, 0)
 
 
-def _execute(call: _Call, mut arena: List[Float32], host: Int, scratch: Int, output: Int, out_words: Int,
+def _execute(call: _Call, mut arena: HostZeroArena, host: Int, scratch: Int, output: Int, out_words: Int,
     program: List[Int32], inputs: List[XprepRunInput]) raises:
     """One program run through the route's transport (the door's
     `xprep_run_records` RUN and cleanup, without its Python records)."""
     _execute_ranges(call, arena, host, scratch, output, out_words, program, inputs, List[Int]())
 
 
-def _execute_ranges(call: _Call, mut arena: List[Float32], host: Int, scratch: Int, output: Int, out_words: Int,
+def _execute_ranges(call: _Call, mut arena: HostZeroArena, host: Int, scratch: Int, output: Int, out_words: Int,
     program: List[Int32], inputs: List[XprepRunInput], inout_ranges: List[Int]) raises:
     # `_execute` with the program's inout ranges (an `EncProgram`'s).
     var flags = call[].route.flags
@@ -677,7 +678,7 @@ def _fit_robust(slot: _Slot, call: _Call) raises:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
     var flags = call[].route.flags
     var device_scratch = scratch > 0 and (flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0
-    var arena = List[Float32](length=max(host + (0 if device_scratch else scratch), 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host + (0 if device_scratch else scratch), 1))
     var fraction_values: List[Float32] = [Float32(lo / 100.0), Float32(0.5), Float32(hi / 100.0)]
     var inputs = List[XprepRunInput](capacity=2)
     var held = PrepXHeld()
@@ -731,7 +732,7 @@ def _transform_robust(slot: _Slot, call: _Call) raises:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
     var dev_out = n * d >= _FUSED_LIMIT and (call[].route.flags & PREP_ROUTE_OUT) != 0
     var host = dest + (0 if dev_out else n * d)
-    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host, 1))
     var inputs = List[XprepRunInput](capacity=3)
     var held = PrepXHeld()
     inputs.append(_x_input(call, n * d, held))
@@ -784,7 +785,7 @@ def _fit_maxabs(slot: _Slot, call: _Call) raises:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
     var flags = call[].route.flags
     var device_scratch = scratch > 0 and (flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0
-    var arena = List[Float32](length=max(host + (0 if device_scratch else scratch), 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host + (0 if device_scratch else scratch), 1))
     var sc = n * d
     var program = List[Int32]()
     var ma = maxabs_fit_program(program, blocked, work, fused, n, d, blocks, host, sc, dest)
@@ -832,7 +833,7 @@ def _transform_maxabs(slot: _Slot, call: _Call) raises:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
     var dev_out = n * d >= _FUSED_LIMIT and (call[].route.flags & PREP_ROUTE_OUT) != 0
     var host = dest + (0 if dev_out else n * d)
-    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host, 1))
     var inputs = List[XprepRunInput](capacity=2)
     var held = PrepXHeld()
     inputs.append(_x_input(call, n * d, held))
@@ -896,7 +897,7 @@ def _transform_stateless(slot: _Slot, call: _Call) raises:
             raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
         inputs.append(XprepRunInput(words, 1, Int(threshold.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
         _stage(program, OP_BINARIZE, words, 0, words, words, out)
-        var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+        var arena = HostZeroArena(max(host, 1))
         _execute(call, arena, host, 0, 0, 0, program, inputs)
         _ = held^  # the fold words X's record addresses live past the run
         _ = threshold^
@@ -911,7 +912,7 @@ def _transform_stateless(slot: _Slot, call: _Call) raises:
     if host + (words if dev_out else 0) > _INT32_BOUND:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
     _stage(program, OP_NORMALIZE, n, 0, n, d, Int(slot[].words[1]), host if dev_out else words)
-    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host, 1))
     _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
     _ = held^  # the fold words X's record addresses live past the run
     if not dev_out:
@@ -949,19 +950,19 @@ def _apply_begin(slot: _Slot, call: _Call, out_cols: Int) raises:
 
 
 def _run_layout(call: _Call, mut program: List[Int32], layout: PrepLayout,
-    inputs: List[XprepRunInput]) raises -> List[Float32]:
+    inputs: List[XprepRunInput]) raises -> HostZeroArena:
     """The door's `_run_layout`: scratch words placed past the host words,
     device scratch when the image has it; returns the arena."""
     if layout.host + layout.scratch > _INT32_BOUND:
         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
     _place_scratch(program, layout.host)
     var device_scratch = layout.scratch > 0 and (call[].route.flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0
-    var arena = List[Float32](length=max(layout.host + (0 if device_scratch else layout.scratch), 1), fill=Float32(0))
+    var arena = HostZeroArena(max(layout.host + (0 if device_scratch else layout.scratch), 1))
     _execute(call, arena, layout.host, layout.scratch, 0, 0, program, inputs)
     return arena^
 
 
-def _take(arena: List[Float32], offset: Int, count: Int) -> List[Float32]:
+def _take(arena: HostZeroArena, offset: Int, count: Int) -> List[Float32]:
     var words = List[Float32](length=count, fill=Float32(0))
     if count > 0:
         unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + offset,
@@ -1022,7 +1023,7 @@ def _transform_poly(slot: _Slot, call: _Call) raises:
     inputs.append(XprepRunInput(so, len(slot[].scale), Int(slot[].scale.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     var program = List[Int32]()
     _stage(program, OP_POLY, words, 0, n, d, io, so, nout, out)
-    var arena = List[Float32](length=host, fill=Float32(0))
+    var arena = HostZeroArena(host)
     _execute(call, arena, host, 0, 0, 0, program, inputs)
     _ = held^  # the fold words X's record addresses live past the run
     unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
@@ -1108,7 +1109,7 @@ def _apply_quantile(slot: _Slot, call: _Call, inverse: Bool) raises:
     inputs.append(XprepRunInput(ro, nq, Int(slot[].scale.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
     var program = List[Int32]()
     _stage(program, OP_QT_INVERSE if inverse else OP_QT_APPLY, words, 0, n, d, qo, nq, ro, 1 if normal else 0, out)
-    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host, 1))
     # A large output comes back through the image's output region straight
     # into the caller's buffer (the door's output store).
     _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
@@ -1210,7 +1211,7 @@ def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
     var program = List[Int32]()
     _stage(program, OP_PT_INVERSE if inverse else OP_PT_APPLY, words, 0, n, d, lo, Int(slot[].words[1]), mo, so, out,
         ao, ko)
-    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host, 1))
     _execute(call, arena, host, 0, call[].dst.data if dev_out else 0, words if dev_out else 0, program, inputs)
     _ = held^  # the fold words X's record addresses live past the run
     if not dev_out:
@@ -1219,13 +1220,13 @@ def _apply_power(slot: _Slot, call: _Call, inverse: Bool) raises:
     _ = arena^
 
 
-def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int, scoped: Bool = True) raises -> List[Float32]:
+def _enc_run(call: _Call, mut prog: EncProgram, second: Int, output: Int, scoped: Bool = True) raises -> HostZeroArena:
     """`_enc_run` with one second buffer (owner 1)."""
     var seconds: List[Int] = [second]
     return _enc_run(call, prog, seconds, output, scoped)
 
 
-def _enc_run(call: _Call, mut prog: EncProgram, seconds: List[Int], output: Int, scoped: Bool = True) raises -> List[Float32]:
+def _enc_run(call: _Call, mut prog: EncProgram, seconds: List[Int], output: Int, scoped: Bool = True) raises -> HostZeroArena:
     """The encode door's `EncProg.run_caps` over the member's own input
     records: owner 0 is the caller's X (`_x_record`: resident in the caller's
     scope, gathered by the fold's row index, or put on the device when the
@@ -1253,14 +1254,14 @@ def _enc_run(call: _Call, mut prog: EncProgram, seconds: List[Int], output: Int,
     var host = prog.host
     var scratch = prog.scratch_size
     var device_scratch = scratch > 0 and (call[].route.flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0
-    var arena = List[Float32](length=max(host + (0 if device_scratch else scratch), 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host + (0 if device_scratch else scratch), 1))
     _execute_ranges(call, arena, host, scratch, output if prog.out_words > 0 else 0, prog.out_words,
         prog.stage_words(), inputs, prog.inout_ranges)
     _ = held^  # the fold words X's record addresses live past the run
     return arena^
 
 
-def _iword(arena: List[Float32], offset: Int) -> Int:
+def _iword(arena: HostZeroArena, offset: Int) -> Int:
     # An int32 word a stage wrote into the arena (the door's `_iword`).
     return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(arena.unsafe_ptr()))[offset])
 
@@ -1615,7 +1616,7 @@ def _fit_spline(slot: _Slot, call: _Call) raises:
         _transform_spline(slot, call)
 
 
-def _spline_no_nan(arena: List[Float32], stats: Int, d: Int, n: Int) raises:
+def _spline_no_nan(arena: HostZeroArena, stats: Int, d: Int, n: Int) raises:
     # The door's `_no_nan`: handle_missing='error' refuses a column with a NaN.
     var ap = _F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     for j in range(d):  # driver-loop: over the per-column non-NaN counts (feature metadata)

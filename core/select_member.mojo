@@ -72,6 +72,7 @@ from x_prep.prep_stateless_native_run import PrepLayout, OP_GATHER_COLS, _varian
 from core.preprocessing_program import prep_program_stage as _stage
 from core.prep_member import _execute as prep_execute, _x_input as prep_x_input, PREP_ROUTE_OUT, PREP_ROUTE_SCRATCH
 from core.prep_member import _enc_run as prep_enc_run
+from core.host_zero_arena import HostZeroArena
 from bindings.prep_encode_prog_run import EncProgram
 from bindings.prep_encode_select_run import (
     ScoreClassif, ScorePearson, ScorePlan, score_classif_stage, score_pearson_stage, score_topk_stage,
@@ -296,7 +297,7 @@ def _fit_variance(slot: _Slot, call: _Call) raises:
     _place_scratch(program, layout.host)
     var flags = call[].route.flags
     var device_scratch = layout.scratch > 0 and (flags & (PREP_ROUTE_OUT | PREP_ROUTE_SCRATCH)) != 0
-    var arena = List[Float32](length=max(layout.host + (0 if device_scratch else layout.scratch), 1), fill=Float32(0))
+    var arena = HostZeroArena(max(layout.host + (0 if device_scratch else layout.scratch), 1))
     # The threshold as its binary64 word, two 4-byte words (`_f64_input`).
     var limit_words = List[Float32](length=2, fill=Float32(0))
     MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(limit_words.unsafe_ptr()))[] = bitcast[DType.uint64](threshold)
@@ -424,7 +425,7 @@ def _transform_select(slot: _Slot, call: _Call) raises:
     var inputs = List[XprepRunInput](capacity=2)
     inputs.append(prep_x_input(call, n * d))
     inputs.append(XprepRunInput(ko, k, Int(slot[].columns.unsafe_ptr()), -1, False, 0, False, 0, 0, 0))
-    var arena = List[Float32](length=max(host, 1), fill=Float32(0))
+    var arena = HostZeroArena(max(host, 1))
     prep_execute(call, arena, host, 0, 0, 0, program, inputs)
     unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data),
         src=_F32P(unsafe_from_address=Int(arena.unsafe_ptr())) + out, count=n * k)
