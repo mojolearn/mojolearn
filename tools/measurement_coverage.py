@@ -149,7 +149,7 @@ NOT_MEASURED = (
     ("mojolearn.training.accumulation_is_aligned", "a boolean check of two sizes; no compute"),
     ("mojolearn.training.numeric_mode_used", "getter; no compute"),
     ("mojolearn.training.vendor_used", "getter; no compute"),
-    # `mojolearn.runtime_report`, `mojolearn.check` and `mojolearn.reproduce` are `not_algorithm` rows of
+    # `mojolearn.runtime_report` and `mojolearn.check` are `not_algorithm` rows of
     # packaging/native_only/manifest.json (like `vendor`, `gpu_arch`, `numeric_mode`), so the public inventory
     # leaves them out and they need no n/a row here; a row for them would be dead
     # (test_not_measured_and_indirect_rows_are_live).

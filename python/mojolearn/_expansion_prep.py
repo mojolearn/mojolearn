@@ -1484,6 +1484,10 @@ class LinearDiscriminantAnalysis(_Classifier):
     >>> lda = mojolearn.LinearDiscriminantAnalysis(n_components=2).fit(X, y)
     >>> Z = lda.transform(X)
     """
+
+    #: the meta-estimators run this class through its native member entry
+    #: (core/discriminant_member.mojo; dense X).
+    _mojolearn_member = (10, 0)
     _mojolearn_native_public = True
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
                    "covariance_estimator", "device")
@@ -1625,6 +1629,10 @@ class QuadraticDiscriminantAnalysis(_Classifier):
     >>> y = rng.integers(0, 2, 1000)
     >>> model = mojolearn.QuadraticDiscriminantAnalysis().fit(X, y)
     """
+
+    #: the meta-estimators run this class through its native member entry
+    #: (core/discriminant_member.mojo; dense X).
+    _mojolearn_member = (10, 1)
     _parameters = ("solver", "shrinkage", "priors", "reg_param", "store_covariance", "tol", "covariance_estimator",
                    "device")
     #: This class takes `device=`: the check builds its other side as the same

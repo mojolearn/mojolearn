@@ -3,7 +3,7 @@
 # the input layout choice (row-major for a FAST Apple binding with the device
 # quantizer, else column-major), the target and class checks with their
 # wording, the feature flags, the sample weights, the eval set, the
-# 35-slot parameter list (the resolved learning rate, leaf iterations and
+# 36-slot parameter list (the resolved learning rate, leaf iterations and
 # random strength, the class weights and the optional tail), the multi-target
 # and query/pair tails, the option strings (loss, bootstrap, detector, NaN
 # mode, border type, the Ordered fold settings), the `gbdt_fit` /
@@ -272,7 +272,7 @@ def _int_or(value: PythonObject, unset: Int) raises -> PythonObject:
 
 def _params(fields: PythonObject, model: PythonObject, n_rows: Int, n_features: Int, n_flags: Int, n_weights: Int,
             n_eval_rows: Int, eval_constant: Bool, context: PythonObject) raises -> PythonObject:
-    """`GradientBoosting._params`: the 35-slot list in the binding's order,
+    """`GradientBoosting._params`: the 36-slot list in the binding's order,
     the class weights, then the optional min_split_gain /
     min_child_hessian / feature_fraction tail."""
     var b = _b()
@@ -333,6 +333,7 @@ def _params(fields: PythonObject, model: PythonObject, n_rows: Int, n_features: 
         py_item(t, nk[].k_grow_policy_codes)[_field(fields, model, nk[].k_grow_policy, "grow_policy")],
         _int_or(_field(fields, model, nk[].k_max_leaves, "max_leaves"), -1),
         py_call_typed(b.int, _field(fields, model, nk[].k_min_data_in_leaf, "min_data_in_leaf")),
+        py_call_typed(b.int, py_get(fields, nk[].k_max_ctr_complexity, PythonObject(1))),
         PythonObject(len(weights)),
     )
     _ = py_call(params.extend, weights)
@@ -344,7 +345,7 @@ def _padded_tail(params: PythonObject) raises -> PythonObject:
     """The slots past the class weights padded to their three defaults
     (`[-1.0, -1.0, 1.0][len(tail):]`), so a later slot lands in place."""
     var b = _b()
-    var fixed = 35 + Int(py=py_call_typed(b.int, params[34]))
+    var fixed = 36 + Int(py=py_call_typed(b.int, params[35]))
     var out = py_call(b.list, params)
     var defaults = Python.list(PythonObject(-1.0), PythonObject(-1.0), PythonObject(1.0))
     var have = len(params) - fixed
@@ -1495,6 +1496,24 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
                         + (" and by Ordered boosting" if i == 0 else "")
                         + "; with no cat_features it would be accepted and "
                         + "ignored. Pass cat_features= or leave it unset.")
+    var complexity = py_item(kw, nk[].k_max_ctr_complexity)
+    var complexity_int = Int(py=py_call_typed(b.int, complexity))
+    if complexity_int < 1:
+        raise Error("mojolearn: max_ctr_complexity must be >= 1, got " + _str(complexity))
+    if complexity_int > 1:
+        if not _truthy(cat):
+            raise Error("mojolearn: max_ctr_complexity is read only by the categorical "
+                        + "path (it combines categorical features); with no cat_features "
+                        + "it would be accepted and ignored. Pass cat_features= or leave it at 1.")
+        if not symmetric:
+            raise Error("mojolearn: max_ctr_complexity above 1 requires "
+                        + "grow_policy='SymmetricTree', got " + _repr(grow))
+        if _truthy(py_item(kw, nk[].k_use_pointwise_searcher)):
+            raise Error("mojolearn: max_ctr_complexity above 1 is not available with "
+                        + "use_pointwise_searcher=True")
+        if fraction < 1.0:
+            raise Error("mojolearn: max_ctr_complexity above 1 is not available with "
+                        + "feature_fraction below 1")
     var fields = py_fields(model)
     var stored = Python.list(
         Python.tuple("loss", loss), Python.tuple("n_estimators", n_estimators), Python.tuple("max_depth", depth),
@@ -1524,6 +1543,7 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
         Python.tuple("feature_fraction", py_item(kw, nk[].k_feature_fraction)), Python.tuple("feature_border_type", border),
         Python.tuple("boosting_type", boosting), Python.tuple("fold_len_multiplier", py_call_typed(b.float, fold_len)),
         Python.tuple("fold_permutation_block", PythonObject(None) if block is None else py_call_typed(b.int, block)),
+        Python.tuple("max_ctr_complexity", PythonObject(complexity_int)),
         Python.tuple("device", py_item(kw, nk[].k_device)),
         Python.tuple("model_", PythonObject(None)), Python.tuple("loss_curve_", PythonObject(None)),
         Python.tuple("test_loss_curve_", PythonObject(None)), Python.tuple("best_iteration_", PythonObject(None)),

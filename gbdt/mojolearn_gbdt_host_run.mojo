@@ -340,8 +340,8 @@ def _gbdt_fit_pointwise_arm(
     by the caller; this reads them again, refuses by name every value the
     pointwise oracle does not restate, applies `train`'s own raises on the
     rest, and fits through `gbdt_pointwise_host_fit`."""
-    var n_class_weights = params.i(34)
-    var fixed_and_weights = 35 + n_class_weights
+    var n_class_weights = params.i(35)
+    var fixed_and_weights = 36 + n_class_weights
     var min_split_gain = Float64(-1)
     if len(params) >= fixed_and_weights + 1:
         min_split_gain = params.f(fixed_and_weights)
@@ -497,8 +497,8 @@ def _gbdt_fit_ordered_arm(
     the loss resolved as `train` resolves it under Ordered (their GPU
     `useExact` needs Plain, `catboost_options.cpp:290-293`, so MAE, MAPE and
     Quantile keep Gradient), then `gbdt_ordered_host_fit`."""
-    var n_class_weights = params.i(34)
-    var fixed_and_weights = 35 + n_class_weights
+    var n_class_weights = params.i(35)
+    var fixed_and_weights = 36 + n_class_weights
     var n_rows = params.i(0)
     var n_features = params.i(1)
     var n_weights = params.i(2)
@@ -769,22 +769,22 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     does not restate, then the host fit and the model text. Returns
     `[model_text, best_iteration, stopped_early, learn_losses,
     test_losses]`."""
-    if len(params) < 35:
+    if len(params) < 36:
         raise Error(
-            "gbdt_fit: params must hold at least 35 values, got "
+            "gbdt_fit: params must hold at least 36 values, got "
             + String(len(params))
         )
-    var n_class_weights = params.i(34)
+    var n_class_weights = params.i(35)
     if n_class_weights < 0:
         raise Error(
             "gbdt_fit: n_class_weights must not be negative, got "
             + String(n_class_weights)
         )
-    var fixed_and_weights = 35 + n_class_weights
+    var fixed_and_weights = 36 + n_class_weights
     if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
         raise Error(
-            "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
-            + String(35 + n_class_weights)
+            "gbdt_fit: params must hold 36 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
+            + String(36 + n_class_weights)
             + ") values, got "
             + String(len(params))
         )
@@ -828,7 +828,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var n_flags = params.i(3)
     var class_weights = List[Float32]()
     for i in range(n_class_weights):  # small-loop(class weight words of params)
-        class_weights.append(Float32(params.f(35 + i)))
+        class_weights.append(Float32(params.f(36 + i)))
     var grow_code = params.i(31)
     if grow_code != 0 and grow_code != 1 and grow_code != 2:
         raise Error(
@@ -947,6 +947,15 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var boost_from_average = params.i(30)
     var max_leaves = params.i(32)
     var min_data_in_leaf = params.i(33)
+    # feature combinations (tree CTRs); read by the CTR categorical arm
+    # only, as on the device, where a fit without CTR columns builds none
+    var max_ctr_complexity = params.i(34)
+    if max_ctr_complexity < 1:
+        # `TCatFeatureParams.check`'s words (`train` raises them)
+        raise Error(
+            "max_ctr_complexity must be at least 1; got "
+            + String(max_ctr_complexity)
+        )
 
     # `gbdt_fit`'s own checks (`gbdt/estimator.mojo:446-464`)
     if n_rows <= 0:
@@ -1470,7 +1479,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         )
         var ctr_fit = gbdt_ctr_host_fit(
             x, y, n_rows, n_features, p, flags, permutation_count,
-            ctr_permutation_id, ev^,
+            ctr_permutation_id, ev^, max_ctr_complexity,
         )
         text = gbdt_ctr_host_model_text(ctr_fit)
         losses = ctr_fit.fit.model.losses.copy()

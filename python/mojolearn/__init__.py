@@ -190,10 +190,6 @@ _LAZY_NAMES = {
     # `verify --check` runs, and `mojolearn._verify_check.check` stays; routed
     # here so `import mojolearn` loads neither module until it is touched.
     "check": "._verify_check",
-    # Fit again and compare with the receipt of a recorded fit (Andrew,
-    # 2026-11-20); `estimator.receipt(X, y)` writes the receipt. Verification
-    # tooling, routed here so `import mojolearn` does not load it.
-    "reproduce": "._reproduce",
     "ExponentialSmoothing": "._tsa_impl", "kpss_test": "._tsa_impl", "select_d": "._tsa_impl",
     "lm_corpus": None,
     "Cholesky": "._cholesky_impl",
@@ -456,7 +452,6 @@ __all__ = [
     "gpu_arch_how",
     "runtime_report",
     "check",
-    "reproduce",
 ]
 
 __all__.extend(name for name, where in _LAZY_NAMES.items()  # glue: the doors' names, in door order

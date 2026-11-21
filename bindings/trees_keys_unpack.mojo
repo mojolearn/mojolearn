@@ -176,6 +176,7 @@ struct TreesKeys(Defaultable, Movable):
     var k_mf_log2: PythonObject
     var k_mf_sqrt: PythonObject
     var k_min_child_hessian: PythonObject
+    var k_max_ctr_complexity: PythonObject
     var k_min_data_in_leaf: PythonObject
     var k_min_impurity_decrease: PythonObject
     var k_min_samples_leaf: PythonObject
@@ -457,6 +458,7 @@ struct TreesKeys(Defaultable, Movable):
         self.k_mf_log2 = PythonObject(None)
         self.k_mf_sqrt = PythonObject(None)
         self.k_min_child_hessian = PythonObject(None)
+        self.k_max_ctr_complexity = PythonObject(None)
         self.k_min_data_in_leaf = PythonObject(None)
         self.k_min_impurity_decrease = PythonObject(None)
         self.k_min_samples_leaf = PythonObject(None)
@@ -743,6 +745,7 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_mf_log2 = py_key("mf_log2")
     nk[].k_mf_sqrt = py_key("mf_sqrt")
     nk[].k_min_child_hessian = py_key("min_child_hessian")
+    nk[].k_max_ctr_complexity = py_key("max_ctr_complexity")
     nk[].k_min_data_in_leaf = py_key("min_data_in_leaf")
     nk[].k_min_impurity_decrease = py_key("min_impurity_decrease")
     nk[].k_min_samples_leaf = py_key("min_samples_leaf")

@@ -46,14 +46,17 @@ from bindings.x_prep_native_inputs_door import _values, _rows_fields
 from bindings.arena_cache_release_door import arena_cache_release_operation
 from bindings.prep_classify_prog_door import ClsProg, NONE, f32_array, i32_array, f32_input
 from bindings.prep_classify_prog_run import (
-    cls_class_counts, cls_copy_block, cls_binary_difference, cls_gnb_fit_program, cls_score_program, cls_tail_stages,
+    cls_copy_block, cls_gnb_fit_program, cls_score_program, cls_tail_stages,
+    ClsDaMode, cls_lda_svd_program, cls_lda_cov_program, cls_lda_transform_program, cls_lda_pair_program,
+    cls_qda_fit_program,
     ClsScore, CLS_KIND_GNB, CLS_KIND_MNB, CLS_KIND_BNB, CLS_KIND_CNB, CLS_KIND_CAT, CLS_KIND_LDA, CLS_KIND_QDA,
     ClsCounts, cls_dnb_counts, cls_dnb_params, cls_prior_stages, CLS_PRIOR_GIVEN, CLS_PRIOR_FIT, CLS_PRIOR_UNIFORM,
 )
 from bindings.prep_classify_common_door import (
     XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_requested_mode, cls_entry,
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
-    float_list, given_priors, prior_sum, is_real, cls_float, col_stats, cs, class_stats, cls_stats, qda_cov, gram,
+    float_list, given_priors, is_real, cls_float, col_stats, class_stats, cls_da_mode,
+    da_shrinkage, da_check_estimator_shrinkage, da_solver_is,
     nb_onepass, nb_counts, encode_y, partial_codes, stage_partial_codes, partial_refuse,
     IDN_NB_CSR, XB, idn_fam, IDN_CLASS_ONEPASS, gnb_refuse,
 )
@@ -73,23 +76,11 @@ comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 # x_prep stage codes (_expansion_prep._OPS).
 comptime OP_BINARIZE = 12
-comptime OP_MATMUL = 13
-comptime OP_CENTER_ROWS = 17
-comptime OP_EIGH = 18
 comptime OP_GNB_EPS = 27
 comptime OP_GNB_PARAMS = 28
 comptime OP_CLASS_LOG_PRIOR = 30
 comptime OP_LDA_PREP = 36
-comptime OP_LDA_W = 37
-comptime OP_LDA_STAGE2 = 38
-comptime OP_LDA_STAGE3 = 39
-comptime OP_QDA_PREP = 41
 comptime OP_LOG = 72
-comptime OP_DA_SHRINK = 81
-comptime OP_DA_POOL = 82
-comptime OP_SYM_FN = 83
-comptime OP_DA_INTERCEPT = 84
-comptime OP_EVR = 85
 comptime OP_ADD_ARRAYS = 90
 comptime OP_GNB_MERGE = 91
 comptime OP_CAT_COUNTS = 92
@@ -97,7 +88,6 @@ comptime OP_CAT_FLP = 93
 comptime OP_CAT_HPART = 133
 comptime OP_CAT_HFOLD = 134
 comptime OP_COLBLOCK = 141
-comptime OP_CENTERED_MATMUL = 178
 comptime OP_P2M_RGATHER = 204
 # CategoricalNB's block histograms hold at most this many words (_CAT_HIST_WORDS).
 comptime CAT_HIST_WORDS = 67108864
@@ -124,19 +114,6 @@ def _ones(count: Int) -> List[Float64]:
     return List[Float64](length=count, fill=1.0)
 
 
-def _pm_one() -> List[Float64]:
-    var w = List[Float64]()
-    w.append(-1.0)
-    w.append(1.0)
-    return w^
-
-
-def _one() -> List[Float64]:
-    var w = List[Float64]()
-    w.append(1.0)
-    return w^
-
-
 def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
     """`check_sample_weight(sample_weight, n)` as a float32 Array (None when
     not given): the words `_nb_weights` put."""
@@ -160,11 +137,6 @@ def _put_weights(mut pr: ClsProg, w: PythonObject) raises -> Int:
 def _copy_block(mut pr: ClsProg, src: Int, rows: Int, cols: Int, context: PythonObject) raises -> Int:
     """`_copy_block`: a bit-for-bit copy (the typed `cls_copy_block`)."""
     return cls_copy_block(pr.program, src, rows, cols)
-
-
-def _binary_difference(mut pr: ClsProg, src: Int, rows: Int, K: Int, d_cols: Int, out_buf: Int, context: PythonObject) raises:
-    """`_binary_difference`: the second minus the first column (or row)."""
-    cls_binary_difference(pr.program, src, rows, K, d_cols, out_buf)
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -468,12 +440,13 @@ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, 
         check_width(model, fields, arr.d)
         var n = arr.n
         var d = arr.d
+        var coef = _sized_attr(fields, "coef_", d, "LinearDiscriminantAnalysis", context)
+        var inter = _sized_attr(fields, "intercept_", 1, "LinearDiscriminantAnalysis", context)
         var pl = ClsProg(model)
-        var xo = pl.put(arr.value)
-        var coef = _put_attr(pl, fields, "coef_", context)
-        var inter = _put_attr(pl, fields, "intercept_", context)
-        var out = pl.alloc(n)
-        pl.stage(OP_MATMUL, n, xo, d, 1, coef, 1, 0, out, 1, d, inter, NONE)
+        var out = cls_lda_pair_program(pl.program, n, d)
+        pl.own(arr.value)
+        pl.own(coef)
+        pl.own(inter)
         pl.run(mode, context)
         return pl.get(out, n, 0, context)
     var pr = ClsProg(model)
@@ -1063,31 +1036,6 @@ def _cat_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObje
 # ---------------------------------------------------------------- discriminant analysis
 
 
-def _shrinkage(shrinkage: PythonObject, context: PythonObject) raises -> Optional[Float64]:
-    """`_shrinkage_value`: None, -1.0 for 'auto', else the float in [0, 1]."""
-    var b = cls_builtins()
-    if shrinkage is None:
-        return None
-    if Bool(py=py_call(b.isinstance, shrinkage, b.str)):
-        if String(shrinkage) != "auto":
-            raise Error("mojolearn: invalid shrinkage " + cls_repr(shrinkage))
-        return Optional[Float64](-1.0)
-    if not is_real(shrinkage, context) or not (cls_float(shrinkage) >= 0 and cls_float(shrinkage) <= 1):
-        raise Error("mojolearn: shrinkage must be 'auto' or a float in [0, 1], got " + cls_repr(shrinkage))
-    return Optional[Float64](cls_float(shrinkage))
-
-
-def _check_estimator_shrinkage(est: PythonObject, shrinkage: PythonObject) raises:
-    if est is not None and shrinkage is not None and Bool(py=shrinkage != PythonObject(0)):
-        raise Error("mojolearn: covariance_estimator and shrinkage parameters are not None. Only one of the two can be set.")
-
-
-def _solver_is(fields: PythonObject, name: String) raises -> Bool:
-    var nk = prep_keys()
-    var solver = py_item(fields, nk[].k_solver)
-    return py_type(solver) is cls_builtins().str and String(solver) == name
-
-
 def _estimator_covs(est: PythonObject, arr: XIn, codes: PythonObject, K: Int, who: String,
                     context: PythonObject) raises -> List[Float64]:
     """A user covariance estimator would be fitted by its Python `fit` inside
@@ -1100,37 +1048,21 @@ def _estimator_covs(est: PythonObject, arr: XIn, codes: PythonObject, K: Int, wh
     raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
 
 
-def _lda_cov_blocks(mut pr: ClsProg, xo: Int, n: Int, d: Int, yo: Int, K: Int, mean: Int, var_: Int, cnt: Int,
-                    shr: Optional[Float64], given: Optional[List[Float64]], context: PythonObject) raises -> Int:
-    if given:
-        return pr.put_list(given.value(), context)
-    var cov = pr.alloc(K * d * d)
-    qda_cov(pr, cls_mode(context), xo, n, d, yo, K, mean, cnt, cov, context)
-    if shr:
-        var so = pr.put_scalar(shr.value(), context)
-        var scratch = pr.alloc(K)
-        pr.stage(OP_DA_SHRINK, K, xo, n, d, yo, mean, var_, cnt, cov, so, scratch)
-    return cov
-
-
-def _lda_binary(mut pr: ClsProg, coef: Int, inter: Int, K: Int, d: Int, context: PythonObject) raises -> Tuple[Int, Int]:
-    var cd = pr.alloc(d)
-    var ci = pr.alloc(1)
-    if K == 2:
-        _binary_difference(pr, coef, 1, K, d, cd, context)
-        var w = pr.put_list(_pm_one(), context)
-        pr.stage(OP_MATMUL, 1, w, 0, 1, inter, 1, 0, ci, 1, 2, NONE, NONE)
-    return (cd, ci)
-
-
-def _lda_priors(mut pr: ClsProg, fields: PythonObject, K: Int, context: PythonObject) raises -> Tuple[Int, Int]:
-    """(gflag, gofs) of the user priors (2 when they are renormalized)."""
+def _prior_list(fields: PythonObject, K: Int, who: String, context: PythonObject) raises -> List[Float64]:
+    """UNPACK of the checked `priors` parameter of a discriminant fit
+    (empty: None)."""
     var nk = prep_keys()
     if py_item(fields, nk[].k_priors) is None:
-        return (0, 0)
-    var pv = given_priors(py_item(fields, nk[].k_priors), K, "LinearDiscriminantAnalysis", False, context)
-    var flag = 2 if abs(prior_sum(pv) - 1.0) > 1e-5 else 1
-    return (flag, pr.put_list(pv, context))
+        return List[Float64]()
+    return given_priors(py_item(fields, nk[].k_priors), K, who, False, context)
+
+
+def _sized_attr(fields: PythonObject, name: String, words: Int, who: String, context: PythonObject) raises -> PythonObject:
+    """UNPACK of one fitted block a typed program reads as `words` words."""
+    var value = f32_input(fields[PythonObject(name)], context)
+    if Int(py=value.size) != words:
+        raise Error("ValueError: " + who + " " + name + " does not hold its fitted size")
+    return value
 
 
 def _lda_publish_coef(pr: ClsProg, fields: PythonObject, K: Int, d: Int, coef: Int, inter: Int, cd: Int, ci: Int,
@@ -1148,21 +1080,25 @@ def _lda_publish_coef(pr: ClsProg, fields: PythonObject, K: Int, d: Int, coef: I
 
 
 def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> XIn:
-    """`LinearDiscriminantAnalysis.fit`; returns the admitted X (fit_transform's input)."""
+    """`LinearDiscriminantAnalysis.fit`; returns the admitted X
+    (fit_transform's input). UNPACK: the checked parameters, X, the class
+    codes, the image's mode words (`cls_da_mode`, once). RUN: the typed fit
+    program (`cls_lda_svd_program`, or `_lda_cov_solver`) through
+    `ClsProg.run`. PACK: the fitted attributes."""
     var nk = prep_keys()
     var b = cls_builtins()
     var solver = py_item(fields, nk[].k_solver)
-    if not (_solver_is(fields, "svd") or _solver_is(fields, "lsqr") or _solver_is(fields, "eigen")):
+    if not (da_solver_is(fields, "svd") or da_solver_is(fields, "lsqr") or da_solver_is(fields, "eigen")):
         raise Error("mojolearn: invalid solver " + cls_repr(solver))
-    if _solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
+    if da_solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
         raise Error("NotImplementedError: mojolearn: shrinkage not supported with 'svd' solver.")
     var est = py_item(fields, nk[].k_covariance_estimator)
-    if est is not None and _solver_is(fields, "svd"):
+    if est is not None and da_solver_is(fields, "svd"):
         raise Error("mojolearn: covariance estimator is not supported with svd solver. Try another solver")
-    _check_estimator_shrinkage(est, py_item(fields, nk[].k_shrinkage))
+    da_check_estimator_shrinkage(est, py_item(fields, nk[].k_shrinkage))
     var shr: Optional[Float64] = None
     if est is None:
-        shr = _shrinkage(py_item(fields, nk[].k_shrinkage), context)
+        shr = da_shrinkage(py_item(fields, nk[].k_shrinkage), context)
     var arr = cls_x2d(X, context)
     var n = arr.n
     var d = arr.d
@@ -1175,217 +1111,127 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     if nc is not None and Bool(py=nc > PythonObject(maxc)):
         raise Error("mojolearn: n_components cannot be larger than min(n_features, n_classes - 1)")
     var mode = cls_mode(context)
-    if not _solver_is(fields, "svd"):
-        _lda_cov_solver(model, fields, arr, codes, K, d, n, mode, shr, context)
+    var da = cls_da_mode(mode, context)
+    if not da_solver_is(fields, "svd"):
+        _lda_cov_solver(model, fields, arr, codes, K, d, n, mode, da, shr, context)
         return arr^
+    var tol = cls_float(py_item(fields, nk[].k_tol))
+    var priors_given = _prior_list(fields, K, "LinearDiscriminantAnalysis", context)
     var pr = ClsProg(model)
-    var xo = pr.put(arr.value)
-    var yo = pr.put_codes(codes)
-    var cnt = pr.alloc(K)
-    var mean = pr.alloc(K * d)
-    var priors = pr.alloc(K)
-    var xbar = pr.alloc(d)
-    var std = pr.alloc(d)
-    var w = pr.alloc(d)
-    var z2 = pr.work(n * d)
-    var g = pr.alloc(d * d)
-    var e1 = pr.alloc(d)
-    var v1 = pr.alloc(d * d)
-    var meta_words = List[Float64]()
-    meta_words.append(cls_float(py_item(fields, nk[].k_tol)))
-    meta_words.append(0.0)
-    meta_words.append(0.0)
-    # lda_stage2 writes the ranks into it
-    var meta = pr.put_list(meta_words, context, True)
-    var scal1 = pr.alloc(d * d)
-    var g2 = pr.alloc(d * d)
-    var ms = pr.alloc(K * d)
-    var e2 = pr.alloc(d)
-    var v2 = pr.alloc(d * d)
-    var scal = pr.alloc(d * d)
-    var coef = pr.alloc(K * d)
-    var inter = pr.alloc(K)
-    var evr = pr.alloc(d)
-    var tmp = pr.alloc(K * d)
-    cls_stats(pr, mode, xo, n, d, yo, K, cnt, mean, NONE, NONE, context)
-    var gp = _lda_priors(pr, fields, K, context)
-    pr.stage(OP_LDA_PREP, 1, cnt, mean, K, d, n, priors, xbar, gp[0], gp[1])
-    var z = pr.work(n * d)
-    var stz = pr.alloc(6 * d)
-    pr.stage(OP_CENTER_ROWS, n * d, xo, n, d, mean, yo, NONE, z)
-    cs(pr, mode, z, n, d, stz, context)
-    pr.stage(OP_LDA_W, d, stz + 2 * d, d, n, K, std, w)
-    pr.stage(OP_CENTER_ROWS, n * d, xo, n, d, mean, yo, w, z2)
-    gram(pr, mode, z2, n, d, g, context)
-    pr.stage(OP_EIGH, 1, g, d, 0, e1, v1)
-    pr.stage(OP_LDA_STAGE2, 1, e1, v1, std, mean, xbar, priors, K, d, n, meta, scal1, g2, ms)
-    pr.stage(OP_EIGH, 1, g2, d, 0, e2, v2)
-    pr.stage(OP_LDA_STAGE3, 1, e2, v2, scal1, mean, xbar, priors, K, d, meta, scal, coef, inter, evr, tmp)
-    var bin = _lda_binary(pr, coef, inter, K, d, context)
-    var sw = NONE
-    if Bool(py=py_item(fields, nk[].k_store_covariance)):
-        var cov = _lda_cov_blocks(pr, xo, n, d, yo, K, mean, NONE, cnt, None, None, context)
-        sw = pr.alloc(d * d)
-        pr.stage(OP_DA_POOL, d * d, cov, K, d, priors, sw, NONE, NONE)
+    var o = cls_lda_svd_program(pr.program, da, n, d, K, tol, priors_given,
+                                Bool(py=py_item(fields, nk[].k_store_covariance)))
+    # the buffer records' owners, in record order
+    pr.own(arr.value)
+    pr.own(codes)
     pr.run(mode, context)
-    if sw != NONE:
-        _set(fields, "covariance_", pr.get(sw, d, d, context))
-    var rank2 = Int(pr.value(meta + 2))
+    if o.sw != NONE:
+        _set(fields, "covariance_", pr.get(o.sw, d, d, context))
+    var rank2 = Int(pr.value(o.meta + 2))
     _set(fields, "_rank", PythonObject(rank2))
-    _set(fields, "means_", pr.get(mean, K, d, context))
-    _set(fields, "priors_", pr.get(priors, K, 0, context))
-    _set(fields, "xbar_", pr.get(xbar, d, 0, context))
-    _set(fields, "_scal_full", pr.get(scal, d, d, context))
+    _set(fields, "means_", pr.get(o.mean, K, d, context))
+    _set(fields, "priors_", pr.get(o.priors, K, 0, context))
+    _set(fields, "xbar_", pr.get(o.xbar, d, 0, context))
+    _set(fields, "_scal_full", pr.get(o.scal, d, d, context))
     # the rank columns of the (d, d) scalings (Array.__getitem__'s strided copy)
     var scalings = classical_wrap_array(native_array_empty("f"), Python.tuple(d, 0), "<f4", "C", py_item(context, nk[].k_output_context))
     if rank2 > 0:
         scalings = classical_typed(Python.tuple(d, rank2), "<f4", py_item(context, nk[].k_output_context))
         var dest = F32P(unsafe_from_address=Int(py=classical_address(scalings)))
         _ = scalings  # keep the Python object alive through the native call above
-        var src = F32P(unsafe_from_address=pr.base) + scal
+        var src = F32P(unsafe_from_address=pr.base) + o.scal
         for i in range(d):  # driver-loop: over the scalings' rows (model structure)
             unsafe_memcpy(dest=dest + i * rank2, src=src + i * d, count=rank2)
             _ = scalings  # keep the Python object alive through the native call above
     _set(fields, "scalings_", scalings)
-    _lda_publish_coef(pr, fields, K, d, coef, inter, bin[0], bin[1], context)
+    _lda_publish_coef(pr, fields, K, d, o.coef, o.inter, o.cd, o.ci, context)
     var keep = maxc if nc is None else Int(py=py_call(b.int, nc))
     _set(fields, "_max_components", PythonObject(keep))
-    _set(fields, "explained_variance_ratio_", pr.get(evr, keep, 0, context))
+    _set(fields, "explained_variance_ratio_", pr.get(o.evr, keep, 0, context))
     _set(fields, "numeric_mode_", mode)
     _set(fields, "n_features_in_", PythonObject(d))
     return arr^
 
 
 def _lda_cov_solver(model: PythonObject, fields: PythonObject, arr: XIn, codes: PythonObject, K: Int, d: Int, n: Int,
-                    mode: PythonObject, shr: Optional[Float64], context: PythonObject) raises:
-    """solver 'lsqr' / 'eigen' (`_fit_cov_solver`)."""
+                    mode: PythonObject, da: ClsDaMode, shr: Optional[Float64], context: PythonObject) raises:
+    """solver 'lsqr' / 'eigen' (`_fit_cov_solver`): the typed
+    `cls_lda_cov_program`."""
     var nk = prep_keys()
     var b = cls_builtins()
-    var pr = ClsProg(model)
-    var xo = pr.put(arr.value)
-    var yo = pr.put_codes(codes)
-    var cnt = pr.alloc(K)
-    var mean = pr.alloc(K * d)
-    var priors = pr.alloc(K)
-    var xbar = pr.alloc(d)
-    var var_ = pr.alloc(K * d) if Bool(shr) else NONE
-    cls_stats(pr, mode, xo, n, d, yo, K, cnt, mean, var_, NONE, context)
-    var gp = _lda_priors(pr, fields, K, context)
-    pr.stage(OP_LDA_PREP, 1, cnt, mean, K, d, n, priors, xbar, gp[0], gp[1])
-    var eigen = _solver_is(fields, "eigen")
+    var priors_given = _prior_list(fields, K, "LinearDiscriminantAnalysis", context)
+    var eigen = da_solver_is(fields, "eigen")
     var est = py_item(fields, nk[].k_covariance_estimator)
-    var tot = NONE
-    if eigen:
-        # The one-class code vector: a zeroed float32 Array put as it is (no
-        # n-word host List and per-word conversion, p3-prep). Same words.
-        var y0 = pr.put(f32_array(n, context))
-        var c1 = pr.alloc(1)
-        var m1 = pr.alloc(d)
-        var v1 = pr.alloc(d) if Bool(shr) else NONE
-        cls_stats(pr, mode, xo, n, d, y0, 1, c1, m1, v1, NONE, context)
-        var gt: Optional[List[Float64]] = None
-        if est is not None:
-            gt = _estimator_covs(est, arr, PythonObject(None), 1, "LinearDiscriminantAnalysis", context)
-        tot = _lda_cov_blocks(pr, xo, n, d, y0, 1, m1, v1, c1, shr, gt, context)
-    var gk: Optional[List[Float64]] = None
     if est is not None:
-        gk = _estimator_covs(est, arr, codes, K, "LinearDiscriminantAnalysis", context)
-    var cov = _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var_, cnt, shr, gk, context)
-    var sw = pr.alloc(d * d)
-    pr.stage(OP_DA_POOL, d * d, cov, K, d, priors, sw, NONE, NONE)
-    var sb = NONE
+        # refused by name before any stage (it was refused where its
+        # covariances would have been staged; nothing ran either way)
+        _ = _estimator_covs(est, arr, codes, K, "LinearDiscriminantAnalysis", context)
+    var has_shrinkage = False
+    var shrinkage = 0.0
+    if shr:
+        has_shrinkage = True
+        shrinkage = shr.value()
+    var pr = ClsProg(model)
+    var o = cls_lda_cov_program(pr.program, da, n, d, K, eigen, has_shrinkage, shrinkage, priors_given)
+    # the buffer records' owners, in record order
+    pr.own(arr.value)
+    pr.own(codes)
     if eigen:
-        sb = pr.alloc(d * d)
-        var one = pr.put_list(_one(), context)
-        var scratch = pr.alloc(d * d)
-        pr.stage(OP_DA_POOL, d * d, sw, 1, d, one, scratch, tot, sb)
-    var swc = pr.alloc(d * d)
-    var one2 = pr.put_list(_one(), context)
-    pr.stage(OP_DA_POOL, d * d, sw, 1, d, one2, swc, NONE, NONE)
-    var e = pr.alloc(d)
-    var v = pr.alloc(d * d)
-    pr.stage(OP_EIGH, 1, swc, d, 0, e, v)
-    var coef = pr.alloc(K * d)
-    var inter = pr.alloc(K)
+        # The one-class code vector: a zeroed float32 Array put as it is.
+        pr.own(f32_array(n, context))
     var nc = py_item(fields, nk[].k_n_components)
     var mc = min(K - 1, d) if nc is None else Int(py=py_call(b.int, nc))
-    var ev = NONE
-    var evr = NONE
-    if not eigen:
-        var P = pr.alloc(d * d)
-        pr.stage(OP_SYM_FN, d * d, e, v, d, 0, P)
-        pr.stage(OP_MATMUL, K * d, mean, d, 1, P, 1, d, coef, d, d, NONE, NONE)
-    else:
-        var W = pr.alloc(d * d)
-        var T = pr.alloc(d * d)
-        var C = pr.alloc(d * d)
-        pr.stage(OP_SYM_FN, d * d, e, v, d, 1, W)
-        pr.stage(OP_MATMUL, d * d, W, d, 1, sb, d, 1, T, d, d, NONE, NONE)
-        pr.stage(OP_MATMUL, d * d, T, d, 1, W, d, 1, C, d, d, NONE, NONE)
-        var e2 = pr.alloc(d)
-        var y2 = pr.alloc(d * d)
-        ev = pr.alloc(d * d)
-        evr = pr.alloc(d)
-        pr.stage(OP_EIGH, 1, C, d, 0, e2, y2)
-        pr.stage(OP_MATMUL, d * d, W, d, 1, y2, d, 1, ev, d, d, NONE, NONE)
-        pr.stage(OP_EVR, 1, e2, d, evr)
-        var t1 = pr.alloc(K * d)
-        pr.stage(OP_MATMUL, K * d, mean, d, 1, ev, d, 1, t1, d, d, NONE, NONE)
-        pr.stage(OP_MATMUL, K * d, t1, d, 1, ev, 1, d, coef, d, d, NONE, NONE)
-    pr.stage(OP_DA_INTERCEPT, K, mean, coef, priors, d, inter)
-    var bin = _lda_binary(pr, coef, inter, K, d, context)
     pr.run(mode, context)
     if eigen:
         for j in range(d):  # driver-loop: over the within-class covariance eigenvalues (feature count)
-            if pr.value(e + j) <= 0:
+            if pr.value(o.e + j) <= 0:
                 raise Error("mojolearn: the within-class covariance is not positive definite (the reference's eigh(Sb, Sw) fails); set shrinkage")
-    _set(fields, "means_", pr.get(mean, K, d, context))
-    _set(fields, "priors_", pr.get(priors, K, 0, context))
-    _set(fields, "xbar_", pr.get(xbar, d, 0, context))
-    _set(fields, "covariance_", pr.get(sw, d, d, context))
-    _lda_publish_coef(pr, fields, K, d, coef, inter, bin[0], bin[1], context)
+    _set(fields, "means_", pr.get(o.mean, K, d, context))
+    _set(fields, "priors_", pr.get(o.priors, K, 0, context))
+    _set(fields, "xbar_", pr.get(o.xbar, d, 0, context))
+    _set(fields, "covariance_", pr.get(o.sw, d, d, context))
+    _lda_publish_coef(pr, fields, K, d, o.coef, o.inter, o.cd, o.ci, context)
     _set(fields, "_max_components", PythonObject(mc))
     if eigen:
-        var full = pr.get(ev, d, d, context)
+        var full = pr.get(o.scal, d, d, context)
         _set(fields, "scalings_", full)
         _set(fields, "_scal_full", full)
         _set(fields, "_rank", PythonObject(d))
-        _set(fields, "explained_variance_ratio_", pr.get(evr, mc, 0, context))
+        _set(fields, "explained_variance_ratio_", pr.get(o.evr, mc, 0, context))
     _set(fields, "numeric_mode_", mode)
     _set(fields, "n_features_in_", PythonObject(d))
 
 
 def _lda_transform(model: PythonObject, fields: PythonObject, arr: XIn, context: PythonObject) raises -> PythonObject:
-    """`LinearDiscriminantAnalysis.transform` of an admitted X."""
+    """`LinearDiscriminantAnalysis.transform` of an admitted X: the typed
+    `cls_lda_transform_program`."""
     var nk = prep_keys()
     check_fitted(model, fields)
     check_width(model, fields, arr.d)
     var n = arr.n
     var d = arr.d
-    if _solver_is(fields, "lsqr"):
+    if da_solver_is(fields, "lsqr"):
         raise Error("NotImplementedError: mojolearn: transform not implemented for 'lsqr' solver (use 'svd' or 'eigen').")
     var mc = min(Int(py=py_item(fields, nk[].k__max_components)), Int(py=py_item(fields, nk[].k__rank)))
     var mode = py_item(fields, nk[].k_numeric_mode_)
-    var eigen = _solver_is(fields, "eigen")
+    var eigen = da_solver_is(fields, "eigen")
+    var xbar = _sized_attr(fields, "xbar_", d, "LinearDiscriminantAnalysis", context)
+    var scal = _sized_attr(fields, "_scal_full", d * d, "LinearDiscriminantAnalysis", context)
+    # C04_LDA (-D MOJOLEARN_CLASSICAL_C04_LDA): the same center_rows -> matmul arithmetic in the consumer.
+    var centered = not eigen and (classical_shared(mode, context) & 4) != 0
     var pr = ClsProg(model)
-    var xo = pr.put(arr.value)
-    var xb = _put_attr(pr, fields, "xbar_", context)
-    var sc = _put_attr(pr, fields, "_scal_full", context)
-    var out = pr.alloc(n * max(mc, 1))
-    if not eigen and (classical_shared(mode, context) & 4) != 0:
-        # C04_LDA (-D MOJOLEARN_CLASSICAL_C04_LDA): the same center_rows -> matmul arithmetic in the consumer.
-        pr.stage(OP_CENTERED_MATMUL, n * mc, xo, n, d, xb, NONE, NONE, sc, d, 1, out, mc, NONE, NONE)
-    else:
-        var cen = xo if eigen else pr.alloc(n * d)
-        if not eigen:
-            pr.stage(OP_CENTER_ROWS, n * d, xo, n, d, xb, NONE, NONE, cen)
-        pr.stage(OP_MATMUL, n * mc, cen, d, 1, sc, d, 1, out, mc, d, NONE, NONE)
+    var dst = cls_lda_transform_program(pr.program, n, d, mc, eigen, centered)
+    pr.own(arr.value)
+    pr.own(xbar)
+    pr.own(scal)
     pr.run(mode, context)
-    return pr.get(out, n, mc, context)
+    return pr.get(dst, n, mc, context)
 
 
 def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`QuadraticDiscriminantAnalysis.fit`."""
+    """`QuadraticDiscriminantAnalysis.fit`. UNPACK: the checked parameters,
+    X, the class codes, the image's mode words (`cls_da_mode`, once). RUN:
+    the typed fit program (`cls_qda_fit_program`) through `ClsProg.run`.
+    PACK: the count and rank refusals, the fitted attributes."""
     var nk = prep_keys()
     if py_item(fields, nk[].k_covariance_estimator) is not None:
         # Fitting a user covariance estimator runs its Python `fit` inside
@@ -1393,18 +1239,17 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
         # (a5f9cc738, bindings/prep_lda_admission.mojo).
         raise Error("TypeError: covariance_estimator cannot invoke Python callbacks; use covariance_estimator=None and the native solver/shrinkage configuration")
     var solver = py_item(fields, nk[].k_solver)
-    if not (_solver_is(fields, "svd") or _solver_is(fields, "eigen")):
+    if not (da_solver_is(fields, "svd") or da_solver_is(fields, "eigen")):
         raise Error("mojolearn: invalid solver " + cls_repr(solver))
-    if _solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
+    if da_solver_is(fields, "svd") and py_item(fields, nk[].k_shrinkage) is not None:
         raise Error("NotImplementedError: mojolearn: shrinkage not supported with 'svd' solver.")
-    var est = py_item(fields, nk[].k_covariance_estimator)
-    if est is not None and _solver_is(fields, "svd"):
-        raise Error("mojolearn: covariance_estimator is not supported with solver='svd'. Try solver='eigen' instead.")
-    _check_estimator_shrinkage(est, py_item(fields, nk[].k_shrinkage))
-    var shr: Optional[Float64] = None
-    if est is None:
-        shr = _shrinkage(py_item(fields, nk[].k_shrinkage), context)
-    var eigen = _solver_is(fields, "eigen")
+    var shr = da_shrinkage(py_item(fields, nk[].k_shrinkage), context)
+    var has_shrinkage = False
+    var shrinkage = 0.0
+    if shr:
+        has_shrinkage = True
+        shrinkage = shr.value()
+    var eigen = da_solver_is(fields, "eigen")
     var arr = cls_x2d(X, context)
     var n = arr.n
     var d = arr.d
@@ -1413,97 +1258,45 @@ def _qda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     if K < 2:
         raise Error("mojolearn: QuadraticDiscriminantAnalysis needs at least two classes")
     var mode = cls_mode(context)
-    # without a covariance_estimator the count check reads the program's own
-    # class counts right after the run; an estimator fits per class inside
-    # the build, so its check stays first (`cls_class_counts`, a p2m program)
-    var late = est is None
-    if not late:
-        var cp = ClsProg(model)
-        var co = cp.put_codes(codes)
-        var tot = 0
-        tot = cls_class_counts(cp.program, co, n, K)
-        cp.run(mode, context)
-        var totals = I32P(unsafe_from_address=cp.base) + tot
-        for k in range(K):  # driver-loop: over the class counts (class count)
-            if Int(totals[k]) < 2:
-                raise Error("mojolearn: y has only 1 sample in a class, covariance is ill defined")
-        # Keep the program (the owner of `cp.base`) alive through the reads
-        # above: Mojo releases it at its last named use, which was the
-        # `cp.base` read, so the counts were read from freed words.
-        _ = cp.base
+    var da = cls_da_mode(mode, context)
+    var reg_param = 0.0 if eigen else cls_float(py_item(fields, nk[].k_reg_param))
+    var priors_given = _prior_list(fields, K, "QuadraticDiscriminantAnalysis", context)
     var pr = ClsProg(model)
-    var xo = pr.put(arr.value)
-    var yo = pr.put_codes(codes)
-    var cnt = pr.alloc(K)
-    var mean = pr.alloc(K * d)
-    var priors = pr.alloc(K)
-    var xbar = pr.alloc(d)
-    var cov = pr.alloc(K * d * d)
-    var ev = pr.alloc(K * d)
-    var evec = pr.alloc(K * d * d)
-    var reg = pr.put_scalar(0.0 if eigen else cls_float(py_item(fields, nk[].k_reg_param)), context)
-    var rot = pr.alloc(K * d * d)
-    var logc = pr.alloc(K)
-    var s2 = pr.alloc(K * d)
-    var var_ = pr.alloc(K * d) if Bool(shr) else NONE
-    # the trailing 1: FAST keeps row-order class sums here
-    cls_stats(pr, mode, xo, n, d, yo, K, cnt, mean, var_, NONE, context, 1)
-    var gflag = 0
-    var gofs = 0
-    if py_item(fields, nk[].k_priors) is not None:
-        gflag = 1
-        gofs = pr.put_list(given_priors(py_item(fields, nk[].k_priors), K, "QuadraticDiscriminantAnalysis", False, context), context)
-    pr.stage(OP_LDA_PREP, 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
-    if est is not None:
-        cov = pr.put_list(_estimator_covs(est, arr, codes, K, "QuadraticDiscriminantAnalysis", context), context)
-    else:
-        qda_cov(pr, mode, xo, n, d, yo, K, mean, cnt, cov, context)
-    if shr:
-        var so = pr.put_scalar(shr.value(), context)
-        var scratch = pr.alloc(K)
-        pr.stage(OP_DA_SHRINK, K, xo, n, d, yo, mean, var_, cnt, cov, so, scratch)
-    var store = Bool(py=py_item(fields, nk[].k_store_covariance))
-    var keep = NONE
-    if store and eigen:
-        keep = pr.alloc(K * d * d)
-        var one = pr.put_list(_one(), context)
-        for k in range(K):  # driver-loop: stages one pooled covariance copy per class (class count)
-            pr.stage(OP_DA_POOL, d * d, cov + k * d * d, 1, d, one, keep + k * d * d, NONE, NONE)
-    pr.stage(OP_EIGH, K, cov, d, d * d, ev, evec)
-    pr.stage(OP_QDA_PREP, K, ev, evec, K, d, reg, cnt, n, rot, logc, s2, gflag, gofs)
-    if store and not eigen:
-        keep = pr.alloc(K * d * d)
-        pr.stage(OP_SYM_FN, K * d * d, s2, evec, d, 2, keep)
+    var o = cls_qda_fit_program(pr.program, da, n, d, K, eigen, reg_param, has_shrinkage, shrinkage, priors_given,
+                                Bool(py=py_item(fields, nk[].k_store_covariance)))
+    # the buffer records' owners, in record order
+    pr.own(arr.value)
+    pr.own(codes)
     pr.run(mode, context)
-    if late:
-        for k in range(K):  # driver-loop: over the class counts (class count)
-            if pr.value(cnt + k) < 2:
-                raise Error("mojolearn: y has only 1 sample in a class, covariance is ill defined")
+    # the count check reads the program's own class counts right after the run
+    for k in range(K):  # driver-loop: over the class counts (class count)
+        if pr.value(o.cnt + k) < 2:
+            raise Error("mojolearn: y has only 1 sample in a class, covariance is ill defined")
     var tol = cls_float(py_item(fields, nk[].k_tol))
     var classes = py_item(fields, nk[].k_classes_)
     for k in range(K):  # driver-loop: rank check per class before raising (class count)
         var above = 0
         for j in range(d):  # driver-loop: over one class's scalings (feature count)
-            if pr.value(s2 + k * d + j) > tol:
+            if pr.value(o.s2 + k * d + j) > tol:
                 above += 1
         if above < d:
             raise Error("mojolearn: the covariance matrix of class " + cls_repr(classes[k]) + " is not full rank. Increase the value of `" + (String("shrinkage") if eigen else String("reg_param")) + "` to reduce the collinearity.")
-    if keep != NONE:
+    if o.keep != NONE:
         var covs = Python.list()
         for k in range(K):  # driver-loop: per-class covariance blocks (class count)
-            _ = py_call(covs.append, pr.get(keep + k * d * d, d, d, context))
+            _ = py_call(covs.append, pr.get(o.keep + k * d * d, d, d, context))
         _set(fields, "covariance_", covs)
-    _set(fields, "means_", pr.get(mean, K, d, context))
-    _set(fields, "priors_", pr.get(priors, K, 0, context))
+    _set(fields, "means_", pr.get(o.mean, K, d, context))
+    _set(fields, "priors_", pr.get(o.priors, K, 0, context))
     var rotations = Python.list()
     var scalings = Python.list()
     for k in range(K):  # driver-loop: per-class rotation and scaling blocks (class count)
-        _ = py_call(rotations.append, pr.get(evec + k * d * d, d, d, context))
-        _ = py_call(scalings.append, pr.get(s2 + k * d, d, 0, context))
+        _ = py_call(rotations.append, pr.get(o.evec + k * d * d, d, d, context))
+        _ = py_call(scalings.append, pr.get(o.s2 + k * d, d, 0, context))
     _set(fields, "rotations_", rotations)
     _set(fields, "scalings_", scalings)
-    _set(fields, "_rot", pr.get(rot, K * d * d, 0, context))
-    _set(fields, "_logc", pr.get(logc, K, 0, context))
+    _set(fields, "_rot", pr.get(o.rot, K * d * d, 0, context))
+    _set(fields, "_logc", pr.get(o.logc, K, 0, context))
     _set(fields, "numeric_mode_", mode)
     _set(fields, "n_features_in_", PythonObject(d))
     return model

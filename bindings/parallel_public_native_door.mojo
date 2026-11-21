@@ -176,13 +176,35 @@ struct ParallelForestOwner(Movable, Writable):
 #    between the member and the fallback.
 # 2. No member entry reads `call.devices` yet (the only reader of the words
 #    in the tree is `member_call_of`).
-# Needed from ma-core: a bit (`MEMBER_CAN_DEVICE_PLAN`: the entry splits over
-# `call.devices` exactly as its family's plain owner does under the bound
-# plan, same bits). Needed from the family lanes: the KMeans and Cholesky
-# multi-device owners (`family_km_par_*`, `family_chol_par_*`) and the
-# cooperative `family_par_run` families set it. With both, each site becomes
-# `member_admit_serving` under the bound plan, the bit test, the member
-# call, else `family_call` as written.
+# STATE 2026-11-25 (lane ma-core, round 6; MEMBER-ABI-V2 item 31): reason 1
+# is answered. `MEMBER_CAN_DEVICE_PLAN` (core/member_abi.mojo; kind-exact,
+# route-exact) says a kind's FIT / PREDICT / TRANSFORM splits over
+# `call.devices` exactly as its plain owner does under the bound plan, same
+# bits. Reason 2 stands: NO member kind sets the bit today, so a conversion
+# written now could only add an admit and a state (`member_admit_serving`,
+# `member_kind_capabilities`) in front of the `family_call` it would always
+# fall back to: cost on every multi-device call for no member route. The
+# sites therefore stay as written until a family sets the bit. THE FORM THEY
+# TAKE THEN (each site, in this order, nothing else):
+#   1. the tuple holds ONE device: `family_call` as written (the bit is not
+#      asked; a member adds nothing to one plain owner call);
+#   2. the class carries no member mark: `family_call` as written (one
+#      import-time plan read, no admit);
+#   3. under the bound plan: `member_admit_serving`, then the kind's own mask
+#      (`member_kind_capabilities`, once per call); without
+#      MEMBER_CAN_DEVICE_PLAN and the operation's bit: `family_call`;
+#   4. else the member call (`member_call_of`: `plan.devices` is what the
+#      family's admit read from the bound plan on this thread), and the
+#      family's `member_pack` for a fit.
+# WHICH FAMILIES COULD SET IT (their plain owners split over the tuple today):
+#   the direct route `family_km_par_*`: KernelRidge (7) and Nystroem
+#   (KernelApprox 8); the cooperative route `family_par_run`: KernelSvm (6),
+#   Gp (23, GaussianProcessRegressor), Mixture (26, GaussianMixture), Density
+#   (27, DBSCAN) and HDBSCAN's family; IsolationForest (18) already reads
+#   `call.devices` through its admit (item 28) and is not behind this door.
+#   Never a member: `family_chol_par_*` (the `Cholesky` class is a linear
+#   algebra object with no member mark) and the shard route's resampling
+#   functions (no estimator).
 
 def _run(model: PythonObject, driver: PythonObject, operation: PythonObject, args: PythonObject,
           entry: PythonObject, owner: PythonObject, names: PythonObject, devices: PythonObject,

@@ -383,6 +383,14 @@ struct GbdtFitParams(Copyable, Movable):
     var fold_len_multiplier: Float64
     #: `fold_permutation_block` (`boosting_options.cpp:12`), 0 unset
     var fold_permutation_block: Int
+    #: their `max_ctr_complexity` (`cat_feature_options.cpp:231`): how many
+    #: features one combination may hold. 1 builds none, and the fit is then
+    #: the fused per-tree path; above 1 the trees mint feature combinations
+    #: (`gbdt/methods/tree_ctr_search.mojo`). Only a fit with CTR
+    #: categorical columns reads it. THE DEFAULT IS 1, not CatBoost's 4,
+    #: until the A/B of `docs/apple-fast/EXPERIMENTS.md`
+    #: (the `max_ctr_complexity` row) is recorded.
+    var max_ctr_complexity: Int
 
 
 def default_gbdt_fit_params() -> GbdtFitParams:
@@ -424,6 +432,8 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         # boosting_type Plain, fold_len_multiplier 2, fold_permutation_block
         # unset
         String("Plain"), Float64(2.0), 0,
+        # max_ctr_complexity: no feature combinations
+        1,
     )
 
 
@@ -584,6 +594,15 @@ def gbdt_fit(
         params.od_type, params.od_pvalue, params.od_wait
     )
 
+    # `max_ctr_complexity` above 1: the default categorical options with
+    # that complexity. At 1 the list stays empty and `train` takes
+    # `TCatFeatureParams.default()` itself, the same call as before.
+    var cat_params = List[TCatFeatureParams]()
+    if params.max_ctr_complexity != 1:
+        var cp = TCatFeatureParams.default()
+        cp.max_tensor_complexity = params.max_ctr_complexity
+        cat_params.append(cp^)
+
     host_times.stop_host("gbdt_fit_host_copy_in", t_phase)
     t_phase = host_times.start()
     var tm = train(
@@ -597,6 +616,7 @@ def gbdt_fit(
         random_seed=params.random_seed,
         score_function=params.score_function,
         cat_features=cats,
+        cat_feature_params=cat_params,
         sample_weight=ws,
         loss=params.loss,
         loss_alpha=params.loss_alpha,

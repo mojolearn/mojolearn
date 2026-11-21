@@ -45,7 +45,7 @@ def gbdt_fit_params_py(params: PythonObject, mut ints: List[Int], mut floats: Li
                        mut bad: List[UInt8]) raises:
     """The params list's two views and flags (UNPACK)."""
     var n = len(params)
-    for k in range(n):  # small-loop(params: 35 fixed slots, the class weights and the short tails): Python parameter list, not row data
+    for k in range(n):  # small-loop(params: 36 fixed slots, the class weights and the short tails): Python parameter list, not row data
         gbdt_fit_param_py(params[k], ints, floats, bad)
 
 

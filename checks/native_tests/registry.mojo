@@ -249,6 +249,7 @@ from checks.native_tests.decomp_entry_table import register as register_decomp_e
 from checks.native_tests.entry_table_contract import register as register_entry_table_contract
 from checks.native_tests.exec_owned_reuse import register as register_exec_owned_reuse
 from checks.native_tests.finite_scan import register as register_finite_scan
+from checks.native_tests.fitted_digest import register as register_fitted_digest
 from checks.native_tests.gp_contract import register as register_gp_contract
 from checks.native_tests.gp_label_owner import register as register_gp_label_owner
 from checks.native_tests.gp_owner import register as register_gp_owner
@@ -474,6 +475,7 @@ from checks.tree_ctr_device_check import register as register_tree_ctr_device_ch
 from checks.tree_ctr_median_device_check import register as register_tree_ctr_median_device_check
 from checks.tree_ctr_fit_device_check import register as register_tree_ctr_fit_device_check
 from checks.tree_ctr_slice_check import register as register_tree_ctr_slice_check
+from checks.ordered_ctr_device_check import register as register_ordered_ctr_device_check
 # lane fx-checks-orphans (2026-11-18): the family standalone main() checks nothing ran; each suite stays in
 # <family>/checks/ (its main() is now run_checks()) and its registered wrapper is checks/native_tests/<family>_<stem>.mojo
 from checks.native_tests.arima_fit_check import register as register_arima_fit_check
@@ -548,6 +550,7 @@ from checks.native_tests.extratrees_split_reduce_check import register as regist
 from checks.native_tests.extratrees_stage_upload_bytes_check import register as register_extratrees_stage_upload_bytes_check
 from checks.native_tests.extratrees_tree_check import register as register_extratrees_tree_check
 from checks.native_tests.gbdt_host_binarize_identical import register as register_gbdt_host_binarize_identical
+from checks.native_tests.gbdt_tree_ctr_host_check import register as register_gbdt_tree_ctr_host_check
 from checks.native_tests.gbdt_ordered_doc_id_check import register as register_gbdt_ordered_doc_id_check
 from checks.native_tests.gemm_gemm_gather_ftz_check import register as register_gemm_gemm_gather_ftz_check
 from checks.native_tests.gemm_gemm_int_slices_check import register as register_gemm_gemm_int_slices_check
@@ -848,6 +851,7 @@ def all_checks() -> List[Check]:
     checks.append(register_entry_table_contract())
     checks.append(register_exec_owned_reuse())
     checks.append(register_finite_scan())
+    checks.append(register_fitted_digest())
     checks.append(register_gp_contract())
     checks.append(register_gp_label_owner())
     checks.append(register_gp_owner())
@@ -1073,6 +1077,7 @@ def all_checks() -> List[Check]:
     checks.append(register_tree_ctr_median_device_check())
     checks.append(register_tree_ctr_fit_device_check())
     checks.append(register_tree_ctr_slice_check())
+    checks.append(register_ordered_ctr_device_check())
     checks.append(register_arima_fit_check())
     checks.append(register_autograd_data_cpu())
     checks.append(register_autograd_data_gpu())
@@ -1145,6 +1150,7 @@ def all_checks() -> List[Check]:
     checks.append(register_extratrees_stage_upload_bytes_check())
     checks.append(register_extratrees_tree_check())
     checks.append(register_gbdt_host_binarize_identical())
+    checks.append(register_gbdt_tree_ctr_host_check())
     checks.append(register_gbdt_ordered_doc_id_check())
     checks.append(register_gemm_gemm_gather_ftz_check())
     checks.append(register_gemm_gemm_int_slices_check())
