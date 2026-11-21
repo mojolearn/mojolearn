@@ -173,6 +173,11 @@ struct ForestFitArgs(Movable, Sized):
     var round_seed: Int
     var round: Int
     var loss: Int
+    #: True: the caller holds no GIL (a member's worker; the operation word
+    #: carried `ENTRY_OP_GIL_FREE`), so the image's fit runs its body bare.
+    #: False (a door): the fit releases the GIL around its body. Set by
+    #: `forest_entry_dispatch` only; never crosses the request spans.
+    var gil_free: Bool
 
     def __init__(out self, x: Int, y: Int, var ints: List[Int], var floats: List[Float64], var bad: List[UInt8],
                  criterion: Int) raises:
@@ -198,6 +203,7 @@ struct ForestFitArgs(Movable, Sized):
         self.round_seed = 0
         self.round = 0
         self.loss = 0
+        self.gil_free = False
 
     def __len__(self) -> Int:
         return len(self.ints)

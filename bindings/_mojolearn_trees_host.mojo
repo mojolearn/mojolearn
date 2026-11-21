@@ -290,7 +290,7 @@ def et_legacy_meta(result: FitResult) -> List[Int64]:
     return meta^
 
 
-def _et_fit[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> Int:
+def _et_fit_result[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> FitResult:
     """`_et_classifier_fit` / `_et_regressor_fit` of the GPU binding: the
     same slot checks in the same words, then the host fit. `tree_start` is
     the GPU binding's global tree ID offset (the shard fits below). Returns
@@ -338,35 +338,48 @@ def _et_fit[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> I
     var x_address = params.x
     var y_address = params.y
     var result: FitResult
-    with GILReleased(Python()):
-        var x = _read_x_col_major(x_address, n_rows, n_features, ROWMAJOR)
-        var y = read_f32(y_address, n_rows)
-        # lane sk-kernels / sk-final: the per-row weights (0: none)
-        var w = List[Float32]()
-        if weights_addr != 0:
-            w = read_f32(weights_addr, n_rows)
-        # lane sk-weq-trees: without bootstrap the zero-weight rows leave
-        # the fit, the device's `DeviceDataset.drop_zero_weight_rows` (same
-        # rows, same ascending order); the plan then sees the kept count, as
-        # the device fit's does (`device_count_nonzero_weights`)
-        var n_fit = n_rows
-        if len(w) > 0 and not config.bootstrap:
-            var rows = host_nonzero_weight_rows(w)
-            if len(rows) > 0 and len(rows) < n_rows:
-                x = host_gather_colmajor(x, n_rows, n_features, rows)
-                y = host_gather_f32(y, rows)
-                w = host_gather_f32(w, rows)
-                n_fit = len(rows)
-        comptime if CLASSIFIER:
-            result = fit_extra_trees_classifier_host_exact(
-                x, y, Int32(n_fit), Int32(n_features), Int32(n_classes), config,
-                tree_start, w^,
-            )
-        else:
-            result = fit_extra_trees_regressor_host_exact(
-                x, y, Int32(n_fit), Int32(n_features), config, tree_start,
-                w^,
-            )
+    var x = _read_x_col_major(x_address, n_rows, n_features, ROWMAJOR)
+    var y = read_f32(y_address, n_rows)
+    # lane sk-kernels / sk-final: the per-row weights (0: none)
+    var w = List[Float32]()
+    if weights_addr != 0:
+        w = read_f32(weights_addr, n_rows)
+    # lane sk-weq-trees: without bootstrap the zero-weight rows leave
+    # the fit, the device's `DeviceDataset.drop_zero_weight_rows` (same
+    # rows, same ascending order); the plan then sees the kept count, as
+    # the device fit's does (`device_count_nonzero_weights`)
+    var n_fit = n_rows
+    if len(w) > 0 and not config.bootstrap:
+        var rows = host_nonzero_weight_rows(w)
+        if len(rows) > 0 and len(rows) < n_rows:
+            x = host_gather_colmajor(x, n_rows, n_features, rows)
+            y = host_gather_f32(y, rows)
+            w = host_gather_f32(w, rows)
+            n_fit = len(rows)
+    comptime if CLASSIFIER:
+        result = fit_extra_trees_classifier_host_exact(
+            x, y, Int32(n_fit), Int32(n_features), Int32(n_classes), config,
+            tree_start, w^,
+        )
+    else:
+        result = fit_extra_trees_regressor_host_exact(
+            x, y, Int32(n_fit), Int32(n_features), config, tree_start,
+            w^,
+        )
+    return result^
+
+
+def _et_fit[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> Int:
+    """`_et_fit_result` kept in ET_HOST_EXPORTS: the export handle. A door
+    holds the GIL, released here around the whole fit (its slot checks
+    included: they read plain words and raise in words); a member's worker
+    holds none (`params.gil_free`, core/forest_entry.mojo) and runs it bare."""
+    var result: FitResult
+    if params.gil_free:
+        result = _et_fit_result[CLASSIFIER, ROWMAJOR](params)
+    else:
+        with GILReleased(Python()):
+            result = _et_fit_result[CLASSIFIER, ROWMAJOR](params)
     return _retain_et_handle(result^)
 
 
@@ -526,7 +539,7 @@ def et_forest_export_release_binding(handle: PythonObject) raises -> PythonObjec
     return PythonObject(None)
 
 
-def et_predict_native(model: List[Int], x_address: Int, out_addr: Int, n_rows: Int, n_features: Int,
+def _et_predict_walk(model: List[Int], x_address: Int, out_addr: Int, n_rows: Int, n_features: Int,
                       n_trees: Int, num_outputs: Int) raises -> Int:
     """`et_predict`'s contract (XF_PREDICT): the forest's averaged vote per
     row of a ROW-major `x`, `out` is `n_rows * num_outputs` float32; returns
@@ -548,13 +561,25 @@ def et_predict_native(model: List[Int], x_address: Int, out_addr: Int, n_rows: I
         raise Error("et_predict: tree_offsets must start at 0 and hold at least one node per tree")
     if n_rows == 0:
         return 0
-    with GILReleased(Python()):
-        var rows = read_f32(x_address, n_rows * n_features)
-        forest_host_vote_into(
-            False, rows, offsets_p, colid_p, quesval_p, left_p,
-            leaves_p, op, n_rows, n_features, n_trees, num_outputs, n_nodes,
-        )
+    var rows = read_f32(x_address, n_rows * n_features)
+    forest_host_vote_into(
+        False, rows, offsets_p, colid_p, quesval_p, left_p,
+        leaves_p, op, n_rows, n_features, n_trees, num_outputs, n_nodes,
+    )
     return n_rows
+
+
+def et_predict_native(model: List[Int], x_address: Int, out_addr: Int, n_rows: Int, n_features: Int,
+                      n_trees: Int, num_outputs: Int, free: Bool = False) raises -> Int:
+    """`_et_predict_walk` for a caller that holds the GIL (released around
+    the whole walk, its checks included: they read plain words) or, with
+    `free`, for a member's worker that holds none (core/forest_entry.mojo)."""
+    if free:
+        return _et_predict_walk(model, x_address, out_addr, n_rows, n_features, n_trees, num_outputs)
+    var written = 0
+    with GILReleased(Python()):
+        written = _et_predict_walk(model, x_address, out_addr, n_rows, n_features, n_trees, num_outputs)
+    return written
 
 
 def et_predict_binding(
@@ -654,8 +679,8 @@ struct EtHostForest(ForestImage):
 
     @staticmethod
     def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
-                regression: Bool) raises -> Int:
-        return et_predict_native(model, x, out_addr, rows, cols, trees, outputs)
+                regression: Bool, free: Bool) raises -> Int:
+        return et_predict_native(model, x, out_addr, rows, cols, trees, outputs, free)
 
     @staticmethod
     def resident_prepare(model: List[Int], features: Int, trees: Int, outputs: Int, ordered: Int) raises -> Int:
@@ -678,8 +703,9 @@ struct EtHostForest(ForestImage):
         return forest_strict_prepare_host_native[False](model, features, trees, outputs)
 
     @staticmethod
-    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
-        return forest_strict_predict_host_native[False](handle, x, out_addr, rows, cols, outputs)
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
+                       free: Bool) raises -> Int:
+        return forest_strict_predict_host_native[False](handle, x, out_addr, rows, cols, outputs, free)
 
     @staticmethod
     def strict_release(handle: Int) raises:

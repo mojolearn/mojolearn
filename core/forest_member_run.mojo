@@ -86,7 +86,7 @@ store's bookkeeping.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy, bitcast
-from core.entry_table import EntryRef, entry_ref_unresolved
+from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_gil_free
 from core.forest_calls import (
     xf_caps, xf_export_sizes, xf_export_into, xf_export_release, xf_predict, xf_resident_prepare,
     xf_resident_predict, xf_resident_labels, xf_strict_prepare, xf_strict_predict, xf_snapshot_release,
@@ -100,6 +100,7 @@ from xtrees.trees_forest_run import ForestFit, forest_fit_core, forest_export_co
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import (
+    MEMBER_GIL_FREE,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
@@ -520,7 +521,10 @@ def _scalars(slot: _SlotPtr, meta: List[Int]):
 
 
 def _fit(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], estimator: String) raises:
-    var key = call[].route.entry
+    # THE GIL RULE: the route entry is marked once per operation; the image
+    # then runs its fit and walks with no release (core/forest_entry.mojo).
+    # The marked ref is what the slot keeps for its predicts.
+    var key = entry_ref_gil_free(call[].route.entry)
     var rows = call[].x.rows
     var cols = call[].x.cols
     _whole(call, estimator)
@@ -829,7 +833,7 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
         raise Error("member ABI: a forest classifier's class count differs from its outputs")
     if len(slot[].imp) > 0 and len(slot[].imp) != slot[].features:
         raise Error("member ABI: the forest feature importances block holds one word per feature")
-    _unprepared(slot, call[].route.entry)
+    _unprepared(slot, entry_ref_gil_free(call[].route.entry))
     slot[].fitted = True
 
 
@@ -844,7 +848,13 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     takes a HOST address of X and uploads it itself (no entry op binds a
     resident store id), so a device-home X is refused (`_dense`).
     `notices`: the RF layout (Tree, Forest) carries its fit notices."""
-    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    # MEMBER_GIL_FREE (THE GIL RULE): every operation of the six kinds is
+    # traced (fx-gil-RESULT.md, "forest / tree / extra_trees: HAS the bit"):
+    # the route entry is marked `entry_ref_gil_free` at fit and import and
+    # kept so, the four images run their fits and walks bare under the bit,
+    # and the member store, the export, resident, grove and strict
+    # registries and the workspace pool each have their own lock word.
+    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_GIL_FREE
     if notices:
         mask |= MEMBER_CAN_NOTICES
     if weights:

@@ -194,8 +194,12 @@ def _rf_classifier_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> 
     var bt = StageTimes()
     var t_bind = bt.start()
     var forest: RandomForestMetaData[DT, CLT]
-    with GILReleased(Python()):
+    if params.gil_free:
+        # a member's worker: no GIL to release (core/forest_entry.mojo)
         forest = _rf_classifier_fit_forest[ROWMAJOR](params, bt)
+    else:
+        with GILReleased(Python()):
+            forest = _rf_classifier_fit_forest[ROWMAJOR](params, bt)
     return _rf_keep_forest(forest, bt, t_bind)
 
 
@@ -689,8 +693,11 @@ def _rf_regressor_fit[ROWMAJOR: Bool = False](params: ForestFitArgs) raises -> I
     var bt = StageTimes()
     var t_bind = bt.start()
     var forest: RandomForestMetaData[DT, RLT]
-    with GILReleased(Python()):
+    if params.gil_free:
         forest = _rf_regressor_fit_forest[ROWMAJOR](params, bt)
+    else:
+        with GILReleased(Python()):
+            forest = _rf_regressor_fit_forest[ROWMAJOR](params, bt)
     return _rf_keep_forest(forest, bt, t_bind)
 
 
@@ -830,7 +837,7 @@ struct RfGpuForest(ForestImage):
 
     @staticmethod
     def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
-                regression: Bool) raises -> Int:
+                regression: Bool, free: Bool) raises -> Int:
         return _rf_predict_native(model, x, out_addr, rows, cols, trees, outputs, regression)
 
     @staticmethod
@@ -854,7 +861,8 @@ struct RfGpuForest(ForestImage):
         raise Error("RuntimeError: rebuild the forest host binding")
 
     @staticmethod
-    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
+                       free: Bool) raises -> Int:
         raise Error("RuntimeError: rebuild the forest host binding")
 
     @staticmethod
