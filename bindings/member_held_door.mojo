@@ -53,7 +53,7 @@ from bindings.member_held_owner_unpack import MemberHeldOwner, MEMBER_HELD_SLOT,
 from bindings.py_model_records import (
     model_generation, records_get, records_put, records_drop, records_stampable, RECORDS_PREPARED,
 )
-from core.member_abi import MemberPlan, MemberCall, member_free, MEMBER_CAN_IMPORT
+from core.member_abi import MemberPlan, MemberCall, member_free, member_own, MEMBER_CAN_IMPORT
 
 
 struct MemberHeld(Movable):
@@ -151,10 +151,29 @@ def member_held_adopt(model: PythonObject, plan: PythonObject, context: PythonOb
     Python estimator it was just packed into (call after `member_pack`: the
     generation is read after the pack's writes). True: the estimator owns
     the state now, do NOT free it. False: nothing was kept and the state is
-    still the caller's to free."""
+    still the caller's to free.
+
+    THE LIFETIME RULE (core/member_abi.mojo): a held state outlives the
+    operation and so every buffer its fit was handed (the caller's X, a
+    gathered fold, a draw). A kind that borrows its fit buffers
+    (`MEMBER_BORROWS_FIT`) is therefore told to own its rows HERE, once per
+    adopted state (`member_own`: one capability question; a kind that owns
+    its state, or a state its export already copied, copies nothing), and
+    only when the state will be kept. A member that cannot own is not
+    adopted (False): the caller frees it and the estimator's first predict
+    imports its fitted attributes instead. The caller's fit buffers must
+    still be valid when this is called."""
     var held = MemberHeld()
     held.plan = member.copy()
     held.state = state
+    try:
+        # The two tests `_member_held_keep` makes first: no copy is made for
+        # a state nothing would keep.
+        if not member_held_type_ready() or not records_stampable(model):
+            return False
+        member_own(member, state)
+    except:
+        return False
     try:
         _member_held_keep(model, plan, context, pins, held)
     except:

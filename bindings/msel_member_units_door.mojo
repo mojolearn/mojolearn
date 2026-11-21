@@ -164,6 +164,7 @@ from core.host_finite_scan import host_all_finite_f32
 from core.host_parallel import host_parallelize
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free, member_kind_capabilities, MEMBER_I64,
+    MEMBER_BORROWS_FIT,
     MEMBER_F32, MEMBER_I32, MEMBER_CAN_EXPORT, member_outputs, member_output_dtype, MEMBER_CAN_TEST_ROWS,
     MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA,
     MEMBER_OP_FIT, MEMBER_OP_SCORE, MEMBER_CAN_FIT, MEMBER_CAN_SCORE, MEMBER_CAN_CLASSIFIER, MEMBER_CAN_ROW_INDEX,
@@ -269,6 +270,18 @@ struct MselMemberRun(Movable):
     var pin: Int
     var index_all: Bool
     var taken: List[Int]
+    # THE LIFETIME RULE (MEMBER-ABI-V2.md item 34): a buffer handed to FIT
+    # stays valid until its state is freed or has been exported. A KEPT unit
+    # (`keep`) whose train side was gathered therefore gathers into these
+    # run-owned buffers, one pair per unit, which die with the run: after PACK
+    # has exported every kept state (and `member_held_adopt` has made an
+    # adopted one own its rows). Empty for every other unit, whose gathered
+    # side stays the unit's own and is freed when the unit ends, as before.
+    # `borrows`: the member kind keeps a pointer into a FIT buffer
+    # (MEMBER_BORROWS_FIT); a kind that owns its state never uses them.
+    var borrows: Bool
+    var held_x: List[List[Float32]]
+    var held_y: List[List[Float32]]
     # Per unit, a RandomForest / DecisionTree fit's notice word
     # (`ensemble/rf_notices.mojo` bits; 0: none) when the unit freed its
     # state, raised as UserWarnings at PACK after the join (lane fx-audit,
@@ -289,6 +302,9 @@ struct MselMemberRun(Movable):
         self.pin = 0
         self.index_all = False
         self.taken = List[Int](length=n_units, fill=0)
+        self.borrows = False
+        self.held_x = List[List[Float32]]()
+        self.held_y = List[List[Float32]]()
         self.notices = List[Int](length=n_units, fill=0)
         self.fit_failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.plans = List[MemberPlan]()
@@ -313,6 +329,10 @@ struct MselMemberRun(Movable):
         self.score_time = List[Float64](length=n_units, fill=0.0)
         self.failed = List[UInt8](length=n_units, fill=UInt8(0))
         self.errors = List[String](length=n_units, fill=String(""))
+        if keep:
+            for unit in range(n_units):  # driver-loop: over units, one empty buffer pair each
+                self.held_x.append(List[Float32]())
+                self.held_y.append(List[Float32]())
 
 
 def _gather_span(src: Int, index: Int, first: Int, count: Int, cols: Int, dst: Int) raises:
@@ -495,15 +515,28 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     # MEMBER_CAN_ROW_INDEX is gathered, into this unit's own buffers.
     var train_words = train_rows if train_mode == 2 else 0
     var test_words = test_rows if test_mode == 2 else 0
-    var x_train = List[Float32](length=train_words * cols, fill=0.0)
-    var y_train = List[Float32](length=train_words, fill=0.0)
+    # THE LIFETIME RULE: a kept state of a borrowing kind reads its FIT
+    # buffers again at PACK (the export), after this unit returned. Its
+    # gathered train side is therefore the RUN's (`held_x[u]`, `held_y[u]`:
+    # this unit's own slots, written by no other worker), not a local.
+    var hold = run[].keep and run[].borrows and train_mode == 2
+    var local_words = 0 if hold else train_words
+    var x_train = List[Float32](length=local_words * cols, fill=0.0)
+    var y_train = List[Float32](length=local_words, fill=0.0)
+    var x_train_at = Int(x_train.unsafe_ptr())
+    var y_train_at = Int(y_train.unsafe_ptr())
+    if hold:
+        run[].held_x[u] = List[Float32](length=train_words * cols, fill=0.0)
+        run[].held_y[u] = List[Float32](length=train_words, fill=0.0)
+        x_train_at = Int(run[].held_x[u].unsafe_ptr())
+        y_train_at = Int(run[].held_y[u].unsafe_ptr())
     var x_test = List[Float32](length=test_words * cols, fill=0.0)
     # The gathered target is copied as 4-byte words: a classifier's int32
     # codes travel through these buffers bit for bit (`run.y_dtype` names them).
     var y_test = List[Float32](length=test_words, fill=0.0)
     if train_mode == 2:
-        _gather(run[].x, train_index, train_rows, cols, Int(x_train.unsafe_ptr()), split)
-        _gather(run[].y, train_index, train_rows, 1, Int(y_train.unsafe_ptr()), split)
+        _gather(run[].x, train_index, train_rows, cols, x_train_at, split)
+        _gather(run[].y, train_index, train_rows, 1, y_train_at, split)
     if test_mode == 2:
         _gather(run[].x, test_index, test_rows, cols, Int(x_test.unsafe_ptr()), split)
         _gather(run[].y, test_index, test_rows, 1, Int(y_test.unsafe_ptr()), split)
@@ -512,8 +545,7 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     call.pin = 0
     var kept = False
     try:
-        _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, Int(x_train.unsafe_ptr()),
-                  Int(y_train.unsafe_ptr()), call)
+        _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, x_train_at, y_train_at, call)
         if run[].tolerate:
             try:
                 _offered(run, u, MEMBER_OP_FIT, train_offer, call)
@@ -542,8 +574,7 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
         else:
             _respond(run, u, 0, test_rows, test_offer, call)
         if run[].return_train:
-            _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, Int(x_train.unsafe_ptr()),
-                      Int(y_train.unsafe_ptr()), call)
+            _side_set(run, train_mode, run[].starts[2 * f], train_index, train_rows, x_train_at, y_train_at, call)
             if n_ops == 0:
                 _offered(run, u, MEMBER_OP_SCORE, train_offer, call)
                 run[].train[u] = call.value
@@ -558,6 +589,10 @@ def _msel_member_unit(run: MutPointer[MselMemberRun, MutUntrackedOrigin], u: Int
     finally:
         if not kept:
             member_free(run[].plans[c], call)
+            if hold:
+                # The state is gone: nothing reads the held side any more.
+                run[].held_x[u] = List[Float32]()
+                run[].held_y[u] = List[Float32]()
         # Integer addresses carry no lifetime: the fold buffers live to here.
         _ = len(x_train)
         _ = len(y_train)
@@ -711,6 +746,9 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
                 return scores^
             classifier = (kind_mask & MEMBER_CAN_CLASSIFIER) != 0
             tests_rows = (kind_mask & MEMBER_CAN_TEST_ROWS) != 0
+            # THE LIFETIME RULE: only a kind that keeps a pointer into its
+            # fit buffers has a kept unit's gathered side held until PACK.
+            run.borrows = (kind_mask & MEMBER_BORROWS_FIT) != 0
             if (kind_mask & MEMBER_CAN_SCOPE) != 0:
                 # THE RESIDENT SCOPE (module note): read once per operation,
                 # only for a kind that can keep X resident. A read that
@@ -962,6 +1000,14 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             _free_kept(run)
             return scores^
         scores.estimators = estimators
+    # THE LIFETIME RULE (core/member_abi.mojo): X and the admitted target
+    # (`pins` holds it: it may be this door's own encoded or converted
+    # array) were handed to every unit's fit and are read again by a
+    # borrowing kind's export and by the adoption's OWN in the PACK above:
+    # they live to here, past the last kept state.
+    _ = pins
+    _ = x
+    _ = y
     if n_ops > 0 and classifier:
         # PACK: a classifier's predicted codes as labels, one decode per
         # (unit, side) with the classes of the one encode (code c is the
@@ -988,4 +1034,8 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
     scores.train = run.train.copy()
     scores.fit_time = run.fit_time.copy()
     scores.score_time = run.score_time.copy()
+    # THE LIFETIME RULE: the kept units' gathered sides live to here, past
+    # every export and adoption of PACK above.
+    _ = len(run.held_x)
+    _ = len(run.held_y)
     return scores^
