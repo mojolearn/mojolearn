@@ -9,12 +9,12 @@ from bindings.gp_argument_pins_unpack import GPArgumentPins
 from bindings.gp_regressor_native_door import gp_regressor_operation
 from bindings.gp_classifier_native_door import gp_classifier_operation
 from bindings.gp_kernel_public_native_door import gp_kernel_operation
-from providers.python.gp_public_lifecycle_pyapi_door import gp_public_operation
+from providers.python.gp_public_lifecycle_pyapi_door import gp_public_operation, gp_public_vendor_used
 
 
 from bindings.operation_names_gp import (
     GP_OPN_FAMILY_GP_GPR_FIT, GP_OPN_FAMILY_GP_GPC_LML, GP_OPN_FAMILY_GP_GPC_FIT, GP_OPN_FAMILY_GP_GPC_PREDICT,
-    GP_OPN_FAMILY_GP_GPC_SCORE)
+    GP_OPN_FAMILY_GP_GPC_SCORE, GP_OPN_FAMILY_GP_GPR_VENDOR_USED)
 
 
 def gp_unknown_operation(operation: String) raises:
@@ -38,6 +38,9 @@ def gp_operation(model: PythonObject, operation: Int, var args: PythonObject,
     # name String, then each owner's exact-name chain).
     if operation < GP_OPN_FAMILY_GP_GPR_FIT:
         return gp_kernel_operation(model, operation, args, context)
+    if operation >= GP_OPN_FAMILY_GP_GPR_VENDOR_USED:
+        # `vendor_used()` of either estimator: the route's device read-back.
+        return gp_public_vendor_used(model, context)
     if operation != GP_OPN_FAMILY_GP_GPC_LML and len(args) > 0 and args[0] is None:
         return gp_public_operation(model, operation, args, context)
     # Internal/archive/worker calls retain their explicit provider pins in

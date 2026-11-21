@@ -728,7 +728,7 @@ def _gpr_score(model: PythonObject, args: GPArgumentPins, context: PythonObject)
     """`score(X, y)`: R^2 from `linear_model._r2_sums`' one program (the y
     mean rounded to float32 on the device, both sums of squares binary64);
     1.0 for a constant target predicted exactly, else 0.0 when SS_tot is 0.
-    args = (binding, X, y)."""
+    args = (binding, X, y) or (binding, X, y, CPU metrics factory)."""
     classical_connect_numpy(context)
     var fields = py_fields(model)
     var pred = _gpr_predict_result(model, fields, args[0], args[1], False, True, context)
@@ -745,7 +745,13 @@ def _gpr_score(model: PythonObject, args: GPArgumentPins, context: PythonObject)
     # row 629): y is not viewed and converted a second time.
     var t = admit_family(view, 1, "y", context).array
     _ = view^
-    var result = gpr_score_result(pred.score.value(), t, context)
+    # A CPU route in a GPU installation hands its CPU metrics factory behind
+    # (binding, X, y) (providers/python/gp_public_lifecycle_pyapi_door.mojo);
+    # every other caller passes three arguments.
+    var cpu_metrics = PythonObject(None)
+    if len(args) > 3:
+        cpu_metrics = args[3]
+    var result = gpr_score_result(pred.score.value(), t, cpu_metrics, context)
     _ = pred
     _ = t
     return PythonObject(result)
