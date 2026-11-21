@@ -1895,17 +1895,29 @@ def train(
             if maxc_o + 1 > cat_params.one_hot_max_size:
                 ordered_ctr_column = True
                 break
-    if ordered_ctr_column:
-        # a categorical column above `one_hot_max_size` builds CTRs, and
-        # those are the one categorical arm Ordered does not restate; a
-        # column the dispatch makes one-hot is an ordinary split candidate
+    # ORDERED CTRS (lane cat-ctr, 2026-11-21). A categorical column above
+    # `one_hot_max_size` builds CTRs under Ordered as under Plain, and the
+    # permutation-dependent ones (Borders) get the reference's dataset per
+    # permutation (`feature_parallel_dataset_builder.cpp:124-160`): the CTR
+    # estimation orders below ARE the Ordered fit's fold permutations (the
+    # same block size, so the same `learn_order_row` words), one compressed
+    # index is built per permutation, and `fit_ordered` searches each tree
+    # on its learn permutation's index and applies it to every
+    # permutation's folds through that permutation's own index.
+    if ordered_ctr_column and len(tree_configs) > 0:
+        # the level-synchronized tree-CTR driver is the Plain greedy
+        # searcher's; the Ordered fold searcher does not mint combinations
         raise Error(
-            "boosting_type='Ordered' with a categorical feature that builds"
-            " CTRs (cardinality above one_hot_max_size) is not implemented"
-            " here: the reference builds a permutation-dependent CTR dataset"
-            " per permutation (feature_parallel_dataset_builder.cpp:124-160),"
-            " which this Ordered arm does not restate; use"
-            " boosting_type='Plain'"
+            "max_ctr_complexity above 1 (feature combinations) with"
+            " boosting_type='Ordered' is not implemented; use"
+            " boosting_type='Plain' or max_ctr_complexity=1"
+        )
+    #: the block size of the CTR estimation orders: the fold permutation
+    #: block of an Ordered fit, 1 otherwise
+    var ctr_order_block = 1
+    if ordered:
+        ctr_order_block = ordered_permutation_block_size(
+            n_rows, fold_permutation_block
         )
     var perm_count = permutation_count
     if perm_count == -1:
@@ -1930,6 +1942,15 @@ def train(
             "ctr_estimation_permutation_id " + String(est_perm)
             + " is outside the " + String(perm_count)
             + " permutations this fit builds"
+        )
+    if ordered and est_perm != perm_count - 1:
+        # `fit_ordered` estimates on its last permutation
+        # (`dynamic_boosting.h`: the estimation permutation is the last)
+        raise Error(
+            "ctr_estimation_permutation_id " + String(est_perm)
+            + " with boosting_type='Ordered': an Ordered fit estimates on"
+            " its last permutation (" + String(perm_count - 1)
+            + "); leave it unset"
         )
 
     for _ in range(perm_count):  # small-loop(perm_count: permutations): one empty list per permutation, no data
@@ -2000,7 +2021,9 @@ def train(
         # column takes the same order).
         for p in range(perm_count):  # small-loop(perm_count: permutations): one order launch per permutation, written on the device
             var d_ord = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-            launch_ctr_estimation_order(ctx, d_ord, n_rows, p, random_seed)
+            launch_ctr_estimation_order(
+                ctx, d_ord, n_rows, p, random_seed, ctr_order_block
+            )
             d_orders.append(d_ord^)
 
     # DEVIATION 2634, THE REACH MARKER (see `CTR_TRACE_ENV`). Every term of
@@ -3102,6 +3125,15 @@ def train(
     # weights, the loss and its leaf estimator, the bootstrap -- is shared
     # with the Plain fit; the loop is `fit_ordered`.
     if ordered:
+        if tree_on:
+            # the layout holds tree-CTR slots only the Plain level driver
+            # fills (refused above by name wherever the categorical walk
+            # could say so; this is the same refusal for every walk)
+            raise Error(
+                "max_ctr_complexity above 1 (feature combinations) with"
+                " boosting_type='Ordered' is not implemented; use"
+                " boosting_type='Plain' or max_ctr_complexity=1"
+            )
         var o_model = TAdditiveModel()
         var o_start = Float64(0.0)
         if bfa:
@@ -3136,7 +3168,7 @@ def train(
         )
         var o_layout = build_layout(fold_counts, column_one_hot)
         var o_out = fit_ordered(
-            ctx, o_layout, cindex, targets, weights, n_rows, n_estimators,
+            ctx, o_layout, cindex, cindexes, targets, weights, n_rows, n_estimators,
             max_depth, device_multiprocessor_count(ctx),
             column_one_hot, o_opts, o_model, trace, test_arm,
             od_kind, od_pvalue, od_wait,

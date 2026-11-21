@@ -474,6 +474,7 @@ from checks.tree_ctr_device_check import register as register_tree_ctr_device_ch
 from checks.tree_ctr_median_device_check import register as register_tree_ctr_median_device_check
 from checks.tree_ctr_fit_device_check import register as register_tree_ctr_fit_device_check
 from checks.tree_ctr_slice_check import register as register_tree_ctr_slice_check
+from checks.ordered_ctr_device_check import register as register_ordered_ctr_device_check
 # lane fx-checks-orphans (2026-11-18): the family standalone main() checks nothing ran; each suite stays in
 # <family>/checks/ (its main() is now run_checks()) and its registered wrapper is checks/native_tests/<family>_<stem>.mojo
 from checks.native_tests.arima_fit_check import register as register_arima_fit_check
@@ -1074,6 +1075,7 @@ def all_checks() -> List[Check]:
     checks.append(register_tree_ctr_median_device_check())
     checks.append(register_tree_ctr_fit_device_check())
     checks.append(register_tree_ctr_slice_check())
+    checks.append(register_ordered_ctr_device_check())
     checks.append(register_arima_fit_check())
     checks.append(register_autograd_data_cpu())
     checks.append(register_autograd_data_gpu())
