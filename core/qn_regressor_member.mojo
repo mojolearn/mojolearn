@@ -42,6 +42,7 @@ from core.host_finite_scan import host_all_finite_f32
 from core.logistic_native_api import QnFitRequest, QnQueryRequest, QnFoldStore
 from glm.qn_door_run import QnDoorFitRequest, QnDoorPredictRequest, qn_door_fit_run, qn_door_predict_run
 from core.member_abi import (
+    MEMBER_GIL_FREE,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
@@ -186,8 +187,13 @@ def _lookup(tagged: Int, release: Bool) raises -> Int:
 
 
 def _capabilities(scored: Bool) -> Int:
+    # MEMBER_GIL_FREE (THE GIL RULE; fx-gil-RESULT.md, round 4): FIT and
+    # PREDICT are `qn_door_fit_run` (never its fold arm: `use_fold` False)
+    # and `qn_door_predict_run`, one call of the route's QN entry on per-call
+    # buffers; SCORE adds the metrics R^2 entry, host arithmetic. The store
+    # has its own lock.
     var bits = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-        | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF)
+        | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_FREE)
     if scored:
         bits |= MEMBER_CAN_SCORE
     return bits

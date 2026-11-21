@@ -58,6 +58,7 @@ from core.linear_svc_native_api import LinearSvcDriver, LinearSvcOptions, Linear
 from core.logistic_native_api import QnFitRequest, QnQueryRequest, QN_NATIVE_DECISION, QN_NATIVE_BINARY, QN_NATIVE_MULTICLASS
 from core.qn_single_fit import QnSingleFitPlan
 from core.member_abi import (
+    MEMBER_GIL_FREE,
     MemberCall, MemberMatrix, MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_DTYPE_UNSAID,
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT, MEMBER_OP_DECISION,
     MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT, MEMBER_OP_IMPORT,
@@ -216,8 +217,14 @@ def _intercept(slot: _SlotP) -> Bool:
 def _capabilities(kind: Int, scored: Bool) -> Int:
     """The bits `kind` honors (kind -1: the family's union); `scored`: the
     route holds the R^2 entry LinearSVR's score reads."""
+    # MEMBER_GIL_FREE, every kind (THE GIL RULE; fx-gil-RESULT.md, round 4):
+    # every operation is calls of the route's LinearSVC entry (the QN
+    # operations and the one-vs-rest fit, into a state this call owns) on
+    # per-call buffers, and for LinearSVR's score the metrics R^2 entry. The
+    # entry touches no CPython or GIL and reaches only its locked process
+    # context; the store has its own lock.
     var bits = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-        | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF)
+        | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_CAN_COEF | MEMBER_GIL_FREE)
     if kind != LINEAR_SVM_MEMBER_SVR:
         bits |= MEMBER_CAN_DECISION | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_SCORE
     elif scored:

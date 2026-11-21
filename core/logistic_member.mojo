@@ -71,7 +71,7 @@ from core.member_abi import (
     MEMBER_OP_CAPABILITIES, MEMBER_OP_NEW, MEMBER_OP_FREE, MEMBER_OP_FIT, MEMBER_OP_PREDICT,
     MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION, MEMBER_OP_SCORE, MEMBER_OP_OUTPUTS, MEMBER_OP_EXPORT,
     MEMBER_OP_IMPORT,
-    MEMBER_GIL_DOOR,
+    MEMBER_GIL_FREE,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
     MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_CLASSIFIER,
     MEMBER_CAN_TEST_ROWS,
@@ -565,16 +565,17 @@ def _logistic_member(operation: Int, address: Int) raises -> Int:
     if qn_regressor_member_owns(operation, call):
         return qn_regressor_member(operation, address)
     if operation == MEMBER_OP_CAPABILITIES:
-        # MEMBER_GIL_DOOR (core/member_abi.mojo): every operation's RUN is
-        # `logistic_fit_run` or `logistic_query_run`, which the estimator's
-        # own door calls inside its GIL release
-        # (providers/python/logistic_route_boundary_door.mojo); the rest is
-        # host loops over the call's own buffers and the locked store. NOT
-        # `MEMBER_GIL_FREE` (glm/qn_door_run.mojo's state is not traced), and
-        # not for kind 1 (QNRegressor answers above).
+        # MEMBER_GIL_FREE (THE GIL RULE, core/member_abi.mojo; the trace is
+        # in fx-gil-RESULT.md, round 4): every operation's RUN is
+        # `logistic_fit_run` or `logistic_query_run`, one call of the QN
+        # entry of the route's image (never the resident-fold entry) on the
+        # call's own buffers; the rest is host loops over those buffers and
+        # the locked store. The QN entry touches no CPython or GIL and
+        # reaches only its locked process context. Kind 1 (QNRegressor)
+        # answers above with the same bit.
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
             | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
-            | MEMBER_CAN_COEF | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS | MEMBER_GIL_DOOR)
+            | MEMBER_CAN_COEF | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS | MEMBER_GIL_FREE)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != _PARAMS or not call[].params:
             raise Error("member ABI: a logistic member takes ten parameters")
