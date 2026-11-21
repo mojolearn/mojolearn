@@ -17,7 +17,9 @@ from core.transport_header import (
 )
 from bindings.native_posix_transport_run import posix_close, posix_clock, posix_socket_prepare
 from bindings.native_transport_run import transport_send_words, transport_receive_into
-from bindings.byte_checkpoint_native_run import byte_checkpoint_write, ByteCheckpointWriteFailure
+from bindings.byte_checkpoint_native_run import (
+    byte_checkpoint_write, ByteCheckpointWriteFailure, byte_checkpoint_read_header, byte_checkpoint_read_arrays,
+)
 
 from core.parallel_worker_frame import (
     WireRecord, WireTensor, wire_frame_words, wire_frame_header, wire_frame_body,
@@ -174,6 +176,36 @@ def _archive() raises:
     var failure = ByteCheckpointWriteFailure()
     var digest = byte_checkpoint_write(path, Int(metadata.unsafe_ptr()), len(metadata), addresses, counts, failure)
     require(failure.number == 0 and digest.byte_length() == 64, "byte checkpoint: write reported a file failure")
+    # The typed read of the file just written: the header's words, then the
+    # four arrays into fresh storage, the same bytes.
+    var read_failure = ByteCheckpointWriteFailure()
+    var archive = byte_checkpoint_read_header(path, read_failure)
+    require(archive.metadata == state and len(archive.counts) == 4 and archive.counts[0] == 300000
+            and archive.counts[3] == 7, "byte checkpoint: the typed read's header differs from the state written")
+    var got_parameters = List[Float32](length=300000, fill=Float32(-1.0))
+    var got_first = List[Float32](length=300000, fill=Float32(-1.0))
+    var got_second = List[Float32](length=300000, fill=Float32(-1.0))
+    var got_flags = List[Int32](length=7, fill=Int32(-1))
+    var got_addresses: List[Int] = [Int(got_parameters.unsafe_ptr()), Int(got_first.unsafe_ptr()),
+                                    Int(got_second.unsafe_ptr()), Int(got_flags.unsafe_ptr())]
+    byte_checkpoint_read_arrays(path, archive, got_addresses, read_failure)
+    var equal = read_failure.number == 0 and got_flags[6] == Int32(1) and got_first[299999] == Float32(0.25) and got_second[0] == Float32(0.5)
+    for i in range(300000):  # small-loop(fixture parameter values)
+        if got_parameters[i] != parameters[i]:
+            equal = False
+    require(equal, "byte checkpoint: the typed read's arrays differ from the arrays written")
+    # A header that promises other bytes is refused by its array's name.
+    archive.digests[8] = archive.digests[8] ^ UInt32(1)
+    var caught = String("")
+    try:
+        byte_checkpoint_read_arrays(path, archive, got_addresses, read_failure)
+    except error:
+        caught = String(error)
+    require(caught == "Byte-LM checkpoint array integrity mismatch: m", "byte checkpoint: a wrong digest was not refused by name")
+    _ = len(got_parameters)
+    _ = len(got_first)
+    _ = len(got_second)
+    _ = len(got_flags)
     var cwd = -100
     comptime if CompilationTarget.is_macos():
         cwd = -2
