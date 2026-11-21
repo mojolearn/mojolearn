@@ -1045,6 +1045,15 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
                     _ = py_call(oob_rows.append, _unseen_rows(xt, wave_rows[i], n, context))
         finally:
             member_set_release(set)  # a failing publication leaves no state behind
+            # THE LIFETIME RULE (core/member_abi.mojo): X, the targets, the
+            # weights and this wave's draws were handed to the members' fits
+            # and live until every state of the wave was packed (exported,
+            # and made to own its rows when adopted) or released: to here.
+            _ = x
+            _ = y_all
+            _ = sample_weight
+            _ = wave_rows
+            _ = wave_cols
         kept = kept and set.kept_all and member_set_host(set)
         done += set.count()
         _ = set.count()

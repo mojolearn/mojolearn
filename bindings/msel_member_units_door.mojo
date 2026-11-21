@@ -1000,6 +1000,14 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
             _free_kept(run)
             return scores^
         scores.estimators = estimators
+    # THE LIFETIME RULE (core/member_abi.mojo): X and the admitted target
+    # (`pins` holds it: it may be this door's own encoded or converted
+    # array) were handed to every unit's fit and are read again by a
+    # borrowing kind's export and by the adoption's OWN in the PACK above:
+    # they live to here, past the last kept state.
+    _ = pins
+    _ = x
+    _ = y
     if n_ops > 0 and classifier:
         # PACK: a classifier's predicted codes as labels, one decode per
         # (unit, side) with the classes of the one encode (code c is the

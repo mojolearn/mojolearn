@@ -660,6 +660,12 @@ def _fit_units_native(clones: PythonObject, xs: PythonObject, d: Int, targets: P
     except:
         packed = False
     member_set_release(set)  # a failing publication leaves no state behind
+    # THE LIFETIME RULE (core/member_abi.mojo): every block, target and weight
+    # a member's fit was handed lives until its state was packed (exported,
+    # and made to own its rows when adopted) or released: to here.
+    _ = xs
+    _ = targets
+    _ = weights
     return packed
 
 
