@@ -771,8 +771,19 @@ def _import(slot: _SlotPtr, call: MutPointer[MemberCall, MutUntrackedOrigin], es
     slot[].fitted = True
 
 
-def _capabilities(classifier: Bool, importances: Bool) -> Int:
-    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+def _capabilities(classifier: Bool, importances: Bool, weights: Bool) -> Int:
+    """The bits a kind honors. `weights` False: the kind's fit refuses
+    `call.weights` (the RF-layout regressor with the importance fit, the
+    estimator's own refusal), so it is not advertised. No
+    `MEMBER_CAN_TEST_ROWS`: the predict entries (XF_PREDICT,
+    XF_RESIDENT_PREDICT, XF_RESIDENT_LABELS, XF_STRICT_PREDICT) never test X,
+    and only images with XF_CAP_DEVICE_SCAN test it at fit; the caller's
+    admission scans. No `MEMBER_CAN_DEVICE_VIEWS`: every forest predict entry
+    takes a HOST address of X and uploads it itself (no entry op binds a
+    resident store id), so a device-home X is refused (`_dense`)."""
+    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    if weights:
+        mask |= MEMBER_CAN_SAMPLE_WEIGHT
     if importances:
         mask |= MEMBER_CAN_IMPORTANCES
     if classifier:
@@ -787,9 +798,12 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
     var call = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _capabilities(True, rf_layout)
+            return _capabilities(True, rf_layout, True)
         var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
-        return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0)
+        # Kind AND settings exact: the RF-layout regressor whose every fit
+        # computes importances refuses weights (`_fit`).
+        var weights = known[].classifier or known[].et or not known[].importances
+        return _capabilities(known[].classifier, known[].importances or len(known[].imp) > 0, weights)
     if operation == MEMBER_OP_NEW:
         if not call[].params:
             raise Error("member ABI: a forest member needs its parameter words")
@@ -802,11 +816,25 @@ def fm_member[name: StaticString, rf_layout: Bool](operation: Int, address: Int,
         call[].state = 0
         return 0
     if operation == MEMBER_OP_OUTPUTS:
+        # With a state the state answers; with none, the kind word of the NEW
+        # parameters (word 0) and the caller's `call.classes` (item 10).
         var proba = call[].flags == MEMBER_OP_PREDICT_PROBA
+        var classifier: Bool
         if call[].state != 0:
             var known = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
             call[].classes = known[].classes
+            classifier = known[].classifier
+        else:
+            if not call[].params or call[].param_count < 1:
+                raise Error("member ABI: a forest member answers OUTPUTS without a state from its parameter words")
+            classifier = _F64P(unsafe_from_address=call[].params)[0] == 0.0
         call[].out_cols = call[].classes if proba else 1
+        # predict: int32 codes (classifier) or float32 values; predict_proba
+        # (classifier only) float32. Another operation stays unsaid.
+        if call[].flags == MEMBER_OP_PREDICT:
+            call[].out_dtype = MEMBER_I32 if classifier else MEMBER_F32
+        elif proba and classifier:
+            call[].out_dtype = MEMBER_F32
         return 0
     var slot = _SlotPtr(unsafe_from_address=_lookup[name](call[].state, False))
     if operation == MEMBER_OP_FIT:

@@ -32,6 +32,13 @@ sample weights host float32, one per row. A device-home view, a row or column
 index and a nonzero `fit_output` are refused in words. Multiclass with an l1
 strength is refused in the estimator's own words.
 
+MEMBER_CAN_TEST_ROWS: every operation that reads X refuses a NaN or an
+infinity itself (the QN entries' finite status word, host and device, fit and
+query); at FIT the sample weights and float32 codes are scanned here (one
+parallel pass each, core/host_finite_scan.mojo), and float32 codes at SCORE.
+OUTPUTS answers `out_dtype`: PREDICT int64, DECISION float32, PREDICT_PROBA
+float64.
+
 Fitted-state blocks (EXPORT / IMPORT), in index order:
 0 `MEMBER_BLOCK_COEF` float32 targets x features (targets = 1 for two
 classes, else classes); 1 `MEMBER_BLOCK_INTERCEPT` float32 1 x targets
@@ -49,7 +56,8 @@ count and the host argmax split their rows across the host's workers.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
-from core.admitted_refusals import admitted_finite_refuse
+from core.admitted_refusals import admitted_finite_refuse, admitted_finite_wording
+from core.host_finite_scan import host_all_finite_f32
 from core.host_helpers_impl import argmax_rows_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -65,6 +73,7 @@ from core.member_abi import (
     MEMBER_OP_IMPORT,
     MEMBER_CAN_FIT, MEMBER_CAN_PREDICT, MEMBER_CAN_PREDICT_PROBA, MEMBER_CAN_DECISION, MEMBER_CAN_SCORE,
     MEMBER_CAN_EXPORT, MEMBER_CAN_IMPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_CAN_COEF, MEMBER_CAN_CLASSIFIER,
+    MEMBER_CAN_TEST_ROWS,
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX,
     MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
@@ -254,6 +263,15 @@ def _code_cast(view: MemberMatrix, dst: Int, rows: Int):
     host_parallelize(task, tasks)
 
 
+def _finite(view: MemberMatrix, what: String) raises:
+    """The estimator's finite refusal of a host float32 view (one parallel
+    pass); integer codes need none."""
+    if view.dtype != MEMBER_F32:
+        return
+    if not host_all_finite_f32(_F32P(unsafe_from_address=view.data), view.rows * view.cols):
+        raise Error("ValueError: " + admitted_finite_wording(_ESTIMATOR, what))
+
+
 def _features_check(slot: _SlotP, cols: Int) raises:
     if cols != slot[].features:
         raise Error("ValueError: X has " + String(cols) + " features, but LogisticRegression is expecting "
@@ -273,6 +291,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var rows = call[].x.rows
     var cols = call[].x.cols
     _codes_view(call[].y, rows, "y")
+    _finite(call[].y, "y")
     var classes = call[].classes
     var targets = logistic_fit_target_count(classes)
     var p = slot[].params.copy()
@@ -287,6 +306,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
         _dense(call[].weights, MEMBER_F32, "sample_weight")
         if call[].weights.rows != rows or call[].weights.cols != 1:
             raise Error("ValueError: sample_weight and X have different numbers of rows")
+        _finite(call[].weights, "sample_weight")
         sample = call[].weights.data
     var y = call[].y.data
     # The QN solver reads float32 codes; int codes are cast once per fit.
@@ -396,6 +416,7 @@ def _score(slot: _SlotP, call: _CallP) raises:
     _query_x(slot, call)
     var rows = call[].x.rows
     _codes_view(call[].y, rows, "y")
+    _finite(call[].y, "y")
     if call[].weights.rows > 0:
         raise Error("NotImplementedError: mojolearn: a weighted score of a LogisticRegression member is not "
             + "published; the caller predicts and runs its own weighted metric")
@@ -524,10 +545,13 @@ def _outputs(call: _CallP) raises:
     var asked = call[].flags
     if asked == MEMBER_OP_PREDICT:
         call[].out_cols = 1
+        call[].out_dtype = MEMBER_I64
     elif asked == MEMBER_OP_DECISION:
         call[].out_cols = targets
+        call[].out_dtype = MEMBER_F32
     elif asked == MEMBER_OP_PREDICT_PROBA:
         call[].out_cols = classes
+        call[].out_dtype = MEMBER_F64
     else:
         member_unsupported(_ESTIMATOR, asked)
     call[].classes = classes
@@ -542,7 +566,7 @@ def _logistic_member(operation: Int, address: Int) raises -> Int:
     if operation == MEMBER_OP_CAPABILITIES:
         return (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_PREDICT_PROBA | MEMBER_CAN_DECISION
             | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
-            | MEMBER_CAN_COEF | MEMBER_CAN_CLASSIFIER)
+            | MEMBER_CAN_COEF | MEMBER_CAN_CLASSIFIER | MEMBER_CAN_TEST_ROWS)
     if operation == MEMBER_OP_NEW:
         if call[].param_count != _PARAMS or not call[].params:
             raise Error("member ABI: a logistic member takes ten parameters")

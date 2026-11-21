@@ -232,7 +232,8 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     ref s = result.storage[0].s
     py_setattr(model, "n_features_in_", PythonObject(d))
     py_setattr(model, "weights_", _pack_f(f[0], [k], context))
-    py_setattr(model, "means_", _pack_f(f[1], [k, d], context))
+    var means = _pack_f(f[1], [k, d], context)
+    py_setattr(model, "means_", means)
     py_setattr(model, "covariances_", _by_type(f[13], k, d, ct, context))
     py_setattr(model, "precisions_cholesky_", _by_type(f[14], k, d, ct, context))
     py_setattr(model, "log_det_chol_", _pack_f(f[12], [k], context))   # x_cluster bgmm_entry
@@ -250,8 +251,14 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
     # admission and kept that list alive in the import context).
     var ext = Python.dict()
     ext[nk[].k_key] = key
-    ext[nk[].k_pchol] = _pack_f(f[3], [k, d, d], context)
-    ext[nk[].k_consts] = _pack_f(f[8], [k], context)
+    var pchol = _pack_f(f[3], [k, d, d], context)
+    var consts = _pack_f(f[8], [k], context)
+    ext[nk[].k_pchol] = pchol
+    ext[nk[].k_consts] = consts
+    # The score entry's model words (means_ || pchol || consts), laid out
+    # once for this fitted state, as the BayesianGaussianMixture door does
+    # (lane fx-leftovers item 8): `_gmm_ext_score` passes a view of them.
+    ext[nk[].k_score_words] = bgmm_score_words(means, pchol, consts, context)
     var order: List[Int] = [11, 4, -1, 6, 1, 7, 2, 3]
     ext[nk[].k_state] = _state(f, order, -1, k, context)
     _ = result^

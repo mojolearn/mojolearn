@@ -10,7 +10,7 @@ this binding.
 
     msel_alloc(nbytes) -> id              resident zero bytes
     msel_read(id, dst_addr, nbytes)       download
-    msel_free(id) / msel_live() -> count  (release-test fault injection and counts)
+    msel_live() -> count                  (live store ids, for the resident tests)
     msel_scatter_rows(dst_id, n_dst, dst_code, src_addr, src_code, n_src, width, idx_id)
     msel_proba_column(src_addr, code, n, k, col, dst_addr)
     msel_rebase_offsets_i32(raw_addr, n_raw, lens_addr, parts, n_out, dst_addr)
@@ -27,7 +27,7 @@ from core.msel_device_x import msel_fold_entry_context, msel_store
 # group-fold bodies are the runs the model-selection helper table publishes
 # (core/msel_helpers_device.mojo); these exports unpack and call them.
 from core.msel_helpers_device import (
-    msel_store_alloc_device_run, msel_store_read_device_run, msel_store_free_device_run,
+    msel_store_alloc_device_run, msel_store_read_device_run,
     msel_scatter_rows_device_run, msel_proba_column_device_run, msel_split_table_device_run,
     msel_group_fold_perm_device_run, msel_store_free_bytes_device_run,
 )
@@ -43,16 +43,9 @@ from core.msel_device_run import _mdx_f32_ptr, _mdx_u32_ptr, kmeans_fit_fold_run
 # Deleted (arena unit E, 2026-11-21): `msel_put` and
 # `msel_take_rows` had no caller since the resident owner calls the
 # model-selection helper table as typed RUN (core/msel_entry_table.mojo);
-# `msel_free` stays as the release tests' fault-injection entry.
-def msel_free_binding(id: PythonObject) raises -> PythonObject:
-    """`core/msel_helpers_device.mojo::msel_store_free_device_run`."""
-    var i = Int(py=id)
-    var status = 0
-    with GILReleased(Python()):
-        status = msel_store_free_device_run(i)
-    return PythonObject(status)
-
-
+# `msel_free` deleted too (lane fx-leftovers item 9, 2026-11-21): it was only
+# the resident tests' fault injection; the close / release failure order is
+# checked natively (checks/native_tests/arena_state_suite.mojo).
 def msel_live_binding() raises -> PythonObject:
     return PythonObject(msel_store()[].live)
 

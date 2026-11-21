@@ -8,7 +8,7 @@
 # call: no loop or repeated call reaches it.
 from std.python import PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.torch_parameter_form_pack import torch_parameter_form
+from bindings.torch_parameter_form_pack import torch_parameter_form, TORCH_FORM_MAPPING
 from bindings.causal_lm_public_door import causal_public_c
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -18,8 +18,15 @@ def causal_lm_parameters_form_c[form: Int](py_self: PyObjectPtr, args_ptr: PyObj
     # CausalLM.parameters() / named_parameters(): the existing entry
     # (`causal_lm_parameters`, causal_public_c[13], lane causal-doors' door,
     # unchanged) then its result in torch's form. A raised entry returns its
-    # null with the Python error set, untouched.
-    var raw = causal_public_c[13](py_self, args_ptr)
+    # null with the Python error set, untouched. state_dict() (the mapping
+    # form) takes the copying entry, causal_public_c[18], which leaves the
+    # model unexposed and its resident session kept (lane fx-leftovers
+    # item 1, 2026-11-21; it was the exposing entry 13 for every form).
+    var raw = PyObjectPtr()
+    comptime if form == TORCH_FORM_MAPPING:
+        raw = causal_public_c[18](py_self, args_ptr)
+    else:
+        raw = causal_public_c[13](py_self, args_ptr)
     if not raw:
         return raw
     try:

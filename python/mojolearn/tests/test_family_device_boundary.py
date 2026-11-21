@@ -340,3 +340,32 @@ def test_python_operations_per_call_do_not_grow_with_rows(spec, device):
         model.predict(x)                                     # the route is resolved; the next call is a hit
         counts[name] = (_python_events(lambda: model.fit(x, y)), _python_events(lambda: model.predict(x)))
     assert counts["small"] == counts["large"]
+
+
+_RESTORED_CPU_SCRIPT = r"""
+import pickle, sys
+import numpy as np
+from mojolearn import _native_family_bridge as bridge
+est = pickle.loads(sys.stdin.buffer.read())
+assert not bridge._CPU_DONE, "nothing connected the CPU images before the restored estimator ran"
+rng = np.random.default_rng(5)
+x = rng.random((60, 4), dtype=np.float32)
+y = (x[:, 0] > 0.5).astype(np.int64)
+est.fit(x, y)
+est.score(x, y)
+assert bridge._CPU_DONE, "the restored device='cpu' estimator did not admit the CPU device"
+assert est.vendor_used() == "cpu"
+"""
+
+
+@two_devices
+def test_a_restored_cpu_estimator_admits_the_cpu_device_once():
+    # An unpickled device="cpu" classifier of the shared family context runs
+    # no constructor; its first label step admits the CPU device (loads the
+    # host label and metrics images) as construction does, in a fresh process
+    # where nothing else connected them.
+    import subprocess
+    from mojolearn.svm import SVC as _SVC
+    data = pickle.dumps(_SVC(device="cpu"))
+    done = subprocess.run([sys.executable, "-c", _RESTORED_CPU_SCRIPT], input=data, capture_output=True)
+    assert done.returncode == 0, done.stderr.decode()[-2000:]

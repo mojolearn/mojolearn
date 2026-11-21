@@ -104,6 +104,9 @@ comptime XCNN_OPN_LAYER_NAMED_PARAMETERS = 89
 # lane api-torch round 3: GCNConv / SAGEConv state_dict / load_state_dict (PyG names)
 comptime XCNN_OPN_GRAPH_STATE_DICT = 90
 comptime XCNN_OPN_GRAPH_LOAD_STATE_DICT = 91
+# lane fx-leftovers item 2: GCNConv / SAGEConv torch-form parameters() / named_parameters()
+comptime XCNN_OPN_GRAPH_PARAMETERS = 92
+comptime XCNN_OPN_GRAPH_NAMED_PARAMETERS = 93
 
 
 struct XcnnKeys(Defaultable, Movable):
@@ -689,6 +692,8 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "layer_named_parameters", XCNN_OPN_LAYER_NAMED_PARAMETERS)
     py_op_add(ops, "graph_state_dict", XCNN_OPN_GRAPH_STATE_DICT)
     py_op_add(ops, "graph_load_state_dict", XCNN_OPN_GRAPH_LOAD_STATE_DICT)
+    py_op_add(ops, "graph_parameters", XCNN_OPN_GRAPH_PARAMETERS)
+    py_op_add(ops, "graph_named_parameters", XCNN_OPN_GRAPH_NAMED_PARAMETERS)
     nk[].ops = ops
     nk[].ready = True
 

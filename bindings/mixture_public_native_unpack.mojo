@@ -674,10 +674,19 @@ def _gmm_ext_score(model: PythonObject, x: PythonObject, context: PythonObject) 
     var means = _get(model, "means_")
     var k = Int(py=means.shape[0])
     var nk = svm_keys()
-    var aux = _aux(Python.list(_any_f32(means, "aux", context), _any_f32(py_item(ext, nk[].k_pchol), "aux", context),
-                               _any_f32(py_item(ext, nk[].k_consts), "aux", context)))
+    # The model words laid out once per fitted state (`bgmm_score_words`, in
+    # `_ext` by the fit). Perf (lane fx-leftovers item 8): this ran `_aux`
+    # (three `_any_f32` reads + one allocation + three memcpy) on EVERY
+    # predict / predict_proba / score_samples / score / bic / aic; now one
+    # view of the held words, the same words in the same order (bits unchanged).
+    var words = py_get(ext, nk[].k_score_words)
+    if words is None:
+        raise Error("RuntimeError: this GaussianMixture is not fitted yet")
     # The image of the estimator's binding route (its device and mode).
-    return _bgmm_score_call(estimator_binding(model, "_mojolearn_x_cluster", context), x, aux, n, d, k, 3)
+    var result = _bgmm_score_span(estimator_binding(model, "_mojolearn_x_cluster", context), x,
+                                  VariantsSpan(Int(py=classical_address(words)), Int(py=words.size)), n, d, k, 3)
+    _ = words  # the held words stay alive through the entry above
+    return result^
 
 
 # ------------------------------------------------- BayesianGaussianMixture
