@@ -21,8 +21,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.parallel_member_device_unpack import parallel_member_says_cpu
-from core.device_route_dw_msel_parallel import member_multi_gpu_refusal
+from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu_refusal
 from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
@@ -129,10 +128,10 @@ def _ranges(count: Int, width: PythonObject) raises -> List[Int]:
 def _member_device(estimator: PythonObject, driver: String) raises:
     """The forecasting drivers run the model on the GPUs in `devices=` only:
     a model that says device='cpu' in a process with a GPU set is refused in
-    words before any shard is cut (bindings/parallel_member_device_unpack.mojo).
+    words before any shard is cut (bindings/msel_member_device_unpack.mojo).
     `_backend._CPU_ONLY` (None in a process with a GPU set) is read from the
     connected backend namespace only for a model that says 'cpu'."""
-    if not parallel_member_says_cpu(py_fields(estimator)):
+    if not member_says_cpu(py_fields(estimator), _b()):
         return
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     if py_get(f[].backend, PythonObject("_CPU_ONLY")) is None:

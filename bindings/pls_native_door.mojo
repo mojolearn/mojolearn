@@ -32,7 +32,7 @@ from bindings.admitted_input_unpack import admit_x
 from bindings.admitted_input_unpack import admit_f32
 from bindings.metrics_cls_native_unpack import metrics_cls_operation
 from bindings.operation_names_mcls import MCLS_OPN_FAMILY_MCLS_R2
-from providers.python.estimator_binding_pyapi_door import estimator_binding_mode
+from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.sequential_admission_door import _one_of
@@ -406,7 +406,7 @@ def _check_fitted(model: PythonObject, fields: PythonObject) raises:
         raise Error("RuntimeError: " + String(py_item(fields, nk[].k__pls_name)) + " is not fitted; call fit first")
 
 
-def _score_binding(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+def _score_binding(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = pls_keys()
     # `_metrics_impl._get_binding` belongs to this whole public operation.
     # Use the import-connected provider and preserve its metrics-specific
@@ -427,7 +427,8 @@ def _score_binding(fields: PythonObject, context: PythonObject) raises -> Python
             raise Error("numeric_mode must be 'fast' or 'identical'")
         expected = String(py=py_call(py_call(mode.strip).lower))
     answer_mode_word(expected, MODE_FAMILY_PLS)
-    var module = estimator_binding_mode(mode, "_mojolearn_metrics", context, False)
+    # The metrics module of the ESTIMATOR'S device (its binding route), not the process set.
+    var module = estimator_binding_routed(model, mode, "_mojolearn_metrics", context, False)
     var reader = neural_descriptor_entry(module, "metrics_numeric_mode", False)
     if reader is None:
         reader = neural_descriptor_entry(module, "umap_numeric_mode", False)
@@ -466,7 +467,7 @@ def pls_operation(model: PythonObject, operation: Int, args: PythonObject, conte
         if owner is None:
             raise Error("NotImplementedError: mojolearn: the PLS score needs the native metrics owner "
                         + "(family_mcls_r2); this install does not carry it")
-        var binding = _score_binding(fields, owner[1])
+        var binding = _score_binding(model, fields, owner[1])
         var truth = admit_f32(args[1], -1, "y", context, finite=False)
         var prediction = pls_operation(model, PLS_OPN_PREDICT, Python.tuple(args[0]), context, fields, state, captured_x,
                                        None, x_deferred, x_pin)

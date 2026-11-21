@@ -6,7 +6,7 @@ LinearRegression (test_linear_device_boundary.py): None is this installation's d
 an explicit `device="gpu"` on a CPU-only installation is refused in words that name `device="cpu"`. The value is read
 once, at construction, into the block's route; `get_params`, `set_params`, clone and pickle carry it. On a GPU
 installation `device="cpu"` runs the host kernels the `*Inference` classes run (`vendor_used() == "cpu"`) and returns
-the bits the GPU block returns; `backward` on it is refused in words (inference only). What needs two devices is
+the bits the GPU block returns; `backward` on it is refused in the shared words. What needs two devices is
 skipped by name on a CPU-only installation.
 """
 import pickle
@@ -171,7 +171,7 @@ def test_cpu_with_fast_mode_is_refused_in_words(tmp_path, family):
 def test_backward_on_the_cpu_device_is_refused_in_words_on_a_gpu_installation(tmp_path, family):
     cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
-    with pytest.raises(NotImplementedError, match="device='cpu' runs inference only in a GPU installation"):
+    with pytest.raises(ValueError, match="device='cpu' is not available for backward"):
         block.backward(x, np.ones_like(x))
 
 

@@ -194,7 +194,6 @@ DEBT = {
     'bindings/gp_score_labels_boundary_door.mojo': {'native_loaded_module': 3},
     'bindings/gp_state_admission_native_unpack.mojo': {'native_loaded_module': 1},
     'bindings/gp_svm_gp_state_door.mojo': {'native_loaded_module': 1},
-    'bindings/holtwinters_host_predict_door.mojo': {'native_loaded_module': 1},
     'bindings/host_archive_lifetime_door.mojo': {'native_loaded_module': 1},
     'bindings/host_archive_native_door.mojo': {'cpython': 1, 'native_loaded_module': 21},
     'bindings/host_archive_predict_native_pack.mojo': {'native_loaded_module': 2},

@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-"""`device=None` (default), `device="gpu"` and `device="cpu"` on the tree estimators, at the Python boundary.
+"""`device=None` (default), `device="gpu"` and `device="cpu"` on the tree estimators: the fit-level rows.
 
-Random forests, extra trees, decision trees and the isolation forest take `device=`. None is this installation's
-device: the GPU where the installation has a GPU set, else the CPU. The tree families check their parameters at fit
-(scikit-learn's convention), so `device` is stored as given, returned as given by `get_params`, and an unknown value
-(and an explicit `device="gpu"` on a CPU-only installation) is refused in words at fit, before any input is read.
-On a GPU installation both table sets exist in one process and `device="cpu"` runs the CPU binaries
-(`vendor_used() == "cpu"`); in `identical` mode it returns the bits the GPU returns. A fitted model is used on the
-table set that fitted it: changing the device of a fitted model is refused in words until it is fitted again.
-These tests run on a GPU installation and on a CPU-only one; what needs two devices is skipped by name on the
-CPU-only one. This file replaces test_extratrees_gpu_only.py, whose rule (`device` must be 'gpu') is retired.
+Random forests, extra trees, decision trees and the isolation forest take `device=`. The parameter itself
+(construction, refusals in words at construction and `set_params`, clone, pickle, a constructor run again) is covered
+for every class by test_device_parameter.py. This file holds what is the family's own: on a GPU installation both
+table sets exist in one process and `device="cpu"` runs the CPU binaries (`vendor_used() == "cpu"`); in `identical`
+mode it returns the bits the GPU returns; `set_params(device=...)` is seen by the next fit; a saved forest does not
+depend on the device. These tests run on a GPU installation and on a CPU-only one; what needs two devices is skipped
+by name on the CPU-only one. This file replaces test_extratrees_gpu_only.py, whose rule (`device` must be 'gpu') is
+retired.
 """
 import pickle
 
@@ -69,29 +68,6 @@ def test_device_is_a_constructor_parameter_with_default_none(cls):
 
 
 @pytest.mark.parametrize("cls", CLASSES)
-@pytest.mark.parametrize("bad", ["tpu", "GPU", " cpu", "cuda", "", "None", 0, 1, False, b"cpu"])
-def test_unknown_device_is_stored_as_given_and_refused_in_words_at_fit(cls, bad):
-    model = build(cls, device=bad)
-    assert model.get_params()["device"] == bad                # parameter operations run on any stored value
-    with pytest.raises(ValueError, match=REFUSAL):
-        # Invalid inputs prove the device is refused before any data is read.
-        model.fit(object()) if cls is IsolationForest else model.fit(object(), object())
-
-
-@pytest.mark.parametrize("cls", CLASSES)
-def test_set_params_and_direct_assignment_are_seen_by_the_next_fit(cls):
-    model = build(cls)
-    model.set_params(device="tpu")
-    with pytest.raises(ValueError, match=REFUSAL):
-        fit(model, cls)
-    model.set_params(device=None)
-    fit(model, cls)
-    model.device = "tpu"
-    with pytest.raises(ValueError, match=REFUSAL):
-        fit(model, cls)
-
-
-@pytest.mark.parametrize("cls", CLASSES)
 def test_default_device_is_this_installations_device(cls):
     model, x = fit(build(cls), cls)
     assert model.vendor_used() == mojolearn.vendor()          # the GPU set where there is one, else the CPU
@@ -101,13 +77,12 @@ def test_default_device_is_this_installations_device(cls):
 
 @pytest.mark.parametrize("cls", CLASSES)
 def test_explicit_gpu_runs_on_a_gpu_installation_and_is_refused_in_words_on_a_cpu_only_one(cls):
-    model = build(cls, device="gpu")
     if TWO_DEVICES:
-        fitted, x = fit(model, cls)
+        fitted, x = fit(build(cls, device="gpu"), cls)
         assert fitted.vendor_used() == mojolearn.vendor()
         return
     with pytest.raises(ValueError, match="device='gpu' needs a GPU build of mojolearn.*device='cpu'"):
-        fit(model, cls)
+        build(cls, device="gpu")
 
 
 @pytest.mark.parametrize("cls", CLASSES)
@@ -128,25 +103,6 @@ def test_two_devices_in_one_process_return_the_same_bits(cls):
     second = answer(cpu, cls, x)
     third = answer(gpu, cls, x)
     assert first.tobytes() == second.tobytes() == third.tobytes()
-
-
-@two_devices
-@pytest.mark.parametrize("cls", CLASSES)
-def test_a_fitted_model_is_not_used_on_the_other_device(cls):
-    model, x = fit(build(cls), cls)
-    model.device = "cpu"                                      # fitted on the GPU table set
-    with pytest.raises(ValueError, match="was fitted with device=the GPU and its device is now 'cpu'"):
-        answer(model, cls, x)
-    assert model.get_params()["device"] == "cpu"              # parameter operations still run
-    model.device = None
-    assert len(answer(model, cls, x)) == len(x)               # set back: the fitted model answers again
-    model.device = "cpu"
-    fit(model, cls)                                           # fitted again, on the CPU table set
-    assert model.vendor_used() == "cpu"
-    assert len(answer(model, cls, x)) == len(x)
-    model.device = None
-    with pytest.raises(ValueError, match="was fitted with device='cpu' and its device is now the GPU"):
-        answer(model, cls, x)
 
 
 @pytest.mark.skipif(mojolearn.vendor() != "metal", reason="numeric_mode='fast' exists on Apple GPUs only")
@@ -192,3 +148,29 @@ def test_check_fits_both_devices_in_this_process(cls):
     x, y = data(cls)
     assert answer(gpu.fit(x, y), cls, x).tobytes() == answer(cpu.fit(x, y), cls, x).tobytes()
     assert gpu.vendor_used() != "cpu" and cpu.vendor_used() == "cpu"
+
+
+@pytest.mark.parametrize("cls", CLASSES)
+def test_unknown_device_is_refused_in_words_at_construction_and_set_params(cls):
+    with pytest.raises(ValueError, match=REFUSAL):
+        build(cls, device="tpu")
+    model = build(cls)
+    with pytest.raises(ValueError, match=REFUSAL):
+        model.set_params(device="tpu")
+    assert model.get_params()["device"] is None               # refused before the estimator changed
+
+
+@two_devices
+@pytest.mark.parametrize("cls", CLASSES)
+def test_set_params_moves_the_next_fit_to_the_other_device(cls):
+    model, x = fit(build(cls, numeric_mode="identical"), cls)
+    on_gpu = answer(model, cls, x)
+    assert model.vendor_used() != "cpu"
+    model.set_params(device="cpu")                            # fitted state is dropped with the parameters
+    fit(model, cls)
+    assert model.vendor_used() == "cpu"
+    assert answer(model, cls, x).tobytes() == on_gpu.tobytes()
+    model.set_params(device=None)
+    fit(model, cls)
+    assert model.vendor_used() != "cpu"
+    assert answer(model, cls, x).tobytes() == on_gpu.tobytes()

@@ -2,8 +2,8 @@
 """`device=None` (default), `device="gpu"` and `device="cpu"` on Sequential, at the Python boundary.
 
 The device is a constructor parameter (and a parameter of `from_checkpoint` / `load`). None is this installation's
-device. It is checked where it is given and resolved once, by the model's first operation, into its native route
-owner; pickle and copy carry it. An explicit `device="gpu"` on a CPU-only installation is refused in words that name
+device. It is checked and refused where it is given and read once, by the model's first operation, into the shared
+route owner (no call reads it again); pickle and copy carry it. An explicit `device="gpu"` on a CPU-only installation is refused in words that name
 `device="cpu"`; `device="cpu"` always runs, in identical mode. On a GPU installation both entry tables exist in one
 process; in identical mode the two devices return the same bits. Which binary ran is read from the verification
 sidecar a saved model writes (its `install.vendor` is the word the binary itself reports). What needs two devices is
@@ -113,17 +113,6 @@ def test_two_models_on_two_devices_interleave_in_one_process(tmp_path):
     third = np.asarray(gpu.predict(x)).tobytes()
     assert first == second == third
     assert vendor_ran(gpu, tmp_path, "g") != "cpu" and vendor_ran(cpu, tmp_path, "c") == "cpu"
-
-
-@two_devices
-def test_an_assigned_device_is_seen_by_the_next_operation(tmp_path):
-    model, x = fitted(None)
-    before = np.asarray(model.predict(x)).tobytes()
-    model.device = "cpu"
-    assert vendor_ran(model, tmp_path, "moved") == "cpu"
-    assert np.asarray(model.predict(x)).tobytes() == before
-    model.device = None
-    assert vendor_ran(model, tmp_path, "back") == mojolearn.vendor()
 
 
 @two_devices

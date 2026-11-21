@@ -21,7 +21,6 @@ from bindings.neighbors_kde_native_door import neighbors_kde_operation, _kde_rel
 from bindings.kde_native_boundary_unpack import kde_owner_admit
 from bindings.kde_admission_boundary_unpack import kde_admission_hit, kde_admission_remember, kde_admission_drop
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
-from providers.python.host_estimator_binding_pyapi_door import host_estimator_binding_current as estimator_binding
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from providers.python.cluster_public_lifecycle_pyapi_door import _target, _refusal
 from bindings.cluster_keys_unpack import cluster_keys

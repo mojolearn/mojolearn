@@ -105,6 +105,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_code: PythonObject
     var k_complete: PythonObject
     var k_condition: PythonObject
+    var k_config: PythonObject
     var k_connections: PythonObject
     var k_control: PythonObject
     var k_cpu: PythonObject
@@ -119,6 +120,8 @@ struct AutogradKeys(Defaultable, Movable):
     var k_download_bytes: PythonObject
     var k_download_calls: PythonObject
     var k_download_host_ns: PythonObject
+    var k_dt_hi: PythonObject
+    var k_dt_lo: PythonObject
     var k_dtype: PythonObject
     var k_dtype_names: PythonObject
     var k_dtypes: PythonObject
@@ -127,7 +130,11 @@ struct AutogradKeys(Defaultable, Movable):
     var k_end_ns: PythonObject
     var k_epoch: PythonObject
     var k_execute: PythonObject
+    var k_exp_avg: PythonObject
+    var k_exp_avg_sq: PythonObject
+    var k_exp_inf: PythonObject
     var k_f32: PythonObject
+    var k_factor: PythonObject
     var k_fields_get: PythonObject
     var k_fill_bytes: PythonObject
     var k_fill_calls: PythonObject
@@ -140,6 +147,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_freed_bytes: PythonObject
     var k_frees: PythonObject
     var k_frozen_error: PythonObject
+    var k_grad_avg: PythonObject
     var k_gradient: PythonObject
     var k_graph: PythonObject
     var k_h: PythonObject
@@ -147,6 +155,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_has_infinity: PythonObject
     var k_has_nan: PythonObject
     var k_has_zero: PythonObject
+    var k_high_freq_factor: PythonObject
     var k_hooks: PythonObject
     var k_host_call_ns: PythonObject
     var k_host_copy_bytes: PythonObject
@@ -169,6 +178,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_logical_shards: PythonObject
     var k_logical_stages: PythonObject
     var k_loss_curve_: PythonObject
+    var k_low_freq_factor: PythonObject
     var k_max_iterations: PythonObject
     var k_memory_scope: PythonObject
     var k_method_type: PythonObject
@@ -176,7 +186,9 @@ struct AutogradKeys(Defaultable, Movable):
     var k_microbatches: PythonObject
     var k_model_native_api_v1: PythonObject
     var k_modes: PythonObject
+    var k_momentum_buffer: PythonObject
     var k_mro: PythonObject
+    var k_mu_product: PythonObject
     var k_n_args: PythonObject
     var k_n_iter_: PythonObject
     var k_name: PythonObject
@@ -207,6 +219,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_optimizer_elements_per_rank: PythonObject
     var k_optimizer_ranges: PythonObject
     var k_optimizer_residency: PythonObject
+    var k_original_max_position_embeddings: PythonObject
     var k_otherwise: PythonObject
     var k_output_shapes: PythonObject
     var k_outputs: PythonObject
@@ -239,6 +252,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_retained: PythonObject
     var k_retained_bytes: PythonObject
     var k_retired_bytes: PythonObject
+    var k_rope_type: PythonObject
     var k_scalar_types: PythonObject
     var k_second_moments: PythonObject
     var k_seed: PythonObject
@@ -251,6 +265,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_shape_names: PythonObject
     var k_shape_scalars: PythonObject
     var k_source: PythonObject
+    var k_square_avg: PythonObject
     var k_squared_l2_float32: PythonObject
     var k_stage: PythonObject
     var k_staging_acquired_bytes: PythonObject
@@ -258,8 +273,10 @@ struct AutogradKeys(Defaultable, Movable):
     var k_staging_bytes: PythonObject
     var k_stale: PythonObject
     var k_start_ns: PythonObject
+    var k_state: PythonObject
     var k_step: PythonObject
     var k_stopped: PythonObject
+    var k_sum: PythonObject
     var k_supported_ops: PythonObject
     var k_sync_calls: PythonObject
     var k_sync_ns: PythonObject
@@ -270,6 +287,7 @@ struct AutogradKeys(Defaultable, Movable):
     var k_torch_namespace: PythonObject
     var k_torch_owner: PythonObject
     var k_transport: PythonObject
+    var k_type: PythonObject
     var k_unsupported: PythonObject
     var k_upload_bytes: PythonObject
     var k_upload_calls: PythonObject
@@ -277,6 +295,8 @@ struct AutogradKeys(Defaultable, Movable):
     var k_value: PythonObject
     var k_version: PythonObject
     var k_weight_map: PythonObject
+    var k_weights: PythonObject
+    var k_words: PythonObject
 
     def __init__(out self):
         self.ready = False
@@ -330,6 +350,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_code = PythonObject(None)
         self.k_complete = PythonObject(None)
         self.k_condition = PythonObject(None)
+        self.k_config = PythonObject(None)
         self.k_connections = PythonObject(None)
         self.k_control = PythonObject(None)
         self.k_cpu = PythonObject(None)
@@ -344,6 +365,8 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_download_bytes = PythonObject(None)
         self.k_download_calls = PythonObject(None)
         self.k_download_host_ns = PythonObject(None)
+        self.k_dt_hi = PythonObject(None)
+        self.k_dt_lo = PythonObject(None)
         self.k_dtype = PythonObject(None)
         self.k_dtype_names = PythonObject(None)
         self.k_dtypes = PythonObject(None)
@@ -352,7 +375,11 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_end_ns = PythonObject(None)
         self.k_epoch = PythonObject(None)
         self.k_execute = PythonObject(None)
+        self.k_exp_avg = PythonObject(None)
+        self.k_exp_avg_sq = PythonObject(None)
+        self.k_exp_inf = PythonObject(None)
         self.k_f32 = PythonObject(None)
+        self.k_factor = PythonObject(None)
         self.k_fields_get = PythonObject(None)
         self.k_fill_bytes = PythonObject(None)
         self.k_fill_calls = PythonObject(None)
@@ -365,6 +392,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_freed_bytes = PythonObject(None)
         self.k_frees = PythonObject(None)
         self.k_frozen_error = PythonObject(None)
+        self.k_grad_avg = PythonObject(None)
         self.k_gradient = PythonObject(None)
         self.k_graph = PythonObject(None)
         self.k_h = PythonObject(None)
@@ -372,6 +400,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_has_infinity = PythonObject(None)
         self.k_has_nan = PythonObject(None)
         self.k_has_zero = PythonObject(None)
+        self.k_high_freq_factor = PythonObject(None)
         self.k_hooks = PythonObject(None)
         self.k_host_call_ns = PythonObject(None)
         self.k_host_copy_bytes = PythonObject(None)
@@ -394,6 +423,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_logical_shards = PythonObject(None)
         self.k_logical_stages = PythonObject(None)
         self.k_loss_curve_ = PythonObject(None)
+        self.k_low_freq_factor = PythonObject(None)
         self.k_max_iterations = PythonObject(None)
         self.k_memory_scope = PythonObject(None)
         self.k_method_type = PythonObject(None)
@@ -401,7 +431,9 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_microbatches = PythonObject(None)
         self.k_model_native_api_v1 = PythonObject(None)
         self.k_modes = PythonObject(None)
+        self.k_momentum_buffer = PythonObject(None)
         self.k_mro = PythonObject(None)
+        self.k_mu_product = PythonObject(None)
         self.k_n_args = PythonObject(None)
         self.k_n_iter_ = PythonObject(None)
         self.k_name = PythonObject(None)
@@ -432,6 +464,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_optimizer_elements_per_rank = PythonObject(None)
         self.k_optimizer_ranges = PythonObject(None)
         self.k_optimizer_residency = PythonObject(None)
+        self.k_original_max_position_embeddings = PythonObject(None)
         self.k_otherwise = PythonObject(None)
         self.k_output_shapes = PythonObject(None)
         self.k_outputs = PythonObject(None)
@@ -464,6 +497,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_retained = PythonObject(None)
         self.k_retained_bytes = PythonObject(None)
         self.k_retired_bytes = PythonObject(None)
+        self.k_rope_type = PythonObject(None)
         self.k_scalar_types = PythonObject(None)
         self.k_second_moments = PythonObject(None)
         self.k_seed = PythonObject(None)
@@ -476,6 +510,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_shape_names = PythonObject(None)
         self.k_shape_scalars = PythonObject(None)
         self.k_source = PythonObject(None)
+        self.k_square_avg = PythonObject(None)
         self.k_squared_l2_float32 = PythonObject(None)
         self.k_stage = PythonObject(None)
         self.k_staging_acquired_bytes = PythonObject(None)
@@ -483,8 +518,10 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_staging_bytes = PythonObject(None)
         self.k_stale = PythonObject(None)
         self.k_start_ns = PythonObject(None)
+        self.k_state = PythonObject(None)
         self.k_step = PythonObject(None)
         self.k_stopped = PythonObject(None)
+        self.k_sum = PythonObject(None)
         self.k_supported_ops = PythonObject(None)
         self.k_sync_calls = PythonObject(None)
         self.k_sync_ns = PythonObject(None)
@@ -495,6 +532,7 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_torch_namespace = PythonObject(None)
         self.k_torch_owner = PythonObject(None)
         self.k_transport = PythonObject(None)
+        self.k_type = PythonObject(None)
         self.k_unsupported = PythonObject(None)
         self.k_upload_bytes = PythonObject(None)
         self.k_upload_calls = PythonObject(None)
@@ -502,6 +540,8 @@ struct AutogradKeys(Defaultable, Movable):
         self.k_value = PythonObject(None)
         self.k_version = PythonObject(None)
         self.k_weight_map = PythonObject(None)
+        self.k_weights = PythonObject(None)
+        self.k_words = PythonObject(None)
 
 
 comptime _AUTOGRAD_KEYS = SharedSlot[AutogradKeys, "MojolearnAutogradKeysV1"]
@@ -559,6 +599,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_code = py_key("code")
     nk[].k_complete = py_key("complete")
     nk[].k_condition = py_key("condition")
+    nk[].k_config = py_key("config")
     nk[].k_connections = py_key("connections")
     nk[].k_control = py_key("control")
     nk[].k_cpu = py_key("cpu")
@@ -573,6 +614,8 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_download_bytes = py_key("download_bytes")
     nk[].k_download_calls = py_key("download_calls")
     nk[].k_download_host_ns = py_key("download_host_ns")
+    nk[].k_dt_hi = py_key("dt_hi")
+    nk[].k_dt_lo = py_key("dt_lo")
     nk[].k_dtype = py_key("dtype")
     nk[].k_dtype_names = py_key("dtype_names")
     nk[].k_dtypes = py_key("dtypes")
@@ -581,7 +624,11 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_end_ns = py_key("end_ns")
     nk[].k_epoch = py_key("epoch")
     nk[].k_execute = py_key("execute")
+    nk[].k_exp_avg = py_key("exp_avg")
+    nk[].k_exp_avg_sq = py_key("exp_avg_sq")
+    nk[].k_exp_inf = py_key("exp_inf")
     nk[].k_f32 = py_key("f32")
+    nk[].k_factor = py_key("factor")
     nk[].k_fields_get = py_key("fields_get")
     nk[].k_fill_bytes = py_key("fill_bytes")
     nk[].k_fill_calls = py_key("fill_calls")
@@ -594,6 +641,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_freed_bytes = py_key("freed_bytes")
     nk[].k_frees = py_key("frees")
     nk[].k_frozen_error = py_key("frozen_error")
+    nk[].k_grad_avg = py_key("grad_avg")
     nk[].k_gradient = py_key("gradient")
     nk[].k_graph = py_key("graph")
     nk[].k_h = py_key("h")
@@ -601,6 +649,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_has_infinity = py_key("has_infinity")
     nk[].k_has_nan = py_key("has_nan")
     nk[].k_has_zero = py_key("has_zero")
+    nk[].k_high_freq_factor = py_key("high_freq_factor")
     nk[].k_hooks = py_key("hooks")
     nk[].k_host_call_ns = py_key("host_call_ns")
     nk[].k_host_copy_bytes = py_key("host_copy_bytes")
@@ -623,6 +672,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_logical_shards = py_key("logical_shards")
     nk[].k_logical_stages = py_key("logical_stages")
     nk[].k_loss_curve_ = py_key("loss_curve_")
+    nk[].k_low_freq_factor = py_key("low_freq_factor")
     nk[].k_max_iterations = py_key("max_iterations")
     nk[].k_memory_scope = py_key("memory_scope")
     nk[].k_method_type = py_key("method_type")
@@ -630,7 +680,9 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_microbatches = py_key("microbatches")
     nk[].k_model_native_api_v1 = py_key("model_native_api_v1")
     nk[].k_modes = py_key("modes")
+    nk[].k_momentum_buffer = py_key("momentum_buffer")
     nk[].k_mro = py_key("mro")
+    nk[].k_mu_product = py_key("mu_product")
     nk[].k_n_args = py_key("n_args")
     nk[].k_n_iter_ = py_key("n_iter_")
     nk[].k_name = py_key("name")
@@ -661,6 +713,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_optimizer_elements_per_rank = py_key("optimizer_elements_per_rank")
     nk[].k_optimizer_ranges = py_key("optimizer_ranges")
     nk[].k_optimizer_residency = py_key("optimizer_residency")
+    nk[].k_original_max_position_embeddings = py_key("original_max_position_embeddings")
     nk[].k_otherwise = py_key("otherwise")
     nk[].k_output_shapes = py_key("output_shapes")
     nk[].k_outputs = py_key("outputs")
@@ -693,6 +746,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_retained = py_key("retained")
     nk[].k_retained_bytes = py_key("retained_bytes")
     nk[].k_retired_bytes = py_key("retired_bytes")
+    nk[].k_rope_type = py_key("rope_type")
     nk[].k_scalar_types = py_key("scalar_types")
     nk[].k_second_moments = py_key("second_moments")
     nk[].k_seed = py_key("seed")
@@ -705,6 +759,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_shape_names = py_key("shape_names")
     nk[].k_shape_scalars = py_key("shape_scalars")
     nk[].k_source = py_key("source")
+    nk[].k_square_avg = py_key("square_avg")
     nk[].k_squared_l2_float32 = py_key("squared_l2_float32")
     nk[].k_stage = py_key("stage")
     nk[].k_staging_acquired_bytes = py_key("staging_acquired_bytes")
@@ -712,8 +767,10 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_staging_bytes = py_key("staging_bytes")
     nk[].k_stale = py_key("stale")
     nk[].k_start_ns = py_key("start_ns")
+    nk[].k_state = py_key("state")
     nk[].k_step = py_key("step")
     nk[].k_stopped = py_key("stopped")
+    nk[].k_sum = py_key("sum")
     nk[].k_supported_ops = py_key("supported_ops")
     nk[].k_sync_calls = py_key("sync_calls")
     nk[].k_sync_ns = py_key("sync_ns")
@@ -724,6 +781,7 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_torch_namespace = py_key("torch_namespace")
     nk[].k_torch_owner = py_key("torch_owner")
     nk[].k_transport = py_key("transport")
+    nk[].k_type = py_key("type")
     nk[].k_unsupported = py_key("unsupported")
     nk[].k_upload_bytes = py_key("upload_bytes")
     nk[].k_upload_calls = py_key("upload_calls")
@@ -731,6 +789,8 @@ def _autograd_keys_fill(nk: UnsafePointer[AutogradKeys, MutUntrackedOrigin]) rai
     nk[].k_value = py_key("value")
     nk[].k_version = py_key("version")
     nk[].k_weight_map = py_key("weight_map")
+    nk[].k_weights = py_key("weights")
+    nk[].k_words = py_key("words")
     var ops = Python.dict()
     py_op_add(ops, "reader_error", AUTOGRAD_OPN_READER_ERROR)
     py_op_add(ops, "reader_read", AUTOGRAD_OPN_READER_READ)

@@ -163,6 +163,9 @@ class HDBSCAN(_NumericModeMixin):
 
     _mojolearn_native_public = True
     _BINDING = "_mojolearn_hdbscan"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(
         self,
@@ -175,9 +178,9 @@ class HDBSCAN(_NumericModeMixin):
         cluster_selection_method="eom",
         allow_single_cluster=False,
         prediction_data=False,
-        *, numeric_mode=None,
+        *, numeric_mode=None, device=None,
     ):
-        return _NATIVE(self, "family_hdbscan_public_initialize", (min_cluster_size, min_samples, cluster_selection_epsilon, max_cluster_size, metric, alpha, cluster_selection_method, allow_single_cluster, prediction_data, numeric_mode,), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_hdbscan_public_initialize", (min_cluster_size, min_samples, cluster_selection_epsilon, max_cluster_size, metric, alpha, cluster_selection_method, allow_single_cluster, prediction_data, numeric_mode, device,), _NATIVE_CONTEXT)
 
     def _extension(self):
         return _NATIVE(self, "family_hdbscan_public_binding", (), _NATIVE_CONTEXT)
