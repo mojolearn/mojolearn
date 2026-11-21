@@ -23,7 +23,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_prepared_owner_unpack import prepared_namespace_admitted, prepared_namespace_admit
-from bindings.py_balanced import py_call, py_contains, py_get, py_item, py_setattr, py_setitem, py_type
+from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_item, py_setattr, py_setitem, py_type
 from checks.numerics import NUMERIC_IDENTICAL
 from core.native_descriptor_abi import TRANSFORMER_BLOCK_ABI_NAME, PRIMITIVE_ABI_NAME, MAMBA_STATE_ABI_NAME
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH
@@ -3779,7 +3779,16 @@ def _causal_digest_hex(mut mods: NativeModules, model: PythonObject) raises -> S
 def causal_lm_digest_binding(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
     """`CausalLM.digest_`: hashed at every read, never the owner's kept
     checkpoint fingerprint (an in-place write into a weight changes no
-    generation word). A `fast` model has no digest."""
+    generation word). A `fast` model has no digest.
+
+    A ParallelCausalLM (one worker process per layer group; its blocks hold
+    a worker index, not the weights) is refused in words (fx-audit 34): this
+    walk reads every block's weights from the model's own fields, and
+    hashing the workers' copies would need a gather the class does not do.
+    One instance-dictionary probe, at a digest read only."""
+    if py_contains(py_fields(model), "layer_devices"):
+        raise Error("AttributeError: ParallelCausalLM has no digest_: its layers live in worker processes; "
+                    + "load the same checkpoint with CausalLM.load and read its digest_")
     var mode = model._native_numeric_mode
     if mode is not None and String(mode) == "fast":
         raise Error("AttributeError: digest_ exists in identical mode only: fast mode promises no identical "
