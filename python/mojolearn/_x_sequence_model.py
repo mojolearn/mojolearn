@@ -264,9 +264,6 @@ class Sequential:
         return _SEQUENTIAL_ENTRY(self, "compile", (loss, optimizer, lr, momentum, nesterov, beta1, beta2, eps, weight_decay, schedule, step_size, gamma, huber_delta, tol, n_iter_no_change), _SEQUENTIAL_CONTEXT)
 
     # ------------------------------------------------------------ description
-    def _binding(self):
-        return _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-
     def _program(self, n_features, sample=None):
         return _SEQUENTIAL_ENTRY(self, "program", (n_features, sample), _SEQUENTIAL_CONTEXT)
 
