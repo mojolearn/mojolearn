@@ -98,7 +98,10 @@ comptime FR_LOW = 21
 comptime FR_LINALG_OPS = 22
 # The estimator-argument binding step that runs before the owner.
 comptime FR_PRE_NONE = 0
-comptime FR_PRE_ESTIMATORS = 1
+# TOMBSTONE: FR_PRE_ESTIMATORS (1: the per-call `estimator_arguments(model, "_mojolearn_estimators", ...)` step of
+# every `family_svc_linear_*` / `family_svm_linear_*` call, a binding-route read and a new args tuple per call)
+# deleted 2026-11-21 by lane ma-pub-linear: LinearSVC / LinearSVR hold their driver on their device route
+# (bindings/linear_svc_boundary_unpack.mojo `linear_svc_route`). Word 1 stays unused.
 comptime FR_PRE_SVM = 2
 comptime FR_PRE_BASE = 3
 comptime FR_PRE_X_NEIGHBORS = 4
@@ -124,9 +127,7 @@ def family_route(operation: String) -> Int:
     tests, in the same order, the family dispatcher ran on every call (now
     run once per name for coded calls, at table fill)."""
     var pre = FR_PRE_NONE
-    if operation.startswith("family_svc_linear_") or operation.startswith("family_svm_linear_"):
-        pre = FR_PRE_ESTIMATORS
-    elif operation.startswith("family_svc_svc_") or operation.startswith("family_svc_svr_"):
+    if operation.startswith("family_svc_svc_") or operation.startswith("family_svc_svr_"):
         pre = FR_PRE_SVM
     elif operation.startswith("family_kmeans_"):
         pre = FR_PRE_BASE
