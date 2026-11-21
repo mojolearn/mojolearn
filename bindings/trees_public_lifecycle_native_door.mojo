@@ -36,6 +36,8 @@ from bindings.operation_names_trees import (
     TREES_OPN_TREES_PUBLIC_FOREST_APPLY, TREES_OPN_TREES_PUBLIC_FOREST_CAPTURE_MODE, TREES_OPN_TREES_PUBLIC_FOREST_DEPTH, TREES_OPN_TREES_PUBLIC_FOREST_EFFECTIVE_MODE, TREES_OPN_TREES_PUBLIC_FOREST_FIT, TREES_OPN_TREES_PUBLIC_FOREST_IS_FITTED, TREES_OPN_TREES_PUBLIC_FOREST_N_LEAVES, TREES_OPN_TREES_PUBLIC_FOREST_ORDERED_RESIDENT_AUTO, TREES_OPN_TREES_PUBLIC_FOREST_PREDICT, TREES_OPN_TREES_PUBLIC_FOREST_PREDICTION_ENGINE, TREES_OPN_TREES_PUBLIC_FOREST_PREDICT_WITH_LEAVES, TREES_OPN_TREES_PUBLIC_FOREST_PROBA, TREES_OPN_TREES_PUBLIC_FOREST_REFRESH, TREES_OPN_TREES_PUBLIC_FOREST_SCORE, TREES_OPN_TREES_PUBLIC_FOREST_SETSTATE, TREES_OPN_TREES_PUBLIC_FOREST_SET_PARAMS, TREES_OPN_TREES_PUBLIC_FOREST_STAGED_PREDICT, TREES_OPN_TREES_PUBLIC_FOREST_VALIDATE_PARAMS,
 )
 from bindings.py_balanced import py_item
+from bindings.trees_route_boundary_door import trees_device_admit
+from providers.python.device_route_boundary_door import device_route_clear
 
 
 def _set_params(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -54,14 +56,18 @@ def _set_params(model: PythonObject, values: PythonObject, context: PythonObject
             py_call(unknown.append, names[i])
     if len(unknown):
         raise Error("Invalid parameter(s) " + String(py_call(b.repr, py_call(b.sorted, unknown))) + " for " + classical_estimator_name(model))
+    var nk = trees_keys()
+    # `device` is checked where it is given, before any field changes.
+    trees_device_admit(py_get(values, nk[].k_device), context)
     py_call(params.update, values)
     var fields = py_fields(model)
     # Like reconstruction through the constructor, value checks stay at fit
     # and all prior fitted/cache state is removed only after binding succeeds.
     py_call(fields.clear)
     py_call(fields.update, params)
-    var nk = trees_keys()
     py_setitem(fields, nk[].k__has_constructor_parameters, PythonObject(True))
+    # The next operation reads the device and resolves the route again.
+    device_route_clear(model)
     return model
 
 
@@ -75,7 +81,10 @@ def forest_public_operation(model: PythonObject, operation: Int, opname: String,
     same text as before."""
     classical_check_layout(model, context)
     if operation == TREES_OPN_TREES_PUBLIC_FOREST_SETSTATE:
-        return forest_restore_state(model, args[0], context)
+        var restored = forest_restore_state(model, args[0], context)
+        # A restored state carries its own `device`: resolve again.
+        device_route_clear(model)
+        return restored
     if operation == TREES_OPN_TREES_PUBLIC_FOREST_IS_FITTED:
         return tree_is_fitted(model, True)
     if operation == TREES_OPN_TREES_PUBLIC_FOREST_DEPTH or operation == TREES_OPN_TREES_PUBLIC_FOREST_N_LEAVES:
@@ -113,8 +122,6 @@ def forest_public_operation(model: PythonObject, operation: Int, opname: String,
     # native side table (bindings/trees_side_records.mojo).
     trees_admit_parameters(model, fields, py_type(model)._parameter_names, context)
     var fitting = operation == TREES_OPN_TREES_PUBLIC_FOREST_FIT
-    # The device was admitted where the operation started
-    # (bindings/trees_route_boundary_door.mojo), before any input is read.
     classical_admit_value(args, context)
     var name = classical_estimator_name(model)
     if not fitting:
