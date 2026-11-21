@@ -1412,6 +1412,8 @@ HOST_IMPORT_ALIASES = {
                 'causal_model_init',
                 'causal_model_load',
                 'causal_model_read_weights',
+                'causal_model_twin',
+                'causal_model_vendor_used',
                 'causal_lm_allocate',
                 'causal_lm_reset',
                 'causal_lm_forward',
@@ -1830,6 +1832,7 @@ FAMILIES = (
             "neural_block_allocate", "neural_block_forward", "neural_block_backward", "neural_block_inference_backward",
             "neural_block_vendor_used", "neural_block_numeric_mode_used",
             "causal_model_init", "causal_model_load", "causal_model_read_weights",
+            "causal_model_twin", "causal_model_vendor_used",
             "causal_lm_allocate", "causal_lm_reset", "causal_lm_forward", "causal_lm_stream", "causal_lm_read",
             "causal_lm_info", "causal_lm_generate", "causal_lm_text_stream", "causal_lm_generate_text",
             "causal_lm_resident", "causal_lm_snapshot", "causal_lm_resume", "causal_lm_parameters",
@@ -1983,7 +1986,6 @@ FAMILIES = (
             "state_file_sha256",
             "knn_search", "knn_classify", "knn_regress", "kmeans_fit", "kmeans_predict", "kmeans_transform",
             "kmeans_native_api_v1",
-            "knn_classify_neighbors", "knn_regress_neighbors",
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "spectral_preparation_native_api_v1", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
@@ -2086,11 +2088,11 @@ FAMILIES = (
             "cholesky_factor", "cholesky_solve",
             # lane/identical-lowbit-inference (2026-09-17): the bf16f32.v1 and
             # int8i32.v1 profiles, gemm/IDENTICAL_LOWBIT_CONTRACT.md.
-            "lowbit_profile_version", "gemm_bf16", "gemm_int8", "quantize_int8",
+            "gemm_bf16", "gemm_int8", "quantize_int8",
             "dequantize_int8", "to_bf16", "from_bf16",
             # lane/lowbit-int15 (2026-09-29): the int15i64.v1 profile,
             # gemm/IDENTICAL_LOWBIT_CONTRACT.md section 6.
-            "int15_profile_version", "gemm_int15", "quantize_int15", "dequantize_int15",
+            "gemm_int15", "quantize_int15", "dequantize_int15",
             # lane/linalg-public (2026-09-19)
             "qr_r", "eigh", "svdvals",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
@@ -2933,9 +2935,7 @@ FAMILIES = (
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_mode_policy_mask",
-            "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
-            "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
-            "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
+            "gbdt_fit", "gbdt_model_dim",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -3065,8 +3065,8 @@ FAMILIES = (
         exports=(
             "resample_host_numeric_mode", "resample_host_vendor", "resample_host_column",
             "resample_host_sabotage", "resample_vendor", "resample_numeric_mode",
-            "bootstrap", "permutation_test", "monte_carlo_integrate",
-            "bootstrap_unpaired", "permutation_samples", "resample_indices",
+            # lane dw-decomp (2026-11-21): the six by-name operation entries are one typed table
+            "resample_native_api_v1",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

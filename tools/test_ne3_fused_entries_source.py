@@ -52,11 +52,14 @@ def test_exports_registered_on_both_bindings_and_listed():
 
 
 def test_fused_doors_keep_the_op_chain_fallback():
-    ocsvm = _read('bindings/svc_ocsvm_native_door.mojo')
+    ocsvm = _read('bindings/svc_ocsvm_boundary_unpack.mojo')
     # The fused labels route is taken only when the entry exists; otherwise the kernel-product
-    # chain runs (typed driver calls since the door moved off named xn_* lookups).
-    fused = ocsvm.index('if labels and _ocsvm_labels_available(binding):')
-    assert fused < ocsvm.index('oc_kernel_product(driver,', fused)
+    # chain runs (typed driver calls since the door moved off named xn_* lookups): UNPACK picks
+    # the path, the typed RUN executes it.
+    product = ocsvm.index('request.path = OC_QUERY_KERNEL_PRODUCT')
+    assert product < ocsvm.index('if labels and _ocsvm_labels_available(binding):', product)
+    run = _read('svm/svc_ocsvm_native_run.mojo')
+    assert run.index('if r.path == OC_QUERY_FUSED_LABELS:') < run.index('oc_kernel_product(driver,')
     local = _read('bindings/neighbors_local_native_door.mojo')
     # NearestCentroid: the fused label kernel when the connection has it, the distance/score
     # label chain otherwise (typed requests on the connected driver).

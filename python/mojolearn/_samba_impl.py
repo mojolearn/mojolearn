@@ -203,6 +203,10 @@ class SambaStack(object):
         Number of microbatches per optimizer step; must divide the batch rows.
     numeric_mode : {'identical', 'fast'} or None, default None
         Numeric mode. None uses the library default. ``'fast'`` is available on Apple GPUs only.
+    device : {'gpu', 'cpu'} or None, default None
+        Where the stack runs. None uses this installation's device. A stack runs on
+        the device of its installation: ``'gpu'`` requires a GPU build and ``'cpu'``
+        a CPU-only installation; any other choice raises `ValueError`.
 
     Attributes
     ----------
@@ -228,8 +232,8 @@ class SambaStack(object):
     def __init__(self, config, weights=None, generator=None, lr=1e-3,
                  betas=(0.9, 0.999), eps=1e-8, weight_decay=0.01,
                  lr_schedule=None, max_norm=None, accumulation_steps=1,
-                 numeric_mode=None):
-        return _native_samba_bridge.RUNTIME.samba_native_call("construct", (self, (config, weights, generator, lr, betas, eps, weight_decay, lr_schedule, max_norm, accumulation_steps, numeric_mode)), _native_samba_bridge.CONTEXT)
+                 numeric_mode=None, *, device=None):
+        return _native_samba_bridge.RUNTIME.samba_native_call("construct", (self, (config, weights, generator, lr, betas, eps, weight_decay, lr_schedule, max_norm, accumulation_steps, numeric_mode, device)), _native_samba_bridge.CONTEXT)
 
     # -- weights ----------------------------------------------------------
     def load_weights(self, weights):
@@ -430,7 +434,7 @@ class SambaStack(object):
             "checkpoint_save", (self, path), _native_samba_bridge.CONTEXT)
 
     @classmethod
-    def from_checkpoint(cls, path, numeric_mode=None):
+    def from_checkpoint(cls, path, numeric_mode=None, *, device=None):
         """Build a stack from a checkpoint written by `save_checkpoint`.
 
         Parameters
@@ -438,6 +442,8 @@ class SambaStack(object):
         path : str or path-like
         numeric_mode : str or None, default None
             None uses the mode stored in the checkpoint.
+        device : {'gpu', 'cpu'} or None, default None
+            As for the constructor.
 
         Returns
         -------
@@ -446,7 +452,7 @@ class SambaStack(object):
         Raises `ValueError` when the checkpoint fails its integrity or schema checks.
         """
         return _native_samba_bridge.RUNTIME.samba_native_call(
-            "checkpoint_load", (cls, path, numeric_mode), _native_samba_bridge.CONTEXT)
+            "checkpoint_load", (cls, path, numeric_mode, device), _native_samba_bridge.CONTEXT)
 
 
 class SambaDecodeSession(object):

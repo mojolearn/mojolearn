@@ -14,7 +14,8 @@ from bindings.lm_corpus_files_door import (corpus_env_lm_cache, corpus_path, cor
     corpus_atomic_begin, corpus_atomic_commit, corpus_atomic_abort, corpus_seconds, corpus_file_size)
 from bindings.tokenizer_public_native_door import (tokenizer_bpe_identity_file, tokenizer_bpe_identity_text,
     tokenizer_bpe_encode_corpus, tokenizer_bpe_train_corpus, tokenizer_bpe_export, tokenizer_bpe_for,
-    tokenizer_bpe_identity, tokenizer_trained_info, tokenizer_gather_rows_native)
+    tokenizer_bpe_identity, tokenizer_trained_info)
+from core.lm_batch_run import LmBatchRequest, lm_batch_dims, lm_batch_run, lm_batch_steps_run
 from bindings.native_json_door import native_json_parse
 from core.sha256 import sha256_hex_addr
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
@@ -428,22 +429,37 @@ def _batch_construct(directory: PythonObject, batch: PythonObject, length: Pytho
     return result
 
 
-def _batch_ids(value: PythonObject, step_value: PythonObject, context: PythonObject,
-               captured_fields: PythonObject) raises -> PythonObject:
+def _batch_words(fields: PythonObject) raises -> LmBatchRequest:
+    """UNPACK: the four admitted words of a batches owner (no token source yet)."""
     var nk = lm_keys()
-    var fields = captured_fields
     var batch = corpus_int(py_item(fields, nk[].k_batch), "batch", True)
     var length = corpus_int(py_item(fields, nk[].k_length), "length", True)
     var lo = corpus_int(py_item(fields, nk[].k_lo), "lo", True)
     var modulus = corpus_int(py_item(fields, nk[].k_modulus), "modulus", True)
-    if batch < 0 or length < 1:
-        raise Error("ValueError: tokens_gather_rows: bad dims")
-    var base = corpus_batch_base(step_value, batch, length)
+    return LmBatchRequest(batch, length, lo, modulus)
+
+
+def _batch_source(fields: PythonObject, context: PythonObject, mut request: LmBatchRequest) raises -> PythonObject:
+    """UNPACK: the mapped token ids of a batches owner into `request`. The
+    returned snapshot owns the mapping: the caller keeps it past the RUN."""
+    var nk = lm_keys()
     var source = corpus_ids_snapshot(py_item(fields, nk[].k_ids_all), context)
-    var result = corpus_empty(Python.tuple(batch, length + 1), context)
-    _ = tokenizer_gather_rows_native(Int(py=source._addr), Int(py=source.size), Int(py=result._addr), Int(py=result.size),
-        batch, length, lo, modulus, base)
-    _ = source^
+    request.source = Int(py=source._addr)
+    request.source_count = Int(py=source.size)
+    return source
+
+
+def _batch_ids(value: PythonObject, step_value: PythonObject, context: PythonObject,
+               captured_fields: PythonObject) raises -> PythonObject:
+    # UNPACK
+    var request = _batch_words(captured_fields)
+    lm_batch_dims(request)
+    var base = corpus_batch_base(step_value, request.batch, request.length)
+    var source = _batch_source(captured_fields, context, request)
+    # PACK storage, then RUN into it
+    var result = corpus_empty(Python.tuple(request.batch, request.length + 1), context)
+    _ = lm_batch_run(request, base, Int(py=result._addr), Int(py=result.size))
+    _ = source
     return result
 
 
@@ -454,31 +470,17 @@ def lm_corpus_gather_steps(owner: PythonObject, steps: List[Int], batch: Int, le
     ONE admission of the batches owner (fields, ids method, token snapshot).
     The same rows, in the same order, as `ids`: `ids(s)` reads base
     s * batch * length; here the base is computed natively for exact ints."""
-    var nk = lm_keys()
+    # UNPACK
     var fields = _batch_fields(owner, context)
     _batch_method(owner, fields, context)
-    var have_batch = corpus_int(py_item(fields, nk[].k_batch), "batch", True)
-    var have_length = corpus_int(py_item(fields, nk[].k_length), "length", True)
-    var lo = corpus_int(py_item(fields, nk[].k_lo), "lo", True)
-    var modulus = corpus_int(py_item(fields, nk[].k_modulus), "modulus", True)
-    if have_batch < 0 or have_length < 1:
-        raise Error("ValueError: tokens_gather_rows: bad dims")
-    if have_batch != batch or have_length != length:
+    var request = _batch_words(fields)
+    lm_batch_dims(request)
+    if request.batch != batch or request.length != length:
         raise Error("ValueError: parallel input has wrong shape")
-    var source = corpus_ids_snapshot(py_item(fields, nk[].k_ids_all), context)
-    var source_address = Int(py=source._addr)
-    var source_count = Int(py=source.size)
-    var cells = batch * (length + 1)
-    var row = batch * length
-    for k in range(len(steps)):  # driver-loop: over the step's logical shards, one batch each
-        var step = steps[k]
-        if step < 0:
-            raise Error("ValueError: tokens_gather_rows: bad dims")
-        if row > 0 and step > 9223372036854775807 // row:
-            raise Error("ValueError: token row position exceeds native indexing")
-        _ = tokenizer_gather_rows_native(source_address, source_count, target_address + k * cells * 4, cells,
-            batch, length, lo, modulus, step * row)
-    _ = source^
+    var source = _batch_source(fields, context, request)
+    # RUN
+    lm_batch_steps_run(request, steps, target_address)
+    _ = source
 
 
 def _batch_parallel_step(owner: PythonObject, trainer: PythonObject, steps_value: PythonObject,
@@ -514,27 +516,24 @@ def _batch_parallel_step(owner: PythonObject, trainer: PythonObject, steps_value
 
 struct LmCorpusIteratorHandle(Movable, Writable):
     # The batches owner is admitted once, at prefetch: the iterator keeps the
-    # admitted scalars and the token source snapshot (which owns the mapped
-    # ids), so each step only allocates its output and gathers natively.
+    # typed request (core/lm_batch_run.mojo) and the token source snapshot
+    # (which owns the mapped ids), so each step only allocates its output
+    # and gathers natively.
     var owner: PythonObject
     var current: Int
     var stop: Int
     var closed: Bool
-    var batch: Int
-    var length: Int
-    var lo: Int
-    var modulus: Int
+    var request: LmBatchRequest
+    var ready: Bool
     var source: PythonObject
 
-    def __init__(out self, owner: PythonObject, start: Int, stop: Int):
+    def __init__(out self, owner: PythonObject, start: Int, stop: Int, request: LmBatchRequest):
         self.owner = owner
         self.current = start
         self.stop = stop
         self.closed = False
-        self.batch = 0
-        self.length = 0
-        self.lo = 0
-        self.modulus = 0
+        self.request = request.copy()
+        self.ready = False
         self.source = PythonObject(None)
 
     def write_to(self, mut writer: Some[Writer]):
@@ -557,14 +556,12 @@ def _prefetch(owner: PythonObject, start_value: PythonObject, steps_value: Pytho
         raise Error("ValueError: prefetch start_step/steps require nonnegative ints and depth a positive int")
     var fields = _batch_fields(owner, context)
     _batch_method(owner, fields, context)
-    var handle = LmCorpusIteratorHandle(owner, start, start + steps)
-    handle.batch = corpus_int(py_item(fields, nk[].k_batch), "batch", True)
-    handle.length = corpus_int(py_item(fields, nk[].k_length), "length", True)
-    handle.lo = corpus_int(py_item(fields, nk[].k_lo), "lo", True)
-    handle.modulus = corpus_int(py_item(fields, nk[].k_modulus), "modulus", True)
-    # Bad dimensions keep raising at the first step, as before (source None).
-    if handle.batch >= 0 and handle.length >= 1:
-        handle.source = corpus_ids_snapshot(py_item(fields, nk[].k_ids_all), context)
+    var request = _batch_words(fields)
+    var handle = LmCorpusIteratorHandle(owner, start, start + steps, request)
+    # Bad dimensions keep raising at the first step, as before (not ready).
+    if request.batch >= 0 and request.length >= 1:
+        handle.source = _batch_source(fields, context, handle.request)
+        handle.ready = True
     var iterator = corpus_new(py_item(context, nk[].k_iterator_class))
     var slots = corpus_fields(iterator, py_item(context, nk[].k_iterator_class), Python.tuple("_handle"))
     py_setitem(slots, nk[].k__handle, PythonObject(alloc=handle^))
@@ -581,16 +578,13 @@ def _iterator_next(value: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("StopIteration:")
     var step = handle[].current
     try:
-        var batch = handle[].batch
-        var length = handle[].length
-        if handle[].source is None:
+        if not handle[].ready:
             raise Error("ValueError: tokens_gather_rows: bad dims")
+        var batch = handle[].request.batch
+        var length = handle[].request.length
         var base = corpus_batch_base(PythonObject(step), batch, length)
-        var source = handle[].source
         var output = corpus_empty(Python.tuple(batch, length + 1), context)
-        _ = tokenizer_gather_rows_native(Int(py=source._addr), Int(py=source.size), Int(py=output._addr), Int(py=output.size),
-            batch, length, handle[].lo, handle[].modulus, base)
-        _ = source^
+        _ = lm_batch_run(handle[].request, base, Int(py=output._addr), Int(py=output.size))
         handle[].current += 1
         return Python.tuple(step, output)
     except error:

@@ -2,6 +2,8 @@
 """Native Generator metadata and the inclusive exhausted next-stream sentinel."""
 # The PACK half of the former `bindings/generator_state_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/generator_state_native_unpack.mojo`.
+# The seed is admitted over the whole of [0, 2^64) as a Python integer (it does not fit a signed
+# native word); the draw door splits it into its two 32-bit words. The counter rule is typed.
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_setitem
@@ -10,6 +12,7 @@ from bindings.py_balanced import py_call, py_setitem
 from bindings.generator_state_native_unpack import (
     generator_fields,
 )
+from core.generator_draw_run import generator_stream_next
 
 
 def generator_validate(seed: PythonObject, counter: PythonObject) raises -> PythonObject:
@@ -52,11 +55,9 @@ def generator_restore(value: PythonObject, state: PythonObject) raises -> Python
 
 
 def generator_next(value: PythonObject) raises -> PythonObject:
+    # UNPACK the counter word, RUN the typed rule (core/generator_draw_run.mojo),
+    # PACK the next counter onto the Generator and the consumed stream id.
     var fields = generator_fields(value)
-    var counter = Int(py=fields["counter"])
-    if counter >= 4294967296:
-        raise Error("RuntimeError: Generator: the stream counter is exhausted")
-    if counter < 0:
-        raise Error("Generator: counter must be nonnegative")
-    py_setitem(fields, "counter", PythonObject(counter + 1))
-    return PythonObject(counter)
+    var stream = generator_stream_next(Int(py=fields["counter"]))
+    py_setitem(fields, "counter", PythonObject(stream + 1))
+    return PythonObject(stream)

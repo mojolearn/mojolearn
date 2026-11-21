@@ -68,6 +68,7 @@ struct TreesKeys(Defaultable, Movable):
     var k_accuracy_score: PythonObject
     var k_accuracy_score_weighted: PythonObject
     var k_approx_dim_: PythonObject
+    var k_gbdt_native_key: PythonObject
     var k_array_class: PythonObject
     var k_array_type: PythonObject
     var k_backend_fields: PythonObject
@@ -347,6 +348,7 @@ struct TreesKeys(Defaultable, Movable):
         self.k_accuracy_score = PythonObject(None)
         self.k_accuracy_score_weighted = PythonObject(None)
         self.k_approx_dim_ = PythonObject(None)
+        self.k_gbdt_native_key = PythonObject(None)
         self.k_array_class = PythonObject(None)
         self.k_array_type = PythonObject(None)
         self.k_backend_fields = PythonObject(None)
@@ -630,6 +632,7 @@ def _trees_keys_fill(nk: UnsafePointer[TreesKeys, MutUntrackedOrigin]) raises:
     nk[].k_accuracy_score = py_key("accuracy_score")
     nk[].k_accuracy_score_weighted = py_key("accuracy_score_weighted")
     nk[].k_approx_dim_ = py_key("approx_dim_")
+    nk[].k_gbdt_native_key = py_key("gbdt_native_key")
     nk[].k_array_class = py_key("array_class")
     nk[].k_array_type = py_key("array_type")
     nk[].k_backend_fields = py_key("backend_fields")

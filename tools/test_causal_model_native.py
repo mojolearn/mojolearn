@@ -108,7 +108,7 @@ def test_execution_registry_is_pinned_and_native_handles_do_not_reread_bindings(
     assert 'downcast_value_ptr[CausalExecutionEntries]' in registry
     assert 'item is not original.value()[names[i]]' in registry   # Optional registry since 2e874ba989
     assert 'entries["parallel_call"] is not connected["parallel_causal_call"]' in registry
-    assert 'causal_pin_entries(mods, _standalone_record_fields(mods, model), entries)' in PUBLIC
+    assert 'causal_pin_entries(mods, _standalone_record_fields(mods, model), admission.entries)' in PUBLIC
     run = PUBLIC.split("def _causal_layer_run_prepared", 1)[1].split("def causal_model_embedding", 1)[0]
     assert 'transformer_block_session_run_words(request.entry, request.handle, request.operation,' in run
     assert '_native_function(e["block_binding"]' not in run

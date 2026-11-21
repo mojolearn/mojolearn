@@ -69,20 +69,8 @@ def neighbor_sort_admit(sort: Bool, distances: Bool) raises:
         raise Error("ValueError: sort_results=True requires return_distance=True")
 
 
-def neighbor_fill_admit(filled: Int, counted: Int) raises:
-    if filled != counted:
-        raise Error("RuntimeError: radius counting and filling passes disagree")
-
-
-def neighbor_sort_network(count: Int) -> Tuple[Int, Int]:
-    """(padded power of two, compare stages) of the segmented sorting
-    network over `count` entries: lg * (lg + 1) / 2 stages."""
-    var power = 1
-    var lg = 0
-    while power < count:  # small-loop(log2 of the entry count)
-        power *= 2
-        lg += 1
-    return (power, lg * (lg + 1) // 2)
+# The fill-count refusal and the sort network's shape of the radius query are
+# neighbors/radius_run.mojo (radius_fill_run, radius_sort_run).
 
 
 def neighbor_radius_offsets_admit(offsets: Int) raises -> Int:

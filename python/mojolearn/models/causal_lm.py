@@ -123,6 +123,17 @@ class CausalLM:
     directly from a `ModelPlan` and a weight dict shaped like
     `_read_weights` returns."""
 
+    # The model takes `device=`; `check` runs the same model on the other
+    # device in this process (`_check_both.on_device`). Its twin is built by
+    # the compiled constructor from this model's own tensors (a CausalLM has
+    # no `get_params`), and there is no fitted state beside them to hand over.
+    _mojolearn_device = True
+    _mojolearn_readback_plan = False  # vendor_used answers from the admitted block image
+    _mojolearn_device_state = None
+
+    def _mojolearn_device_twin(self, device):
+        return _NATIVE.causal_model_twin(self, device, _NATIVE_CONTEXT)
+
     def __init__(self, plan, weights, *, weight_format="float32", max_positions=None, device=None,
                  numeric_profile=None):
         return _NATIVE.causal_model_init(self, plan, weights,
@@ -250,6 +261,52 @@ class CausalLM:
     def resume_generation(self, checkpoint, *, tokenizer=None):
         """Resume a generation checkpoint on the same model weights and settings."""
         return _NATIVE.causal_lm_resume(self, checkpoint, tokenizer)
+
+    def check(self, ids, *, method=None):
+        """Run this model on the GPU and on the CPU, print both sides' reports
+        and whether their answers are the same bits.
+
+        In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA
+        and AMD GPUs, and the CPU binaries are held to the same bits. This
+        answers `ids` twice on this machine: with this model, and with the
+        same model on the other device, built in this process from the same
+        weights. It runs in `identical` mode only. When nothing could be
+        compared (for example on an installation with no GPU) it prints why.
+
+        Parameters
+        ----------
+        ids : array-like
+            Integer token ids of shape `(batch, length)`.
+        method : str, optional
+            The method to check. Default: `forward`.
+
+        Returns
+        -------
+        dict
+            The same result as `mojolearn.check(model, ids)`: `ran`, `sides`
+            (one record per side) and `verdict["verdict"]`, which is
+            `'MATCH'` or `'MISMATCH'`; `ran` is False, with a `reason`, when
+            nothing was compared.
+
+        Example::
+
+            result = model.check(ids)
+        """
+        from .._verify_check import check, format_check
+        result = check(self, ids, method=method)
+        print(format_check(result))
+        return result
+
+    def vendor_used(self):
+        """The backend this model runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'`` or ``'hip'``, or ``'cpu'`` for a model
+            constructed with ``device="cpu"`` or on a CPU-only installation.
+        """
+        return _NATIVE.causal_model_vendor_used(self)
 
     def __repr__(self):
         return _NATIVE.causal_lm_repr(self)

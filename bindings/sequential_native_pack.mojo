@@ -29,6 +29,7 @@ from bindings.sequential_keys_unpack import (
     SEQUENTIAL_OPN_INITIALIZE,
     SEQUENTIAL_OPN_LAYERS,
     SEQUENTIAL_OPN_LOAD_CHECKPOINT,
+    SEQUENTIAL_OPN_VENDOR_USED,
     SEQUENTIAL_OPN_LOAD_WEIGHTS,
     SEQUENTIAL_OPN_PREDICT,
     SEQUENTIAL_OPN_PREDICT_PROBA,
@@ -93,6 +94,13 @@ def sequential_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = sequential_save(mods, model, args[0], Bool(py=args[1]), context)
         elif operation == SEQUENTIAL_OPN_LOAD_CHECKPOINT:
             result = sequential_load_checkpoint(mods, model, args[0], args[1], args[2], context)
+        elif operation == SEQUENTIAL_OPN_VENDOR_USED:
+            # The vendor word the route's binary answered and the route
+            # resolution checked against the selected device
+            # (bindings/sequential_route_door.mojo): 'cpu' for a
+            # `device="cpu"` model, this installation's vendor otherwise.
+            # A metadata read: resolves the route like any first operation.
+            result = py_item(sequential_entries(model, context), nk[].k__sequential_checked_vendor)
         else:
             raise Error("Sequential: unknown native operation")
         return result.steal_data()

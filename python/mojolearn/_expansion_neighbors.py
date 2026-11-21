@@ -865,7 +865,7 @@ class KernelPCA(_XNeighbors):
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
                  kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver="auto",
                  tol=0, max_iter=None, iterated_power="auto", remove_zero_eig=False,
-                 random_state=None, copy_X=True, n_jobs=None, numeric_mode=None, device=None):
+                 random_state=None, copy_X=True, n_jobs=None, numeric_mode=None):
         self.n_components = n_components
         self.kernel = kernel
         self.gamma = gamma
@@ -883,7 +883,6 @@ class KernelPCA(_XNeighbors):
         self.copy_X = copy_X
         self.n_jobs = n_jobs
         self.numeric_mode = numeric_mode
-        self.device = device
 
     def fit(self, X, y=None):
         """Fit the model on the training data.
@@ -1019,13 +1018,12 @@ class PolynomialCountSketch(_XNeighbors):
     #: (providers/python/estimator_binding_pyapi_door.mojo); the check runs both devices in this process.
     _mojolearn_device = True
 
-    def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None, device=None):
+    def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
         self.gamma = gamma
         self.degree = degree
         self.coef0 = coef0
         self.n_components = n_components
         self.random_state = random_state
-        self.device = device
 
     @_native_local_method
     def fit(self, X, y=None):

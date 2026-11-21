@@ -53,6 +53,10 @@ class AutoTheta(ParamsMixin):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -84,10 +88,13 @@ class AutoTheta(ParamsMixin):
     # lifecycle (fit bookkeeping and the NotFittedError of predict in
     # bindings/xseq_forecast_native_door.mojo), so no `_mode` class-creation wrappers are installed.
     _mojolearn_native_public = True
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, season_length=1, decomposition_type="multiplicative", model=None,
-                 initial_smoothed=None, alpha=None, theta=None, numeric_mode=None):
-        _XSEQ(self, "theta_initialize", (season_length, decomposition_type, model, initial_smoothed, alpha, theta, numeric_mode), _XSEQ_CONTEXT)
+                 initial_smoothed=None, alpha=None, theta=None, numeric_mode=None, device=None):
+        _XSEQ(self, "theta_initialize", (season_length, decomposition_type, model, initial_smoothed, alpha, theta, numeric_mode, device), _XSEQ_CONTEXT)
 
     def fit(self, y, X=None):
         """Store one series or a batch of series for forecasting.
@@ -177,6 +184,10 @@ class Theta(AutoTheta):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -232,6 +243,10 @@ class OptimizedTheta(AutoTheta):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -287,6 +302,10 @@ class DynamicTheta(AutoTheta):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------
@@ -342,6 +361,10 @@ class DynamicOptimizedTheta(AutoTheta):
         Numeric mode for this model (``'identical'``
         or ``'fast'``); None uses the process default (see
         :func:`mojolearn.set_numeric_mode`). ``'fast'`` is available on Apple GPUs only.
+    device : {None, "gpu", "cpu"}, default=None
+        Where the model is fitted and forecasts. None uses this installation's
+        device, ``"cpu"`` runs on the CPU and ``"gpu"`` requires a GPU
+        installation. Other values raise ``ValueError``.
 
     Attributes
     ----------

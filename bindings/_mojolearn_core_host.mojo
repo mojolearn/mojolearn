@@ -188,9 +188,7 @@ from core.core_host_impl import (
     kmeans_predict_host,
     kmeans_transform_host,
     knn_classify_host,
-    knn_classify_neighbors_host,
     knn_regress_host,
-    knn_regress_neighbors_host,
     knn_search_host,
     nonzero_f64_count,
     nonzero_f64_fill,
@@ -691,97 +689,10 @@ def knn_regress_binding(
     return PythonObject(KNN_HOST_QUERY_TILE)
 
 
-# ===========================================================================
-# THE MERGED-NEIGHBOR VOTES (lane/cpu-training-par-wave2, 2026-09-15). The
-# GPU binding's `knn_classify_neighbors` / `knn_regress_neighbors`
-# (`bindings/_mojolearn.mojo`, over `neighbors/estimator.mojo::
-# knn_classifier_from_neighbors` / `knn_regressor_from_neighbors`), which
-# `parallel_neighbors_reference._vote` calls on the neighbors the reference
-# shards merged in Python. The vote half of `knn_classify_binding` and
-# `knn_regress_binding` above, statement for statement, over the given
-# distances and global indices instead of a host search.
-# ===========================================================================
-
-
-def knn_classify_neighbors_binding(
-    dist_addr: PythonObject,
-    idx_addr: PythonObject,
-    y_addr: PythonObject,
-    out_labels_addr: PythonObject,
-    out_proba_addr: PythonObject,
-    out_uniq_addr: PythonObject,
-    params: PythonObject,
-    dist_params: PythonObject,
-) raises -> PythonObject:
-    """Vote on globally merged neighbors, the GPU binding's parameter layout
-    (`knn_classify_binding`'s; the feature count and query tile slots are
-    unread). float32 distances and uint32 global indices, both
-    n_queries x k. Returns zero on success."""
-    if len(params) < 7:
-        raise Error(
-            "knn_classify: params must hold at least 7 values, got "
-            + String(len(params))
-        )
-    var ni = _index(params[0])
-    var nq = _index(params[1])
-    var kk = _index(params[3])
-    var no = _index(params[5])
-    var want_proba = _index(params[6]) != 0
-    if len(params) != 7 + no:
-        raise Error(
-            "knn_classify: params must hold 7 + n_outputs ("
-            + String(7 + no)
-            + ") values, got "
-            + String(len(params))
-        )
-    var n_classes = List[Int]()
-    for i in range(no):  # small-loop(n_classes argument words, one per output)
-        n_classes.append(_index(params[7 + i]))
-    var dist_address = _index(dist_addr)
-    var idx_address = _index(idx_addr)
-    var y_address = _index(y_addr)
-    var lp = i32_ptr(_index(out_labels_addr))
-    var pp = f32_ptr(_index(out_proba_addr))
-    var up = i32_ptr(_index(out_uniq_addr))
-    var dt = _dist_triple(dist_params)
-    with GILReleased(Python()):
-        knn_classify_neighbors_host(
-            dist_address, idx_address, y_address, lp, pp, up,
-            ni, nq, kk, no, want_proba, n_classes, dt[2],
-        )
-    return PythonObject(0)
-
-
-def knn_regress_neighbors_binding(
-    dist_addr: PythonObject,
-    idx_addr: PythonObject,
-    y_addr: PythonObject,
-    out_addr: PythonObject,
-    params: PythonObject,
-    dist_params: PythonObject,
-) raises -> PythonObject:
-    """Regress on globally merged neighbors, `knn_regress_binding`'s
-    parameter layout (the feature count and query tile slots are unread).
-    Returns zero on success."""
-    if len(params) != 6:
-        raise Error(
-            "knn_regress: params must hold 6 values, got "
-            + String(len(params))
-        )
-    var dist_address = _index(dist_addr)
-    var idx_address = _index(idx_addr)
-    var y_address = _index(y_addr)
-    var op = f32_ptr(_index(out_addr))
-    var ni = _index(params[0])
-    var nq = _index(params[1])
-    var kk = _index(params[3])
-    var no = _index(params[5])
-    var dt = _dist_triple(dist_params)
-    with GILReleased(Python()):
-        knn_regress_neighbors_host(
-            dist_address, idx_address, y_address, op, ni, nq, kk, no, dt[2],
-        )
-    return PythonObject(0)
+# The merged-neighbor votes (`knn_classify_neighbors`, `knn_regress_neighbors`)
+# are operations 12 and 13 of the neighbors operations table
+# (core/neighbors_entry_table.mojo); their Python exports had no caller left
+# and are deleted (lane dw-neighbors, 2026-11-21).
 
 
 # ===========================================================================
@@ -1166,8 +1077,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[knn_search_binding]("knn_search")
         module.def_function[knn_classify_binding]("knn_classify")
         module.def_function[knn_regress_binding]("knn_regress")
-        module.def_function[knn_classify_neighbors_binding]("knn_classify_neighbors")
-        module.def_function[knn_regress_neighbors_binding]("knn_regress_neighbors")
         module.def_function[kmeans_fit_binding]("kmeans_fit")
         module.def_function[kmeans_native_api_v1_binding]("kmeans_native_api_v1")
         module.def_function[kmeans_predict_binding]("kmeans_predict")

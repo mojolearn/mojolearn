@@ -18,9 +18,9 @@
 # words or codes through the label table and the typed forms), RUN in
 # bindings/prep_labels_prog_run.mojo (typed requests, the stages on the typed
 # `EncProgram`, no Python object) and the typed run, then PACK here (arena
-# words to the result). No builder reads a field while it stages. The one
-# program this door still takes from another owner unsplit is the list-route
-# fit's `_fit_categories` (the encode owner's category fit).
+# words to the result). No builder reads a field while it stages. The
+# list-route fit of numeric labels runs the encode owner's typed category
+# fit over program-owned label words (`_fit_category_words`).
 from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from bindings.native_loaded_module_door import native_loaded_module
@@ -37,7 +37,7 @@ from bindings.scaler_lifecycle_native_door import scaler_entries
 from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.x_prep_native_owner_door import xprep_values, xprep_address
 from bindings.prep_encode_native_door import (
-    EncProg, NONE, enc_caps, _take1, _word, _iword, _fit_categories, _default_mode, _truth)
+    EncProg, NONE, enc_caps, _take1, _word, _iword, _fit_category_words, _default_mode, _truth)
 from bindings.prep_encode_prog_run import OUT_MARK
 from bindings.prep_labels_prog_run import (
     LabelWords, LabelCats, LabelCodes, LabelUnbinarize, LAB_CODES_BUFFER, LAB_CODES_WORDS, LAB_CODES_LOOKUP,
@@ -184,17 +184,6 @@ def _take_i32(ran: PythonObject, offset: Int, rows: Int, cols: Int, context: Pyt
     if cols < 0:
         return _take_words(ran, offset, rows, Python.tuple(rows), "i", "<i4", 4, context)
     return _take_words(ran, offset, rows * cols, Python.tuple(rows, cols), "i", "<i4", 4, context)
-
-
-def _f32_matrix(values: List[Float64], rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
-    # A float32 C-order Array of the values rounded once to float32.
-    var out = admitted_array(Python.tuple(rows, cols), "<f4", _out(context))
-    var dest = F32P(unsafe_from_address=labels_address(out))
-    _ = out  # keep the Python object alive through the native call above
-    for i in range(len(values)):  # driver-loop: over a fitted category or label word list
-        dest[i] = Float32(values[i])
-        _ = out  # keep the Python object alive through the native call above
-    return out
 
 
 def _classes_array(classes: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -478,15 +467,16 @@ def _numeric_label_words(values: PythonObject, mut words: List[Float64], mut all
 
 def _label_classes(model: PythonObject, mode: PythonObject, values: PythonObject, context: PythonObject) raises -> LabelFit:
     """`_label_classes`: numeric labels by a device sort and run scan
-    (`_fit_categories`), anything else by the ORDER RULE (sorted_classes)."""
+    (`_fit_category_words`), anything else by the ORDER RULE (sorted_classes)."""
     var words = List[Float64]()
     var all_ints = False
     if not _numeric_label_words(values, words, all_ints, True, context) or len(words) == 0:
         var ordered = _sorted_classes(values, context)
         return LabelFit(ordered.classes, PythonObject(None), PythonObject(None), PythonObject(None))
-    var m = len(words)
-    var arr = _f32_matrix(words, m, 1, context)
-    var cats = _fit_categories(Python.tuple(0, arr, PythonObject(None), m, 1), mode, scaler_entries(model, mode, context), context)[0]
+    # The label words are program-owned float32 words of the category fit
+    # (no Array is built for the call), run on the estimator's image.
+    var entries = scaler_entries(model, mode, context)
+    var cats = _fit_category_words(words, mode, entries, enc_caps(model, entries), context)
     var K = Int(py=cats.size)
     var source = F32P(unsafe_from_address=Int(py=classical_address(cats)))
     var classes = Python.list()

@@ -15,6 +15,7 @@ comptime PLS_OPN_SCORE = 2
 comptime PLS_OPN_PREDICT = 3
 comptime PLS_OPN_TRANSFORM = 4
 comptime PLS_OPN_INVERSE_TRANSFORM = 5
+comptime PLS_OPN_VENDOR_USED = 6
 
 
 struct PlsKeys(Defaultable, Movable):
@@ -127,6 +128,7 @@ def _pls_keys_fill(nk: UnsafePointer[PlsKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "predict", PLS_OPN_PREDICT)
     py_op_add(ops, "transform", PLS_OPN_TRANSFORM)
     py_op_add(ops, "inverse_transform", PLS_OPN_INVERSE_TRANSFORM)
+    py_op_add(ops, "vendor_used", PLS_OPN_VENDOR_USED)
     nk[].ops = ops
     nk[].ready = True
 

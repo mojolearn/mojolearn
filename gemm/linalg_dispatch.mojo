@@ -5,10 +5,11 @@ from core.native_descriptor_call import native_descriptor_words, native_descript
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from gemm.contract import GEMM_NUMERICAL_PROFILE_VERSION, LOWBIT_PROFILE_VERSION, INT15_PROFILE_VERSION
 from gemm.linalg_native import gemm_native, gemm_bf16_native, gemm_int8_native, quantize_int8_native, dequantize_int8_native, gemm_int15_native, quantize_int15_native, dequantize_int15_native, to_bf16_native, from_bf16_native, from_f16_native
+from gemm.linalg_fused_run import gemm_fused_native
 from core.shared_slot import SharedSlot
 
 comptime LINALG_NATIVE_ABI_NAME = "mojolearn.linalg.v1"
-comptime LINALG_NATIVE_OPERATION_COUNT = 15
+comptime LINALG_NATIVE_OPERATION_COUNT = 16
 
 
 def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
@@ -72,6 +73,13 @@ def linalg_native_operation(op: Int, a: List[Int], p: List[Int]) raises -> Int:
         if len(a) != 0 or len(p) != 0:
             raise Error("linalg native ABI: metadata takes no descriptors")
         return INT15_PROFILE_VERSION
+    if op == 15:
+        # lane dw-decomp (2026-11-21): `gemm_fused` (the Apple fast epilogue
+        # arm, MOJOLEARN_AFN_GEMM_EPILOGUE) joins the table, so the public door
+        # calls no Python entry. A build without the arm refuses it in words.
+        if len(a) != 5:
+            raise Error("linalg native ABI: invalid gemm_fused address count")
+        return gemm_fused_native(a, p)
     raise Error("linalg native ABI: unknown operation")
 
 
