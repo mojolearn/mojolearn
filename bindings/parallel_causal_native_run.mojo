@@ -146,9 +146,9 @@ def causal_allocation_index_admit(index: Int, blocks: Int) raises:
 
 
 # ------------------------------------------------------------ worker rules
-def causal_frame_admit(kind: Int) raises:
-    if kind != WIRE_REQUEST:
-        raise Error("ParallelCausalLM: worker received an invalid frame kind")
+# Removed 2026-11-21 (lane pools-frame): `causal_frame_admit`. The worker's
+# receive is `process_worker_next` (bindings/native_process_pool_door.mojo),
+# which refuses a frame that is neither a request nor the close.
 
 
 def causal_worker_route(vendor: String) -> Int:

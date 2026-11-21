@@ -20,9 +20,16 @@ from mojolearn import Array, _backend
 from mojolearn._causal_lm_fixtures import family_fixture, _llama_config, _llama_tensors, _write_checkpoint
 from mojolearn._verify_causal_lm import state_digest
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn._native_process import _native_process
 from mojolearn.models import CausalLM
 from mojolearn.models import parallel_causal_lm as mod
 from mojolearn.tests import _mamba_block_reference
+
+
+def pool_mirror(pool):
+    # The pool handle is a native owner; its published mirror (devices,
+    # cooperative, workers, closed, timing) is read through the process door.
+    return _native_process("mirror", (pool,))
 
 
 AUDIT_FIELDS = ('python_frames', 'forbidden_native_calls', 'wrapper_work',
@@ -89,7 +96,7 @@ def actual_owner(tmp_path, monkeypatch, checkpoint, *, profile='fp32_v1', weight
         model = checked(mod._native_parallel_causal, 'load_with_worker',
                         (mod.ParallelCausalLM, str(checkpoint), owners(),
                          (weight_format, None, profile), module), mod._CAUSAL_CONTEXT)
-        pids = [w['pid'] for w in model._pool['workers']]
+        pids = [w['pid'] for w in pool_mirror(model._pool)['workers']]
         assert len(set(pids)) == len(set(owners()))
         assert all(pid != os.getpid() for pid in pids)
         assert model._native_numeric_mode == 1
@@ -232,11 +239,11 @@ def test_native_owners_match_independent_blocks_and_continue_states(tmp_path, mo
             bits(actual_params[key], expected_params[key])
         # Each worker genuinely lacks unassigned layers. A model error keeps
         # its process and sequence alive; later good requests still work.
-        pids = [w['pid'] for w in split._pool['workers']]
+        pids = [w['pid'] for w in pool_mirror(split._pool)['workers']]
         if len(set(owners())) > 1:
             refused(split._rpc, RuntimeError, 'worker failed', owners()[0], 'parameters', 1)
         bits(checked(split.forward, ids), expected)
-        assert [w['pid'] for w in split._pool['workers']] == pids
+        assert [w['pid'] for w in pool_mirror(split._pool)['workers']] == pids
         blocks = split.blocks
         remote = state.layers[0]
         refused(blocks[1].step, ValueError, 'another layer', np.zeros((2, 1, plain.d_model), 'f4'), remote)
@@ -386,7 +393,7 @@ def test_uniform_sampling_stream_chunks_and_eos_match_generate(tmp_path, monkeyp
 def test_public_load_and_transport_failure_refuse_lost_state(tmp_path):
     root, _, _ = checkpoint(tmp_path)
     split = checked(mod.ParallelCausalLM.load, root, layer_devices=owners(), numeric_profile='fp32_v1')
-    pids = [w['pid'] for w in split._pool['workers']]
+    pids = [w['pid'] for w in pool_mirror(split._pool)['workers']]
     try:
         ids = np.array([[1, 2]], 'i4')
         state = checked(split.allocate_state, 1, 5)
@@ -396,7 +403,7 @@ def test_public_load_and_transport_failure_refuse_lost_state(tmp_path):
         assert audit.exception is not None
         for key in AUDIT_FIELDS:
             assert not audit.report()[key], audit.report()
-        assert split._failed and not split._pool['workers']
+        assert split._failed and not pool_mirror(split._pool)['workers']
         refused(split.forward, RuntimeError, 'worker state was lost', ids)
     finally:
         checked(split.close)

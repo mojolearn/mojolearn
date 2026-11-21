@@ -8,7 +8,7 @@ from mojolearn import ParallelNeuralTrainer, SmallMLPTrainer, _backend
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_parallel_mlp_native import model_fixture
 # independent_gradient left test_parallel_mlp_native.py in 2fb40775dc.
-from mojolearn.tests.test_parallel_neural_native import independent_gradient, training_state
+from mojolearn.tests.test_parallel_neural_native import independent_gradient, training_state, pool_mirror
 
 
 @pytest.fixture(autouse=True)
@@ -96,7 +96,7 @@ def test_public_train_refuses_hooks_without_launch_or_state_change(location):
     try:
         before = audit_native_call(owner.checkpoint).assert_native()
         rejected(owner.train_step, shards)
-        assert owner._pool['workers'] == owner._update_pool['workers'] == []
+        assert pool_mirror(owner._pool)['workers'] == pool_mirror(owner._update_pool)['workers'] == []
         assert training_state(audit_native_call(owner.checkpoint).assert_native()) == training_state(before)
     finally:
         audit_native_call(owner.close).assert_native()
@@ -115,7 +115,7 @@ def test_mutated_model_metadata_is_refused_but_native_cleanup_remains_available(
     else:
         model._schedule = defaultdict(lambda: Hook().fail('default factory'), {'dataset': 'x'})
     rejected(owner.checkpoint)
-    assert owner._pool['workers'] == owner._update_pool['workers'] == []
+    assert pool_mirror(owner._pool)['workers'] == pool_mirror(owner._update_pool)['workers'] == []
     # Closing touches native locks/process owners, not rejected model data.
     audit_native_call(owner.close).assert_native()
 
