@@ -51,7 +51,8 @@ from bindings.byte_perf_helpers_pack import byte_int_list_from_i64
 from core.byte_lm_teardown_switch import byte_lm_teardown_with_gil
 from bindings.py_model_records import records_get, records_put, RECORDS_PREPARED
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_published, byte_lm_vendor_text_word, BYTE_LM_TABLE_TRAINER
-from core.byte_lm_entry_table_sessions import byte_lm_sessions_published, byte_lm_resident_run
+from core.byte_lm_entry_table_sessions import byte_lm_sessions_published
+from bindings.byte_lm_trainer_native_run import ByteLmPlan, byte_lm_run_resident, byte_lm_run_table
 from bindings.byte_lm_session_owner_pack import byte_lm_session_owner_new
 from training.byte_lm_session_owner_run import ByteLmSessionOwner
 from core.entry_table import EntryRef
@@ -62,7 +63,7 @@ from providers.python.device_route_boundary_door import (
 from training.byte_lm_glue_abi import (
     BYTE_LM_GLUE_ABI, BG_OP_COUNT, BG_ABSENT, BG_NUMERIC_MODE, BG_VENDOR, BG_PROFILE, BG_SUFFIX,
     BG_CONFIG_PROFILE, BG_ATTENTION_ARM, BG_MEMORY_PROFILE, BG_STEP_GLUE_ARM,
-    byte_lm_trainer_ref, byte_lm_glue_ref, byte_lm_trainer_call, byte_lm_glue_read_text, byte_lm_glue_read_int, byte_lm_session_new, byte_lm_session_free,
+    byte_lm_trainer_ref, byte_lm_glue_ref, byte_lm_glue_read_text, byte_lm_glue_read_int, byte_lm_session_new, byte_lm_session_free,
 )
 
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -401,23 +402,15 @@ def _load(mut mods: NativeModules, shape: _Shape, context: PythonObject) raises 
 
 
 def _native_plan(shape: _Shape, state: PythonObject, train: Bool, batch: Int = 0,
-                 length: Int = 0, release: Bool = False) raises -> Tuple[List[Int], List[Float64]]:
+                 length: Int = 0, release: Bool = False) raises -> ByteLmPlan:
+    """UNPACK: the state's step counter and optimizer scalars read into the
+    typed plan RUN takes (bindings/byte_lm_trainer_native_run.mojo)."""
     var cfg = state["config"]
-    var ints = List[Int]()
-    for i in range(9):  # driver-loop: over the admitted model shape
-        ints.append(shape.d[i])
-    ints.append(Int(shape.chunked))
-    ints.append(Int(train))
-    ints.append(Int(py=state["completed_steps"]))
-    ints.append(Int(py=cfg["kind"]))
-    ints.append(Int(py=cfg["nesterov"]))
-    ints.append(batch)
-    ints.append(length)
-    ints.append(Int(release))
-    var floats = List[Float64]()
+    var scalars = List[Float64](capacity=8)
     for key in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:  # driver-loop: over the eight optimizer scalars
-        floats.append(Float64(py=cfg[key]))
-    return (ints^, floats^)
+        scalars.append(Float64(py=cfg[key]))
+    return ByteLmPlan(_shape_words(shape), train, Int(py=state["completed_steps"]), Int(py=cfg["kind"]),
+                      Int(py=cfg["nesterov"]), batch, length, release, scalars^)
 
 
 def _session_call(session: PythonObject, operation: Int, addresses: List[Int], ints: List[Int],
@@ -430,16 +423,13 @@ def _session_call(session: PythonObject, operation: Int, addresses: List[Int], i
     releases the GIL as the provider route did; callers that ran with it
     held keep `release_gil=False`."""
     var native = session.downcast_value_ptr[ByteLmSessionOwner]()
-    var entry = native[].entry  # resolved once, at the owner's construction
-    var handle = native[].handle()
     var result = 0
-    # The owner's request buffer is reused across steps (one session is
-    # stepped by one caller at a time, as its native state requires).
+    # RUN: typed values only (bindings/byte_lm_trainer_native_run.mojo).
     if release_gil:
         with GILReleased(Python()):
-            result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats, native[].words)
+            result = byte_lm_run_resident(native[], operation, addresses, ints, floats)
     else:
-        result = byte_lm_resident_run(entry, handle, operation, addresses, ints, floats, native[].words)
+        result = byte_lm_run_resident(native[], operation, addresses, ints, floats)
     _ = session  # the owner (and so the handle) is live through the synchronous native call
     return result
 
@@ -447,7 +437,7 @@ def _session_call(session: PythonObject, operation: Int, addresses: List[Int], i
 def _native_execute(fields: PythonObject, operation: Int, addresses: List[Int], shape: _Shape, state: PythonObject,
                     train: Bool, batch: Int = 0, length: Int = 0, release: Bool = False) raises -> Int:
     var plan = _native_plan(shape, state, train, batch, length, release)
-    return _session_call(fields["_native_session"], operation, addresses, plan[0], plan[1])
+    return _session_call(fields["_native_session"], operation, addresses, plan.ints, plan.floats)
 
 
 def _session_ensure(fields: PythonObject) raises:
@@ -465,11 +455,12 @@ def _table_execute(trainer: EntryRef, operation: Int, addresses: List[Int], ints
     provider object): computation releases the GIL as the provider did;
     session finalization keeps it."""
     var result = 0
+    # RUN: typed values only (bindings/byte_lm_trainer_native_run.mojo).
     if release_gil:
         with GILReleased(Python()):
-            result = byte_lm_trainer_call(trainer, operation, addresses, ints, floats)
+            result = byte_lm_run_table(trainer, operation, addresses, ints, floats)
     else:
-        result = byte_lm_trainer_call(trainer, operation, addresses, ints, floats)
+        result = byte_lm_run_table(trainer, operation, addresses, ints, floats)
     return result
 
 
@@ -759,7 +750,7 @@ def _run_stateless(mut mods: NativeModules, fields: PythonObject, tokens: Python
     var completed = PythonObject(None)
     try:
         descriptors[0] = session
-        completed = PythonObject(_table_execute(trainer, 8, descriptors, plan[0], plan[1]))
+        completed = PythonObject(_table_execute(trainer, 8, descriptors, plan.ints, plan.floats))
         if locked_teardown:
             var finalize: List[Int] = [session]
             _ = _table_execute(trainer, 9, finalize, List[Int](), List[Float64](), False)
@@ -1714,7 +1705,7 @@ def byte_lm_logits(mut mods: NativeModules, trainer: PythonObject, args: PythonO
             # Operation 7 (stateless logits) takes no session: the image's
             # table entry runs it with plain words, no provider object.
             var plan = _native_plan(shape, state, False, batch, length)
-            written = _table_execute(byte_lm_trainer_ref(_key(fields)), 7, addresses, plan[0], plan[1])
+            written = _table_execute(byte_lm_trainer_ref(_key(fields)), 7, addresses, plan.ints, plan.floats)
             mods.released()
         _ = tokens
         _ = row_lengths  # keep the Python object alive through the native call above
