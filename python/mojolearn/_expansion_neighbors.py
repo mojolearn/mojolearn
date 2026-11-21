@@ -290,6 +290,9 @@ class LocalOutlierFactor(_XNeighbors):
     #: estimator's device route, and the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_XNEIGHBORS = 12) and core/xneighbors_member.mojo.
+    _mojolearn_member = (12, 1)
 
     def __init__(self, n_neighbors=20, *, algorithm="auto", leaf_size=30, metric="minkowski", p=2,
                  metric_params=None, contamination="auto", novelty=False, n_jobs=None, device=None):

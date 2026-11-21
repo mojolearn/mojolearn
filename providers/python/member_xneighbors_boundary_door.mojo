@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The member boundary of the XNeighbors family (UNPACK / PACK of
-core/xneighbors_member.mojo). Published: NearestCentroid (kind 0). Not yet
-published (admit refuses with the kind): LocalOutlierFactor OneClassSVM
+core/xneighbors_member.mojo). Published: NearestCentroid (kind 0),
+LocalOutlierFactor (kind 1). Not yet published (admit refuses with the kind): OneClassSVM
 KernelPCA PolynomialCountSketch AdditiveChi2Sampler SkewedChi2Sampler
 LabelPropagation LabelSpreading KNNImputer SVGP.
 
@@ -19,8 +19,15 @@ LabelPropagation LabelSpreading KNNImputer SVGP.
     `class_prior_`, `n_features_in_`); `classes_` and `_codes_classes` are
     the class CODES 0 .. classes-1: the caller's PACK publishes the labels by
     setting both to its classes (predict maps codes through `classes_`).
+    LocalOutlierFactor: `_fit_X` (a new Array: the member's copy of the rows
+    it borrowed), `_fit_dist`, `_lrd`, `negative_outlier_factor_`, `offset_`,
+    `n_neighbors_`, `n_features_in_`, `n_samples_fit_`, as `_lof_fit_pack`.
   * `xneighbors_member_state` (UNPACK): a member state from a fitted
-    estimator's four arrays (the class count is `class_prior_`'s length).
+    estimator's arrays (NearestCentroid: the class count is `class_prior_`'s
+    length).
+  The LocalOutlierFactor A/B arms (`unfused_knn`, `old_items`) are read from
+  the caller's context's `family_xn_loc_flags` when it carries them, else
+  their default (off).
 
 SERIAL BY NATURE: one member's admission or publication (a few record reads
 and four block copies); a caller runs its members in parallel.
@@ -33,6 +40,7 @@ from bindings.classical_labels_door import labels_cast
 from bindings.family_common_pack import family_field
 from bindings.member_owner_unpack import MemberOwner
 from bindings.nearest_centroid_provider_unpack import NcConnection
+from bindings.neighbors_local_native_door import _lof_check
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU, device_vendor_code
 from core.entry_table import EntryRef, entry_ref_word
@@ -41,7 +49,9 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from core.xneighbors_member import (
-    XNEIGHBORS_KIND_NEAREST_CENTROID, NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
+    XNEIGHBORS_KIND_NEAREST_CENTROID, XNEIGHBORS_KIND_LOF,
+    NC_BLOCK_CENTROIDS, NC_BLOCK_STD, NC_BLOCK_DEVIATIONS, NC_BLOCK_PRIOR,
+    LOF_BLOCK_ROWS, LOF_BLOCK_DISTANCES, LOF_BLOCK_DENSITIES, LOF_BLOCK_SCORES, LOF_BLOCK_OFFSET,
 )
 from neighbors.neighbors_local_run import nc_refuse_metric, nc_check_priors_ndim
 from neighbors.nearest_centroid_run import NC_PRIORS_EMPIRICAL, NC_PRIORS_UNIFORM, NC_PRIORS_GIVEN
@@ -61,12 +71,63 @@ def _image_word(module: PythonObject, name: String, b: PythonObject) raises -> P
     return py_call(reader)
 
 
+def _route(model: PythonObject, context: PythonObject, b: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """The route of the image the estimator's own doors call: its x_neighbors
+    native operations entry and the image's (mode, vendor) words. False: a
+    device image built with no GPU vendor (it publishes no member entry)."""
+    var binding = estimator_binding(model, "_mojolearn_x_neighbors", context)
+    var module = xn_module(binding)
+    var mode = Int(py=_image_word(module, "x_neighbors_numeric_mode", b))
+    var vendor = device_vendor_code(String(_image_word(module, "x_neighbors_vendor", b)))
+    if vendor < 0:
+        return False
+    var admitted = xn_admit(binding)
+    var connection = NcConnection(admitted)
+    var route = DeviceRoute(DEVICE_CPU if vendor == 0 else DEVICE_GPU)
+    route.mode = mode
+    route.vendor = vendor
+    route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, XN_OPERATION_COUNT))
+    owner.plan.route = route
+    owner.pins = Python.tuple(binding, admitted, connection.provider)
+    # The image's capability words (the connection's cached probe).
+    owner.plan.params = [1.0 if connection.fused else 0.0, 1.0 if connection.wide else 0.0]
+    _ = connection^
+    return True
+
+
+def _context_flag(context: PythonObject, name: String) raises -> Float64:
+    var flags = py_get(context, PythonObject("family_xn_loc_flags"), PythonObject(None))
+    if flags is None:
+        return 0.0
+    return 1.0 if Bool(py=flags[PythonObject(name)]) else 0.0
+
+
+def _lof_admit(fields: PythonObject, context: PythonObject, b: PythonObject, mut owner: MemberOwner) raises:
+    # `LocalOutlierFactor._check_params`, the estimator's own checks.
+    _lof_check(fields, context)
+    var contamination = family_field(fields, "contamination")
+    var auto = py_type(contamination) is b.str and String(contamination) == "auto"
+    var words: List[Float64] = [Float64(XNEIGHBORS_KIND_LOF),
+        Float64(Int(py=py_call(b.int, family_field(fields, "n_neighbors")))),
+        1.0 if Bool(py=py_call(b.bool, family_field(fields, "novelty"))) else 0.0,
+        1.0 if auto else 0.0, 0.0 if auto else Float64(py=py_call(b.float, contamination)),
+        _context_flag(context, "unfused_knn"), _context_flag(context, "old_items")]
+    owner.plan.params = words^
+
+
 def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False: its image publishes no member entry."""
-    if kind != XNEIGHBORS_KIND_NEAREST_CENTROID:
+    if kind != XNEIGHBORS_KIND_NEAREST_CENTROID and kind != XNEIGHBORS_KIND_LOF:
         raise Error("ValueError: mojolearn: XNeighbors member kind " + String(kind) + " is not published")
+    if kind == XNEIGHBORS_KIND_LOF:
+        _lof_admit(fields, context, b, owner)
+        var lof_words = owner.plan.params.copy()
+        if not _route(model, context, b, owner):
+            return False
+        owner.plan.params = lof_words^
+        return True
     # The estimator's own parameter checks, in its fit's order.
     var metric = family_field(fields, "metric")
     if not py_contains(Python.tuple(PythonObject("euclidean"), PythonObject("manhattan")), metric):
@@ -91,21 +152,10 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
     if threshold is not None:
         shrink = Float64(py=py_call(b.float, threshold))
     # The image the estimator's own fit and predict call, and its words.
-    var binding = estimator_binding(model, "_mojolearn_x_neighbors", context)
-    var module = xn_module(binding)
-    var mode = Int(py=_image_word(module, "x_neighbors_numeric_mode", b))
-    var vendor = device_vendor_code(String(_image_word(module, "x_neighbors_vendor", b)))
-    if vendor < 0:
+    if not _route(model, context, b, owner):
         return False
-    var admitted = xn_admit(binding)
-    var connection = NcConnection(admitted)
-    var route = DeviceRoute(DEVICE_CPU if vendor == 0 else DEVICE_GPU)
-    route.mode = mode
-    route.vendor = vendor
-    route.entry = EntryRef(connection.driver.entry, entry_ref_word(mode, vendor, XN_OPERATION_COUNT))
-    owner.plan.route = route
     var words: List[Float64] = [Float64(kind), 0.0 if euclidean else 1.0, Float64(priors_kind), shrink,
-        1.0 if connection.fused else 0.0, 1.0 if connection.wide else 0.0]
+        owner.plan.params[0], owner.plan.params[1]]
     if priors_kind == NC_PRIORS_GIVEN:
         var count = Int(py=given.size)
         var start = len(words)
@@ -114,8 +164,6 @@ def xneighbors_member_admit(model: PythonObject, fields: PythonObject, kind: Int
             Int(words.unsafe_ptr()) + start * 8, "<f8", count, context)
     _ = given
     owner.plan.params = words^
-    owner.pins = Python.tuple(binding, admitted, connection.provider)
-    _ = connection^
     return True
 
 
@@ -134,10 +182,7 @@ def _publish_block(call: MemberCall, typestr: String, context: PythonObject, wid
     return array
 
 
-def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
-    plan: MemberPlan, state: Int) raises:
-    """PACK: write the fitted attributes of state `state` into `model`, as
-    the estimator's own fit does."""
+def _nc_pack(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan, state: Int) raises:
     var call = MemberCall(plan.route, state)
     call.block = NC_BLOCK_PRIOR
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
@@ -170,10 +215,7 @@ def _f32_block(fields: PythonObject, name: String, ndim: Int, context: PythonObj
     return admit_x(source, ndim, name, context)
 
 
-def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
-    plan: MemberPlan) raises -> Int:
-    """UNPACK: a new member state holding the fitted attributes of `model`.
-    The caller frees it (`member_free`)."""
+def _nc_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
     var centroids = _f32_block(fields, "centroids_", 2, context)
     var deviations = _f32_block(fields, "deviations_", 2, context)
     var std = _f32_block(fields, "within_class_std_dev_", 1, context)
@@ -213,3 +255,92 @@ def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: 
     _ = prior_view
     _ = prior
     return call.state
+
+
+def _lof_pack(fields: PythonObject, context: PythonObject, plan: MemberPlan, state: Int) raises:
+    """`_lof_fit_pack`'s fields, in its order."""
+    var call = MemberCall(plan.route, state)
+    call.block = LOF_BLOCK_ROWS
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var fit_x = _publish_block(call, "<f4", context, 4, False)
+    var rows = call.dst.rows
+    var features = call.dst.cols
+    call.block = LOF_BLOCK_DISTANCES
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var distances = _publish_block(call, "<f4", context, 4, False)
+    var k = call.dst.cols
+    call.block = LOF_BLOCK_DENSITIES
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var densities = _publish_block(call, "<f4", context, 4, True)
+    call.block = LOF_BLOCK_SCORES
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var scores = _publish_block(call, "<f4", context, 4, True)
+    call.block = LOF_BLOCK_OFFSET
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
+    var offset = _F64P(unsafe_from_address=call.dst.data)[0]
+    py_setitem(fields, "_fit_X", fit_x)
+    py_setitem(fields, "_fit_dist", distances)
+    py_setitem(fields, "_lrd", densities)
+    py_setitem(fields, "n_neighbors_", PythonObject(k))
+    py_setitem(fields, "n_features_in_", PythonObject(features))
+    py_setitem(fields, "n_samples_fit_", PythonObject(rows))
+    py_setitem(fields, "negative_outlier_factor_", scores)
+    py_setitem(fields, "offset_", PythonObject(offset))
+
+
+def _lof_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan) raises -> Int:
+    var fit_x = _f32_block(fields, "_fit_X", 2, context)
+    var distances = _f32_block(fields, "_fit_dist", 2, context)
+    var densities = _f32_block(fields, "_lrd", 1, context)
+    var scores = _f32_block(fields, "negative_outlier_factor_", 1, context)
+    var offset_source = py_get(fields, PythonObject("offset_"))
+    if offset_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var offset: List[Float64] = [Float64(py=py_call(b.float, offset_source))]
+    var call = member_new(plan)
+    try:
+        call.block = LOF_BLOCK_ROWS
+        call.x = MemberMatrix(Int(py=classical_address(fit_x)), Int(py=fit_x.shape[0]), Int(py=fit_x.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = LOF_BLOCK_DISTANCES
+        call.x = MemberMatrix(Int(py=classical_address(distances)), Int(py=distances.shape[0]),
+            Int(py=distances.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = LOF_BLOCK_DENSITIES
+        call.x = MemberMatrix(Int(py=classical_address(densities)), 1, Int(py=densities.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = LOF_BLOCK_SCORES
+        call.x = MemberMatrix(Int(py=classical_address(scores)), 1, Int(py=scores.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = LOF_BLOCK_OFFSET
+        call.x = MemberMatrix(Int(offset.unsafe_ptr()), 1, 1, MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = fit_x
+    _ = distances
+    _ = densities
+    _ = scores
+    _ = offset^
+    return call.state
+
+
+def xneighbors_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    plan: MemberPlan, state: Int) raises:
+    """PACK: write the fitted attributes of state `state` into `model`, as
+    the estimator's own fit does."""
+    if plan.kind == XNEIGHBORS_KIND_LOF:
+        _lof_pack(fields, context, plan, state)
+    else:
+        _nc_pack(fields, context, b, plan, state)
+
+
+def xneighbors_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+    plan: MemberPlan) raises -> Int:
+    """UNPACK: a new member state holding the fitted attributes of `model`.
+    The caller frees it (`member_free`)."""
+    if plan.kind == XNEIGHBORS_KIND_LOF:
+        return _lof_state(fields, context, b, plan)
+    return _nc_state(fields, context, plan)
