@@ -21,12 +21,16 @@ from bindings.logistic_admission_unpack import (
 )
 from bindings.logistic_keys_unpack import logistic_keys
 from bindings.py_balanced import py_item
+from providers.python.logistic_route_boundary_door import logistic_device_admit
 
 
 def logistic_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = logistic_storage(model, context)
     var nk = logistic_keys()
-    var names = py_item(context, nk[].k_lr_parameters)
+    # The constructor's own order: the checked parameters, then `device`
+    # (stored as given; checked by the door before this, read once into the
+    # estimator's route owner at its first operation).
+    var names = py_item(context, nk[].k_lr_constructor_parameters)
     if len(args) != len(names):
         raise Error("TypeError: native LogisticRegression requires its full constructor configuration")
     for i in range(len(names)):  # driver-loop: refusal before publishing any constructor parameters
@@ -48,7 +52,10 @@ def logistic_get_params(model: PythonObject, context: PythonObject) raises -> Py
     var nk = logistic_keys()
     var names = py_item(context, nk[].k_lr_sorted_parameters)
     for i in range(len(names)):  # driver-loop: ParamsMixin's sorted parameter names
-        py_setitem(out, names[i], fields[names[i]])
+        # `device` alone may be absent (an instance built without its
+        # constructor): None, this installation's device. Every checked
+        # parameter was required by logistic_fields above.
+        py_setitem(out, names[i], py_get(fields, names[i]))
     return out
 
 
@@ -74,6 +81,9 @@ def logistic_set_params(model: PythonObject, values: PythonObject, context: Pyth
         if String(parts[1]) != "":
             raise Error("AttributeError: scalar parameter has no set_params")
         _parameter(parts[0], values[key], context, True)
+        if String(parts[0]) == "device":
+            # A new device is refused in words before the estimator changes.
+            logistic_device_admit(values[key], context, b)
         py_setitem(params, key, values[key])
     # Preserve ParamsMixin's successful reconstruction: a new configuration
     # removes fitted state. A rejected update leaves the original model alone.

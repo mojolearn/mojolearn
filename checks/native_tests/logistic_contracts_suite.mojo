@@ -8,6 +8,7 @@ from core.host_parallel import host_parallelize
 from core.logistic_native_api import qn_fold_f32_ptr, qn_native_spans
 from checks.native_tests.logistic_descriptor_fixtures import (
     logistic_driver_fixture, logistic_fold_fixture, logistic_fixed_fixture, logistic_concurrent_fixture,
+    logistic_route_fixture, LOGISTIC_ROUTE_FIXTURES,
 )
 
 
@@ -107,7 +108,8 @@ def _invalid_span(unit: Int) raises:
 
 
 def run_checks() raises:
-    comptime FIXTURES = 118
+    comptime CONTRACT_FIXTURES = 118
+    comptime FIXTURES = CONTRACT_FIXTURES + LOGISTIC_ROUTE_FIXTURES
     var failed = List[Int](length=FIXTURES, fill=0)
     var failures_ptr = failed.unsafe_ptr()
     def task(unit: Int) {imm failures_ptr}:
@@ -124,8 +126,10 @@ def run_checks() raises:
                 logistic_fold_fixture(unit - 43)
             elif unit < 54:
                 logistic_fixed_fixture(unit - 48)
-            else:
+            elif unit < CONTRACT_FIXTURES:
                 logistic_concurrent_fixture(unit - 54)
+            else:
+                logistic_route_fixture(unit - CONTRACT_FIXTURES)
         except problem:
             print("FAIL logistic_contracts fixture", unit, String(problem))
             failures_ptr.unsafe_store(unit, 1)

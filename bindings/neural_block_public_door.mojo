@@ -46,6 +46,10 @@ from bindings.causal_lm_public_door import _causal_array_guard
 from bindings.causal_lm_public_door import causal_mamba_entry, causal_mamba_stateless_run
 from autograd.block_step_ops import IDN_MAMBA12_FORWARD_DOOR_OLD
 from core.entry_table import EntryRef, entry_ref_unresolved, entry_ref_call
+from bindings.neural_device_unpack import neural_device_unpack
+from core.device_route_dw_neural_models import (
+    neural_device_route, neural_route_name, neural_device_cpu_training_refusal,
+)
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
     NEURAL_TABLE_BLOCK_FORWARD, NEURAL_TABLE_BLOCK_TRAIN, NEURAL_TABLE_MAMBA_TRAIN,
@@ -104,11 +108,19 @@ struct NativeBlockPlan(Movable, Writable):
     # forward calls, resolved at the plan's first stateless forward and held
     # (word 0 until then).
     var mamba_entry: EntryRef
+    # What the admitted block image itself reported (causal_lm_admit_binding):
+    # its vendor word and numeric-mode code. `vendor_used` and
+    # `numeric_mode_used` of a block answer from here, so a `device="cpu"`
+    # block in a GPU installation says `cpu` (lane dw-neural-models).
+    var vendor: String
+    var mode: Int
 
     def __init__(out self, owner: PythonObject, layer: PythonObject) raises:
         self.context = owner._native_context
         self.entries = owner._native_entries
         self.kind = String(owner.kind)
+        self.vendor = String(py=owner._native_vendor)
+        self.mode = Int(py=owner._native_numeric_mode)
         # Only a Transformer block's forward calls the forward table.
         self.forward_entry = entry_ref_unresolved()
         if self.kind == "transformer":
@@ -353,6 +365,50 @@ def _neural_owner_reusable(mut mods: NativeModules, snapshot: PythonObject, live
     return True
 
 
+def _neural_block_route(mut mods: NativeModules, block: PythonObject, kind: String, device: PythonObject,
+    mode: PythonObject, context: PythonObject) raises -> String:
+    # The one place a block's `device` is turned into its route (constructor,
+    # `set_params` through the constructor, and an owner record's miss).
+    # None is this installation's device; the `*Inference` classes are the
+    # CPU side by class; an unknown value, an explicit 'gpu' in a CPU-only
+    # process and 'cpu' beside an explicit fast mode are refused in words
+    # (core/device_route_dw_neural_models.mojo, core/linear_route.mojo).
+    var bi = mods.module("builtins")
+    var code = neural_device_unpack(device, bi)
+    ref cpy = Python().cpython()
+    var cpu_class = cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(block)._obj_ptr, context["block_classes"]["cpu"][kind]._obj_ptr) != 0
+    var selected = context["selected_vendor"]
+    var process_vendor = 1
+    if selected is None or String(selected) == "cpu":
+        process_vendor = 0
+    var fast = False
+    if mode is not None and py_type(mode) is bi.str:
+        fast = String(py=mode.strip().lower()) == "fast"
+    return neural_route_name(neural_device_route(code, cpu_class, process_vendor, fast))
+
+
+def _neural_device_reconcile(mut mods: NativeModules, block: PythonObject, live: PythonObject, context: PythonObject) raises:
+    # Owner record miss only. `device` is the constructor parameter and the
+    # authority; `_native_route` and everything built for it (weights
+    # storage, session, lock, provider caches) is derived state. A block
+    # whose derived state was built for another device (its fields handed
+    # over from the same block on the other device by `check`, `device`
+    # assigned after construction, or restored in an installation without
+    # that device) is rebuilt from its constructor parameters, exactly as
+    # `set_params` rebuilds it. A block whose state agrees pays the reads
+    # below once per owner record.
+    var bi = mods.module("builtins")
+    var route = py_get(live, "_native_route")
+    var kind = py_get(live, "_native_kind")
+    if py_type(route) is not bi.str or py_type(kind) is not bi.str:
+        return
+    var want = _neural_block_route(mods, block, String(kind), py_get(live, "device"), py_get(live, "numeric_mode"), context)
+    if want == String(route):
+        return
+    _ = bump_model_generation(block)
+    _neural_block_rebuild(mods, block, live, bi.dict(), context)
+
+
 def neural_block_owner(mut mods: NativeModules, block: PythonObject, context: PythonObject) raises -> PythonObject:
     # The parallel worker keeps its existing owner ABI at one-time layer
     # construction. Repeated standalone execution uses the native plan below.
@@ -386,6 +442,7 @@ def neural_block_execution(mut mods: NativeModules, block: PythonObject, context
             py_setitem(fields, "_arithmetic_profile_mode", want_mode)
             py_setitem(fields, "_arithmetic_profile_changed", record[5])
         return NativeBlockExecution(record[1], fields)
+    _neural_device_reconcile(mods, block, live, context)
     var key = PythonObject(None)
     var binding_key = PythonObject(None)
     var uses_default = False
@@ -431,13 +488,12 @@ def neural_block_init_binding(mut mods: NativeModules, block: PythonObject, weig
     var fields = neural_block_fields(mods, block, context, False)
     _ = neural_block_weight_names(mods, block)
     var kind = String(kind_value)
-    ref cpy = Python().cpython()
-    var cpu = cpy.lib.get_function[Int32]("PyType_IsSubtype")(py_type(block)._obj_ptr, context["block_classes"]["cpu"][kind]._obj_ptr) != 0
-    var route = PythonObject("cpu" if cpu else "gpu")
-    # The established GPU block class routes to native host arithmetic on a
+    # `device` (options[0]) is read here, once, into the block's route; every
+    # later operation runs the owner record built for that route and none
+    # asks which device the process has. None is this installation's device:
+    # the established GPU block class routes to native host arithmetic on a
     # CPU-only installation, just as the package binding selector does.
-    if context["selected_vendor"] is None or String(context["selected_vendor"]) == "cpu":
-        route = PythonObject("cpu")
+    var route = PythonObject(_neural_block_route(mods, block, kind, captured_options[0], captured_options[1], context))
     var plan = py_call(mods.module("types").SimpleNamespace)
     py_setattr(plan, "kind", kind_value)
     var norm_name = "input_layernorm.weight" if kind == "transformer" else ("norm.weight" if kind == "mamba1" else "block_norm.weight")
@@ -470,6 +526,8 @@ def neural_block_init_binding(mut mods: NativeModules, block: PythonObject, weig
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_native_kind", kind_value)
     py_setitem(fields, "_native_route", route)
+    # The constructor parameter as given (get_params, clone, pickle).
+    py_setitem(fields, "device", captured_options[0])
     # Public parameter verification (2026-10-27): the constructor previously
     # retained only its ordered internal tensors, so inherited get_params
     # could not return the caller's weights and set_params could not rebuild.
@@ -488,6 +546,16 @@ def neural_block_set_params_binding(mut mods: NativeModules, block: PythonObject
     if len(updates) == 0:
         return block
     var fields = neural_block_fields(mods, block, context)
+    _neural_block_rebuild(mods, block, fields, updates, context)
+    return block
+
+
+def _neural_block_rebuild(mut mods: NativeModules, block: PythonObject, fields: PythonObject, updates: PythonObject, context: PythonObject) raises:
+    # The block rebuilt through its constructor door from its stored
+    # constructor parameters with `updates` applied (`set_params`; the device
+    # reconcile passes no update). A refused replacement leaves the live
+    # block untouched.
+    var bi = mods.module("builtins")
     var kind = String(fields["_native_kind"])
     var names = Python.list("weights", "numeric_mode")
     if kind == "mamba2":
@@ -499,12 +567,15 @@ def neural_block_set_params_binding(mut mods: NativeModules, block: PythonObject
     var values = bi.dict()
     for i in range(len(names)):  # driver-loop: fixed constructor configuration, no Python callbacks
         py_setitem(values, names[i], fields[names[i]])
+    # A block stored before `device` existed has no such field: None, this
+    # installation's device.
+    py_setitem(values, "device", py_get(fields, "device"))
     var keys = py_call(bi.list, updates.keys())
     for i in range(len(keys)):  # driver-loop: validate all keys before constructing replacement
         if py_type(keys[i]) is not bi.str or not py_contains(values, keys[i]):
             raise Error("ValueError: Invalid parameter for neural block")
         py_setitem(values, keys[i], updates[keys[i]])
-    var options = Python.list(PythonObject(None), values["numeric_mode"])
+    var options = Python.list(values["device"], values["numeric_mode"])
     if kind == "mamba2":
         _ = py_call(options.append, values["dt_limit"])
     elif kind == "transformer":
@@ -520,7 +591,6 @@ def neural_block_set_params_binding(mut mods: NativeModules, block: PythonObject
     var fresh = neural_block_fields(mods, replacement, context)
     _ = py_call(fields.clear)
     _ = py_call(fields.update, fresh)
-    return block
 
 
 def _neural_allocate(mut mods: NativeModules, owner: NativeBlockExecution, b: Int, cap: Int) raises -> PythonObject:
@@ -1049,6 +1119,11 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
     var key = PythonObject(String(py=fields["_native_route"]) + ":" + mode_text)
     var selected = py_get(context["training_bindings"], key)
     if selected is None:
+        if String(py=fields["_native_route"]) == "cpu":
+            # A CPU-routed block in a GPU installation (device='cpu'): the
+            # host training images are the CPU-only installation's and are
+            # not loaded beside their GPU siblings (failure path only).
+            neural_device_cpu_training_refusal("neural block backward")
         raise Error("NotImplementedError: native training bindings unavailable for " + String(key))
     var family = "transformer" if String(fields["_native_kind"]) == "transformer" else "mamba"
     var entries = selected[family]
@@ -1568,6 +1643,23 @@ def neural_block_setstate_binding(mut mods: NativeModules, block: PythonObject, 
     py_setitem(fields, "_native_block_provider_cache", PythonObject(None))
     return PythonObject(None)
 
+def neural_block_used_binding(mut mods: NativeModules, block: PythonObject, vendor: Bool, context: PythonObject) raises -> PythonObject:
+    # `vendor_used` / `numeric_mode_used` of a block: the words the admitted
+    # image of ITS route reported, held by the retained plan. The class-level
+    # read-back (bindings/mode_metadata_native_door.mojo) names the class's
+    # GPU binding whatever the block's device, so the block classes answer
+    # here (metadata; one owner-record read, no kernel).
+    _ = generation_initialize_binding(context["generation_classes"])
+    var owner = neural_block_execution(mods, block, context)
+    var result = PythonObject(None)
+    if vendor:
+        result = PythonObject(owner.plan.downcast_value_ptr[NativeBlockPlan]()[].vendor.copy())
+    else:
+        result = PythonObject("identical" if owner.plan.downcast_value_ptr[NativeBlockPlan]()[].mode == 1 else "fast")
+    _neural_publish_block(owner)
+    return result
+
+
 def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     var mods = NativeModules()
     try:
@@ -1589,6 +1681,10 @@ def neural_block_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) 
             var bi = mods.module("builtins")
             var name = String(py_call(bi.type.__dict__["__name__"].__get__, py_type(args[0])))
             raise Error("NotImplementedError: mojolearn " + name + ".backward: inference is forward only; the backward pass runs on the GPU block class over a training binding")
+        elif operation == 8:
+            result = neural_block_used_binding(mods, args[0], True, args[1])
+        elif operation == 9:
+            result = neural_block_used_binding(mods, args[0], False, args[1])
         else:
             result = neural_block_backward_binding(mods, args[0], args[1], args[2], args[3])
         return result.steal_data()

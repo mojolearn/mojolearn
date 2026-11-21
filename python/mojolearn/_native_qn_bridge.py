@@ -70,6 +70,31 @@ def connect(losses):
     return call, context
 
 
+def connect_cpu_device(context):
+    """Connect the CPU QN entry of `device="cpu"` once, at import, beside the
+    device image (`context["qn_bindings"]`).
+
+    The host estimators binary publishes its native QN table when it
+    initializes; the compiled owner resolves an estimator's route against the
+    device table or this one, once per estimator
+    (bindings/qn_boundary_unpack.mojo `qn_route`). In a CPU-only process the
+    selected image already is the CPU image and nothing is loaded. A host
+    binary that is not built is kept as its refusal text, said when a
+    `device="cpu"` estimator first runs."""
+    # glue: load the CPU image once and retain it with its table key
+    from . import _backend
+    if "qn_bindings" not in context or context["vendor"] == "cpu":
+        return
+    try:
+        host = _backend.load_host_module("_mojolearn_estimators_host")
+        # load_host_module read the image back as CPU and identical: its
+        # native QN table key is (tier 1, vendor 0).
+        cpu = {"_module": host, "native_key": (1, _NATIVE_VENDORS["cpu"])}
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+        cpu = type(error).__name__ + ": " + str(error)
+    context["qn_cpu_bindings"] = {"identical": cpu}
+
+
 def _qn_fold_key():
     # glue (lane a7c; table key since lane calltable-solver-estimators): the
     # (tier, vendor) key of the resident-fold QN entry the GPU base binding
