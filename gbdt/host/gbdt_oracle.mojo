@@ -1069,6 +1069,7 @@ def _binarize_columns(
 #: named again after the join.
 comptime GbdtIntPtr = MutPointer[Int, MutUntrackedOrigin]
 comptime GbdtI32Ptr = MutPointer[Int32, MutUntrackedOrigin]
+comptime GbdtU64Ptr = MutPointer[UInt64, MutUntrackedOrigin]
 
 
 def _gbdt_units(items: Int, work: Int) -> Int:
@@ -2692,7 +2693,22 @@ def _bootstrap_pass(
 ) raises -> Tuple[Float32, Float32]:
     """`launch_bootstrap` + `bootstrap_kernel` (`bootstrap.mojo:118-246`,
     `:292-348`) at `stat_count` planes (two by default), then `deterministic_sum_lanes_kernel[2]`
-    over the block magnitudes. Returns the two folded magnitudes."""
+    over the block magnitudes. Returns the two folded magnitudes.
+
+    THE SPLIT (lane gbdt-host-par): the unit is one device BLOCK. Thread
+    `gid` of block `b` owns seed `gid`, the rows `gid, gid + stride, ...`
+    and its two magnitudes, so no block reads or writes another's seeds,
+    rows or `mag_part` pair. Inside a block everything is the kernel's
+    order: a thread's draws and magnitudes ascending in its rows, the
+    block's halving fold, and after the join the lane fold over the blocks
+    in block order. Blocks go round robin to `_gbdt_units` tasks over
+    `rows x planes` draws and multiplies; a task holds two block slabs."""
+    if (
+        kind != GBDT_BOOT_BAYESIAN
+        and kind != GBDT_BOOT_BERNOULLI
+        and kind != GBDT_BOOT_POISSON
+    ):
+        raise Error("gbdt host: bootstrap kind " + String(kind) + " is not restated")
     var by_rows = (n_rows + GBDT_BOOT_BLOCK - 1) // GBDT_BOOT_BLOCK
     var blocks = GBDT_BOOT_SEEDS // GBDT_BOOT_BLOCK
     if by_rows < blocks:
@@ -2701,51 +2717,63 @@ def _bootstrap_pass(
         blocks = 1
     var stride = blocks * GBDT_BOOT_BLOCK
     var mag_part = List[Float32](length=2 * blocks, fill=Float32(0.0))
-    for b in range(blocks):
+    var units = _gbdt_units(blocks, 8 * n_rows * stat_count)
+    var seeds_p = rebind[GbdtU64Ptr](seeds.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var mag_p = rebind[HostF32Ptr](mag_part.unsafe_ptr())
+
+    def block_draws(unit: Int) {imm units, imm blocks, imm stride, imm kind, imm param, imm n_rows, imm stat_count, imm seeds_p, imm stats_p, imm mag_p}:
         var s_w = List[Float32](length=GBDT_BOOT_BLOCK, fill=Float32(0.0))
         var s_g = List[Float32](length=GBDT_BOOT_BLOCK, fill=Float32(0.0))
-        for tid in range(GBDT_BOOT_BLOCK):
-            var gid = b * GBDT_BOOT_BLOCK + tid
-            var s = seeds[gid]
-            var mag_w = Float32(0.0)
-            var mag_g = Float32(0.0)
-            var i = gid
-            while i < n_rows:
-                var bw: Float32
-                if kind == GBDT_BOOT_BAYESIAN:
-                    # `bootstrap_kernel[BAYESIAN]` (lane/catboost-parity):
-                    # `-log(u + 1e-20)`, raised to the temperature unless 1
-                    var draw = next_uniform_f(s)
-                    s = draw[1]
-                    var tmp = -identical_log(draw[0] + Float32(1e-20))
-                    bw = tmp
-                    if param != Float32(1.0):
-                        bw = identical_pow(tmp, param)
-                elif kind == GBDT_BOOT_BERNOULLI:
-                    var draw = next_uniform_f(s)
-                    s = draw[1]
-                    bw = Float32(1.0) if draw[0] < param else Float32(0.0)
-                elif kind == GBDT_BOOT_POISSON:
-                    var draw = next_poisson_f(s, param)
-                    s = draw[1]
-                    bw = draw[0]
-                else:
-                    raise Error("gbdt host: bootstrap kind " + String(kind) + " is not restated")
-                var w = stats[i] * bw
-                stats[i] = w
-                mag_w += abs(w)
-                var gmax = Float32(0.0)
-                for k in range(1, stat_count):
-                    var g = stats[k * n_rows + i] * bw
-                    stats[k * n_rows + i] = g
-                    gmax = max(gmax, abs(g))
-                mag_g += gmax
-                i += stride
-            seeds[gid] = s
-            s_w[tid] = mag_w
-            s_g[tid] = mag_g
-        mag_part[2 * b] = _halving_fold(s_w)
-        mag_part[2 * b + 1] = _halving_fold(s_g)
+        var b = unit
+        while b < blocks:
+            for tid in range(GBDT_BOOT_BLOCK):
+                var gid = b * GBDT_BOOT_BLOCK + tid
+                var s = seeds_p[gid]
+                var mag_w = Float32(0.0)
+                var mag_g = Float32(0.0)
+                var i = gid
+                while i < n_rows:
+                    var bw: Float32
+                    if kind == GBDT_BOOT_BAYESIAN:
+                        # `bootstrap_kernel[BAYESIAN]` (lane/catboost-parity):
+                        # `-log(u + 1e-20)`, raised to the temperature unless 1
+                        var draw = next_uniform_f(s)
+                        s = draw[1]
+                        var tmp = -identical_log(draw[0] + Float32(1e-20))
+                        bw = tmp
+                        if param != Float32(1.0):
+                            bw = identical_pow(tmp, param)
+                    elif kind == GBDT_BOOT_BERNOULLI:
+                        var draw = next_uniform_f(s)
+                        s = draw[1]
+                        bw = Float32(1.0) if draw[0] < param else Float32(0.0)
+                    else:
+                        var draw = next_poisson_f(s, param)
+                        s = draw[1]
+                        bw = draw[0]
+                    var w = stats_p[i] * bw
+                    stats_p[i] = w
+                    mag_w += abs(w)
+                    var gmax = Float32(0.0)
+                    for k in range(1, stat_count):
+                        var g = stats_p[k * n_rows + i] * bw
+                        stats_p[k * n_rows + i] = g
+                        gmax = max(gmax, abs(g))
+                    mag_g += gmax
+                    i += stride
+                seeds_p[gid] = s
+                s_w[tid] = mag_w
+                s_g[tid] = mag_g
+            # the halving fold consumes the slab; every word is written
+            # again by the next block's threads
+            mag_p[2 * b] = _halving_fold(s_w)
+            mag_p[2 * b + 1] = _halving_fold(s_g)
+            b += units
+
+    host_parallelize(block_draws, units)
+    _ = len(seeds)
+    _ = len(stats)
     var mags = _deterministic_sum_lanes(mag_part, 2, blocks)
     return (mags[0], mags[1])
 
@@ -2775,35 +2803,51 @@ def _target_std_dev(
         n_blocks = 1
     var stride = n_blocks * B
     var partials = List[Float32](length=3 * n_blocks, fill=Float32(0.0))
-    for b in range(n_blocks):
+    # THE SPLIT (lane gbdt-host-par): the unit is one device block (its 512
+    # threads' strided rows, read only, and its three partials); a thread's
+    # flushed sums ascending in its rows and the block's halving folds are
+    # the kernel's, and the three-lane fold over the blocks runs after the
+    # join in block order. Blocks go round robin to `_gbdt_units` tasks over
+    # `rows x planes` accumulations; a task holds three 512-word slabs.
+    var units = _gbdt_units(n_blocks, 4 * n_rows * stat_count)
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var part_p = rebind[HostF32Ptr](partials.unsafe_ptr())
+
+    def block_sums(unit: Int) {imm units, imm n_blocks, imm stride, imm n_rows, imm stat_count, imm multiclass_optimization, imm stats_p, imm part_p}:
         var s0 = List[Float32](length=B, fill=Float32(0.0))
         var s1 = List[Float32](length=B, fill=Float32(0.0))
         var s2 = List[Float32](length=B, fill=Float32(0.0))
-        for tid in range(B):
-            var weighted_sum = Float32(0.0)
-            var weighted_sum2 = Float32(0.0)
-            var total_weight = Float32(0.0)
-            var i = B * b + tid
-            while i < n_rows:
-                var w = stats[i]
-                if w > Float32(1e-15):
-                    var stat_sum = Float32(0.0)
-                    for k in range(1, stat_count):
-                        var wt = stats[k * n_rows + i]
-                        weighted_sum = ftz(weighted_sum + wt)
-                        weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))
-                        stat_sum = ftz(stat_sum + wt)
-                    if multiclass_optimization:
-                        weighted_sum = ftz(weighted_sum + -stat_sum)
-                        weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(stat_sum * stat_sum) / w))
-                    total_weight = ftz(total_weight + w)
-                i += stride
-            s0[tid] = weighted_sum
-            s1[tid] = weighted_sum2
-            s2[tid] = total_weight
-        partials[3 * b] = ftz(_halving_fold_512(s0))
-        partials[3 * b + 1] = ftz(_halving_fold_512(s1))
-        partials[3 * b + 2] = ftz(_halving_fold_512(s2))
+        var b = unit
+        while b < n_blocks:
+            for tid in range(B):
+                var weighted_sum = Float32(0.0)
+                var weighted_sum2 = Float32(0.0)
+                var total_weight = Float32(0.0)
+                var i = B * b + tid
+                while i < n_rows:
+                    var w = stats_p[i]
+                    if w > Float32(1e-15):
+                        var stat_sum = Float32(0.0)
+                        for k in range(1, stat_count):
+                            var wt = stats_p[k * n_rows + i]
+                            weighted_sum = ftz(weighted_sum + wt)
+                            weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))
+                            stat_sum = ftz(stat_sum + wt)
+                        if multiclass_optimization:
+                            weighted_sum = ftz(weighted_sum + -stat_sum)
+                            weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(stat_sum * stat_sum) / w))
+                        total_weight = ftz(total_weight + w)
+                    i += stride
+                s0[tid] = weighted_sum
+                s1[tid] = weighted_sum2
+                s2[tid] = total_weight
+            # every slab word is written again by the next block's threads
+            part_p[3 * b] = ftz(_halving_fold_512(s0))
+            part_p[3 * b + 1] = ftz(_halving_fold_512(s1))
+            part_p[3 * b + 2] = ftz(_halving_fold_512(s2))
+            b += units
+
+    host_parallelize(block_sums, units)
     var l2 = _deterministic_sum_lanes(partials, 3, n_blocks)
     var sum2 = Float64(l2[1])
     var weight = Float64(l2[2])
