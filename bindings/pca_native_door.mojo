@@ -85,7 +85,7 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             sequential_admit_value(args, context)
         var fields = pca_fields(model, context)
         if operation == PCA_OPN_INITIALIZE:
-            result = pca_initialize(model, args)
+            result = pca_initialize(model, args, context)
         elif operation == PCA_OPN_GET_PARAMS:
             result = pca_get_params(model, context)
         elif operation == PCA_OPN_SET_PARAMS:
@@ -98,7 +98,7 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             if py_get(context, nk[].k_ndarray) is None:
                 raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
                             + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
-            var entries = pca_entries(fields, context)
+            var entries = pca_entries(model, fields, context)
             if operation == PCA_OPN_NUMERIC_MODE_USED:
                 result = PythonObject("identical" if pca_mode(entries) == 1 else "fast")
             elif operation == PCA_OPN_VENDOR_USED:

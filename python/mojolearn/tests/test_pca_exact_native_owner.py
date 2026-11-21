@@ -30,10 +30,10 @@ def native_inverse(model, x):
 
 def native_initialize(model, n_components=None, copy=True, whiten=False, svd_solver="auto", tol=0.0,
                       iterated_power="auto", n_oversamples=10, power_iteration_normalizer="auto",
-                      random_state=None, numeric_mode=None):
+                      random_state=None, numeric_mode=None, device=None):
     return ENTRY(model, "initialize", (n_components, copy, whiten, svd_solver, tol, iterated_power,
                                        n_oversamples, power_iteration_normalizer, random_state,
-                                       numeric_mode), CONTEXT)
+                                       numeric_mode, device), CONTEXT)
 
 
 def native_get(model, deep=True):

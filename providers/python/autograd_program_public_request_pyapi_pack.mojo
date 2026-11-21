@@ -4,10 +4,11 @@
 # (a direct typed call when this image owns the registry: lane
 # restore-executor-fast-run 2026-11-13, see the Session request PACK file).
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_type, py_setitem
+from bindings.py_balanced import py_item, py_type, py_setitem
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_cpython_table import cpython_table
 from sequence.exec_trait import Exec
+from bindings.autograd_keys_unpack import autograd_keys
 from providers.python.autograd_program_owner_pyapi_door import program_owner_fields
 from providers.python.autograd_session_public_request_pyapi_pack import ops_session_public_call_py
 from providers.python.autograd_session_frontend_pyapi_door import ops_session_fields
@@ -59,10 +60,11 @@ def _fixed_run_session[KIND: Int](
     if py_type(args[0]) is not tuple_type:
         return 0
     var session_fields = ops_session_fields(session)
-    var sid = session_fields["_id"]
+    var nk = autograd_keys()
+    var sid = py_item(session_fields, nk[].k__id)
     if sid is None or py_type(sid) is not int_type:
         return 0
-    var lifetime = session_fields["_lifetime"]
+    var lifetime = py_item(session_fields, nk[].k__lifetime)
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
     if (len(resource[].context) != 2 or resource[].context[0] != ops_session_registry_token()
             or resource[].context[1] != KIND):
@@ -102,7 +104,9 @@ def ops_program_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
                 _ = owner  # the Program (and through it the Session) stays pinned through the run
                 return answer
     var fields = program_owner_fields(owner)
-    var pid = fields["_id"]
+    # Held keys: `_id` and `_s` were a Python str built per read.
+    var nk = autograd_keys()
+    var pid = py_item(fields, nk[].k__id)
     var int_type = types[].int_type
     if pid is not None and py_type(pid) is not int_type:
         raise Error("TypeError: Program handle requires an exact native integer")
@@ -110,7 +114,7 @@ def ops_program_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     # Restore: git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
     if pid is not None and len(args) == 4 and String(py=operation) == "run":
         var program_id = Int(py=pid)
-        var session = fields["_s"]
+        var session = py_item(fields, nk[].k__s)
         var sid = _fixed_run_session[KIND](session, args, tuple_type, int_type)
         if sid != 0 and program_id >= 1:
             program_run_route_record[KIND](owner, fields, session, sid, program_id)
@@ -121,7 +125,8 @@ def ops_program_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     # Do not copy unrelated user fields: destroying a snapshot after execution
     # must not release application finalizers that another thread removed.
     var snapshot = Python.dict()
-    py_setitem(snapshot, "_s", fields["_s"])
-    py_setitem(snapshot, "_id", pid)
-    return ops_session_public_call_py[E, KIND](snapshot["_s"], PythonObject("program_public"),
+    var owning = py_item(fields, nk[].k__s)
+    py_setitem(snapshot, nk[].k__s, owning)
+    py_setitem(snapshot, nk[].k__id, pid)
+    return ops_session_public_call_py[E, KIND](owning, PythonObject("program_public"),
                                                Python.tuple(owner, snapshot, fields, operation, args))

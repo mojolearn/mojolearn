@@ -24,6 +24,7 @@ from core.ipca_native_api import IPCAFitRequest, IPCAPartialRequest, IPCAPreviou
 from core.ipca_native_state import IPCAOutputRoom, ipca_output_shape
 from bindings.ipca_descriptor_boundary_door import (
     ipca_connection,
+    ipca_route_vendor,
     ipca_run_fit,
     ipca_run_partial,
     ipca_run_query,
@@ -311,6 +312,8 @@ def _ipca_dispatch(model: PythonObject, operation: String, args: PythonObject, c
         var x = decomp_admit(args[0], "IncrementalPCA", context)
         result = _project(model, fields, x, operation == "inverse_transform", context)
         _ = x
+    elif operation == "vendor_used":
+        result = PythonObject(ipca_route_vendor(model, py_fields(model), context))
     else:
         raise Error("unknown private IncrementalPCA operation")
     return result

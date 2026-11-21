@@ -91,7 +91,7 @@ def connect(context, package):
     if decomposition is not None:
         register(decomposition.PCA, decomposition._PCA_ENTRY, decomposition._PCA_CONTEXT,
                  ('n_components', 'copy', 'whiten', 'svd_solver', 'tol', 'iterated_power', 'n_oversamples',
-                  'power_iteration_normalizer', 'random_state', 'numeric_mode'), 'initialize', {
+                  'power_iteration_normalizer', 'random_state', 'numeric_mode', 'device'), 'initialize', {
                      'fit': ('fit', (arg(0), arg(1))), 'transform': ('transform', (arg(0),)),
                      'get_params': ('get_params', (const(False),)),
                      'set_params': ('set_params', (arg(0),)),

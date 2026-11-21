@@ -25,6 +25,7 @@ from core.mode_answer import MODE_FAMILY_FOREST
 from std.math import sqrt
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_item
+from bindings.trees_route_boundary_door import trees_device_unpack
 from bindings.py_typed_call import py_call_typed
 from bindings.trees_public_inputs_door import (
     TreesLabels,
@@ -173,19 +174,10 @@ def forest_kind(model: PythonObject, context: PythonObject) raises -> String:
     raise Error("TypeError: " + String(cls.__name__) + " is not a connected tree ensemble")
 
 
-def forest_check_fit_device(model: PythonObject, context: PythonObject) raises:
-    """Extra Trees: refuse a non-GPU `device` at fit before any input is
-    admitted or converted (scikit-learn's convention: fit validates the
-    stored parameters first). The caller has already admitted the stored
-    constructor fields as native values, so the comparison runs no Python
-    hook. Random forests have no device parameter."""
-    if _family(forest_kind(model, context)) != "et":
-        return
-    var nk = trees_keys()
-    var device = py_get(py_fields(model), nk[].k_device, PythonObject(None))
-    var b = trees_builtins()
-    if not Bool(py=py_call(b.isinstance, device, b.str)) or not Bool(py=device == PythonObject("gpu")):
-        raise Error("Extra Trees training is GPU-only; device must be 'gpu', got " + _repr(device))
+# TOMBSTONE: forest_check_fit_device (Extra Trees' fit-time `device must be
+# 'gpu'` test) deleted 2026-11-20 by lane dw-trees: the estimator's device is
+# admitted where every operation starts (bindings/trees_route_boundary_door.mojo
+# `trees_route_enter`: a fit refuses an unknown device before any input is read).
 
 
 def forest_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -320,12 +312,9 @@ def _rf_base(params: PythonObject, criterion_code: PythonObject, class_weight: P
     configuration `_cfg`. `params` hold the base's arguments by name."""
     var b = trees_builtins()
     var nk = trees_keys()
-    var device = py_item(params, nk[].k_device)
-    if not Bool(py=device == PythonObject("gpu")):
-        raise Error("device must be 'gpu', got " + _repr(device) + ": the fit runs on the"
-                    + " GPU binding, or, on a CPU-only install with the rf host"
-                    + " binding built, on its host restatement"
-                    + " (ensemble/host/rf_oracle.mojo) under the same device='gpu'")
+    # `device`: None, 'gpu' or 'cpu' (the pilot's rule and words); which table
+    # set runs is the route's question, answered where the operation starts.
+    _ = trees_device_unpack(py_item(params, nk[].k_device), True)
     if py_item(params, nk[].k_max_leaf_nodes) is not None:
         _refuse("max_leaf_nodes", String(py_item(tables, nk[].k_max_leaf_nodes_why)))
     var oob = py_item(params, nk[].k_oob_score)
@@ -438,8 +427,7 @@ def _et_derive(model: PythonObject, params: PythonObject, kind: String, context:
     var nk = trees_keys()
     var tables = py_item(context, nk[].k_trees_et_tables)
     var device = py_item(params, nk[].k_device)
-    if not Bool(py=py_call(b.isinstance, device, b.str)) or not Bool(py=device == PythonObject("gpu")):
-        raise Error("Extra Trees training is GPU-only; device must be 'gpu', got " + _repr(device))
+    _ = trees_device_unpack(device, True)
     if py_item(params, nk[].k_n_jobs) is not None:
         raise Error("NotImplementedError: n_jobs is not implemented: there is no CPU thread pool here -- the"
                     + " fit runs one host thread driving the GPU (device='gpu')."
@@ -809,10 +797,7 @@ def _et_params(fields: PythonObject, cfg: PythonObject, rows: Int, cols: Int, cl
     """`extratrees._fit_params`: the 22-slot list in _mojolearn_trees.mojo's
     order."""
     var nk = trees_keys()
-    var device = py_item(fields, nk[].k_device)
-    var b = trees_builtins()
-    if not Bool(py=py_call(b.isinstance, device, b.str)) or not Bool(py=device == PythonObject("gpu")):
-        raise Error("Extra Trees training is GPU-only; device must be 'gpu', got " + _repr(device))
+    _ = trees_device_unpack(py_item(fields, nk[].k_device), True)
     var slots = _et_max_features(py_item(cfg, nk[].k_max_features), context)
     var depth = py_item(cfg, nk[].k_max_depth)
     var seed = py_item(cfg, nk[].k_random_state)
@@ -1298,7 +1283,6 @@ def forest_shard_prepare(model: PythonObject, rows: Int, cols: Int, y_source: Py
     the checked targets, the class weights, and the one typed request
     (`forest_fit_request`) as words for the workers."""
     var kind = forest_kind(model, context)
-    forest_check_fit_device(model, context)
     var params = forest_get_params(model, context)
     var mode = py_get(params, PythonObject("numeric_mode"), PythonObject(None))
     if mode is not None and (py_type(mode) is not trees_builtins().str or String(mode) != "identical"):

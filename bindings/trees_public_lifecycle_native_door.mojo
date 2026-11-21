@@ -19,7 +19,7 @@ from bindings.prep_lda_admission_door import lda_native_labels
 from bindings.metrics_native_support_door import metric_warn
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside as _outside, estimator_feature_check as _feature_check
 from bindings.sequential_inputs_door import sequential_input
-from bindings.trees_public_forest_door import forest_fit, forest_public_predict, forest_kind, forest_get_params, forest_check_fit_device
+from bindings.trees_public_forest_door import forest_fit, forest_public_predict, forest_kind, forest_get_params
 from bindings.trees_public_forest_door import (
     forest_refresh, forest_validate_stored, forest_capture_mode, forest_effective_mode, forest_prediction_engine,
     forest_ordered_resident_auto,
@@ -113,9 +113,8 @@ def forest_public_operation(model: PythonObject, operation: Int, opname: String,
     # native side table (bindings/trees_side_records.mojo).
     trees_admit_parameters(model, fields, py_type(model)._parameter_names, context)
     var fitting = operation == TREES_OPN_TREES_PUBLIC_FOREST_FIT
-    if fitting:
-        # Parameter validation precedes input admission and conversion.
-        forest_check_fit_device(model, context)
+    # The device was admitted where the operation started
+    # (bindings/trees_route_boundary_door.mojo), before any input is read.
     classical_admit_value(args, context)
     var name = classical_estimator_name(model)
     if not fitting:

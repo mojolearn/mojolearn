@@ -38,7 +38,7 @@ def connect(pca_class):
     # A densified SciPy sparse X is written as an Array (host_sparse_native).
     context["output_context"] = _numpy_free_context()
     context.update(pca_class=pca_class, pca_dictionary_descriptor=descriptor, pca_bindings=connected,
-                   pca_parameters=("copy", "iterated_power", "n_components", "n_oversamples",
+                   pca_parameters=("copy", "device", "iterated_power", "n_components", "n_oversamples",
                                    "numeric_mode", "power_iteration_normalizer", "random_state",
                                    "svd_solver", "tol", "whiten"),
                    pca_state=("components_", "mean_", "singular_values_", "explained_variance_",
@@ -70,6 +70,9 @@ def connect(pca_class):
     except (ImportError, AttributeError, TypeError, RuntimeError):
         fold = None
     context["pca_fold_factory"] = fold if isinstance(fold, BuiltinFunctionType) else None
+    # glue: the CPU image of `device="cpu"`, connected once beside the device set
+    from ._native_decomp_device_bridge import connect_cpu_device, ESTIMATORS_HOST
+    connect_cpu_device(context, ESTIMATORS_HOST, {"pca_native_api_v1": "pca_cpu_bindings"})
     entry = _binding()._module.pca_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("PCA owner requires a compiled pca_native_call")

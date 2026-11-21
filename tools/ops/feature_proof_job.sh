@@ -63,6 +63,41 @@ EOF
 step device-and-check "$PY" -I "$W/device.py"
 grep -E '^(DEVICE|CHECK|REFUSAL)' "$RES/logs/device-and-check.log" | cut -c1-400
 
+# 1b. the same for LogisticRegression (lane dev2-logistic-device's completion test): two classes and four, with
+# sample weights and class weights; labels, scores, probabilities and coefficients compared; check on both devices
+cat > "$W/device_logistic.py" <<'EOF'
+import numpy as np, mojolearn as ml
+from mojolearn.linear_model import LogisticRegression
+r = np.random.default_rng(0)
+X = r.random((4000, 16), dtype=np.float32)
+s = X @ np.linspace(-1.0, 1.5, 16, dtype=np.float32) + r.normal(0.0, 0.2, 4000).astype(np.float32)
+w = np.linspace(0.5, 2.0, 4000, dtype=np.float32)
+bad = []
+for name, y in (("binary", (s > np.median(s)).astype(np.int64)),
+                ("multiclass", np.digitize(s, np.quantile(s, [0.25, 0.5, 0.75])).astype(np.int64))):
+    for kw, sw in (({}, None), ({"class_weight": "balanced"}, w)):
+        g = LogisticRegression(max_iter=60, **kw).fit(X, y, sw); c = LogisticRegression(max_iter=60, device="cpu", **kw).fit(X, y, sw)
+        same = {"coef": np.asarray(g.coef_).tobytes() == np.asarray(c.coef_).tobytes(),
+                "n_iter": int(np.asarray(g.n_iter_)[0]) == int(np.asarray(c.n_iter_)[0])}
+        for m in ("predict", "decision_function", "predict_proba", "predict_log_proba"):
+            same[m] = np.asarray(getattr(g, m)(X)).tobytes() == np.asarray(getattr(c, m)(X)).tobytes()
+        print("DEVICE LogisticRegression", name, sorted(kw), "weighted" if sw is not None else "unweighted",
+              "vendors", g.vendor_used(), c.vendor_used(), "params", g.get_params().get("device"), c.get_params().get("device"), same)
+        bad += [(name, k) for k, v in same.items() if not v]
+        if c.vendor_used() != "cpu" or g.vendor_used() == "cpu":
+            bad.append((name, "one device"))
+    for m in ("predict", "predict_proba"):
+        print("CHECK LogisticRegression", name, m, g.check(X, method=m))
+try:
+    LogisticRegression(device="tpu")
+    raise SystemExit("unknown device accepted")
+except (ValueError, TypeError) as e:
+    print("REFUSAL", type(e).__name__, str(e)[:160])
+assert not bad, f"GPU and CPU differ: {bad}"
+EOF
+step device-and-check-logistic "$PY" -I "$W/device_logistic.py"
+grep -E '^(DEVICE|CHECK|REFUSAL)' "$RES/logs/device-and-check-logistic.log" | cut -c1-400
+
 # 2. receipts and reproduce (same machine); the folder is left for a second machine
 cat > "$W/receipt.py" <<'EOF'
 import sys, numpy as np, mojolearn as ml

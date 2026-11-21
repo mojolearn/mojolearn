@@ -13,6 +13,7 @@ comptime TSVD_OPN_FIT = 0
 comptime TSVD_OPN_FIT_TRANSFORM = 1
 comptime TSVD_OPN_TRANSFORM = 2
 comptime TSVD_OPN_INVERSE_TRANSFORM = 3
+comptime TSVD_OPN_VENDOR_USED = 4
 
 
 struct TsvdKeys(Defaultable, Movable):
@@ -117,6 +118,7 @@ def _tsvd_keys_fill(nk: UnsafePointer[TsvdKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "fit_transform", TSVD_OPN_FIT_TRANSFORM)
     py_op_add(ops, "transform", TSVD_OPN_TRANSFORM)
     py_op_add(ops, "inverse_transform", TSVD_OPN_INVERSE_TRANSFORM)
+    py_op_add(ops, "vendor_used", TSVD_OPN_VENDOR_USED)
     nk[].ops = ops
     nk[].ready = True
 

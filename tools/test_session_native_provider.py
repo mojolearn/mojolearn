@@ -44,10 +44,13 @@ def test_generic_resource_pins_provider_and_closes_with_admitted_context():
 
 
 def test_public_handle_is_checked_against_native_owner_before_execution():
-    source = (ROOT / 'providers/python/autograd_ops_frontend_pyapi_door.mojo').read_text()
+    source = plain('providers/python/autograd_ops_frontend_pyapi_door.mojo',
+                   (ROOT / 'providers/python/autograd_ops_frontend_pyapi_door.mojo').read_text())
     method = source.split('def ops_session_call_py[', 1)[1]
     assert method.index('neural_descriptor_resource_handle(') < method.index('var s = ops_session[')
-    assert 'admitted_id != Int(py=fields["_id"])' in method
+    # `_id` is read once into `handle` (held key), then compared with the registry owner's handle.
+    assert 'var handle = fields["_id"]' in method
+    assert 'admitted_id != Int(py=handle)' in method
     assert 'neural_descriptor_resource_close(fields["_lifetime"], resource_scope)' in method
 
 
@@ -65,4 +68,4 @@ def test_imported_constructor_shares_public_session_connection_and_owner():
                    (ROOT / 'providers/python/autograd_import_frontend_pyapi_door.mojo').read_text())
     assert 'connections=ops._SESSION_CONNECTIONS' in bridge
     assert 'session=session, program=program' in bridge
-    assert 'ops_session_initialize_py(session, PythonObject(False), mode, context["connections"], context["backend"], context["program"])' in native
+    assert 'ops_session_initialize_py(session, PythonObject(False), mode, context["connections"], PythonObject(None), context["program"])' in native

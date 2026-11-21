@@ -27,15 +27,14 @@ TWO DEVIATIONS FROM sklearn'S CONTRACT, STATED RATHER THAN HIDDEN:
   from the global RNG; this library's whole claim is bit-reproducibility, so
   an entry point that is nondeterministic by default would be the wrong
   default. Pass an int to choose a different seed.
-* `device="gpu"` is retained for constructor compatibility. CPU training is
-  retired from the public API; host reference trainers exist only for checks.
-  GPU regression uses fixed-point quantized labels (deviation 135). On a
-  CPU-ONLY INSTALL (no GPU set, `mojolearn/host/_mojolearn_trees_host.so`
-  built; the CPU training lane, 2026-09-14) the same calls route to
+* `device=None` (this installation's device), `"gpu"` or `"cpu"` selects the
+  table set the fit and the predictions run on
+  (bindings/trees_route_boundary_door.mojo). GPU regression uses fixed-point
+  quantized labels (deviation 135). The CPU trainer is
   `bindings/_mojolearn_trees_host.mojo`, the device trainer restated on the
   host, whose forests are bit identical to the GPU's on
-  `tools/identity_break.py`'s fixtures; `device` still reads `"gpu"` there
-  because the fit is the GPU's fit, computed elsewhere.
+  `tools/identity_break.py`'s fixtures. It is what a CPU-only install runs
+  and what `device="cpu"` runs on a GPU install.
 
 BOOTSTRAP (DEVIATION 460): `bootstrap=True` draws each tree's rows with
 replacement through cuML's own sampler (the fnv1a32 `(seed, tree)` chain
@@ -153,6 +152,10 @@ _UNSUPPORTED_CRITERIA = {
 
 class _ExtraTreesBase(_ForestProtocol, _NumericModeMixin):
     _BINDING = "_mojolearn_trees"
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
+    vendor_used = _native_trees_bridge.device_vendor_used
     save = _ForestArchive.save
     load = vars(_ForestArchive)["load"]
 
@@ -165,7 +168,9 @@ _native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (
     _native_archive_bridge.fitted("_offsets"),
     ("format", "format", _MODEL_FORMAT),
     ("estimator", "estimator"),
-    ("array", "device", "device"),
+    # The member is the constant the format has always held: `device` is a
+    # constructor parameter, not model state (equal models, equal files).
+    ("format", "device", "gpu"),
     ("array", "offsets", "_offsets"),
     ("array", "colid", "_colid"),
     ("array", "quesval", "_quesval"),
@@ -246,9 +251,10 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         raises an error, as in scikit-learn.
     monotonic_cst : None, default None
         Only None is accepted.
-    device : {'gpu'}, default 'gpu'
-        Only 'gpu' is accepted; other values raise `ValueError`. On a
-        CPU-only install the same calls run the host build of the trainer.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a
+        GPU installation. Other values raise `ValueError` at fit.
     inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
         How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
         `fast` mode and 'sequential' otherwise.
@@ -300,7 +306,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         ccp_alpha=0.0,
         max_samples=None,
         monotonic_cst=None,
-        device="gpu",
+        device=None,
         inference_engine="auto",
     ):
         # Signature only: `forest_estimator` installs the native constructor
@@ -409,9 +415,10 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         raises an error, as in scikit-learn.
     monotonic_cst : None, default None
         Only None is accepted.
-    device : {'gpu'}, default 'gpu'
-        Only 'gpu' is accepted; other values raise `ValueError`. On a
-        CPU-only install the same calls run the host build of the trainer.
+    device : {None, 'gpu', 'cpu'}, default None
+        Where the model is fitted and predicts. None uses this
+        installation's device, 'cpu' runs on the CPU and 'gpu' requires a
+        GPU installation. Other values raise `ValueError` at fit.
     inference_engine : {'auto', 'sequential', 'parallel_groves'}, default 'auto'
         How `predict` reduces over trees. 'auto' uses 'parallel_groves' in
         `fast` mode and 'sequential' otherwise.
@@ -458,7 +465,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         ccp_alpha=0.0,
         max_samples=None,
         monotonic_cst=None,
-        device="gpu",
+        device=None,
         inference_engine="auto",
     ):
         # Signature only: `forest_estimator` installs the native constructor

@@ -26,6 +26,9 @@ def connect(ipca_class):
     # Fitted arrays and projections are mojolearn Arrays, as `_M.out` made them.
     context["output_context"] = _numpy_free_context()
     context.update(ipca_class=ipca_class, ipca_bindings=decomp)
+    # glue: the CPU image of `device="cpu"`, connected once beside the device set
+    from ._native_decomp_device_bridge import connect_cpu_device, X_DECOMP_HOST
+    connect_cpu_device(context, X_DECOMP_HOST, {"ipca_native_api_v1": "ipca_cpu_bindings"})
     entry = _binding()._module.ipca_native_call
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError("IncrementalPCA owner requires a compiled ipca_native_call")
