@@ -514,8 +514,18 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     var options = gbdt_fit_options(config, rows)
     var flags = List[UInt32](length=1, fill=0)
     var rate = words.rate
+    # The word lists move into the request by swap: moving the fields would leave
+    # `words` and `options` partly destroyed.
+    var fit_ints = List[Int]()
+    swap(fit_ints, words.ints)
+    var fit_floats = List[Float64]()
+    swap(fit_floats, words.floats)
+    var fit_bad = List[UInt8]()
+    swap(fit_bad, words.bad)
+    var fit_strs = List[String]()
+    swap(fit_strs, options.strs)
     var args = GbdtFitArgs(x_addr, y_addr, w_addr, Int(flags.unsafe_ptr()), x_addr, y_addr,
-                           words.ints^, words.floats^, words.bad^, options.strs^)
+                           fit_ints^, fit_floats^, fit_bad^, fit_strs^)
     var outcome = xg_fit(entry, row_major, args)
     _ = len(scratch)  # the column-major copy lives until the fit returned
     _ = len(codes)  # the classifier's float32 targets too
@@ -525,8 +535,8 @@ def _fit[I: GbdtMemberImage](slot: _SlotPtr, call: _CallPtr) raises:
     var dim = xg_model_dim(entry, outcome.text)
     _clear[I](slot)
     slot[].bias = gbdt_bias_of(outcome.text)
-    slot[].text = outcome.text^
-    slot[].learn = outcome.learn^
+    swap(slot[].text, outcome.text)  # by swap: `outcome` is read after (moving a field out of it is refused)
+    swap(slot[].learn, outcome.learn)
     slot[].best_iteration = outcome.best_iteration
     slot[].stopped_early = outcome.stopped_early
     slot[].features = cols

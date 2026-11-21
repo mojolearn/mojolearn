@@ -1159,8 +1159,18 @@ def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObje
     py_setitem(fields, nk[].k_boosting_type_, PythonObject(options.boosting))
     var ex_addr = x.address if held is None else Int(py=held[1])
     var ey_addr = ya.address if held is None else Int(py=held[3])
+    # The word lists move into the request by swap: moving the fields would leave
+    # `words` and `options` partly destroyed.
+    var fit_ints = List[Int]()
+    swap(fit_ints, words.ints)
+    var fit_floats = List[Float64]()
+    swap(fit_floats, words.floats)
+    var fit_bad = List[UInt8]()
+    swap(fit_bad, words.bad)
+    var fit_strs = List[String]()
+    swap(fit_strs, options.strs)
     var fit_args = GbdtFitArgs(x.address, ya.address, w_addr, trees_address(flags_holder), ex_addr, ey_addr,
-                               words.ints^, words.floats^, words.bad^, options.strs^)
+                               fit_ints^, fit_floats^, fit_bad^, fit_strs^)
     var classes = GBDT_CLASSES_NONE
     if _eq(loss, "MultiClass"):
         classes = GBDT_CLASSES_DIM_PLUS_ONE
