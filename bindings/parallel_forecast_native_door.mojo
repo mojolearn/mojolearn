@@ -21,6 +21,8 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.parallel_member_device_unpack import parallel_member_says_cpu
+from core.device_route_dw_msel_parallel import member_multi_gpu_refusal
 from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
@@ -124,6 +126,19 @@ def _ranges(count: Int, width: PythonObject) raises -> List[Int]:
     return out^
 
 
+def _member_device(estimator: PythonObject, driver: String) raises:
+    """The forecasting drivers run the model on the GPUs in `devices=` only:
+    a model that says device='cpu' in a process with a GPU set is refused in
+    words before any shard is cut (bindings/parallel_member_device_unpack.mojo).
+    `_backend._CPU_ONLY` (None in a process with a GPU set) is read from the
+    connected backend namespace only for a model that says 'cpu'."""
+    if not parallel_member_says_cpu(py_fields(estimator)):
+        return
+    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    if py_get(f[].backend, PythonObject("_CPU_ONLY")) is None:
+        member_multi_gpu_refusal(driver)
+
+
 def _devices(devices: PythonObject) raises:
     """`DevicePool`'s admission of the device list, in its words."""
     var b = _b()
@@ -165,6 +180,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     var b = _b()
     if py_type(estimator) is not f[].arima_cls:
         raise Error("TypeError: predict_arima requires mojolearn.ARIMA")
+    _member_device(estimator, "predict_arima")
     var fields = py_fields(estimator)
     var nk = parallel_keys()
     if not py_contains(fields, nk[].k_params_):
@@ -236,6 +252,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     var b = _b()
     if py_type(estimator) is not f[].hw_cls:
         raise Error("TypeError: requires mojolearn.ExponentialSmoothing")
+    _member_device(estimator, "predict_exponential_smoothing")
     var fields = py_fields(estimator)
     var nk = parallel_keys()
     if not Bool(py=py_item(fields, nk[].k_fit_executed_flag)):
@@ -351,6 +368,7 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
     var b = _b()
     if py_type(estimator) is not f[].arima_cls:
         raise Error("TypeError: fit_arima requires mojolearn.ARIMA")
+    _member_device(estimator, "fit_arima")
     if exog is not None:
         raise Error("NotImplementedError: fit_arima does not shard exogenous regressors; ARIMA.fit(y, exog) fits "
                     + "them on one device")
@@ -409,6 +427,7 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
     var b = _b()
     if py_type(estimator) is not f[].hw_cls:
         raise Error("TypeError: requires mojolearn.ExponentialSmoothing")
+    _member_device(estimator, "fit_exponential_smoothing")
     var nk = parallel_keys()
     if String(py=py_item(f[].backend, nk[].k__DEFAULT_MODE)) != "identical":
         raise Error("ValueError: ExponentialSmoothing requires IDENTICAL numeric mode")
