@@ -95,10 +95,20 @@ def test_identical_mode_cpu_device_returns_the_gpu_bits(cls, weighted):
 
 @two_devices
 @pytest.mark.parametrize("cls", CLASSES)
-def test_cpu_device_refuses_fast_mode_in_words(cls):
+def test_cpu_device_never_runs_a_fast_binary(cls):
     x, y = data()
-    with pytest.raises(ValueError, match="device='cpu' runs in identical mode only"):
-        cls(device="cpu", numeric_mode="fast").fit(x, y)
+    model = cls(device="cpu", numeric_mode="fast")
+    try:
+        model.fit(x, y)
+    except ValueError as refusal:
+        # where `fast` names its own binaries (Apple): refused in words
+        assert "device='cpu' runs in identical mode only" in str(refusal)
+    except ImportError:
+        # where no fast binaries are installed, the mode's own refusal stands
+        pass
+    else:
+        # where the identical set answers `fast` for this family
+        assert model.numeric_mode_used() == "identical" and model.vendor_used() == "cpu"
 
 
 @pytest.mark.parametrize("cls", CLASSES)
@@ -125,10 +135,14 @@ def test_clone_and_pickle_carry_the_device(cls, device):
     assert rebuilt.get_params() == model.get_params()
     assert rebuilt.fit(x, y).vendor_used() == used
 
-    sklearn_base = pytest.importorskip("sklearn.base") if "sklearn" in sys.modules else None
-    if sklearn_base is not None:
-        cloned = sklearn_base.clone(model)
+    try:
+        from sklearn.base import clone
+    except ImportError:
+        clone = None
+    if clone is not None:
+        cloned = clone(model)
         assert cloned.get_params()["device"] == device
+        assert cloned.fit(x, y).vendor_used() == used
 
     restored = pickle.loads(pickle.dumps(model))
     assert restored.get_params()["device"] == device
