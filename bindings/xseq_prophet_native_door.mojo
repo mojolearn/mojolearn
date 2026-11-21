@@ -8,7 +8,8 @@
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.xseq_native_common_door import xseq_route_of, xseq_base, xseq_addr, xseq_column_i64
+from bindings.xseq_native_common_door import xseq_route_of, xseq_addr, xseq_column_i64
+from bindings.forecast_device_door import forecast_finite
 from core.entry_table import EntryRef
 from sequence.xseq_prophet_run import (
     ProphetPredictRequest, prophet_run_days, prophet_run_features, prophet_run_parameter_count,
@@ -244,7 +245,8 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     # The model's one route (resolved once); the device is read from the
     # model's own fields on a miss, the mode object is the one `_state` copied.
     var nk = xseq_keys()
-    var key = xseq_route_of(model, py_get(fields, nk[].k_numeric_mode), original, context).glue
+    var route = xseq_route_of(model, py_get(fields, nk[].k_numeric_mode), original, context)
+    var key = route.glue
     var t_owner = PythonObject(None)
     var t = _times(args[0], context, t_owner)
     var y = prophet_source(args[1], context)
@@ -262,8 +264,9 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         B = Int(py=Y.shape[0])
         N = Int(py=Y.shape[1])
         if N >= 2 and N == t.n:
-            # call-table: base helper
-            finite = Int(py=py_call(xseq_base(context, "all_finite_f32"), xseq_addr(Y), Y.size)) == 1
+            # a CPU route beside a GPU set scans on the host; every other
+            # route through the base binding's `all_finite_f32`
+            finite = forecast_finite(route.cpu_table, xseq_addr(Y), Int(py=Y.size), context)
     var cp_owner = PythonObject(None)
     var has_cp = py_item(fields, nk[].k_changepoints) is not None
     var cp_times = ProphetTimes(0, 0, False)

@@ -35,9 +35,9 @@ from providers.python.forecast_initialize_pyapi_pack import forecast_initialize
 from providers.python.forecast_matrix_pyapi_door import forecast_matrix
 from providers.python.forecast_owner_pyapi_unpack import forecast_commit
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.py_typed_call import py_call_typed
+from bindings.forecast_device_door import forecast_finite, forecast_positive_host
 from bindings.xseq_native_common_door import (
-    XF32P, XI64P, xseq_route, xseq_base, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
+    XF32P, XI64P, xseq_route, xseq_input, xseq_refuse_f64, xseq_zeros, xseq_addr, xseq_f32p,
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
     xseq_float, xseq_truth,
 )
@@ -398,18 +398,25 @@ def _ets_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     if forecast_run_ets_needs_positive(spec, s):
         # every value > 0: finite (`all_finite_f32`) and a first-wins minimum above zero (`reduce_stat` 0)
         var size = Int(py=series[2]) * Int(py=series[3])
-        # call-table: base helper
-        var positive = Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), series[4], PythonObject(size)))
+        # The estimator's route says whether this is a CPU route beside a GPU
+        # set (one record read on a hit; only a model that needs positive
+        # data reads it here): its two scans then run on the host.
+        var cpu_table = xseq_route(model, fields, context).cpu_table
+        var positive = forecast_finite(cpu_table, series[4], size, context)
         _ = y  # keep the Python object alive through the native call above
         if positive:
             # The data-sized reduce_stat runs with the GIL released, as the
             # released base helper (bindings/base_helpers_released.mojo) did
             # before the door split moved the call into RUN.
-            var base_ref = base_helpers_key(py_item(context, nk[].k_xseq_base))
             var y_addr = Int(py=series[4])
             var ets_py = Python()
-            with GILReleased(ets_py):
-                positive = forecast_run_min_above_zero(base_ref, y_addr, size)
+            if cpu_table:
+                with GILReleased(ets_py):
+                    positive = forecast_positive_host(y_addr, size)
+            else:
+                var base_ref = base_helpers_key(py_item(context, nk[].k_xseq_base))
+                with GILReleased(ets_py):
+                    positive = forecast_run_min_above_zero(base_ref, y_addr, size)
             _ = y  # keep the Python object alive through the native call above
         forecast_run_ets_check_positive(positive)
     var damped = xseq_truth(py_item(fields, nk[].k_damped))
@@ -505,10 +512,12 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     _store(fields, nk[].k__one, series[0])
     var y = series[1]
     forecast_run_garch_check_n(Int(py=series[3]))
-    # the finiteness scan (the base binding's `all_finite_f32`)
-    # call-table: base helper
-    forecast_run_garch_check_finite(Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), series[4],
-                                                          PythonObject(Int(py=series[2]) * Int(py=series[3])))))
+    # The estimator's route, resolved before the finiteness scan (it was
+    # resolved before the fit call below): a CPU route beside a GPU set scans
+    # on the host, every other route through the base binding's `all_finite_f32`.
+    var route = xseq_route(model, fields, context)
+    forecast_run_garch_check_finite(forecast_finite(route.cpu_table, series[4],
+                                                    Int(py=series[2]) * Int(py=series[3]), context))
     _ = y  # keep the Python object alive through the native calls above
     var batch = Int(py=series[2])
     var n = Int(py=series[3])
@@ -532,7 +541,7 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     var info_addr = Int(py=xseq_addr(info))
     var sigma_addr = Int(py=xseq_addr(sigma))
     var forecast_addr = Int(py=xseq_addr(forecast))
-    var entry_key = xseq_route(model, fields, context).glue
+    var entry_key = route.glue
     var py = Python()
     with GILReleased(py):
         forecast_run_garch(entry_key, y_addr, params_addr, info_addr, sigma_addr, forecast_addr, words)
