@@ -47,6 +47,7 @@ differs.
 """
 from core.gp_native_provider import GPProviderAPI
 from core.gp_entry_table import GPEntryKey, GP_COLUMN_HOST, gp_table_publish
+from core.gp_member import gp_member_publish
 from bindings.py_balanced import py_setattr
 from core.gp_native_host import GPHostKernels
 from core.shared_slot import SharedSlot
@@ -635,6 +636,8 @@ def build__mojolearn_gp_host() -> PythonObject:
         module.def_function[cholesky_solve_binding]("cholesky_solve")
         var published = module.finalize()
         _publish_gp_table(published)
+        # The family's member entry (core/gp_member.mojo), vendor 0 (CPU).
+        gp_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(GP_HOST_NATIVE_API.get_or_create_ptr()))
         return published
     except e:
         abort(String("failed to create _mojolearn_gp_host: ", e))

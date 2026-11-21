@@ -57,8 +57,8 @@ comptime MSEL_STORE_NAME: StaticString = _MSEL_STORE_NAME_IDN if GLOBAL_NUMERIC_
 #: that names it reads the same store.
 comptime MSEL_STORE = SharedSlot[MselStore, MSEL_STORE_NAME, MSEL_STORE_LAYOUT]
 #: THE store cross-validation folds live in: model selection always connects
-#: the IDENTICAL base binding's msel entries (python/mojolearn/
-#: _native_arena_rows.py `_native('msel_put')`), whatever mode the estimator's
+#: the IDENTICAL base binding's msel helper table (core/msel_entry_table.mojo,
+#: read by the resident owner), whatever mode the estimator's
 #: own binding was built in, so a fold reader names the identical store and
 #: context explicitly (in an identical build these are MSEL_STORE and
 #: MSEL_CONTEXT_SLOT themselves).

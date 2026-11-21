@@ -52,6 +52,12 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.metrics_native_support_door import metric_is_integral, metric_is_bool
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
+from std.python._cpython import GILReleased
+from core.entry_table import EntryRef
+from core.iforest_entry import (
+    IFForestRunRequest, IFForestSpans, IFRunRequest, IF_CAP_DEVICE_SCAN, IF_CAP_RESIDENT, IF_CAP_SCORES_F64,
+    IF_EXPORT_INFO, if_entry_caps, if_entry_export, if_entry_forest_run, if_entry_ref, if_entry_run,
+)
 
 comptime _WANT_SCORE_SAMPLES = 0
 comptime _WANT_DECISION_FUNCTION = 1
@@ -85,7 +91,7 @@ comptime _WANT_WIDE_BASE = 3
 # (the training matrix of a resident fit is the caller's borrowed buffer
 # since restore-iforest-kde, so an in-place edit after fit reached the saved
 # model); a loaded or unpickled estimator holds it instead of `_x` and
-# scores it through `iforest_forest_run`, with no fit.
+# scores it through IF_OP_FOREST_RUN (core/iforest_entry.mojo), with no fit.
 comptime _FOREST_FIELD = "_if_forest"
 
 
@@ -220,21 +226,36 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> String:
     return clean
 
 
-def _params(model: PythonObject, fields: PythonObject, n_train: Int, n_features: Int, n_query: Int, want: Int,
-            context: PythonObject) raises -> PythonObject:
-    """`IsolationForest._params`: the sixteen `iforest_run` slots."""
+def _request(model: PythonObject, fields: PythonObject, n_train: Int, n_features: Int, n_query: Int, want: Int,
+             context: PythonObject) raises -> IFRunRequest:
+    """`IsolationForest._params`: the typed request of one fit-and-score
+    (core/iforest_entry.mojo; the former sixteen `iforest_run` slots),
+    addresses and the resident form left to the caller."""
     var nk = trees_keys()
     if not py_contains(fields, nk[].k__seed):  # an instance assembled without fit or load
         iforest_validate(model, fields, context)
     var b = trees_builtins()
-    return Python.list(
-        PythonObject(n_train), PythonObject(n_features), PythonObject(n_query), py_item(fields, nk[].k__n_estimators),
-        py_item(fields, nk[].k__max_samples_mode), py_item(fields, nk[].k__max_samples_int), py_item(fields, nk[].k__max_samples_frac), py_item(fields, nk[].k__max_depth),
-        py_item(fields, nk[].k__max_features_mode), py_item(fields, nk[].k__max_features_int), py_item(fields, nk[].k__max_features_frac),
-        PythonObject(1 if Bool(py=py_call(b.bool, py_item(fields, nk[].k__bootstrap))) else 0), py_item(fields, nk[].k__seed),
-        PythonObject(1 if Bool(py=py_call(b.bool, py_item(fields, nk[].k__contamination_auto))) else 0), py_item(fields, nk[].k__contamination),
-        PythonObject(want),
-    )
+    var r = IFRunRequest()
+    r.n_train = n_train
+    r.n_features = n_features
+    r.n_query = n_query
+    r.n_estimators = Int(py=py_item(fields, nk[].k__n_estimators))
+    r.max_samples_mode = Int(py=py_item(fields, nk[].k__max_samples_mode))
+    r.max_samples_int = Int(py=py_item(fields, nk[].k__max_samples_int))
+    r.max_samples_frac = Float64(py=py_item(fields, nk[].k__max_samples_frac))
+    r.max_depth = Int(py=py_item(fields, nk[].k__max_depth))
+    r.max_features_mode = Int(py=py_item(fields, nk[].k__max_features_mode))
+    r.max_features_int = Int(py=py_item(fields, nk[].k__max_features_int))
+    r.max_features_frac = Float64(py=py_item(fields, nk[].k__max_features_frac))
+    r.bootstrap = Bool(py=py_call(b.bool, py_item(fields, nk[].k__bootstrap)))
+    r.random_state = Int(py=py_item(fields, nk[].k__seed))
+    r.contamination_auto = Bool(py=py_call(b.bool, py_item(fields, nk[].k__contamination_auto)))
+    r.contamination = Float64(py=py_item(fields, nk[].k__contamination))
+    r.want = want
+    return r^
+
+
+# TOMBSTONE: _params (the sixteen Python-list slots of the Python binding `iforest_forest_export`; the export now takes the typed request, IF_OP_EXPORT of core/iforest_entry.mojo) deleted 2026-11-21 by lane/ma-pub-trees round 4; code recoverable at 0b76d181f1.
 
 
 def _release(model: PythonObject, fields: PythonObject) raises:
@@ -249,11 +270,21 @@ def _release(model: PythonObject, fields: PythonObject) raises:
         _ = py_call(fields.pop, "_if_lifetime", PythonObject(None))
 
 
+def _iforest_entry(svm: PythonObject) raises -> EntryRef:
+    """The native iforest entry (core/iforest_entry.mojo) of the svm image
+    the bridge connected for this tier (its `svm_native_key`), resolved
+    once per operation: one dictionary read and the table's slot read, no
+    CPython call."""
+    var key = py_get(svm, trees_keys()[].k_svm_native_key)
+    if key is None:
+        raise Error("ImportError: mojolearn: the svm binding publishes no native iforest entry")
+    return if_entry_ref(Int(py=key[0]), Int(py=key[1]))
+
+
 def _resident_table(svm: PythonObject) raises -> Bool:
     """True when the binding `svm` keeps the fitted forest resident
-    between calls (`iforest_resident`)."""
-    var probe = trees_entry(svm, "iforest_resident")
-    return probe is not None and Int(py=py_call_typed(probe)) == 1
+    between calls (IF_CAP_RESIDENT)."""
+    return (if_entry_caps(_iforest_entry(svm)) & IF_CAP_RESIDENT) != 0
 
 
 def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonObject, want: Int, fresh: Bool,
@@ -266,7 +297,9 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     else the float32 scores the public door widens."""
     var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
-    var resident = _resident_table(svm)
+    var entry = _iforest_entry(svm)
+    var caps = if_entry_caps(entry)
+    var resident = (caps & IF_CAP_RESIDENT) != 0
     # Lane forests-regression: no export runs at fit, so a refit-per-call
     # binary's fit is the sixteen-param one-shot of 0.8.55 and its scoring
     # calls stay sixteen-param refits.
@@ -277,8 +310,7 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
     # binary. Bits unchanged (the float32 values widened exactly).
     var wide_out = False
     if wide and resident and want != _WANT_PREDICT:
-        var f64_probe = trees_entry(svm, "iforest_scores_f64")
-        wide_out = f64_probe is not None and Int(py=py_call_typed(f64_probe)) == 1
+        wide_out = (caps & IF_CAP_SCORES_F64) != 0
     # Lane perf-iforest (2026-11-13): the score vector is uninitialised
     # storage (admitted_family_door.admitted_array): `iforest_run` writes all
     # n_query words for want 0 and 1, so the zero fill (native_array_zeros)
@@ -290,8 +322,8 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
         Python.tuple(n_query), "<f8" if wide_out else "<f4", context)
     var labels = admitted_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
     var info = admitted_vector(4 if keep else 3, "<f8", context)
-    var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), n_query,
-                         want + _WANT_WIDE_BASE if wide_out else want, context)
+    var request = _request(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), n_query,
+                           want + _WANT_WIDE_BASE if wide_out else want, context)
     # The held record: (token, the training matrix it was minted for, its
     # lifetime). A record for another training matrix is not this forest's.
     var held = trees_side_get(_TOKEN_SLOT, model) if resident else PythonObject(None)
@@ -303,16 +335,21 @@ def _run(model: PythonObject, fields: PythonObject, x: AdmittedX, train: PythonO
         held = PythonObject(None)
     var held_token = Int(py=held[0]) if held is not None else 0
     var same_train = held is not None and held[1] is train
-    if keep:
-        _ = py_call(params.append, PythonObject(0 if fresh or not same_train else held_token))
     var nk = trees_keys()
-    var run = py_get(svm, nk[].k_iforest_run)
-    if run is None:
-        raise Error("ImportError: mojolearn: the svm binding has no iforest_run")
-    _ = trees_call(run, Python.list(PythonObject(trees_address(train)), PythonObject(x.address),
-                                    PythonObject(0 if values is None else trees_address(values)),
-                                    PythonObject(0 if labels is None else trees_address(labels)),
-                                    PythonObject(trees_address(info)), params))
+    request.resident = keep
+    if keep:
+        request.token = 0 if fresh or not same_train else held_token
+    request.train = trees_address(train)
+    request.query = x.address
+    request.out_f32 = 0 if values is None else trees_address(values)
+    request.out_i32 = 0 if labels is None else trees_address(labels)
+    request.info = trees_address(info)
+    # The fit and the scoring run with the GIL released, as inside the
+    # former Python binding `iforest_run`; the entry touches no Python.
+    with GILReleased(Python()):
+        _ = if_entry_run(entry, request)
+    _ = train  # the lent training matrix stays alive through the call above
+    _ = x.array  # the lent query stays alive through the call above
     _ = values  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
@@ -372,15 +409,10 @@ def _as_array(x: AdmittedX, context: PythonObject) raises -> PythonObject:
 
 
 def _device_scan(fields: PythonObject, context: PythonObject) raises -> Bool:
-    """A binary that scans the uploaded X on the device
-    (`iforest_device_scan` or `iforest_device_finite_scan`)."""
+    """A binary that scans the uploaded X on the device (IF_CAP_DEVICE_SCAN:
+    the former `iforest_device_scan` or `iforest_device_finite_scan`)."""
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
-    var names = Python.tuple("iforest_device_scan", "iforest_device_finite_scan")
-    for i in range(2):  # driver-loop: over fixed call structure, small-loop(names): the two device scan probes
-        var probe = trees_entry(svm, String(names[i]))
-        if probe is not None and Int(py=py_call_typed(probe)) == 1:
-            return True
-    return False
+    return (if_entry_caps(_iforest_entry(svm)) & IF_CAP_DEVICE_SCAN) != 0
 
 
 def iforest_device_scan(model: PythonObject, context: PythonObject) raises -> Bool:
@@ -557,7 +589,7 @@ def _score(model: PythonObject, X: PythonObject, want: Int, wide: Bool,
 
 def iforest_forest_words(forest: PythonObject, context: PythonObject) raises -> PythonObject:
     """UNPACK: `(words, views)` of a saved forest tuple: the seven words
-    `iforest_forest_run` takes (five addresses, trees, nodes) after the
+    IF_OP_FOREST_RUN takes (five addresses, trees, nodes) after the
     dtype, layout and length checks, and the views that keep the five
     buffers alive through the native call. The node-level checks run in
     the binding (`if_forest_check`)."""
@@ -617,20 +649,17 @@ def _held(model: PythonObject, svm: PythonObject) raises -> PythonObject:
 def _run_forest(model: PythonObject, fields: PythonObject, x: AdmittedX, want: Int, wide: Bool,
                 context: PythonObject) raises -> PythonObject:
     """`_run` for an estimator that holds its saved forest (`_if_forest`)
-    and no training matrix: `iforest_forest_run` scores the forest (uploaded
+    and no training matrix: IF_OP_FOREST_RUN scores the forest (uploaded
     once, then kept under a token like a fitted one); no fit, and `offset_`
     / `max_samples_` are the saved ones."""
     var n_query = x.rows
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
-    var run = trees_entry(svm, "iforest_forest_run")
-    if run is None:
-        raise Error("ImportError: mojolearn: the svm binding has no iforest_forest_run")
+    var entry = _iforest_entry(svm)
     var forest = fields[_FOREST_FIELD]
     var unpacked = iforest_forest_words(forest, context)
     var wide_out = False
     if wide and want != _WANT_PREDICT:
-        var f64_probe = trees_entry(svm, "iforest_scores_f64")
-        wide_out = f64_probe is not None and Int(py=py_call_typed(f64_probe)) == 1
+        wide_out = (if_entry_caps(entry) & IF_CAP_SCORES_F64) != 0
     var values = PythonObject(None) if want == _WANT_PREDICT else family_uninit_array(
         Python.tuple(n_query), "<f8" if wide_out else "<f4", context)
     var labels = admitted_vector(n_query, "<i4", context) if want == _WANT_PREDICT else PythonObject(None)
@@ -640,15 +669,17 @@ def _run_forest(model: PythonObject, fields: PythonObject, x: AdmittedX, want: I
     var same = held is not None and held[1] is forest
     var b = trees_builtins()
     var nk = trees_keys()
-    var params = Python.list(
-        PythonObject(x.cols), PythonObject(n_query), py_call_typed(b.int, py_item(fields, nk[].k_max_samples_)),
-        py_call_typed(b.float, py_item(fields, nk[].k_offset_)), PythonObject(want + _WANT_WIDE_BASE if wide_out else want),
-        PythonObject(held_token if same else 0),
+    var request = IFForestRunRequest(
+        iforest_forest_spans(unpacked[0]), x.address, 0 if values is None else trees_address(values),
+        0 if labels is None else trees_address(labels), trees_address(info), x.cols, n_query,
+        Int(py=py_call_typed(b.int, py_item(fields, nk[].k_max_samples_))),
+        Float64(py=py_call_typed(b.float, py_item(fields, nk[].k_offset_))),
+        want + _WANT_WIDE_BASE if wide_out else want, held_token if same else 0,
     )
-    _ = trees_call(run, Python.list(unpacked[0], PythonObject(x.address),
-                                    PythonObject(0 if values is None else trees_address(values)),
-                                    PythonObject(0 if labels is None else trees_address(labels)),
-                                    PythonObject(trees_address(info)), params))
+    # The upload and the scoring run with the GIL released, as inside the
+    # former Python binding `iforest_forest_run`; the entry touches no Python.
+    with GILReleased(Python()):
+        _ = if_entry_forest_run(entry, request)
     _ = unpacked  # keep the forest views alive through the native call above
     _ = values  # keep the Python object alive through the native call above
     _ = labels  # keep the Python object alive through the native call above
@@ -660,11 +691,18 @@ def _run_forest(model: PythonObject, fields: PythonObject, x: AdmittedX, want: I
     return labels if want == _WANT_PREDICT else values
 
 
+def iforest_forest_spans(words: PythonObject) raises -> IFForestSpans:
+    """UNPACK: the seven words `iforest_forest_words` returns (five
+    addresses, trees, nodes) as the typed forest spans."""
+    return IFForestSpans(Int(py=words[0]), Int(py=words[1]), Int(py=words[2]), Int(py=words[3]),
+                         Int(py=words[4]), Int(py=words[5]), Int(py=words[6]))
+
+
 def iforest_export_forest(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """The fitted forest as a tuple of five Arrays (`_FOREST_FIELD`'s form),
     for `save()` and pickle. A loaded or unpickled estimator returns the
     forest it holds. A fitted one reads the resident forest its scores use
-    from the binding (`iforest_forest_export`: the device's node arrays,
+    from the image (IF_OP_EXPORT: the device's node arrays,
     or the CPU column's oracle trees); a binding with no live forest for
     this estimator fits one from `_x` first and keeps it. Raises when the
     estimator holds neither."""
@@ -678,43 +716,49 @@ def iforest_export_forest(model: PythonObject, context: PythonObject) raises -> 
     if not py_contains(fields, nk[].k__x):
         raise Error("RuntimeError: " + _PREFIX + "this estimator is not fitted yet")
     var svm = trees_table(context, _mode(fields, context), "_mojolearn_svm")
-    var export = trees_entry(svm, "iforest_forest_export")
-    if export is None:
-        raise Error("ImportError: mojolearn: the svm binding has no iforest_forest_export")
+    var entry = _iforest_entry(svm)
     var train = py_item(fields, nk[].k__x)
-    var params = _params(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), 1, _WANT_SCORE_SAMPLES,
-                         context)
-    var resident = _resident_table(svm)
+    var request = _request(model, fields, Int(py=train.shape[0]), Int(py=train.shape[1]), 1, _WANT_SCORE_SAMPLES,
+                           context)
+    var resident = (if_entry_caps(entry) & IF_CAP_RESIDENT) != 0
     # Every binary: on a refit-per-call one the record is the forest `fit`
     # just kept for this export (lane fix-iforest-double-fit).
     var held = _held(model, svm)
     var held_token = Int(py=held[0]) if held is not None else 0
     var same = held is not None and held[1] is train
-    _ = py_call(params.append, PythonObject(held_token if same else 0))
-    var info = admitted_vector(4, "<f8", context)
-    var address = PythonObject(trees_address(train))
-    # The sizes first (the binding keeps a fresh fit under its token), then
-    # the forest into storage of exactly that size.
-    var sized = trees_call(export, Python.list(address, PythonObject(trees_address(info)), params, Python.list()))
-    var token = Int(py=sized[0])
-    var n_trees = Int(py=sized[1])
-    var total = Int(py=sized[2])
-    py_setitem(params, PythonObject(16), PythonObject(token))
+    request.token = held_token if same else 0
+    var info = admitted_vector(IF_EXPORT_INFO, "<f8", context)
+    request.train = trees_address(train)
+    request.info = trees_address(info)
+    var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(info))
+    # The sizes first (the image keeps a fresh fit under its token), then
+    # the forest into storage of exactly that size: two IF_OP_EXPORT calls,
+    # one store take each (the arrays are sized from the forest). Both run
+    # with the GIL released, as inside the former binding.
+    with GILReleased(Python()):
+        _ = if_entry_export(entry, request, IFForestSpans(0, 0, 0, 0, 0, 0, 0))
+    var n_trees = Int(words[4])
+    var total = Int(words[5])
+    request.token = Int(words[3])
     var offsets = family_uninit_array(Python.tuple(n_trees + 1), "<i4", context)
     var feature = family_uninit_array(Python.tuple(total), "<i4", context)
     var threshold = family_uninit_array(Python.tuple(total), "<f4", context)
     var left = family_uninit_array(Python.tuple(total), "<i4", context)
     var right = family_uninit_array(Python.tuple(total), "<i4", context)
-    var words = Python.list(
-        PythonObject(trees_address(offsets)), PythonObject(trees_address(feature)),
-        PythonObject(trees_address(threshold)), PythonObject(trees_address(left)),
-        PythonObject(trees_address(right)), PythonObject(n_trees), PythonObject(total),
-    )
-    var written = trees_call(export, Python.list(address, PythonObject(trees_address(info)), params, words))
+    var spans = IFForestSpans(trees_address(offsets), trees_address(feature), trees_address(threshold),
+                              trees_address(left), trees_address(right), n_trees, total)
+    with GILReleased(Python()):
+        _ = if_entry_export(entry, request, spans)
+    _ = offsets  # the five destinations stay alive through the native call above
+    _ = feature
+    _ = threshold
+    _ = left
+    _ = right
+    var written = Int(words[3])
     _ = train  # keep the training matrix alive through the native calls above
-    _ = info  # keep the Python object alive through the native calls above
+    _ = info  # keep the Python object alive through the native reads above
     if resident:
-        _keep_token(model, svm, held, held_token, train, same, Int(py=written[0]))
+        _keep_token(model, svm, held, held_token, train, same, written)
     else:
         # The copy call dropped the forest from a refit-per-call binary's
         # store; its record goes too (the release is then a no-op).
@@ -762,3 +806,51 @@ def iforest_operation_with_source(model: PythonObject, operation: String, args: 
 def iforest_operation(model: PythonObject, operation: String, args: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     return iforest_operation_with_source(model, operation, args, context, args[0], False)
+
+
+def iforest_member_words(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> List[Float64]:
+    """UNPACK for the member admit (providers/python/
+    member_isolation_forest_boundary_door.mojo): the estimator's own
+    parameter checks (`iforest_validate`, its words and refusals) on a
+    SCRATCH copy of the instance dictionary (the admit never writes the
+    caller's unfitted template), then the thirteen NEW words of
+    core/isolation_forest_member.mojo, then two more: the tier and vendor of
+    the svm image the bridge connected for the estimator's tier (its
+    `svm_native_key`). One dictionary copy per admit (once per member
+    estimator at a caller's UNPACK, never per fold)."""
+    var scratch = py_call(trees_builtins().dict, fields)
+    iforest_validate(model, scratch, context)
+    var r = _request(model, scratch, 0, 0, 0, 0, context)
+    var svm = trees_table(context, _mode(scratch, context), "_mojolearn_svm")
+    var key = py_get(svm, trees_keys()[].k_svm_native_key)
+    if key is None:
+        raise Error("ImportError: mojolearn: the svm binding publishes no native iforest entry")
+    var words: List[Float64] = [
+        0.0, Float64(r.n_estimators), Float64(r.max_samples_mode), Float64(r.max_samples_int), r.max_samples_frac,
+        Float64(r.max_depth), Float64(r.max_features_mode), Float64(r.max_features_int), r.max_features_frac,
+        1.0 if r.bootstrap else 0.0, Float64(r.random_state), 1.0 if r.contamination_auto else 0.0,
+        r.contamination, Float64(Int(py=key[0])), Float64(Int(py=key[1])),
+    ]
+    _ = scratch
+    return words^
+
+
+def iforest_member_pack_fields(model: PythonObject, fields: PythonObject, forest: PythonObject, offset: Float64,
+                               max_samples: Int, n_features: Int, context: PythonObject) raises:
+    """PACK for the member (providers/python/member_isolation_forest_boundary_door.mojo):
+    the fitted attributes a LOADED estimator holds (`host_archive_public_iforest`'s
+    fields): the resolved knobs (`iforest_validate`, on this estimator, the
+    caller's clone), the saved forest `_if_forest` (five Arrays), `offset_`
+    (the float32 offset as a float, as the fit door writes it),
+    `max_samples_` and `n_features_in_`; no training matrix and no resident
+    record (the first score uploads the forest, as after a load)."""
+    _ = iforest_forest_words(forest, context)  # the saved-forest refusals, once
+    iforest_validate(model, fields, context)
+    _release(model, fields)
+    var nk = trees_keys()
+    if py_contains(fields, nk[].k__x):
+        _ = py_call(fields.pop, "_x", PythonObject(None))
+    py_setitem(fields, _FOREST_FIELD, forest)
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(n_features))
+    py_setitem(fields, nk[].k_offset_, PythonObject(Float64(Float32(offset))))
+    py_setitem(fields, nk[].k_max_samples_, PythonObject(max_samples))

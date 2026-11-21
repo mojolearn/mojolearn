@@ -41,7 +41,7 @@ from bindings.py_keys import py_op_code
 from bindings.native_operation_names_unpack import operation_lookup, operation_code
 from bindings.native_operation_codes import (
     family_route, family_route_owner, family_route_pre, family_route_cluster, OP_LEAF_NONE,
-    FR_PRE_ESTIMATORS, FR_PRE_SVM, FR_PRE_BASE, FR_PRE_X_NEIGHBORS,
+    FR_PRE_SVM, FR_PRE_BASE, FR_PRE_X_NEIGHBORS,
     FR_DENSITY, FR_PAR_PUBLIC, FR_PAR_RUN, FR_KMEANS, FR_KM, FR_SVM, FR_XC, FR_METRIC, FR_XN, FR_CHOL,
     FR_MSEL, FR_SVC, FR_GP, FR_MCLS, FR_MEXP, FR_HDBSCAN_PUBLIC, FR_CFA, FR_CFB, FR_MIX, FR_MANI, FR_LOW,
     FR_LINALG_OPS)
@@ -147,9 +147,9 @@ def _family_owner_call(model: PythonObject, route: Int, leaf: Int, operation: St
     # Deeper algorithm dispatch is migrated separately; do not equate this
     # boundary repair with completion of every transitive runtime path.
     var pre = family_route_pre(route)
-    if pre == FR_PRE_ESTIMATORS:
-        args = estimator_arguments(model, "_mojolearn_estimators", args, context)
-    elif pre == FR_PRE_SVM:
+    # LinearSVC / LinearSVR take no binding here: their driver is their
+    # device route (bindings/linear_svc_boundary_unpack.mojo `linear_svc_route`).
+    if pre == FR_PRE_SVM:
         args = estimator_arguments(model, "_mojolearn_svm", args, context)
     elif pre == FR_PRE_BASE:
         args = estimator_arguments(model, "_mojolearn", args, context)

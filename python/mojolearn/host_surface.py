@@ -2016,9 +2016,9 @@ FAMILIES = (
             # lane cpu2-l4-modelsel (2026-10-04): model selection's fold store,
             # fold-row gather, prediction scatter, proba column and forest
             # offset merge (bindings/msel_host_pack.mojo, the host column)
-            "msel_put", "msel_free", "msel_live",
+            # (msel_put and msel_take_rows deleted, arena unit E 2026-11-21: no caller)
+            "msel_free", "msel_live",
             # lane p3 (2026-11-09): the fold store's free bytes (host column: -1)
-            "msel_take_rows",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
             # lane migrate-shared-labels: the shared argument-and-label entry
@@ -2421,8 +2421,8 @@ FAMILIES = (
                         # lane verify-coverage-20261024: gamma='scale' (scale_gamma_limbs)
                         "svc-gamma-scale"),
         # The neighbors and density inference lane (2026-09-15): a saved
-        # IsolationForest scores through iforest_run, the same forest rebuild
-        # every GPU scoring call runs (DEVIATION 874).
+        # IsolationForest scores through the native iforest entry
+        # (core/iforest_entry.mojo), the GPU image's contract.
         inference_lanes=("svc", "svc-linear", "svc-poly", "svr", "svr-linear", "iforest", "iforest-tuned"),
         forest_kinds=(),
         classes=("SVC", "IsolationForest", "SVR"),
@@ -2437,15 +2437,16 @@ FAMILIES = (
             "svr_native_api_v1",
             "svm_host_numeric_mode", "svm_host_vendor", "svm_host_column",
             "svm_host_sabotage", "svm_vendor", "svm_numeric_mode", "svc_fit",
-            "svc_predict", "svr_fit", "svr_predict", "iforest_run",
+            "svc_predict", "svr_fit", "svr_predict",
             "svc_pair_epilogue", "svc_platt_train", "svc_splitmix_perm",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "scale_gamma_limbs", "py2mojo_linear_flags", "svc_ovo_layout",
             "svc_dual_gemv",
             # lane perf-trees-misc (2026-11-05): the resident host forest
             "iforest_resident", "iforest_resident_release",
-            # lane fix-iforest-save-device-forest (2026-11-13): the saved forest out and in
-            "iforest_forest_export", "iforest_forest_run",
+            # lane fix-iforest-save-device-forest (2026-11-13): the saved forest out and in;
+            # round 4 of lane ma-pub-trees (2026-11-21) moved both onto IF_OP_EXPORT /
+            # IF_OP_FOREST_RUN of the native iforest entry (core/iforest_entry.mojo).
             # manifest sync (lane ne1-k-fail-b, 2026-11-07): registered in the binding source
             "svm_binary_api_v1",
         ),

@@ -1000,6 +1000,8 @@ class BayesianGaussianMixture(_XCluster):
     #: This class takes `device=`: the check builds its other side as the same
     #: estimator on the other device, in this process (`_check_both.on_device`).
     _mojolearn_device = True
+    #: Member ABI family 25 (XCluster), kind 5 (core/xcluster_member.mojo).
+    _mojolearn_member = (25, 5)
 
     def __init__(self, *, n_components=1, covariance_type="full", tol=1e-3, reg_covar=1e-6,
                  max_iter=100, n_init=1, init_params="kmeans",
@@ -1168,5 +1170,5 @@ _native_family_bridge.tables(cluster_public_replaced_fields={
     MeanShift: ('bandwidth_', 'cluster_centers_', 'labels_', 'n_features_in_', 'n_iter_'),
     OPTICS: ('cluster_hierarchy_', 'core_distances_', 'labels_', 'n_features_in_', 'ordering_', 'predecessor_', 'reachability_'),
     AffinityPropagation: ('affinity_matrix_', 'cluster_centers_', 'cluster_centers_indices_', 'labels_', 'message_diag_', 'n_features_in_', 'n_iter_'),
-    BayesianGaussianMixture: ('_full_pchol', '_log_consts', '_warm', 'converged_', 'covariance_prior_', 'covariances_', 'degrees_of_freedom_', 'degrees_of_freedom_prior_', 'lower_bound_', 'mean_precision_', 'mean_precision_prior_', 'mean_prior_', 'means_', 'n_features_in_', 'n_iter_', 'precisions_cholesky_', 'weight_concentration_', 'weight_concentration_prior_', 'weights_'),
+    BayesianGaussianMixture: ('_full_pchol', '_log_consts', '_score_words', '_warm', 'converged_', 'covariance_prior_', 'covariances_', 'degrees_of_freedom_', 'degrees_of_freedom_prior_', 'lower_bound_', 'mean_precision_', 'mean_precision_prior_', 'mean_prior_', 'means_', 'n_features_in_', 'n_iter_', 'precisions_cholesky_', 'weight_concentration_', 'weight_concentration_prior_', 'weights_'),
 })

@@ -62,7 +62,7 @@ from isolation_forest.impl.isolation_forest import (
     IDN_IF_SCORES_F64,
     contamination_offset as if_contamination_offset,
 )
-from core.shared_slot import SharedSlot
+from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 
 def percentile_linear_host(values: List[Float32], q: Float64) -> Float64:
@@ -607,39 +607,74 @@ struct IFResidentEntry(Movable):
 
 
 struct _IFResidentStore(Defaultable, Movable):
+    var synchronization: List[Int64]
+    """[0] the store's lock word (lane ma-pub-trees unit 3): the native
+    iforest entry (core/iforest_entry.mojo) runs with the GIL released, so
+    the GIL no longer orders the take, the put, the token and the release.
+
+    LOCK DISCIPLINE (lane ma-pub-trees round 4, checked at every caller in
+    bindings/_mojolearn_svm.mojo and core/isolation_forest_member.mojo):
+    the lock is held ONLY inside `if_resident_new_token` (mint),
+    `if_resident_take` (the one lookup, which REMOVES the entry),
+    `if_resident_put` (the insert after the run) and `if_resident_release`
+    (free). A fit, an import, a score and every kernel launch run on the
+    taken entry with the lock released (the entry is out of the store, so
+    no other thread can reach it), and evicted or stale entries are freed
+    after the unlock. One public operation (fit, score_samples,
+    decision_function, predict, a member call) takes its entry ONCE. The
+    one exception is `save()` / pickle of a fitted estimator: IF_OP_EXPORT
+    is called twice (the sizes, then the copy into storage of exactly that
+    size, which only the caller can allocate), one take each; it is reached
+    from no loop, and the forest stays resident between the two so the
+    second call never fits (core/iforest_entry.mojo)."""
     var entries: List[IFResidentEntry]
     var next: Int
     var nonce: Int
 
     def __init__(out self):
+        self.synchronization = List[Int64](length=1, fill=0)
         self.entries = List[IFResidentEntry]()
         self.next = 0
         self.nonce = 0
 
 
-comptime IF_RESIDENT_STORE = SharedSlot[_IFResidentStore, _IF_RESIDENT_SLOT]
+# Version 2: the lock word joined the layout.
+comptime IF_RESIDENT_STORE = SharedSlot[_IFResidentStore, _IF_RESIDENT_SLOT, 2]
+
+
+@always_inline
+def _if_store_lock(p: UnsafePointer[_IFResidentStore, MutUntrackedOrigin]) -> MutPointer[Int64, MutUntrackedOrigin]:
+    return rebind[MutPointer[Int64, MutUntrackedOrigin]](p[].synchronization.unsafe_ptr())
 
 
 def if_resident_new_token() raises -> Int:
     """A token no other entry of this process carries and (through the
     per-process nonce) one a token pickled in another process will not
     equal. Never 0; below 2^51, so it is exact in the float64 `info` slot.
-    Call under the GIL."""
+    Holds the store's lock."""
     var p = IF_RESIDENT_STORE.get_or_create_ptr()
+    var lock = _if_store_lock(p)
+    shared_slot_lock(lock)
     if p[].nonce == 0:
         p[].nonce = ((Int(perf_counter_ns()) & 0x3FFFFFF) + 1) << 24
     p[].next = (p[].next % 0xFFFFFF) + 1
-    return p[].nonce + p[].next
+    var token = p[].nonce + p[].next
+    shared_slot_unlock(lock)
+    return token
 
 
 def if_resident_take(token: Int, key: IFResidentKey) raises -> List[IFResidentEntry]:
     """The resident entry `token` names, REMOVED from the store, as a list
     of one; an empty list when there is none or its key differs (a stale
-    entry under that token is dropped). Call under the GIL."""
+    entry under that token is dropped, after the lock is released). Holds
+    the store's lock."""
     var held = List[IFResidentEntry]()
     if token == 0:
         return held^
+    var stale = List[IFResidentEntry]()
     var p = IF_RESIDENT_STORE.get_or_create_ptr()
+    var lock = _if_store_lock(p)
+    shared_slot_lock(lock)
     var found = -1
     for i in range(len(p[].entries)):  # small-loop(p[].entries: resident forests held): a token lookup over live entries
         if p[].entries[i].token == token:
@@ -650,36 +685,47 @@ def if_resident_take(token: Int, key: IFResidentKey) raises -> List[IFResidentEn
         if entry.key.same(key):
             held.append(entry^)
         else:
-            _ = entry^
+            stale.append(entry^)
+    shared_slot_unlock(lock)
+    _ = stale^  # its device buffers are freed outside the lock
     return held^
 
 
 def if_resident_put(mut held: List[IFResidentEntry]) raises:
-    """Return a taken (or freshly fitted) entry to the store. Call under the
-    GIL."""
+    """Return a taken (or freshly fitted) entry to the store; the evicted
+    oldest are freed after the lock is released. Holds the store's lock."""
     if len(held) == 0:
         return
+    var evicted = List[IFResidentEntry]()
     var p = IF_RESIDENT_STORE.get_or_create_ptr()
-    while len(p[].entries) >= IF_RESIDENT_CAP:
-        var oldest = p[].entries.pop(0)
-        _ = oldest^
+    var lock = _if_store_lock(p)
+    shared_slot_lock(lock)
+    while len(p[].entries) >= IF_RESIDENT_CAP:  # small-loop(p[].entries): evict past the cap
+        evicted.append(p[].entries.pop(0))
     p[].entries.append(held.pop())
+    shared_slot_unlock(lock)
+    _ = evicted^
 
 
 def if_resident_release(token: Int) raises:
     """Drop the resident forest `token` names, if any (the Python estimator
-    was refitted or collected). Call under the GIL."""
+    was refitted or collected). Holds the store's lock; the forest is freed
+    after it is released."""
     if token == 0:
         return
+    var dropped = List[IFResidentEntry]()
     var p = IF_RESIDENT_STORE.get_or_create_ptr()
+    var lock = _if_store_lock(p)
+    shared_slot_lock(lock)
     var found = -1
-    for i in range(len(p[].entries)):
+    for i in range(len(p[].entries)):  # small-loop(p[].entries: resident forests held): a token lookup over live entries
         if p[].entries[i].token == token:
             found = i
             break
     if found >= 0:
-        var entry = p[].entries.pop(found)
-        _ = entry^
+        dropped.append(p[].entries.pop(found))
+    shared_slot_unlock(lock)
+    _ = dropped^
 
 
 def iforest_run_resident(

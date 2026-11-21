@@ -80,7 +80,9 @@ def test_json_checkpoint_retains_bounded_format_and_native_codec():
     assert 'native_json_parse_unique(encoded)' in source
     assert 'sha256_hexdigest(_canonical(payload))' in source
     assert 'py_type(encoded) is not bi.bytes' in source
-    assert 'byte_checkpoint_io(failure, c[].os.replace,' in source
-    assert 'byte_checkpoint_io(failure, c[].os.unlink,' in source
+    # The file calls are typed (no Python file object, no `os` call).
+    assert 'byte_file_write(target, address, total, file_failure)' in source
+    assert 'byte_file_read(target, Int(data.unsafe_ptr()), BYTE_JSON_LIMIT + 1, file_failure)' in source
+    assert 'byte_checkpoint_io(' not in source and 'c[].os' not in source
     assert 'generation_array([cells]' in source
     assert 'py_call(context[' not in source

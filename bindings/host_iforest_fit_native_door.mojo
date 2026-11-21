@@ -20,7 +20,7 @@ from bindings.native_buffer_owner_pack import native_buffer_view
 from bindings.native_scalar_decode_unpack import native_scalar_buffer
 from bindings.host_iforest_depth_native_unpack import host_iforest_depth_admit, host_iforest_depth_truth, host_iforest_depth_step, host_iforest_depth_positive
 from bindings.native_numpy_metadata_unpack import native_numpy_dtype
-from bindings.host_iforest_native_door import host_iforest_alias_types, _host_resident_entries, _HOST_TOKEN_SLOT, host_iforest_owned_x
+from bindings.host_iforest_native_door import host_iforest_alias_types, _host_resident_entries, _HOST_TOKEN_SLOT, host_iforest_owned_x, host_iforest_entry, host_iforest_request, host_iforest_run
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze_any
 from bindings.trees_lifetime_door import trees_resident_new
 from bindings.trees_side_records_unpack import trees_side_put
@@ -254,27 +254,20 @@ def _if_fit_body(model: PythonObject, fields: PythonObject, raw: PythonObject, c
         _ = fitted_freeze_any(x)
     py_setitem(fields, nk[].k_n_features_in_, x.shape[1])
     var output = host_archive_typed(Python.tuple(1), "<f4", py_item(context, nk[].k_output_context))
-    var params = Python.list(x.shape[0], x.shape[1], 1, py_item(fields, nk[].k__n_estimators), py_item(fields, nk[].k__max_samples_mode), py_item(fields, nk[].k__max_samples_int), py_item(fields, nk[].k__max_samples_frac), py_item(fields, nk[].k__max_depth), py_item(fields, nk[].k__max_features_mode), py_item(fields, nk[].k__max_features_int), py_item(fields, nk[].k__max_features_frac), Int(Bool(py=py_item(fields, nk[].k__bootstrap))), py_item(fields, nk[].k__seed), Int(Bool(py=py_item(fields, nk[].k__contamination_auto))), py_item(fields, nk[].k__contamination), 0)
-    var entry = _kernel_entry("iforest_run", context)
-    # N411 (ne1-a-trees, 2026-11-06): on a binary that keeps the fitted
-    # forest resident (`iforest_resident()` == 1), the fit's run passes the
-    # seventeenth param (token 0: fit and keep) and the returned token goes
-    # into the estimator's native side record, so the first score reuses
-    # this forest instead of building it a second time. The record has the
-    # scoring path's shape (token, the fitted `_x`, its lifetime); a binary
-    # whose key no longer matches simply refits, so the scores are the same
-    # bits either way (the forest is a pure function of the seed and X).
-    var resident = _host_resident_entries(entry, context)
+    var request = host_iforest_request(fields, Int(py=x.shape[0]), Int(py=x.shape[1]), 1, 0)
+    var resident = _host_resident_entries(_kernel_entry("iforest_resident_release", context), context)
     if resident is not None and not host_iforest_owned_x(fields):
-        # N390: a fitted `_x` that is the caller's own storage cannot be made
-        # read-only, so it keeps the per-call fit (lesson 10).
         resident = PythonObject(None)
     if resident is not None:
-        _ = py_call(params.append, PythonObject(0))
+        request.resident = True
+        request.token = 0
     var info = host_archive_typed(Python.tuple(3 if resident is None else 4), "<f8", py_item(context, nk[].k_output_context))
+    request.train = Int(py=classical_address(x))
+    request.query = request.train
+    request.out_f32 = Int(py=classical_address(output))
+    request.info = Int(py=classical_address(info))
     try:
-        # One query row is the same first row previously copied by x[:1].
-        _ = py_call(entry, classical_address(x), classical_address(x), classical_address(output), 0, classical_address(info), params)
+        host_iforest_run(host_iforest_entry(), request)
     except error:
         raise Error("HostIForestKernelError: " + String(error))
     _ = x^

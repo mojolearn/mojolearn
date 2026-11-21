@@ -38,8 +38,9 @@ __all__ = ["SVC", "SVR", "LinearSVC", "LinearSVR"]
 # The compiled family owner, connected once at import: every public method of
 # the two linear machines is one native call (bindings/svm_mixture_native_door.mojo
 # for LinearSVC.decision_function and LinearSVR.predict,
-# bindings/svc_linear_native_door.mojo for fit, predict and score), handed the
-# estimators binding admitted by the shared provider after native entry.
+# bindings/svc_linear_native_door.mojo for fit, predict and score). The
+# driver is the estimator's device route, resolved once and held natively
+# (bindings/linear_svc_boundary_unpack.mojo `linear_svc_route`).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 class _LinearSVMBase(_NumericModeMixin):
@@ -152,6 +153,10 @@ class LinearSVC(_LinearSVMBase):
     # One-call native public methods: the family owner runs the whole lifecycle
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LINEAR_SVM = 5) and core/linear_svm_member.mojo.
+    _mojolearn_member = (5, 0)
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.
@@ -328,6 +333,10 @@ class LinearSVR(_LinearSVMBase):
     # One-call native public methods: the family owner runs the whole lifecycle
     # (providers/python/family_public_lifecycle_pyapi_door.mojo); no _mode wrappers.
     _mojolearn_native_public = True
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_LINEAR_SVM = 5) and core/linear_svm_member.mojo.
+    _mojolearn_member = (5, 1)
 
     #: scikit-learn's estimator kind: `cross_val_score` stratifies a
     #: classifier's default folds, as scikit-learn's does.

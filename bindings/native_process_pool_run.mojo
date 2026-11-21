@@ -20,10 +20,13 @@ struct ProcessPoolRecord(Movable):
     them (`cooperative`) or each device has its own, the closed flag, the next
     request sequence number and, per started worker in spawn order, its
     process id and the descriptor of its authenticated socket (-1 until its
-    hello is admitted, and again after its socket is closed)."""
+    hello is admitted, and again after its socket is closed). `trace` is the
+    id of the shard trace record the pool's requests are added to (0: none;
+    bindings/parallel_shard_common_door.mojo sets it at each admission)."""
     var cooperative: Bool
     var closed: Bool
     var sequence: Int
+    var trace: Int
     var devices: List[Int]
     var pids: List[Int]
     var fds: List[Int]
@@ -32,6 +35,7 @@ struct ProcessPoolRecord(Movable):
         self.cooperative = cooperative
         self.closed = False
         self.sequence = 0
+        self.trace = 0
         self.devices = devices^
         self.pids = List[Int]()
         self.fds = List[Int]()

@@ -155,6 +155,10 @@ def connect(context, package):
     connect_extra(context, register, registry)
     from ._native_msel_prep import connect as connect_prep
     connect_prep(context, register, registry)
+    # Marked member classes without a schema of their own, AFTER every hand-written schema above (a class those
+    # register was listed as unregistered when this ran first).
+    from ._native_msel_more import connect_members
+    connect_members(context, register, registry)
     neighbors = loaded('neighbors')
     if neighbors is not None:
         registry[neighbors.KNeighborsClassifier]["classes_kind"] = "knn"  # glue: native form of the connected class-label property

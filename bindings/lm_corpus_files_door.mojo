@@ -133,7 +133,8 @@ def corpus_bytes_object(values: List[UInt8]) raises -> PythonObject:
     _ = len(values)
     if not raw:
         # CPython set MemoryError; it is the pending exception the door restores.
-        raise stash_python_error()
+        var failure = stash_python_error()
+        raise failure^
     return PythonObject(from_owned=raw)
 
 

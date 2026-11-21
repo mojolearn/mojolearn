@@ -3,9 +3,11 @@
 MEMBER-ABI-V2.md; RUN: core/xcluster_member.mojo.
 
 Published kinds: 0 MiniBatchKMeans, 1 BisectingKMeans, 2 MeanShift,
-4 AffinityPropagation (`_mojolearn_member = (25, kind)` on each class).
-Every other kind answers False here (OPTICS 3: the class has no predict;
-BayesianGaussianMixture 5: not published), as does a MiniBatchKMeans with
+4 AffinityPropagation, 5 BayesianGaussianMixture (`_mojolearn_member =
+(25, kind)` on each class). Every other kind answers False here (OPTICS 3:
+the class has no predict), as does a BayesianGaussianMixture with an array
+`mean_prior` or `covariance_prior` or `warm_start=True` (words tied to the
+data or to a previous fit), a MiniBatchKMeans with
 explicit starting centers (an array `init`), a MeanShift with explicit
 `seeds`, an AffinityPropagation with affinity='precomputed' or a per-sample
 preference (words tied to the training rows), and the caller keeps the
@@ -62,6 +64,10 @@ from core.device_route import DeviceRoute, DEVICE_CPU, DEVICE_GPU, device_vendor
 from core.entry_table import EntryRef, entry_ref_word
 from core.hostptr import f32_ptr
 from core.kmeans_variants_api import VARIANTS_MODE, KMEANS_VARIANTS_COUNT
+from core.bgmm_native_api import BGMM_NATIVE_COUNT
+from bindings.boundary_read_door import read_int_like, read_float_like, read_bool
+from bindings.mixture_public_native_unpack import _bgmm_connection, _any_f32, bgmm_score_words
+from mixture.mixture_door_run import bgmm_count_at_least_one, mixture_by_type_shape
 from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_IMPORT_DONE,
@@ -73,6 +79,8 @@ comptime _KIND_MINIBATCH = 0
 comptime _KIND_BISECT = 1
 comptime _KIND_MEANSHIFT = 2
 comptime _KIND_AFFINITY = 4
+comptime _KIND_BGMM = 5
+comptime _BLOCK_BGMM = MEMBER_BLOCK_FAMILY + 8
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 
 
@@ -194,6 +202,71 @@ def _affinity_admit(model: PythonObject, context: PythonObject, mut owner: Membe
     return True
 
 
+def _choice(value: PythonObject, names: List[String], what: String) raises -> Int:
+    """The code of `value` in `names` (the estimator's own option table:
+    python/mojolearn/mixture.py family_mix_ctypes / family_mix_inits), or the
+    door's refusal with the sorted names."""
+    for i in range(len(names)):  # driver-loop: at most four option names
+        if family_is_str(value) and _eq(value, PythonObject(names[i])):
+            return i
+    var listed = String("")
+    var order = List[Int]()
+    for i in range(len(names)):  # driver-loop: at most four option names, sorted
+        var at = 0
+        while at < len(order) and names[order[at]] < names[i]:
+            at += 1
+        order.insert(at, i)
+    for i in range(len(order)):  # driver-loop: at most four option names
+        listed += (", " if i else "") + "'" + names[order[i]] + "'"
+    raise Error(what + " must be one of [" + listed + "], got " + family_repr(value))
+
+
+def _bgmm_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises -> Bool:
+    """`bgmm_fit_stage`'s reads and refusals, in its order, without X (the
+    rows-cover refusal runs in RUN at fit). False for an array mean_prior or
+    covariance_prior and for warm_start=True (the class's own doors)."""
+    var ctypes: List[String] = ["full", "tied", "diag", "spherical"]
+    var inits: List[String] = ["kmeans", "random", "k-means++", "random_from_data"]
+    var ct = _choice(_attr(model, "covariance_type"), ctypes, "covariance_type")
+    var init_code = _choice(_attr(model, "init_params"), inits, "init_params")
+    var prior_type = _attr(model, "weight_concentration_prior_type")
+    if not _one_of(prior_type, "dirichlet_process", "dirichlet_distribution"):
+        raise Error("weight_concentration_prior_type must be 'dirichlet_process' or "
+                    + "'dirichlet_distribution'")
+    var process = _eq(prior_type, PythonObject("dirichlet_process"))
+    var k = read_int_like(_attr(model, "n_components"))
+    bgmm_count_at_least_one(read_int_like(_attr(model, "n_init")))
+    bgmm_count_at_least_one(read_int_like(_attr(model, "max_iter")))
+    if _attr(model, "mean_prior") is not None or _attr(model, "covariance_prior") is not None:
+        return False
+    if read_bool(_attr(model, "warm_start")):
+        return False
+    var wcp = _attr(model, "weight_concentration_prior")
+    var mpp = _attr(model, "mean_precision_prior")
+    var dfp = _attr(model, "degrees_of_freedom_prior")
+    var prior_weight = -1.0 if wcp is None else read_float_like(wcp)
+    var prior_mean_precision = -1.0 if mpp is None else read_float_like(mpp)
+    var prior_freedom = -1.0 if dfp is None else read_float_like(dfp)
+    var reg_covar = read_float_like(_attr(model, "reg_covar"))
+    var tol = read_float_like(_attr(model, "tol"))
+    var max_iter = read_int_like(_attr(model, "max_iter"))
+    var n_init = read_int_like(_attr(model, "n_init"))
+    var seed = _seed(_attr(model, "random_state"))
+    _variants_route(model, context, owner)
+    # The binding's typed BGMM entry (`bgmm_native_api_v1`) -> route.third.
+    var binding = owner.pins[0]
+    var mixture = _bgmm_connection(binding)
+    owner.plan.route.third = EntryRef(mixture.driver.entry,
+        entry_ref_word(owner.plan.route.mode, owner.plan.route.vendor, BGMM_NATIVE_COUNT))
+    owner.plan.route.has_third = True
+    owner.pins = Python.tuple(owner.pins[0], owner.pins[1], mixture.provider)
+    var words: List[Float64] = [Float64(_KIND_BGMM), Float64(k), Float64(ct), Float64(init_code),
+        1.0 if process else 0.0, prior_weight, prior_mean_precision, prior_freedom, reg_covar, tol,
+        Float64(max_iter), Float64(n_init), bitcast[DType.float64](Int64(seed))]
+    owner.plan.params = words^
+    return True
+
+
 def _bisect_admit(model: PythonObject, context: PythonObject, mut owner: MemberOwner) raises:
     """`bisect_fit_stage`'s reads, in its order, without X."""
     var init = _attr(model, "init")
@@ -236,6 +309,9 @@ def xcluster_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     if kind == _KIND_AFFINITY:
         classical_connect_numpy(context)
         return _affinity_admit(model, context, owner)
+    if kind == _KIND_BGMM:
+        classical_connect_numpy(context)
+        return _bgmm_admit(model, context, owner)
     if kind != _KIND_BISECT:
         return False
     classical_connect_numpy(context)
@@ -269,15 +345,119 @@ def _i32_array(view: MemberMatrix, shape: PythonObject, context: PythonObject) r
     return array
 
 
+def _shape(values: List[Int]) raises -> PythonObject:
+    var shape = Python.list()
+    for i in range(len(values)):  # driver-loop: one to three axis lengths
+        _ = py_call(shape.append, PythonObject(values[i]))
+    return py_call(native_loaded_module("builtins").tuple, shape)
+
+
+def _bgmm_pack(model: PythonObject, context: PythonObject, plan: MemberPlan, mut call: MemberCall) raises:
+    """`_bgmm_fit`'s publications (bindings/mixture_public_native_pack.mojo),
+    the same names, dtypes, shapes and order, from the state's blocks."""
+    var k = Int(plan.params[1])
+    var ct = Int(plan.params[2])
+    var process = plan.params[4] != 0.0
+    _export(plan, call, _BLOCK_BGMM + 1)
+    var d = call.dst.cols
+    var means = _f32_array(call.dst, context)
+    _export(plan, call, _BLOCK_BGMM + 0)
+    _set(model, "weights_", _f32_shaped(call.dst, Python.tuple(k), context))
+    _set(model, "means_", means)
+    _export(plan, call, _BLOCK_BGMM + 3)
+    var pchol = _f32_shaped(call.dst, Python.tuple(k, d, d), context)
+    _set(model, "_full_pchol", pchol)
+    _export(plan, call, _BLOCK_BGMM + 13)
+    _set(model, "covariances_", _f32_shaped(call.dst, _shape(mixture_by_type_shape(ct, k, d)), context))
+    _export(plan, call, _BLOCK_BGMM + 14)
+    _set(model, "precisions_cholesky_", _f32_shaped(call.dst, _shape(mixture_by_type_shape(ct, k, d)), context))
+    _export(plan, call, _BLOCK_BGMM + 4)
+    var wc0 = _f32_shaped(call.dst, Python.tuple(k), context)
+    if process:
+        _export(plan, call, _BLOCK_BGMM + 5)
+        _set(model, "weight_concentration_", Python.tuple(wc0, _f32_shaped(call.dst, Python.tuple(k), context)))
+    else:
+        _set(model, "weight_concentration_", wc0)
+    _export(plan, call, _BLOCK_BGMM + 6)
+    _set(model, "mean_precision_", _f32_shaped(call.dst, Python.tuple(k), context))
+    _export(plan, call, _BLOCK_BGMM + 7)
+    if ct == 1:
+        _set(model, "degrees_of_freedom_", PythonObject(Float64(f32_ptr(call.dst.data)[0])))
+    else:
+        _set(model, "degrees_of_freedom_", _f32_shaped(call.dst, Python.tuple(k), context))
+    _export(plan, call, _BLOCK_BGMM + 8)
+    var consts = _f32_shaped(call.dst, Python.tuple(k), context)
+    _set(model, "_log_consts", consts)
+    # the class's score door reads these words (laid out once per state)
+    _set(model, "_score_words", bgmm_score_words(means, pchol, consts, context))
+    _export(plan, call, _BLOCK_BGMM + 9)
+    _set(model, "mean_prior_", _f32_shaped(call.dst, Python.tuple(d), context))
+    _export(plan, call, _BLOCK_BGMM + 15)
+    if ct == 2:
+        _set(model, "covariance_prior_", _f32_shaped(call.dst, Python.tuple(d), context))
+    elif ct == 3:
+        _set(model, "covariance_prior_", PythonObject(Float64(f32_ptr(call.dst.data)[0])))
+    else:
+        _set(model, "covariance_prior_", _f32_shaped(call.dst, Python.tuple(d, d), context))
+    _export(plan, call, MEMBER_BLOCK_SCALARS)
+    var s = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    var lower = s[0]
+    var iterations = Int(s[1])
+    var converged = s[2] != 0.0
+    var prior_weight = s[3]
+    var prior_mean_precision = s[4]
+    var prior_freedom = s[5]
+    _set(model, "lower_bound_", PythonObject(lower))
+    _set(model, "n_iter_", PythonObject(iterations))
+    _set(model, "converged_", PythonObject(converged))
+    # The state a warm_start refit resumes from: blocks [11, 4, 5, 6, 1, 7,
+    # 2, 3] end to end, an empty block 5 (Dirichlet distribution) as k
+    # zeros, the bytes `_state` lays out (one allocation, one copy a block).
+    var order: List[Int] = [11, 4, 5, 6, 1, 7, 2, 3]
+    var sizes = List[Int](length=len(order), fill=0)
+    var total = 0
+    for j in range(len(order)):  # driver-loop: the eight warm-state blocks
+        _export(plan, call, _BLOCK_BGMM + order[j])
+        sizes[j] = call.dst.rows * call.dst.cols
+        if order[j] == 5 and sizes[j] == 0:
+            sizes[j] = -k
+        total += sizes[j] if sizes[j] >= 0 else k
+    var warm = family_array(Python.tuple(total), "<f4", context)
+    var at = Int(py=classical_address(warm))
+    for j in range(len(order)):  # driver-loop: the eight warm-state blocks
+        if sizes[j] < 0:
+            var zero = f32_ptr(at)
+            for t in range(k):  # driver-loop: k zero words of an absent block
+                zero[t] = 0.0
+            at += 4 * k
+            continue
+        _export(plan, call, _BLOCK_BGMM + order[j])
+        if sizes[j] > 0:
+            unsafe_memcpy(dest=f32_ptr(at), src=f32_ptr(call.dst.data), count=sizes[j])
+        at += 4 * sizes[j]
+    var key = Python.tuple(PythonObject(k), PythonObject(d), _attr(model, "covariance_type"))
+    _set(model, "_warm", Python.tuple(key, warm))
+    _set(model, "weight_concentration_prior_", PythonObject(prior_weight))
+    _set(model, "mean_precision_prior_", PythonObject(prior_mean_precision))
+    _set(model, "degrees_of_freedom_prior_", PythonObject(prior_freedom))
+    _set(model, "n_features_in_", PythonObject(d))
+    _ = means
+    _ = warm
+
+
 def xcluster_member_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan, state: Int) raises:
     """PACK: write the fitted attributes of state `state` into `model`, as
     the estimator's own fit does (the same names, dtypes and shapes)."""
     var kind = Int(plan.params[0])
-    if kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT and kind != _KIND_AFFINITY:
+    if (kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT and kind != _KIND_AFFINITY
+            and kind != _KIND_BGMM):
         raise Error("RuntimeError: mojolearn: this x_cluster member kind is not published")
     classical_connect_numpy(context)
     var call = MemberCall(plan.route, state)
+    if kind == _KIND_BGMM:
+        _bgmm_pack(model, context, plan, call)
+        return
     if kind == _KIND_AFFINITY:
         _export(plan, call, MEMBER_BLOCK_FAMILY)
         var ap_d = call.dst.cols
@@ -382,6 +562,50 @@ def _centers_state(fields: PythonObject, plan: MemberPlan, centers: PythonObject
     return call.state
 
 
+def _bgmm_state(fields: PythonObject, context: PythonObject, plan: MemberPlan) raises -> Int:
+    """A BayesianGaussianMixture state from a fitted model: the score
+    entry's model blocks (means_, _full_pchol, _log_consts, the words
+    `_bgmm_score` reads) and the six fitted scalars."""
+    var means_source = py_get(fields, PythonObject("means_"), PythonObject(None))
+    var pchol_source = py_get(fields, PythonObject("_full_pchol"), PythonObject(None))
+    var consts_source = py_get(fields, PythonObject("_log_consts"), PythonObject(None))
+    if means_source is None or pchol_source is None or consts_source is None:
+        raise Error("NotFittedError: this member is not fitted yet")
+    var means = _any_f32(means_source, "means_", context)
+    var pchol = _any_f32(pchol_source, "_full_pchol", context)
+    var consts = _any_f32(consts_source, "_log_consts", context)
+    var names: List[String] = ["lower_bound_", "n_iter_", "converged_", "weight_concentration_prior_",
+        "mean_precision_prior_", "degrees_of_freedom_prior_"]
+    var scalars = List[Float64](length=len(names), fill=0.0)
+    for i in range(len(names)):  # driver-loop: six fitted scalar attributes
+        var value = py_get(fields, PythonObject(names[i]), PythonObject(None))
+        if value is not None:
+            scalars[i] = read_float_like(value)
+    var call = member_new(plan)
+    try:
+        call.block = _BLOCK_BGMM + 1
+        call.x = MemberMatrix(Int(py=classical_address(means)), Int(py=means.shape[0]), Int(py=means.shape[1]))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = _BLOCK_BGMM + 3
+        call.x = MemberMatrix(Int(py=classical_address(pchol)), 1, Int(py=pchol.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = _BLOCK_BGMM + 8
+        call.x = MemberMatrix(Int(py=classical_address(consts)), 1, Int(py=consts.size))
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+        call.block = MEMBER_BLOCK_SCALARS
+        call.x = MemberMatrix(Int(scalars.unsafe_ptr()), 1, len(names), MEMBER_F64)
+        call.flags = MEMBER_IMPORT_DONE
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, call)
+    except error:
+        member_free(plan, call)
+        raise error
+    _ = means
+    _ = pchol
+    _ = consts
+    _ = len(scalars)
+    return call.state
+
+
 def xcluster_member_state(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
     plan: MemberPlan) raises -> Int:
     """UNPACK: a new member state holding the fitted leaf centers, tree and
@@ -389,9 +613,12 @@ def xcluster_member_state(model: PythonObject, fields: PythonObject, context: Py
     imported). A MiniBatchKMeans state holds its centers and
     [inertia_, n_steps_, n_iter_]. The caller frees it (`member_free`)."""
     var kind = Int(plan.params[0])
-    if kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT and kind != _KIND_AFFINITY:
+    if (kind != _KIND_BISECT and kind != _KIND_MINIBATCH and kind != _KIND_MEANSHIFT and kind != _KIND_AFFINITY
+            and kind != _KIND_BGMM):
         raise Error("RuntimeError: mojolearn: this x_cluster member kind is not published")
     classical_connect_numpy(context)
+    if kind == _KIND_BGMM:
+        return _bgmm_state(fields, context, plan)
     var source = py_get(fields, PythonObject("cluster_centers_"), PythonObject(None))
     if source is None:
         raise Error("NotFittedError: this member is not fitted yet")

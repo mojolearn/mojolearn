@@ -32,7 +32,7 @@ from bindings.msel_member_device_unpack import member_says_cpu, member_multi_gpu
 from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.native_process_pool_door import (
-    process_pool_create, process_pool_map, process_pool_close,
+    process_pool_create, process_pool_close,
     process_worker_connect, process_worker_next, process_worker_reply, process_worker_refuse,
 )
 from bindings.native_transport_door import transport_close
@@ -49,9 +49,17 @@ from bindings.parallel_shard_common_door import (
     shard_model,
     shard_array,
     shard_identity,
+    ShardWave,
+    shard_wave,
 )
 from bindings.parallel_shard_common_run import (
     shard_read_shift, shard_width_admit, shard_bounds, shard_indices_admit, shard_block_copy, SHARD_DEVICE_NOT_AN_INDEX,
+    shard_request_op,
+    PARALLEL_SHARD_WORKER_OPN_IDENTITY,
+    PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD,
+    PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD,
+    PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD,
+    PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD,
 )
 from bindings.parallel_forecast_native_run import (
     forecast_arima_mode_admit, forecast_process_mode_admit, forecast_exog_admit, forecast_span_admit,
@@ -70,11 +78,6 @@ from bindings.parallel_keys_unpack import (
     PARALLEL_FORECAST_OPN_PREDICT_ARIMA,
     PARALLEL_FORECAST_OPN_PREDICT_EXPONENTIAL_SMOOTHING,
     PARALLEL_FORECAST_OPN_WORKER,
-    PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD,
-    PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD,
-    PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD,
-    PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD,
-    PARALLEL_FORECAST_WORKER_OPN_IDENTITY,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -145,7 +148,7 @@ def _devices(devices: PythonObject) raises:
     shard_indices_admit(indices)
 
 
-def _run(requests: PythonObject, devices: PythonObject) raises -> PythonObject:
+def _run(requests: ShardWave, devices: PythonObject) raises -> PythonObject:
     """`_run`: the pool's results in request order (an admitted, traced pool,
     bindings/parallel_shard_common_door.mojo `shard_run`); the pool always closes."""
     return shard_run(requests, devices, _CHILD)
@@ -186,7 +189,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
     var complexity = Int(py=py_item(fields, nk[].k_complexity_))
     var keep = Python.tuple("order", "seasonal_order", "trend", "k_", "method", "maxiter", "n_exog_", "complexity_",
                             "n_obs_", "_y_ndim", "numeric_mode")
-    var requests = b.list()
+    var requests = shard_wave()
     var context = f[].arima_context
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per device shard
         var lo = ranges[2 * r]
@@ -199,7 +202,7 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
         py_setitem(state, nk[].k_batch_size_, hi - lo)
         py_setitem(state, nk[].k__y, _rows(py_item(fields, nk[].k__y), lo, hi, n_obs, context))
         py_setitem(state, nk[].k_params_, _rows(py_item(fields, nk[].k_params_), lo, hi, complexity, context))
-        _ = py_call(requests.append, Python.tuple(nk[].k_arima_predict_shard, state, Python.tuple(start, end)))
+        requests.add(PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD, state, Python.tuple(start, end))
     var parts = _run(requests, devices)
     var width = end - start
     var result = tsa_array("f", "<f4", Python.tuple(batch, width), batch * width, 4, context)
@@ -266,7 +269,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     # fitted arrays, then each shard's slice. The carried fields are walked
     # once; each shard takes a shallow copy and sets its own words.
     var base = shard_state(fields, drop, context)
-    var requests = b.list()
+    var requests = shard_wave()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per device shard
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
@@ -282,7 +285,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
         _ = part  # keep the Python object alive through the native call above
         _ = comps  # keep the Python object alive through the native call above
         py_setitem(state, nk[].k__comps, part)
-        _ = py_call(requests.append, Python.tuple(nk[].k_hw_predict_shard, state, Python.tuple(start, end)))
+        requests.add(PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD, state, Python.tuple(start, end))
     var parts = _run(requests, devices)
     var width = end - start
     var result = tsa_array("f", "<f4", Python.tuple(width * batch), width * batch, 4, context)
@@ -364,13 +367,13 @@ def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, 
     var state = shard_state(fields, drop, context)
     py_setitem(state, nk[].k_numeric_mode, "identical")
     var n_devices = shard_devices(devices)
-    var requests = b.list()
+    var requests = shard_wave()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per series shard
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
         var shift = shard_read_shift(r, lo, n_devices)
-        _ = py_call(requests.append, Python.tuple(nk[].k_arima_fit_shard, state,
-                                                  Python.tuple(shard_rows(data, lo - shift, hi - shift, context))))
+        requests.add(PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD, state,
+                                                  Python.tuple(shard_rows(data, lo - shift, hi - shift, context)))
     var parts = shard_run(requests, devices, _CHILD)
     var merged = b.dict()
     var names = [String("params_"), String("x_"), String("x0_"), String("n_iter_"), String("retcode_"),
@@ -419,7 +422,7 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
     var state = shard_state(fields, drop, context)
     py_setitem(state, nk[].k_fit_executed_flag, False)
     var n_devices = shard_devices(devices)
-    var requests = b.list()
+    var requests = shard_wave()
     for r in range(len(ranges) // 2):  # driver-loop: one worker request per series shard
         var lo = ranges[2 * r]
         var hi = ranges[2 * r + 1]
@@ -428,7 +431,7 @@ def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) r
         # `ExponentialSmoothing(data[lo:hi], ts_num=hi - lo, **params)`
         py_setitem(shard_state_r, nk[].k_endog, shard_rows(data, lo - shift, hi - shift, context))
         py_setitem(shard_state_r, nk[].k_ts_num, hi - lo)
-        _ = py_call(requests.append, Python.tuple(nk[].k_hw_fit_shard, shard_state_r, Python.tuple()))
+        requests.add(PARALLEL_FORECAST_WORKER_OPN_HW_FIT_SHARD, shard_state_r, Python.tuple())
     var parts = shard_run(requests, devices, _CHILD)
     # The plain fit's buffers for the whole batch, every shard's columns at
     # its series offset: the packed components (3 * steps rows of `batch`
@@ -484,32 +487,27 @@ def _fitted_record(model: PythonObject, names: PythonObject) raises -> PythonObj
 
 # ---------------------------------------------------------------- the worker
 
-def forecast_worker_dispatch(request: PythonObject) raises -> PythonObject:
+def forecast_worker_dispatch(operation: Int, request: PythonObject) raises -> PythonObject:
     """One shard: the model rebuilt natively from its state record, then the
-    native predict over (start, end)."""
+    native predict over (start, end). `operation` is the decoded request
+    word (the identity code or a `PARALLEL_FORECAST_WORKER_OPN_*` code);
+    `request` is the payload record `(state, args)` (None for identity)."""
     var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
     var b = _b()
     var nk = parallel_keys()
-    if len(request) == 1 and py_op_code(nk[].ops_forecast_worker, request[0]) == PARALLEL_FORECAST_WORKER_OPN_IDENTITY:
+    if operation == PARALLEL_SHARD_WORKER_OPN_IDENTITY:
         return shard_identity()
-    forecast_envelope_admit(len(request))
-    var operation = py_op_code(nk[].ops_forecast_worker, request[0])
-    var state = request[1]
-    var args = request[2]
+    forecast_envelope_admit(py_type(request) is b.tuple, len(request) if py_type(request) is b.tuple else 0)
+    var state = request[0]
+    var args = request[1]
     if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_PREDICT_SHARD:
-        var model = py_call(b.object.__new__, f[].arima_cls)
-        var fields = py_fields(model)
-        var keys = py_call(b.list, state)
-        for k in range(len(keys)):  # driver-loop: over the shard's state record fields
-            py_setitem(fields, keys[k], state[keys[k]])
-        py_setitem(fields, nk[].k__exog, PythonObject(None))
+        # One instance-dictionary update (`shard_model`); it was a key list
+        # and one read and one store per state field.
+        var model = shard_model(f[].arima_cls, state)
+        py_setitem(py_fields(model), nk[].k__exog, PythonObject(None))
         return arima_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].arima_context)
     if operation == PARALLEL_FORECAST_WORKER_OPN_HW_PREDICT_SHARD:
-        var model = py_call(b.object.__new__, f[].hw_cls)
-        var fields = py_fields(model)
-        var keys = py_call(b.list, state)
-        for k in range(len(keys)):  # driver-loop: over the shard's state record fields
-            py_setitem(fields, keys[k], state[keys[k]])
+        var model = shard_model(f[].hw_cls, state)
         return hw_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].hw_context)
     if operation == PARALLEL_FORECAST_WORKER_OPN_ARIMA_FIT_SHARD:
         var model = shard_model(f[].arima_cls, state)
@@ -534,7 +532,10 @@ def forecast_worker(argv: PythonObject) raises:
             if not turn.open:
                 break
             try:
-                process_worker_reply(socket, turn.sequence, forecast_worker_dispatch(turn.value))
+                # The typed request: one decode of the frame's words (a frame
+                # without request words is refused), then the code's branch.
+                var operation = shard_request_op(Int(turn.request.unsafe_ptr()), len(turn.request) * 8)
+                process_worker_reply(socket, turn.sequence, forecast_worker_dispatch(operation, turn.value))
             except error:
                 process_worker_refuse(socket, turn.sequence, String(error))
     except error:

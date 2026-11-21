@@ -16,7 +16,7 @@
     ],
     "input preparation": [
       "test_cache_upload_native.py",
-      "test_cache_key_native.py",
+      "test_device_cache_native_state.py",
       "test_late_numpy_native_metadata.py",
       "test_optimizer_native_container_admission.py",
       "test_training_cross_entropy_public_native.py",

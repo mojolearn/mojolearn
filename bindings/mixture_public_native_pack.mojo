@@ -70,7 +70,7 @@ from mixture.mixture_door_run import (
 from bindings.mixture_public_native_unpack import (
     _GMM_ADMIT_SLOT, _GMM_OPERANDS_SLOT, BgmmEntryFit,
     _get, _get_or, _x_finite, _check_mode, _gmm_needs_ext, _gmm_connection, _gmm_score_call, _gmm_ext_score,
-    _bgmm_fit_call, _bgmm_score, _gmm_public_admit,
+    _bgmm_fit_call, _bgmm_score, _gmm_public_admit, bgmm_score_words,
     gmm_default_refuse_options, gmm_fit_settings, gmm_fit_random_state, gmm_ext_fit_stage, bgmm_fit_stage,
 )
 
@@ -376,8 +376,10 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     ref f = result.storage[0].f
     ref s = result.storage[0].s
     py_setattr(model, "weights_", _pack_f(f[0], [k], context))
-    py_setattr(model, "means_", _pack_f(f[1], [k, d], context))
-    py_setattr(model, "_full_pchol", _pack_f(f[3], [k, d, d], context))
+    var means = _pack_f(f[1], [k, d], context)
+    var pchol = _pack_f(f[3], [k, d, d], context)
+    py_setattr(model, "means_", means)
+    py_setattr(model, "_full_pchol", pchol)
     # f[13], f[14], f[15]: the binding's by-type forms (bgmm_entry)
     py_setattr(model, "covariances_", _by_type(f[13], k, d, ct, context))
     py_setattr(model, "precisions_cholesky_", _by_type(f[14], k, d, ct, context))
@@ -391,7 +393,10 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
         py_setattr(model, "degrees_of_freedom_", PythonObject(Float64(f[7][0])))
     else:
         py_setattr(model, "degrees_of_freedom_", _pack_f(f[7], [k], context))
-    py_setattr(model, "_log_consts", _pack_f(f[8], [k], context))
+    var consts = _pack_f(f[8], [k], context)
+    py_setattr(model, "_log_consts", consts)
+    # the score entry's model words, laid out once for this fitted state
+    py_setattr(model, "_score_words", bgmm_score_words(means, pchol, consts, context))
     py_setattr(model, "mean_prior_", _pack_f(f[9], [d], context))
     if ct == 2:
         py_setattr(model, "covariance_prior_", _pack_f(f[15], [d], context))

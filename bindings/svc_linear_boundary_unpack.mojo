@@ -41,7 +41,7 @@ from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_MUL
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
 from bindings.classical_labels_door import labels_type_name, classical_encode_labels
 from bindings.labels_descriptor_boundary_door import labels_scope
-from bindings.linear_svc_boundary_unpack import LinearSvcWeights, LinearSvcConnection, linear_svc_connection
+from bindings.linear_svc_boundary_unpack import LinearSvcWeights, LinearSvcConnection, linear_svc_route
 from core.linear_svc_native_api import LinearSvcOptions, LinearSvcFitRequest, LinearSvcWeightsState
 from core.logistic_native_api import QnFitRequest, QnQueryRequest
 from bindings.svc_common_unpack import (
@@ -86,6 +86,36 @@ def _linear_check_common(model: PythonObject, fields: PythonObject) raises:
         if (Bool(py=family_call(operator.ne, family_call(b.int, value), value))
                 or Bool(py=family_call(operator.lt, value, PythonObject(1)))):
             raise Error("mojolearn " + name + ": " + names[i] + " must be a positive integer, got " + family_str(value))
+
+
+def linear_svr_check_fields(model: PythonObject, fields: PythonObject) raises -> PythonObject:
+    """LinearSVR.fit's parameter checks, in its order (epsilon, then
+    `_check_common`); returns the epsilon field. Shared with the member
+    admission (providers/python/member_linear_svm_boundary_door.mojo)."""
+    var operator = native_loaded_module("operator")
+    var nk = svm_keys()
+    var epsilon = svc_field(fields, nk[].k_epsilon, "epsilon")
+    if not (Bool(py=family_call(operator.le, PythonObject(0.0), epsilon))
+            and Bool(py=family_call(operator.lt, epsilon, family_call(svc_builtins().float, PythonObject("inf"))))):
+        raise Error("mojolearn LinearSVR: epsilon must be finite and non-negative, got " + family_str(epsilon))
+    _linear_check_common(model, fields)
+    return epsilon
+
+
+def linear_svc_check_fields(model: PythonObject, fields: PythonObject) raises:
+    """LinearSVC.fit's parameter checks, in its order (multi_class, then
+    `_check_common`). Shared with the member admission."""
+    var operator = native_loaded_module("operator")
+    var nk = svm_keys()
+    var multi_class = svc_field(fields, nk[].k_multi_class, "multi_class")
+    if Bool(py=family_call(operator.ne, multi_class, PythonObject("ovr"))):
+        raise Error("mojolearn LinearSVC: multi_class must be 'ovr', got " + family_repr(multi_class))
+    _linear_check_common(model, fields)
+
+
+def linear_svm_strengths(fields: PythonObject) raises -> Array[Float64, 2]:
+    """[l1, l2] strengths of the fit request (1/C on the chosen penalty)."""
+    return _linear_strengths_values(fields)
 
 
 def _linear_strengths_values(fields: PythonObject) raises -> Array[Float64, 2]:
@@ -174,16 +204,11 @@ struct LinearSvrFitUnpacked(Movable):
 
 
 def linear_svr_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LinearSvrFitUnpacked:
-    """`LinearSVR.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
-    var operator = native_loaded_module("operator")
-    var binding = args[0]
+    """`LinearSVR.fit(X, y, sample_weight)`; args = (None, X, y, sample_weight); the
+    driver comes from the estimator's held route (`linear_svc_route`)."""
     var fields = py_fields(model)
     var nk = svm_keys()
-    var epsilon = svc_field(fields, nk[].k_epsilon, "epsilon")
-    if not (Bool(py=family_call(operator.le, PythonObject(0.0), epsilon))
-            and Bool(py=family_call(operator.lt, epsilon, family_call(svc_builtins().float, PythonObject("inf"))))):
-        raise Error("mojolearn LinearSVR: epsilon must be finite and non-negative, got " + family_str(epsilon))
-    _linear_check_common(model, fields)
+    var epsilon = linear_svr_check_fields(model, fields)
     var xc_pin = ArrayPin()
     var xc = admit_family_meta(args[1], 2, "X", context, xc_pin)
     py_setitem(fields, nk[].k_input_copied_, PythonObject(admit_family_copied(xc, args[1])))
@@ -216,7 +241,7 @@ def linear_svr_fit_unpack(model: PythonObject, args: PythonObject, context: Pyth
         Int(py=classical_address(weights)), 0, sw_address, 0, rows, cols, 1,
         max_iter, linesearch, memory, intercept, penalty_normalized, loss,
         strengths[0], strengths[1], tol, 0.1 * tol, svr_eps)
-    var connection = linear_svc_connection(binding)
+    var connection = linear_svc_route(model, fields, context)
     return LinearSvrFitUnpacked(fields, x, t, sw, weights, connection^, request^, cols, intercept)
 
 
@@ -242,15 +267,11 @@ struct LinearSvcFitUnpacked(Movable):
 
 
 def linear_svc_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> LinearSvcFitUnpacked:
-    """`LinearSVC.fit(X, y, sample_weight)`; args = (binding, X, y, sample_weight)."""
-    var operator = native_loaded_module("operator")
-    var binding = args[0]
+    """`LinearSVC.fit(X, y, sample_weight)`; args = (None, X, y, sample_weight); the
+    driver comes from the estimator's held route (`linear_svc_route`)."""
     var fields = py_fields(model)
     var nk = svm_keys()
-    var multi_class = svc_field(fields, nk[].k_multi_class, "multi_class")
-    if Bool(py=family_call(operator.ne, multi_class, PythonObject("ovr"))):
-        raise Error("mojolearn LinearSVC: multi_class must be 'ovr', got " + family_repr(multi_class))
-    _linear_check_common(model, fields)
+    linear_svc_check_fields(model, fields)
     var xc_pin = ArrayPin()
     var xc = admit_family_meta(args[1], 2, "X", context, xc_pin)
     py_setitem(fields, nk[].k_input_copied_, PythonObject(admit_family_copied(xc, args[1])))
@@ -278,7 +299,7 @@ def linear_svc_fit_unpack(model: PythonObject, args: PythonObject, context: Pyth
     var pn = 1 if svc_truthy(svc_attr(model, nk[].k_penalty_normalized)) else 0
     var tol = svc_float(svc_field(fields, nk[].k_tol, "tol"))
     var loss = Int(py=svc_attr(model, nk[].k__LOSSES)[svc_field(fields, nk[].k_loss, "loss")])
-    var connection = linear_svc_connection(binding)
+    var connection = linear_svc_route(model, fields, context)
     var options = LinearSvcOptions(rows, cols, first, n_fits,
         svc_int(svc_field(fields, nk[].k_max_iter, "max_iter")),
         svc_int(svc_field(fields, nk[].k_linesearch_max_iter, "linesearch_max_iter")),

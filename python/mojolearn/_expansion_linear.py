@@ -326,6 +326,10 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
     verbose = 0
     n_jobs = None
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 2)
+
     def __init__(self, loss="hinge", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True,
                  epsilon=0.1, random_state=None, learning_rate="optimal", eta0=0.01,
@@ -479,6 +483,10 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
     # (`cls.__new__`, bindings/host_archive_native_door.mojo) never ran __init__, and its
     # get_params reads these defaults (as `device` does).
     verbose = 0
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 0)
 
     def __init__(self, loss="squared_error", *, penalty="l2", alpha=0.0001, l1_ratio=0.15,
                  fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, epsilon=0.1,
@@ -1458,6 +1466,10 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 3)
+
     def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
                  tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
                  early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
@@ -1577,6 +1589,10 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
 
     _BINDING = _BINDING
 
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 4)
+
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0, loss="hinge",
                  n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False,
@@ -1685,6 +1701,10 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
     """
 
     _BINDING = _BINDING
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 1)
 
     def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
                  validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0,
@@ -1797,6 +1817,10 @@ class SGDOneClassSVM(NumericModeMixin):
 
     _BINDING = _BINDING
     _estimator_type = "outlier_detector"
+
+    # Runs as a native member of a meta-estimator: (member family, kind) of
+    # core/member_families.mojo (MEMBER_FAMILY_SGD = 3) and core/sgd_member.mojo.
+    _mojolearn_member = (3, 5)
 
     def __init__(self, nu=0.5, fit_intercept=True, max_iter=1000, tol=1e-3, shuffle=True, verbose=0,
                  random_state=None, learning_rate="optimal", eta0=0.01, power_t=0.5, warm_start=False,

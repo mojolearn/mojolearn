@@ -49,7 +49,7 @@ from bindings.native_owner_registry_unpack import register_native_owner_type
 from bindings.native_owner_registry_run import native_owner_no_pins
 from core.experiment_guards_kernel import KERNEL_GUARDS_OK
 from bindings.device_plan_binding_pack import device_plan_enter_binding, device_plan_exit_binding, device_plan_log_binding
-from core.device_plan import device_plan_current
+from core.device_plan import DevicePlan, device_plan_current, plan_for_single
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, copy_f32, list_f32
 from std.os import abort
 from std.python import Python, PythonObject
@@ -59,6 +59,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from svm.native_descriptor_dispatch import SVC_NATIVE_API
 from core.kernel_svm_member import kernel_svm_member_publish
+from core.isolation_forest_member import isolation_forest_member_publish
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from svm.svr_native_device import SVR_DEVICE_API
 from svm.svc_native_device import SVC_DEVICE_API
@@ -92,6 +93,11 @@ from isolation_forest.forest_io import (
     if_imported_key,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.native_descriptor_abi import NativeDescriptorError
+from core.iforest_entry import (
+    IFExportRequest, IFForestRunRequest, IFForestSpans, IFImage, IFRunRequest, IF_CAP_DEVICE_SCAN,
+    IF_CAP_RESIDENT, IF_CAP_SCORES_F64, if_entry_dispatch, if_entry_publish,
+)
 
 # Lane p3-svm-gp-kernel: the resident forest on every tier. `IDN_IF_RESIDENT`
 # is IDENTICAL only, so a FAST binary refit the whole forest (and re-ran the
@@ -695,113 +701,50 @@ def svr_predict_resident_binding(
     return Python.list(Int(words[0]), Int(words[1]))
 
 
-def iforest_run_binding(
-    train_addr: PythonObject,
-    query_addr: PythonObject,
-    out_f32_addr: PythonObject,
-    out_i32_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
+def _iforest_plan(single: Bool) raises -> DevicePlan:
+    """A member's one device (`single`, its route's: no thread or
+    environment question), else the calling thread's IsolationForest plan."""
+    if single:
+        return plan_for_single()
+    return device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
+
+
+def _iforest_run(r: IFRunRequest) raises -> Int:
     """`IsolationForest.fit` plus ONE of `score_samples`,
     `decision_function` or `predict`, in one call (isolation_forest/,
-    DEVIATIONS 680-686 and 750-751). Returns `n_query`.
+    DEVIATIONS 680-686 and 750-751), over the typed request of
+    core/iforest_entry.mojo (the former Python binding `iforest_run`'s
+    sixteen / seventeen params, the same words). Returns `n_query`. Runs
+    with the GIL released (the caller's); the resident store's take and put
+    hold the store's own lock.
 
-    DEVIATION 874: the fit happens on EVERY call, because the forest is
-    eight device buffers and this boundary retains no device pointer. See
-    the block comment at `isolation_forest/estimator.mojo::
-    iforest_run_host`.
-
-    `params` is, in this exact order (mirrored in
-    `python/mojolearn/_iforest_impl.py`):
-
-         0  n_train
-         1  n_features
-         2  n_query
-         3  n_estimators
-         4  max_samples_mode     (0 = 'auto', 1 = int, 2 = float fraction)
-         5  max_samples_int
-         6  max_samples_frac     (float)
-         7  max_depth            (-1 = None, their auto)
-         8  max_features_mode    (0 = float fraction, 1 = int)
-         9  max_features_int
-        10  max_features_frac    (float)
-        11  bootstrap            (0/1)
-        12  random_state         (an int in [0, 2^32-1]; None is 0 here)
-        13  contamination_auto   (0/1)
-        14  contamination        (float; read only when slot 13 is 0)
-        15  want                 (0 = score_samples, 1 = decision_function,
-                                  2 = predict)
-
-    Slot 15 picks which output buffer is written. `want` 0 and 1 write
-    `n_query` float32 to `out_f32_addr` and touch `out_i32_addr` not at
-    all; `want` 2 writes `n_query` int32 to `out_i32_addr` and touches
-    `out_f32_addr` not at all. The unused address may be 0.
-
-    `info_addr` is THREE float64, written on every call:
-
-        0  offset_          (the contamination quantile, or -0.5)
-        1  max_samples_     (the resolved subsample size)
-        2  n_features_in_
+    `want` 0 and 1 write `n_query` float32 at `out_f32` and touch `out_i32`
+    not at all; `want` 2 writes `n_query` int32 at `out_i32`. `info` is
+    THREE float64 (offset_, max_samples_, n_features_in_), FOUR on the
+    resident form (the token after this call last).
 
     Lane fam2-forests (`IDN_IF_RESIDENT`, isolation_forest/estimator.mojo
-    "THE RESIDENT ENTRY"): a binary whose `iforest_resident()` is 1 also
-    takes SEVENTEEN params and FOUR info slots:
-
-        params 16  token    (0 = fit a fresh forest and keep it; else the
-                             token an earlier call returned: that resident
-                             forest scores the query with NO fit; a token
-                             that is gone or whose key differs refits as
-                             DEVIATION 874 does and keeps the new forest)
-        info    3  token    (the resident forest's token after this call)
-
-    Sixteen params is the DEVIATION 874 form, unchanged.
-
-    Lane fix-iforest-double-fit (2026-11-13): EVERY binary takes the
-    seventeen-param form. A refit-per-call binary (`iforest_resident()` 0,
-    `-D MOJOLEARN_IDN_ALL_OFF`) receives it only from `fit` (token
-    0): the forest that fit builds stays in the store under the returned
-    token just long enough for `iforest_forest_export` to read it out, which
-    drops it (`iforest_forest_export_binding`'s put rule). Before it that
-    binary fitted TWICE per `fit`: once here (the sixteen-param one-shot,
-    whose forest died with the call) and once more inside the export. Its
-    scoring calls still send sixteen params and refit per call, unchanged.
+    "THE RESIDENT ENTRY"): `resident` with `token` 0 fits a fresh forest and
+    keeps it; a live token whose key matches scores with NO fit; a token that
+    is gone or whose key differs refits as DEVIATION 874 does and keeps the
+    new forest. Lane fix-iforest-double-fit (2026-11-13): every binary takes
+    the resident form from `fit` (token 0), so the forest that fit builds
+    stays in the store until `iforest_forest_export` reads it out.
     """
-    var resident = len(params) == 17
-    if len(params) != 16 and not resident:
-        raise Error(
-            "iforest_run: params must contain 16 values, got " + String(len(params))
-        )
-    var tp = f32_ptr(Int(py=train_addr))
-    var qp = f32_ptr(Int(py=query_addr))
-    var ip = f64_ptr(Int(py=info_addr))
-    var n_train = Int(py=params[0])
-    var n_features = Int(py=params[1])
-    var n_query = Int(py=params[2])
-    var n_estimators = Int(py=params[3])
-    var max_samples_mode = Int(py=params[4])
-    var max_samples_int = Int(py=params[5])
-    var max_samples_frac = Float64(py=params[6])
-    var max_depth = Int(py=params[7])
-    var max_features_mode = Int(py=params[8])
-    var max_features_int = Int(py=params[9])
-    var max_features_frac = Float64(py=params[10])
-    var bootstrap = Int(py=params[11]) != 0
-    var random_state = Int(py=params[12])
-    var contamination_auto = Int(py=params[13]) != 0
-    var contamination = Float64(py=params[14])
-    var want = Int(py=params[15])
+    var want = r.want
     var wide_scores = False
     comptime if _IF_WIDE_ROUTE:
-        if resident and (want == _IF_WANT_WIDE_BASE or want == _IF_WANT_WIDE_BASE + 1):
+        if r.resident and (want == _IF_WANT_WIDE_BASE or want == _IF_WANT_WIDE_BASE + 1):
             wide_scores = True
             want -= _IF_WANT_WIDE_BASE
-    if n_train <= 0 or n_features <= 0 or n_query <= 0:
+    if r.n_train <= 0 or r.n_features <= 0 or r.n_query <= 0:
         raise Error("iforest_run: n_train, n_features and n_query must all be positive")
-    # DEVIATION 2638: the training matrix is LENT by address (the Python
-    # caller keeps it alive through this synchronous call) and transposed
-    # into the pinned upload stage across the host pool; it is no longer
-    # appended cell by cell into a List and transposed again cell by cell.
+    var tp = f32_ptr(r.train)
+    var qp = f32_ptr(r.query)
+    var ip = f64_ptr(r.info)
+    # DEVIATION 2638: the training matrix is LENT by address (the caller
+    # keeps it alive through this synchronous call) and transposed into the
+    # pinned upload stage across the host pool.
     var train = List[Float32]()
     var query = List[Float32]()
     # Lane fam-forests (`IDN_IF_QUERY_DEVICE`, isolation_forest/impl/
@@ -812,126 +755,146 @@ def iforest_run_binding(
         q_addr = Int(qp)
     else:
         # the define's off arm: one memcpy (no per-cell host loop)
-        query = list_f32(qp, n_query * n_features)
-    # The IsolationForest device plan, read ONCE here at the binding entry
-    # (the thread-scoped plan, else MOJOLEARN_IFOREST_DEVICE_COUNT); nothing
-    # below reads it again (isolation_forest/multi_gpu.mojo::fit_dispatch).
-    var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
+        query = list_f32(qp, r.n_query * r.n_features)
+    # The IsolationForest device plan, read ONCE here at the entry (the
+    # thread-scoped plan, else MOJOLEARN_IFOREST_DEVICE_COUNT; a member's
+    # request is `single`: one device, its route's); nothing below reads it
+    # again (isolation_forest/multi_gpu.mojo::fit_dispatch).
+    var plan = _iforest_plan(r.single)
     var res = IFRunOutputs()
-    if resident:
-        # The take and the put run under the GIL; the fit (on a miss) and
-        # the scoring run with it released, on an entry no other thread
-        # can reach while it is out of the store.
-        var token = Int(py=params[16])
-        var out_f32 = Int(py=out_f32_addr)
-        var out_i32 = Int(py=out_i32_addr)
+    if r.resident:
         var key = IFResidentKey(
-            Int(tp), n_train, n_features, n_estimators, max_samples_mode,
-            max_samples_int, max_samples_frac, max_depth, max_features_mode,
-            max_features_int, max_features_frac, bootstrap, random_state,
-            contamination_auto, contamination,
+            Int(tp), r.n_train, r.n_features, r.n_estimators, r.max_samples_mode,
+            r.max_samples_int, r.max_samples_frac, r.max_depth, r.max_features_mode,
+            r.max_features_int, r.max_features_frac, r.bootstrap, r.random_state,
+            r.contamination_auto, r.contamination,
         )
-        var held = if_resident_take(token, key)
+        var held = if_resident_take(r.token, key)
         var new_token = 0
         if len(held) == 0:
             new_token = if_resident_new_token()
         try:
-            with GILReleased(Python()):
-                res = iforest_run_resident(
-                    plan, held, key, new_token, query, q_addr, n_query, want, out_f32, out_i32,
-                    wide_scores,
-                )
+            res = iforest_run_resident(
+                plan, held, key, new_token, query, q_addr, r.n_query, want, r.out_f32, r.out_i32,
+                wide_scores,
+            )
         except e:
             # Preserve an existing caller-owned forest after a refused
-            # query. A new token has not reached Python yet: caching it
+            # query. A new token has not reached the caller yet: caching it
             # here would orphan its buffers until native-global teardown.
             if new_token == 0:
                 if_resident_put(held)
             raise e
         if_resident_put(held)
         iforest_resident_info_run(res, ip)
-        return PythonObject(n_query)
-    with GILReleased(Python()):
-        res = iforest_run_host(
-            plan, train, n_train, n_features, query, n_query, n_estimators,
-            max_samples_mode, max_samples_int, max_samples_frac, max_depth,
-            max_features_mode, max_features_int, max_features_frac,
-            bootstrap, random_state, contamination_auto, contamination,
-            want, train_addr=Int(tp), query_addr=q_addr,
-        )
+        return r.n_query
+    res = iforest_run_host(
+        plan, train, r.n_train, r.n_features, query, r.n_query, r.n_estimators,
+        r.max_samples_mode, r.max_samples_int, r.max_samples_frac, r.max_depth,
+        r.max_features_mode, r.max_features_int, r.max_features_frac,
+        r.bootstrap, r.random_state, r.contamination_auto, r.contamination,
+        want, train_addr=Int(tp), query_addr=q_addr,
+    )
     var out_i32_word = 0
     var out_f32_word = 0
     if want == IF_WANT_PREDICT:
-        out_i32_word = Int(py=out_i32_addr)
+        out_i32_word = r.out_i32
     else:
-        out_f32_word = Int(py=out_f32_addr)
-    iforest_outputs_run(res, want, out_i32_word, out_f32_word, n_query, ip)
-    return PythonObject(n_query)
+        out_f32_word = r.out_f32
+    iforest_outputs_run(res, want, out_i32_word, out_f32_word, r.n_query, ip)
+    return r.n_query
 
 
-def _forest_words(words: PythonObject) raises -> IFForestWords:
-    """UNPACK: the seven words of a compact forest (offsets, feature,
-    threshold, left and right addresses, trees, nodes)."""
-    if len(words) != 7:
-        raise Error("iforest forest: seven words are needed, got " + String(len(words)))
-    return IFForestWords(Int(py=words[0]), Int(py=words[1]), Int(py=words[2]), Int(py=words[3]),
-                         Int(py=words[4]), Int(py=words[5]), Int(py=words[6]))
+struct _SvmIForestImage(IFImage):
+    @staticmethod
+    def caps() -> Int:
+        var bits = 0
+        comptime if _IF_RESIDENT_ROUTE:
+            bits |= IF_CAP_RESIDENT
+        comptime if _IF_WIDE_ROUTE:
+            bits |= IF_CAP_SCORES_F64
+        comptime if IF_DEVICE_TRANSPOSE or IF_FAST_ROWMAJOR:
+            bits |= IF_CAP_DEVICE_SCAN
+        return bits
+
+    @staticmethod
+    def run(request: IFRunRequest) raises -> Int:
+        return _iforest_run(request)
+
+    @staticmethod
+    def release(token: Int) raises:
+        if_resident_release(token)
+
+    @staticmethod
+    def export(request: IFExportRequest) raises -> Int:
+        return _iforest_export(request)
+
+    @staticmethod
+    def forest_run(request: IFForestRunRequest) raises -> Int:
+        return _iforest_forest_run(request)
 
 
-def iforest_forest_export_binding(
-    train_addr: PythonObject, info_addr: PythonObject, params: PythonObject, words: PythonObject,
-) raises -> PythonObject:
-    """The fitted forest as the compact host form `save()` and pickle write
-    (lane fix-iforest-save-device-forest, isolation_forest/forest_io.mojo):
-    read from the device, so a caller's in-place edit of the borrowed
-    training X after fit never reaches a saved model.
+def svm_iforest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,
+                         result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """This image's iforest entry (core/iforest_entry.mojo)."""
+    return if_entry_dispatch[_SvmIForestImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
 
-    `params` is `iforest_run`'s seventeen (slot 15 unused, slot 16 the
-    token): the resident forest that token names when its key matches (the
+
+# TOMBSTONE: iforest_run (the Python-argument binding; both IsolationForest doors and the host doors now call the native iforest entry, core/iforest_entry.mojo) deleted 2026-11-21 by lane/ma-pub-trees; code recoverable at b7d83c52a9.
+
+
+def _forest_words(f: IFForestSpans) -> IFForestWords:
+    """The forest spans of core/iforest_entry.mojo as forest_io's words."""
+    return IFForestWords(f.offsets, f.feature, f.threshold, f.left, f.right, f.trees, f.total)
+
+
+def _iforest_export(request: IFExportRequest) raises -> Int:
+    """IF_OP_EXPORT (core/iforest_entry.mojo; was the Python binding
+    `iforest_forest_export`, the same body): the fitted forest as the compact
+    host form `save()`, pickle and the member's EXPORT write (lane
+    fix-iforest-save-device-forest, isolation_forest/forest_io.mojo), read
+    from the device, so a caller's in-place edit of the borrowed training X
+    after fit never reaches a saved model.
+
+    The resident forest `request.fit.token` names when its key matches (the
     forest every score of this estimator used), else a fresh fit from
-    `train_addr`, kept under a new token on a resident binary. `words`
-    empty asks for the sizes only; seven words (offsets, feature,
-    threshold, left, right addresses, trees, nodes) receive the forest.
-    `info_addr` takes FOUR float64: offset_, max_samples_, n_features_in_,
-    token. Returns `[token, trees, nodes]`."""
-    if len(params) != 17:
-        raise Error("iforest_forest_export: params must contain 17 values, got " + String(len(params)))
+    `train`, kept under a new token on a resident binary. Destinations 0 ask
+    for the sizes only. `info` takes SIX float64: offset_, max_samples_,
+    n_features_in_, token, trees, nodes. Runs with the GIL released (the
+    caller's); the store's lock is held only for the take and the put."""
+    var r = request.fit.copy()
     var key = IFResidentKey(
-        Int(py=train_addr), Int(py=params[0]), Int(py=params[1]), Int(py=params[3]), Int(py=params[4]),
-        Int(py=params[5]), Float64(py=params[6]), Int(py=params[7]), Int(py=params[8]),
-        Int(py=params[9]), Float64(py=params[10]), Int(py=params[11]) != 0, Int(py=params[12]),
-        Int(py=params[13]) != 0, Float64(py=params[14]),
+        r.train, r.n_train, r.n_features, r.n_estimators, r.max_samples_mode,
+        r.max_samples_int, r.max_samples_frac, r.max_depth, r.max_features_mode,
+        r.max_features_int, r.max_features_frac, r.bootstrap, r.random_state,
+        r.contamination_auto, r.contamination,
     )
-    if key.n_train <= 0 or key.n_features <= 0:
-        raise Error("iforest_forest_export: n_train and n_features must both be positive")
-    if key.train_addr == 0:
-        raise Error("iforest_forest_export: the training matrix address is null")
-    var write = len(words) > 0
-    var dst = IFForestWords(0, 0, 0, 0, 0, 0, 0)
-    if write:
-        dst = _forest_words(words)
-    var ip = f64_ptr(Int(py=info_addr))
-    var token = Int(py=params[16])
-    var plan = device_plan_current("MOJOLEARN_IFOREST_DEVICE_COUNT")
+    var write = request.forest.offsets != 0
+    var dst = _forest_words(request.forest)
+    var ip = f64_ptr(r.info)
+    var plan = _iforest_plan(r.single)
     # The sizes call keeps its forest in the store on every route, so the
     # copy call (same token) never fits again; a refit-per-call binary drops
-    # it after the copy. At `fit` the token is the one `iforest_run` just
+    # it after the copy. At `fit` the token is the one the run just
     # returned on every route (lane fix-iforest-double-fit), so neither call
     # fits: the export reads the forest that fit built.
-    var held = if_resident_take(token, key)
+    var held = if_resident_take(r.token, key)
     var new_token = 0
     if len(held) == 0:
         new_token = if_resident_new_token()
     var n_trees = 0
     var n_nodes = 0
     try:
-        with GILReleased(Python()):
-            if_resident_fit_if_empty(plan, held, key, new_token)
-            var sizes = if_held_forest_sizes(held)
-            n_trees = sizes[0]
-            n_nodes = sizes[1]
-            if write:
-                if_held_forest_export(held, dst)
+        if_resident_fit_if_empty(plan, held, key, new_token)
+        var sizes = if_held_forest_sizes(held)
+        n_trees = sizes[0]
+        n_nodes = sizes[1]
+        if write:
+            if n_trees != dst.n_trees or n_nodes != dst.total:
+                raise Error("iforest_forest_export: the destinations hold " + String(dst.n_trees) + " trees and "
+                            + String(dst.total) + " nodes, the forest has " + String(n_trees) + " and "
+                            + String(n_nodes))
+            if_held_forest_export(held, dst)
     except e:
         if new_token == 0:
             if_resident_put(held)
@@ -941,46 +904,38 @@ def iforest_forest_export_binding(
     ip.unsafe_store(1, Float64(held[0].est.max_samples_))
     ip.unsafe_store(2, Float64(key.n_features))
     ip.unsafe_store(3, Float64(held_token))
+    ip.unsafe_store(4, Float64(n_trees))
+    ip.unsafe_store(5, Float64(n_nodes))
     if _IF_RESIDENT_ROUTE or not write:
         if_resident_put(held)
-    return Python.list(PythonObject(held_token), PythonObject(n_trees), PythonObject(n_nodes))
+    return n_trees
 
 
-def iforest_forest_run_binding(
-    words: PythonObject, query_addr: PythonObject, out_f32_addr: PythonObject, out_i32_addr: PythonObject,
-    info_addr: PythonObject, params: PythonObject,
-) raises -> PythonObject:
-    """ONE of `score_samples`, `decision_function` or `predict` over a
-    SAVED compact forest (a loaded or unpickled IsolationForest): the forest
-    is uploaded once (isolation_forest/forest_io.mojo `if_forest_import`)
-    and scored by `iforest_run`'s resident scorer, the same kernels; no
-    training matrix and no fit (lane fix-iforest-save-device-forest).
+def _iforest_forest_run(r: IFForestRunRequest) raises -> Int:
+    """IF_OP_FOREST_RUN (core/iforest_entry.mojo; was the Python binding
+    `iforest_forest_run`, the same body): ONE of `score_samples`,
+    `decision_function` or `predict` over a SAVED compact forest (a loaded
+    or unpickled IsolationForest, an imported member): uploaded once
+    (isolation_forest/forest_io.mojo `if_forest_import`) and scored by the
+    resident scorer, the same kernels; no training matrix and no fit.
 
-    `words`: the seven forest words. `params`: n_features, n_query,
-    max_samples_, offset_ (float), want (0, 1, 2; 3 and 4 the float64
-    score_samples / decision_function where `iforest_scores_f64` is 1),
-    token (0, or the token an earlier call returned: that imported forest
-    scores with no upload). `info_addr` takes FOUR float64 (offset_,
-    max_samples_, n_features_in_, token). Returns `n_query`."""
-    if len(params) != 6:
-        raise Error("iforest_forest_run: params must contain 6 values, got " + String(len(params)))
-    var forest = _forest_words(words)
-    var n_features = Int(py=params[0])
-    var n_query = Int(py=params[1])
-    var max_samples_ = Int(py=params[2])
-    var offset_ = Float64(py=params[3])
-    var want = Int(py=params[4])
-    var token = Int(py=params[5])
+    `want` 0, 1, 2; 3 and 4 the float64 score_samples / decision_function
+    where IF_CAP_SCORES_F64. `token` 0, or the token an earlier call
+    returned (that imported forest scores with no upload). `info` takes
+    FOUR float64 (offset_, max_samples_, n_features_in_, token). Runs with
+    the GIL released (the caller's)."""
+    var forest = _forest_words(r.forest)
+    var n_features = r.n_features
+    var n_query = r.n_query
+    var want = r.want
     var wide_scores = False
     comptime if _IF_WIDE_ROUTE:
         if want == _IF_WANT_WIDE_BASE or want == _IF_WANT_WIDE_BASE + 1:
             wide_scores = True
             want -= _IF_WANT_WIDE_BASE
-    if n_features <= 0 or n_query <= 0:
-        raise Error("iforest_forest_run: n_features and n_query must both be positive")
     if want < 0 or want > IF_WANT_PREDICT:
         raise Error("iforest_forest_run: want=" + String(want) + " is not one of 0, 1, 2")
-    var qp = f32_ptr(Int(py=query_addr))
+    var qp = f32_ptr(r.query)
     var query = List[Float32]()
     var q_addr = 0
     comptime if IDN_IF_QUERY_DEVICE:
@@ -990,24 +945,23 @@ def iforest_forest_run_binding(
     var out_f32 = 0
     var out_i32 = 0
     if want == IF_WANT_PREDICT:
-        out_i32 = Int(py=out_i32_addr)
+        out_i32 = r.out_i32
         if out_i32 == 0:
             raise Error("iforest_forest_run: the label output address is null")
     else:
-        out_f32 = Int(py=out_f32_addr)
+        out_f32 = r.out_f32
         if out_f32 == 0:
             raise Error("iforest_forest_run: the score output address is null")
-    var ip = f64_ptr(Int(py=info_addr))
-    var key = if_imported_key(forest, n_features, max_samples_, offset_)
-    var held = if_resident_take(token, key) if _IF_RESIDENT_ROUTE else List[IFResidentEntry]()
+    var ip = f64_ptr(r.info)
+    var key = if_imported_key(forest, n_features, r.max_samples, r.offset)
+    var held = if_resident_take(r.token, key) if _IF_RESIDENT_ROUTE else List[IFResidentEntry]()
     var new_token = 0
     if len(held) == 0:
         new_token = if_resident_new_token() if _IF_RESIDENT_ROUTE else 0
     var res = IFRunOutputs()
     try:
-        with GILReleased(Python()):
-            if_imported_if_empty(held, key, new_token, forest, n_features, max_samples_, offset_)
-            res = if_resident_score(held, n_features, query, q_addr, n_query, want, out_f32, out_i32, wide_scores)
+        if_imported_if_empty(held, key, new_token, forest, n_features, r.max_samples, r.offset)
+        res = if_resident_score(held, n_features, query, q_addr, n_query, want, out_f32, out_i32, wide_scores)
     except e:
         if new_token == 0 and _IF_RESIDENT_ROUTE:
             if_resident_put(held)
@@ -1016,7 +970,10 @@ def iforest_forest_run_binding(
         if_resident_put(held)
     iforest_resident_info_run(res, ip)
     _ = query^  # keep the query copy alive past the scoring above
-    return PythonObject(n_query)
+    return n_query
+
+
+# TOMBSTONE: iforest_forest_export, iforest_forest_run (the Python-argument bindings; save, pickle and a loaded model's scores now call IF_OP_EXPORT / IF_OP_FOREST_RUN of the native iforest entry, core/iforest_entry.mojo) deleted 2026-11-21 by lane/ma-pub-trees round 4; code recoverable at 0b76d181f1.
 
 
 def svm_vendor_binding() raises -> PythonObject:
@@ -1131,12 +1088,9 @@ def build__mojolearn_svm() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_svm.patch
         m.def_function[svr_fit_binding]("svr_fit")
         m.def_function[svr_predict_binding]("svr_predict")
-        m.def_function[iforest_run_binding]("iforest_run")
         m.def_function[iforest_resident_binding]("iforest_resident")
         m.def_function[iforest_scores_f64_binding]("iforest_scores_f64")
         m.def_function[iforest_resident_release_binding]("iforest_resident_release")
-        m.def_function[iforest_forest_export_binding]("iforest_forest_export")
-        m.def_function[iforest_forest_run_binding]("iforest_forest_run")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")
         m.def_function[svm_scale_gamma_limbs_binding]("scale_gamma_limbs")
@@ -1154,6 +1108,11 @@ def build__mojolearn_svm() -> PythonObject:
         # vendor ("none") publishes nothing.
         var member_vendor = (1 if COMPILED_VENDOR == "metal" else 2 if COMPILED_VENDOR == "cuda" else 3 if COMPILED_VENDOR == "hip" else -1)
         if member_vendor > 0:
+            # The IsolationForest entry (core/iforest_entry.mojo), the doors'
+            # only way to the fit-and-score since iforest_run left.
+            if_entry_publish["MojolearnSvmIForestEntryOwnerV1"](Int(GLOBAL_NUMERIC_MODE), member_vendor, svm_iforest_entry_v1)
+            # Its member entry (core/isolation_forest_member.mojo), over that entry.
+            isolation_forest_member_publish(Int(GLOBAL_NUMERIC_MODE), member_vendor, Int(SVC_NATIVE_API.get_or_create_ptr()))
             kernel_svm_member_publish(GLOBAL_NUMERIC_MODE, member_vendor, Int(SVC_NATIVE_API.get_or_create_ptr()))
         # The owner identity needs the finalized type object (Mojo 1.2 creates
         # it in finalize(); see bindings/native_owner_registry.mojo).

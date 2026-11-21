@@ -54,7 +54,8 @@ from arima.host.arima_oracle import ARIMA_ORACLE_HOST_SABOTAGE
 # The fit, the prediction and the forecast are operations of this image's
 # published table (arima/arima_ops_host.mojo); this root registers only the
 # read-backs the host loader asks for.
-from arima.arima_ops_host import publish_arima_ops_host
+from arima.arima_ops_host import publish_arima_ops_host, ARIMA_OPS_HOST_API
+from core.forecast_member import forecast_member_publish
 
 
 def arima_host_numeric_mode_binding() raises -> PythonObject:
@@ -131,6 +132,8 @@ def build__mojolearn_arima_host() -> PythonObject:
         # The ARIMA operations table of this image (core/arima_entry_table.mojo).
         var published_module = module.finalize()
         publish_arima_ops_host()
+        # The member entry (core/member_abi.mojo): ARIMA runs as a member of a meta-estimator.
+        forecast_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(ARIMA_OPS_HOST_API.get_or_create_ptr()))
         return published_module
     except error:
         abort(String("failed to create _mojolearn_arima_host: ", error))

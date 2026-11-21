@@ -66,7 +66,7 @@ comptime _XC_ADMIT_SLOT = "cluster_public_admitted_v1"
 
 
 def _learned_names() raises -> PythonObject:
-    return Python.tuple("cluster_centers_", "labels_", "n_features_in_", "counts_", "_partial_init", "_partial_batch", "_partial_state", "tree_nodes_", "_tree_centers", "weights_", "means_", "precisions_cholesky_", "log_det_chol_", "_log_consts", "_full_pchol", "_warm", "n_steps_", "lower_bound_")
+    return Python.tuple("cluster_centers_", "labels_", "n_features_in_", "counts_", "_partial_init", "_partial_batch", "_partial_state", "tree_nodes_", "_tree_centers", "weights_", "means_", "precisions_cholesky_", "log_det_chol_", "_log_consts", "_full_pchol", "_score_words", "_warm", "n_steps_", "lower_bound_")
 
 
 def _query_key(model: PythonObject) raises -> PythonObject:

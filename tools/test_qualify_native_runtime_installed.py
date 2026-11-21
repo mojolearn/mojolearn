@@ -323,7 +323,9 @@ class InstalledNativeAudit(unittest.TestCase):
         for vendor in ("cpu", "metal", "cuda", "hip"):
             scope = q.test_applicability([name], vendor)[name]
             self.assertIn("Only DeviceCache.get", scope["coverage_limit"])
-            self.assertIn("no device slots", scope["execution_route"])
+            self.assertIn("one real x_prep upload", scope["execution_route"])
+            self.assertEqual(scope.get("cpu_not_applicable_file"),
+                             q.CPU_WORD_STORE_SKIP if vendor == "cpu" else None)
 
     def test_iforest_depth_scope_is_public_explicit_host_on_each_package(self):
         name = "test_iforest_depth_native.py"
@@ -344,7 +346,7 @@ class InstalledNativeAudit(unittest.TestCase):
             scope = q.test_applicability([name], vendor)[name]
             self.assertIn("Only DeviceCache.__len__ and resident.stats", scope["coverage_limit"])
             self.assertIn("get, construction/upload/release", scope["coverage_limit"])
-            self.assertEqual(scope["cpu_not_applicable_cases"], {})
+            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 10 if vendor == "cpu" else 0)
             self.assertIn("numpy", q.test_dependencies([name]))
 
     def test_device_rows_materialize_scope_is_public_and_backend_applicable(self):
@@ -452,17 +454,18 @@ class InstalledNativeAudit(unittest.TestCase):
             scope = q.test_applicability([name], vendor)[name]
             self.assertIn("DeviceCache.live", scope["execution_route"])
             self.assertIn("constructor, supports, release, close", scope["coverage_limit"])
-            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 8 if vendor == "cpu" else 0)
+            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 6 if vendor == "cpu" else 0)
 
     def test_public_cache_live_cpu_exclusions_are_exact_real_store_cases(self):
         name = "test_cache_lifecycle_native.py"
-        cases = set()
-        for prefix in ("x_prep", "x_metrics"):
-            for slots in (0, 1, 2):
-                cases.add(f"test_cache_live_matches_real_store_count_after_consumed_allocations[{slots}-{prefix}]")
-            cases.add(f"test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[{prefix}]")
+        cases = {f"test_cache_live_matches_real_store_count_after_consumed_allocations[{slots}]" for slots in (0, 1, 2)}
+        cases |= {"test_cache_live_uses_captured_native_entry_and_ignores_mutable_int",
+                  "test_cache_context_entry_preserves_identity[normal]",
+                  "test_cache_context_entry_preserves_identity[subclass]"}
         self.assertEqual(set(q.CPU_NOT_APPLICABLE[name]), cases)
-        node = name + "::test_cache_live_without_optional_store_counter_is_none[normal]"
+        self.assertEqual(set(q.CPU_NOT_APPLICABLE[name].values()), {q.CPU_WORD_STORE_SKIP})
+        node = name + "::test_cache_live_refuses_a_foreign_object_before_any_hook[foreign_slots]"
+        self.assertNotIn(node.partition("::")[2], q.CPU_NOT_APPLICABLE[name])
         self.assertEqual(q.selected_files(test_nodes=[node]), [name])
 
     def test_public_cache_release_scope_and_cpu_exclusions(self):
@@ -472,8 +475,9 @@ class InstalledNativeAudit(unittest.TestCase):
         for vendor in ("cpu", "metal", "cuda", "hip"):
             scope = q.test_applicability([name], vendor)[name]
             self.assertIn("resident scope", scope["execution_route"])
-            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 24 if vendor == "cpu" else 0)
-        host = "test_empty_lifecycle_calls_are_native_on_every_package"
+            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 13 if vendor == "cpu" else 0)
+        self.assertIn("test_resident_scope_exit_frees_scope_caches[x_prep]", q.CPU_NOT_APPLICABLE[name])
+        host = "test_resident_scope_exit_on_error_clears_and_propagates"
         self.assertNotIn(host, q.CPU_NOT_APPLICABLE[name])
         self.assertEqual(q.selected_files(test_nodes=[name + "::" + host]), [name])
 
@@ -493,26 +497,20 @@ class InstalledNativeAudit(unittest.TestCase):
         for vendor in ("cpu", "metal", "cuda", "hip"):
             scope = q.test_applicability([name], vendor)[name]
             self.assertIn("DeviceCache.id_of", scope["execution_route"])
-            self.assertIn("x_prep/x_metrics", scope["execution_route"])
+            self.assertIn("x_prep word-store", scope["execution_route"])
             self.assertIn("constructor, release, close", scope["coverage_limit"])
             self.assertIn("compound cleanup failure injection", scope["coverage_limit"])
-            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 20 if vendor == "cpu" else 0)
+            self.assertEqual(scope["cpu_not_applicable_cases"], {})
+            self.assertEqual(scope.get("cpu_not_applicable_file"),
+                             q.CPU_WORD_STORE_SKIP if vendor == "cpu" else None)
 
-    def test_public_cache_upload_cpu_exclusions_are_exact_real_store_cases(self):
+    def test_public_cache_upload_cpu_exclusion_is_the_whole_word_store_file(self):
         name = "test_cache_upload_native.py"
-        cases = set()
-        for prefix in ("x_prep", "x_metrics"):
-            cases.add("test_cache_id_of_real_upload_hit_alias_and_owned_publication[" + prefix + "]")
-            cases.add("test_cache_id_of_real_upload_uses_connected_store_entries[" + prefix + "]")
-            for failure in ("null", "address_overflow", "size_overflow"):
-                cases.add("test_cache_id_of_real_native_upload_failure_preserves_empty_state[" + failure + "-" + prefix + "]")
-            for change in ("replace_dictionary", "publish_competitor", "change_route", "delete_counter_slot", "foreign_dictionary"):
-                cases.add("test_cache_id_of_real_concurrent_publication_cleanup[" + change + "-" + prefix + "]")
-        self.assertEqual(set(q.CPU_NOT_APPLICABLE[name]), cases)
-        self.assertEqual(set(q.CPU_NOT_APPLICABLE[name].values()),
-                         {"real word-store upload requires a GPU package; explicitly excluded from CPU selection"})
-        host = "test_cache_id_of_preserves_hit_owners_and_native_metadata[tuple-array]"
-        self.assertNotIn(host, q.CPU_NOT_APPLICABLE[name])
+        # Every case uploads to the x_prep store: the whole file is N/A on CPU,
+        # each case with exactly the word-store skip reason.
+        self.assertNotIn(name, q.CPU_NOT_APPLICABLE)
+        self.assertEqual(q.CPU_FILE_NOT_APPLICABLE[name], q.CPU_WORD_STORE_SKIP)
+        host = "test_cache_id_of_real_upload_hit_alias_and_owned_publication"
         self.assertEqual(q.selected_files(test_nodes=[name + "::" + host]), [name])
 
     def test_public_training_scalar_buffer_scope_is_version_and_operation_bounded(self):

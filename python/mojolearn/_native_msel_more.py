@@ -24,7 +24,6 @@ def connect(context, register, registry):
         _connect_boosting(boosting, register, owner_for, _layout)
     if prep is not None and prep.GaussianNB not in registry:
         _connect_naive_bayes(prep, register, owner_for)
-    _connect_members(context, register, registry)
 
 
 def _connect_boosting(boosting, register, owner_for, _layout):
@@ -104,25 +103,71 @@ def _pls_methods(cls):
             'score': ('score', (('arg', 0), ('arg', 1), ('constant', None)))}
 
 
+def _rnn_methods(cls):
+    # glue: the recurrent owner's fixed operation names (python/mojolearn/_x_sequence_rnn.py)
+    methods = {'fit': ('rnn_fit', (('arg', 0), ('arg', 1))), 'predict': ('rnn_predict', (('arg', 0),))}
+    if getattr(cls, '_estimator_type', None) == 'classifier':
+        methods['predict_proba'] = ('rnn_predict_proba', (('arg', 0),))
+        methods['score'] = ('rnn_classifier_score', (('arg', 0), ('arg', 1), ('constant', None)))
+    else:
+        methods['score'] = ('rnn_score', (('arg', 0), ('arg', 1), ('constant', None)))
+    return methods
+
+
 # Member family number (core/member_families.mojo) -> the names of the family owner's entry and context in the
-# module that defines the class, and its method recipes. One row per FAMILY whose classes had no schema of their
-# own; the CLASSES come from their marks (`_mojolearn_member`), never from a list here. Every constructor of
-# these families only stores its parameters under their own names (init None: the native clone copies them).
+# module that defines the class, its method recipes and (optional fourth word) the owner's constructor operation.
+# A row is NEVER required for a marked class to be registered: it only adds the Python-unit method recipes (the
+# path the class takes when its member cannot serve a request) for a family whose classes had no schema of their
+# own. The CLASSES come from their marks (`_mojolearn_member`), never from a list here. Without a fourth word the
+# constructor only stores its parameters under their own names (init None: the native clone copies them).
 _MEMBER_SCHEMAS = {
     19: ('_XSEQ', '_XSEQ_CONTEXT', _mlp_methods),
+    20: ('_XSEQ', '_XSEQ_CONTEXT', _rnn_methods),
     22: ('_PLS_CALL', '_PLS_CONTEXT', _pls_methods),
 }
 
 
-def _connect_members(context, register, registry):
+def _derive_member(cls, fields, names):
+    # glue: import-time class metadata of one marked class without a schema. Answers (entry, owner context) read
+    # from the class's OWN fit door, or None when that cannot be read exactly:
+    # - the owner context is the one `*_CONTEXT` dictionary of the class's module that its fit names (the context
+    #   the family's member admit receives is therefore the one its fit door receives);
+    # - the constructor must only store its parameters under their own names (every name its code uses is a
+    #   parameter), because a member-only plan clones by copying those fields.
+    from types import BuiltinFunctionType, FunctionType
+    rows = tuple(vars(base) for base in cls.__mro__[:-1])  # glue: the class's own ancestry, import-time
+    fit = next((row['fit'] for row in rows if 'fit' in row), None)
+    init = next((row['__init__'] for row in rows if '__init__' in row), None)
+    fit = getattr(fit, '__wrapped__', fit)
+    if type(fit) is not FunctionType or type(init) is not FunctionType or fit.__globals__ is not fields:
+        return None
+    if not set(init.__code__.co_names) <= set(names) or init.__code__.co_freevars:
+        return None
+    used = fit.__code__.co_names
+    contexts = [name for name in used if name.endswith('_CONTEXT') and type(fields.get(name)) is dict]  # glue: one fit door
+    entries = [name for name in used if type(fields.get(name)) is BuiltinFunctionType]  # glue: one fit door
+    if len(contexts) != 1:
+        return None
+    return (fields[entries[0]] if len(entries) == 1 else None), fields[contexts[0]]
+
+
+def connect_members(context, register, registry):
     # glue: every class of a LOADED package module that carries its OWN member mark and has no schema yet is
-    # registered from its family's row, once per module (a family that loads later is scanned when it connects).
-    # A marked class of a family without a row stays as it was and is listed in
-    # context['family_msel_member_unregistered'] (its mark is not read until it has a schema).
+    # registered, once per module (a family that loads later is scanned when it connects). Called AFTER every
+    # hand-written schema is connected (python/mojolearn/_native_msel_dispatch.py), so a class with a schema of its
+    # own keeps it and is never listed as waiting.
+    # 1. A family with a row in _MEMBER_SCHEMAS: the row's owner and method recipes (member first, Python units
+    #    when the member cannot serve the request).
+    # 2. Any other family: a MEMBER-ONLY plan derived from the class (`_derive_member`): no method recipes, so the
+    #    class runs through its member wherever the family's CAPABILITIES serve the request and is refused in the
+    #    words it had before its mark everywhere else (plan['member_only']; bindings/msel_estimator_native_door.mojo).
+    # 3. A class neither form can describe stays exactly as before its mark and is listed in
+    #    context['family_msel_member_unregistered'].
     import sys
     import inspect
     scanned = context.setdefault('family_msel_member_scanned', set())
     waiting = context.setdefault('family_msel_member_unregistered', [])
+    waiting[:] = [cls for cls in waiting if cls not in registry]  # glue: classes a later schema registered
     prefix = __package__ + '.'
     for name, module in tuple(sys.modules.items()):  # glue: loaded package modules, each scanned once
         if module is None or not name.startswith(prefix) or name in scanned:
@@ -139,13 +184,20 @@ def _connect_members(context, register, registry):
             if cls in registry:
                 continue
             row = _MEMBER_SCHEMAS.get(vars(cls)['_mojolearn_member'][0])
-            if row is None:
-                if cls not in waiting:
-                    waiting.append(cls)
-                continue
-            methods = row[2](cls)
             names = getattr(cls, '_parameters', None) or tuple(inspect.signature(cls).parameters)
-            register(cls, fields[row[0]], fields[row[1]], names, None, methods)
-            plan = registry[cls]
+            if row is not None:
+                methods = row[2](cls)
+                register(cls, fields[row[0]], fields[row[1]], names, row[3] if len(row) > 3 else None, methods)
+                plan = registry[cls]
+            else:
+                derived = _derive_member(cls, fields, names)
+                if derived is None:
+                    if cls not in waiting:
+                        waiting.append(cls)
+                    continue
+                methods = {}
+                register(cls, derived[0], derived[1], names, None, methods)
+                plan = registry[cls]
+                plan['member_only'] = True
             plan['initial_fields'] = {}
             plan['keywords'] = {key: () for key in methods}  # glue: no keyword arguments in these recipes

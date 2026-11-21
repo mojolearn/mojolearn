@@ -1171,6 +1171,7 @@ def _publish_umap_ops(module: PythonObject) raises:
 # writes from bindings/merged_groups.json (one shared file per directory set).
 from core.shared_slot import SharedSlot
 from core.spectral_native_provider import SpectralProviderAPI
+from core.spectral_member import spectral_member_publish
 from core.spectral_native_host import SpectralHostKernels
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_capsule
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_IDENTICAL
@@ -1235,6 +1236,9 @@ def build__mojolearn_metrics_host() -> PythonObject:
         module.def_function[metrics_numeric_mode_binding]("umap_numeric_mode")
         var published_module = module.finalize()
         _publish_umap_ops(published_module)
+        # SpectralClustering's member entry (core/spectral_member.mojo): its predict runs on this
+        # image's spectral queries.
+        spectral_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(SPECTRAL_API.get_or_create_ptr()[].entries.unsafe_ptr()))
         return published_module
     except error:
         abort(String("failed to create _mojolearn_metrics_host: ", error))

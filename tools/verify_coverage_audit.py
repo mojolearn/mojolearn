@@ -2124,13 +2124,10 @@ ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_h
 
 # lane verify-coverage-20261024: the whole-surface audit's last GAP rows,
 # each checked in the source.
-_ARENA_ROWS = ("_native_arena_rows connects msel_put, msel_free and msel_take_rows together as the "
-               "owner context's arena_msel_put / _free / _take_rows; the arena owners "
-               "(bindings/arena_resident_native_door.mojo, arena_materialize_native.mojo) put, gather and free "
-               "every model_selection._Resident snapshot with them, which GridSearchCV and cross_validate "
-               "take per fold (x-metrics-search reaches msel_free by name)")
+# (_ARENA_ROWS, the "covered" note of msel_put / msel_take_rows, removed with
+# those exports: arena unit E, 2026-11-21. The resident owner calls the
+# model-selection helper table as typed RUN, core/msel_entry_table.mojo.)
 ANNOTATIONS.update({
-    **{e: ("covered", ["x-metrics-search"], _ARENA_ROWS) for e in ("msel_put", "msel_take_rows")},
     "nsum_f64": ("n/a", [], "a test seam: test_py_bugs.py holds the live Neumaier fold to CPython 3.12's sum "
                             "through _portable_math.nsum and this export only"),
     "gemm_fused": ("n/a", [], "fast tier only (Apple): linalg_fast.matmul_fused, built only with "
