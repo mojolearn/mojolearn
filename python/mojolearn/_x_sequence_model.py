@@ -443,8 +443,8 @@ class Sequential(_CheckMixin):
         Parameters
         ----------
         device : str, optional
-            ``"cpu"``, ``"gpu"``, ``"cuda"``, ``"cuda:0"``, ``"mps"`` or
-            ``"mps:0"``, as the ``device`` constructor argument takes them.
+            ``"gpu"`` or ``"cpu"``, as the ``device`` constructor argument
+            takes them.
         dtype : optional
             ``torch.float32``, NumPy's float32 or ``"float32"``. The model
             runs float32 only; any other dtype is refused.

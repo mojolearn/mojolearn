@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """PyTorch conventions at the Python boundary (docs/api/TORCH_CONVENTIONS.md).
 
-Device words: `cuda` / `cuda:0` on Linux and `mps` / `mps:0` on macOS name the GPU route of `device=`; the other
-OS's word, another GPU index and a `torch.device` object are refused in words. Neural blocks: `state_dict`,
+Device: only None, 'gpu' and 'cpu' (Andrew, 2026-11-21); PyTorch's device words are refused like any unknown value.
+Neural blocks: `state_dict`,
 `load_state_dict`, `parameters`, `named_parameters` and `to(device, dtype)` with PyTorch's meaning. The tests check
 the boundary only (names, refusals, identity of the returned arrays, the route after `to`); the numerics of a rebuilt
 block are the constructor's and are tested there.
 """
-import platform
-
 import numpy as np
 import pytest
 
@@ -18,9 +16,6 @@ from mojolearn.models import CausalLM
 from mojolearn.models import causal_lm
 
 FAMILIES = ["llama", "mamba", "mamba2"]
-MACOS = platform.system() == "Darwin"
-GPU_WORDS = ["mps", "mps:0"] if MACOS else ["cuda", "cuda:0"]
-OTHER_OS_WORDS = ["cuda", "cuda:0"] if MACOS else ["mps", "mps:0"]
 HAS_GPU = mojolearn.vendor() != "cpu"
 needs_gpu = pytest.mark.skipif(not HAS_GPU, reason="a CPU-only installation has no GPU route")
 
@@ -48,48 +43,13 @@ def block_inputs(tmp_path, family):
 
 # ---- device words -----------------------------------------------------------
 
-@needs_gpu
-@pytest.mark.parametrize("word", GPU_WORDS)
-def test_pytorch_gpu_word_is_the_gpu_route(tmp_path, word):
-    cls, _, weights, kwargs, x = block_inputs(tmp_path, "llama")
-    block = cls(weights, device=word, **kwargs)
-    assert block.get_params()["device"] == word
-    assert block.vendor_used() == mojolearn.vendor()
-    gpu = cls(weights, device="gpu", **kwargs)
-    assert np.asarray(block.forward(x)).tobytes() == np.asarray(gpu.forward(x)).tobytes()
-
-
-@pytest.mark.parametrize("word", OTHER_OS_WORDS + ["cuda:1", "mps:1", "xpu", "meta"])
-def test_device_words_without_a_device_are_refused_in_words(tmp_path, word):
+@pytest.mark.parametrize("word", ["cuda", "cuda:0", "mps", "mps:0", "xpu"])
+def test_pytorch_device_words_are_refused(tmp_path, word):
     cls, _, weights, kwargs, _ = block_inputs(tmp_path, "llama")
     with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
         cls(weights, device=word, **kwargs)
-
-
-def test_refusal_names_the_pytorch_word_of_this_os(tmp_path):
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, "llama")
-    with pytest.raises(ValueError, match="'mps'" if MACOS else "'cuda'"):
-        cls(weights, device=OTHER_OS_WORDS[0], **kwargs)
-    with pytest.raises(ValueError, match="VISIBLE_DEVICES"):
-        cls(weights, device=("mps:1" if MACOS else "cuda:1"), **kwargs)
-
-
-def test_torch_device_object_is_refused_with_the_string_hint(tmp_path):
-    torch = pytest.importorskip("torch")
-    cls, _, weights, kwargs, _ = block_inputs(tmp_path, "llama")
-    with pytest.raises(ValueError, match="str"):
-        cls(weights, device=torch.device("cpu"), **kwargs)
-
-
-@needs_gpu
-@pytest.mark.parametrize("word", GPU_WORDS)
-def test_pytorch_gpu_word_reaches_estimators(word):
-    est = mojolearn.Ridge(device=word)
-    assert est.get_params()["device"] == word
-    X = np.random.default_rng(0).random((64, 3), dtype=np.float32)
-    y = X @ np.array([1.0, -2.0, 0.5], dtype=np.float32)
-    got = np.asarray(est.fit(X, y).predict(X)).tobytes()
-    assert got == np.asarray(mojolearn.Ridge(device="gpu").fit(X, y).predict(X)).tobytes()
+    with pytest.raises(ValueError, match="device must be 'gpu', 'cpu' or None, got"):
+        cls(weights, device="cpu", **kwargs).to(word)
 
 
 # ---- neural block state ------------------------------------------------------
@@ -167,8 +127,8 @@ def test_to_moves_the_block_between_routes(tmp_path, family):
     cls, _, weights, kwargs, x = block_inputs(tmp_path, family)
     block = cls(weights, device="cpu", **kwargs)
     assert block.vendor_used() == "cpu"
-    assert block.to(GPU_WORDS[0]) is block
-    assert block.get_params()["device"] == GPU_WORDS[0]
+    assert block.to("gpu") is block
+    assert block.get_params()["device"] == "gpu"
     assert block.vendor_used() == mojolearn.vendor()
     on_gpu = np.asarray(block.forward(x)).tobytes()
     assert block.to("cpu").vendor_used() == "cpu"
