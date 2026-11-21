@@ -39,7 +39,6 @@ from bindings.trees_public_inputs_door import (
     trees_builtins,
     trees_table,
     trees_entry,
-    trees_need,
     trees_helper,
     trees_reshape,
     trees_address,
@@ -78,11 +77,10 @@ from bindings.trees_public_forest_door import (
     forest_refresh,
     forest_capture_mode,
     forest_effective_mode,
-    forest_export,
+    forest_export_handle,
     forest_key,
     forest_kind,
     _check_mode,
-    _rf_params,
     _store_model,
     _int,
     _float,
@@ -95,6 +93,10 @@ from bindings.trees_public_forest_door import (
     _dt_tier_bins,
     forest_fit_request,
 )
+from core.forest_calls import (
+    xf_caps, xf_session_open, xf_session_close, xf_fit_session, xf_ada_open, xf_fit_ada_round,
+)
+from core.forest_fit_request import XF_CAP_SESSION, XF_CAP_ADA
 from xtrees.trees_forest_run import (
     _refuse,
     _classifier,
@@ -113,7 +115,7 @@ from xtrees.dart_calls import (
     xd_ref, xd_caps, xd_predict, xd_forest_prepare, xd_forest_predict,
     xd_forest_release,
 )
-from core.entry_table import EntryRef
+from core.entry_table import EntryRef, entry_ref_unresolved
 from xtrees.glue_calls import (
     xt_ref,
     xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_accumulate_rows, xt_apply, xt_argmax_rows,
@@ -619,21 +621,30 @@ def _is_class(member: PythonObject, key: String, context: PythonObject) raises -
     return py_type(member) is context[key]
 
 
-struct Session(Copyable, Movable):
-    """An open forest data session (`ForestDataSession`): the binding and
-    the handle, or none."""
-    var native: PythonObject
+struct Session(Movable):
+    """An open forest data session (`ForestDataSession`) as plain values:
+    the forest entry of the image that holds it (resolved once per ensemble
+    fit), that image's capability bits and the handle (0: none). Every
+    session operation is a typed call of that entry (core/forest_calls.mojo
+    XF_SESSION_* / XF_FIT_SESSION / XF_ADA_OPEN / XF_FIT_ADA_ROUND)."""
+    var key: EntryRef
+    var caps: Int
     var handle: Int
 
-    def __init__(out self, native: PythonObject, handle: Int):
-        self.native = native
+    def __init__(out self, key: EntryRef, caps: Int, handle: Int):
+        self.key = key.copy()
+        self.caps = caps
         self.handle = handle
 
     def close(mut self) raises:
         if self.handle > 0:
             var handle = self.handle
             self.handle = 0
-            _ = py_call_typed(trees_entry(self.native, "rf_data_session_close"), _P(handle))
+            xf_session_close(self.key, handle)
+
+
+def _no_session() -> Session:
+    return Session(entry_ref_unresolved(), 0, 0)
 
 
 # TOMBSTONE: MOJOLEARN_TE_ADA_SESSION_OFF / MOJOLEARN_IDN_ADA_SESSION_OFF and the MOJOLEARN_FOREST_SESSION run-time
@@ -657,19 +668,19 @@ def _member_session(member: PythonObject, x: AdmittedXView, row_major: Bool, cho
     # device scan repeats; `x_finite` went with it. A binary without a
     # session entry leaves each member fit to test X, its forest door.)
     var mode = _member_mode(member, context)
-    var native = trees_table(context, mode, "_mojolearn_rf")
-    if trees_entry(native, "rf_data_session_open") is None:
-        return Session(native, 0)
+    var key = forest_key(trees_table(context, mode, "_mojolearn_rf"))
+    var caps = xf_caps(key)
+    if (caps & XF_CAP_SESSION) == 0:
+        return Session(key, caps, 0)
     var share = choice == "share" and mode == "fast"
-    var handle = PythonObject(0)
+    var handle = 0
     try:
-        handle = py_call_typed(trees_entry(native, "rf_data_session_open"), _P(x.address),
-                               Python.list(_P(x.rows), _P(x.cols), _P(1 if row_major else 0), _P(1 if share else 0)))
+        handle = xf_session_open(key, x.address, x.rows, x.cols, row_major, share)
     except error:
         if TREES_NONFINITE in String(error):
             raise Error(TREES_NONFINITE)
         raise error^
-    return Session(native, Int(py=handle))
+    return Session(key, caps, handle)
 
 
 def _switches(xt: PythonObject) raises -> Int:
@@ -711,20 +722,19 @@ def _member_fit_weighted(member: PythonObject, xcm: AdmittedX, w32: PythonObject
     var weights = trees_weighted_rows(w32, py_get(fields, "class_weight"), labels, xtrees, context)
     var rf = trees_table(context, mode, "_mojolearn_rf")
     _y_rows_check(labels.n, xcm.rows)
-    var params = _rf_params(fields, "dt_classifier", xcm.rows, xcm.cols, k, rf, context)
-    var criterion = fields["_cfg"]["criterion"]
+    # One typed request for both routes (the member's configuration read
+    # once: `forest_config`): the session fit reads the session's X, the
+    # plain fit the column-major X at `xcm`.
+    var fit = ForestFit(True, weights=weights.address)
+    var request = forest_fit_request(fields, fields["_cfg"], "dt_classifier", xcm.rows, xcm.cols, k, xcm.address,
+                                     trees_address(labels.codes), fit, rf, context)
     var result = PythonObject(None)
     if session.handle > 0:
-        var entry = trees_need(session.native, "rf_classifier_fit_weighted_session_export",
-                               "rebuild the forest binding for forest data sessions")
-        result = forest_export(session.native, py_call_typed(entry, _P(session.handle), _A(labels.codes), params, criterion,
-                                                             _P(weights.address)), "into", context)
+        request.session = session.handle
+        # RUN: XF_FIT_SESSION; PACK: the export into the model Arrays
+        result = forest_export_handle(session.key, xf_fit_session(session.key, True, request), "into", context)
         _ = weights  # keep the Python object alive through the native call above
     else:
-        var fit = ForestFit(True, weights=weights.address)
-        _ = weights  # keep the Python object alive through the native call above
-        var request = forest_fit_request(fields, fields["_cfg"], "dt_classifier", xcm.rows, xcm.cols, k, xcm.address,
-                                         trees_address(labels.codes), fit, rf, context)
         result = _launch(rf, fit, xcm.view(), request, False, context)
         _ = weights  # keep the Python object alive through the native call above
     # Both fit routes receive only the codes' address. The model owns the
@@ -745,17 +755,19 @@ def _member_fit_session_rows(member: PythonObject, session: Session, rows: Pytho
     var fields = py_fields(member)
     var mode = String(fields["_fit_numeric_mode"])
     var y = admit_f32(y32, 1, "y", context, finite=False)
-    var code = fields["_cfg"]["criterion"]
-    if Int(py=code) != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
-        raise Error("a forest data session fits squared_error members")
     var n_rows = len(rows)
-    _y_rows_check(y.rows, n_rows)
     var rf = trees_table(context, mode, "_mojolearn_rf")
-    var params = _rf_params(fields, kind, n_rows, x_cols, 0, rf, context)
-    var entry = trees_need(session.native, "rf_regressor_fit_session_rows_export",
-                           "rebuild the forest binding for forest data sessions")
-    var result = forest_export(session.native, py_call_typed(entry, _P(session.handle), _A(rows), _P(y.address), params, code),
-                               "into", context)
+    # The typed request (the member's configuration read once): x = the
+    # int32 row ids of the session's X, y = their targets.
+    var request = forest_fit_request(fields, fields["_cfg"], kind, n_rows, x_cols, 0, trees_address(rows), y.address,
+                                     ForestFit(False), rf, context)
+    if request.criterion != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
+        raise Error("a forest data session fits squared_error members")
+    _y_rows_check(y.rows, n_rows)
+    request.session = session.handle
+    # RUN: XF_FIT_SESSION; PACK: the export into the model Arrays
+    var result = forest_export_handle(session.key, xf_fit_session(session.key, False, request), "into", context)
+    _ = rows  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above
     _member_store(member, result, x_cols)
     _ = y  # keep the Python object alive through the native call above
@@ -1218,31 +1230,29 @@ def _colmajor(xt: PythonObject, x: AdmittedXView, context: PythonObject) raises 
     return _keep_ret_out^
 
 
-def _ada_device_rounds(session: Session, entry: String) raises -> Bool:
-    """The session's binary runs AdaBoost's rounds on the device (lane
-    n5-prophet-adaboost-loops, `bindings/_mojolearn_rf.mojo` `rf_ada_open`):
-    the weights stay there for the whole fit. A binary without the entries
-    (the CPU-only install's `_mojolearn_rf_host`) keeps the per-round steps."""
-    if session.handle <= 0:
-        return False
-    return trees_entry(session.native, "rf_ada_open") is not None and trees_entry(session.native, entry) is not None
+def _ada_device_rounds(session: Session) -> Bool:
+    """The session's image runs AdaBoost's rounds on the device (lane
+    n5-prophet-adaboost-loops, XF_CAP_ADA: `bindings/_mojolearn_rf.mojo`):
+    the weights stay there for the whole fit. An image without the
+    capability (the host image `_mojolearn_rf_host`) keeps the per-round
+    steps."""
+    return session.handle > 0 and (session.caps & XF_CAP_ADA) != 0
 
 
 def _ada_open(session: Session, w: PythonObject, y_addr: Int, cw_addr: Int, n: Int, k: Int) raises:
-    """`rf_ada_open`: the fit's starting weights, labels / targets and
+    """XF_ADA_OPEN: the fit's starting weights, labels / targets and
     class_weight rows go to the session's device once."""
-    _ = py_call_typed(trees_entry(session.native, "rf_ada_open"), _P(session.handle), _A(w), _P(y_addr), _P(cw_addr),
-                      Python.list(_P(n), _P(k)))
+    xf_ada_open(session.key, session.handle, trees_address(w), y_addr, cw_addr, n, k)
     _ = w  # keep the Python object alive through the native call above
 
 
 def _ada_member_round(member: PythonObject, session: Session, labels: TreesLabels, n: Int, d: Int, lr: Float64,
                       last: Bool, stats: PythonObject, context: PythonObject) raises:
-    """One SAMME round on the device (`rf_classifier_fit_ada_round_export`)
+    """One SAMME round on the device (XF_FIT_ADA_ROUND)
     for a best-splitter DecisionTreeClassifier member from
     `_validated_clone`: its classes are the ensemble's codes (`labels`, every
     class present), its weights the resident boosting weights times n times
-    its class_weight rows (given to `rf_ada_open`); the round writes the
+    its class_weight rows (given to XF_ADA_OPEN); the round writes the
     step's [status, alpha, error, total] into `stats`."""
     var fields = py_fields(member)
     var mode = String(fields["_fit_numeric_mode"])
@@ -1250,13 +1260,16 @@ def _ada_member_round(member: PythonObject, session: Session, labels: TreesLabel
     var k = len(labels.classes)
     py_setitem(fields, "n_classes_", _P(k))
     var rf = trees_table(context, mode, "_mojolearn_rf")
-    var params = _rf_params(fields, "dt_classifier", n, d, k, rf, context)
-    var criterion = fields["_cfg"]["criterion"]
-    var entry = trees_need(session.native, "rf_classifier_fit_ada_round_export",
-                           "rebuild the forest binding for AdaBoost device rounds")
-    var result = forest_export(session.native, py_call_typed(entry, _P(session.handle), params, criterion,
-                                                             Python.list(_F(lr), _P(1 if last else 0)), _A(stats)),
-                               "into", context)
+    # The typed request (the member's configuration read once) with the
+    # round's words; X, the labels and the weights are the session's.
+    var request = forest_fit_request(fields, fields["_cfg"], "dt_classifier", n, d, k, 0, 0, ForestFit(True), rf,
+                                     context)
+    request.session = session.handle
+    request.stats = trees_address(stats)
+    request.rate = lr
+    request.last = 1 if last else 0
+    # RUN: XF_FIT_ADA_ROUND; PACK: the export into the model Arrays
+    var result = forest_export_handle(session.key, xf_fit_ada_round(session.key, True, request), "into", context)
     _ = stats  # keep the Python object alive through the native call above
     _member_store(member, result, d)
     _fitted(member)
@@ -1264,7 +1277,7 @@ def _ada_member_round(member: PythonObject, session: Session, labels: TreesLabel
 
 def _ada_member_round_r2(member: PythonObject, session: Session, n: Int, d: Int, seed: Int, it: Int, loss: Int,
                          lr: Float64, last: Bool, stats: PythonObject, context: PythonObject) raises:
-    """One AdaBoost.R2 round on the device (`rf_regressor_fit_ada_round_export`)
+    """One AdaBoost.R2 round on the device (XF_FIT_ADA_ROUND)
     for a squared-error best-splitter DecisionTreeRegressor member from
     `_validated_clone`: the rows drawn from the resident weights, the member
     fitted on them, its predictions and the R2 step there; `stats` gets
@@ -1272,17 +1285,21 @@ def _ada_member_round_r2(member: PythonObject, session: Session, n: Int, d: Int,
     var kind = forest_kind(member, context)
     var fields = py_fields(member)
     var mode = String(fields["_fit_numeric_mode"])
-    var code = fields["_cfg"]["criterion"]
-    if Int(py=code) != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
-        raise Error("a forest data session fits squared_error members")
     var rf = trees_table(context, mode, "_mojolearn_rf")
-    var params = _rf_params(fields, kind, n, d, 0, rf, context)
-    var entry = trees_need(session.native, "rf_regressor_fit_ada_round_export",
-                           "rebuild the forest binding for AdaBoost device rounds")
-    var result = forest_export(session.native, py_call_typed(entry, _P(session.handle), params, code,
-                                                             Python.list(_P(seed), _P(it), _P(loss), _F(lr),
-                                                                         _P(1 if last else 0)), _A(stats)),
-                               "into", context)
+    # The typed request (the member's configuration read once) with the
+    # round's words; X, the targets and the weights are the session's.
+    var request = forest_fit_request(fields, fields["_cfg"], kind, n, d, 0, 0, 0, ForestFit(False), rf, context)
+    if request.criterion != Int(py=context["trees_rf_tables"]["reg_criteria"]["squared_error"]):
+        raise Error("a forest data session fits squared_error members")
+    request.session = session.handle
+    request.stats = trees_address(stats)
+    request.rate = lr
+    request.last = 1 if last else 0
+    request.round_seed = seed
+    request.round = it
+    request.loss = loss
+    # RUN: XF_FIT_ADA_ROUND; PACK: the export into the model Arrays
+    var result = forest_export_handle(session.key, xf_fit_ada_round(session.key, False, request), "into", context)
     _ = stats  # keep the Python object alive through the native call above
     _member_store(member, result, d)
     _fitted(member)
@@ -1329,7 +1346,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         var dt_best = _is_class(base, "trees_dt_classifier", context) and Bool(py=py_fields(base)["splitter"] == PythonObject("best"))
         var xcm: Optional[AdmittedX] = None
         var encoded: Optional[TreesLabels] = None
-        var session = Session(PythonObject(None), 0)
+        var session = _no_session()
         if dt_best:
             var cm = _colmajor(xt, x.view(), context)
             # The labels are encoded ONCE for every member and round.
@@ -1356,7 +1373,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         # up once and only the step's four words come back per round.
         var device_rounds = False
         if xcm:
-            device_rounds = _ada_device_rounds(session, "rf_classifier_fit_ada_round_export")
+            device_rounds = _ada_device_rounds(session)
         var dev_labels = labels.copy()
         if device_rounds:
             dev_labels = encoded.value().copy()
@@ -1439,15 +1456,15 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     # A best-splitter squared-error DecisionTreeRegressor member fits rows
     # of the SAME X staged on the device once (the member's rows gathered
     # there).
-    var session = Session(PythonObject(None), 0)
+    var session = _no_session()
     if _is_class(base, "trees_dt_regressor", context):
         var bf = py_fields(base)
         var crit = bf["criterion"]
         if Bool(py=bf["splitter"] == PythonObject("best")) and (Bool(py=crit == PythonObject("squared_error"))
                                                                   or Bool(py=crit == PythonObject("mse"))):
-            var native = trees_table(context, _member_mode(base, context), "_mojolearn_rf")
-            if trees_entry(native, "rf_regressor_fit_session_rows_export") is not None:
-                session = _member_session(base, x.view(), True, _ada_session_choice(fields, xt, context), context)
+            # an image without XF_CAP_SESSION answers handle 0 (the member
+            # fits keep the host gather)
+            session = _member_session(base, x.view(), True, _ada_session_choice(fields, xt, context), context)
     var loss = Int(py=context["trees_ada_losses"][fields["loss"]])
     var is_dt = Bool(py=py_call(trees_builtins().isinstance, base, context["trees_dt_regressor"]))
     var y_array = _as_array(y32, Python.tuple(n), context)
@@ -1462,7 +1479,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
     # lane n5-prophet-adaboost-loops: the session members' rounds run on the
     # device; weights and targets go up once, the rows are drawn and
     # gathered there, and only the step's four words come back per round.
-    var device_rounds = _ada_device_rounds(session, "rf_regressor_fit_ada_round_export")
+    var device_rounds = _ada_device_rounds(session)
     if device_rounds:
         _ada_open(session, w, y32.address, 0, n, 0)
         _ = y32  # keep the Python object alive through the native call above

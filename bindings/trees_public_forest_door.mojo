@@ -607,24 +607,6 @@ def _check_count(value: PythonObject, message: String) raises -> Int:
     return Int(py=value)
 
 
-def forest_export(native: PythonObject, descriptor: PythonObject, selection: String,
-                  context: PythonObject) raises -> PythonObject:
-    """`_forest_protocol._export_fit_result` of a fit a Python entry returned
-    (the boost door's session and AdaBoost member fits): the descriptor's
-    handle (UNPACK), then `forest_export_handle`."""
-    var b = trees_builtins()
-    if not Bool(py=py_call(b.isinstance, descriptor, Python.tuple(b.list, b.tuple))) or len(descriptor) == 0:
-        raise Error("native forest export returned an invalid descriptor")
-    var handle = descriptor[0]
-    if _is_bool(handle) or not Bool(py=py_call(b.isinstance, handle, b.int)) or Int(py=handle) < 1:
-        raise Error("native forest export returned an invalid handle")
-    var key = forest_key(native)
-    if len(descriptor) != 5:
-        xf_export_release(key, Int(py=handle))
-        raise Error("native forest export descriptor requires five fields")
-    return forest_export_handle(key, Int(py=handle), selection, context)
-
-
 def forest_export_handle(key: EntryRef, handle: Int, selection: String,
                          context: PythonObject) raises -> PythonObject:
     """One owned native fit copied into the five model Arrays, its handle
@@ -702,11 +684,8 @@ def _launch_on(key: EntryRef, fit: ForestFit, x: AdmittedXView, args: ForestFitA
 # ------------------------------------------------------------- fit params
 
 
-def _max_features_fraction(max_features: PythonObject, n_features: Int, context: PythonObject) raises -> Float64:
-    """`randomforest._max_features_fraction` for `_rf_params` (the boost
-    door's list): the form read once (`_rf_features`), the fraction and its
-    refusals in `forest_features_fraction`."""
-    return forest_features_fraction(_rf_features(max_features, context), n_features)
+# TOMBSTONE: forest_export (the export of a fit a Python entry returned as a descriptor) / _rf_params / _max_features_fraction (the 16-slot Python list of an RF fit and its fraction read; the boost door's session and AdaBoost member fits were their last callers and now build the typed request, `forest_fit_request`, and call XF_FIT_SESSION / XF_FIT_ADA_ROUND) deleted 2026-11-21 by lane dw-trees-boost; code recoverable at cc2c81eb61.
+# Restore: git apply experiments/removed/dead_entries_rf_session_ada_calls.patch
 
 
 def _dt_tier_bins(fields: PythonObject, rf: PythonObject) raises -> PythonObject:
@@ -718,27 +697,6 @@ def _dt_tier_bins(fields: PythonObject, rf: PythonObject) raises -> PythonObject
         return _int(bins)
     # XF_DT_DEFAULT_BINS: the image's bin count (128 in one without its own)
     return PythonObject(xf_dt_default_bins(forest_key(rf)))
-
-
-def _rf_params(fields: PythonObject, kind: String, rows: Int, cols: Int, classes: Int, rf: PythonObject,
-               context: PythonObject) raises -> PythonObject:
-    """`_RandomForestBase._fit_params`: the 16-slot list in
-    _mojolearn_rf.mojo's order, then min_weight_fraction_leaf when it is
-    not 0; DecisionTreeRegressor's slot 7 is its tier's bin count."""
-    var nk = trees_keys()
-    var cfg = py_item(fields, nk[].k__cfg)
-    var params = Python.list(PythonObject(rows), PythonObject(cols), PythonObject(classes),
-                             py_item(cfg, nk[].k_n_estimators), py_item(cfg, nk[].k_max_depth), py_item(cfg, nk[].k_max_leaves),
-                             PythonObject(_max_features_fraction(py_item(cfg, nk[].k_max_features), cols, context)),
-                             py_item(cfg, nk[].k_n_bins), py_item(cfg, nk[].k_min_samples_leaf), py_item(cfg, nk[].k_min_samples_split),
-                             py_item(cfg, nk[].k_min_impurity_decrease), PythonObject(1 if _truthy(py_item(cfg, nk[].k_bootstrap)) else 0),
-                             py_item(cfg, nk[].k_max_samples), py_item(cfg, nk[].k_random_state), py_item(cfg, nk[].k_n_streams), py_item(cfg, nk[].k_max_batch_size))
-    var mwf = py_get(cfg, nk[].k_min_weight_fraction_leaf, PythonObject(0.0))
-    if _truthy(mwf):
-        _ = py_call(params.append, mwf)
-    if kind == "dt_regressor":
-        py_setitem(params, PythonObject(7), _dt_tier_bins(fields, rf))
-    return params
 
 
 def _note(first: String, text: String) -> String:
@@ -1038,9 +996,8 @@ def _et_max_features(max_features: PythonObject, context: PythonObject) raises -
 
 
 # TOMBSTONE: _et_params (the 22-slot Python list of an Extra Trees fit, built
-# and read back per fit) deleted 2026-11-21 by lane dw-trees. `_rf_params`
-# stays: five sites of bindings/trees_public_boost_door.mojo, which reads open
-# arms, still take its list.
+# and read back per fit) deleted 2026-11-21 by lane dw-trees. (`_rf_params`
+# followed it the same day, lane dw-trees-boost: tombstone above `_dt_tier_bins`.)
 # TOMBSTONE: _rf_slots / _et_slots / _et_bootstrap_rows / _check_regression_target /
 # _device_scan (the per-fit reads of the `_cfg` dictionary, each scalar boxed
 # as a Python object, and the Python comparisons of the target check) deleted
