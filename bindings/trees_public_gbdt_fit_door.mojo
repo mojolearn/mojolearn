@@ -48,7 +48,7 @@ from bindings.admitted_input_unpack import (
 from bindings.classical_arrays_door import classical_address, classical_c_order
 # TOMBSTONE: TreesView / trees_view / trees_check_rank / trees_f32 / trees_f32_view / trees_forest_layout / trees_all_finite / trees_check_sample_weight / trees_vector uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
-from bindings.trees_public_gbdt_door import gbdt_table, gbdt_has_ctr, _field, _int, _repr, ordered_option_values
+from bindings.trees_public_gbdt_door import gbdt_table, _field, _int, _repr, ordered_option_values
 from bindings.gbdt_fit_boundary_unpack import gbdt_fit_params_py, gbdt_fit_strs_py
 from std.memory import unsafe_memcpy
 from core.trees_entry_table import TreesEntryKey
@@ -61,6 +61,7 @@ from bindings.p3_labels_metrics_native_door import p3_text_codes, P3_TEXT_OK
 from bindings.label_list_words_unpack import label_store_address
 from bindings.label_list_words_pack import label_list_store
 from core.label_words_impl import id_words_coded, group_runs_scan, group_sizes_store_u32, label_codes_i32_to_int
+from gbdt.trees_gbdt_run import gbdt_text_has_ctr
 from gbdt.trees_gbdt_fit_run import (
     _sabotaged, _pair_end_range,
     GbdtOrderedFacts, GbdtSearchFacts, GBDT_F32_MAX, gbdt_nan, gbdt_auto_rate, gbdt_check_ordered_options,
@@ -876,9 +877,85 @@ def _gk(table: PythonObject) raises -> EntryRef:
 # -------------------------------------------------------------------- fit
 
 
+struct GbdtFitCall(Movable):
+    """One fit as UNPACK leaves it. RUN reads `entry`, `row_major` and
+    `args` only (plain words: gbdt/fit_request.mojo); PACK reads the counts.
+    The admitted arrays and the holders of every address in `args` stay
+    alive here until PACK returns.
+
+    Fields:
+        entry: the native entry of the gbdt image of the estimator's run
+            context (resolved from the table the context names).
+        row_major: X is C-order, so the image's row-major fit runs.
+        args: the fit request (six addresses, the parameter views, the
+            option strings).
+        n_features, n_eval_rows: the fitted width and the held-out rows.
+        classes: how `n_classes_` follows the model dimension (the
+            `GBDT_CLASSES_*` words below).
+        x, y, weights: the admitted arrays `args` addresses.
+        pins: the other holders `args` addresses (cat flags, the eval set,
+            group sizes, pairs), as one tuple.
+    """
+    var entry: EntryRef
+    var row_major: Bool
+    var args: GbdtFitArgs
+    var n_features: Int
+    var n_eval_rows: Int
+    var classes: Int
+    var x: AdmittedX
+    var y: AdmittedX
+    var weights: Optional[AdmittedX]
+    var pins: PythonObject
+
+    def __init__(out self, entry: EntryRef, row_major: Bool, var args: GbdtFitArgs, n_features: Int,
+                 n_eval_rows: Int, classes: Int, var x: AdmittedX, var y: AdmittedX,
+                 var weights: Optional[AdmittedX], pins: PythonObject):
+        self.entry = entry
+        self.row_major = row_major
+        self.args = args^
+        self.n_features = n_features
+        self.n_eval_rows = n_eval_rows
+        self.classes = classes
+        self.x = x^
+        self.y = y^
+        self.weights = weights^
+        self.pins = pins
+
+
+# `n_classes_` of a fitted model: None, the model dimension plus one
+# (MultiClass) or the model dimension (MultiClassOneVsAll).
+comptime GBDT_CLASSES_NONE = 0
+comptime GBDT_CLASSES_DIM_PLUS_ONE = 1
+comptime GBDT_CLASSES_DIM = 2
+# The model dimension PACK reads from the host archive state (a CTR model of
+# the host image), not from the image's entry.
+comptime GBDT_DIM_FROM_ARCHIVE = -1
+
+
 def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`GradientBoosting.fit(X, y, sample_weight, eval_set, group_id,
-    subgroup_id, pairs, pairs_weight)`."""
+    subgroup_id, pairs, pairs_weight)`: UNPACK (every check, in the order
+    and words of the former single body, into one typed request), RUN (the
+    fit and the model dimension in the gbdt image of the estimator's run
+    context, through its native entry: plain words, no Python object), PACK
+    (the fitted attributes)."""
+    var call = gbdt_fit_unpack(model, args, context)
+    # RUN (gbdt/fit_calls.mojo): the row-major entry when X is C-order
+    # (refused by name by an image without it).
+    var outcome = xg_fit(call.entry, call.row_major, call.args)
+    var dim = GBDT_DIM_FROM_ARCHIVE
+    if entry_ref_vendor(call.entry) != 0 or not gbdt_text_has_ctr(outcome.text):
+        # (vendor word 0 is "cpu", core/gbdt_entry_table.mojo: the host
+        # image's CTR model takes its dimension from the archive state.)
+        dim = xg_model_dim(call.entry, outcome.text)
+    return gbdt_fit_pack(model, call, outcome, dim, context)
+
+
+def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> GbdtFitCall:
+    """UNPACK of `GradientBoosting.fit`: the inputs admitted, every refusal
+    in the fit's order and wording, the resolved settings stored
+    (`learning_rate_`, `boosting_type_`), the parameter and option lists
+    read once into the request's plain views."""
     var b = _b()
     var t = _tables(context)
     var fields = py_fields(model)
@@ -1075,47 +1152,48 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, nk[].k_boosting_type_, PythonObject(boosting))
     var ex_addr = x.address if held is None else Int(py=held[1])
     var ey_addr = ya.address if held is None else Int(py=held[3])
-    # UNPACK of the params and strs lists once; the fit runs natively in the
-    # connected gbdt image (gbdt/fit_calls.mojo), the row-major entry when X
-    # is C-order (refused by name by an image without it).
+    # The params and strs lists, read once into the request's plain views.
     var p_ints = List[Int]()
     var p_floats = List[Float64]()
     var p_bad = List[UInt8]()
     gbdt_fit_params_py(params, p_ints, p_floats, p_bad)
     var fit_args = GbdtFitArgs(x.address, ya.address, w_addr, trees_address(flags_holder), ex_addr, ey_addr,
                                p_ints^, p_floats^, p_bad^, gbdt_fit_strs_py(strs))
-    var outcome = xg_fit(gkey, x.c_order, fit_args)
-    _ = fit_args^
-    _ = flags_holder  # keep the Python object alive through the native call above
-    _ = group_holder  # keep the Python object alive through the native call above
-    _ = weights^
-    _ = held^
-    _ = group_holder^
-    _ = pair_holders^
-    # PACK of the native outcome
+    var classes = GBDT_CLASSES_NONE
+    if _eq(loss, "MultiClass"):
+        classes = GBDT_CLASSES_DIM_PLUS_ONE
+    elif _eq(loss, "MultiClassOneVsAll"):
+        classes = GBDT_CLASSES_DIM
+    var row_major = x.c_order
+    var pins = Python.tuple(flags_holder, held, group_holder, pair_holders)
+    return GbdtFitCall(gkey, row_major, fit_args^, n_features, n_eval_rows, classes, x^, ya^, weights^, pins)
+
+
+def gbdt_fit_pack(model: PythonObject, call: GbdtFitCall, outcome: GbdtFitOutcome, dim: Int,
+                  context: PythonObject) raises -> PythonObject:
+    """PACK of `GradientBoosting.fit`: the fitted attributes from the native
+    outcome. `dim` is the model dimension RUN read, or
+    GBDT_DIM_FROM_ARCHIVE."""
+    var nk = trees_keys()
+    var fields = py_fields(model)
     var text = PythonObject(outcome.text)
     py_setitem(fields, nk[].k_model_, text)
     py_setitem(fields, nk[].k_bias_, PythonObject(gbdt_bias_of(outcome.text)))
     py_setitem(fields, nk[].k_best_iteration_, PythonObject(outcome.best_iteration))
     py_setitem(fields, nk[].k_stopped_early_, PythonObject(outcome.stopped_early))
     py_setitem(fields, nk[].k_loss_curve_, _f64_curve(outcome.learn, context))
-    py_setitem(fields, nk[].k_test_loss_curve_, _f64_curve(outcome.test, context) if n_eval_rows else PythonObject(None))
-    py_setitem(fields, nk[].k_n_features_in_, PythonObject(n_features))
-    var dim = PythonObject(None)
-    if entry_ref_vendor(gkey) == 0 and gbdt_has_ctr(text):
-        # the host image (vendor word 0 is "cpu", core/gbdt_entry_table.mojo)
-        dim = py_call_typed(b.int, py_item(host_archive_gbdt_state(text, context), nk[].k_dim))
-    else:
-        dim = PythonObject(xg_model_dim(gkey, outcome.text))
-    py_setitem(fields, nk[].k_approx_dim_, dim)
-    if _eq(loss, "MultiClass"):
-        py_setitem(fields, nk[].k_n_classes_, dim + PythonObject(1))
-    elif _eq(loss, "MultiClassOneVsAll"):
-        py_setitem(fields, nk[].k_n_classes_, dim)
+    py_setitem(fields, nk[].k_test_loss_curve_, _f64_curve(outcome.test, context) if call.n_eval_rows else PythonObject(None))
+    py_setitem(fields, nk[].k_n_features_in_, PythonObject(call.n_features))
+    var width = PythonObject(dim)
+    if dim == GBDT_DIM_FROM_ARCHIVE:
+        width = py_call_typed(_b().int, py_item(host_archive_gbdt_state(text, context), nk[].k_dim))
+    py_setitem(fields, nk[].k_approx_dim_, width)
+    if call.classes == GBDT_CLASSES_DIM_PLUS_ONE:
+        py_setitem(fields, nk[].k_n_classes_, width + PythonObject(1))
+    elif call.classes == GBDT_CLASSES_DIM:
+        py_setitem(fields, nk[].k_n_classes_, width)
     else:
         py_setitem(fields, nk[].k_n_classes_, PythonObject(None))
-    _ = x^
-    _ = ya^
     return model
 
 
