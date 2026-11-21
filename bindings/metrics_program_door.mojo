@@ -14,9 +14,10 @@
 from std.python import PythonObject
 from core.metrics_program_plan import MetricProgramPlan
 from bindings.arena_prog_run import MetricArenaOwner
-from bindings.arena_prog_native_door import _metrics_run_plan
+from bindings.arena_prog_native_door import _metrics_run_plan, metrics_run_plan_entries
+from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.metrics_keys_unpack import metrics_keys
-from bindings.py_balanced import py_item
+from bindings.py_balanced import py_item, py_get, py_type
 
 
 struct MetricDoorProg(Movable):
@@ -82,10 +83,24 @@ def metric_plan_run(plan: MetricProgramPlan, pins: List[PythonObject], mode: Pyt
                     context: PythonObject) raises -> MetricArenaOwner:
     """`_run(prog, numeric_mode)`: a typed plan and its pins handed to the
     shared runner (bindings/arena_prog_native_door.mojo `_metrics_run_plan`,
-    UNPACK of the input addresses + typed RUN, the GIL released)."""
+    UNPACK of the input addresses + typed RUN, the GIL released).
+
+    The image is the one `context` names: a `device="cpu"` estimator's CPU
+    label scope (bindings/labels_descriptor_boundary_door.mojo `labels_scope`
+    of a family context) carries the CPU x_metrics runner entries
+    (`labels_metrics_entries`), which then run the plan; any other context
+    names none and runs the process image of `mode`. One dictionary read
+    with the interned key per program."""
     var nk = metrics_keys()
     var prog_context = py_item(context, nk[].k_family_metrics_prog_context)
-    return _metrics_run_plan(plan, pins, mode, prog_context)
+    var entries = py_get(context, nk[].k_labels_metrics_entries)
+    if entries is None:
+        return _metrics_run_plan(plan, pins, mode, prog_context)
+    if py_type(entries) is py_type(PythonObject("")):
+        # the CPU image did not connect at import: its recorded words
+        raise Error(String(entries))
+    classical_connect_numpy(prog_context)
+    return metrics_run_plan_entries(plan, pins, entries, prog_context)
 
 
 def metric_door_run(prog: MetricDoorProg, mode: PythonObject, context: PythonObject) raises -> MetricArenaOwner:

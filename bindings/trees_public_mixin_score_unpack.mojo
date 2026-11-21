@@ -8,6 +8,7 @@
 # order are the ones the mixins called, so the score keeps its bits.
 from std.python import Python, PythonObject
 from bindings.base_helpers_key_unpack import base_helpers_key
+from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.base_helpers_released_unpack import base_reduce_stat_int
 from bindings.py_balanced import py_call, py_get, py_fields, py_contains
 from bindings.classifier_public_lifecycle_door import classifier_label_list
@@ -94,7 +95,7 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
         var target = labels_classification_encoded(y, "y", context)
         if not Bool(py=PythonObject(target.kind) == py_item(fields, nk[].k__label_kind_)):
             raise Error("TypeError: score labels must have the training label type")
-        var encoded = trees_class_codes(target, classifier_label_list(py_item(fields, nk[].k_classes_), context), context)
+        var encoded = trees_class_codes(target, classifier_label_list(py_item(fields, nk[].k_classes_), context), labels_scope(model, context))
         _ = target^
         var predicted = adapter_codes(model, X, context)
         var n = Int(py=encoded.size)

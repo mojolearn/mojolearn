@@ -93,6 +93,11 @@ def connect_cpu_device(context):
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
         cpu = type(error).__name__ + ": " + str(error)
     context["qn_cpu_bindings"] = {"identical": cpu}
+    # The label steps of a device="cpu" classifier run the host label kernels
+    # (bindings/labels_descriptor_boundary_door.mojo `labels_scope`): its CPU
+    # label scope, built once here, last.
+    from ._native_labels_bridge import cpu_scope
+    cpu_scope(context)
 
 
 def _qn_fold_key():

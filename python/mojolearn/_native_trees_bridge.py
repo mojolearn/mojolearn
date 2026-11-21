@@ -253,6 +253,11 @@ def connect_cpu_device(context):
         table[name] for table in tables  # glue: the CPU images' resident release identities, once at connection
         for name in ('forest_release_gpu', 'gbdt_resident_release', 'iforest_resident_release')  # glue: existing compiled release ABIs
         if name in table)
+    # The label steps of a device="cpu" classifier run the host label kernels
+    # (bindings/labels_descriptor_boundary_door.mojo `labels_scope`): its CPU
+    # label scope, built once here, last.
+    from ._native_labels_bridge import cpu_scope
+    cpu_scope(context)
 
 
 def device_vendor_used(self):

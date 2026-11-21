@@ -794,6 +794,20 @@ class GradientBoosting(_NumericModeMixin):
         Where the model is fitted and predicts. None uses this
         installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
         requires a GPU installation. Other values raise ``ValueError``.
+    **aliases
+        CatBoost, XGBoost and LightGBM names for the parameters above, where
+        the name means the same thing: for example ``iterations``,
+        ``num_boost_round`` or ``num_trees`` for ``n_estimators``, ``eta`` for
+        ``learning_rate``, ``depth`` for ``max_depth``, ``reg_lambda`` or
+        ``lambda_l2`` for ``l2_leaf_reg``, ``random_seed`` or ``seed`` for
+        ``random_state``, ``colsample_bytree`` for ``feature_fraction``,
+        ``loss_function`` or ``objective`` for ``loss`` and
+        ``categorical_feature`` for ``cat_features``. The value is stored under
+        Mojolearn's name, which ``get_params`` reports. Giving both names with
+        different values raises ``ValueError``, and so does a name whose
+        meaning differs in the other library (such as ``max_bin``,
+        ``early_stopping_rounds`` or ``gamma``); the message names the
+        parameter to use. The same names work in ``set_params``.
 
     Attributes
     ----------
@@ -853,6 +867,9 @@ class GradientBoosting(_NumericModeMixin):
     #: the other side as the same estimator on the other device, in this process.
     _mojolearn_device = True
     vendor_used = _native_trees_bridge.device_vendor_used
+    #: The constructor's `**aliases` takes CatBoost / XGBoost / LightGBM names
+    #: for its own parameters (python/mojolearn/_boosting_param_names.py).
+    _mojolearn_parameter_names = True
 
     def __init__(
         self,
@@ -902,10 +919,15 @@ class GradientBoosting(_NumericModeMixin):
         *,
         numeric_mode=None,
         device=None,
+        **aliases,
     ):
         # The constructor's checks and its stored state are the native
         # owner's (bindings/trees_public_gbdt_fit_door.mojo `gbdt_initialize`),
-        # shared with the scikit-learn adapters' learner.
+        # shared with the scikit-learn adapters' learner. `aliases` (the
+        # CatBoost / XGBoost / LightGBM names, python/mojolearn/_boosting_param_names.py)
+        # is the last item: the tree door resolves it onto canonical
+        # positions before the constructor reads them, and an empty dict is
+        # one length test (bindings/trees_gbdt_parameter_names_unpack.mojo).
         _TREES(self, "trees_gbdt_init", (
             loss, n_estimators, max_depth, learning_rate, l2_leaf_reg, border_count, random_state, loss_alpha,
             loss_q, loss_delta, loss_variance_power, loss_border, leaf_estimation_method,
@@ -915,7 +937,7 @@ class GradientBoosting(_NumericModeMixin):
             border_build_max_samples, class_weights, permutation_count, ctr_estimation_permutation_id,
             grow_policy, max_leaves, min_data_in_leaf, min_split_gain, min_child_hessian, feature_fraction,
             feature_border_type, boosting_type, fold_len_multiplier, fold_permutation_block, device,
-            numeric_mode,
+            numeric_mode, aliases,
         ), _TREES_CONTEXT)
 
     # -- the parameter list, in the ONE order both sides name --------------
@@ -1176,6 +1198,10 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
     ("when_set", "category_map_", (("array", "category_map", "category_map_"),)),
 ), host_archive_gbdt_bindings=_native_trees_bridge.bindings("_mojolearn_gbdt"))
 
+#: The `trees_gbdt_init` argument order: the constructor's parameters with
+#: `device` last; `numeric_mode` follows them in the call.
+_INIT_NAMES = ('loss', 'n_estimators', 'max_depth', 'learning_rate', 'l2_leaf_reg', 'border_count', 'random_state', 'loss_alpha', 'loss_q', 'loss_delta', 'loss_variance_power', 'loss_border', 'leaf_estimation_method', 'leaf_estimation_iterations', 'bootstrap_type', 'bagging_temperature', 'subsample', 'cat_features', 'one_hot_features', 'od_type', 'od_pvalue', 'od_wait', 'use_best_model', 'best_model_min_trees', 'score_function', 'nan_mode', 'random_strength', 'use_pointwise_searcher', 'boost_from_average', 'border_build_max_samples', 'class_weights', 'permutation_count', 'ctr_estimation_permutation_id', 'grow_policy', 'max_leaves', 'min_data_in_leaf', 'min_split_gain', 'min_child_hessian', 'feature_fraction', 'feature_border_type', 'boosting_type', 'fold_len_multiplier', 'fold_permutation_block', 'device')
+
 # The fixed option tables `fit` reads natively (bindings/trees_public_gbdt_fit_door.mojo).
 _native_trees_bridge.register(GradientBoosting, "gbdt", trees_gbdt_tables=dict(
     multi_output_losses=MULTI_OUTPUT_LOSSES, multi_regression_losses=MULTI_REGRESSION_LOSSES,
@@ -1186,13 +1212,32 @@ _native_trees_bridge.register(GradientBoosting, "gbdt", trees_gbdt_tables=dict(
     legacy_learning_rate=_LEGACY_LEARNING_RATE, catboost_learning_rate=_CATBOOST_LEARNING_RATE,
     catboost_random_strength=_CATBOOST_RANDOM_STRENGTH, legacy_random_strength=_LEGACY_RANDOM_STRENGTH,
     ordered_max_rows=_ORDERED_MAX_ROWS, ordered_min_iterations=_ORDERED_MIN_ITERATIONS,
-    init_names=('loss', 'n_estimators', 'max_depth', 'learning_rate', 'l2_leaf_reg', 'border_count', 'random_state', 'loss_alpha', 'loss_q', 'loss_delta', 'loss_variance_power', 'loss_border', 'leaf_estimation_method', 'leaf_estimation_iterations', 'bootstrap_type', 'bagging_temperature', 'subsample', 'cat_features', 'one_hot_features', 'od_type', 'od_pvalue', 'od_wait', 'use_best_model', 'best_model_min_trees', 'score_function', 'nan_mode', 'random_strength', 'use_pointwise_searcher', 'boost_from_average', 'border_build_max_samples', 'class_weights', 'permutation_count', 'ctr_estimation_permutation_id', 'grow_policy', 'max_leaves', 'min_data_in_leaf', 'min_split_gain', 'min_child_hessian', 'feature_fraction', 'feature_border_type', 'boosting_type', 'fold_len_multiplier', 'fold_permutation_block', 'device'),
+    init_names=_INIT_NAMES,
     losses=LOSSES, required_param=_REQUIRED_PARAM, bootstrap_types=BOOTSTRAP_TYPES,
     grow_policies=GROW_POLICIES, non_symmetric_losses=_NON_SYMMETRIC_LOSSES,
     unsupported_score_functions=_UNSUPPORTED_SCORE_FUNCTIONS, score_functions=SCORE_FUNCTIONS,
     nan_modes=NAN_MODES, boosting_types=BOOSTING_TYPES, catboost_iterations=_CATBOOST_ITERATIONS,
     legacy_iterations=_LEGACY_ITERATIONS, catboost_bootstrap=_CATBOOST_BOOTSTRAP,
 ))
+
+# CatBoost / XGBoost / LightGBM parameter names (python/mojolearn/_boosting_param_names.py),
+# built once here: the constructor's table carries each canonical name's
+# position in the `trees_gbdt_init` call and its default; `set_params` reads
+# the same table through the shared setter (bindings/full_reset_params_native_door.mojo
+# `_merge`), only for a name that is not a parameter.
+def _connect_parameter_names():
+    import inspect
+    from ._boosting_param_names import parameter_name_table
+    from ._mode import _GENERIC_PARAMS_CONTEXT
+    order = _INIT_NAMES + ('numeric_mode',)
+    signature = inspect.signature(GradientBoosting.__init__).parameters
+    defaults = {name: signature[name].default for name in order}  # glue: constructor defaults, once at import
+    table = parameter_name_table(order, defaults)
+    _TREES_CONTEXT['trees_gbdt_parameter_names'] = table
+    _GENERIC_PARAMS_CONTEXT.setdefault('parameter_names', {})[GradientBoosting] = table
+
+
+_connect_parameter_names()
 
 
 # Former docstring: Experimental one-tree, depth-two FeatureFreq combination estimator. Source columns
