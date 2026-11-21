@@ -3,15 +3,13 @@
 # (`classical_native_call(model, "fitted_digest", (), context)`, the context
 # of python/mojolearn/_native_archive_bridge.py `connect()`).
 #
-# LAZY. Nothing here runs at fit. The first read of `digest_` describes the
-# fitted fields (UNPACK), hashes them with the GIL released across the host
-# cores (RUN, core/fitted_digest.mojo) and returns the hex string (PACK). The
-# string is kept in the model's record table (bindings/py_model_records.mojo,
-# outside the instance dictionary), stamped with the model's generation word
-# and the content of its containers and member estimators: `fit`,
-# `set_params`, `__setstate__`, `load_state_dict` and any attribute
-# assignment change the generation, so the next read hashes again. Python
-# 3.10 / 3.11 keep no generation: every read hashes.
+# NO CACHE. Nothing here runs at fit and nothing is kept: EVERY read of
+# `digest_` describes the fitted fields (UNPACK), hashes them with the GIL
+# released across the host cores (RUN, core/fitted_digest.mojo) and returns
+# the hex string (PACK). A kept string would be a wrong answer after an
+# in-place write into a fitted array (`model.coef_[0] = 1` changes no
+# generation word), so the digest is always the hash of the state as it is at
+# the read.
 #
 # WHICH FIELDS (one walk, the saved-model writer's describers; the table
 # docs/api/DIGEST_FIELDS.md is generated from the same three sources):
@@ -53,15 +51,10 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_archive_door import _archive_unpack_member, _archive_class_name_unpack
 from bindings.archive_npz_door import _npz_value, _npz_is
 from bindings.archive_schema_native_door import archive_schema_lookup, _schema_run, _schema_gp_state, _schema_mode
-from bindings.py_model_records import (
-    RECORDS_PREPARED, ContentRecord, content_fields, content_object, records_stamped_get, records_stamped_put,
-)
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from core.native_archive_write import NativeArchiveMember
 from core.fitted_digest import fitted_digest_hex
 
-#: The record name of the kept digest (a format change renames it with the format word).
-comptime _DIGEST_RECORD = "fitted_digest_v1"
 #: Member estimators inside member estimators, and containers inside containers.
 comptime _DIGEST_DEPTH = 8
 
@@ -98,11 +91,8 @@ def _digest_flat(value: PythonObject, is_list: Bool, b: PythonObject, bytes_type
 
 
 def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) raises -> String:
-    """The digest of the fitted `model` (64 lowercase hex digits), from its
-    record when the model has not changed since it was hashed."""
-    var kept = records_stamped_get(RECORDS_PREPARED, model, _DIGEST_RECORD)
-    if kept is not None:
-        return String(py=kept)
+    """The digest of the fitted `model` (64 lowercase hex digits), hashed
+    from its state as it is now (nothing is kept between reads)."""
     if depth > _DIGEST_DEPTH:
         raise Error("AttributeError: digest_ is not available: member estimators are nested deeper than "
                     + String(_DIGEST_DEPTH) + " levels")
@@ -120,15 +110,12 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
     var schema = steps is not None and py_type(steps) is not b.str
     var pins = List[PythonObject]()
     var members = List[NativeArchiveMember]()
-    var nested = List[PythonObject]()
-    var own = PythonObject(None)
     if schema:
         # 1. The saved-model schema's members, as `save` builds them.
         var values = Python.dict()
         var failure = String("")
         try:
             var admitted = classical_family_admit(model)
-            own = admitted
             var fields = py_call(b.dict, admitted)
             if String(py=_schema_mode(fields, PythonObject("mojolearn: "), context)) == "fast":
                 failure = "fast"
@@ -162,7 +149,6 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
         if not Bool(py=_fitted(model)):
             raise _digest_unfitted(class_name)
         var fields = _fields(model)
-        own = fields
         if String(py=_schema_mode(fields, PythonObject("mojolearn: "), context)) == "fast":
             raise Error("AttributeError: digest_ exists in identical mode only: fast mode promises no identical "
                         + "bits, so a fast model has no digest")
@@ -249,7 +235,6 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
             if base is not None and _npz_is(value, base):
                 # A member estimator: its own digest, as text, under its place.
                 var inner = fitted_digest_text(value, context, depth + 1)
-                nested.append(value)
                 leaf_names.append(name)
                 leaf_values.append(PythonObject(inner))
                 continue
@@ -273,14 +258,6 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
             result = fitted_digest_hex(class_name, members)
     finally:
         _ = pins
-    # Keep it for the next read of the unchanged model. The record holds no
-    # reference to the model; a model without a generation keeps nothing.
-    var content = ContentRecord()
-    content_fields(content, own, 4)
-    for i in range(len(nested)):  # driver-loop: over the member estimators the digest depends on
-        content_object(content, nested[i], 4)
-    _ = records_stamped_put(RECORDS_PREPARED, model, _DIGEST_RECORD, content^, PythonObject(result))
-    _ = nested
     _ = members
     return result
 

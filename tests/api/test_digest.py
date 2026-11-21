@@ -68,18 +68,33 @@ def test_unfitted_model_has_no_digest(name, params, target):
 
 
 @pytest.mark.parametrize("name,params,target", CASES)
-def test_digest_is_lazy_and_never_stored_on_the_model(name, params, target):
+def test_digest_is_hashed_at_the_read_and_never_stored_on_the_model(name, params, target):
     model = _fit(name, params, target)
     assert "digest_" not in vars(model)             # nothing was hashed or stored by fit
     before = dict(vars(model))
     digest = model.digest_
-    assert model.digest_ == digest                  # the second read is the kept string
+    assert model.digest_ == digest                  # the unchanged model hashes to the same string again
     assert "digest_" not in vars(model) and vars(model).keys() == before.keys()
     assert "digest_" not in model.get_params()      # not a constructor parameter
 
 
+def test_an_in_place_write_into_a_fitted_array_changes_the_next_read():
+    # Nothing is kept between reads: a write into the elements of a stored fitted array (which changes no
+    # attribute of the model) is in the next digest.
+    model = _fit("Ridge", dict(alpha=1.0), "r")
+    first = model.digest_
+    stored = model.coef_
+    if not (isinstance(stored, np.ndarray) and stored.flags.writeable and np.shares_memory(stored, model.coef_)):
+        pytest.skip("coef_ is not handed out as the stored writeable array on this build")
+    stored[0] += np.float32(1.0)
+    second = model.digest_
+    assert second != first
+    stored[0] -= np.float32(1.0)
+    assert model.digest_ == first
+
+
 @pytest.mark.parametrize("name,params,target", CASES)
-def test_refit_drops_the_kept_digest(name, params, target):
+def test_refit_changes_the_digest(name, params, target):
     model = _fit(name, params, target)
     first = model.digest_
     model.fit(X_OTHER) if target is None else model.fit(X_OTHER, Y if target == "r" else C)

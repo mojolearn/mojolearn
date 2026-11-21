@@ -34,7 +34,7 @@ step() { # name, command...
 "$PY" -I -c "import mojolearn as ml; print('PROOF wheel', ml.__version__)" 2>&1 | tail -n 1
 
 # D. digest_: per estimator family, fit on the GPU and with device="cpu" in ONE process; the two `digest_` strings are
-#    equal. Also per family: a second read and a second fit give the same string, a fit on changed data and a refit
+#    equal. Also per family: a second read (hashed again: nothing is kept) and a second fit give the same string, a fit on changed data and a refit
 #    change it, and an unfitted model has no digest_. A family that has no digest yet prints NOT-YET with its reason
 #    and does not fail the step. The digests are left in $REC/digests.json for a second machine (FP_REPLAY), with
 #    the data. The families run one after another: the GPU is one device and each fit is a few milliseconds.
