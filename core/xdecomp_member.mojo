@@ -555,7 +555,7 @@ def _fit_ipca(slot: _Slot, call: _Call) raises:
     var outputs = IPCAOutputs(_address(slot, 0), _address(slot, 1), _address(slot, 2), _address(slot, 3),
         _address(slot, 4), _address(slot, 5))
     var driver = IPCANativeDriver(route.entry.call)
-    var result = driver.fit(IPCAFitRequest(call[].x.data, rows, cols, requested, batch, outputs, keep))
+    var result = driver.fit(IPCAFitRequest(call[].x.data, rows, cols, requested, batch, outputs^, keep))
     if result.kept:
         for k in range(_HANDLES):  # driver-loop: five resident state handles
             slot[].handles[k] = result.state.values[k]
