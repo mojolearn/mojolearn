@@ -5312,91 +5312,98 @@
           "value": {
             "parameter": "n_estimators"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "max_samples",
           "value": {
             "parameter": "max_samples"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "max_depth",
           "value": {
             "parameter": "max_depth"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "max_features",
           "value": {
             "parameter": "max_features"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "bootstrap",
           "value": {
             "parameter": "bootstrap"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "contamination",
           "value": {
             "parameter": "contamination"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "random_state",
           "value": {
             "parameter": "random_state"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "warm_start",
           "value": {
             "parameter": "warm_start"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "n_jobs",
           "value": {
             "parameter": "n_jobs"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "verbose",
           "value": {
             "parameter": "verbose"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "output_type",
           "value": {
             "parameter": "output_type"
           },
-          "source": "python/mojolearn/_iforest_impl.py:153"
+          "source": "python/mojolearn/_iforest_impl.py:169"
+        },
+        {
+          "field": "device",
+          "value": {
+            "parameter": "device"
+          },
+          "source": "python/mojolearn/_iforest_impl.py:169"
         },
         {
           "field": "numeric_mode",
           "value": {
             "parameter": "numeric_mode"
           },
-          "source": "NumericModeMixin after python/mojolearn/_iforest_impl.py:153"
+          "source": "NumericModeMixin after python/mojolearn/_iforest_impl.py:169"
         }
       ],
       "trace": [
-        "python/mojolearn/_iforest_impl.py:153"
+        "python/mojolearn/_iforest_impl.py:169"
       ],
-      "constructor": "python/mojolearn/_iforest_impl.py:153",
-      "signature_source": "def __init__(self, *, n_estimators=100, max_samples='auto', max_depth=None, max_features=1.0, bootstrap=False, contamination='auto', random_state=None, warm_start=False, n_jobs=None, verbose=False, output_type=None)",
+      "constructor": "python/mojolearn/_iforest_impl.py:169",
+      "signature_source": "def __init__(self, *, n_estimators=100, max_samples='auto', max_depth=None, max_features=1.0, bootstrap=False, contamination='auto', random_state=None, warm_start=False, n_jobs=None, verbose=False, output_type=None, device=None)",
       "parameters": [
         "n_estimators",
         "max_samples",
@@ -5408,9 +5415,10 @@
         "warm_start",
         "n_jobs",
         "verbose",
-        "output_type"
+        "output_type",
+        "device"
       ],
-      "constructor_ast_sha256": "b92f10680b13a126c3eb238e96e946017f954d7999a5373dde902da95d357adb",
+      "constructor_ast_sha256": "0648c8643157b50e184ac6e225341b378af15a2088dcfef0fc55e22abf748cb8",
       "field_order": [
         "n_estimators",
         "max_samples",
@@ -5423,6 +5431,7 @@
         "n_jobs",
         "verbose",
         "output_type",
+        "device",
         "numeric_mode"
       ],
       "final_fields": {
@@ -5459,6 +5468,9 @@
         "output_type": {
           "parameter": "output_type"
         },
+        "device": {
+          "parameter": "device"
+        },
         "numeric_mode": {
           "parameter": "numeric_mode"
         }
@@ -5474,7 +5486,8 @@
         "warm_start": "False",
         "n_jobs": "None",
         "verbose": "False",
-        "output_type": "None"
+        "output_type": "None",
+        "device": "None"
       },
       "numeric_mode_injection": true,
       "module": "mojolearn._iforest_impl",
@@ -5483,8 +5496,8 @@
         {
           "path": "python/mojolearn/_iforest_impl.py",
           "name": "__init__",
-          "line": 153,
-          "ast_sha256": "b92f10680b13a126c3eb238e96e946017f954d7999a5373dde902da95d357adb"
+          "line": 169,
+          "ast_sha256": "0648c8643157b50e184ac6e225341b378af15a2088dcfef0fc55e22abf748cb8"
         }
       ],
       "constructor_ancestry": [
@@ -16780,8 +16793,18 @@
     "helpers": {
       "_application_subclass": "f3076f9b98210a1e5f0087d6956f9edd6d8a245ba3df000a875772e1513bd76b",
       "_connect_application_params": "b34180df1081c8d2ee4833659dc33542550222a59a961cdbf7e9a2cbba6260c7",
-      "_install_numeric_mode": "47deb1ed7a96919afbc333298dc41b3b0e6382027a7ec80ec23e8b572f9e1f3a"
+      "_install_numeric_mode": "cd53d2198452146f95729cbe31332c47cd45f25c9108029b63dc6de87b45a4ca"
     },
-    "rebound": "2026-11-17 (lane fb14-tool-tests): every ast_sha256 is the function's AST without its docstring (positions excluded), so a docstring or a line move no longer unbinds it. Two helpers rebound on reading the diff of 21b231faac: _application_subclass changed its docstring only; _install_numeric_mode lost the CPU-training guard loop, which set each fit method to itself (_guard_cpu_training returned it unchanged), so the events it writes are unchanged."
+    "rebound": "2026-11-17 (lane fb14-tool-tests): every ast_sha256 is the function's AST without its docstring (positions excluded), so a docstring or a line move no longer unbinds it. Two helpers rebound on reading the diff of 21b231faac: _application_subclass changed its docstring only; _install_numeric_mode lost the CPU-training guard loop, which set each fit method to itself (_guard_cpu_training returned it unchanged), so the events it writes are unchanged. | 2026-11-21 (lane dw-core): _install_numeric_mode records the class in the device table (_device_record) and lists the wrapper for install_device; the numeric_mode wrapper body and the events it writes are unchanged. IsolationForest re-derived by --rederive (its constructor writes device)."
+  },
+  "installer_device_parameter": {
+    "field": "device",
+    "value": {
+      "parameter": "device"
+    },
+    "position": "last",
+    "default": null,
+    "source": "python/mojolearn/_native_full_reset_params.py _install (every class whose own constructor does not name device)",
+    "check": "providers/python/device_route_boundary_door.mojo device_admit_class"
   }
 }

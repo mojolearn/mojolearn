@@ -32,6 +32,7 @@ from bindings.declared_params_native_door import _release as _declared_release
 from bindings.umap_parameters_native_door import umap_parameters_fields
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
+from providers.python.device_route_boundary_door import device_admit_class, device_route_clear
 
 
 def _quoted_names(names: PythonObject) raises -> String:
@@ -187,6 +188,19 @@ def _construct(model: PythonObject, positional: PythonObject, keywords: PythonOb
     var missing = context["missing"]
     var cls = py_type(model)
     var fields = _fields(model)
+    if Bool(py=py_get(plan, "device_admit", False)):
+        # `device` of a class this door gave the parameter to
+        # (python/mojolearn/_native_full_reset_params.py `_install`): an
+        # unknown value, 'gpu' on a CPU-only installation and 'cpu' for a
+        # class that cannot run there beside a GPU set are refused in the
+        # shared words before any field is written. The default None on a new
+        # instance is two dictionary reads and calls nothing; a constructor
+        # run again on a live instance drops its device route.
+        var device = native_instance_item(values, "device")
+        if device is not None or py_contains(fields, "device"):
+            device_admit_class(model, device, py_get(context["backend_fields"], "_CPU_ONLY") is not None,
+                               py_get(context, "device_cpu"), b)
+            device_route_clear(model)
     if py_get(plan, "validation_kind") is not None and String(plan["validation_kind"]) == "umap":
         if py_contains(fields, "_parameters") or py_contains(fields, "_extras"):
             raise Error("TypeError: native UMAP construction refuses instance validation callbacks")
