@@ -1012,10 +1012,10 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     The metric calls are SERIAL BY NATURE: the connected metric entries take
     Python arrays with the GIL held (core/metrics_entry_table.mojo holds a
     typed entry for R^2 only), exactly as each Python unit called them.
-    A scorer that reads decision_function keeps the Python units."""
+    A scorer that reads decision_function keeps the Python units.
+    CROSS_VAL_PREDICT (`run.method`): `predict` / `predict_proba` of each
+    fold's test rows, placed the same way; no metric runs."""
     if not run.raise_errors or rows.dev or len(rows.ranges) != 0 or rows.reuse_test:
-        return False
-    if run.method is not None:
         return False
     var b = msel_b()
     var responses = List[Int]()
@@ -1023,7 +1023,18 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     var slot = List[Int]()
     var names = Python.list()
     var model = PythonObject(None)
-    if run.multi is not None or run.single is not None:
+    if run.method is not None:
+        # cross_val_predict: the one method, placed per unit. A method the
+        # class does not have is the Python units' to refuse.
+        try:
+            model = msel_estimator_plan(run.base, context)
+            var op = _msel_response_op(run.method)
+            if op < 0 or not py_contains(model["methods"], run.method):
+                return False
+            responses.append(op)
+        except:
+            return False
+    elif run.multi is not None or run.single is not None:
         try:
             model = msel_estimator_plan(run.base, context)
             for k in range(run.n_keys):  # driver-loop: over scorer names (one response read each)
@@ -1049,7 +1060,16 @@ def _msel_member_route(mut run: MselUnitRun, mut rows: MselFoldRows, y: PythonOb
     if not native.ran:
         return False
     var n_ops = len(responses)
-    if n_ops > 0:
+    if run.method is not None:
+        # The fold's predictions as each Python unit left them (`_numeric_pred`
+        # of the method's output): a float32 Array the unit's worker filled,
+        # or a classifier's decoded labels.
+        try:
+            for u in range(run.n_units):  # driver-loop: over units (one prediction object each)
+                py_setitem(run.preds, PythonObject(u), _numeric_pred(native.outputs[u * native.sides], context))
+        except:
+            return False
+    elif n_ops > 0:
         # The metrics, in unit order. A metric that refuses publishes nothing
         # from this route: the Python units run the request and raise.
         var test = List[Float64](length=run.n_units * run.n_keys, fill=0.0)
