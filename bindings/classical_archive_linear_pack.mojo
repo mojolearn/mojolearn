@@ -36,7 +36,7 @@ def archive_linear_pack(cls: PythonObject, plan: NativeLinearArchivePlan,
     # `device` is a constructor parameter, not model state: the file does not
     # carry it. A loaded public model takes the default; the explicit Host*
     # classes (mojolearn.host_model) run on the CPU by class and say so.
-    py_setitem(fields, "device", "cpu" if Bool(py=py_get(context, nk[].k_classical_explicit_cpu, False)) else "gpu")
+    py_setitem(fields, "device", PythonObject("cpu" if Bool(py=py_get(context, nk[].k_classical_explicit_cpu, False)) else "gpu"))
     py_setitem(fields, nk[].k_coef_, coefficients)
     py_setitem(fields, nk[].k_intercept_, plan.intercept)
     py_setitem(fields, nk[].k_n_features_in_, plan.features)
