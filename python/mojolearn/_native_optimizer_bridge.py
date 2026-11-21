@@ -37,7 +37,9 @@ def connect(training):
             # glue: metadata is available independently of optional training
             # kernels; retain its actual compiled entries once at import.
             try:
-                metadata_entries = tuple(getattr(binding, name) for name in ("training_numeric_mode", "training_vendor"))  # glue: fixed compiled metadata exports
+                # glue: the image's native table factory; its tier and vendor are read through the table
+                # (bindings/training_metadata_native_pack.mojo), not through per-read Python entries
+                metadata_entries = tuple(getattr(binding, name) for name in ("optimizer_native_api_v1",))  # glue: fixed compiled metadata export
                 if any(type(entry) is not BuiltinFunctionType for entry in metadata_entries):  # glue: admit only native metadata entry points
                     raise TypeError("training metadata requires compiled native entries")
                 metadata_bindings[mode] = metadata_entries

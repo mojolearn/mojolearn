@@ -92,7 +92,7 @@ def test_metadata_preserves_connected_binding_failure_category(operation, catego
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)
-@pytest.mark.parametrize("index", [0, 1])
+@pytest.mark.parametrize("index", [0])
 def test_metadata_refuses_replaced_python_export_before_call(operation, index, monkeypatch):
     records = _training_impl._OPT_CONTEXT["training_metadata_bindings"]
     entries = list(records["identical"])
@@ -108,15 +108,11 @@ def test_metadata_refuses_replaced_python_export_before_call(operation, index, m
     assert not calls
 
 
-@pytest.mark.parametrize("operation", OPERATIONS)
-def test_metadata_rechecks_actual_compiled_mode(operation, monkeypatch):
-    records = _training_impl._OPT_CONTEXT["training_metadata_bindings"]
-    # A fixed native test function returns an unsupported integer code.
-    # This exercises the refusal without compiling a deliberately wrong tier.
-    assert sys.getrecursionlimit() not in (0, 1)
-    monkeypatch.setitem(records, "identical", (sys.getrecursionlimit, records["identical"][1]))
-    category = ImportError if _backend._CPU_ONLY is not None else RuntimeError
-    _refusal(audit_native_call(operation, "identical"), category, "compiled")
+# The tier is now the connected image's own native table answer
+# (OPT_NATIVE_MODE), read when the image is connected. The former test here
+# replaced the `training_numeric_mode` export with another builtin to return
+# an unsupported code; there is no export to replace, and a wrong tier can
+# only come from a wrongly built binary.
 
 
 @pytest.mark.parametrize("operation", OPERATIONS)
