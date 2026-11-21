@@ -60,6 +60,7 @@ from core.density_member import density_member_v2
 from core.hierarchy_member import hierarchy_member_v2
 from core.spectral_member import spectral_member_v2
 from core.member_abi import member_output_dtype, MEMBER_I32, MEMBER_CAN_SCORE_SAMPLES, MEMBER_DTYPE_UNSAID
+from core.member_abi import MEMBER_BORROWS_FIT, member_own
 from core.member_families import MEMBER_FAMILY_SPARE3, MEMBER_FAMILY_COUNT, member_family_name
 
 comptime _LINEAR_FIXTURES = 5
@@ -77,7 +78,12 @@ comptime _SWEEP_B = 7
 #: KernelApprox 8, Gp 23, Mlp 19, Sequence 20, Cnn 21, Pls 22, Forecast 37,
 #: ForecastSeq 43.
 comptime _SWEEP_A = 12
-comptime MEMBER_ABI_FIXTURES = _LINEAR_FIXTURES + _PUBLISHED + _SWEEP_B + _SWEEP_A
+#: THE LIFETIME RULE (core/member_abi.mojo; lane fx-borrow, 2026-11-21): a
+#: borrowing kind (the k-NN regressor) fitted on a buffer that is then
+#: overwritten: 0 after the export of both blocks, 1 after MEMBER_EXPORT_OWN
+#: (`member_own`).
+comptime _BORROW = 2
+comptime MEMBER_ABI_FIXTURES = _LINEAR_FIXTURES + _PUBLISHED + _SWEEP_B + _SWEEP_A + _BORROW
 
 
 def require(ok: Bool, message: String) raises:
@@ -339,13 +345,124 @@ def _sweep_a_fixture(which: Int) raises:
     _ = len(none)
 
 
+def _borrow_new(member: MemberRef) raises -> Int:
+    """A KNeighborsRegressor member state (kind 1, one neighbor, euclidean,
+    uniform weights)."""
+    var words: List[Float64] = [1.0, 1.0, 1.0, 2.0, 0.0, 0.0]
+    var call = MemberCall(DeviceRoute(0))
+    call.params = Int(words.unsafe_ptr())
+    call.param_count = 6
+    _ = member_call(member, MEMBER_OP_NEW, call)
+    _ = len(words)
+    return call.state
+
+
+def _borrow_same(view: MemberMatrix, expected: List[Float32]) -> Bool:
+    """The float32 host block `view` holds exactly the words `expected`."""
+    if view.data == 0 or view.rows * view.cols != len(expected):
+        return False
+    var words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=view.data)
+    for i in range(len(expected)):  # driver-loop: over a six-word fixture block
+        if words[i] != expected[i]:
+            return False
+    return True
+
+
+def _borrow_block(member: MemberRef, state: Int, block: Int) raises -> MemberMatrix:
+    var call = MemberCall(DeviceRoute(0), state)
+    call.block = block
+    _ = member_call(member, MEMBER_OP_EXPORT, call)
+    return call.dst
+
+
+def _borrow_fixture(which: Int) raises:
+    """THE LIFETIME RULE on a borrowing kind, without a kernel. Fit a k-NN
+    regressor on a buffer; make the state own its rows (`which` 0: the
+    export of both blocks, the copy that always existed; 1: `member_own`,
+    what an adoption sends); OVERWRITE the fit buffers; the state's blocks
+    still hold the fitted words, in the state's own storage; IMPORT them
+    into a second state, free the first, and the second state's blocks are
+    the exported ones. A k-NN answer is a function of exactly these two
+    blocks and the query, so the predict of the imported state is the
+    exported model's; the predict call itself needs the family's kernel
+    entry in the route, which this suite (no image) does not hold.
+    SERIAL BY NATURE: one state, six words; the fixtures are the parallel units."""
+    var member = MemberRef(EntryRef(neighbors_member_v2, 0), 0)
+    # a kind that owns its state does not say it borrows, and OWN is not sent to it
+    var linear_probe = MemberCall(DeviceRoute(0))
+    require((member_call(_member(), MEMBER_OP_CAPABILITIES, linear_probe) & MEMBER_BORROWS_FIT) == 0,
+        "member ABI: the linear member owns its state (no MEMBER_BORROWS_FIT)")
+    var points: List[Float32] = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    var targets: List[Float32] = [10.0, 20.0, 30.0]
+    var fitted_points = points.copy()
+    var fitted_targets = targets.copy()
+    var first = _borrow_new(member)
+    var second = 0
+    try:
+        var call = MemberCall(DeviceRoute(0), first)
+        require((member_call(member, MEMBER_OP_CAPABILITIES, call) & MEMBER_BORROWS_FIT) != 0,
+            "member ABI: a k-NN state says it borrows its fit buffers (kind-exact)")
+        call.x = MemberMatrix(Int(points.unsafe_ptr()), 3, 2)
+        call.y = MemberMatrix(Int(targets.unsafe_ptr()), 3, 1)
+        _ = member_call(member, MEMBER_OP_FIT, call)
+        if which == 0:
+            _ = _borrow_block(member, first, MEMBER_BLOCK_FAMILY)
+            _ = _borrow_block(member, first, MEMBER_BLOCK_FAMILY + 1)
+        else:
+            var plan = MemberPlan()
+            plan.member = member
+            plan.route = DeviceRoute(0)
+            member_own(plan, first)
+            member_own(plan, first)  # a second OWN copies nothing and changes nothing
+        # the caller's buffers are gone (overwritten in place)
+        for i in range(6):  # driver-loop: over the fixture's six words
+            points[i] = Float32(-7.0)
+        for i in range(3):  # driver-loop: over the fixture's three targets
+            targets[i] = Float32(-7.0)
+        var point_view = _borrow_block(member, first, MEMBER_BLOCK_FAMILY)
+        var target_view = _borrow_block(member, first, MEMBER_BLOCK_FAMILY + 1)
+        require(point_view.data != Int(points.unsafe_ptr()) and target_view.data != Int(targets.unsafe_ptr()),
+            "member ABI: an owning k-NN state hands out its own words, not the caller's fit buffers")
+        require(_borrow_same(point_view, fitted_points) and _borrow_same(target_view, fitted_targets),
+            "member ABI: a k-NN state that owns its rows keeps the fitted words after the fit buffers changed")
+        second = _borrow_new(member)
+        var into = MemberCall(DeviceRoute(0), second)
+        into.block = MEMBER_BLOCK_FAMILY
+        into.x = point_view
+        _ = member_call(member, MEMBER_OP_IMPORT, into)
+        into.block = MEMBER_BLOCK_FAMILY + 1
+        into.x = target_view
+        into.flags = MEMBER_IMPORT_DONE
+        _ = member_call(member, MEMBER_OP_IMPORT, into)
+        # the first state goes; the imported one is whole on its own
+        var gone = MemberCall(DeviceRoute(0), first)
+        _ = member_call(member, MEMBER_OP_FREE, gone)
+        first = 0
+        require(_borrow_same(_borrow_block(member, second, MEMBER_BLOCK_FAMILY), fitted_points)
+            and _borrow_same(_borrow_block(member, second, MEMBER_BLOCK_FAMILY + 1), fitted_targets),
+            "member ABI: the imported k-NN state holds the exported model, not the overwritten buffers")
+    finally:
+        if first != 0:
+            var last = MemberCall(DeviceRoute(0), first)
+            _ = member_call(member, MEMBER_OP_FREE, last)
+        if second != 0:
+            var other = MemberCall(DeviceRoute(0), second)
+            _ = member_call(member, MEMBER_OP_FREE, other)
+        _ = len(points)
+        _ = len(targets)
+        _ = len(fitted_points)
+        _ = len(fitted_targets)
+
+
 def _fixture(unit: Int) raises:
     if unit >= _LINEAR_FIXTURES + _PUBLISHED:
         var extra = unit - _LINEAR_FIXTURES - _PUBLISHED
         if extra < _SWEEP_B:
             _sweep_b_fixture(extra)
-        else:
+        elif extra < _SWEEP_B + _SWEEP_A:
             _sweep_a_fixture(extra - _SWEEP_B)
+        else:
+            _borrow_fixture(extra - _SWEEP_B - _SWEEP_A)
         return
     if unit >= _LINEAR_FIXTURES:
         _published_fixture(unit - _LINEAR_FIXTURES)

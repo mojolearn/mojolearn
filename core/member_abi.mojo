@@ -78,6 +78,32 @@ core/member_families.mojo (generated; no family edits this file).
     (`member_outputs_of`). With a live state the state answers and the
     shape words are ignored.
 
+THE LIFETIME RULE (2026-11-21, lane fx-borrow; MEMBER-ABI-V2.md item 34). The
+first paragraph above ("the caller owns every addressed buffer until the call
+returns") holds for every operation but FIT. Every buffer a caller hands to
+`MEMBER_OP_FIT` / `MEMBER_OP_PARTIAL_FIT` (x, y, weights, row_index,
+column_index) stays valid and unchanged until that state is FREEd or has
+been told to own its rows, whichever the caller does last on it:
+  * a kind WITHOUT `MEMBER_BORROWS_FIT` keeps no pointer into a fit buffer
+    after FIT returns: the caller may free the buffers at once.
+  * a kind WITH `MEMBER_BORROWS_FIT` (kind-exact: ask with a live state, or
+    `member_kind_capabilities`) may read them again in PREDICT / SCORE /
+    TRANSFORM of that state and in EXPORT; never after a FREE, a new FIT or
+    an IMPORT of that state, and never after `MEMBER_EXPORT_OWN`.
+  * `MEMBER_OP_EXPORT` with `call.flags = MEMBER_EXPORT_OWN` (`member_own`):
+    the state copies every fit buffer it still reads into words it owns,
+    ONCE (a second call copies nothing), and from its return reads no caller
+    buffer. An exported block VIEW alone does not promise that (a family may
+    hand back the borrowed words themselves): a caller that lets a state
+    outlive its fit buffers (a state an estimator holds:
+    bindings/member_held_door.mojo `member_held_adopt` does it for every
+    caller) sends OWN first. No copy is made per fit, per fold or per call.
+  * a caller that GATHERS a fit buffer (a scattered fold, a bootstrap draw)
+    for a borrowing kind keeps it as long as the unit's state: freed after
+    FREE for a state it does not keep, after PACK (the export, and the
+    adoption's OWN) for one it keeps. For a kind that owns its state it
+    frees the buffer when the fit returns.
+
 SERIAL BY NATURE: publication and resolution are metadata operations with no
 independent units. The member operations themselves are the family's RUN and
 parallel inside as that family is; a caller runs independent members (folds,
@@ -152,6 +178,13 @@ comptime MEMBER_CAN_SCOPE = 16777216         # reads call.scope / call.pin: keep
 #: with one device the bit is not asked at all.
 comptime MEMBER_CAN_DEVICE_PLAN = 33554432   # splits over call.devices as its plain owner does under the bound plan
 
+#: KIND-EXACT (answered with `call.state != 0`; the family's union with 0).
+#: A fitted state of this kind keeps a pointer into a buffer its FIT was
+#: handed (x, y, weights or an index) after FIT returns: THE LIFETIME RULE in
+#: the module note. Not a "can": a property the caller must honor. A kind
+#: with the bit answers `MEMBER_OP_EXPORT` + `MEMBER_EXPORT_OWN`.
+comptime MEMBER_BORROWS_FIT = 67108864       # the fitted state reads its FIT buffers after FIT returned
+
 #: `call.out_dtype` after MEMBER_OP_OUTPUTS: the member did not say.
 comptime MEMBER_DTYPE_UNSAID = -1
 #: `call.scope` when the caller runs in no resident scope (the value of
@@ -178,6 +211,11 @@ comptime MEMBER_BLOCK_FAMILY = 64
 #: `call.flags` of MEMBER_OP_EXPORT: `call.block` is an index 0 .. count-1
 #: (the block's name comes back in `call.block`), for a PACK that walks them.
 comptime MEMBER_BLOCK_BY_INDEX = 1
+#: `call.flags` of MEMBER_OP_EXPORT, alone (no block is read or answered):
+#: the state copies every FIT buffer it still borrows into words it owns,
+#: once, and reads no caller buffer afterwards (THE LIFETIME RULE). Sent only
+#: to a kind with `MEMBER_BORROWS_FIT` (`member_own` asks first).
+comptime MEMBER_EXPORT_OWN = 4
 #: `call.flags` of MEMBER_OP_IMPORT: this was the last block; check the
 #: state is complete and mark it fitted (`call.classes` = its class count).
 comptime MEMBER_IMPORT_DONE = 2
@@ -515,6 +553,20 @@ def member_kind_capabilities(plan: MemberPlan) raises -> Int:
     finally:
         member_free(plan, call)
     return mask
+
+
+def member_own(plan: MemberPlan, state: Int) raises:
+    """THE LIFETIME RULE: make the fitted `state` own every FIT buffer it
+    still borrows, so it may outlive them. One capability question of the
+    state's own kind; a kind without `MEMBER_BORROWS_FIT` is sent nothing
+    and copies nothing, and a state that already owns its rows copies
+    nothing. Call it ONCE per state that is kept past its fit buffers (at
+    adoption), never per call. Raises the member's words when it cannot."""
+    var call = MemberCall(plan.route, state)
+    if (member_call(plan.member, MEMBER_OP_CAPABILITIES, call) & MEMBER_BORROWS_FIT) == 0:
+        return
+    call.flags = MEMBER_EXPORT_OWN
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
 
 
 def member_outputs(plan: MemberPlan, operation: Int, features: Int, targets: Int) raises -> Int:

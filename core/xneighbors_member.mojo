@@ -208,6 +208,7 @@ from core.member_abi import (
     MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
 from core.member_families import MEMBER_FAMILY_XNEIGHBORS
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -1111,6 +1112,10 @@ def _lof_export(slot: _SlotPtr, call: _CallPtr) raises:
     state's next fit, import or free (the borrowed rows are copied here)."""
     if not slot[].fitted:
         raise Error("NotFittedError: this LocalOutlierFactor member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        # THE LIFETIME RULE: the borrowed fit rows, once; no view is answered.
+        _lof_own_rows(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block >= _LOF_BLOCKS:
@@ -1486,6 +1491,10 @@ def _kp_export(slot: _SlotPtr, call: _CallPtr) raises:
     state's next fit, import or free (the borrowed rows are copied here)."""
     if not slot[].fitted:
         raise Error("NotFittedError: this KernelPCA member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        # THE LIFETIME RULE: the borrowed fit rows, once; no view is answered.
+        _lof_own_rows(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block >= _KP_BLOCKS:
@@ -1945,6 +1954,10 @@ def _im_export(slot: _SlotPtr, call: _CallPtr) raises:
     """A view of one fitted block (the borrowed rows are copied here once)."""
     if not slot[].fitted:
         raise Error("NotFittedError: this KNNImputer member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        # THE LIFETIME RULE: the borrowed fit rows, once; no view is answered.
+        _lof_own_rows(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block >= _IM_BLOCKS:
@@ -2183,8 +2196,14 @@ comptime _OCSVM = (MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_DECISION | M
 
 
 def _capabilities(slot: _SlotPtr) -> Int:
+    # MEMBER_BORROWS_FIT, kind-exact: LocalOutlierFactor, KernelPCA and a
+    # KNNImputer without a masked copy read the caller's fit X as their
+    # fitted rows until an export of the rows block, or MEMBER_EXPORT_OWN,
+    # copied them. Every other kind owns its fitted words.
     if slot[].kind == XNEIGHBORS_KIND_LOF:
-        return _LOF_NOVELTY if slot[].novelty else _LOF_OUTLIER
+        return (_LOF_NOVELTY if slot[].novelty else _LOF_OUTLIER) | MEMBER_BORROWS_FIT
+    if slot[].kind == XNEIGHBORS_KIND_KERNEL_PCA or (slot[].kind == XNEIGHBORS_KIND_IMPUTER and not slot[].im_mask):
+        return _TRANSFORMER | MEMBER_BORROWS_FIT
     if slot[].kind == XNEIGHBORS_KIND_OCSVM:
         return _OCSVM
     if slot[].kind == XNEIGHBORS_KIND_SVGP:
@@ -2292,7 +2311,7 @@ def _xneighbors_member(operation: Int, address: Int) raises -> Int:
     var call = _CallPtr(unsafe_from_address=address)
     if operation == MEMBER_OP_CAPABILITIES:
         if call[].state == 0:
-            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER | _SVGP
+            return _NC_EUCLIDEAN | _LOF_NOVELTY | _OCSVM | _TRANSFORMER | _SVGP | MEMBER_BORROWS_FIT
         return _capabilities(_SlotPtr(unsafe_from_address=_lookup(call[].state, False)))
     if operation == MEMBER_OP_NEW:
         _new(call)

@@ -259,7 +259,8 @@ def gbdt_ranking_pointwise_host_fit(
         var splits = _ordered_tree_structure(
             cindex, helpers, params.max_depth, sw, sg, doc_ids, part_bounds,
             1, 0, scale, params.l2_leaf_reg, feat_offset, feat_shift,
-            feat_mask, not cosine_score, score_std_dev, tree_seed, cosine_score,
+            feat_mask, List[Bool](), not cosine_score, score_std_dev,
+            tree_seed, cosine_score,
         )
         var n_leaves = 1 << len(splits)
         var bins = List[Int](length=n_rows, fill=0)

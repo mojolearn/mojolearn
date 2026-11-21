@@ -98,6 +98,7 @@ from core.member_abi import (
     MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY, MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE,
     member_publish, member_call_from_spans, member_unsupported,
 )
+from core.member_abi import MEMBER_BORROWS_FIT, MEMBER_EXPORT_OWN
 from core.member_families import MEMBER_FAMILY_DENSITY
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -500,6 +501,10 @@ def _kde_own(slot: _Slot):
 def _kde_export(slot: _Slot, call: _Call) raises:
     if not slot[].fitted:
         raise Error("NotFittedError: this KernelDensity member is not fitted yet")
+    if (call[].flags & MEMBER_EXPORT_OWN) != 0:
+        # THE LIFETIME RULE: the rows and the weights, once; no view is answered.
+        _kde_own(slot)
+        return
     var block = call[].block
     if (call[].flags & MEMBER_BLOCK_BY_INDEX) != 0:
         if block < 0 or block > 2:
@@ -642,8 +647,11 @@ def _density_member(operation: Int, address: Int) raises -> Int:
         # No MEMBER_CAN_TEST_ROWS: X is admitted finite by the caller (the
         # DBSCAN and KDE entries do not test it; only KDE weights are checked here).
         var dbscan = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_CAN_SAMPLE_WEIGHT
+        # MEMBER_BORROWS_FIT: a fitted KernelDensity state reads the caller's
+        # X and weights until an export (or MEMBER_EXPORT_OWN) copied them.
+        # DBSCAN owns its state (its core rows are gathered at fit).
         var kde = (MEMBER_CAN_FIT | MEMBER_CAN_SCORE_SAMPLES | MEMBER_CAN_SCORE | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
-            | MEMBER_CAN_SAMPLE_WEIGHT)
+            | MEMBER_CAN_SAMPLE_WEIGHT | MEMBER_BORROWS_FIT)
         if call[].state != 0:
             var kind = _Slot(unsafe_from_address=_lookup(call[].state, False))[].kind
             return kde if kind == _KIND_KDE else dbscan
