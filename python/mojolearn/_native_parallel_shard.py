@@ -51,9 +51,9 @@ _WORKER_BINDINGS = {
     "_mojolearn_x_neighbors": _connect_binding("_mojolearn_x_neighbors", ("x_neighbors_native_api_v1",)),
     "neighbor_density": _connect_binding("_mojolearn_estimators", ("kde_score_samples",),
         ("kde_fit_prepare", "kde_fit_release", "kde_score_samples_resident")),
-    "_mojolearn_ivf": _connect_binding("_mojolearn_ivf",
-        ("ivf_flat_partial_search",),
-        ("ivf_numeric_mode", "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release", "ivf_flat_index_export")),
+    # The shard worker calls the image's IVF-Flat operations table (the
+    # module's `ivf_native_key`), not exports by name.
+    "_mojolearn_ivf": _connect_binding("_mojolearn_ivf", (), ("ivf_numeric_mode",)),
 }
 
 

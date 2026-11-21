@@ -18,7 +18,10 @@ from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_labels_door import labels_cast, labels_reshape, classical_decode_labels
 from bindings.admitted_input_unpack import admit_ids
-from bindings.family_common_pack import family_call, family_entry, family_array
+from bindings.family_common_pack import family_call, family_array
+from bindings.ivf_ops_native_door import ivf_ops_key, ivf_door_search, ivf_door_prepare, ivf_door_export, ivf_door_release
+from core.ivf_entry_table import IvfIndexSpans, IvfIndexWords
+from ivf.ivf_query_run import IVF_NO_HANDLE, IvfSearchRequest
 from bindings.parallel_shard_common_door import shard_model, shard_rows, shard_dtype
 from bindings.parallel_shard_common_run import shard_item
 from bindings.arena_materialize_native_door import arena_ragged_rows
@@ -422,7 +425,9 @@ def _release(token: PythonObject, tables: PythonObject, context: PythonObject) r
     if cls is py_item(tables, nk[].k_ivf_class):
         var held = py_get(py_fields(model), nk[].k__resident)
         if held is not None:
-            _ = family_call(family_entry(held[2], "ivf_flat_index_release", context), held[1])
+            # The minting image's table entry (before: its release export
+            # read by name and called). Once per released snapshot.
+            ivf_door_release(ivf_ops_key(held[2]), Int(py=held[1]))
             py_setitem(py_fields(model), nk[].k__resident, PythonObject(None))
     elif cls is py_item(tables, nk[].k_kde_class):
         _kde_release(py_fields(model))
@@ -441,27 +446,35 @@ def _ivf_partial(model: PythonObject, source: PythonObject, tables: PythonObject
     var ids = family_array(Python.tuple(m, k), "<i4", context)
     var counts = family_array(Python.tuple(m), "<i4", context)
     var binding = neighbor_binding(tables, "_mojolearn_ivf")
-    var stored = Python.list(classical_address(py_item(fields, nk[].k_centers_)), classical_address(py_item(fields, nk[].k_center_norms_)),
-        classical_address(py_item(fields, nk[].k_list_offsets_)), classical_address(py_item(fields, nk[].k_list_indices_)), classical_address(py_item(fields, nk[].k_list_data_)))
-    var sizes = Python.list(py_item(fields, nk[].k_n_rows_), py_item(fields, nk[].k_n_features_in_), py_item(fields, nk[].k_n_lists_), py_item(fields, nk[].k_metric_code_))
+    # RUN (ivf/ivf_query_run.mojo): the process set's IVF image through its
+    # operations table, under the key read here (one exact dictionary read
+    # per query round). Before, per round: `ivf_flat_index_prepare` and the
+    # search export read by name, a five-address, a four-address and an
+    # eight-word Python list (plus a copy of the sizes on the first round)
+    # and a Python call. Nothing is added per query.
+    var ops_key = ivf_ops_key(binding)
+    var index_words = IvfIndexWords(Int(py=py_item(fields, nk[].k_n_rows_)), Int(py=py_item(fields, nk[].k_n_features_in_)),
+                                    Int(py=py_item(fields, nk[].k_n_lists_)), Int(py=py_item(fields, nk[].k_metric_code_)))
     var held = py_get(fields, nk[].k__resident)
-    var prepare = knn_door(binding, "ivf_flat_index_prepare")
+    var handle = IVF_NO_HANDLE
+    var spans = IvfIndexSpans(0, 0, 0, 0, 0)
     # Worker snapshots are private and immutable until released. Unlike a public
-    # mutable index, their five input buffers never change during a query round.
-    if held is None and prepare is not None:
-        var prepare_sizes = py_call(native_loaded_module("builtins").list, sizes)
-        _ = py_call(prepare_sizes.append, 1)
-        var handle = family_call(prepare, stored, prepare_sizes)
-        held = Python.tuple(PythonObject(None), handle, binding)
-        py_setitem(fields, nk[].k__resident, held)
-    _ = py_call(sizes.extend, Python.list(m, k, py_item(fields, nk[].k_n_probes)))
-    var output = Python.list(classical_address(q), classical_address(dist), classical_address(ids), classical_address(counts))
-    if held is not None:
-        _ = py_call(sizes.append, 1)
-        _ = family_call(family_entry(binding, "ivf_flat_index_search", context), held[1], output, sizes)
+    # mutable index, their five input buffers never change during a query round:
+    # the first round prepares the shard's disjoint storage once (every image
+    # that publishes the table prepares an index).
+    if held is None:
+        spans = IvfIndexSpans(
+            Int(py=classical_address(py_item(fields, nk[].k_centers_))), Int(py=classical_address(py_item(fields, nk[].k_center_norms_))),
+            Int(py=classical_address(py_item(fields, nk[].k_list_offsets_))), Int(py=classical_address(py_item(fields, nk[].k_list_indices_))),
+            Int(py=classical_address(py_item(fields, nk[].k_list_data_))))
+        handle = ivf_door_prepare(ops_key, spans, index_words, True)
+        py_setitem(fields, nk[].k__resident, Python.tuple(PythonObject(None), PythonObject(handle), binding))
     else:
-        _ = py_call(stored.extend, output)
-        _ = family_call(family_entry(binding, "ivf_flat_partial_search", context), stored, sizes)
+        handle = Int(py=held[1])
+    ivf_door_search(ops_key, IvfSearchRequest(
+        index_words, handle, spans, Int(py=classical_address(q)), Int(py=classical_address(dist)),
+        Int(py=classical_address(ids)), Int(py=classical_address(counts)), 0,
+        m, k, Int(py=py_item(fields, nk[].k_n_probes)), True))
     _ = q
     _ = model
     return Python.tuple(dist, ids, counts)
@@ -503,7 +516,9 @@ def parallel_neighbor_worker(operation: Int, args: PythonObject, tables: PythonO
         return PythonObject(None)
     if operation == PARALLEL_SHARD_WORKER_OPN_IVF_STORE:
         var model = shard_model(py_item(tables, nk[].k_ivf_class), args[1])
-        _ = family_entry(neighbor_binding(tables, "_mojolearn_ivf"), "ivf_flat_partial_search", context)
+        # The store step proves the image answers the partial search before
+        # any round runs (before: its export probed by name).
+        _ = ivf_ops_key(neighbor_binding(tables, "_mojolearn_ivf"))
         py_setitem(_snapshots(), args[0], model)
         return py_item(py_fields(model), nk[].k_n_rows_)
     var model = py_get(_snapshots(), args[0])
@@ -594,7 +609,9 @@ def parallel_ivf_admit(index: PythonObject, tables: PythonObject, context: Pytho
         if cached is None:
             raise Error("RuntimeError: resident IVF index was released before its list data was read")
         var data = family_array(Python.tuple(n, dim), "<f4", context)
-        _ = family_call(family_entry(binding, "ivf_flat_index_export", context), cached[1], classical_address(data), PythonObject(n * dim))
+        # The minting image's table (before: the process image's export read
+        # by name). Once per shard split of a device-built index.
+        ivf_door_export(ivf_ops_key(cached[2]), Int(py=cached[1]), Int(py=classical_address(data)), n * dim)
         py_setitem(fields, nk[].k_list_data_, data)
         _ = py_call(fields.pop, "_device_list_data")
         var arrays = Python.tuple(_ann_key_entry(fields, "centers_"), _ann_key_entry(fields, "center_norms_"),

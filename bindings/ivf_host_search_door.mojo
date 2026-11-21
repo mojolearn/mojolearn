@@ -26,8 +26,6 @@ from std.python._cpython import GILReleased
 
 from core.hostptr import read_f32
 from bindings.ivf_index_arrays_unpack import (
-    ivf_read_resident_filter,
-    ivf_write_resident_result,
     ivf_extend_count,
     ivf_read_index_arrays,
     ivf_read_search_filter,
@@ -41,7 +39,6 @@ from ivf.ivf_host_search_run import (
     ivf_host_register,
     ivf_host_release,
     ivf_host_search_run,
-    _host_ivf_view,
 )
 
 
@@ -134,34 +131,10 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
     return PythonObject(ivf_host_register(arrays^, partial))
 
 
-def ivf_flat_index_search_binding(
-    handle: PythonObject, addrs: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    var h = Int(py=handle)
-    if len(params) != 8:
-        raise Error("ivf_flat_index_search: params must contain 8 values (n, dim, n_lists, metric, m, k, n_probes, partial)")
-    var e = _host_ivf_view(h)
-    var partial = Int(py=params[7]) != 0
-    if (
-        e[].index.n_rows != Int(py=params[0]) or e[].index.dim != Int(py=params[1])
-        or e[].index.n_lists != Int(py=params[2]) or e[].index.metric != Int(py=params[3])
-        or e[].partial_storage != partial
-    ):
-        raise Error("ivf_flat_index_search: the handle holds another index than the call names")
-    var ext = ivf_search_extents(params)
-    var m = ext[0]
-    var k = ext[1]
-    var n_probes = ext[2]
-    var queries = read_f32(Int(py=addrs[0]), m * e[].index.dim)
-    var keep = ivf_read_resident_filter(addrs, e[].index.n_rows)
-    var dist = List[Float32]()
-    var idx = List[UInt32]()
-    var cand = List[Int32]()
-    with GILReleased(Python()):
-        ivf_host_search_run(e[].index, queries, m, k, n_probes, partial, keep, dist, idx, cand)
-    ivf_write_resident_result(addrs, dist, idx, cand, m, k)
-    _ = e^
-    return PythonObject(0)
+# TOMBSTONE: ivf_flat_index_search (Python export of the resident IVF-Flat search; its body is operation
+# IVF_OP_INDEX_SEARCH of the IVF-Flat operations table, core/ivf_entry_table.mojo, and its three callers, the
+# IVFIndex search door, the shard worker and the query route capture, call that table) deleted 2026-11-21 by lane
+# dw-neighbors; no caller left (tools/native_caller_audit.py); code recoverable at b647d4eee1.
 
 
 def ivf_flat_index_release_binding(handle: PythonObject) raises -> PythonObject:

@@ -59,7 +59,16 @@ def composition_fields(model: PythonObject, context: PythonObject) raises -> Pyt
             raise Error("TypeError: native preprocessing state requires exact string keys")
     var names = py_item(plan, nk[].k_parameters)
     for i in range(len(names)):  # driver-loop: declared composition configuration, before coercion or comparison
-        var value = fields[names[i]]
+        var name = names[i]
+        var value = PythonObject(None)
+        if name is nk[].k_device:
+            # An instance built without its constructor (or saved before the
+            # parameter existed) has no `device`: None, this installation's
+            # device, as the route's one read answers it. One pointer compare
+            # per declared name; the other names are read as before.
+            value = py_get(fields, name)
+        else:
+            value = fields[name]
         if String(names[i]) == "estimator":
             if value is not None:
                 prep_estimator_admit(value, String(cls.__name__), context)

@@ -21,11 +21,16 @@ from bindings.classical_pandas_door import classical_admit_value, native_pandas_
 from bindings.sequential_admission_door import _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.sequential_inputs_door import sequential_input, sequential_sequence
-from bindings.family_common_pack import family_array, family_entry, family_call, family_call_kw
+from bindings.family_common_pack import family_array, family_call, family_call_kw
 from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_shape_once, array_metadata_once, array_python_shape
 from core.cast_in import CAST_KIND_FLOAT, CAST_KIND_SIGNED
 from bindings.neighbors_knn_native_door import knn_door, knn_state_values, knn_state_unchanged
-from bindings.neighbors_ann_native_door import _ivf_metric, _ann_release, IVF_QUERY_STATE_SLOT
+from bindings.neighbors_ann_native_door import _ivf_metric, ivf_release_held, IVF_QUERY_STATE_SLOT
+from bindings.ivf_ops_native_door import (
+    ivf_ops_key, ivf_door_search, ivf_door_prepare, ivf_door_export, ivf_door_extend,
+)
+from core.ivf_entry_table import IvfEntryKey, IvfIndexSpans, IvfIndexWords
+from ivf.ivf_query_run import IVF_NO_HANDLE, IvfExtendRequest, IvfSearchRequest
 from bindings.neighbors_ann_query_native_door import ann_pq_materialize
 from bindings.parallel_neighbor_worker_door import neighbor_kneighbors, _radius, neighbor_radius_rows, _i32_vector, _flag
 from bindings.host_inference_scalars_door import host_inference_scalar
@@ -258,7 +263,10 @@ def _ivf_materialize(fields: PythonObject, context: PythonObject) raises:
     var n = Int(py=fields["n_rows_"])
     var dim = Int(py=fields["n_features_in_"])
     var data = family_array(Python.tuple(n, dim), "<f4", context)
-    _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1], classical_address(data), PythonObject(n * dim))
+    # The minting image's table (one key read; before: its export read by
+    # name and called with three boxed words). Once per first read of
+    # `list_data_`, never per query.
+    ivf_door_export(ivf_ops_key(cached[2]), Int(py=cached[1]), Int(py=classical_address(data)), n * dim)
     # The resident handle keeps this data on the device (hazard class A).
     _ = fitted_freeze(data, context)
     py_setitem(fields, "list_data_", data)
@@ -360,21 +368,23 @@ def _ivf_search(model: PythonObject, kind: PythonObject, args: PythonObject, adm
     var keep = _ivf_filter(args[1], n, context)
     var stored_pins = List[ArrayPin]()
     var stored_snapshots = _ivf_search_snapshots(fields, fitted, admitted, context, stored_pins)
-    var handle = _ivf_snapshot_resident(fields, binding, stored_snapshots, stored_pins, fitted, context)
-    var addresses = Python.list(q.source.addr, classical_address(dist), classical_address(ids), classical_address(count))
-    var sizes = Python.list(n, dim, fitted[2], fitted[3], m, k, fields["n_probes"])
-    if handle is None:
-        var stored = _ivf_snapshot_addresses(stored_snapshots)
-        _ = py_call(stored.extend, addresses)
-        addresses = stored
-    else:
-        _ = py_call(sizes.append, 0)
-    if keep is not None:
-        _ = py_call(addresses.append, classical_address(keep))
-    if handle is None:
-        _ = family_call(family_entry(binding, "ivf_flat_search", context), addresses, sizes)
-    else:
-        _ = family_call(family_entry(binding, "ivf_flat_index_search", context), handle, addresses, sizes)
+    # RUN (ivf/ivf_query_run.mojo `ivf_search_run`): one call of the image's
+    # IVF-Flat operations table under the key read here (one exact dictionary
+    # read per search). Before, per search: `ivf_flat_index_prepare` and the
+    # search export read by name, a four- to ten-address and a seven- or
+    # eight-word Python list built and re-read word by word in the export,
+    # and a Python call. Nothing is added per query.
+    var ops_key = ivf_ops_key(binding)
+    var index_words = IvfIndexWords(n, dim, fitted[2], fitted[3])
+    var handle = _ivf_snapshot_resident(fields, binding, ops_key, index_words, stored_snapshots, stored_pins,
+                                        fitted, context, b)
+    # A resident search reads no stored array; the per-call search (a fitted
+    # array that cannot be frozen) reads and admits the five.
+    var spans = IvfIndexSpans(0, 0, 0, 0, 0) if handle != IVF_NO_HANDLE else _ivf_snapshot_spans(stored_snapshots)
+    ivf_door_search(ops_key, IvfSearchRequest(
+        index_words, handle, spans, q.source.addr, Int(py=classical_address(dist)), Int(py=classical_address(ids)),
+        Int(py=classical_address(count)), 0 if keep is None else Int(py=classical_address(keep)),
+        m, k, Int(py=fields["n_probes"]), False))
     _ = q
     _ = q_pin
     _ = stored_snapshots
@@ -492,8 +502,7 @@ def _ivf_snapshot_materialize(fields: PythonObject, mut snapshots: List[ArrayMet
     var data = family_array(Python.tuple(n, dim), "<f4", context)
     var output_pin = ArrayPin()
     var output = array_metadata_once(data, [n, dim], "list_data_", context, output_pin)
-    _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1],
-                    PythonObject(output.source.addr), PythonObject(n * dim))
+    ivf_door_export(ivf_ops_key(cached[2]), Int(py=cached[1]), output.source.addr, n * dim)
     # The resident handle keeps this data on the device (hazard class A).
     _ = fitted_freeze(data, context)
     py_setitem(fields, "list_data_", data)
@@ -512,22 +521,25 @@ def _ivf_snapshot_materialize(fields: PythonObject, mut snapshots: List[ArrayMet
         pins[4] = output_pin^
 
 
-def _ivf_snapshot_addresses(snapshots: List[ArrayMetadata]) raises -> PythonObject:
+def _ivf_snapshot_spans(snapshots: List[ArrayMetadata]) raises -> IvfIndexSpans:
+    """The captured addresses of the five fitted arrays (centres, their
+    norms, offsets, ids, list vectors)."""
     if len(snapshots) != 5:
         raise Error("RuntimeError: fitted IVF vector storage is unavailable")
-    var result = Python.list()
-    for i in range(len(snapshots)):  # small-loop(five captured IVF storage addresses)
-        _ = py_call(result.append, snapshots[i].source.addr)
-    return result
+    return IvfIndexSpans(snapshots[0].source.addr, snapshots[1].source.addr, snapshots[2].source.addr,
+                         snapshots[3].source.addr, snapshots[4].source.addr)
 
 
-def _ivf_snapshot_resident(fields: PythonObject, binding: PythonObject,
+def _ivf_snapshot_resident(fields: PythonObject, binding: PythonObject, ops_key: IvfEntryKey,
+                           index_words: IvfIndexWords,
                            mut snapshots: List[ArrayMetadata], mut pins: List[ArrayPin], fitted: List[Int],
-                           context: PythonObject) raises -> PythonObject:
-    var prepare = knn_door(binding, "ivf_flat_index_prepare")
-    if prepare is None:
-        _ivf_snapshot_materialize(fields, snapshots, pins, fitted, context)
-        return PythonObject(None)
+                           context: PythonObject, b: PythonObject) raises -> Int:
+    """The resident handle this search runs through, minted on first use, or
+    `IVF_NO_HANDLE` (a caller-assigned array that cannot be frozen keeps the
+    per-call search). Every image that publishes the operations table
+    prepares an index, so the former probe of `ivf_flat_index_prepare` by
+    name (one dictionary read per search) and its "no prepare door" arm are
+    gone."""
     var key = _ivf_snapshot_key(fields, binding, snapshots, pins, fitted)
     var cached = py_get(fields, "_resident")
     if cached is not None:
@@ -542,26 +554,28 @@ def _ivf_snapshot_resident(fields: PythonObject, binding: PythonObject,
         # already proved `cached[2]` is the connected alias of the minting
         # module; when it is this route, the handle is this route's, so the
         # stored module id stands for it. Every other key word is compared.
-        var b = native_loaded_module("builtins")
         var probe = key
         var stored = cached[0]
         if cached[2] is binding and py_type(stored) is b.tuple and len(stored) == 7:
             probe = Python.tuple(key[0], key[1], key[2], key[3], key[4], key[5], stored[6])
         if _ivf_key_equal(stored, probe):
-            return cached[1]
+            return Int(py=cached[1])
     _ivf_snapshot_materialize(fields, snapshots, pins, fitted, context)
-    _ann_release(fields, "ivf_flat_index_release", binding)
+    ivf_release_held(fields, binding, b)
     # p3-neighbors-cluster (hazard class A): the resident key holds identity,
     # address and shape, never values, so the fitted arrays are made read-only
     # when the device copy is taken (bindings/p3nc_fitted_freeze.mojo). A
     # caller-assigned array that cannot be frozen keeps the per-call search.
     for i in range(len(snapshots)):  # small-loop(five captured fitted arrays)
         if not fitted_is_freezable(pins[i].keep, context):
-            return PythonObject(None)
+            return IVF_NO_HANDLE
     for i in range(len(snapshots)):  # small-loop(five captured fitted arrays)
         _ = fitted_freeze(pins[i].keep, context)
-    var handle = family_call(prepare, _ivf_snapshot_addresses(snapshots), Python.list(fitted[0], fitted[1], fitted[2], fitted[3], 0))
-    py_setitem(fields, "_resident", Python.tuple(_ivf_snapshot_key(fields, binding, snapshots, pins, fitted), handle, binding))
+    # Once per fitted state (the first search after a fit on a CPU image, a
+    # load, an extend or a replaced array), never per query.
+    var handle = ivf_door_prepare(ops_key, _ivf_snapshot_spans(snapshots), index_words, False)
+    py_setitem(fields, "_resident", Python.tuple(_ivf_snapshot_key(fields, binding, snapshots, pins, fitted),
+                                                 PythonObject(handle), binding))
     return handle
 
 
@@ -612,26 +626,30 @@ def _ivf_extend(model: PythonObject, kind: PythonObject, args: PythonObject, con
         if cached is None:
             raise Error("RuntimeError: resident IVF index was released before its list data was read")
         var exported = family_array(Python.tuple(n, dim), "<f4", context)
-        _ = family_call(family_entry(cached[2], "ivf_flat_index_export", context), cached[1],
-                        classical_address(exported), PythonObject(n * dim))
+        ivf_door_export(ivf_ops_key(cached[2]), Int(py=cached[1]), Int(py=classical_address(exported)), n * dim)
         py_setitem(fields, "list_data_", exported)
         _ = py_call(fields.pop, "_device_list_data")
     # The device export above is a fresh native Array; any other list_data_
     # is the stamped object when `admitted`.
     var old_data = _ivf_stored_snapshot(fields, "list_data_", [n, dim], CAST_KIND_FLOAT, context, old_data_pin, admitted)
     var binding = _query_route(model, kind, "ivf", context)
-    var entry = family_entry(binding, "ivf_flat_extend", context)
+    var ops_key = ivf_ops_key(binding)
     var total = n + m
     var offsets = family_array(Python.tuple(n_lists + 1), "<i4", context)
     var indices = family_array(Python.tuple(total), "<i4", context)
     var data = family_array(Python.tuple(total, dim), "<f4", context)
     var labels = family_array(Python.tuple(m), "<i4", context)
-    _ann_release(fields, "ivf_flat_index_release", binding)
-    # Existing compiled IVF algorithm and address order; no arithmetic changes.
-    _ = family_call(entry, Python.list(centers.source.addr, norms.source.addr,
-        old_offsets.source.addr, old_indices.source.addr, old_data.source.addr, x.source.addr,
-        classical_address(offsets), classical_address(indices), classical_address(data), classical_address(labels)),
-        Python.list(n, dim, n_lists, metric, m))
+    ivf_release_held(fields, binding, b)
+    # RUN (ivf/ivf_query_run.mojo `ivf_extend_run`): the image's table entry,
+    # the existing compiled IVF algorithm and address order; no arithmetic
+    # changes. Before: `ivf_flat_extend` read by name, a ten-address and a
+    # five-word Python list and a Python call. Once per extend.
+    ivf_door_extend(ops_key, IvfExtendRequest(
+        IvfIndexWords(n, dim, n_lists, metric),
+        IvfIndexSpans(centers.source.addr, norms.source.addr, old_offsets.source.addr, old_indices.source.addr,
+                      old_data.source.addr),
+        x.source.addr, m, Int(py=classical_address(offsets)), Int(py=classical_address(indices)),
+        Int(py=classical_address(data)), Int(py=classical_address(labels))))
     _ = x
     _ = x_pin
     _ = centers
