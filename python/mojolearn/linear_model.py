@@ -1073,12 +1073,42 @@ class QNRegressor(_NumericModeMixin):
     _mojolearn_native_public = True
     _BINDING = "_mojolearn_estimators"
     _LOSSES = {"squared_error": _QN_LOSS_SQUARED, "absolute_error": _QN_LOSS_ABS}
+    #: This class takes `device=`: the check builds its other side as the same
+    #: estimator on the other device, in this process (`_check_both.on_device`).
+    _mojolearn_device = True
 
     def __init__(self, *, loss="squared_error", fit_intercept=True,
                  l1_strength=0.0, l2_strength=0.0, max_iter=1000, tol=1e-4,
                  delta=None, linesearch_max_iter=50, lbfgs_memory=5,
-                 warm_start=False, penalty_normalized=True, numeric_mode=None):
-        return _QN_CALL(self, "initialize", (loss, fit_intercept, l1_strength, l2_strength, max_iter, tol, delta, linesearch_max_iter, lbfgs_memory, warm_start, penalty_normalized, numeric_mode,), _QN_CONTEXT)
+                 warm_start=False, penalty_normalized=True, numeric_mode=None, device=None):
+        # `device` is checked here (an unknown value, and 'gpu' on a CPU-only
+        # installation, are refused in words); None is this installation's device.
+        return _QN_CALL(self, "initialize", (loss, fit_intercept, l1_strength, l2_strength, max_iter, tol, delta, linesearch_max_iter, lbfgs_memory, warm_start, penalty_normalized, numeric_mode, device), _QN_CONTEXT)
+
+    # Engineering note: both answers come from the estimator's route (the
+    # compiled image it resolved to), so a `device="cpu"` estimator on a GPU
+    # installation answers 'cpu'.
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _QN_CALL(self, "vendor_used", (), _QN_CONTEXT)
+
+    def numeric_mode_used(self):
+        """The numeric mode this estimator runs in.
+
+        Returns
+        -------
+        str
+            ``'identical'`` or ``'fast'`` (Apple only), read from the compiled
+            binary the estimator uses, not from the argument it was given.
+        """
+        return _QN_CALL(self, "numeric_mode_used", (), _QN_CONTEXT)
 
     def fit(self, X, y, sample_weight=None):
         """Fit the model.
@@ -1162,7 +1192,11 @@ _native_classical_bridge.connect_cpu_device(_CLASSICAL)
 # score are one call each into it (bindings/qn_native_door.mojo).
 from ._native_qn_bridge import connect as _connect_qn  # noqa: E402
 _QN_CALL, _QN_CONTEXT = _connect_qn(QNRegressor._LOSSES)
-_QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_intercept', 'l1_strength', 'l2_strength', 'max_iter', 'tol', 'delta', 'linesearch_max_iter', 'lbfgs_memory', 'warm_start', 'penalty_normalized', 'numeric_mode'))
+_QN_CONTEXT.update(qn_public_class=QNRegressor, qn_parameters=('loss', 'fit_intercept', 'l1_strength', 'l2_strength', 'max_iter', 'tol', 'delta', 'linesearch_max_iter', 'lbfgs_memory', 'warm_start', 'penalty_normalized', 'numeric_mode', 'device'))
+# The CPU QN entry of `device="cpu"`, connected once at import beside the
+# device image: an estimator's route picks one of the two, once.
+from ._native_qn_bridge import connect_cpu_device as _connect_qn_cpu  # noqa: E402
+_connect_qn_cpu(_QN_CONTEXT)
 
 
 # The compiled LogisticRegression owner, connected once at import: fit,
