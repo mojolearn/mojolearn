@@ -22,7 +22,7 @@ from bindings.native_process_pool_door import (
 )
 from bindings.native_process_wire_door import WireOutgoing, wire_unpack, wire_append, wire_key, wire_text, wire_send, wire_receive
 from bindings.native_transport_door import transport_close
-from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_balanced import py_call, py_contains, py_fields, py_get, py_setattr, py_setitem, py_type
 from core.parallel_worker_request import (
     WorkerRequest, worker_request_decode, parallel_causal_op_code, WORKER_NO_HANDLE,
     PC_CONFIGURE, PC_BLOCK, PC_TENSORS, PC_EMBEDDING, PC_FINAL, PC_HEAD, PC_HEAD_INT15, PC_NORM, PC_ROUTE,
@@ -32,7 +32,8 @@ from core.parallel_worker_frame import WIRE_RESULT, WIRE_ERROR, WIRE_CLOSE, WIRE
 from bindings.parallel_causal_native_run import (
     CAUSAL_DEVICE_INEXACT,
     causal_route_reads_devices, causal_route_plan, causal_route_name, causal_layer_map_admit,
-    causal_closed_admit, causal_lost_admit, causal_layer_format_admit, causal_layer_owner_admit,
+    causal_closed_admit, causal_layer_format_admit, causal_layer_owner_admit,
+    CausalRegistryState, causal_registry_usable, causal_registry_worker,
     causal_option_admit, causal_weight_format_admit, causal_block_index_admit, causal_allocation_index_admit,
     causal_frame_admit, causal_worker_route, causal_worker_route_admit, causal_top_tensor_admit,
     causal_step_word, causal_run_request, causal_layers_request, causal_layers_count,
@@ -159,14 +160,72 @@ def _parallel_state_fields(mut mods: NativeModules, state: PythonObject) raises 
         Python.tuple("layer", "token", "_lifetime"))
 
 
-def _parallel_int_keys(value: PythonObject) raises -> PythonObject:
-    var bi = PARALLEL_CAUSAL.get_or_create_ptr()[].bi
-    if py_type(value) is not bi.dict:
-        raise Error("TypeError: parallel routing requires exact dictionary storage")
-    var keys = py_call(bi.list, value.keys())
-    for i in range(len(keys)):  # driver-loop: admit keys before dictionary hashing or equality
-        _ = _parallel_word(keys[i])
-    return keys
+struct ParallelCausalOwner(Movable, Writable):
+    """One model's native owner, stored once in the instance dictionary as
+    `_native`. `native` is the typed worker registry RUN decides on
+    (bindings/parallel_causal_native_run.mojo): the device of each layer,
+    the worker of each device, closed, failed. The Python objects are
+    boundary pins the door admitted and built itself at construction: the
+    layer-device tuple, the device-to-worker dictionary, the process pool's
+    dictionary and its per-device aliases. An operation's captured namespace
+    receives these pins as they are; nothing is re-admitted or copied per
+    operation. `layer_devices`, `_worker_index`, `_pool`, `_pools`,
+    `_closed` and `_failed` on the instance are mirrors for callers and for
+    the shared model doors; this door writes them and never reads them."""
+    var owner_id: Int
+    var native: CausalRegistryState
+    var devices: PythonObject
+    var indices: PythonObject
+    var pool: PythonObject
+    var pools: PythonObject
+
+    def __init__(out self, owner_id: Int, layer_devices: List[Int], devices: PythonObject,
+                 indices: PythonObject, pool: PythonObject, pools: PythonObject):
+        self.owner_id = owner_id
+        self.native = CausalRegistryState(layer_devices)
+        self.devices = devices
+        self.indices = indices
+        self.pool = pool
+        self.pools = pools
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("ParallelCausalOwner(closed=", self.native.closed, ", failed=", self.native.failed, ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+def _causal_record_or_none(owner: PythonObject) raises -> PythonObject:
+    """The model's native owner record, or None for an instance whose
+    constructor has not built it yet. The instance dictionary is read
+    through object's own lookup (no hook runs)."""
+    var nk = parallel_keys()
+    var record = py_get(py_fields(owner), nk[].k__native)
+    if record is None:
+        return record
+    var owner_id = Int(py=py_call(PARALLEL_CAUSAL.get_or_create_ptr()[].bi.id, owner))
+    try:
+        var rec = record.downcast_value_ptr[ParallelCausalOwner]()
+        if rec[].owner_id != owner_id:
+            raise Error("foreign")
+    except:
+        raise Error("TypeError: parallel model storage does not belong to this model")
+    return record
+
+
+def _causal_record(owner: PythonObject) raises -> PythonObject:
+    """The exact native owner record of a constructed model."""
+    var record = _causal_record_or_none(owner)
+    if record is None:
+        raise Error("RuntimeError: ParallelCausalLM is not initialized")
+    return record
+
+
+def _causal_serving(owner: PythonObject) raises -> Bool:
+    """Whether the model's workers can still be asked (not closed, not lost)."""
+    var record = _causal_record(owner)
+    var rec = record.downcast_value_ptr[ParallelCausalOwner]()
+    return not rec[].native.closed and not rec[].native.failed
 
 
 def _parallel_pool_admit(mut mods: NativeModules, pool: PythonObject) raises:
@@ -187,28 +246,20 @@ def _parallel_capture_model_fields(mut mods: NativeModules, owner: PythonObject,
     model_dict(mods, live)
     var result = Python.dict()
     var nk = parallel_keys()
-    var devices = _parallel_causal_map(mods, py_item(live, nk[].k_layer_devices))
+    # The registry words come from the model's native owner: the pins it
+    # admitted once at construction, as they are. REMOVED: the per-operation
+    # re-admission of `layer_devices` (a tuple copy, the layer-map rule and
+    # the route rule), the two exact-flag reads, the key lists and the
+    # copies of the worker-index and pool-alias dictionaries.
+    var record = _causal_record(owner)
+    var rec = record.downcast_value_ptr[ParallelCausalOwner]()
+    var devices = rec[].devices
     py_setitem(result, nk[].k_layer_devices, devices)
-    py_setitem(result, nk[].k__closed, _parallel_flag(py_item(live, nk[].k__closed)))
-    py_setitem(result, nk[].k__failed, _parallel_flag(py_item(live, nk[].k__failed)))
-    var original_pool = py_item(live, nk[].k__pool)
-    if original_pool is not None:
-        _parallel_pool_admit(mods, original_pool)
-    py_setitem(result, nk[].k__pool, original_pool)
-    var indices = py_item(live, nk[].k__worker_index)
-    var keys = _parallel_int_keys(indices)
-    var copied = Python.dict()
-    for i in range(len(keys)):  # driver-loop: copy addressed-worker routing words once
-        py_setitem(copied, keys[i], _parallel_word(indices[keys[i]]))
-    py_setitem(result, nk[].k__worker_index, copied)
-    var pools = py_item(live, nk[].k__pools)
-    keys = _parallel_int_keys(pools)
-    copied = Python.dict()
-    for i in range(len(keys)):  # driver-loop: preserve aliases to the one native process owner
-        if pools[keys[i]] is not original_pool:
-            raise Error("TypeError: parallel routing has an inconsistent process owner")
-        py_setitem(copied, keys[i], original_pool)
-    py_setitem(result, nk[].k__pools, copied)
+    py_setitem(result, nk[].k__closed, PythonObject(rec[].native.closed))
+    py_setitem(result, nk[].k__failed, PythonObject(rec[].native.failed))
+    py_setitem(result, nk[].k__pool, rec[].pool)
+    py_setitem(result, nk[].k__worker_index, rec[].indices)
+    py_setitem(result, nk[].k__pools, rec[].pools)
     var blocks = py_item(live, nk[].k__blocks)
     model_sequence(mods, blocks)
     var captured = Python.list()
@@ -646,13 +697,13 @@ def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
     mods.released()
 
 
-def _parallel_causal_usable(fields: PythonObject) raises:
+def _parallel_causal_usable(owner: PythonObject) raises:
     # A closed model or a lost worker state is a RuntimeError on every public
     # call (forward, step, parameters, ...); an invalid argument stays a
-    # ValueError. One check so the calls cannot disagree.
-    var nk = parallel_keys()
-    causal_closed_admit(_parallel_flag(py_item(fields, nk[].k__closed)))
-    causal_lost_admit(_parallel_flag(py_item(fields, nk[].k__failed)))
+    # ValueError. One check, on the model's native owner, so the calls
+    # cannot disagree.
+    var record = _causal_record(owner)
+    causal_registry_usable(record.downcast_value_ptr[ParallelCausalOwner]()[].native)
 
 
 struct CausalRpc(Movable):
@@ -720,11 +771,12 @@ def _parallel_causal_send(mut mods: NativeModules, owner: PythonObject, device: 
                           outgoing: WireOutgoing, captured: PythonObject) raises -> PythonObject:
     """One addressed typed request whose payload record is already built."""
     var fields = _parallel_captured(mods, owner, captured)
-    _parallel_causal_usable(fields)
-    _ = _parallel_word(device)
+    var record = _causal_record(owner)
+    var rec = record.downcast_value_ptr[ParallelCausalOwner]()
+    causal_registry_usable(rec[].native)
     var nk = parallel_keys()
-    var index = _parallel_word(py_item(fields, nk[].k__worker_index)[device])
-    var pool = py_item(fields, nk[].k__pool)
+    var index = causal_registry_worker(rec[].native, _parallel_word(device))
+    var pool = rec[].pool
     if pool is None:
         raise Error("RuntimeError: ParallelCausalLM has no process owner")
     var result = PythonObject(None)
@@ -735,6 +787,9 @@ def _parallel_causal_send(mut mods: NativeModules, owner: PythonObject, device: 
     except error:
         mods.released()
         if len(process_pool_pids(pool)) == 0:
+            rec[].native.failed = True
+            # Mirrors: the operation's namespace and the instance field the
+            # shared model doors and callers read.
             py_setitem(fields, nk[].k__failed, True)
             var live = py_item(fields, nk[].k__causal_live_fields)
             model_dict(mods, live)
@@ -755,6 +810,13 @@ def _parallel_causal_close(mut mods: NativeModules, owner: PythonObject) raises:
         Python.tuple("_closed", "_pool", "_pools"))
     py_setitem(fields, nk[].k__closed, True)
     var live = py_get(fields, nk[].k__pool)
+    # A constructor that failed before the pool existed has no record.
+    var record = _causal_record_or_none(owner)
+    if record is not None:
+        var rec = record.downcast_value_ptr[ParallelCausalOwner]()
+        rec[].native.closed = True
+        live = rec[].pool
+        rec[].pools = Python.dict()
     if live is not None:
         _parallel_pool_admit(mods, live)
         try:
@@ -860,6 +922,10 @@ def _parallel_causal_init(mut mods: NativeModules, owner: PythonObject, input_pl
         py_setitem(pools, unique[i], pool)
     py_setitem(live, nk[].k__pools, py_call(bi.dict, pools))
     py_setitem(fields, nk[].k__pools, pools)
+    # PACK, once per model: the native owner. Its pins are the door's own
+    # admitted objects (the instance fields above are copies for callers).
+    py_setitem(live, nk[].k__native, PythonObject(alloc=ParallelCausalOwner(
+        Int(py=py_call(bi.id, owner)), _parallel_device_words(devices), devices, indices, pool, pools)))
     _ = py_call(fields.update, _parallel_capture_model_fields(mods, owner, fields))
     py_setitem(fields, nk[].k__causal_original, owner)
     py_setitem(fields, nk[].k__causal_live_fields, live)
@@ -996,7 +1062,7 @@ def _parallel_causal_release_token(mut mods: NativeModules, block: PythonObject,
     var original = py_item(_parallel_block_fields(mods, block), nk[].k_model)
     var captured = _parallel_owner_snapshot(mods, original)
     var fields = causal_snapshot_fields(mods, captured)
-    if not _parallel_flag(py_item(fields, nk[].k__closed)) and not _parallel_flag(py_item(fields, nk[].k__failed)):
+    if _causal_serving(original):
         var layer = causal_snapshot_fields(mods, _parallel_find_block(mods, block, captured))
         _ = _parallel_causal_rpc(mods, py_item(fields, nk[].k__causal_original), py_item(fields, nk[].k_layer_devices)[py_item(layer, nk[].k_index)],
                                 WorkerRequest(PC_RELEASE, _parallel_word(token)), PythonObject(None), captured)
@@ -1048,7 +1114,7 @@ def _parallel_causal_release(mut mods: NativeModules, remote: PythonObject, capt
     var model = py_item(fields, nk[].k__native_parallel_model)
     var owner = causal_snapshot_fields(mods, model)
     var block = causal_snapshot_fields(mods, py_item(fields, nk[].k__native_parallel_block))
-    if not _parallel_flag(py_item(owner, nk[].k__closed)) and not _parallel_flag(py_item(owner, nk[].k__failed)):
+    if _causal_serving(py_item(owner, nk[].k__causal_original)):
         _ = _parallel_causal_rpc(mods, py_item(owner, nk[].k__causal_original), py_item(owner, nk[].k_layer_devices)[py_item(block, nk[].k_index)],
                                 WorkerRequest(PC_RELEASE, _parallel_word(token)), PythonObject(None), model)
     # Preserve the old failure contract: a failed release keeps the token and
@@ -1197,7 +1263,7 @@ def parallel_causal_call(mut mods: NativeModules, operation: Int, name: PythonOb
         return _parallel_capture_state(mods, args[0], args[1]) if len(args) > 1 else _parallel_capture_state(mods, args[0])
     elif operation == PARALLEL_CAUSAL_OPN_PARAMETERS:
         var model = causal_model_capture(mods, args[0], p[].context)
-        _parallel_causal_usable(causal_snapshot_fields(mods, model))
+        _parallel_causal_usable(args[0])
         var result = PythonObject(None)
         try:
             result = causal_lm_parameters_binding(mods, model)
@@ -1344,7 +1410,9 @@ def parallel_causal_call(mut mods: NativeModules, operation: Int, name: PythonOb
     elif operation == PARALLEL_CAUSAL_OPN_CLOSE or operation == PARALLEL_CAUSAL_OPN_CLOSE_QUIET or operation == PARALLEL_CAUSAL_OPN_EXIT:
         _parallel_causal_close(mods, args[0])
     elif operation == PARALLEL_CAUSAL_OPN_ENTER:
-        causal_closed_admit(_parallel_flag(py_item(_parallel_model_fields(mods, args[0]), nk[].k__closed)))
+        _ = _parallel_model_fields(mods, args[0])
+        var entered = _causal_record(args[0])
+        causal_closed_admit(entered.downcast_value_ptr[ParallelCausalOwner]()[].native.closed)
         return args[0]
     elif operation == PARALLEL_CAUSAL_OPN_PRIMITIVES_INIT:
         var fields = model_record_fields(mods, args[0], py_item(p[].classes, nk[].k_primitives), Python.tuple("model"))
