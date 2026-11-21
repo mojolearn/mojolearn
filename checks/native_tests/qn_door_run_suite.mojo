@@ -5,7 +5,7 @@ publication of a fitted [coef | intercept] vector. Analytic answers, Mojo
 buffers only; independent fixtures run through the shared host worker pool.
 RUN calls through the route's resolved entry and reads no table: a request
 that carries an unresolved entry is refused by that entry, in its words. The
-device rule of the route (core/device_route_dw_classical.mojo): None is the
+device rule of the route (core/device_route.mojo): None is the
 installation's device, an explicit GPU without a GPU set and a CPU route in
 fast mode are refused, the CPU table is named only beside a device set, and
 the resolved image must report the planned vendor and the selected tier.
@@ -14,9 +14,8 @@ cases (python/mojolearn/tests/test_family_device_boundary.py)."""
 from core.host_parallel import host_parallelize
 from core.logistic_native_api import QnFitRequest, QnQueryRequest
 from core.entry_table import entry_ref_unresolved
-from core.linear_route import LINEAR_DEVICE_GPU, LINEAR_DEVICE_CPU, LINEAR_DEVICE_INSTALL
-from core.device_route_dw_classical import (
-    FamilyRoute, family_mode_code, family_mode_word, family_vendor_word, family_route_plan, family_route_admit,
+from core.device_route import (
+    DEVICE_GPU, DEVICE_CPU, DEVICE_INSTALL, DeviceRoute, device_mode_code, device_mode_word, device_vendor_word, device_route_plan, device_route_admit,
 )
 from glm.qn_door_run import (
     QnDoorPredictRequest, qn_door_predict_run,
@@ -86,16 +85,16 @@ def publish_fixture(intercept: Bool) raises:
 
 def plan_refusal(device: Int, process_vendor: Int, mode: Int) -> String:
     try:
-        _ = family_route_plan(device, process_vendor, mode)
+        _ = device_route_plan(device, process_vendor, mode)
     except error:
         return String(error)
     return String("")
 
 
 def admit_refusal(device: Int, process_vendor: Int, image_mode: Int, image_vendor: Int, mode: Int) raises -> String:
-    var plan = family_route_plan(device, process_vendor, mode)
+    var plan = device_route_plan(device, process_vendor, mode)
     try:
-        family_route_admit("QN", plan, image_mode, image_vendor, mode)
+        device_route_admit("QN", plan, image_mode, image_vendor, mode)
     except error:
         return String(error)
     return String("")
@@ -106,55 +105,55 @@ def route_fixture(index: Int) raises:
     if index == 12:
         # None is the installation's device: the GPU set where there is one.
         for vendor in range(1, 4):  # driver-loop: over the three GPU vendor words
-            var plan = family_route_plan(LINEAR_DEVICE_INSTALL, vendor, 1)
-            require(plan.device == LINEAR_DEVICE_GPU and not plan.cpu_table and plan.expected_vendor == vendor,
+            var plan = device_route_plan(DEVICE_INSTALL, vendor, 1)
+            require(plan.device == DEVICE_GPU and not plan.cpu_table and plan.expected_vendor == vendor,
                     "None did not resolve to the GPU set")
     elif index == 13:
         # None in a CPU-only process: the process's own (CPU) table, in either tier.
-        var plan = family_route_plan(LINEAR_DEVICE_INSTALL, 0, 1)
-        require(plan.device == LINEAR_DEVICE_CPU and not plan.cpu_table and plan.expected_vendor == 0,
+        var plan = device_route_plan(DEVICE_INSTALL, 0, 1)
+        require(plan.device == DEVICE_CPU and not plan.cpu_table and plan.expected_vendor == 0,
                 "None did not resolve to the CPU in a CPU-only process")
-        var explicit = family_route_plan(LINEAR_DEVICE_CPU, 0, 0)
-        require(explicit.device == LINEAR_DEVICE_CPU and not explicit.cpu_table, "cpu in a CPU-only process changed")
+        var explicit = device_route_plan(DEVICE_CPU, 0, 0)
+        require(explicit.device == DEVICE_CPU and not explicit.cpu_table, "cpu in a CPU-only process changed")
     elif index == 14:
         # cpu beside a device set: the CPU table, vendor word 0.
         for vendor in range(1, 4):  # driver-loop: over the three GPU vendor words
-            var plan = family_route_plan(LINEAR_DEVICE_CPU, vendor, 1)
-            require(plan.device == LINEAR_DEVICE_CPU and plan.cpu_table and plan.expected_vendor == 0,
+            var plan = device_route_plan(DEVICE_CPU, vendor, 1)
+            require(plan.device == DEVICE_CPU and plan.cpu_table and plan.expected_vendor == 0,
                     "cpu beside a device set did not name the CPU table")
     elif index == 15:
-        require(plan_refusal(LINEAR_DEVICE_CPU, 2, 0)
+        require(plan_refusal(DEVICE_CPU, 2, 0)
                 == "ValueError: device='cpu' runs in identical mode only; numeric_mode='fast' is for Apple GPUs",
                 "cpu with fast was not refused in words")
     elif index == 16:
-        var text = plan_refusal(LINEAR_DEVICE_GPU, 0, 1)
+        var text = plan_refusal(DEVICE_GPU, 0, 1)
         require(text.startswith("ValueError: device='gpu' needs a GPU build of mojolearn") and "device='cpu'" in text,
                 "an explicit gpu without a GPU set was not refused in words: " + text)
     elif index == 17:
-        require(admit_refusal(LINEAR_DEVICE_INSTALL, 2, 1, 2, 1) == "", "the selected device image was refused")
-        require(admit_refusal(LINEAR_DEVICE_CPU, 2, 1, 0, 1) == "", "the CPU image was refused for device='cpu'")
-        require(admit_refusal(LINEAR_DEVICE_INSTALL, 0, 0, 0, 0) == "", "the CPU-only process's image was refused")
+        require(admit_refusal(DEVICE_INSTALL, 2, 1, 2, 1) == "", "the selected device image was refused")
+        require(admit_refusal(DEVICE_CPU, 2, 1, 0, 1) == "", "the CPU image was refused for device='cpu'")
+        require(admit_refusal(DEVICE_INSTALL, 0, 0, 0, 0) == "", "the CPU-only process's image was refused")
     elif index == 18:
-        require(admit_refusal(LINEAR_DEVICE_INSTALL, 2, 1, 3, 1) == "RuntimeError: QN native vendor differs from selected execution",
+        require(admit_refusal(DEVICE_INSTALL, 2, 1, 3, 1) == "RuntimeError: QN native vendor differs from selected execution",
                 "a foreign device image was admitted")
-        require(admit_refusal(LINEAR_DEVICE_CPU, 2, 1, 2, 1) == "RuntimeError: device='cpu' requires the CPU identical binding",
+        require(admit_refusal(DEVICE_CPU, 2, 1, 2, 1) == "RuntimeError: device='cpu' requires the CPU identical binding",
                 "a device image was admitted for device='cpu'")
     elif index == 19:
-        require(admit_refusal(LINEAR_DEVICE_INSTALL, 2, 0, 2, 1) == "RuntimeError: QN native mode differs from selected execution",
+        require(admit_refusal(DEVICE_INSTALL, 2, 0, 2, 1) == "RuntimeError: QN native mode differs from selected execution",
                 "an image of the other tier was admitted")
     elif index == 20:
-        require(family_mode_code("identical") == 1 and family_mode_code("fast") == 0 and family_mode_code("Identical") == -1,
+        require(device_mode_code("identical") == 1 and device_mode_code("fast") == 0 and device_mode_code("Identical") == -1,
                 "mode codes changed")
-        require(family_mode_word(1) == "identical" and family_mode_word(0) == "fast", "mode words changed")
-        require(family_vendor_word(0) == "cpu" and family_vendor_word(1) == "metal" and family_vendor_word(2) == "cuda"
-                and family_vendor_word(3) == "hip", "vendor words changed")
-        var route = FamilyRoute(LINEAR_DEVICE_CPU)
-        require(route.device == LINEAR_DEVICE_CPU and route.mode == -1 and route.vendor == -1 and not route.has_second
+        require(device_mode_word(1) == "identical" and device_mode_word(0) == "fast", "mode words changed")
+        require(device_vendor_word(0) == "cpu" and device_vendor_word(1) == "metal" and device_vendor_word(2) == "cuda"
+                and device_vendor_word(3) == "hip", "vendor words changed")
+        var route = DeviceRoute(DEVICE_CPU)
+        require(route.device == DEVICE_CPU and route.mode == -1 and route.vendor == -1 and not route.has_second
                 and route.entry.word == 0 and route.second.word == 0, "a new route is not unresolved")
     else:
         # RUN calls through the request's entry: an unresolved one refuses
         # in its own words and no table is read.
-        var route = FamilyRoute(LINEAR_DEVICE_GPU)
+        var route = DeviceRoute(DEVICE_GPU)
         var request = QnQueryRequest(0, 0, 0, 0, 0, 0, 1, False, False)
         var text = String("")
         try:

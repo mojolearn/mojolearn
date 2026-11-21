@@ -18,10 +18,10 @@ from core.estimators_entry_table import (
     EstimatorsEntryKey, estimators_vendor_word, estimators_table_entry, ESTIMATORS_TABLE_QN, ESTIMATORS_TABLE_QN_FOLD,
 )
 from core.entry_table import EntryRef, entry_ref_word
-from core.device_route_dw_classical import FamilyRoute, family_mode_code, family_route_plan, family_route_admit
-from providers.python.device_route_dw_classical_door import (
-    FamilyRouteOwner, family_route_held, family_route_keep, family_route_value, family_device_request,
-    family_route_second_refuse,
+from core.device_route import DeviceRoute, device_mode_code, device_route_plan, device_route_admit
+from providers.python.device_route_boundary_door import (
+    DeviceRouteOwner, device_route_held, device_route_keep, device_route_value, device_request,
+    device_route_refuse,
 )
 from core.logistic_native_api import QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_COUNT, QN_FOLD_COUNT
 from glm.qn_door_run import (
@@ -42,12 +42,12 @@ from bindings.py_balanced import py_item
 struct QnRouteCall(Movable):
     """One operation's route: the resolved entries by value, and the owner
     whose pins keep their images loaded until the operation returns."""
-    var route: FamilyRoute
+    var route: DeviceRoute
     var owner: PythonObject
 
 
-def _qn_route_build(device_request: Int, mode: PythonObject, default_mode: PythonObject,
-    context: PythonObject, b: PythonObject) raises -> FamilyRouteOwner:
+def _qn_route_build(requested_device: Int, mode: PythonObject, default_mode: PythonObject,
+    context: PythonObject, b: PythonObject) raises -> DeviceRouteOwner:
     """Resolve an estimator's QN entry once: its numeric mode (None: the
     process mode), its device (None: this installation's), the native QN
     table key of the image those select (the bridge recorded each image's
@@ -55,7 +55,7 @@ def _qn_route_build(device_request: Int, mode: PythonObject, default_mode: Pytho
     table read. Runs at an estimator's first operation, after a changed
     mode and after a new `__init__`; never per call."""
     var nk = qn_keys()
-    var owner = FamilyRouteOwner(device_request)
+    var owner = DeviceRouteOwner(requested_device)
     var selected = mode
     if mode is None:
         selected = default_mode
@@ -69,9 +69,9 @@ def _qn_route_build(device_request: Int, mode: PythonObject, default_mode: Pytho
     if mode_name != "identical" and mode_name != "fast":
         raise Error("numeric_mode must be fast, identical or None")
     answer_mode_word(mode_name, MODE_FAMILY_LINEAR)
-    var mode_code = family_mode_code(mode_name)
+    var mode_code = device_mode_code(mode_name)
     var process_vendor = estimators_vendor_word(String(py_item(context, nk[].k_vendor)))
-    var plan = family_route_plan(device_request, process_vendor, mode_code)
+    var plan = device_route_plan(requested_device, process_vendor, mode_code)
     var entries = PythonObject(None)
     if plan.cpu_table:
         # A GPU installation running `device="cpu"`: the CPU image loaded
@@ -87,7 +87,7 @@ def _qn_route_build(device_request: Int, mode: PythonObject, default_mode: Pytho
         raise Error("ImportError: " + String(entries))
     var native = py_item(entries, nk[].k_native_key)
     var key = EstimatorsEntryKey(Int(py=native[0]), Int(py=native[1]))
-    family_route_admit("QN", plan, key.mode, key.vendor, mode_code)
+    device_route_admit("QN", plan, key.mode, key.vendor, mode_code)
     var entry = estimators_table_entry[ESTIMATORS_TABLE_QN](key)
     owner.route.device = plan.device
     owner.route.mode = key.mode
@@ -105,7 +105,7 @@ def _qn_route_build(device_request: Int, mode: PythonObject, default_mode: Pytho
             owner.route.second = EntryRef(fold_entry, entry_ref_word(fold.mode, fold.vendor, QN_FOLD_COUNT))
         except error:
             # Said by the fold fit that needs it, in the table's own words.
-            owner.second_refusal = String(error)
+            owner.refusal = String(error)
     owner.mode = mode
     owner.default_mode = default_mode
     owner.context = context
@@ -123,12 +123,12 @@ def qn_route(model: PythonObject, fields: PythonObject, context: PythonObject) r
     var default_mode = PythonObject(None)
     if mode is None:
         default_mode = py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)
-    var owner = family_route_held(model, mode, default_mode, context)
+    var owner = device_route_held(model, mode, default_mode, context)
     if owner is None:
         var b = native_loaded_module("builtins")
-        var device = family_device_request(fields, b)
-        owner = family_route_keep(model, _qn_route_build(device, mode, default_mode, context, b))
-    return QnRouteCall(family_route_value(owner), owner)
+        var device = device_request(fields, b)
+        owner = device_route_keep(model, _qn_route_build(device, mode, default_mode, context, b))
+    return QnRouteCall(device_route_value(owner), owner)
 
 
 def _int(value: PythonObject) raises -> Int:
@@ -200,7 +200,7 @@ def qn_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject
             if route.second.word == 0:
                 # The fold entry did not resolve (an unresolved ref's word is
                 # 0): refuse in the table's own words.
-                family_route_second_refuse(call.owner, "RuntimeError: the resident-fold QN entry is unavailable")
+                device_route_refuse(call.owner, "RuntimeError: the resident-fold QN entry is unavailable")
             use_fold = True
             store = QnFoldStore(fx.store.base_id, fx.store.base_rows, fx.store.index_id)
         else:

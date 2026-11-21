@@ -6,7 +6,7 @@ The door calls UNPACK with the GIL held, releases the GIL for the whole of a
 RUN call (docs/plans/PYTHON_AT_THE_BOUNDARY.md section 2.1), then calls PACK.
 
 The fit runs the qn_fit body through the estimator's resolved QN entry
-(the route UNPACK read: core/device_route_dw_classical.mojo; the entry of
+(the route UNPACK read: core/device_route.mojo; the entry of
 the device image or, for `device="cpu"`, of the CPU image), or, for an
 identical-mode cross-validation fold on the device, the base binding's
 resident-fold QN entry held by the same route, then copies the fitted coefficients and writes the iteration count
