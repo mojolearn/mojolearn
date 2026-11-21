@@ -17,6 +17,20 @@ Code today: `gbdt/options/catboost_options.mojo:857` (`combination_ctrs` NOT HON
 `max_ctr_complexity` above 1), `gbdt/models/hash.mojo` (the combination hash fold already exists),
 `docs/plans/gbdt-cpu-ctr-eval-20261027.md` (CTR evaluation notes).
 
+What CatBoost does with a combination, which is what we must match: while it grows each oblivious tree, at every
+level after the first it forms new candidate features by pairing the categorical features (and the numeric
+splits) already in the tree with each other categorical feature, up to `max_ctr_complexity` columns per
+combination (CatBoost's default is 4). Each combination is a new category: the hash of the row's values in those
+columns. Each new category gets its target statistic (CTR: smoothed mean target, counter, buckets, with the
+priors) computed in the ORDERED way (each row sees only the rows before it in a random permutation, so its own
+target never leaks into its feature), and the split is chosen among them like any other. Combinations picked by
+the trees are kept, and their CTR tables over all training rows go into the model for predict. This is how
+CatBoost learns interactions such as site x scanner without the user building the column.
+
+What Mojolearn has now: single categorical columns only (one-hot when cardinality is small, otherwise a single-column
+ordered CTR, `gbdt/ctrs/`), over the rows in the caller's order; permutation-dependent CTR datasets under
+`boosting_type='Ordered'` are listed NOT IMPLEMENTED (`gbdt/NOT_IMPLEMENTED.tsv`).
+
 Work, in order:
 1. **Native category encoding at fit.** Accept arbitrary category values (strings, integers, unseen codes) and map
    them to codes in Mojo at UNPACK, with the map stored in the model and applied at predict (unseen value -> the
