@@ -1,5 +1,5 @@
 diff --git a/bindings/_mojolearn_arima.mojo b/bindings/_mojolearn_arima.mojo
-index 623d62ebd2..094d5a3fde 100644
+index ad012f4da0..094d5a3fde 100644
 --- a/bindings/_mojolearn_arima.mojo
 +++ b/bindings/_mojolearn_arima.mojo
 @@ -78,8 +78,11 @@ THE GIL is released around every device call, and nothing inside a
@@ -648,7 +648,7 @@ index 623d62ebd2..094d5a3fde 100644
 +        m.def_function[arima_resident_prepare_binding]("arima_resident_prepare")
 +        m.def_function[arima_resident_release_binding]("arima_resident_release")
          m.def_function[arima_resident_count_binding]("arima_resident_count")
--        # TOMBSTONE: dead Python exports arima_fit, arima_ic_from_loglike, arima_order_batch_enabled, arima_order_search, arima_order_caps, arima_order_search_device, arima_search_reuse_enabled, arima_order_search_fit, arima_fast_search_mode, arima_ndiffs_kpss, arima_predict, arima_forecast, arima_resident_prepare, arima_resident_release, arima_predict_resident, arima_forecast_resident (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+-        # TOMBSTONE: dead Python exports arima_fit, arima_ic_from_loglike, arima_order_batch_enabled, arima_order_search, arima_order_caps, arima_order_search_device, arima_search_reuse_enabled, arima_order_search_fit, arima_fast_search_mode, arima_ndiffs_kpss, arima_predict, arima_forecast, arima_resident_prepare, arima_resident_release, arima_predict_resident, arima_forecast_resident (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at d8f4bf534c.
 -        # Restore: git apply experiments/removed/dead_entries_arima_calls.patch
 -        # The ARIMA operations table of this image (core/arima_entry_table.mojo):
 -        # an estimator's route resolves it once.
@@ -661,7 +661,7 @@ index 623d62ebd2..094d5a3fde 100644
      except e:
          abort(String("failed to create _mojolearn_arima: ", e))
 diff --git a/bindings/_mojolearn_arima_host.mojo b/bindings/_mojolearn_arima_host.mojo
-index bb12d8463a..bc6f92f80a 100644
+index e505f7c5c7..bc6f92f80a 100644
 --- a/bindings/_mojolearn_arima_host.mojo
 +++ b/bindings/_mojolearn_arima_host.mojo
 @@ -41,20 +41,34 @@ differs.
@@ -801,7 +801,7 @@ index bb12d8463a..bc6f92f80a 100644
          module.def_function[arima_host_sabotage_binding]("arima_host_sabotage")
          module.def_function[arima_vendor_binding]("arima_vendor")
          module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
--        # TOMBSTONE: dead Python exports arima_order_caps, arima_fit, arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+-        # TOMBSTONE: dead Python exports arima_order_caps, arima_fit, arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at d8f4bf534c.
 -        # Restore: git apply experiments/removed/dead_entries_arima_calls.patch
 -        # The ARIMA operations table of this image (core/arima_entry_table.mojo).
 -        var published_module = module.finalize()
@@ -815,7 +815,7 @@ index bb12d8463a..bc6f92f80a 100644
      except error:
          abort(String("failed to create _mojolearn_arima_host: ", error))
 diff --git a/bindings/_mojolearn_forecast_host.mojo b/bindings/_mojolearn_forecast_host.mojo
-index a46669c5bc..0cf61eccc1 100644
+index 376cf91176..0cf61eccc1 100644
 --- a/bindings/_mojolearn_forecast_host.mojo
 +++ b/bindings/_mojolearn_forecast_host.mojo
 @@ -49,7 +49,10 @@ from checks.kernel_matrix import (
@@ -834,7 +834,7 @@ index a46669c5bc..0cf61eccc1 100644
          module.def_function[forecast_host_sabotage_binding]("forecast_host_sabotage")
          module.def_function[arima_vendor_binding]("arima_vendor")
          module.def_function[arima_numeric_mode_binding]("arima_numeric_mode")
--        # TOMBSTONE: dead Python exports arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at SHA_PLACEHOLDER.
+-        # TOMBSTONE: dead Python exports arima_predict, arima_forecast (no product caller: the ARIMA and AutoARIMA owners reach these kernels through the published ARIMA operations table, core/arima_entry_table.mojo; lane dw-forecast-tail) deleted 2026-11-21; code recoverable at d8f4bf534c.
 -        # Restore: git apply experiments/removed/dead_entries_arima_calls.patch
 +        module.def_function[arima_predict_binding]("arima_predict")
 +        module.def_function[arima_forecast_binding]("arima_forecast")
