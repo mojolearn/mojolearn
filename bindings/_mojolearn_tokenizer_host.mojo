@@ -95,7 +95,7 @@ from bindings.tokenizer_public_native_door import (
 from providers.python.transformer_decode_pyapi_door import TransformerDecodeHandle
 from bindings.mamba_public_native_door import MambaDecodeHandle
 from bindings.native_transport_door import transport_c, transport_initialize
-from bindings.cross_vendor_native_door import cross_vendor_c
+from bindings.cross_vendor_native_door import cross_vendor_c, CrossReadyOwner, CrossRateOwner, CrossFeedOwner, CrossWorkerOwner, CrossCoordinatorOwner
 from bindings.native_codec_door import codec_c
 from bindings.native_process_pool_door import process_c
 from bindings.optimizer_lifecycle_unpack import optimizer_finalize_descriptor_binding
@@ -1014,6 +1014,12 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         transport_initialize()
         module.def_py_c_function(transport_c, "native_transport_call")
         module.def_py_c_function(cross_vendor_c, "cross_vendor_call")
+        # The cross-vendor owners' native records (bindings/cross_vendor_native_door.mojo).
+        _ = module.add_type[CrossReadyOwner]("_CrossReadyOwner")
+        _ = module.add_type[CrossRateOwner]("_CrossRateOwner")
+        _ = module.add_type[CrossFeedOwner]("_CrossFeedOwner")
+        _ = module.add_type[CrossWorkerOwner]("_CrossWorkerOwner")
+        _ = module.add_type[CrossCoordinatorOwner]("_CrossCoordinatorOwner")
         module.def_py_c_function(runtime_classical_unavailable_c, "parallel_byte_call")
         module.def_py_c_function(codec_c, "native_codec_call")
         module.def_py_c_function(process_c, "native_process_call")
