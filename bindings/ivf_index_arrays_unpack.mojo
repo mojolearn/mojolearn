@@ -45,12 +45,11 @@ admits them, before any search or extend statement runs.
 """
 from std.python import Python, PythonObject
 
-from core.hostptr import f32_ptr, i32_ptr, read_i32
+from core.hostptr import read_i32
 # The typed bodies (lane thin-trees-metrics, 2026-10-21): the output
 # stores, the shard merge and the shard plan, moved word for word; their
 # address-level halves are ivf/ivf_index_arrays_run.mojo (lane
 # rs-decomposition, 2026-11-12).
-from ivf.index_arrays_impl import ivf_store_search_result
 from ivf.ivf_index_arrays_run import (
     IvfIndexArrays,
     ivf_admit_index_arrays_run,
@@ -214,7 +213,8 @@ def ivf_write_extended_arrays(
 # `ivf_flat_index_prepare(addrs, params) -> handle`:
 #     addrs   0 to 4 the index as for search (read, admitted once)
 #     params  0 n, 1 dim, 2 n_lists, 3 metric, 4 partial_storage (0 or 1)
-# `ivf_flat_index_search(handle, addrs, params)`:
+# `ivf_flat_index_search` (no Python door since 2026-11-21: operation IVF_OP_INDEX_SEARCH of
+# core/ivf_entry_table.mojo; the former list contract, for the record):
 #     addrs   0 queries (m * dim float32, read), 1 dist_out (m * k float32),
 #             2 idx_out (m * k int32), 3 cand_out (m int32), WRITTEN,
 #             optional 4 the sample filter (n int32, read)
@@ -222,26 +222,3 @@ def ivf_write_extended_arrays(
 #             4 m, 5 k, 6 n_probes, 7 partial_storage (must be the handle's)
 # `ivf_flat_index_release(handle)`.
 # ===========================================================================
-
-
-def ivf_read_resident_filter(addrs: PythonObject, n_rows: Int) raises -> List[Int32]:
-    """`ivf_flat_index_search`'s optional address 4 (DEVIATION 5863); absent
-    is no filter and returns an empty list."""
-    if len(addrs) < 5:
-        return List[Int32]()
-    return read_i32(Int(py=addrs[4]), n_rows)
-
-
-def ivf_write_resident_result(
-    addrs: PythonObject,
-    distances: List[Float32],
-    indices: List[UInt32],
-    n_candidates: List[Int32],
-    m: Int,
-    k: Int,
-) raises:
-    """`ivf_flat_index_search`'s addresses 1 to 3, as `ivf_write_search_result`."""
-    var dp = f32_ptr(Int(py=addrs[1]))
-    var ip = i32_ptr(Int(py=addrs[2]))
-    var cp = i32_ptr(Int(py=addrs[3]))
-    ivf_store_search_result(dp, ip, cp, distances, indices, n_candidates, m, k)

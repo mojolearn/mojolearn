@@ -143,7 +143,7 @@ def test_worker_has_no_python_callback_registry_or_dynamic_estimator_call():
     assert "parallel_neighbor_worker(operation, args," in owner
     for forbidden in ("Python.import_module", "getattr(state", "_extension()", "_partial_search(", ".kneighbors(", ".predict("):
         assert forbidden not in worker
-    assert 'family_entry(binding, "ivf_flat_partial_search", context)' in worker
+    assert "ivf_door_search(ops_key, IvfSearchRequest(" in worker and "family_entry(" not in worker
     assert "finally:\n            knn_release(model)" in worker
     assert "parallel_public_result(result, method, kind, context)" in owner
 

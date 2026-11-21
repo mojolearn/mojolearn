@@ -6,7 +6,8 @@
 worker (bindings/parallel_neighbor_worker_door.mojo).
 
 UNPACK is `ivf_ops_key`: one exact read of the image's module dictionary for
-the `(mode, vendor, image)` it recorded when it published. RUN is
+the key word it recorded when it published (`ivf_native_key`, one exact int:
+mode | vendor << 8 | image << 16). RUN is
 ivf/ivf_query_run.mojo (typed requests, no Python). The `ivf_door_*` calls
 here hold the interpreter lock rule of the old exports, decided by the key
 the door already holds (one integer compare, nothing read):
@@ -18,7 +19,6 @@ the door already holds (one integer compare, nothing read):
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_fields, py_get, py_type
 from core.ivf_entry_table import IvfEntryKey, IvfIndexSpans, IvfIndexWords
 from ivf.ivf_query_run import (
@@ -30,15 +30,21 @@ from ivf.ivf_query_run import (
 def ivf_ops_key_probe(binding: PythonObject) raises -> IvfEntryKey:
     """The IVF-Flat table key of the image behind `binding` (an exact
     compiled module, or the import-time captured table of one), or a key
-    with vendor -1 when it records none (not a module; an image that
-    predates the table). One exact dictionary read, never `__getattr__`."""
-    var b = native_loaded_module("builtins")
-    if py_type(binding) is not py_type(b):
+    with vendor -1 when it records none (no namespace; an image that
+    predates the table). One read of the object's own dictionary through
+    object's native lookup (never `__getattr__`) and an exact-int test: no
+    code of `binding` runs, and what is read only selects a native table."""
+    var key: PythonObject
+    try:
+        key = py_get(py_fields(binding), "ivf_native_key")
+    except:
         return IvfEntryKey(-1, -1, -1)
-    var key = py_get(py_fields(binding), "ivf_native_key")
-    if key is None or py_type(key) is not b.tuple or len(key) != 3:
+    if key is None or py_type(key) is not py_type(PythonObject(0)):
         return IvfEntryKey(-1, -1, -1)
-    return IvfEntryKey(Int(py=key[0]), Int(py=key[1]), Int(py=key[2]))
+    var word = Int(py=key)
+    if word < 0:
+        return IvfEntryKey(-1, -1, -1)
+    return IvfEntryKey(word & 255, (word >> 8) & 255, (word >> 16) & 255)
 
 
 def ivf_ops_key(binding: PythonObject) raises -> IvfEntryKey:

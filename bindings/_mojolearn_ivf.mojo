@@ -37,19 +37,17 @@ from bindings.ivf_index_arrays_unpack import (
     ivf_build_extents,
     ivf_extend_count,
     ivf_read_index_arrays,
-    ivf_read_resident_filter,
     ivf_read_search_filter,
     ivf_search_extents,
 )
 from x_ann.stage_timer import AnnStages
-from ivf.resident import ivf_resident_check, ivf_resident_n_rows, ivf_resident_release
+from ivf.resident import ivf_resident_release
 from ivf.ivf_index_arrays_run import ivf_arrays_check_cells
 # The RUN bodies of these doors, on the binding's one process-lifetime
 # DeviceContext (lane rs-decomposition, 2026-11-12).
 from bindings.ivf_device_run import (
     ivf_device_extend_run,
     ivf_device_prepare_run,
-    ivf_device_resident_search_run,
     ivf_device_search_run,
     ivf_flat_build_resident_run,
     ivf_flat_build_run,
@@ -210,22 +208,10 @@ def ivf_flat_index_export_binding(handle: PythonObject, address: PythonObject, c
     return PythonObject(0)
 
 
-def ivf_flat_index_search_binding(
-    handle: PythonObject, addrs: PythonObject, params: PythonObject
-) raises -> PythonObject:
-    var h = Int(py=handle)
-    if len(params) != 8:
-        raise Error("ivf_flat_index_search: params must contain 8 values (n, dim, n_lists, metric, m, k, n_probes, partial)")
-    var n = Int(py=params[0])
-    var dim = Int(py=params[1])
-    ivf_resident_check(h, n, dim, Int(py=params[2]), Int(py=params[3]), Int(py=params[7]) != 0)
-    var ext = ivf_search_extents(params)
-    var queries_addr = Int(py=addrs[0])
-    var keep = ivf_read_resident_filter(addrs, ivf_resident_n_rows(h))
-    ivf_device_resident_search_run(
-        h, queries_addr, dim, ext[0], ext[1], ext[2], keep, Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3])
-    )
-    return PythonObject(0)
+# TOMBSTONE: ivf_flat_index_search (Python export of the resident IVF-Flat search; its body is operation
+# IVF_OP_INDEX_SEARCH of the IVF-Flat operations table, core/ivf_entry_table.mojo, and its three callers, the
+# IVFIndex search door, the shard worker and the query route capture, call that table) deleted 2026-11-21 by lane
+# dw-neighbors; no caller left (tools/native_caller_audit.py); code recoverable at b647d4eee1.
 
 
 def ivf_flat_index_release_binding(handle: PythonObject) raises -> PythonObject:
@@ -270,7 +256,6 @@ def build__mojolearn_ivf() -> PythonObject:
         m.def_function[ivf_finalize_distances_binding]("ivf_finalize_distances")
         m.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
         m.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
-        m.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
         m.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
         m.def_function[ivf_flat_build_resident_binding]("ivf_flat_build_resident")
         m.def_function[ivf_flat_index_export_binding]("ivf_flat_index_export")
@@ -280,12 +265,12 @@ def build__mojolearn_ivf() -> PythonObject:
         publish_parallel_ivf_device()
         # The IVF-Flat operations table (core/ivf_entry_table.mojo): the IVF
         # doors call this image's entry with plain words and read its key
-        # from the module attribute `ivf_native_key` (mode, vendor, image).
+        # from the module attribute `ivf_native_key` (mode | vendor << 8 | image << 16).
         # A build with no GPU vendor publishes nothing and records no key.
         var ops_key = publish_ivf_ops_device()
         if ops_key.vendor > 0:
-            py_setattr(published_module, "ivf_native_key", Python.tuple(
-                PythonObject(ops_key.mode), PythonObject(ops_key.vendor), PythonObject(ops_key.image)))
+            py_setattr(published_module, "ivf_native_key",
+                       PythonObject(ops_key.mode | (ops_key.vendor << 8) | (ops_key.image << 16)))
         return published_module
     except e:
         abort(String("failed to create _mojolearn_ivf: ", e))

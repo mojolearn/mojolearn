@@ -11,7 +11,7 @@ bindings' Python `ivf_flat_*` exports and their two Python lists.
 Modeled on core/neighbors_entry_table.mojo: the same core/entry_table.mojo
 publication and lookup, one slot name per tier, vendor and image. The key is
 the `(mode, vendor, image)` an image records as its module attribute
-`ivf_native_key` when it publishes (vendor words 0 cpu, 1 metal, 2 cuda,
+`ivf_native_key` when it publishes (one int, mode | vendor << 8 | image << 16; vendor words 0 cpu, 1 metal, 2 cuda,
 3 hip; image 0 the full image, 1 the search-only CPU image, which carries no
 build); the door reads that attribute at UNPACK. The two CPU images share one
 host handle registry (ivf/ivf_host_search_run.mojo `HOST_IVF_REGISTRY`), so a

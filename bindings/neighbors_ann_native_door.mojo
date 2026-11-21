@@ -39,6 +39,9 @@ from bindings.family_common_pack import (
 # TOMBSTONE: ann_candidates_i32 / _ann_item (core/neighbors_ann_impl.mojo, a two-pass serial byte walk, merged into admit_ids) deleted 2026-11-08 by lane a3-admit-decomp-prep-metrics; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A3_ADMISSION_HELPERS.patch.
 from bindings.parallel_public_result_door import parallel_public_result
+from bindings.ivf_ops_native_door import ivf_ops_key, ivf_ops_key_probe, ivf_door_build, ivf_door_release
+from core.ivf_entry_table import IvfIndexSpans, IvfIndexWords
+from ivf.ivf_query_run import IvfBuildRequest, ivf_borrowed
 from bindings.neighbors_ann_query_native_door import neighbors_ann_search, ann_pq_materialize, ann_stored_drop
 from bindings.mode_metadata_native_door import _fields
 from bindings.p3nc_fitted_freeze_unpack import fitted_freeze
@@ -156,14 +159,47 @@ def _ann_borrowed(minter: PythonObject, binding: PythonObject, release: String) 
     estimator that minted the handle is then another estimator, on the other
     device, that was handed this fitted state in memory
     (`_check_both.on_device`: `model.check`, `verify --cross-check`) and
-    still owns it. The device column is told by the one entry only a GPU
-    image publishes: `ivf_flat_index_export` for IVF-Flat (its host image
-    keeps its own prepared index, without an export), the release entry
-    itself for the x_ann kinds (their host image keeps no resident index).
+    still owns it. For the x_ann kinds the device column is told by the
+    release entry itself, which only a GPU image publishes (their host image
+    keeps no resident index). IVF-Flat tells it by the two images' table
+    keys (`ivf_release_held`, ivf/ivf_query_run.mojo `ivf_borrowed`): both
+    its columns mint handles.
     Two images of ONE device (identical and fast, or a module and its
     import-time query alias) are never borrowed from each other."""
-    var marker = String("ivf_flat_index_export") if release == "ivf_flat_index_release" else release.copy()
-    return (py_get(py_fields(minter), marker) is None) != (py_get(py_fields(binding), marker) is None)
+    return (py_get(py_fields(minter), release) is None) != (py_get(py_fields(binding), release) is None)
+
+
+def ivf_release_held(fields: PythonObject, binding: PythonObject, b: PythonObject) raises:
+    """`_ann_release` for IVF-Flat: pop the held `(key, handle, binding)`,
+    if any, and release the handle through the MINTING image's operations
+    table (core/ivf_entry_table.mojo). Quiet on an image that records no
+    table key or a handle already gone. A handle the other device's image
+    minted is borrowed (`ivf_borrowed`, the `_ann_borrowed` rule on the two
+    table keys): this estimator forgets it and never releases it, because
+    its owner still searches through it.
+
+    Before (lane dw-neighbors, 2026-11-21): the minter's `ivf_flat_index_release`
+    export read by name from its module dictionary, two more by-name reads of
+    `ivf_flat_index_export` for the borrowed test, and a Python call. Now two
+    key reads and one table call. Runs once per fit / extend / stale handle,
+    never per query. `b` is the caller's admitted builtins module."""
+    var cached = py_call(fields.pop, PythonObject("_resident"), PythonObject(None))
+    if cached is None:
+        return
+    if py_type(cached) is not b.tuple or len(cached) != 3 or py_type(cached[1]) is not b.int:
+        raise Error("TypeError: ANN resident state requires its native key, handle and module")
+    if py_type(cached[2]) is not py_type(b):
+        raise Error("TypeError: ANN resident state requires its compiled module owner")
+    var minter = ivf_ops_key_probe(cached[2])
+    if minter.vendor < 0:
+        return
+    var own = ivf_ops_key_probe(binding)
+    if own.vendor >= 0 and ivf_borrowed(minter, own):
+        return
+    try:
+        ivf_door_release(minter, Int(py=cached[1]))
+    except:
+        pass
 
 
 def _ann_release(fields: PythonObject, release: String, binding: PythonObject) raises:
@@ -276,8 +312,7 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     # prepared registry outside `__dict__`) and what it holds.
     var stamp_mods = NativeModules()
     prepared_drop(stamp_mods, IVF_QUERY_STATE_SLOT, model)
-    _ann_release(fields, "ivf_flat_index_release", binding)
-    var x = x_pin.keep
+    ivf_release_held(fields, binding, b)
     var n = x_snapshot.shape[0]
     var dim = x_snapshot.shape[1]
     var n_lists_o = _ann_param(fields, "IVFIndex", "n_lists")
@@ -292,17 +327,28 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var offsets = _ann_empty(plan.offsets, "<i4", context)
     var indices = _ann_empty(plan.indices, "<i4", context)
     _ivf_extension(fields, binding, context)
-    var params = Python.list(PythonObject(n), PythonObject(dim), n_lists_o, iters, metric, seed)
-    var resident_build = neural_descriptor_entry(binding, "ivf_flat_build_resident", False)
-    if resident_build is not None:
-        # ORDER MATCHES bindings/_mojolearn_ivf.mojo (ivf_flat_build_resident):
-        # x, centers_out, center_norms_out, offsets_out, indices_out;
-        # n, dim, n_lists, kmeans_n_iters, metric, seed.
-        var handle = family_call(b.int, family_call(
-            resident_build,
-            Python.list(PythonObject(x_snapshot.source.addr), classical_address(centers), classical_address(norms),
-                        classical_address(offsets), classical_address(indices)),
-            params))
+    # RUN (ivf/ivf_query_run.mojo `ivf_build_run`): one call of the image's
+    # IVF-Flat operations table under the key read here, once per fit.
+    # Before: two by-name reads of the module dictionary (`ivf_flat_build_resident`,
+    # then `ivf_flat_build`), a six-word and a five- or six-word Python list,
+    # a Python call and, in the export, eleven or twelve boxed-word reads.
+    var ops_key = ivf_ops_key(binding)
+    if not ops_key.on_device() and not ops_key.builds():
+        raise Error("ImportError: mojolearn IVFIndex: "
+                    + family_str(family_call(b.getattr, binding, PythonObject("__name__"), binding))
+                    + " exports no ivf_flat_build; this binary predates the build and search split, "
+                    + "rebuild it with bash bindings/build_ivf.sh")
+    var words = IvfIndexWords(n, dim, n_lists, Int(py=metric))
+    var iters_word = Int(py=iters)
+    var seed_word = Int(py=seed)
+    if ops_key.on_device():
+        # The resident build: x, centers_out, center_norms_out, offsets_out,
+        # indices_out (the list vectors stay in the image's handle).
+        var handle = PythonObject(ivf_door_build(ops_key, IvfBuildRequest(
+            x_snapshot.source.addr,
+            IvfIndexSpans(Int(py=classical_address(centers)), Int(py=classical_address(norms)),
+                          Int(py=classical_address(offsets)), Int(py=classical_address(indices)), 0),
+            words, iters_word, seed_word)))
         _ = x_snapshot  # retain the captured storage owners through native execution
         _ = x_pin
         _ = centers  # keep the Python object alive through the native call above
@@ -335,18 +381,14 @@ def _ivf_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         _ = fitted_freeze(fields["list_indices_"], context)
         return model
     var data = _ann_empty(plan.data, "<f4", context)
-    var build = neural_descriptor_entry(binding, "ivf_flat_build", False)
-    if build is None:
-        raise Error("ImportError: mojolearn IVFIndex: "
-                    + family_str(family_call(b.getattr, binding, PythonObject("__name__"), binding))
-                    + " exports no ivf_flat_build; this binary predates the build and search split, "
-                    + "rebuild it with bash bindings/build_ivf.sh")
-    # ORDER MATCHES bindings/ivf_index_arrays.mojo (ivf_flat_build):
-    # x, centers_out, center_norms_out, offsets_out, indices_out, list_data_out.
-    _ = family_call(build,
-                    Python.list(PythonObject(x_snapshot.source.addr), classical_address(centers), classical_address(norms),
-                                classical_address(offsets), classical_address(indices), classical_address(data)),
-                    params)
+    # The CPU column's build: x, centers_out, center_norms_out, offsets_out,
+    # indices_out, list_data_out.
+    _ = ivf_door_build(ops_key, IvfBuildRequest(
+        x_snapshot.source.addr,
+        IvfIndexSpans(Int(py=classical_address(centers)), Int(py=classical_address(norms)),
+                      Int(py=classical_address(offsets)), Int(py=classical_address(indices)),
+                      Int(py=classical_address(data))),
+        words, iters_word, seed_word))
     _ = x_snapshot  # retain the captured storage owners through native execution
     _ = x_pin
     _ = centers  # keep the Python object alive through the native call above

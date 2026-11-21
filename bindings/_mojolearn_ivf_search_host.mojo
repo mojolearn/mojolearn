@@ -36,7 +36,6 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from bindings.ivf_host_search_door import (
     ivf_flat_index_prepare_binding,
     ivf_flat_index_release_binding,
-    ivf_flat_index_search_binding,
     ivf_finalize_distances_binding,
     ivf_flat_extend_binding,
     ivf_flat_partial_search_binding,
@@ -102,7 +101,6 @@ def build__mojolearn_ivf_search_host() -> PythonObject:
         module.def_function[ivf_flat_partial_search_binding]("ivf_flat_partial_search")
         module.def_function[ivf_finalize_distances_binding]("ivf_finalize_distances")
         module.def_function[ivf_flat_index_prepare_binding]("ivf_flat_index_prepare")
-        module.def_function[ivf_flat_index_search_binding]("ivf_flat_index_search")
         module.def_function[ivf_flat_index_release_binding]("ivf_flat_index_release")
         # ivf_merge_shards: no Python door (lane calltable-parallel-archive,
         # 2026-11-11); the distributed IVF owner reads the parallel IVF table
@@ -111,8 +109,8 @@ def build__mojolearn_ivf_search_host() -> PythonObject:
         # The IVF-Flat operations table (core/ivf_entry_table.mojo), the
         # search-only CPU image (no build): the key the IVF doors read.
         var ops_key = publish_ivf_ops_search_host()
-        py_setattr(published_module, "ivf_native_key", Python.tuple(
-            PythonObject(ops_key.mode), PythonObject(ops_key.vendor), PythonObject(ops_key.image)))
+        py_setattr(published_module, "ivf_native_key",
+                   PythonObject(ops_key.mode | (ops_key.vendor << 8) | (ops_key.image << 16)))
         return published_module
     except error:
         abort(String("failed to create _mojolearn_ivf_search_host: ", error))

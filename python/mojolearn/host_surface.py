@@ -3292,7 +3292,9 @@ FAMILIES = (
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
             "ivf_flat_build", "ivf_flat_search",
             "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
-            "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
+            "ivf_flat_index_prepare", "ivf_flat_index_release",
+            # ivf_flat_index_search: no Python door since lane dw-neighbors (2026-11-21); the
+            # image answers it as an operation of its IVF-Flat operations table.
             # ivf_merge_shards, ivf_shard_plan: no Python door since lane
             # calltable-parallel-archive (2026-11-11); this image publishes them
             # in its parallel IVF table.
@@ -3334,7 +3336,9 @@ FAMILIES = (
             "ivf_search_host_column", "ivf_search_host_sabotage",
             "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search", "ivf_flat_extend",
             "ivf_flat_partial_search", "ivf_finalize_distances",
-            "ivf_flat_index_prepare", "ivf_flat_index_search", "ivf_flat_index_release",
+            "ivf_flat_index_prepare", "ivf_flat_index_release",
+            # ivf_flat_index_search: no Python door since lane dw-neighbors (2026-11-21); the
+            # image answers it as an operation of its IVF-Flat operations table.
             # ivf_merge_shards: no Python door since lane calltable-parallel-archive
             # (2026-11-11); `_mojolearn_ivf_host` publishes it natively.
         ),
