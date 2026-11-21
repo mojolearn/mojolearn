@@ -44,7 +44,7 @@ class CorpusPublicSource(unittest.TestCase):
     def test_preparation_owns_cache_and_existing_tokenizer_routes(self):
         source = _plain(NATIVE)
         for entry in ("tokenizer_bpe_train_corpus(data,", "tokenizer_bpe_encode_corpus(tokenizer,",
-                      "tokenizer_gather_rows_native(Int(py=source._addr)",
+                      "lm_batch_run(request, base, Int(py=result._addr)",
                       "corpus_atomic_begin(final)", "corpus_atomic_commit(temporary, final)",
                       "corpus_atomic_abort(temporary)", "corpus_hash_file(path)",
                       # pass 3 (N174): one token hash per prepare, carried to batches().
@@ -103,7 +103,7 @@ class CorpusPublicSource(unittest.TestCase):
         make = source.split("def _prefetch(", 1)[1].split("def _iterator_next(", 1)[0]
         advance = source.split("def _iterator_next(", 1)[1].split("def _batch_describe(", 1)[0]
         self.assertNotIn("_batch_ids(", make)
-        self.assertIn("LmCorpusIteratorHandle(owner, start, start + steps)", make)
+        self.assertIn("LmCorpusIteratorHandle(owner, start, start + steps, request)", make)
         # The iterator now uses its admitted native snapshot directly. The
         # public boundary tests cover mutation/failure behavior; requiring the
         # former Python-object helper calls would restore unnecessary dispatch.
