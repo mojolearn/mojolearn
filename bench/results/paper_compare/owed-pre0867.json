@@ -63,13 +63,15 @@
   },
   "program-run-entry": {
    "define": "MOJOLEARN_PROGRAM_RUN_ENTRY",
-   "status": "define in code (providers/python/autograd_program_pyapi_door.mojo PROGRAM_RUN_ENTRY): B = every fixed-shape Program.run on autograd/program_entries.mojo program_execute_run (fb75472a87); A = OpsSession.run_program (0.8.55 route: scratch-tape inputs, cached replay, download into the caller's array)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): LOSER; A (the default) is unchanged; removed: the switch and its three gates (program_execute_run stays: dynamic_shapes, optimize and profile run on it); the define is refused (core/experiment_guards_neural.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.fx-verdicts7.patch. Was: define in code (providers/python/autograd_program_pyapi_door.mojo PROGRAM_RUN_ENTRY): B = every fixed-shape Program.run on autograd/program_entries.mojo program_execute_run (fb75472a87); A = OpsSession.run_program (0.8.55 route: scratch-tape inputs, cached replay, download into the caller's array)",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 1 cell: neural/program-run gaussian 0.551 -> 0.603 (1.10). B (every fixed-shape Program.run on program_execute_run) loses: deleted."
   },
   "session-call-descriptor": {
    "define": "MOJOLEARN_SESSION_CALL_DESCRIPTOR",
-   "status": "define in code (providers/python/autograd_session_public_request_pyapi_pack.mojo SESSION_CALL_DESCRIPTOR): B = every public Session/Program call through the session_public_api_v1 descriptor (d2f14a3de4, ec806eaf6f, 1edde63a6a); A = a direct typed call when the calling image owns the session registry",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): LOSER; A (the default) is unchanged; removed: the switch, its gate and the zero-filled read-back branch (the descriptor route stays: a Session of another image takes it); the define is refused (core/experiment_guards_neural.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch. Was: define in code (providers/python/autograd_session_public_request_pyapi_pack.mojo SESSION_CALL_DESCRIPTOR): B = every public Session/Program call through the session_public_api_v1 descriptor (d2f14a3de4, ec806eaf6f, 1edde63a6a); A = a direct typed call when the calling image owns the session registry",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 2 cells: neural/ops-session-step gaussian 2.63 -> 2.93 (1.11); neural/program-run gaussian 0.538 -> 0.540 (1.00). B (every same-image call through the descriptor, zero-filled read-back arrays) loses: deleted."
   },
   "if-fit-own-x": {
    "define": "MOJOLEARN_IDN_IF_FIT_OWN_X",
@@ -89,8 +91,9 @@
   },
   "samba-program-forward": {
    "define": "MOJOLEARN_SAMBA_PROGRAM_FORWARD",
-   "status": "define in code (training/neural_identical_experiments.mojo SAMBA_PROGRAM_FORWARD, read by bindings/samba_inference_native_door.mojo samba_forward): B = the stateless SambaStack.forward on SambaStackProgram (lane x6; its per-call waste fixed: held Mamba-3 stages, kept forward-only attention stages, no report copies); A = the restored resident forward samba_resident_forward (descriptor op 16, training/samba_resident.mojo)",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): NOISE; A (the default) is unchanged; removed: the switch and its gate (SambaStackProgram stays: the stateful forward, the step, the decode session, and the stateless forward of a stack the resident route does not take); the define is refused (core/experiment_guards_neural.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_SAMBA_PROGRAM_FORWARD.fx-verdicts7.patch. Was: define in code (training/neural_identical_experiments.mojo SAMBA_PROGRAM_FORWARD, read by bindings/samba_inference_native_door.mojo samba_forward): B = the stateless SambaStack.forward on SambaStackProgram (lane x6; its per-call waste fixed: held Mamba-3 stages, kept forward-only attention stages, no report copies); A = the restored resident forward samba_resident_forward (descriptor op 16, training/samba_resident.mojo)",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 1 cell: neural/samba-forward bytes 4.55 -> 4.55 (1.00). NOISE: B (the stateless forward on SambaStackProgram) deleted. The model's _samba_forward_route was not read from this job's Mac-side evidence; the program forward's only other measurement is candidate 4c2340386abc, NVIDIA 10.54 ms against 4.60, so B has no recorded win either way."
   },
   "rf-device-loop": {
    "define": "MOJOLEARN_IDN_RF_DEVICE_LOOP",
@@ -558,13 +561,15 @@
   },
   "adaboost-reencode": {
    "define": "MOJOLEARN_TREES_FAST_ADABOOST_REENCODE",
-   "status": "define in code (bindings/trees_public_boost_door.mojo ADABOOST_REENCODE): B = the labels re-encoded per member; A = the labels encoded once per fit, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): NOISE; A (the default) is unchanged; removed: the label re-encode per member; the define is refused (core/experiment_guards_trees.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_TREES_FAST_ADABOOST_REENCODE.patch. Was: define in code (bindings/trees_public_boost_door.mojo ADABOOST_REENCODE): B = the labels re-encoded per member; A = the labels encoded once per fit, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 4 cells, 0.98-1.04, median 1.00: adaboost-clf istella fit 1538 -> 1592 (1.04), infer 394 -> 398 (1.01); taxi fit 251 -> 246 (0.98), infer 133 -> 133 (1.00). NOISE: B (re-encode per member) deleted."
   },
   "hr2-bagging-members": {
    "define": "MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS",
-   "status": "define in code (bindings/trees_public_boost_door.mojo HR2_BAGGING_MEMBERS): B = the per-member fit loop; A = one forest fit of every member, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): LOSER; A (the default) is unchanged; removed: the per-member fit loop for a bag the forest fit admits; the define is refused (core/experiment_guards_trees.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS.patch. Was: define in code (bindings/trees_public_boost_door.mojo HR2_BAGGING_MEMBERS): B = the per-member fit loop; A = one forest fit of every member, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 8 cells, 0 faster, 3.84-13.71, median 7.30: bagging-clf istella fit 843 -> 9538 (11.32), infer 22.84 -> 87.71 (3.84); bagging-clf taxi fit 96.15 -> 782 (8.14), infer 4.43 -> 31.44 (7.10); bagging-reg istella fit 1329 -> 9688 (7.29), infer 12.23 -> 66.44 (5.43); bagging-reg taxi fit 91.75 -> 671 (7.31), infer 0.931 -> 12.77 (13.71). B (the per-member fit loop) loses: deleted."
   },
   "gbdt-ordered-fold-index": {
    "define": "MOJOLEARN_GBDT_FAST_ORDERED_FOLD_INDEX",
@@ -584,8 +589,9 @@
   },
   "xprep-direct-off": {
    "define": "MOJOLEARN_XPREP_FAST_DIRECT_OFF",
-   "status": "define in code (bindings/arena_prog_native_door.mojo, bindings/prep_classify_prog_door.mojo XPREP_DIRECT): B = inputs of PREP_DIRECT_MIN_WORDS or more staged through the arena; A = the direct upload from the input's own buffer, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): LOSER; A (the default) is unchanged; removed: the switch (arena staging stays for inputs under the direct threshold and bindings without the direct entries); the define is refused (core/experiment_guards_base.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_XPREP_FAST_DIRECT_OFF.patch. Was: define in code (bindings/arena_prog_native_door.mojo, bindings/prep_classify_prog_door.mojo XPREP_DIRECT): B = inputs of PREP_DIRECT_MIN_WORDS or more staged through the arena; A = the direct upload from the input's own buffer, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 48 cells (12 estimators x istella, taxi x fit, infer), 3 faster / 11 flat / 34 slower by ratio, 0.96-17.38, median 1.75: variance-threshold istella fit 56.99 -> 990 (17.38), taxi fit 3.57 -> 50.86 (14.24); robust-scaler taxi fit 7.71 -> 55.28 (7.17); quantile-transformer taxi fit 8.08 -> 55.33 (6.85); kbins taxi fit 10.18 -> 58.07 (5.71); normalizer istella fit 1105 -> 2036 (1.84); target-encoder istella fit 176 -> 238 (1.35); the standard and minmax scalers 0.98-1.04; best cell onehot taxi infer 255 -> 244 (0.96). B (host-arena staging of large inputs) loses: deleted."
   },
   "xprep-mi-sorted-off": {
    "define": "MOJOLEARN_XPREP_FAST_MI_SORTED_OFF",
@@ -599,8 +605,9 @@
   },
   "xprep-out-off": {
    "define": "MOJOLEARN_XPREP_FAST_OUT_OFF",
-   "status": "define in code (bindings/arena_prog_native_door.mojo, bindings/maxabs_native_door.mojo, bindings/prep_encode_native_door.mojo (+6 x_prep doors) XPREP_OUT): B = the output in host words; A = the device output region, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): NOISE; A (the default) is unchanged; removed: the switch (host-word output stays under the output threshold and on the host column); the define is refused (core/experiment_guards_base.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch. Was: define in code (bindings/arena_prog_native_door.mojo, bindings/maxabs_native_door.mojo, bindings/prep_encode_native_door.mojo (+6 x_prep doors) XPREP_OUT): B = the output in host words; A = the device output region, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 48 cells (12 estimators x istella, taxi x fit, infer), 0.91-1.13, median 1.00, 46 cells inside 0.98-1.04: extremes target-encoder istella infer 15.46 -> 14.07 (0.91) and kbins taxi fit 10.19 -> 11.52 (1.13). NOISE: B (host-word output on a binding with an output region) deleted."
   },
   "xprep-pt-interleave": {
    "define": "MOJOLEARN_XPREP_FAST_PT_INTERLEAVE",
@@ -624,13 +631,15 @@
   },
   "xprep-te-gather-off": {
    "define": "MOJOLEARN_XPREP_FAST_TE_GATHER_OFF",
-   "status": "define in code (bindings/prep_encode_native_door.mojo TE_GATHER): B = TargetEncoder without the gather; A = the gather, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): NOISE; A (the default) is unchanged; removed: the switch and B's te_enc stage (the kernel's no-gather loop stays: the host column's every-row form shares it); the define is refused (core/experiment_guards_base.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_XPREP_FAST_TE_GATHER_OFF.patch. Was: define in code (bindings/prep_encode_native_door.mojo TE_GATHER): B = TargetEncoder without the gather; A = the gather, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 4 cells, 0.98-1.01: target-encoder istella fit 173 -> 171 (0.98), infer 14.11 -> 14.11 (1.00); taxi fit 130 -> 130 (1.00), infer 8.85 -> 8.91 (1.01). NOISE: B (te_enc on the bucket rows without te_gather) deleted."
   },
   "xprep-te-pbucket-off": {
    "define": "MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF",
-   "status": "define in code (bindings/prep_encode_native_door.mojo TE_PBUCKET): B = TargetEncoder without the per-bucket pass; A = the per-bucket pass, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
-   "owed": "RUN"
+   "status": "DELETED 2026-11-21 (lane fx-verdicts7): LOSER; A (the default) is unchanged; removed: te_bucket (op 108, x_prep/target.mojo te_bucket_unit, _te_bucket_reg) and its stage; the define is refused (core/experiment_guards_base.mojo); code recoverable at 519388d23a, experiments/removed/MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF.patch. Was: define in code (bindings/prep_encode_native_door.mojo TE_PBUCKET): B = TargetEncoder without the per-bucket pass; A = the per-bucket pass, the default. Was a run-time env read until lane fx-env-dead (2026-11-18); default unchanged",
+   "owed": "DECIDED",
+   "evidence": "A/B abn9 2026-11-21, NVIDIA L40S host 79f003b8e8ae, base wheel 3880db30a6af and its B set, base and arm back to back in one job (nvc1-0003, R2 tag nvc-ab-20261121T003518Z-d38466; every cell ~/mojolearn-evidence/briefs-20261118/abn9-SUMMARY-TG-nvidia.txt and ~/mojolearn-evidence/measure-candidate/build-3880db30a6/abn9/SUMMARY-TG-nvidia.txt), one scored run per arm, full datasets, base -> arm ms: 4 cells, median 1.39: target-encoder istella fit 171 -> 345 (2.02), infer 13.99 -> 14.39 (1.03); taxi fit 130 -> 228 (1.76), infer 9.32 -> 9.07 (0.97). B (te_bucket, one thread per column) loses: deleted with its kernel (op 108)."
   },
   "mamba-decode-stage-arena": {
    "define": "MOJOLEARN_MAMBA_FAST_DECODE_STAGE_ARENA",
@@ -1457,7 +1466,8 @@
    "b_arms": [
     "program-run-entry"
    ],
-   "decides": "program_execute_run (B) becomes the one fixed-shape run only if at least as fast as run_program (A) on NVIDIA and AMD; output digests must match between arms (same _program_op replay); A = direct Program.run door + run_program, B = full public door chain + program_execute_run"
+   "decides": "program_execute_run (B) becomes the one fixed-shape run only if at least as fast as run_program (A) on NVIDIA and AMD; output digests must match between arms (same _program_op replay); A = direct Program.run door + run_program, B = full public door chain + program_execute_run",
+   "owed": "DECIDED"
   },
   {
    "id": "restore-executor-session-call",
@@ -1472,7 +1482,8 @@
    "b_arms": [
     "session-call-descriptor"
    ],
-   "decides": "the descriptor hop for same-image calls with its second handle admission and zero-filled read-back arrays (B) returns only if at least as fast as the direct typed call (A) on NVIDIA and AMD; digests must not move"
+   "decides": "the descriptor hop for same-image calls with its second handle admission and zero-filled read-back arrays (B) returns only if at least as fast as the direct typed call (A) on NVIDIA and AMD; digests must not move",
+   "owed": "DECIDED"
   },
   {
    "id": "rk-iforest-fit-borrow",
@@ -1542,7 +1553,8 @@
    "kind": "ab",
    "lane": "samba-forward",
    "rows": "full",
-   "source": "restore-samba-resident-forward (2026-11-13): samba_resident_forward (IDN_SAMBA_RESIDENT_STEP PROMOTED samba-forward NV 12.0 -> 5.3, AMD 8.8 -> 5.8 ms; 0.8.55 paper NV 4.60 / AMD 6.10 ms) restored from 5b5490960d after lane x6 (d38aa3ba43, 2f8537c34b) deleted it unmeasured; candidate 4c2340386abc program NV 10.54 / MI325X 8.36 ms"
+   "source": "restore-samba-resident-forward (2026-11-13): samba_resident_forward (IDN_SAMBA_RESIDENT_STEP PROMOTED samba-forward NV 12.0 -> 5.3, AMD 8.8 -> 5.8 ms; 0.8.55 paper NV 4.60 / AMD 6.10 ms) restored from 5b5490960d after lane x6 (d38aa3ba43, 2f8537c34b) deleted it unmeasured; candidate 4c2340386abc program NV 10.54 / MI325X 8.36 ms",
+   "owed": "DECIDED"
   },
   {
    "id": "restore-rf-device-loop",
@@ -3567,7 +3579,8 @@
    "b_arms": [
     "adaboost-reencode"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "owed": "DECIDED"
   },
   {
    "id": "hr2-bagging-members-rows",
@@ -3583,7 +3596,8 @@
    "b_arms": [
     "hr2-bagging-members"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "owed": "DECIDED"
   },
   {
    "id": "gbdt-ordered-fold-index-rows",
@@ -3651,7 +3665,8 @@
    "b_arms": [
     "xprep-direct-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "owed": "DECIDED"
   },
   {
    "id": "xprep-mi-sorted-off-rows",
@@ -3709,7 +3724,8 @@
    "b_arms": [
     "xprep-out-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "owed": "DECIDED"
   },
   {
    "id": "xprep-pt-interleave-rows",
@@ -3780,7 +3796,8 @@
    "b_arms": [
     "xprep-te-gather-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "owed": "DECIDED"
   },
   {
    "id": "xprep-te-pbucket-off-rows",
@@ -3793,7 +3810,8 @@
    "b_arms": [
     "xprep-te-pbucket-off"
    ],
-   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)"
+   "decides": "keep A (the default) unless B is faster at equal quality on the NVIDIA L40S; digests must not move; time also a neighbouring shape and a non-board dataset before a flip (no dimension targeting)",
+   "owed": "DECIDED"
   },
   {
    "id": "mamba-decode-stage-arena",

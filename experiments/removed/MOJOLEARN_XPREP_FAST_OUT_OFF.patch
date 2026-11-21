@@ -1,0 +1,199 @@
+diff --git a/bindings/arena_prog_native_door.mojo b/bindings/arena_prog_native_door.mojo
+index 703db60e55..fb6f5ee04b 100644
+--- a/bindings/arena_prog_native_door.mojo
++++ b/bindings/arena_prog_native_door.mojo
+@@ -15,6 +15,7 @@
+ # step: the same entries are called with the same words, so no bit moves.
+ from bindings.mode_answer_door import answer_mode_object
+ from core.mode_answer import MODE_FAMILY_PROGRAM
++from std.sys.compile import is_defined
+ from bindings.native_array_storage_door import native_array_zeros
+ from std.memory import unsafe_memcpy
+ from core.metrics_program_plan import MetricProgramPlan
+@@ -244,9 +245,7 @@ def _prep_run_impl(prog: PythonObject, mode: PythonObject, context: PythonObject
+     var on = 0 if fields["out_size"] is None else _int(fields["out_size"], context)
+     var out_code = String(fields["_out_code"])
+     var has_out = py_get(entries, "x_prep_run_out") is not None
+-    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-    var dev_out = has_out and on > 0
++    var dev_out = has_out and on > 0 and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+     var has_scratch_entry = sc > 0 and not has_out and py_get(entries, "x_prep_run_scratch") is not None
+     var dev_scratch = sc > 0 and (has_out or has_scratch_entry)
+     if H + sc + on > INT32_MAX:
+diff --git a/bindings/maxabs_native_door.mojo b/bindings/maxabs_native_door.mojo
+index f4efd28c6c..74743e0230 100644
+--- a/bindings/maxabs_native_door.mojo
++++ b/bindings/maxabs_native_door.mojo
+@@ -1,5 +1,6 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # MaxAbsScaler owns its existing x_prep program and complete public operation.
++from std.sys.compile import is_defined
+ from std.os import getenv
+ from std.python import Python, PythonObject
+ from std.python._cpython import PyObjectPtr
+@@ -141,9 +142,7 @@ def _maxabs_apply(fields: PythonObject, var values: PythonObject, entries: Pytho
+     var dest = n*d+(d if scale is not None else 0)
+     if dest+n*d > 2147483647:
+         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
+-    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None
++    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+     var host = dest+(0 if dev_out else n*d)
+     var arena = xprep_storage(host,context)
+     var output_store = xprep_storage(n*d,context) if dev_out else PythonObject(None)
+diff --git a/bindings/prep_normalizer_lifecycle_pack.mojo b/bindings/prep_normalizer_lifecycle_pack.mojo
+index ea39758ffc..3fa67aeca2 100644
+--- a/bindings/prep_normalizer_lifecycle_pack.mojo
++++ b/bindings/prep_normalizer_lifecycle_pack.mojo
+@@ -2,6 +2,7 @@
+ # Normalizer operations own their complete previously decorated public calls.
+ # The PACK half of the former `bindings/prep_normalizer_lifecycle.mojo` (fence-flip-2 split, 2026-11-12);
+ # the UNPACK half is `bindings/prep_normalizer_lifecycle_unpack.mojo`.
++from std.sys.compile import is_defined
+ from std.python import Python, PythonObject
+ from bindings.native_loaded_module_door import native_loaded_module, native_namespace_string_keys
+ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+@@ -212,9 +213,7 @@ def _normalizer_apply(values: PythonObject, n: Int, d: Int, code: Int,
+     # Same normalization stage, arena operands, large-output rule and native
+     # transport as the preexisting _transform branch. No model math moves.
+     var words = n * d
+-    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-    var dev_out = words >= 134217728 and py_get(entries, "x_prep_run_out") is not None
++    var dev_out = words >= 134217728 and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+     var host = words + (0 if dev_out else words)
+     if host + (words if dev_out else 0) > 2147483647:
+         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+diff --git a/bindings/prep_stateless_native_door.mojo b/bindings/prep_stateless_native_door.mojo
+index 74517f1a5a..b89354e0ca 100644
+--- a/bindings/prep_stateless_native_door.mojo
++++ b/bindings/prep_stateless_native_door.mojo
+@@ -6,6 +6,7 @@
+ # Python `_Prog` built) and runs it through the shared transport
+ # (bindings/x_prep_native_owner.mojo `xprep_run`). fit_transform converts X once
+ # and runs the one transform program.
++from std.sys.compile import is_defined
+ from std.memory import unsafe_memcpy, bitcast
+ from std.python import Python, PythonObject
+ from std.python._cpython import PyObjectPtr
+@@ -211,9 +212,7 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
+     if kind == "normalizer":
+         var code = _norm_code(fields)
+         var words = n * d
+-        # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-        var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
++        var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+         var host = words + (0 if dev_out else words)
+         if host + (words if dev_out else 0) > 2147483647:
+             raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+@@ -236,9 +235,7 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
+     var words = n * nout
+     var fortran = String(fields["order"]) == "F"
+     var transpose = fortran and words > 0
+-    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-    var dev_out = transpose and words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
++    var dev_out = transpose and words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+     var host = out + words + (words if transpose and not dev_out else 0)
+     if host + (words if dev_out else 0) > 2147483647:
+         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+@@ -495,9 +492,7 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
+     var qo = words
+     var ro = qo + nq * d
+     var out = ro + nq
+-    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
++    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+     var host = out + (0 if dev_out else words)
+     if host + (words if dev_out else 0) > 2147483647:
+         raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+@@ -611,9 +606,7 @@ def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, conte
+         host += d
+         _ = py_call(inputs.append, Python.tuple(mo, Python.tuple(0, mean, PythonObject(None), d, 1)))
+         _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, scale, PythonObject(None), d, 1)))
+-    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
++    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+     var out = host
+     if not dev_out:
+         host += words
+diff --git a/bindings/robust_native_pack.mojo b/bindings/robust_native_pack.mojo
+index 3ff0cca09f..50a5c45c89 100644
+--- a/bindings/robust_native_pack.mojo
++++ b/bindings/robust_native_pack.mojo
+@@ -2,6 +2,7 @@
+ # RobustScaler owns its existing x_prep stage sequence and public lifecycle.
+ # The PACK half of the former `bindings/robust_native.mojo` (fence-flip-2 split, 2026-11-12);
+ # the UNPACK half is `bindings/robust_native_unpack.mojo`.
++from std.sys.compile import is_defined
+ from std.os import getenv
+ from std.python import Python, PythonObject
+ from std.python._cpython import PyObjectPtr
+@@ -213,9 +214,7 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
+     var dest = n*d+(d if center is not None else 0)+(d if scale is not None else 0)
+     if dest+n*d > 2147483647:
+         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
+-    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None
++    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+     var host = dest+(0 if dev_out else n*d)
+     var arena = xprep_storage(host,context)
+     var output_store = xprep_storage(n*d,context) if dev_out else PythonObject(None)
+diff --git a/bindings/prep_encode_prog_run.mojo b/bindings/prep_encode_prog_run.mojo
+index 93b45a88dd..69decef481 100644
+--- a/bindings/prep_encode_prog_run.mojo
++++ b/bindings/prep_encode_prog_run.mojo
+@@ -79,7 +79,8 @@ struct EncProgram(Movable):
+ 
+     def output(mut self, words: Int, region: Bool) raises -> Int:
+         """`_Prog.output`: below OUT_MIN_WORDS, or when the door found no
+-        output region on the binding (`region` False: the host column), the output is host words."""
++        output region on the binding (`region` False: the host column, or
++        -D MOJOLEARN_XPREP_FAST_OUT_OFF), the output is host words."""
+         if words < OUT_MIN_WORDS or not region:
+             return self.alloc(words)
+         if self.out_words > 0:
+diff --git a/bindings/prep_encode_native_door.mojo b/bindings/prep_encode_native_door.mojo
+index 19d763e597..ae75cf0b40 100644
+--- a/bindings/prep_encode_native_door.mojo
++++ b/bindings/prep_encode_native_door.mojo
+@@ -8,6 +8,7 @@
+ # stores the fitted attributes under the names, types and dtypes the Python
+ # set. fit_transform converts X once and hands the converted X to the
+ # transform program.
++from std.sys.compile import is_defined
+ from std.memory import unsafe_memcpy, bitcast
+ from std.math import ceil
+ from std.os import getenv
+@@ -183,10 +185,8 @@ struct EncProg(Movable):
+ 
+     def output(mut self, words: Int, entries: PythonObject) raises -> Int:
+         # Below OUT_MIN_WORDS, or on a binding without an output region
+-        # (the host column), the output is host words.
+-        # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+-        var region = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
++        # (the host column; -D MOJOLEARN_XPREP_FAST_OUT_OFF), the output is host words.
++        var region = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+         return self.prog.output(words, region)
+ 
+     def _record(mut self, record: PythonObject, words: Int) -> Int:
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 5e8ed83201..776523b8bd 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -188,7 +188,7 @@ class _Scratch:
+     read back by `get` into its own host buffer (no copy out of the arena).
+     Both resolve when the program runs (host arena size, then the scratch,
+     then the output) and never cross to the device from the host; the host
+-    binding gets them as plain
++    binding, or a build with -D MOJOLEARN_XPREP_FAST_OUT_OFF for the output, gets them as plain
+     arena words."""
+     __slots__ = ("off", "kind")
+ 

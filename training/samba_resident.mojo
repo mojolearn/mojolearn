@@ -1039,9 +1039,8 @@ def samba_resident_forward(
 # 5.3 ms (0.44x), AMD 8.8 -> 5.8 ms (0.66x) vs the per-op route; the 0.8.55
 # paper column (NVIDIA L40S 4.60 ms, AMD MI300X 6.10 ms) ran this function. The
 # program forward that replaced it measured NVIDIA 10.54 ms (2.29x), MI325X
-# 8.36 ms (1.48x) at candidate 4c2340386abc. B arm: -D
-# MOJOLEARN_SAMBA_PROGRAM_FORWARD (SambaStackProgram); RUN OWED samba-forward
-# A vs B on NVIDIA and AMD (bench/results/paper_compare/owed-pre0867.json).
+# 8.36 ms (1.48x) at candidate 4c2340386abc. The program B arm of the
+# stateless forward is deleted (A/B abn9, NVIDIA L40S: 4.55 -> 4.55 ms).
 
 
 def _step_registry_in(

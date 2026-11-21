@@ -1,0 +1,198 @@
+diff --git a/bindings/prep_encode_native_door.mojo b/bindings/prep_encode_native_door.mojo
+index 19d763e597..ae75cf0b40 100644
+--- a/bindings/prep_encode_native_door.mojo
++++ b/bindings/prep_encode_native_door.mojo
+@@ -8,6 +8,7 @@
+ # stores the fitted attributes under the names, types and dtypes the Python
+ # set. fit_transform converts X once and hands the converted X to the
+ # transform program.
++from std.sys.compile import is_defined
+ from std.memory import unsafe_memcpy, bitcast
+ from std.math import ceil
+ from std.os import getenv
+@@ -65,6 +66,7 @@ comptime OP_LABEL_BINARIZE = 51
+ comptime OP_F_CLASSIF = 63
+ comptime OP_F_REGRESSION = 64
+ comptime OP_CHI2 = 65
++comptime OP_TE_BUCKET = 108
+ comptime OP_TE_GATHER = 114
+ comptime OP_TE_HIST = 115
+ comptime OP_TE_HSUM = 116
+@@ -2633,21 +2633,24 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
+         else:
+             bstart = p.alloc(d * (cmax + 1))
+             brows = p.alloc(n * d)
+-        # TOMBSTONE: MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF (B arm loses: te_bucket, one thread per column; A/B abn9 NVIDIA L40S, target-encoder fit 1.76 and 2.02 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF.patch; record in docs/TOMBSTONES.md.
+-        var ch = max(1, min(256, (n + 4095) // 4096))
+-        var hh = p.scratch(d * ch * cmax)
+-        var tot = p.scratch(d * cmax)
+-        _stage(p.prog.program, OP_TE_HIST, d * ch, codes, n, d, cmax, ch, hh)
+-        _stage(p.prog.program, OP_TE_HSUM, d * cmax, cmax, ch, hh, tot)
+-        _stage(p.prog.program, OP_TE_HSTART, d, cmax, bstart, tot)
+-        _stage(p.prog.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
+-        # TOMBSTONE: MOJOLEARN_XPREP_FAST_TE_GATHER_OFF (NOISE: B staged te_enc on the bucket rows without te_gather; A/B abn9 NVIDIA L40S, 4 cells 0.98-1.01 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
+-        var gb = p.scratch(n * d * (1 + T))
+-        _stage(p.prog.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
+-        _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+-               bstart + 1, brows, gb + 1)
++        if not is_defined["MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF"]():
++            var ch = max(1, min(256, (n + 4095) // 4096))
++            var hh = p.scratch(d * ch * cmax)
++            var tot = p.scratch(d * cmax)
++            _stage(p.prog.program, OP_TE_HIST, d * ch, codes, n, d, cmax, ch, hh)
++            _stage(p.prog.program, OP_TE_HSUM, d * cmax, cmax, ch, hh, tot)
++            _stage(p.prog.program, OP_TE_HSTART, d, cmax, bstart, tot)
++            _stage(p.prog.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
++        else:
++            _stage(p.prog.program, OP_TE_BUCKET, d, codes, n, d, cmax, bstart, brows)
++        if not is_defined["MOJOLEARN_XPREP_FAST_TE_GATHER_OFF"]():
++            var gb = p.scratch(n * d * (1 + T))
++            _stage(p.prog.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
++            _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
++                   bstart + 1, brows, gb + 1)
++        else:
++            _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
++                   bstart + 1, brows)
+     var out = NONE
+     if apply:
+         out = p.output(n * d * T, entries)
+diff --git a/x_prep/target.mojo b/x_prep/target.mojo
+index 6b4445180c..01f6930a6c 100644
+--- a/x_prep/target.mojo
++++ b/x_prep/target.mojo
+@@ -235,8 +235,95 @@ def te_global_unit(t: Int, f: FP, q: IP):
+     st(f, p(q, 4) + 2 * t + 1, ss)
+ 
+ 
+-# TOMBSTONE: MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF (B arm loses: `te_bucket_unit`, op 108, with `_te_bucket_reg` and TE_REG: one thread per column walking every row twice; A/B abn9 NVIDIA L40S, target-encoder fit 1.76 and 2.02 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+-# Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF.patch; record in docs/TOMBSTONES.md.
++#: categories whose bucket counters `te_bucket` keeps in a thread-private array
++comptime TE_REG = 256
++
++
++def _te_bucket_reg(t: Int, f: FP, n: Int, d: Int, cmax: Int, C: Int, S: Int, R: Int):
++    """`te_bucket_unit` with its counters in a thread-private array instead of
++    arena words (lane prep-apple2: consecutive rows of one category made each
++    count a load after a store to the same arena word). The same START and
++    ROWS words."""
++    var cnt = Array[Int32, TE_REG + 1](fill=Int32(0))
++    var full = n - n % RUN
++    for i0 in range(0, full, RUN):
++        var bc = run_block[RUN](f, C + i0 * d + t, d)
++        comptime for u in range(RUN):
++            var code = Int(ftz(bc[u]))
++            if code >= 0 and code < cmax:
++                cnt[code + 1] += 1
++    for i in range(full, n):
++        var code = Int(ld(f, C + i * d + t))
++        if code >= 0 and code < cmax:
++            cnt[code + 1] += 1
++    for c in range(cmax):
++        cnt[c + 1] += cnt[c]
++    for c in range(cmax + 1):
++        sti(f, S + c, Int(cnt[c]))
++    # cnt[c] is now category c's fill position
++    for i0 in range(0, full, RUN):
++        var bc = run_block[RUN](f, C + i0 * d + t, d)
++        comptime for u in range(RUN):
++            var code = Int(ftz(bc[u]))
++            if code >= 0 and code < cmax:
++                sti(f, R + Int(cnt[code]), i0 + u)
++                cnt[code] += 1
++    for i in range(full, n):
++        var code = Int(ld(f, C + i * d + t))
++        if code >= 0 and code < cmax:
++            sti(f, R + Int(cnt[code]), i)
++            cnt[code] += 1
++
++
++def te_bucket_unit(t: Int, f: FP, q: IP):
++    """q = [CODES, n, d, CMAX, START, ROWS]; t = column j (lane prep-apple).
++    The rows of each category of column j, ascending: START[j*(CMAX+1) + c]
++    .. START[j*(CMAX+1) + c + 1] index ROWS[j*n + ...], which holds the row
++    numbers whose code is c, in row order (int words). A code outside
++    [0, CMAX) is in no bucket. `te_enc` then walks one category's rows
++    instead of every row: the same rows in the same order."""
++    var n = p(q, 1)
++    var d = p(q, 2)
++    var cmax = p(q, 3)
++    var C = p(q, 0)
++    var S = p(q, 4) + t * (cmax + 1)
++    var R = p(q, 5) + t * n
++    if cmax <= TE_REG:
++        _te_bucket_reg(t, f, n, d, cmax, C, S, R)
++        return
++    for c in range(cmax + 1):
++        sti(f, S + c, 0)
++    var full = n - n % RUN
++    for i0 in range(0, full, RUN):
++        var bc = run_block[RUN](f, C + i0 * d + t, d)
++        comptime for u in range(RUN):
++            var code = Int(ftz(bc[u]))
++            if code >= 0 and code < cmax:
++                sti(f, S + code + 1, ldi(f, S + code + 1) + 1)
++    for i in range(full, n):
++        var code = Int(ld(f, C + i * d + t))
++        if code >= 0 and code < cmax:
++            sti(f, S + code + 1, ldi(f, S + code + 1) + 1)
++    for c in range(cmax):
++        sti(f, S + c + 1, ldi(f, S + c + 1) + ldi(f, S + c))
++    # scatter: START[c] is advanced as its bucket fills, then restored
++    for i0 in range(0, full, RUN):
++        var bc = run_block[RUN](f, C + i0 * d + t, d)
++        comptime for u in range(RUN):
++            var code = Int(ftz(bc[u]))
++            if code >= 0 and code < cmax:
++                var at = ldi(f, S + code)
++                sti(f, R + at, i0 + u)
++                sti(f, S + code, at + 1)
++    for i in range(full, n):
++        var code = Int(ld(f, C + i * d + t))
++        if code >= 0 and code < cmax:
++            var at = ldi(f, S + code)
++            sti(f, R + at, i)
++            sti(f, S + code, at + 1)
++    for c in range(cmax, 0, -1):
++        sti(f, S + c, ldi(f, S + c - 1))
++    sti(f, S, 0)
+ 
+ 
+ # ------------------------------------------------ te_bucket in parallel (lane prep-apple2)
+diff --git a/x_prep/units.mojo b/x_prep/units.mojo
+index ebf4284b30..4869844724 100644
+--- a/x_prep/units.mojo
++++ b/x_prep/units.mojo
+@@ -16,7 +16,7 @@ from x_prep.prims import (
+ )
+ from x_prep.eigh import eigh_unit
+ from x_prep.target import (
+-    te_global_unit, te_enc_unit, te_apply_unit, te_gather_unit,
++    te_global_unit, te_enc_unit, te_apply_unit, te_bucket_unit, te_gather_unit,
+     te_hist_unit, te_hsum_unit, te_hstart_unit, te_hscatter_unit,
+ )
+ from x_prep.kbins import kbins_edges_unit, kbins_codes_unit, kbins_inverse_unit, kbins_gw_unit, kbins_wq_unit, kbins_wkm_unit
+@@ -308,7 +308,8 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
+         pt_fold_unit(t, f, q)
+     comptime if OP == 107:
+         ii_rowabs_unit(t, f, q)
+-    # op 108 (te_bucket) is retired: TOMBSTONE in x_prep/target.mojo (MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF).
++    comptime if OP == 108:
++        te_bucket_unit(t, f, q)
+     comptime if OP == 109:
+         pt_log_unit(t, f, q)
+     comptime if OP == 110:
+diff --git a/python/mojolearn/_expansion_prep.py b/python/mojolearn/_expansion_prep.py
+index 5e8ed83201..776523b8bd 100644
+--- a/python/mojolearn/_expansion_prep.py
++++ b/python/mojolearn/_expansion_prep.py
+@@ -70,7 +70,7 @@ _OPS = dict(
+     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
+     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
+     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
+-    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, pt_log=109,
++    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108, pt_log=109,
+     pt_spts=110, pt_smap=111, pt_sfold=112, pt_sres=113, te_gather=114,
+     te_hist=115, te_hsum=116, te_hstart=117, te_hscatter=118,
+     lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,

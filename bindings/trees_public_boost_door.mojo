@@ -26,7 +26,6 @@
 # it on the device); RandomTreesEmbedding's `fit_transform`
 # converts X once for the fit and the transform.
 from std.python import Python, PythonObject
-from std.sys.compile import is_defined
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.native_f32_view_pack import native_f32_view_array
 from bindings.py_attr import py_attr
@@ -672,15 +671,16 @@ def _member_store(member: PythonObject, result: PythonObject, cols: Int) raises:
     _store_model(py_fields(member), result, cols)
 
 
-def _member_fit_weighted(member: PythonObject, xcm: AdmittedX, codes: PythonObject, w32: PythonObject,
-                         encoded: Optional[TreesLabels], session: Session, context: PythonObject) raises:
+def _member_fit_weighted(member: PythonObject, xcm: AdmittedX, w32: PythonObject,
+                         encoded: TreesLabels, session: Session, context: PythonObject) raises:
     """`DecisionTreeClassifier._fit_weighted(Xcm, codes, w32, x_finite=True,
-    encoded=..., session=...)` on a column-major float32 X already scanned.
+    encoded=..., session=...)` on a column-major float32 X already scanned,
+    with the labels the caller encoded once for the whole fit.
     `member` comes from `_validated_clone(..., "dt_classifier", ...)`: its
     constructor state is refreshed and its mode captured already."""
     var fields = py_fields(member)
     var mode = String(fields["_fit_numeric_mode"])
-    var labels = encoded.value().copy() if encoded else trees_encode_labels(codes, context)
+    var labels = encoded.copy()
     py_setitem(fields, "classes_", labels.classes)
     var k = len(labels.classes)
     py_setitem(fields, "n_classes_", _P(k))
@@ -774,11 +774,8 @@ def _bagging_batched_ok(fields: PythonObject, base: PythonObject, n_rows: Int, n
                         sample_weight: PythonObject, context: PythonObject) raises -> Bool:
     """`_BaggingBase._batched_ok`: a bag of best-splitter decision trees over
     every feature, without weights or out-of-bag scoring, is one forest fit."""
-    # lane fx-env-dead (2026-11-18): was the run-time env read
-    # MOJOLEARN_HR2_BAGGING_MEMBERS=1 per fit; now a build define, default
-    # unchanged (one forest fit), A/B owed.
-    comptime if is_defined["MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS"]():
-        return False
+    # TOMBSTONE: MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS (B arm loses: the per-member fit loop for a bag the forest fit admits; A/B abn9 NVIDIA L40S, 8 cells 3.84-13.71 arm/base, 0 faster) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_TREES_FAST_HR2_BAGGING_MEMBERS.patch; record in docs/TOMBSTONES.md.
     if not _is_class(base, "trees_dt_classifier", context) and not _is_class(base, "trees_dt_regressor", context):
         return False
     var bf = py_fields(base)
@@ -1309,11 +1306,10 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         var session = Session(PythonObject(None), 0)
         if dt_best:
             var cm = _colmajor(xt, x.view(), context)
-            # lane fx-env-dead (2026-11-18): was the run-time env read
-            # MOJOLEARN_ADABOOST_REENCODE=1 per fit; now a build define,
-            # default unchanged (encode once), A/B owed.
-            comptime if not is_defined["MOJOLEARN_TREES_FAST_ADABOOST_REENCODE"]():
-                encoded = trees_encode_labels(codes, context)
+            # The labels are encoded ONCE for every member and round.
+            # TOMBSTONE: MOJOLEARN_TREES_FAST_ADABOOST_REENCODE (NOISE: B re-encoded the labels per member; A/B abn9 NVIDIA L40S, 4 cells 0.98-1.04 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+            # Restore: git apply experiments/removed/MOJOLEARN_TREES_FAST_ADABOOST_REENCODE.patch; record in docs/TOMBSTONES.md.
+            encoded = trees_encode_labels(codes, context)
             # the session open tests the column-major words it uploads
             # (lane a8c: the host scan of cm before it is deleted)
             session = _member_session(base, cm.view(), False, _ada_session_choice(fields, xt, context), context)
@@ -1336,7 +1332,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             device_rounds = _ada_device_rounds(session, "rf_classifier_fit_ada_round_export")
         var dev_labels = labels.copy()
         if device_rounds:
-            dev_labels = encoded.value().copy() if encoded else trees_encode_labels(codes, context)
+            dev_labels = encoded.value().copy()
             var mode = _member_mode(base, context)
             var cw_rows = trees_class_rows_only(py_get(py_fields(base), "class_weight"), dev_labels,
                                                 trees_table(context, mode, "_mojolearn_x_trees"), context)
@@ -1365,7 +1361,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                     continue
                 if xcm:
                     member = _validated_clone(base, template, _sub_seed(seed, it), "dt_classifier", memo, context)
-                    _member_fit_weighted(member, xcm.value(), codes, _w32(xt, w, n, context), encoded, session, context)
+                    _member_fit_weighted(member, xcm.value(), _w32(xt, w, n, context), encoded.value(), session, context)
                 else:
                     member = _clone_from(base, template, _sub_seed(seed, it), context)
                     _member_fit(member, xa, codes, _w32(xt, w, n, context), context)

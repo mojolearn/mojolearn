@@ -8,7 +8,6 @@
 # reads the arena back into public Arrays (PACK). The arena, inputs, ranges,
 # resident and device-gathered inputs and the run are the ones the Python
 # `_Prog.run` made: no bit moves.
-from std.sys.compile import is_defined
 from bindings.native_array_storage_door import native_array_empty, native_array_zeros
 from bindings.native_loaded_module_door import native_loaded_module
 from std.python import Python, PythonObject
@@ -38,7 +37,7 @@ comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime NONE = -1
 comptime INT32_MAX = 2147483647
 # x_prep: an input of at least this many words goes up from its own buffer
-# into a slot freed after the run (on unless -D MOJOLEARN_XPREP_FAST_DIRECT_OFF);
+# into a slot freed after the run;
 # _expansion_prep._DIRECT_MIN_WORDS (bindings/arena_prog_native.mojo).
 comptime PREP_DIRECT_MIN_WORDS = 1048576
 
@@ -167,8 +166,9 @@ struct ClsProg(Movable):
         var base = Int(py=arena[1])
         var t_alloc = Int(perf_counter_ns()) if profile else 0
         var ranges = (dev_scratch or sc == 0) and _switch("MOJOLEARN_ARENA_RANGES") and py_get(entries, "x_prep_run_ranges") is not None
-        var direct_ok = (py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None
-                         and not is_defined["MOJOLEARN_XPREP_FAST_DIRECT_OFF"]())
+        # TOMBSTONE: MOJOLEARN_XPREP_FAST_DIRECT_OFF (B arm loses: host-arena staging of large inputs; A/B abn9 NVIDIA L40S, 48 cells 0.96-17.38 arm/base, median 1.75, 34 slower) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_DIRECT_OFF.patch; record in docs/TOMBSTONES.md.
+        var direct_ok = py_get(entries, "x_prep_dev_put") is not None and py_get(entries, "x_prep_dev_free") is not None
         var gather_ok = ranges and _can_gather(entries, "x_prep")
         var records = List[ClsRunInput](capacity=len(self.program.inputs))
         var held = List[PythonObject](capacity=2 * len(self.program.inputs))

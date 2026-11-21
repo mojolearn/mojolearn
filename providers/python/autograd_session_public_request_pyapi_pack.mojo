@@ -16,12 +16,10 @@
 # a call into this very image, went door -> descriptor record -> C ABI entry
 # (`session_public_native_v1`) -> `ops_session_call_fields_py`, with no A/B.
 # Board cell ops-session-step NV 2.30 ms (0.8.55) -> 2.71 (0.8.66) -> 2.60
-# (candidate 4c2340386abc, 1.13x). A/B owed (owed row
-# restore-executor-session-call, b arm session-call-descriptor):
-# -D MOJOLEARN_SESSION_CALL_DESCRIPTOR forwards every call through the
-# descriptor as before (B). Same session operation either way: no bit change.
+# (candidate 4c2340386abc, 1.13x). Same session operation either way: no bit
+# change. The B arm (every call through the descriptor) lost A/B abn9 and is
+# deleted; a Session of another image still takes the descriptor below.
 from std.python import Python, PythonObject
-from std.sys import is_defined
 from bindings.py_balanced import py_type
 from sequence.exec_trait import Exec
 from autograd.ops_api import ops_session_registry_token
@@ -40,7 +38,8 @@ from providers.python.autograd_session_public_request_pyapi_unpack import (
 # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (unmeasured B arm: every Session call through the descriptor; EXP:2395 RESTORED the direct typed call as default) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at 8fe6eaaa01.
 # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime SESSION_CALL_DESCRIPTOR = is_defined["MOJOLEARN_SESSION_CALL_DESCRIPTOR"]()
+# TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+# Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
 
 
 def ops_session_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
@@ -56,27 +55,28 @@ def ops_session_public_call_py[E: Exec & Movable & Deinitable, KIND: Int](
     var fields = ops_session_fields(session)
     var lifetime = fields["_lifetime"]
     var resource = lifetime.downcast_value_ptr[NativeDescriptorResource]()
-    comptime if not SESSION_CALL_DESCRIPTOR:
-        # The same admission `session_public_native_v1` applies on entry:
-        # the scope words name this registry image and this executor kind.
-        if (len(resource[].context) == 2 and resource[].context[0] == ops_session_registry_token()
-                and resource[].context[1] == KIND):
-            # Lane fix-executor-session-rows (2026-11-13): the handle
-            # admission of `ops_session_call_fields_py`, read from the
-            # resource already in hand (one downcast per call, not two),
-            # and no public-provider read: the descriptor below is the only
-            # user of `_public_provider`, so its downcasts, ABI-name string
-            # compare and module identity check run only on that route.
-            var sid = fields["_id"]
-            if sid is not None:
-                if py_type(sid) is not types[].int_type:
-                    raise Error("TypeError: Session handle must be a native integer")
-                var admitted_id = resource[].handle
-                if admitted_id == 0 or admitted_id != Int(py=sid):
-                    raise Error("TypeError: Session handle differs from its native registry owner")
-            var answer = ops_session_call_admitted_py[E, KIND](session, operation, args, fields)
-            _ = lifetime  # the resource owner stays pinned through the call
-            return answer
+    # TOMBSTONE: MOJOLEARN_SESSION_CALL_DESCRIPTOR (B arm loses: every same-image Session call through the descriptor, zero-filled read-back arrays; A/B abn9 NVIDIA L40S, ops-session-step 2.63 -> 2.93 ms 1.11, program-run 1.00 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_SESSION_CALL_DESCRIPTOR.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
+    # The same admission `session_public_native_v1` applies on entry:
+    # the scope words name this registry image and this executor kind.
+    if (len(resource[].context) == 2 and resource[].context[0] == ops_session_registry_token()
+            and resource[].context[1] == KIND):
+        # Lane fix-executor-session-rows (2026-11-13): the handle
+        # admission of `ops_session_call_fields_py`, read from the
+        # resource already in hand (one downcast per call, not two),
+        # and no public-provider read: the descriptor below is the only
+        # user of `_public_provider`, so its downcasts, ABI-name string
+        # compare and module identity check run only on that route.
+        var sid = fields["_id"]
+        if sid is not None:
+            if py_type(sid) is not types[].int_type:
+                raise Error("TypeError: Session handle must be a native integer")
+            var admitted_id = resource[].handle
+            if admitted_id == 0 or admitted_id != Int(py=sid):
+                raise Error("TypeError: Session handle differs from its native registry owner")
+        var answer = ops_session_call_admitted_py[E, KIND](session, operation, args, fields)
+        _ = lifetime  # the resource owner stays pinned through the call
+        return answer
     var provider = fields["_public_provider"]
     var public_owner = provider.downcast_value_ptr[NeuralDescriptorProvider]()
     var model_owner = resource[].provider.downcast_value_ptr[NeuralDescriptorProvider]()

@@ -70,7 +70,7 @@ _OPS = dict(
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
     mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
-    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, te_bucket=108, pt_log=109,
+    scaler_stats=101, std_scale=102, nan_keep=103, pt_init=104, pt_map=105, pt_fold=106, ii_rowabs=107, pt_log=109,
     pt_spts=110, pt_smap=111, pt_sfold=112, pt_sres=113, te_gather=114,
     te_hist=115, te_hsum=116, te_hstart=117, te_hscatter=118,
     lab_load=119, uniq_count=120, uniq_scan=121, uniq_write=122, chunk_neg=123,
@@ -139,7 +139,7 @@ def _optional_prep_entry(binding, name):
 
 #: lane gap-nb-maxabs-grp (2026-10-02), two A/B switches (unset or anything
 #: but "0": on):
-#:   MOJOLEARN_XPREP_DIRECT   (now the build define -D MOJOLEARN_XPREP_FAST_DIRECT_OFF, 2026-11-18) an input of at least _DIRECT_MIN_WORDS words goes
+#:   MOJOLEARN_XPREP_DIRECT   (switch deleted 2026-11-21, A/B abn9: always on) an input of at least _DIRECT_MIN_WORDS words goes
 #:                            up to the device FROM ITS OWN BUFFER (a store
 #:                            slot for the length of the run, copied device to
 #:                            device into the arena) instead of being copied
@@ -188,7 +188,7 @@ class _Scratch:
     read back by `get` into its own host buffer (no copy out of the arena).
     Both resolve when the program runs (host arena size, then the scratch,
     then the output) and never cross to the device from the host; the host
-    binding, or a build with -D MOJOLEARN_XPREP_FAST_OUT_OFF for the output, gets them as plain
+    binding gets them as plain
     arena words."""
     __slots__ = ("off", "kind")
 

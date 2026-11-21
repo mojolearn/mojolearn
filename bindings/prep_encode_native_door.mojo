@@ -8,7 +8,6 @@
 # stores the fitted attributes under the names, types and dtypes the Python
 # set. fit_transform converts X once and hands the converted X to the
 # transform program.
-from std.sys.compile import is_defined
 from std.memory import unsafe_memcpy, bitcast
 from std.math import ceil
 from std.os import getenv
@@ -66,7 +65,6 @@ comptime OP_LABEL_BINARIZE = 51
 comptime OP_F_CLASSIF = 63
 comptime OP_F_REGRESSION = 64
 comptime OP_CHI2 = 65
-comptime OP_TE_BUCKET = 108
 comptime OP_TE_GATHER = 114
 comptime OP_TE_HIST = 115
 comptime OP_TE_HSUM = 116
@@ -185,8 +183,10 @@ struct EncProg(Movable):
 
     def output(mut self, words: Int, entries: PythonObject) raises -> Int:
         # Below OUT_MIN_WORDS, or on a binding without an output region
-        # (the host column; -D MOJOLEARN_XPREP_FAST_OUT_OFF), the output is host words.
-        var region = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+        # (the host column), the output is host words.
+        # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+        var region = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None
         return self.prog.output(words, region)
 
     def _record(mut self, record: PythonObject, words: Int) -> Int:
@@ -2633,24 +2633,21 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
         else:
             bstart = p.alloc(d * (cmax + 1))
             brows = p.alloc(n * d)
-        if not is_defined["MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF"]():
-            var ch = max(1, min(256, (n + 4095) // 4096))
-            var hh = p.scratch(d * ch * cmax)
-            var tot = p.scratch(d * cmax)
-            _stage(p.prog.program, OP_TE_HIST, d * ch, codes, n, d, cmax, ch, hh)
-            _stage(p.prog.program, OP_TE_HSUM, d * cmax, cmax, ch, hh, tot)
-            _stage(p.prog.program, OP_TE_HSTART, d, cmax, bstart, tot)
-            _stage(p.prog.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
-        else:
-            _stage(p.prog.program, OP_TE_BUCKET, d, codes, n, d, cmax, bstart, brows)
-        if not is_defined["MOJOLEARN_XPREP_FAST_TE_GATHER_OFF"]():
-            var gb = p.scratch(n * d * (1 + T))
-            _stage(p.prog.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
-            _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
-                   bstart + 1, brows, gb + 1)
-        else:
-            _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
-                   bstart + 1, brows)
+        # TOMBSTONE: MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF (B arm loses: te_bucket, one thread per column; A/B abn9 NVIDIA L40S, target-encoder fit 1.76 and 2.02 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_PBUCKET_OFF.patch; record in docs/TOMBSTONES.md.
+        var ch = max(1, min(256, (n + 4095) // 4096))
+        var hh = p.scratch(d * ch * cmax)
+        var tot = p.scratch(d * cmax)
+        _stage(p.prog.program, OP_TE_HIST, d * ch, codes, n, d, cmax, ch, hh)
+        _stage(p.prog.program, OP_TE_HSUM, d * cmax, cmax, ch, hh, tot)
+        _stage(p.prog.program, OP_TE_HSTART, d, cmax, bstart, tot)
+        _stage(p.prog.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
+        # TOMBSTONE: MOJOLEARN_XPREP_FAST_TE_GATHER_OFF (NOISE: B staged te_enc on the bucket rows without te_gather; A/B abn9 NVIDIA L40S, 4 cells 0.98-1.01 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+        # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_TE_GATHER_OFF.patch; record in docs/TOMBSTONES.md.
+        var gb = p.scratch(n * d * (1 + T))
+        _stage(p.prog.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
+        _stage(p.prog.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+               bstart + 1, brows, gb + 1)
     var out = NONE
     if apply:
         out = p.output(n * d * T, entries)

@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # MaxAbsScaler owns its existing x_prep program and complete public operation.
-from std.sys.compile import is_defined
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -142,7 +141,9 @@ def _maxabs_apply(fields: PythonObject, var values: PythonObject, entries: Pytho
     var dest = n*d+(d if scale is not None else 0)
     if dest+n*d > 2147483647:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
-    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None and not is_defined["MOJOLEARN_XPREP_FAST_OUT_OFF"]()
+    # TOMBSTONE: MOJOLEARN_XPREP_FAST_OUT_OFF (NOISE: B kept large outputs as host words on a binding with an output region; A/B abn9 NVIDIA L40S, 48 cells 0.91-1.13 arm/base, median 1.00) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_XPREP_FAST_OUT_OFF.patch; record in docs/TOMBSTONES.md.
+    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None
     var host = dest+(0 if dev_out else n*d)
     var arena = xprep_storage(host,context)
     var output_store = xprep_storage(n*d,context) if dev_out else PythonObject(None)

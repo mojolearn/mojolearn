@@ -11,7 +11,6 @@ from bindings.py_cpython_table import cpython_table
 from std.python._cpython import PyObjectPtr
 from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
-from std.sys import is_defined
 from sequence.exec_trait import Exec
 from providers.python.autograd_execution_profile_pyapi_pack import execution_profile_object
 from sequence.ops import FP
@@ -327,18 +326,15 @@ def _optimization_object(plan: ProgramOptimization) raises -> PythonObject:
 # 1.04 ms (0.8.55) -> 1.19 (0.8.66) -> 1.70 (candidate 4c2340386abc, 1.63x;
 # Program.run itself 0.761 ms on the L40S, nv-profile-program2.log); AMD
 # MI300X 1.25 (0.8.55), MI325X 0.60 (candidate). Same `_program_op` replay
-# and kernels on both routes: no bit change. A/B owed (owed row
-# restore-executor-program-run, b arm program-run-entry):
-# -D MOJOLEARN_PROGRAM_RUN_ENTRY runs every Program.run on program_execute_run
-# as before (B). dynamic_shapes, optimize and profile keep program_execute_run.
-# Extended by lane fix-executor-session-rows (2026-11-13): the same define
-# also turns off Program.run's direct door to `_program_run_fixed`
-# (autograd_program_public_request_pyapi_pack.mojo), so B is the whole
-# former chain.
+# and kernels on both routes: no bit change. dynamic_shapes, optimize and
+# profile keep program_execute_run. The B arm (every Program.run on
+# program_execute_run, the whole former chain) lost A/B abn9 and is deleted
+# (second tombstone below).
 # TOMBSTONE: MOJOLEARN_PROGRAM_RUN_ENTRY (unmeasured B arm: the former program_execute_run chain; EXP:2394 RESTORED the run_program route as default) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at a435c824c4.
 # Restore: git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime PROGRAM_RUN_ENTRY = is_defined["MOJOLEARN_PROGRAM_RUN_ENTRY"]()
+# TOMBSTONE: MOJOLEARN_PROGRAM_RUN_ENTRY (B arm loses: every fixed-shape Program.run on program_execute_run; A/B abn9 NVIDIA L40S, program-run 0.551 -> 0.603 ms, 1.10 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+# Restore: git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
 
 
 def _program_run_fixed[E: Exec & Movable & Deinitable, KIND: Int](
@@ -381,9 +377,10 @@ def ops_program_execute_py[E: Exec & Movable & Deinitable, KIND: Int](
     # TOMBSTONE: MOJOLEARN_PROGRAM_RUN_ENTRY (unmeasured B arm: the former program_execute_run chain; EXP:2394 RESTORED the run_program route as default) deleted 2026-11-15 by lane/expdel2-08-base; code recoverable at a435c824c4.
     # Restore: git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.patch; record in docs/TOMBSTONES.md.
     # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-    comptime if not PROGRAM_RUN_ENTRY:
-        if not profiled and not Bool(py=optimize) and not Bool(py=dynamic_shapes):
-            return _program_run_fixed[E, KIND](sid_i, Int(py=pid), Int(py=owner_sid), arrays)
+    # TOMBSTONE: MOJOLEARN_PROGRAM_RUN_ENTRY (B arm loses: every fixed-shape Program.run on program_execute_run; A/B abn9 NVIDIA L40S, program-run 0.551 -> 0.603 ms, 1.10 arm/base) deleted 2026-11-21 by lane/fx-verdicts7; code recoverable at 519388d23a.
+    # Restore: git apply experiments/removed/MOJOLEARN_PROGRAM_RUN_ENTRY.fx-verdicts7.patch; record in docs/TOMBSTONES.md.
+    if not profiled and not Bool(py=optimize) and not Bool(py=dynamic_shapes):
+        return _program_run_fixed[E, KIND](sid_i, Int(py=pid), Int(py=owner_sid), arrays)
     var plan = program_execute_prepare[E, KIND](sid_i, Int(py=pid), Int(py=owner_sid), Bool(py=optimize), profiled)
     # Native ABI shape policy: bool preserves the existing fixed-rank
     # dynamic contract; integer 2 selects compatibility checked at each node.
