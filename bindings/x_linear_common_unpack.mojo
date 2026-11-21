@@ -14,7 +14,7 @@ from core.linear_entry_table_ext import (
     XL_OP_FLAGS, XL_OP_DECISION, XL_OP_DECISION_CODES, XL_OP_DECISION_ROWS, XL_OP_CLASS_PREP, XL_HAS_FIT_FOLD,
 )
 from x_linear.door_run import (
-    XlDecisionRequest, xl_decision_run, XlFitRequest, xl_fit_run, xl_run_call, xl_run_fit, xl_run_fit_fold, xl_run_status_refuse,
+    XlDecisionRequest, xl_decision_run, XlFitRequest, xl_fit_run, xl_run_call, xl_run_fit, xl_run_status_refuse,
     xl_run_word, xl_run_copy, xl_run_join, xl_block_dims, xl_run_block,
 )
 from bindings.x_linear_route_unpack import XLinearOps
@@ -406,32 +406,6 @@ def _xl_fold_matrix(source: PythonObject, est: String, ops: XLinearOps, context:
         if (flags & XL_HAS_FIT_FOLD) != 0:
             return admit_x_unrecorded(source, est, context, defer_finite=True, device_x=True)
     return _xl_matrix(source, est, context)
-
-
-def _xl_run_x(model: PythonObject, ops: XLinearOps, algo: Int, x: AdmittedXView, y_addr: Int, y_size: Int,
-              ip: List[Int], fp: List[Float64], n_out: Int, n_fw: Int, n_iw: Int,
-              context: PythonObject) raises -> PythonObject:
-    """`_xl_run` over an admitted X: a device-resident fold (`x.store`) is
-    fitted by XL_OP_FIT_FOLD on rows gathered on the device (no host
-    gather, no upload of X) and refused on its words; any other X by
-    XL_OP_FIT from its host words."""
-    if not x.store.active():
-        return _xl_run(ops, algo, x.address, x.rows * x.cols, x.rows, x.cols, y_addr, y_size, ip, fp, n_out,
-                       n_fw, n_iw, context)
-    var out = admitted_vector(n_out, "<f4", context)
-    var zero = admitted_vector(1, "<f4", context)
-    var ya = y_addr if y_size > 0 else labels_address(zero)
-    var out_addr = labels_address(out)
-    var words: Tuple[Int, Int] = (0, 0)
-    var py = Python()
-    with GILReleased(py):
-        words = xl_run_fit_fold(ops.entry, algo, x.store.base_id, x.store.base_rows, x.store.index_id, x.rows,
-                                x.cols, ya, y_size, ip, fp, n_out, n_fw, n_iw, out_addr)
-    _ = zero  # keep the Python object alive through the native call above
-    _ = out  # keep the Python object alive through the native call above
-    door_rows_refuse(words[0], words[1], _name(model), x.store.base_rows)
-    _ = zero^
-    return out
 
 
 struct XlFit(Movable):
