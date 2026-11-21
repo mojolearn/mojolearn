@@ -19,11 +19,16 @@ route choice. The door resolves the Python-held parts (the selected image, its
 entry presence words, the resident cache slots, DeviceRows fields) in UNPACK
 and releases the GIL around this call. No bit moves.
 """
-from std.memory import unsafe_memcpy
+from std.memory import unsafe_memcpy, ArcPointer
 from core.entry_table import EntryRef
 from core.prep_entry_table import xp_transport_call
 from x_prep.transport_abi import XP_RUN, XP_RUN_SCRATCH, XP_RUN_OUT, XP_RUN_RANGES, XP_DEV_PUT, XP_DEV_FREE, XP_DEV_TAKE_ROWS
-from bindings.arena_prog_run import _add_input, _merge_pairs, _pad
+from bindings.arena_prog_run import _add_input, _merge_pairs, _pad, _switch
+from core.entry_table import entry_ref_unresolved
+from core.arena_state import ARENA_CACHES, ARENA_HANDLE_NONE, DeviceCacheState, arena_handle
+from bindings.arena_cache_run import (
+    ArenaCachePut, arena_cache_upload, arena_cache_drop, arena_scope_cache, arena_scope_cache_found,
+)
 
 comptime CLS_F32P = MutPointer[Float32, MutUntrackedOrigin]
 # Words of one stage record: op, total and the fourteen parameters.
@@ -264,6 +269,177 @@ def cls_prog_release(key: EntryRef, owned: List[Int]) -> String:
         except error:
             failures += ("" if failures.byte_length() == 0 else "; ") + "slot " + String(slot) + ": " + String(error)
     return failures
+
+
+# ---------------------------------------------------------------- the typed run
+# Lane ma-pub-kernel round 5 (2026-11-21): the run policy of one classifier
+# program (the image's route words, the Int32 bound, which input stays
+# resident, goes up directly or is copied, the release of the run's slots
+# and the drop of stale resident copies) was written in the door over Python
+# objects (`ClsProg.run`). It is typed here so the door (UNPACK: addresses,
+# the thread's scope word, the store) and a member (core/naive_bayes_member.mojo:
+# borrowed views, the caller's scope word) run the SAME policy. Same route
+# choice, same input choices, same executor calls in the same order.
+comptime CLS_INT32_MAX = 2147483647
+# An input of at least this many words goes up from its own buffer into a
+# slot freed after the run (`_expansion_prep._DIRECT_MIN_WORDS`).
+comptime CLS_DIRECT_MIN_WORDS = 1048576
+
+#: `cls_input_choice` answers
+comptime CLS_INPUT_HOST = 0      # copied into the host arena
+comptime CLS_INPUT_RESIDENT = 1  # the scope's cache holds (or takes) its device copy
+comptime CLS_INPUT_DIRECT = 2    # put from its own buffer into a slot this run owns
+
+
+@fieldwise_init
+struct ClsRunPlan(ImplicitlyCopyable, Movable):
+    """The selected image as one run reads it: its x_prep transport entry and
+    its capabilities (`has_ranges` is the `x_prep_run_ranges` entry alone; the
+    MOJOLEARN_ARENA_RANGES switch is read by `cls_run_route`). `dev_store`:
+    both `x_prep_dev_put` and `x_prep_dev_free`. `take_rows`: those two and
+    `x_prep_dev_take_rows`."""
+    var key: EntryRef
+    var has_out: Bool
+    var has_scratch: Bool
+    var has_ranges: Bool
+    var dev_store: Bool
+    var take_rows: Bool
+
+
+def cls_run_route(plan: ClsRunPlan, program: ClsProgram) raises -> ClsRoute:
+    """The run's route words for `program` on the image of `plan`, and the
+    refusal of a program past the native Int32 indexing bound."""
+    var sc = program.scratch_size
+    var has_scratch_entry = sc > 0 and not plan.has_out and plan.has_scratch
+    var dev_scratch = sc > 0 and (plan.has_out or has_scratch_entry)
+    if program.size + sc > CLS_INT32_MAX:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    var ranges = (dev_scratch or sc == 0) and plan.has_ranges and _switch("MOJOLEARN_ARENA_RANGES")
+    return ClsRoute(dev_scratch, plan.has_out, ranges)
+
+
+def cls_host_words(program: ClsProgram, route: ClsRoute) -> Int:
+    """The words of the host arena of one run (the scratch region too when
+    the image keeps no device scratch)."""
+    return program.size + (0 if route.dev_scratch else program.scratch_size)
+
+
+def _cls_cache_find(lease: ArcPointer[DeviceCacheState], address: Int, words: Int) raises -> Int:
+    return lease[].find(address, words, True)
+
+
+struct ClsResident(Movable):
+    """The caller's `resident()` scope for ONE program run: the scope's handle
+    word (`ARENA_HANDLE_NONE` outside a scope, or when the image has no device
+    store), its size floor and the image's transport entry. The scope's cache
+    on that entry is created and leased at the first input the run keeps
+    resident (one scope acquire, one lease per run; a hit is one typed lookup)."""
+    var scope: Int
+    var min_words: Int
+    var store: EntryRef
+    var cache: Int
+    var lease: Optional[ArcPointer[DeviceCacheState]]
+
+    def __init__(out self):
+        self.scope = ARENA_HANDLE_NONE
+        self.min_words = 0
+        self.store = entry_ref_unresolved()
+        self.cache = ARENA_HANDLE_NONE
+        self.lease = Optional[ArcPointer[DeviceCacheState]]()
+
+    def __init__(out self, scope: Int, min_words: Int, store: EntryRef):
+        self.scope = scope
+        self.min_words = min_words
+        self.store = store
+        self.cache = ARENA_HANDLE_NONE
+        self.lease = Optional[ArcPointer[DeviceCacheState]]()
+
+    def active(self) -> Bool:
+        return self.scope >= 0
+
+    def keeps(self, rows: Bool, words: Int) -> Bool:
+        """Whether the run keeps an input of `words` words resident (a
+        DeviceRows base at any size)."""
+        return self.scope >= 0 and (rows or words >= self.min_words)
+
+    def find(mut self, address: Int, words: Int) raises -> Int:
+        """The store id of the resident copy of (`address`, `words`), counted
+        as a hit, or -1."""
+        if not self.lease:
+            self.cache = arena_scope_cache(self.scope, self.store, "x_prep")
+            self.lease = Optional[ArcPointer[DeviceCacheState]](ARENA_CACHES.acquire(arena_handle(self.cache)))
+        return _cls_cache_find(self.lease.value(), address, words)
+
+    def put(self, address: Int, words: Int, pin: Int) raises -> ArenaCachePut:
+        """After a `find` miss: upload the buffer and publish it with the pin
+        token `pin` (a reference the caller took for the cache; `pinned`
+        False in the answer hands it back). No Python is touched: the door
+        releases the GIL around this call."""
+        return arena_cache_upload(self.cache, self.store, address, words, pin)
+
+
+def cls_input_choice(record: ClsInput, route: ClsRoute, plan: ClsRunPlan, resident: ClsResident) -> Int:
+    """Where one caller buffer (not a device gather) goes: the scope's cache,
+    a direct put, or the host arena. An in-out input and a run without the
+    range runner always copy."""
+    if not route.ranges or record.in_out:
+        return CLS_INPUT_HOST
+    if resident.keeps(False, record.words):
+        return CLS_INPUT_RESIDENT
+    if plan.dev_store and record.words >= CLS_DIRECT_MIN_WORDS:
+        return CLS_INPUT_DIRECT
+    return CLS_INPUT_HOST
+
+
+struct ClsRunDone(Movable):
+    """What one run hands back to its boundary: the run's own failure
+    (`failed`, `error`), the failures of the cleanup after it (`cleanup`,
+    empty: none) and the pin tokens of resident copies the run dropped (the
+    boundary unpins them last, with the interpreter held)."""
+    var failed: Bool
+    var error: String
+    var cleanup: String
+    var pins: List[Int]
+
+    def __init__(out self):
+        self.failed = False
+        self.error = String("")
+        self.cleanup = String("")
+        self.pins = List[Int]()
+
+    def keep_cleanup(mut self, text: String):
+        if text.byte_length() > 0:
+            self.cleanup += ("" if self.cleanup.byte_length() == 0 else "; ") + text
+
+
+def cls_prog_run(plan: ClsRunPlan, program: ClsProgram, records: List[ClsRunInput], arena: Int, route: ClsRoute,
+                 resident: ClsResident, inout_addresses: List[Int], inout_words: List[Int]) -> ClsRunDone:
+    """RUN of one program: the inputs and the stages (`cls_prog_execute`),
+    then, whether or not it failed, the release of every slot the run
+    acquired and the drop of the resident copies of its in-out inputs (a
+    stage rewrote their host words; `inout_addresses` / `inout_words` are
+    their buffers' identities, empty when the caller has none that could be
+    resident). Never raises: the boundary reports from the answer. The
+    caller keeps every addressed buffer alive and holds no interpreter lock."""
+    var done = ClsRunDone()
+    var owned = List[Int](capacity=2 * len(records))
+    try:
+        cls_prog_execute(plan.key, program, records, arena, route, owned)
+    except error:
+        done.failed = True
+        done.error = String(error)
+    done.keep_cleanup(cls_prog_release(plan.key, owned))
+    if resident.active() and len(inout_addresses) > 0:
+        try:
+            var cache = arena_scope_cache_found(resident.scope, resident.store, "x_prep")
+            if cache >= 0:
+                var released = arena_cache_drop(cache, resident.store, inout_addresses, inout_words)
+                for i in range(len(released.pins)):  # driver-loop: over the pins of the dropped in-out copies
+                    done.pins.append(released.pins[i])
+                done.keep_cleanup(released.failure)
+        except drop_error:
+            done.keep_cleanup("resident in-out drop: " + String(drop_error))
+    return done^
 
 
 # ---------------------------------------------------------------- typed stage builders
