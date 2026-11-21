@@ -8,9 +8,11 @@ more dense categorical features.  The tensor identity uses the canonical
 same source-feature order and radices are serialized with the counts, so the
 apply side cannot guess a training-time projection.
 
-This is intentionally not admitted by `train(max_ctr_complexity > 1)` yet.
-That surface also promises history-dependent split tensors and Borders CTRs;
-its refusal remains until the structure searcher can mint those tensors.
+`train(max_ctr_complexity > 1)` does not go through this table: its
+combinations are a derived categorical column per member tuple
+(`gbdt/models/combination_map.mojo`) with the simple-CTR builders over it
+(`gbdt/methods/tree_ctr_search.mojo`). This slice stays the route of
+`ExperimentalTwoLevelFeatureFreq` and of `checks/tree_ctr_slice_check.mojo`.
 """
 
 from gbdt.methods.batch_feature_tensor_builder import TFeatureTensor

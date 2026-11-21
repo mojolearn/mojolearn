@@ -23,7 +23,7 @@ functions are deleted in the same commit series):
 
 A case builds the fit request the public `GradientBoosting.fit` builds
 (`bindings/trees_public_gbdt_fit_door.mojo` `_params` and `gbdt_fit`: the
-35 slots, the class weights, the tails and the four option strings) from the
+36 slots, the class weights, the tails and the four option strings) from the
 original test's options and the constructor's defaults (`gbdt_initialize`:
 1000 / 100 iterations, the Bayesian bootstrap on SymmetricTree, the score
 function, the automatic learning rate from CatBoost's GPU table through
@@ -413,6 +413,7 @@ def fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs) raises -> GbdtFitOutcome:
     s.i(_grow_code(o.grow_policy))
     s.i(o.max_leaves)
     s.i(o.min_data_in_leaf)
+    s.i(1)  # max_ctr_complexity: no feature combinations
     s.i(len(o.class_weights))
     for w in o.class_weights:  # small-loop(the class_weights argument)
         s.f(w)
