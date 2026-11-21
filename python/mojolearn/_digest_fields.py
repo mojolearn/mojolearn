@@ -96,6 +96,16 @@ EXTRA_BY_NAME = {
     "_StackingBase": ("_widths_", "_binary"),
     "MultiOutputRegressor": ("_multi_ridge",),
     "_GBDTAdapter": ("_learner_",),
+    # forecasting (bindings/xseq_forecast_native_door.mojo, xseq_prophet_native_door.mojo,
+    # tsa_autoarima_native_door.mojo): the training series a forecast extends. `_fitted_h` and `_last` are
+    # per-horizon caches a later predict fills: not fitted state.
+    "AutoTheta": ("_one", "_y"),
+    "_Croston": ("_one", "_y"),
+    "ETS": ("_one", "_y", "_season"),
+    "GARCH": ("_one", "_y", "_fc"),
+    "ProphetForecaster": ("_one", "_nh"),
+    "AutoARIMA": ("_fitted",),
+    "_BaseMLP": ("_y_1d",),
 }
 
 #: Public names (ending in "_") that record how a call ran, not what was
