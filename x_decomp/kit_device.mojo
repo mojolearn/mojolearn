@@ -1811,15 +1811,53 @@ struct DMcd:
         mut output: DCands,
     ) raises:
         """`select_random` (has_init False) or `select_init` (True) with the
-        candidates taking each C-step together (MCD_LOCKSTEP, x_decomp/mcd.mojo):
+        candidates taking each C-step together (MCD_LOCKSTEP, x_decomp/mcd.mojo),
+        in batches of `_ls_batch` candidates (every candidate at once when
+        they fit the device's free memory), the `keep` best in
+        `_order_by_det`'s order appended to `output`. Candidates are
+        independent and a trial's draw is numbered in trial order, so the
+        batch size changes no word; the order over all candidates is the
+        order over each batch's `keep` best, by the same (det, index) key."""
+        var B = self._ls_batch(trials, X.c)
+        var no_idx = List[Int]()
+        if B >= trials:
+            self._ls_chunk(X, h, 0, trials, keep, n_iter, has_init, inits, output, no_idx)
+            return
+        var chunks = (trials + B - 1) // B
+        var kept = DCands(chunks * keep, X.c)
+        var gidx = List[Int]()
+        var t0 = 0
+        while t0 < trials:  # driver-loop: over candidate batches (the free-memory bound)
+            var cnt = min(B, trials - t0)
+            self._ls_chunk(X, h, t0, cnt, keep, n_iter, has_init, inits, kept, gidx)
+            t0 += cnt
+        var keys = List[UInt64](capacity=len(gidx))
+        for i in range(len(gidx)):  # small-loop(gidx: kept candidates of every batch): one log determinant each
+            keys.append(_key(Float32(kept.det[i]), gidx[i]))
+        sort(keys)
+        for a in range(min(keep, len(keys))):  # small-loop(keep: kept candidates): two device copies a kept candidate
+            var gj = Int(keys[a] & UInt64(0xFFFFFFFF))
+            var pos = 0
+            for i in range(len(gidx)):  # small-loop(gidx: as above): the slot of candidate gj
+                if gidx[i] == gj:
+                    pos = i
+            output.push(self.k, kept.loc(pos), kept.cov(pos), kept.det[pos])
+        _ = kept^
+
+    def _ls_chunk(
+        mut self, X: DMat, h: Int, t0: Int, trials: Int, keep: Int, n_iter: Int, has_init: Bool, inits: DCands,
+        mut output: DCands, mut gidx: List[Int],
+    ) raises:
+        """One batch of `select_lockstep`: candidates t0 .. t0 + trials - 1
+        (`inits` rows when has_init), its `keep` best appended to `output`
+        and their candidate numbers to `gidx`.
         `c_step`'s statements for every candidate, in its order, on the same
         operands; only the order of launches across candidates and the waits
-        change (one wait a round for every candidate's log determinant, one
-        batched Jacobi launch a round). A candidate's current and previous
+        change (one wait a round for every candidate's log determinant, the
+        round's eigen solves together: `_ls_eigh`). A candidate's current and previous
         (location, covariance) sit in two arenas and swap by index; nothing
         else of a candidate outlives its step (the callers read only the
-        kept candidates' location, covariance and log determinant). For
-        1 <= d <= XD_EIGH_ONE_BLOCK_N (the callers test it)."""
+        kept candidates' location, covariance and log determinant)."""
         var d = X.c
         var T = trials
         var cap = max(T, 1)
@@ -1844,7 +1882,7 @@ struct DMcd:
         var D0 = DMat(cap * d, d)
         if has_init and T > 0:
             for t in range(T):  # driver-loop: over the C-step candidates (one device copy each)
-                self.k.put(DMat(rows_of=D0, row0=t * d, rows=d), inits.cov(t))
+                self.k.put(DMat(rows_of=D0, row0=t * d, rows=d), inits.cov(t0 + t))
             self._ls_eigh(D0, T, d, W0, V0)
         for t in range(T):  # driver-loop: over the C-step candidates (each one's first step, enqueued)
             var sel: DMat
@@ -1855,7 +1893,7 @@ struct DMcd:
                 sel = self.k.smallest_dev(r, h)
             else:
                 var P0 = self._ls_pinv(W0, V0, t, d)
-                var d0 = self.mahal(X, inits.loc(t), P0)
+                var d0 = self.mahal(X, inits.loc(t0 + t), P0)
                 sel = self.k.smallest_dev(d0, h)
             var Xs = self.k.gather_dev(X, sel)
             var loc = self.k.colmean(Xs)
@@ -1948,6 +1986,7 @@ struct DMcd:
         for a in range(len(top)):  # small-loop(top: kept candidates): two device copies a kept candidate
             var j = top[a]
             output.push(self.k, _ls_view(LA, LB, side[j], j, 1), _ls_view(CA, CB, side[j], j * d, d), dets[j])
+            gidx.append(t0 + j)
         # the arenas outlive every view of them (Mojo frees a value at its last NAMED use)
         _ = LA^
         _ = CA^
@@ -1964,7 +2003,7 @@ struct DMcd:
         `_order_by_det`'s order) appended to `output`. The later stages read
         only a kept candidate's location and covariance."""
         comptime if MCD_LOCKSTEP:
-            if X.c >= 1 and X.c <= XD_EIGH_ONE_BLOCK_N:
+            if _ls_applies(X.c):
                 var no_inits = DCands(1, X.c)
                 self.select_lockstep(X, h, trials, keep, n_iter, False, no_inits, output)
                 return
@@ -1984,7 +2023,7 @@ struct DMcd:
         """`select_candidates` from initial estimates, the `keep` best
         locations and covariances appended to `output` (packed, as above)."""
         comptime if MCD_LOCKSTEP:
-            if X.c >= 1 and X.c <= XD_EIGH_ONE_BLOCK_N:
+            if _ls_applies(X.c):
                 self.select_lockstep(X, h, inits.count(), keep, n_iter, True, inits, output)
                 return
         var tr = DCands(inits.count(), X.c)
@@ -2003,12 +2042,49 @@ struct DMcd:
         (det, j) candidate kept whole (support rows and, when `want_dist`,
         its final distances, computed for it alone by `finish`), every
         other one released as soon as it loses. A NaN determinant is
-        refused after every C-step ran, as `_order_by_det` refused it."""
+        refused after every C-step ran, as `_order_by_det` refused it.
+
+        MCD_LOCKSTEP (lane sp-mcd-wide, 2026-11-20): the candidates' FIRST
+        solves, pinvh(cov0) of every initial estimate, are taken together
+        (`_ls_eigh`, in batches of `_ls_batch`), then each candidate runs
+        the rest of its C-step as before (`c_step_from`). The same solves on
+        the same operands, so the same words. The C-steps themselves stay
+        one candidate after another here: each keeps its support rows and
+        distances whole, and its launches are products over every row of X,
+        which fill the device by themselves."""
         var best = Optional[DEst]()
         var best_key = UInt64(0)
         var nan_seen = False
-        for t in range(inits.count()):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
-            var e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t))
+        var T = inits.count()
+        var d = X.c
+        var ls = False
+        var B = 1
+        comptime if MCD_LOCKSTEP:
+            ls = _ls_applies(d) and T > 0
+            if ls:
+                B = self._ls_batch(T, d)
+        # the first solves of candidates base .. base + have - 1 (ls only)
+        var W0 = DMat(0, 0)
+        var V0 = DMat(0, 0)
+        var base = 0
+        var have = 0
+        for t in range(T):  # small-loop(inits: C-step candidates): one enqueued C-step per kept candidate
+            var e: DEst
+            if ls:
+                if t >= base + have:
+                    base = t
+                    have = min(B, T - t)
+                    var D0 = DMat(have * d, d)
+                    W0 = DMat(have, d)
+                    V0 = DMat(have * d, d)
+                    for a in range(have):  # driver-loop: over the batch's candidates (one device copy each)
+                        self.k.put(DMat(rows_of=D0, row0=a * d, rows=d), inits.cov(base + a))
+                    self._ls_eigh(D0, have, d, W0, V0)
+                    _ = D0^
+                var P0 = self._ls_pinv(W0, V0, t - base, d)
+                e = self.c_step_from(X, h, n_iter, True, inits.loc(t), P0)
+            else:
+                e = self.c_step(X, h, n_iter, True, inits.loc(t), inits.cov(t))
             var f = Float32(e.det)
             if f != f:
                 nan_seen = True
@@ -2017,6 +2093,9 @@ struct DMcd:
             if not best or key < best_key:
                 best_key = key
                 best = Optional(e^)
+        # the batch's solves outlive every view of them (Mojo frees a value at its last NAMED use)
+        _ = W0^
+        _ = V0^
         if nan_seen:
             raise Error("x_decomp MinCovDet: a NaN distance or draw has no order (refused)")
         if not best:
