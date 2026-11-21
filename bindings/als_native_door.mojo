@@ -21,7 +21,7 @@ from bindings.decomp_public_lifecycle_pack import decomp_public_finish
 from x_decomp.decomp_public_lifecycle_run import decomp_public_method
 from bindings.public_lifecycle_owner_door import lifecycle_end
 from bindings.decomp_kit_native_door import (
-    DecompF32, DecompDoor, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
+    DecompF32, DecompDoor, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries_routed,
     decomp_input, decomp_resident_drop, decomp_kit_unpack, decomp_kit_publish, decomp_kit_out_shape,
     decomp_door_borrow, decomp_door_input, decomp_door_resident_hit, decomp_door_resident_input,
     decomp_door_resident_derived, decomp_door_resident_keep,
@@ -76,8 +76,11 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
     decomp_resident_drop(model)
     var mode = decomp_mode(fields["numeric_mode"], context)
     py_setitem(fields, "numeric_mode_", mode)
-    # UNPACK: the image, user_items and every option, once.
-    var entries = decomp_entries(mode, context)
+    # UNPACK: the image, user_items and every option, once. The entries are
+    # the ESTIMATOR'S: the x_decomp image of its device, held by its route
+    # (bindings/decomp_kit_native_door.mojo `decomp_entries_routed`); a hit
+    # reads no mode word, no table and no device.
+    var entries = decomp_entries_routed(model, fields, mode, context)
     var door = DecompDoor(entries, context["output_context"])
     var kit = decomp_kit_unpack(entries)
     try:
@@ -140,7 +143,7 @@ def als_query(model: PythonObject, operation: String, args: PythonObject, contex
     var fields = py_fields(model)
     if not py_contains(fields, "user_factors"):
         raise Error("RuntimeError: AlternatingLeastSquares is not fitted; call fit first")
-    var entries = decomp_entries(py_get(fields, "numeric_mode_"), context)
+    var entries = decomp_entries_routed(model, fields, py_get(fields, "numeric_mode_"), context)
     var door = DecompDoor(entries, context["output_context"])
     # The fitted model of this query: its factors stay on the device (N325).
     door.owner = model

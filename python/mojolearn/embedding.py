@@ -91,24 +91,29 @@ class Embedding(_NumericModeMixin):
     """
 
     _mojolearn_native_public = True
+
+    # Takes `device=`: the layer's entries are held by its route owner
+    # (bindings/embedding_layer_native_door.mojo `_entries`).
+    _mojolearn_device = True
     # Public fields are passive scalar/table storage. Avoid inheriting the
     # Python fitted-output lookup wrapper on every operation lookup.
     __getattribute__ = object.__getattribute__
     _BINDING = "_mojolearn_embedding"
 
     def __init__(self, num_embeddings, embedding_dim, padding_idx=None, max_norm=None,
-                 norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None, plan="auto", *, numeric_mode=None):
-        _EMBEDDING_NATIVE("emblayer_init", self, (num_embeddings, embedding_dim, padding_idx, max_norm, norm_type, scale_grad_by_freq, sparse, weight, plan, numeric_mode), None, _EMBEDDING_CONTEXT)
+                 norm_type=2.0, scale_grad_by_freq=False, sparse=False, weight=None, plan="auto", *, numeric_mode=None,
+                 device=None):
+        _EMBEDDING_NATIVE("emblayer_init", self, (num_embeddings, embedding_dim, padding_idx, max_norm, norm_type, scale_grad_by_freq, sparse, weight, plan, numeric_mode, device), None, _EMBEDDING_CONTEXT)
 
     @classmethod
     def from_pretrained(cls, embeddings, padding_idx=None, max_norm=None, norm_type=2.0,
-                        scale_grad_by_freq=False, sparse=False, numeric_mode=None, plan="auto"):
+                        scale_grad_by_freq=False, sparse=False, numeric_mode=None, plan="auto", device=None):
         """Build a layer from an existing (V, d) table, as torch's `Embedding.from_pretrained`.
 
         There is no `freeze` argument, because nothing here trains the table. The other
         arguments are the constructor's.
         """
-        return _EMBEDDING_NATIVE("emblayer_pretrained", cls, (embeddings, padding_idx, max_norm, norm_type, scale_grad_by_freq, sparse, numeric_mode, plan), None, _EMBEDDING_CONTEXT)
+        return _EMBEDDING_NATIVE("emblayer_pretrained", cls, (embeddings, padding_idx, max_norm, norm_type, scale_grad_by_freq, sparse, numeric_mode, plan, device), None, _EMBEDDING_CONTEXT)
 
     def set_params(self, **params):
         """Set constructor parameters and rebuild the table from the supplied settings."""

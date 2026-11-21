@@ -74,6 +74,15 @@ def connect_classes(context, package):
         if type(bind) is not FunctionType or bind not in known or type(basename) is not str:
             # A class without the protocol does not receive a guessed route.
             continue
+        # A plan serves only the shared read-back door (`numeric_mode_used`,
+        # `vendor_used` of NumericModeMixin, and a family door that calls its
+        # `_readback`). A class that answers both from its own owner and
+        # says so (`_mojolearn_readback_plan = False`: the neural blocks
+        # answer from their device route) never reads one: none is built, and
+        # its binaries are not loaded here for it (lane dw-core round 2; the
+        # block plans were built and unused).
+        if next((row['_mojolearn_readback_plan'] for row in namespaces if '_mojolearn_readback_plan' in row), True) is False:  # glue: inherited class marker
+            continue
         route = known[bind]
         actual = host._HOST_BASENAMES.get(basename, basename) if route == 'host' else basename
         if route == 'host_gp':

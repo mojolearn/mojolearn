@@ -313,3 +313,91 @@ def test_classifier_fit_both_fits_one_estimator_per_device_with_the_same_weights
                                 fit_both=True, spawn=no_child, **LABELS)
     assert result["ran"] and result["form"] == "fit-both" and result["transfer"] == "device"
     assert DeviceClassifier.built == [None, "cpu"] and result["verdict"]["match"]     # the given estimator, its twin
+
+
+# ---- the hooks of `on_device` (lane dw-core round 2): one design, two steps, each with a default and a class hook
+
+
+class _Leaf:
+    _mojolearn_device = True
+
+    def __init__(self, a=1, device=None):
+        self.a, self.device = a, device
+
+    def get_params(self, deep=True):
+        return dict(a=self.a, device=self.device)
+
+
+class _Meta:
+    _mojolearn_device = True
+
+    def __init__(self, estimator=None, estimators=(), device=None):
+        self.estimator, self.estimators, self.device = estimator, estimators, device
+
+    def get_params(self, deep=True):
+        return dict(estimator=self.estimator, estimators=self.estimators, device=self.device)
+
+
+class _NoParams:
+    """No get_params (Sequential), constructor data (ExponentialSmoothing), no state to share (the neural blocks)."""
+    _mojolearn_device = True
+    _mojolearn_device_state = None
+
+    def __init__(self, data, device=None):
+        self.data, self.device = data, device
+
+    def _mojolearn_device_twin(self, device):
+        return _NoParams(self.data, device=device)
+
+
+class _NativeState(_Leaf):
+    """Fitted state that is not the instance dictionary (trees)."""
+
+    def _mojolearn_device_state(self, twin, device):
+        twin.model_ = ("moved", self.model_, device)
+
+
+def test_a_meta_estimator_puts_its_members_and_its_fitted_members_on_the_other_device():
+    meta = _Meta(estimator=_Leaf(), estimators=[("x", _Leaf(2)), ("y", 3)])
+    meta.best_estimator_ = _Leaf(5)
+    meta.best_estimator_.coef_ = [9]
+    meta.n_ = 4
+    twin = cb.on_device(meta, "cpu")
+    assert twin.device == "cpu" and twin.estimator.device == "cpu" and twin.estimators[0][1].device == "cpu"
+    assert twin.estimators[1] == ("y", 3) and twin.n_ == 4
+    assert twin.best_estimator_.device == "cpu" and twin.best_estimator_.coef_ is meta.best_estimator_.coef_
+    # the given estimator and its members are left where they were
+    assert meta.estimator.device is None and meta.estimators[0][1].device is None and meta.best_estimator_.device is None
+
+
+def test_a_class_twin_builder_serves_a_model_without_get_params_and_the_state_copy_can_be_declined():
+    model = _NoParams([1, 2])
+    model.weights_ = object()
+    twin = cb.on_device(model, "cpu")
+    assert type(twin) is _NoParams and twin.device == "cpu" and twin.data is model.data
+    assert not hasattr(twin, "weights_")
+    assert cb.on_device(twin, "cpu") is twin and cb.on_device(model, "gpu") is model
+
+
+def test_a_class_state_hook_hands_over_fitted_state_that_is_not_the_instance_dictionary():
+    tree = _NativeState()
+    tree.model_ = "native owner"
+    assert cb.on_device(tree, "cpu").model_ == ("moved", "native owner", "cpu")
+    assert not hasattr(cb.on_device(tree, "cpu", fitted=False), "model_")
+
+
+def test_a_failing_hook_is_a_refusal_in_words_not_a_comparison():
+    class Broken(_Leaf):
+        def _mojolearn_device_state(self, twin, device):
+            raise RuntimeError("no owner")
+
+    try:
+        cb.on_device(Broken(), "cpu")
+    except cb.NotChecked as refused:
+        assert "fitted state of Broken" in str(refused) and "no owner" in str(refused)
+    else:
+        raise AssertionError("a failing state hook was not refused")
+
+
+def test_forward_is_a_default_method():
+    assert cb.DEFAULT_METHODS == ("predict", "transform", "forward")

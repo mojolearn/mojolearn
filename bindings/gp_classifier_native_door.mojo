@@ -15,7 +15,7 @@ from core.native_label_codes import NativeLabelCodes
 from core.gp_native_storage import GPCQueryScratch
 from core.gp_native_storage import GPCMemberTables, GPCQueryTables
 from bindings.gp_score_boundary_door import GPCPredictionCodes
-from bindings.gp_native_boundary_door import GPConnection, gp_kernel_view, gp_run
+from bindings.gp_native_boundary_door import GPConnection, gp_kernel_view, gp_run, gp_route_cpu_metrics
 from bindings.public_lifecycle_owner_door import lifecycle_admit_fields
 from std.python import Python, PythonObject
 from bindings.gp_argument_pins_unpack import GPArgumentPins
@@ -806,11 +806,9 @@ def gp_classifier_operation(model: PythonObject, operation: Int, args: GPArgumen
         if n_truth != n_pred:
             raise Error("mojolearn GaussianProcessClassifier: y has " + String(n_truth) + " entries for "
                         + String(n_pred) + " rows")
-        # A CPU route in a GPU installation hands its CPU metrics factory
-        # behind (binding, base binding, X, y); every other caller passes four.
-        var cpu_metrics = PythonObject(None)
-        if len(args) > 4:
-            cpu_metrics = args[4]
+        # A CPU route resolved beside a GPU set scores on the CPU metrics
+        # image its route holds; every other route scores as before.
+        var cpu_metrics = gp_route_cpu_metrics(args[0])
         var result = gpc_score_result(args[3], pred, cpu_metrics, context)
         _ = prediction
         _ = pred

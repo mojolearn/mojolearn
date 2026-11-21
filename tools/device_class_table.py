@@ -91,6 +91,10 @@ def main(argv):
             continue
         if init is not None and "device" in init:
             takes = "own constructor"
+        elif name in compiled:
+            # python/mojolearn/_native_full_reset_params.py `_install` adds the keyword and the
+            # compiled constructor and setter check it (lane dw-core round 2).
+            takes = "shared constructor door"
         elif inherited("_mojolearn_native_public") or (owner and classes[owner]["native_ctor"]):
             takes = "NO: compiled constructor (its family names device)"
         elif any(c in compiled for c in line) or any(c in recipes for c in line) or any(c in native_inits for c in line):
@@ -116,6 +120,7 @@ def main(argv):
     takes = [r for r in rows if not r[3].startswith("NO")]
     print("estimator classes:", len(rows))
     print("take device=:", len(takes), "(shared wrapper:", sum(r[3] == "shared wrapper" for r in rows),
+          "shared constructor door:", sum(r[3] == "shared constructor door" for r in rows),
           "own constructor:", sum(r[3] == "own constructor" for r in rows), ")")
     print("of those, device='cpu' beside a GPU set runs:", sum(r[4] == "runs" for r in takes))
     print("refused, no CPU implementation:", sum("no CPU" in r[4] for r in takes))
