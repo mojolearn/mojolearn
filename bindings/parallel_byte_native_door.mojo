@@ -21,6 +21,11 @@ from bindings.native_json_door import native_json_parse
 from bindings.native_buffer_address_unpack import native_buffer_address
 from bindings.native_transport_door import _transport_json, transport_initialize
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect, neural_descriptor_provider_id
+from providers.python.neural_descriptor_run import (
+    neural_descriptor_record, neural_descriptor_record_count, neural_descriptor_record_entry,
+    neural_descriptor_record_workspace,
+)
+from core.native_descriptor_abi import NativeDescriptorCall
 from bindings.parallel_byte_native_run import (
     ParallelByteSession,
     PARALLEL_SCHEDULE_ABI_NAME, PARALLEL_SCHEDULE_OPERATIONS,
@@ -140,12 +145,21 @@ struct ParallelByteOwner(Movable, Writable):
         self.owner_id = owner_id
         var nk = parallel_keys()
         var provider = py_item(table, nk[].k_provider)
-        # UNPACK, once per trainer: the provider id word, the shape words, the
-        # optimizer scalars and the committed step leave their Python objects
-        # here; no operation reads them from Python again.
-        var provider_id = 0
+        # UNPACK, once per trainer: the schedule table's entry, call workspace
+        # and call counts (out of the pinned provider's typed record), the
+        # shape words, the optimizer scalars and the committed step leave
+        # their Python objects here; no operation reads them from Python again.
+        var entry = List[NativeDescriptorCall]()
+        var workspace = 0
+        var calls = 0
+        var operations = 0
         if provider is not None:
-            provider_id = neural_descriptor_provider_id(provider)
+            var provider_id = neural_descriptor_provider_id(provider)
+            entry.append(neural_descriptor_record_entry(provider_id))
+            workspace = neural_descriptor_record_workspace(provider_id)
+            operations = neural_descriptor_record_count(provider_id)
+            # Fixed length for the provider's lifetime, so the address is stable.
+            calls = Int(neural_descriptor_record(provider_id)[].calls.unsafe_ptr())
         var dims = List[Int]()
         var shape_dims = py_item(shape, nk[].k_dims)
         for i in range(len(shape_dims)):  # driver-loop: over dims: nine or ten admitted shape words
@@ -156,7 +170,7 @@ struct ParallelByteOwner(Movable, Writable):
                     String("weight_decay"), String("momentum"), String("dampening"), String("max_norm")]:
             scalars.append(Float64(py=config[key]))
         self.native = ParallelByteSession(
-            provider_id, schedule, pool_optimizer, devices^, logical_shards, dims^,
+            entry^, workspace, calls, operations, schedule, pool_optimizer, devices^, logical_shards, dims^,
             Int(py=py_item(shape, nk[].k_n_total)), Int(py=py_item(shape, nk[].k_n_tensors)),
             Int(py=py_item(state, nk[].k_completed_steps)),
             Int(py=py_item(config, nk[].k_kind)), Bool(py=py_item(config, nk[].k_nesterov)), scalars^)
