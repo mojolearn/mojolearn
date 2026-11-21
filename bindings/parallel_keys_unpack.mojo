@@ -234,7 +234,6 @@ struct ParallelKeys(Defaultable, Movable):
     var k__exog: PythonObject
     var k__failed: PythonObject
     var k__fit_numeric_mode: PythonObject
-    var k__gradients: PythonObject
     var k__handle: PythonObject
     var k__head: PythonObject
     var k__head_int15: PythonObject
@@ -580,7 +579,6 @@ struct ParallelKeys(Defaultable, Movable):
         self.k__exog = PythonObject(None)
         self.k__failed = PythonObject(None)
         self.k__fit_numeric_mode = PythonObject(None)
-        self.k__gradients = PythonObject(None)
         self.k__handle = PythonObject(None)
         self.k__head = PythonObject(None)
         self.k__head_int15 = PythonObject(None)
@@ -918,7 +916,6 @@ def _parallel_keys_fill(nk: UnsafePointer[ParallelKeys, MutUntrackedOrigin]) rai
     nk[].k__exog = py_key("_exog")
     nk[].k__failed = py_key("_failed")
     nk[].k__fit_numeric_mode = py_key("_fit_numeric_mode")
-    nk[].k__gradients = py_key("_gradients")
     nk[].k__handle = py_key("_handle")
     nk[].k__head = py_key("_head")
     nk[].k__head_int15 = py_key("_head_int15")
