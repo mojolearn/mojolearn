@@ -15,7 +15,7 @@ from providers.python.neural_descriptor_pyapi_door import neural_descriptor_exec
 from sequence.neural_model_dispatch import (
     MODEL_SAVE_CHECKPOINT, MODEL_CHECKPOINT_INFO, MODEL_LOAD_CHECKPOINT, MODEL_VERIFY_DIGEST,
     MODEL_VERIFY_FILL, MODEL_VERIFY_FILE_SHA256, MODEL_VERIFY_MODEL_INFO, MODEL_N_PARAMS,
-    MODEL_IMPORT_PARAMS,
+    MODEL_IMPORT_PARAMS, MODEL_EXPORT_PARAMS,
 )
 
 # Text results are short and fixed: an FNV-1a64 digest (16 hex digits), a
@@ -219,3 +219,17 @@ def sequential_file_import(entries: PythonObject, program: List[Int], table: Lis
     _ = _file_call(entries, MODEL_IMPORT_PARAMS, addresses, ints, table)
     _ = len(text)
     return (counts[0], counts[1], counts[2])
+
+
+def sequential_file_export(entries: PythonObject, program: List[Int], table: List[Float64], params: Int,
+                           dst: Int, mut shapes: List[Int]) raises -> Int:
+    """Sequential.state_dict's transfer: the float32 parameters at `params`
+    into the float32 buffer at `dst` in PyTorch's layouts, and one 8-word
+    shape record per tensor into `shapes` (its length is the capacity).
+    Returns the tensor count."""
+    var ints: List[Int] = [len(program), len(shapes)]
+    _file_extend(ints, program)
+    var addresses: List[Int] = [params, dst, Int(shapes.unsafe_ptr())]
+    var count = _file_call(entries, MODEL_EXPORT_PARAMS, addresses, ints, table)
+    _ = len(shapes)
+    return count

@@ -95,6 +95,9 @@ comptime XCNN_OPN_POOL_INDICES_SET = 82
 comptime XCNN_OPN_POOL_FORWARD = 83
 comptime XCNN_OPN_POOL_TRANSFORM = 84
 comptime XCNN_OPN_CNNCLF_ADOPT = 85
+# lane api-torch round 2: state_dict / load_state_dict of Conv, BatchNorm and BasicBlock
+comptime XCNN_OPN_LAYER_STATE_DICT = 86
+comptime XCNN_OPN_LAYER_LOAD_STATE_DICT = 87
 
 
 struct XcnnKeys(Defaultable, Movable):
@@ -674,6 +677,8 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "pool_forward", XCNN_OPN_POOL_FORWARD)
     py_op_add(ops, "pool_transform", XCNN_OPN_POOL_TRANSFORM)
     py_op_add(ops, "cnnclf_adopt", XCNN_OPN_CNNCLF_ADOPT)
+    py_op_add(ops, "layer_state_dict", XCNN_OPN_LAYER_STATE_DICT)
+    py_op_add(ops, "layer_load_state_dict", XCNN_OPN_LAYER_LOAD_STATE_DICT)
     nk[].ops = ops
     nk[].ready = True
 

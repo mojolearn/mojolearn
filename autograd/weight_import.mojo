@@ -352,3 +352,78 @@ def session_load_check(src: WeightSource, layout: Int, shape: List[Int]) raises 
         raise Error("load_weights: " + _q(src.name) + " has shape " + wi_shape_str(src.dims)
                     + "; the tensor has shape " + wi_shape_str(shape))
     return wi_matrix(src, False)
+
+
+# WEIGHT EXPORT (lane api-torch round 2, 2026-11-21): the inverse of
+# `model_import_params`, for Sequential.state_dict / parameters /
+# named_parameters. Each parameter tensor of the model leaves in PyTorch's
+# layout (`nn.Sequential` names; a linear weight (out, in)), at the same
+# offset it has in params_, so one float32 buffer of spec.n_params holds them
+# all. The copy is the import's own machinery reversed: one upload of
+# params_, then per linear weight one upload_cast of its (in, out) block
+# viewed as its (out, in) transpose (the two strides swapped), then one
+# download. float32 to float32: the words are moved, never rounded, so the
+# exported values are params_' bits on every vendor and the host column.
+# No new kernel and no new opcode.
+#
+# Shape record (WE_SHAPE_WORDS words per tensor, state_dict order: layers in
+# order, the weight then the bias):
+#   [0] layer index, [1] slot (WI_SLOT_WEIGHT / WI_SLOT_BIAS), [2] offset in
+#   the buffer (floats), [3] rank (1..WI_MAX_RANK), [4..7] dims (0 past it)
+comptime WE_SHAPE_WORDS = 8
+
+
+def model_export_tensors(spec: ModelSpec) -> Int:
+    """How many parameter tensors `model_export_params` writes."""
+    var count = 0
+    for i in range(spec.n_layers()):  # driver-loop: over layers
+        if _has_params(spec, i):
+            count += 2 if _has_bias(spec, i) else 1
+    return count
+
+
+def model_export_params[E: Exec](
+    mut ex: E, spec: ModelSpec, params: Int, dst: Int, shapes: Int, capacity: Int,
+) raises -> Int:
+    """dst (spec.n_params host floats) = the model's parameters at `params`
+    in PyTorch's layouts; `shapes` (capacity words) = one WE_SHAPE_WORDS
+    record per tensor. Returns the tensor count."""
+    var n = model_export_tensors(spec)
+    if params == 0 or dst == 0 or shapes == 0:
+        raise Error("state_dict: null buffer address")
+    if n * WE_SHAPE_WORDS > capacity:
+        raise Error("state_dict: the shape result holds " + String(capacity) + " words; "
+                    + String(n * WE_SHAPE_WORDS) + " are needed")
+    var rec = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=shapes)
+    var D = ex.alloc(spec.n_params)
+    ex.upload(D, FP(unsafe_from_address=params), spec.n_params)
+    var at = 0
+    for i in range(spec.n_layers()):  # driver-loop: over layers
+        if not _has_params(spec, i):
+            continue
+        for slot in range(2):  # small-loop(2: the weight and the bias slot): metadata, no data
+            if slot == WI_SLOT_BIAS and not _has_bias(spec, i):
+                continue
+            var off = spec.param_off[i]
+            if slot == WI_SLOT_BIAS:
+                off += _weight_count(spec, i)
+            if spec.kinds[i] == LAYER_LINEAR and slot == WI_SLOT_WEIGHT:
+                # params_ holds (in, out) row-major: element (o, k) of the
+                # (out, in) view is at k * out + o.
+                var fi = spec.in_width[i]
+                var fo = spec.arg0[i]
+                var view = CastIn(params + 4 * off, CAST_KIND_FLOAT, 4, fo, fi, 4, 4 * fo)
+                view.check("state_dict: layer " + String(i) + " (linear) weight")
+                upload_cast(ex, D + off, view)
+            var dims = _expected(spec, i, slot, WI_LAYOUT_TORCH)
+            var base = at * WE_SHAPE_WORDS
+            rec[base] = i
+            rec[base + 1] = slot
+            rec[base + 2] = off
+            rec[base + 3] = len(dims)
+            for k in range(WI_MAX_RANK):  # small-loop(WI_MAX_RANK: 4): metadata, no data
+                rec[base + 4 + k] = dims[k] if k < len(dims) else 0
+            at += 1
+    ex.download(FP(unsafe_from_address=dst), D, spec.n_params)
+    ex.free(D)
+    return n
