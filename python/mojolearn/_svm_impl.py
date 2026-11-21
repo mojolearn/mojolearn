@@ -485,6 +485,8 @@ class SVC(NumericModeMixin):
     # route and asks that module for its resident entries: device="cpu" runs
     # beside a GPU set.
     _mojolearn_device = True
+    #: Member mark (core/kernel_svm_member.mojo): family 6 (KernelSvm), kind 0.
+    _mojolearn_member = (6, 0)
 
     def __init__(
         self,
@@ -1008,6 +1010,8 @@ class SVR(NumericModeMixin):
     # route and asks that module for its resident entries: device="cpu" runs
     # beside a GPU set.
     _mojolearn_device = True
+    #: Member mark (core/kernel_svm_member.mojo): family 6 (KernelSvm), kind 1.
+    _mojolearn_member = (6, 1)
 
     def __init__(
         self,

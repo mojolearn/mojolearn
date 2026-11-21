@@ -253,6 +253,28 @@ class Conv2d(_Layer):
     def set_weights(self, weight, bias=None):
         return _XCNN(self, "conv_set_weights", (weight, bias), _XCNN_CONTEXT)
 
+    def state_dict(self):
+        """The layer's parameters by PyTorch's names, as copies.
+
+        Returns
+        -------
+        dict of str to ndarray
+            The names and layouts ``torch.nn.Conv2d`` uses.
+        """
+        return _XCNN(self, "layer_state_dict", (), _XCNN_CONTEXT)
+
+    def load_state_dict(self, state_dict):
+        """Load parameters named as :meth:`state_dict` names them.
+
+        Every name the layer has must be given and no other (PyTorch's
+        ``strict=True``); shapes are checked before the layer changes.
+
+        Returns
+        -------
+        self
+        """
+        return _XCNN(self, "layer_load_state_dict", (state_dict,), _XCNN_CONTEXT)
+
     def pin_weights(self):
         """Keep `weight_` and `bias_` on the device for `DeviceTensor`
         forwards and backwards. While they are kept there, `weight_` and
@@ -531,6 +553,28 @@ class BatchNorm2d(_Layer):
     def eval(self):
         return _XCNN(self, "bn_train", (False,), _XCNN_CONTEXT)
 
+    def state_dict(self):
+        """The layer's parameters by PyTorch's names, as copies.
+
+        Returns
+        -------
+        dict of str to ndarray
+            The names and layouts ``torch.nn.BatchNorm2d`` uses.
+        """
+        return _XCNN(self, "layer_state_dict", (), _XCNN_CONTEXT)
+
+    def load_state_dict(self, state_dict):
+        """Load parameters named as :meth:`state_dict` names them.
+
+        Every name the layer has must be given and no other (PyTorch's
+        ``strict=True``); shapes are checked before the layer changes.
+
+        Returns
+        -------
+        self
+        """
+        return _XCNN(self, "layer_load_state_dict", (state_dict,), _XCNN_CONTEXT)
+
     @property
     def running_mean_(self):
         return _XCNN(self, "bn_running_get", ("running_mean_",), _XCNN_CONTEXT)
@@ -725,6 +769,28 @@ class BasicBlock(_Layer):
 
     def parameters(self):
         return _XCNN(self, "block_parameters", (), _XCNN_CONTEXT)
+
+    def state_dict(self):
+        """The layer's parameters by PyTorch's names, as copies.
+
+        Returns
+        -------
+        dict of str to ndarray
+            The names and layouts torchvision's ``BasicBlock`` uses.
+        """
+        return _XCNN(self, "layer_state_dict", (), _XCNN_CONTEXT)
+
+    def load_state_dict(self, state_dict):
+        """Load parameters named as :meth:`state_dict` names them.
+
+        Every name the layer has must be given and no other (PyTorch's
+        ``strict=True``); shapes are checked before the layer changes.
+
+        Returns
+        -------
+        self
+        """
+        return _XCNN(self, "layer_load_state_dict", (state_dict,), _XCNN_CONTEXT)
 
     def transform(self, X):
         return _XCNN(self, "block_transform", (X,), _XCNN_CONTEXT)

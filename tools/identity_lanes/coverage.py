@@ -744,7 +744,7 @@ def _(ml, X, yc, yr, Xh=None):
     win = [(ids[2 * k:2 * k + 2, :-1], ids[2 * k:2 * k + 2, 1:]) for k in range(4)]  # glue: four (2, 16) windows
 
     def flat(m):
-        p = m.parameters()
+        p = dict(m.named_parameters())
         return np.concatenate([np.asarray(p[k], dtype=np.float32).reshape(-1) for k in sorted(p)])  # glue: names
 
     a = ml.SambaStack(cfg, generator=T.Generator(1), lr=1e-3)
@@ -1156,7 +1156,7 @@ def _(ml, X, yc, yr, Xh=None):
         lplan = M.plan_for(M.HFConfig.from_json(root))
         # The weights the loader read, back through the public parameters()
         # (the constructor keeps their bytes), in the constructor's layout.
-        params = M.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1").parameters()
+        params = dict(M.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1").named_parameters())
         weights = {"embed": params[lplan.embed_name],
                    **{k: params[n] for k, n in (("norm", lplan.norm_name), ("head", lplan.head_name))
                       if n is not None},  # glue: the two optional top-level tensors

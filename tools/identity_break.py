@@ -3800,7 +3800,7 @@ def _lowbit_samba_lane(ml, X, Xh, fmt):
     forward logits only (no step)."""
     cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
     seed = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
-    w = {n: np.asarray(v).copy() for n, v in seed.parameters().items()} if hasattr(seed, "parameters") \
+    w = {n: np.asarray(v).copy() for n, v in seed.named_parameters()} if hasattr(seed, "named_parameters") \
         else {n: np.asarray(seed.arrays[n]).copy() for n in seed.names}
     packed = ml.lowbit.pack(w, fmt)
     f32, got = ml.lowbit.unpack(packed)
@@ -4308,7 +4308,7 @@ def _(ml, X, yc, yr, Xh=None):
     losses = [np.float64(m.train_step(ids[batch * k:batch * k + batch, :-1],
                                       ids[batch * k:batch * k + batch, 1:])["loss"])
               for k in range(steps)]
-    params = m.parameters()
+    params = dict(m.named_parameters())
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
                 m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
@@ -5201,7 +5201,7 @@ def _(ml, X, yc, yr, Xh=None):
     losses = [np.float64(m.train_step(ids[batch * k:batch * k + batch, :-1],
                                       ids[batch * k:batch * k + batch, 1:])["loss"])
               for k in range(steps)]
-    params = m.parameters()
+    params = dict(m.named_parameters())
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
                 m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
@@ -6896,7 +6896,7 @@ def _(ml, X, yc, yr, Xh=None):
         state = m.allocate_state(HF_LM_BATCH, HF_LM_LEN)
         m.forward(A(np.ascontiguousarray(ids[:, :HF_LM_LEN - 1])), state)
         step = np.asarray(m.step(A(np.ascontiguousarray(ids[:, HF_LM_LEN - 1:])), state))
-        params = np.concatenate([_hf_bytes(w) for _, w in sorted(m.parameters().items())])
+        params = np.concatenate([_hf_bytes(w) for _, w in sorted(m.named_parameters())])
         other = mamba.allocate_state(HF_LM_BATCH, HF_LM_LEN)
         flags = np.asarray([
             step.tobytes() == np.ascontiguousarray(logits[:, HF_LM_LEN - 1, :]).tobytes(),
@@ -6905,7 +6905,7 @@ def _(ml, X, yc, yr, Xh=None):
             m.plan.head_name is not None and mamba.plan.head_name is None,
             [one.device for one in models] == [m.device] * len(models),
             all(one.weight_format == "float32" for one in models),
-            sorted(m.parameters()) == sorted(m.plan.checkpoint_names()),
+            sorted(name for name, _ in m.named_parameters()) == sorted(m.plan.checkpoint_names()),
             [one.plan.kind for one in models]
             == ["transformer"] * 6 + ["mamba1", "mamba2"],
             _hf_refused(lambda: M.CausalLM.load(llama, device="tpu"), "device must be"),
