@@ -52,7 +52,15 @@ FITTED-STATE BLOCKS, in index order:
   2 `MEMBER_BLOCK_FAMILY + 1` float64 1 x L: the layer widths (input,
     hidden..., output);
   3 `MEMBER_BLOCK_FAMILY + 2` float32 1 x n_iter: the loss curve.
-An import needs blocks 0 .. 2; the curve is optional.
+An import needs blocks 0 .. 2; the curve is optional. An exported block is
+read-only: the parameter block may be resident on the device (below).
+
+RESIDENT WEIGHTS: every predict, predict_proba and score names the fitted
+block (owner = the state's slot address, token = a new number at each fit or
+import), so a GPU route uploads it on the first call only and keeps it
+resident across calls (sequence/perf3_seq_resident.mojo), as the estimator's
+own predict door keeps its packed block; a refit or an import names a new
+block, and FREE posts the owner's death so the device copy is freed.
 
 The fitted state is OWNED here, in a process-wide store of fixed chunks: a
 slot never moves once minted, so a fit or predict runs on its slot without
@@ -80,6 +88,7 @@ from core.member_families import MEMBER_FAMILY_MLP
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
+from sequence.perf3_seq_resident_words import seq_resident_owner_died
 from sequence.xseq_native_common_run import xseq_stream_child_seed
 from sequence.xseq_neural_run import (
     XseqNeuralEntry, XseqMlpFitRequest, XseqMlpPredictRequest, xseq_run_mlp_sizes, xseq_run_mlp_param_count,
@@ -99,6 +108,10 @@ comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
+# Resident-block tokens of member states sit above every token the class
+# doors mint (`seq_resident_token`, a counter from 1), so a member's (owner,
+# token) never names a door's block even if an owner word were reused.
+comptime _TOKEN_BASE = 1 << 40
 
 
 struct MlpMemberSlot(Copyable, Movable, Defaultable):
@@ -115,6 +128,15 @@ struct MlpMemberSlot(Copyable, Movable, Defaultable):
     var curve: List[Float32]
     var scalars: List[Float64]
     var widths: List[Float64]
+    # The device-resident fitted block (sequence/perf3_seq_resident.mojo):
+    # the owner word is this slot's address, `token` names the current
+    # `params` (0: none yet). `stamp` counts every params change of this
+    # slot address across generations (never reset), so a refit, an import
+    # or a reuse of the slot names a new block. `named`: a predict named the
+    # block, so FREE posts the owner's death to drop its device copy.
+    var stamp: Int
+    var token: Int
+    var named: Bool
 
     def __init__(out self):
         self.generation = 0
@@ -128,6 +150,9 @@ struct MlpMemberSlot(Copyable, Movable, Defaultable):
         self.curve = List[Float32]()
         self.scalars = List[Float64]()
         self.widths = List[Float64]()
+        self.stamp = 0
+        self.token = 0
+        self.named = False
 
 
 struct MlpMemberStore(Defaultable, Movable):
@@ -208,6 +233,12 @@ def _lookup(handle: Int, release: Bool) raises -> Int:
             slot[].curve = List[Float32]()
             slot[].scalars = List[Float64]()
             slot[].widths = List[Float64]()
+            slot[].token = 0
+            if slot[].named:
+                # The device store frees this owner's resident block at its
+                # next call, before any lookup (non-raising).
+                slot[].named = False
+                seq_resident_owner_died(address)
             store[].free.append(index)
         return address
     finally:
@@ -236,6 +267,12 @@ def _model_entry(route: DeviceRoute) -> XseqNeuralEntry:
 
 def _output_entry(route: DeviceRoute) -> XseqNeuralEntry:
     return XseqNeuralEntry(route.second.call, route.second.word)
+
+
+def _name_params(slot: _SlotP):
+    """A new resident-block token for the slot's current `params`."""
+    slot[].stamp += 1
+    slot[].token = _TOKEN_BASE + slot[].stamp
 
 
 def _fit(slot: _SlotP, call: _CallP) raises:
@@ -283,6 +320,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     var total = xseq_run_mlp_param_count(sizes)
     var max_iter = Int(w[15])
     slot[].fitted = False
+    slot[].token = 0
     slot[].params = List[Float32](length=total, fill=0.0)
     slot[].curve = List[Float32](length=max_iter, fill=0.0)
     var base = Int(slot[].params.unsafe_ptr())
@@ -314,6 +352,7 @@ def _fit(slot: _SlotP, call: _CallP) raises:
     for l in range(len(sizes)):  # driver-loop: over network layers
         slot[].widths[l] = Float64(sizes[l])
     slot[].sizes = sizes^
+    _name_params(slot)
     slot[].fitted = True
 
 
@@ -331,8 +370,13 @@ def _forward(slot: _SlotP, call: _CallP, proba2: Bool, width: Int, dst: Int) rai
     for l in range(1, len(slot[].sizes) - 1):  # driver-loop: over hidden layer widths
         hidden.append(slot[].sizes[l])
     var w = _F64P(unsafe_from_address=Int(slot[].words.unsafe_ptr()))
+    # The fitted block is named (owner = this slot, token = its params): a
+    # GPU route keeps it resident across calls, uploading it on the first
+    # predict only, as the estimator's own predict door does; a host
+    # executor ignores the three words.
+    slot[].named = True
     var request = XseqMlpPredictRequest(call[].x.rows, features, Int(slot[].scalars[5]), Int(w[1]),
-        Int(slot[].scalars[4]), hidden^, proba2, width, len(slot[].params), 0, 0)
+        Int(slot[].scalars[4]), hidden^, proba2, width, len(slot[].params), Int(slot), slot[].token)
     xseq_run_mlp_predict(_model_entry(call[].route), request, call[].x.data, Int(slot[].params.unsafe_ptr()), dst)
 
 
@@ -452,6 +496,7 @@ def _import(slot: _SlotP, call: _CallP) raises:
         unsafe_memcpy(dest=words.unsafe_ptr(), src=_F32P(unsafe_from_address=call[].x.data), count=count)
         slot[].fitted = False
         if block == _BLOCK_PARAMS:
+            slot[].token = 0
             slot[].params = words^
         else:
             slot[].curve = words^
@@ -488,6 +533,7 @@ def _import(slot: _SlotP, call: _CallP) raises:
         if Int(slot[].scalars[6]) < 2:
             raise Error("member ABI: a fitted MLPClassifier state needs its class count")
     slot[].sizes = sizes^
+    _name_params(slot)
     slot[].fitted = True
 
 
