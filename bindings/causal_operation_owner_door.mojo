@@ -19,6 +19,7 @@ from bindings.py_optional import py_present
 from training.causal_operation_owner_run import _causal_model_runtime_names, _causal_block_runtime_names
 from bindings.causal_keys_unpack import causal_keys, CausalKeys
 from bindings.py_balanced import py_item
+from providers.python.generation_metadata_pyapi_door import GenerationOperationSnapshot
 from core.causal_owner import CausalModelWords
 from core.causal_layer_run import causal_layer_kind, CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1
 
@@ -150,13 +151,23 @@ struct CausalModelOwner(Movable, Writable):
     the model's prepared record (`_CAUSAL_MODEL_SLOT`), inside the template,
     so a capture whose identity key still matches hands this same owner to
     the operation with no added read. A changed model drops the record and
-    this owner with it; CPython's reference count is the finaliser. It owns
-    typed words only: no tensor, no Python object."""
+    this owner with it; CPython's reference count is the finaliser.
+
+    It owns the typed words and, from the model's first local forward on,
+    the weights as typed views (`snapshot`: addresses, layouts, layer words,
+    the layer route, and the pins of the storage they address). The tensors
+    stay the public blocks' (a replaced one changes the identity key, so the
+    generation). `snapshot` is written ONCE (`causal_model_snapshot_keep`,
+    GIL held) and never replaced or cleared while the owner lives, so a
+    reader may hold a reference into it across a GIL release for as long as
+    it holds the owner's handle. It keeps no capture and no public object."""
 
     var words: CausalModelWords
+    var snapshot: Optional[GenerationOperationSnapshot]
 
     def __init__(out self, var words: CausalModelWords):
         self.words = words^
+        self.snapshot = None
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("CausalModelOwner(generation=", self.words.generation, ")")
@@ -202,6 +213,18 @@ def causal_model_owner_build(fields: PythonObject) raises -> PythonObject:
     if vendor is not None:
         words.resident_cuda = String(vendor) == "cuda"
     return PythonObject(alloc=CausalModelOwner(words^))
+
+
+def causal_model_snapshot_keep(held: PythonObject, var built: GenerationOperationSnapshot):
+    """Give the model owner its weight snapshot, once per generation. Call
+    with the GIL held, on a snapshot built from a capture of this owner's
+    generation. A snapshot already kept wins (another operation built it
+    while this one was building): the kept one is never replaced, because a
+    running operation may be reading it."""
+    var owner = held.downcast_value_ptr[CausalModelOwner]()
+    if not owner[].snapshot:
+        built.detach()
+        owner[].snapshot = Optional(built^)
 
 
 def causal_model_owner(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
