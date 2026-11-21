@@ -47,8 +47,11 @@ class HostGBDT:
 
     Loads a file written by ``GradientBoosting.save`` and predicts on the CPU,
     with no GPU needed. ``predict`` returns what ``GradientBoosting.predict``
-    returns for the same file. Models with categorical (CTR) columns are
-    supported; a model that uses CTR table types with no prediction-time
+    returns for the same file, on the same inputs: a model fitted with
+    ``cat_features`` encodes its categorical columns (numbers, text or None,
+    from lists, object or string arrays and pandas) through the category map
+    saved with it, and a value the fit did not see is treated as unseen.
+    Models with categorical (CTR) columns are supported; a model that uses CTR table types with no prediction-time
     formula (Buckets, BinarizedTargetMeanValue, FloatTargetMeanValue) is
     refused at load.
 
@@ -71,6 +74,9 @@ class HostGBDT:
     bias : float or None, default None
     estimator : str, default 'GradientBoosting'
         The class that saved the model.
+    category_map : int64 array or None, default None
+        The model's ``category_map_`` (for a model fitted with
+        ``cat_features``).
 
     Attributes
     ----------
@@ -96,9 +102,10 @@ class HostGBDT:
     estimator = 'GradientBoosting'
 
     def __init__(self, *, loss, text, n_features_in, approx_dim, n_classes=None,
-                 numeric_mode=None, bias=None, estimator='GradientBoosting'):
+                 numeric_mode=None, bias=None, estimator='GradientBoosting', category_map=None):
         return _native_host_archive(self, _OP.host_tree_init_gbdt,
-            (loss, text, n_features_in, approx_dim, n_classes, numeric_mode, bias, estimator), _ARCHIVE_CONTEXT)
+            (loss, text, n_features_in, approx_dim, n_classes, numeric_mode, bias, estimator, category_map),
+            _ARCHIVE_CONTEXT)
 
     @classmethod
     def from_file(cls, path):
@@ -136,9 +143,12 @@ class HostGBDT:
         return _native_host_archive(self, _OP.host_tree_engine, (), _ARCHIVE_CONTEXT)
 
     def model_sha256(self):
-        """Return the SHA-256 hex digest of the model text (UTF-8).
+        """Return the SHA-256 hex digest of the model.
 
-        It equals the digest of the archive's ``model`` member.
+        The model text (UTF-8), followed for a model fitted with
+        ``cat_features`` by its category map's int64 words. For a model
+        without categorical features it equals the digest of the archive's
+        ``model`` member.
         """
         return _native_host_archive(self, _OP.host_tree_hash, (), _ARCHIVE_CONTEXT)
 
@@ -194,10 +204,10 @@ def gbdt_ctr_model_dim(text):
     return _native_host_archive(None, _OP.host_tree_ctr_dim, (text,), _ARCHIVE_CONTEXT)
 
 
-def gbdt_ctr_predict(X, *, loss, text, n_features_in, approx_dim, n_classes, estimator):
-    """`HostGBDT(...).predict(X)` for a CTR model text."""
+def gbdt_ctr_predict(X, *, loss, text, n_features_in, approx_dim, n_classes, estimator, category_map=None):
+    """`HostGBDT(...).predict(X)` for a CTR model text (and its category map)."""
     return _native_host_archive(None, _OP.host_tree_ctr_predict,
-        (X, loss, text, n_features_in, approx_dim, n_classes, estimator), _ARCHIVE_CONTEXT)
+        (X, loss, text, n_features_in, approx_dim, n_classes, estimator, category_map), _ARCHIVE_CONTEXT)
 
 
 # Defer this import until HostGBDT exists: the shared archive registry also
