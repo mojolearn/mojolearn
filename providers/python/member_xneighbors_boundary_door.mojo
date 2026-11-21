@@ -17,8 +17,9 @@ LabelPropagation LabelSpreading KNNImputer SVGP.
   * `xneighbors_member_pack` (PACK): the attributes the estimator's fit
     writes (`centroids_`, `deviations_`, `within_class_std_dev_`,
     `class_prior_`, `n_features_in_`); `classes_` and `_codes_classes` are
-    the class CODES 0 .. classes-1: the caller's PACK publishes the labels by
-    setting both to its classes (predict maps codes through `classes_`).
+    the caller's labels (`member_pack_labeled`, taken with
+    `member_labels_take`; predict maps codes through `classes_`), or the
+    class codes 0 .. classes-1 when it gave none.
     LocalOutlierFactor: `_fit_X` (a new Array: the member's copy of the rows
     it borrowed), `_fit_dist`, `_lrd`, `negative_outlier_factor_`, `offset_`,
     `n_neighbors_`, `n_features_in_`, `n_samples_fit_`, as `_lof_fit_pack`.
@@ -38,7 +39,7 @@ from bindings.admitted_input_unpack import admit_x, admit_c_view, admitted_dtype
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_labels_door import labels_cast
 from bindings.family_common_pack import family_field
-from bindings.member_owner_unpack import MemberOwner
+from bindings.member_owner_unpack import MemberOwner, member_labels_take
 from bindings.nearest_centroid_provider_unpack import NcConnection
 from bindings.neighbors_local_native_door import _lof_check
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
@@ -198,7 +199,11 @@ def _nc_pack(fields: PythonObject, context: PythonObject, b: PythonObject, plan:
     call.block = NC_BLOCK_STD
     _ = member_call(plan.member, MEMBER_OP_EXPORT, call)
     var std = _publish_block(call, "<f4", context, 4, True)
-    var codes = Python.list(py_call(b.range, PythonObject(classes)))
+    # The caller's labels (member_pack_labeled), taken once: code c is
+    # labels[c]; the estimator's own fit writes its classes to both fields.
+    var codes = member_labels_take(fields, b)
+    if codes is None:
+        codes = Python.list(py_call(b.range, PythonObject(classes)))
     py_setitem(fields, "class_prior_", prior)
     py_setitem(fields, "centroids_", centroids)
     py_setitem(fields, "deviations_", deviations)
