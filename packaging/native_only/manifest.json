@@ -136,6 +136,7 @@
       "parallel_neighbors_reference",
       "parallel_preprocessing",
       "preprocessing",
+      "reproduce",
       "resample",
       "runtime_report",
       "select_d",
@@ -7242,6 +7243,15 @@
       "symbol_origin": "mojolearn._expansion_ann.refine"
     },
     {
+      "algorithm": "mojolearn.reproduce",
+      "status": "not_algorithm",
+      "cases": [],
+      "reason": "Verification tool: fits the estimator a receipt records on the user's data and compares hashes with the receipt; not a numerical algorithm.",
+      "source": "python/mojolearn/__init__.py",
+      "canonical_algorithm": "mojolearn.reproduce",
+      "symbol_origin": "mojolearn._reproduce.reproduce"
+    },
+    {
       "algorithm": "mojolearn.resample",
       "status": "not_algorithm",
       "cases": [],
@@ -7755,9 +7765,9 @@
   ],
   "inventory_note": "Inventory includes public aliases, metadata and namespace exports. not_algorithm rows are explicit exclusions from algorithm coverage; missing rows remain visible. ready means a source fixture exists, never that compile/runtime/backend validation passed.",
   "census": {
-    "public_export_rows": 648,
+    "public_export_rows": 649,
     "alias_rows": 109,
-    "canonical_non_algorithm_exports": 67,
+    "canonical_non_algorithm_exports": 68,
     "canonical_algorithm_entries": 472,
     "canonical_status_counts": {
       "blocked": 9,
