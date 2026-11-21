@@ -208,7 +208,7 @@ struct MselMemberScores(Movable):
     # metric reads its device once per scorer template).
     var members: PythonObject
 
-    def __init__(out self):
+    def __init__(out self) raises:
         self.ran = False
         self.estimators = PythonObject(None)
         self.outputs = Python.list()
