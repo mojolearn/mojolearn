@@ -214,6 +214,17 @@ def causal_model_owner_build(fields: PythonObject) raises -> PythonObject:
             words.mamba1_profile = Int(py=profile)
     words.resident = py_contains(entries, PythonObject(CAUSAL_ENTRY_RESIDENT))
     var vendor = py_get(entries, PythonObject(CAUSAL_ENTRY_RESIDENT_VENDOR))
+    var program = py_get(entries, PythonObject(CAUSAL_ENTRY_PROGRAM_READ))
+    if program is not None:
+        words.program_read = Int(py=program)
+    if words.norm:
+        # A norm_eps that is not a number reads as 0 here: the decode
+        # program then refuses the read ("a final norm with eps 0") and
+        # every other route meets the value where it reads it.
+        try:
+            words.norm_eps = Float64(py=py_item(fields, PythonObject("norm_eps")))
+        except:
+            words.norm_eps = 0.0
     if vendor is not None:
         words.resident_cuda = String(vendor) == "cuda"
     return PythonObject(alloc=CausalModelOwner(words^))

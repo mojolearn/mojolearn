@@ -58,6 +58,11 @@ struct CausalModelWords(Copyable, Movable):
     # The registry carries the resident session route, and its vendor is CUDA.
     var resident: Bool
     var resident_cuda: Bool
+    # The decode program's session family word of the registry
+    # (`program_read`); -1 when the install has no GPU decode program.
+    var program_read: Int
+    # The final norm's eps (read only when `norm`).
+    var norm_eps: Float64
 
     def __init__(out self):
         self.generation = 0
@@ -76,6 +81,8 @@ struct CausalModelWords(Copyable, Movable):
         self.mamba1_profile = 0
         self.resident = False
         self.resident_cuda = False
+        self.program_read = -1
+        self.norm_eps = 0.0
 
 
 def causal_positions_admit(words: CausalModelWords, has_state: Bool, have: Int, capacity: Int, length: Int) raises:
