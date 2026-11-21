@@ -255,7 +255,7 @@ def _if_fit_body(model: PythonObject, fields: PythonObject, raw: PythonObject, c
     py_setitem(fields, nk[].k_n_features_in_, x.shape[1])
     var output = host_archive_typed(Python.tuple(1), "<f4", py_item(context, nk[].k_output_context))
     var request = host_iforest_request(fields, Int(py=x.shape[0]), Int(py=x.shape[1]), 1, 0)
-    var resident = _host_resident_entries(_kernel_entry("iforest_forest_run", context), context)
+    var resident = _host_resident_entries(_kernel_entry("iforest_resident_release", context), context)
     if resident is not None and not host_iforest_owned_x(fields):
         resident = PythonObject(None)
     if resident is not None:

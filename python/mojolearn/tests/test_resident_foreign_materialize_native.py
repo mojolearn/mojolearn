@@ -5,7 +5,10 @@ Lists, tuples, ranges, memoryview/array.array, pandas and Arrow-backed
 pandas values are materialized by the native model-selection input owner:
 the whole take is one native call, the original dtype is kept (float64 that float32 would round, int64
 beyond 2**24), and caller hooks (__array__, __iter__, __float__, DLPack)
-are refused before they can run.
+are refused before they can run. The entries are native: `_entry(value)`
+answers (owner, prepared Array, store id) without a second put, and the
+store's live count shows what was put (2026-11-21, arena unit E: the
+`_entries` mapping is gone).
 """
 import array
 import gc
@@ -56,7 +59,8 @@ def test_take_on_sequences_is_native_and_keeps_natural_dtype(owner, value, dtype
     rows = audit_native_call(owner.take, value, INDICES).assert_native()
     expected = np.asarray(value if not isinstance(value, range) else list(value), dtype=dtype)[[2, 0]]
     assert rows.dtype == dtype and np.array_equal(_rows(rows), expected)
-    assert owner._entries[id(value)][0] is value
+    live = _live()
+    assert owner._entry(value)[0] is value and _live() == live
 
 
 def test_take_on_array_array_and_memoryview_is_native(owner):
@@ -105,9 +109,11 @@ def test_arrow_missing_float_reads_nan_and_missing_integer_is_refused(owner):
     rows = audit_native_call(owner.take, floats, np.array([1, 2], dtype="i8")).assert_native()
     assert rows.dtype == "<f8" and np.isnan(_rows(rows)[0, 0]) and _rows(rows)[1, 0] == 3.0
     ints = pd.DataFrame({"a": [1, None, 3]}).astype("int64[pyarrow]")
+    live = _live()
     audit = audit_native_call(owner.take, ints, INDICES)
     assert type(audit.exception) is TypeError and not audit.frames
-    assert id(ints) not in owner._entries
+    # Nothing was put for the refused owner.
+    assert _live() == live
 
 
 @pytest.mark.parametrize("hook", ["__array__", "__iter__", "__float__", "__dlpack__", "__len__"])
@@ -119,9 +125,10 @@ def test_foreign_hooks_are_refused_before_they_run(owner, hook):
         raise AssertionError("caller hook ran")
 
     value = type("Foreign", (), {hook: poisoned})()
+    live = _live()
     audit = audit_native_call(owner.take, value, INDICES)
     assert audit.exception is not None and not calls and not audit.frames
-    assert id(value) not in owner._entries
+    assert _live() == live
 
 
 def test_device_rows_materialize_on_a_float64_base_is_native(owner):
@@ -143,6 +150,7 @@ def test_upload_is_reused_for_the_same_foreign_owner(owner):
     base = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
     owner.take(base, INDICES)
     live = _live()
-    entry = owner._entries[id(base)]
+    entry = owner._entry(base)
     audit_native_call(owner.take, base, np.array([1], dtype="i8")).assert_native()
-    assert owner._entries[id(base)] is entry and _live() == live + 1
+    # The base is not put again; only the new index Array is.
+    assert owner._entry(base)[2] == entry[2] and owner._entry(base)[1] is entry[1] and _live() == live + 1

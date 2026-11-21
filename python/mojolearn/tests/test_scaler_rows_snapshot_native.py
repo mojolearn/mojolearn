@@ -1,5 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
-"""A DeviceRows host materialization is a retained snapshot, not a callback."""
+"""A DeviceRows host materialization is a retained snapshot, not a callback.
+
+The snapshot is kept on the fold's native state; `rows.materialize()`
+returns it once it exists (before any gather owner is consulted).
+
+Deleted with the instance dictionary (2026-11-21, arena unit E): the test
+that rebuilt `rows.__dict__` with hooked keys (a DeviceRows has one slot),
+and the pre-set `rows._host`; a preexisting snapshot is now made by a
+first `materialize` through `model_selection._Resident.take`.
+"""
 import gc
 import numpy as np
 from array import array
@@ -7,29 +16,8 @@ import pytest
 import mojolearn as ml
 from mojolearn._array import Array
 from mojolearn._arena_io import DeviceRows
+from mojolearn.model_selection import _Resident
 from mojolearn._verify_native_runtime import audit_native_call
-
-
-@pytest.mark.parametrize('estimator', ['MaxAbsScaler', 'RobustScaler'])
-@pytest.mark.parametrize('ranges', ['0', '1'])
-@pytest.mark.parametrize('field', ['base', 'indices', 'dtype', '_host'])
-def test_row_metadata_keys_are_refused_before_python_equality(estimator, ranges, field, monkeypatch):
-    monkeypatch.setenv('MOJOLEARN_ARENA_RANGES', ranges)
-    calls = []
-    class ForeignKey(str):
-        __hash__ = str.__hash__
-        def __eq__(self, other):
-            calls.append('equality')
-            return str.__eq__(self, other)
-    rows = DeviceRows(Array.from_list([[1.,2.],[3.,4.]], '<f4'), Array.from_list([0], '<i8'), None)
-    value = rows.__dict__.pop(field)
-    rows.__dict__[ForeignKey(field)] = value
-    calls.clear()
-    audit = audit_native_call(getattr(ml, estimator)().fit, rows)
-    assert isinstance(audit.exception, TypeError), audit.report()
-    assert 'metadata keys' in str(audit.exception)
-    assert not calls
-    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
 
 
 @pytest.mark.parametrize('estimator', ['MaxAbsScaler', 'RobustScaler'])
@@ -60,10 +48,14 @@ def test_row_class_layout_is_refused_before_dictionary_or_lifecycle_hooks(estima
         else:
             patch.setattr(DeviceRows, '__getattribute__' if hook == 'getattribute' else '__del__', forbidden, raising=False)
         audit = audit_native_call(model.fit, rows)
-    # Restore finalizer metadata while the source is still retained.
-    assert isinstance(audit.exception, TypeError), audit.report()
     assert not calls
     assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
+    if hook == 'descriptor':
+        # A wrongly connected class has no native rows state behind the slot.
+        assert isinstance(audit.exception, TypeError), audit.report()
+    else:
+        # The state is read through the slot: a class hook is never reached.
+        audit.assert_native()
 
 
 @pytest.mark.parametrize('estimator', ['MaxAbsScaler', 'RobustScaler'])
@@ -77,19 +69,22 @@ def test_host_rows_snapshot_survives_base_and_index_mutation(estimator, preexist
         calls.append(True)
         raise AssertionError('Python materialization hook ran')
     base = Array.from_list([[1.,2.],[3.,4.],[5.,6.]], '<f4')
-    rows = DeviceRows(base, Array.from_list([0,2], '<i8'), forbidden)
+    resident = _Resident()
+    rows = DeviceRows(base, Array.from_list([0,2], '<i8'), resident.take if preexisting else forbidden)
     if preexisting:
-        rows._host = Array.from_list([[1.,2.],[5.,6.]], '<f4')
+        first = rows.materialize()
         base._mv[0] = 100.
     model = getattr(ml, estimator)()
     before = audit_native_call(model.fit_transform, rows).assert_native()
-    snapshot = rows._host
-    assert snapshot is not None
+    snapshot = rows.materialize()
+    if preexisting:
+        assert snapshot is first
     base._mv[0] = 200.
     rows.indices._mv[0] = 1
     after = audit_native_call(model.fit_transform, rows).assert_native()
     assert before.tobytes() == after.tobytes()
-    assert rows._host is snapshot and not calls
+    assert rows.materialize() is snapshot and not calls
+    resident.close()
     field = model.max_abs_ if estimator == 'MaxAbsScaler' else model.center_
     np.testing.assert_array_equal(field, [5.,6.] if estimator == 'MaxAbsScaler' else [3.,4.])
 
@@ -110,6 +105,7 @@ def test_materialization_preserves_original_typed_snapshot_before_float32_cast(e
     actual = audit_native_call(getattr(ml, estimator)().fit_transform, rows).assert_native()
     expected = getattr(ml, estimator)().fit_transform(values[[0,2]].astype('f4'))
     assert actual.tobytes() == expected.tobytes()
-    assert rows._host.dtype == dtype and rows._host.shape == (2,2)
-    assert rows._host.tobytes() == values[[0,2]].tobytes()
+    snapshot = rows.materialize()
+    assert snapshot.dtype == dtype and snapshot.shape == (2,2)
+    assert snapshot.tobytes() == values[[0,2]].tobytes()
     assert not calls

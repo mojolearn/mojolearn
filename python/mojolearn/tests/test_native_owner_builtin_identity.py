@@ -51,4 +51,7 @@ def test_device_rows_reinitialization_uses_connected_owner_identities(kind):
     assert audit.assert_native() is None
     assert calls == []
     assert rows.base is new and rows.indices is indices
-    assert rows._host is None and rows.shape == (1, 2)
+    assert rows.shape == (1, 2)
+    # No host snapshot is kept, and no gather owner was given.
+    with pytest.raises(TypeError, match='_Resident.take'):
+        rows.materialize()

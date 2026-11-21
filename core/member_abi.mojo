@@ -94,6 +94,8 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: `MEMBER_ABI` (core/member_families.mojo), on any change of `MemberCall`,
 #: `MemberMatrix`, `DeviceRoute` or the operation codes.
 #: 3 (2026-11-21): `MemberMatrix.steps`.
+#: Words APPENDED to the end of `MemberCall` (round 5: out_dtype, scope, pin, devices, device_count) do not
+#: bump it: every image of one build compiles this file, and a member that does not read them is unchanged.
 comptime MEMBER_CALL_LAYOUT = 3
 
 comptime MEMBER_OP_CAPABILITIES = 0       # result word: the mask of MEMBER_CAN_* (of call.state's kind, or the family's union)
@@ -136,6 +138,14 @@ comptime MEMBER_CAN_CLASSIFIER = 524288      # y is class codes; fit reads call.
 comptime MEMBER_CAN_MULTI_OUTPUT = 1048576   # y may have more than one column
 comptime MEMBER_CAN_STEPS = 2097152          # reads x.steps: each row of X is steps x features (a sequence member)
 comptime MEMBER_CAN_FORECAST = 4194304       # fits a series in y; predict without x writes dst.rows steps ahead
+comptime MEMBER_CAN_TEST_ROWS = 8388608      # its entry refuses non-finite X / y / weights itself: the caller makes no finite scan
+comptime MEMBER_CAN_SCOPE = 16777216         # reads call.scope / call.pin: keeps a pinned host X resident in the caller's scope
+
+#: `call.out_dtype` after MEMBER_OP_OUTPUTS: the member did not say.
+comptime MEMBER_DTYPE_UNSAID = -1
+#: `call.scope` when the caller runs in no resident scope (the value of
+#: core/arena_state.mojo `ARENA_HANDLE_NONE`).
+comptime MEMBER_SCOPE_NONE = -1
 
 #: What a caller needs of a member, as masks for `MemberRef.has`,
 #: `member_require` and `member_admit_serving`: a predictor (classifier,
@@ -272,6 +282,29 @@ struct MemberCall(Movable):
     # Results.
     var value: Float64
     var out_cols: Int
+    # APPENDED 2026-11-21 (round 5). A member that does not know these words
+    # ignores them; their initial values mean "not given" / "not said", so a
+    # caller must treat them as hints it can do without.
+    # MEMBER_OP_OUTPUTS answer: the element type (MEMBER_F32 ...) of the
+    # asked operation's `dst`; MEMBER_DTYPE_UNSAID from a member that does not
+    # say (the caller then keeps its documented default for that operation).
+    var out_dtype: Int
+    # The caller's resident scope (the handle word of
+    # bindings/arena_scope_door.mojo `arena_scope_active`, read once per
+    # public operation at UNPACK), MEMBER_SCOPE_NONE without one; and the pin
+    # word of the object that owns the host words of `x` (what
+    # bindings/arena_cache_run.mojo `arena_cache_find_or_put` takes), 0 when
+    # the caller pins nothing. Only a member with MEMBER_CAN_SCOPE reads
+    # them, and only with `pin != 0` may it keep `x` resident past the call.
+    var scope: Int
+    var pin: Int
+    # The member's device plan, resolved on the PUBLIC thread by the family's
+    # admit (`MemberPlan.devices`): the address and count of the device ids in
+    # rank order; count 0 = the one device of `route`. A member never reads
+    # the thread's plan or the environment inside a call (a worker thread has
+    # no bound plan).
+    var devices: Int
+    var device_count: Int
 
     def __init__(out self, route: DeviceRoute, state: Int = 0):
         self.layout = MEMBER_CALL_LAYOUT
@@ -291,6 +324,11 @@ struct MemberCall(Movable):
         self.classes = 0
         self.value = 0.0
         self.out_cols = 0
+        self.out_dtype = MEMBER_DTYPE_UNSAID
+        self.scope = MEMBER_SCOPE_NONE
+        self.pin = 0
+        self.devices = 0
+        self.device_count = 0
 
     def on_cpu(self) -> Bool:
         """The member's RESOLVED device is the CPU (its route says so; no
@@ -327,6 +365,16 @@ struct MemberPlan(Copyable, Movable):
     var route: DeviceRoute
     var params: List[Float64]
     var classes: Int
+    # APPENDED 2026-11-21 (round 5). The member's device ids in rank order,
+    # written by the family's admit from the public thread's device plan
+    # (core/device_plan.mojo `device_plan_current(<the family's setting>)`),
+    # empty = the one device of `route`. `member_call_of` hands them to every
+    # call; the plan must outlive those calls (it already does: the owner).
+    var devices: List[Int]
+    # The caller's resident scope and X pin for this public operation (see
+    # `MemberCall.scope`); the caller's UNPACK writes them after admit.
+    var scope: Int
+    var pin: Int
 
     def __init__(out self):
         self.family = -1
@@ -335,6 +383,9 @@ struct MemberPlan(Copyable, Movable):
         self.route = DeviceRoute(0)
         self.params = List[Float64]()
         self.classes = 0
+        self.devices = List[Int]()
+        self.scope = MEMBER_SCOPE_NONE
+        self.pin = 0
 
 
 def member_publish[family: Int](mode: Int, vendor: Int, publisher: Int, entry: NativeDescriptorCall) raises:
@@ -379,13 +430,27 @@ def member_resolve_family(family: Int, route: DeviceRoute) raises -> MemberRef:
     return member
 
 
-def member_new(plan: MemberPlan) raises -> MemberCall:
-    """A worker's own call holding a new unfitted state of the planned
-    member. The worker frees it with `member_free` on every path."""
-    var call = MemberCall(plan.route)
+def member_call_of(plan: MemberPlan, state: Int = 0) raises -> MemberCall:
+    """A call of the planned member over `state` (0: none yet) carrying the
+    plan's words: its hyperparameters, class count, device ids, and the
+    caller's scope and pin. Every caller builds its calls here (or with
+    `member_new`), never with a bare `MemberCall(route, state)`, so a word
+    appended to the plan reaches the member without an edit at the caller."""
+    var call = MemberCall(plan.route, state)
     call.params = Int(plan.params.unsafe_ptr())
     call.param_count = len(plan.params)
     call.classes = plan.classes
+    call.devices = Int(plan.devices.unsafe_ptr()) if len(plan.devices) > 0 else 0
+    call.device_count = len(plan.devices)
+    call.scope = plan.scope
+    call.pin = plan.pin
+    return call^
+
+
+def member_new(plan: MemberPlan) raises -> MemberCall:
+    """A worker's own call holding a new unfitted state of the planned
+    member. The worker frees it with `member_free` on every path."""
+    var call = member_call_of(plan)
     _ = member_call(plan.member, MEMBER_OP_NEW, call)
     return call^
 
@@ -412,15 +477,29 @@ def member_outputs(plan: MemberPlan, operation: Int, features: Int, targets: Int
     at UNPACK, and its workers write into them. No state is minted. A family
     that cannot know the width before a fit refuses in words; ask a fitted
     state with `member_outputs_of` then."""
-    var call = MemberCall(plan.route)
-    call.params = Int(plan.params.unsafe_ptr())
-    call.param_count = len(plan.params)
-    call.classes = plan.classes
+    var call = member_call_of(plan)
     call.flags = operation
     call.x.cols = features
     call.y.cols = targets
     _ = member_call(plan.member, MEMBER_OP_OUTPUTS, call)
     return call.out_cols
+
+
+def member_output_dtype(plan: MemberPlan, operation: Int, features: Int, targets: Int, unsaid: Int) raises -> Int:
+    """The element type (`MEMBER_F32`, `_F64`, `_I32`, `_I64`) of
+    `operation`'s `dst` for a member of this plan, asked before any state
+    exists, as `member_outputs` asks the width; `unsaid` when the member does
+    not answer it (a member published before the word existed). Once per
+    member class at UNPACK: a caller places its buffer in that type and never
+    learns it from a refused call."""
+    var call = member_call_of(plan)
+    call.flags = operation
+    call.x.cols = features
+    call.y.cols = targets
+    _ = member_call(plan.member, MEMBER_OP_OUTPUTS, call)
+    if call.out_dtype == MEMBER_DTYPE_UNSAID:
+        return unsaid
+    return call.out_dtype
 
 
 def member_outputs_of(plan: MemberPlan, mut call: MemberCall, operation: Int) raises -> Int:
