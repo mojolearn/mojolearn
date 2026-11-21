@@ -42,8 +42,8 @@ process, the CPU side in a child process started with `MOJOLEARN_VENDOR=cpu`
 (`python -m mojolearn._check_both DIRECTORY`, `child_main` below), for the
 estimators whose fitted model cannot be handed to the CPU side.
 
-AN ESTIMATOR THAT TAKES `device=` (`takes_device`: Ridge and LinearRegression
-so far) needs neither a saved file nor a child process. Its two sides are the
+AN ESTIMATOR THAT TAKES `device=` (`takes_device`: Ridge, LinearRegression and
+LogisticRegression so far) needs neither a saved file nor a child process. Its two sides are the
 same estimator constructed on each device in this process (`on_device`): the
 fitted-model form hands the fitted attributes to the other device's estimator
 in memory, and `fit_both` fits one estimator per device here. The side record

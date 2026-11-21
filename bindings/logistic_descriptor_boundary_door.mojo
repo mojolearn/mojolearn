@@ -6,11 +6,11 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.shared_slot import SharedSlot
 from core.logistic_native_api import (
-    LOGISTIC_NATIVE_ABI, QN_NATIVE_COUNT, QnFitRequest, QnQueryRequest, QnLinkRequest,
+    LOGISTIC_NATIVE_ABI, QN_NATIVE_COUNT, QnFitRequest, QnQueryRequest,
     LOGISTIC_FOLD_ABI, QN_FOLD_COUNT, QnFoldDriver, QnFoldStore, QnFoldResult,
 )
 from glm.logistic_descriptor_boundary_run import (
-    logistic_connection_index, logistic_connection_add, logistic_mode, logistic_multiclass, logistic_driver,
+    logistic_connection_index, logistic_connection_add, logistic_driver,
 )
 from bindings.py_provider_pins import ProviderPins, provider_word
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
@@ -35,25 +35,12 @@ def logistic_connection(entries: PythonObject) raises -> Int:
     return index
 
 
-def logistic_compiled_mode(entries: PythonObject) raises -> Int:
-    return logistic_mode(logistic_connection(entries))
-
-
-def logistic_multiclass_available(entries: PythonObject) raises -> Bool:
-    return logistic_multiclass(logistic_connection(entries))
-
-
-def logistic_run_fit(entries: PythonObject, request: QnFitRequest) raises -> Int:
-    var index = logistic_connection(entries)
-    var provider = LOGISTIC_PROVIDER_PINS.get_or_create_ptr()[].providers[index]
-    var driver = logistic_driver(index)
-    var iterations = 0
-    try:
-        with GILReleased(Python()):
-            iterations = driver.fit(request)
-    finally:
-        _ = provider
-    return iterations
+# TOMBSTONE: `logistic_compiled_mode`, `logistic_multiclass_available`, `logistic_run_fit` and `logistic_run_link`
+# (the by-entries forms LogisticRegression's door called per public operation: each admitted the provider and
+# scanned the connection list again; the estimator's route owner resolves the connection once and calls its
+# driver, providers/python/logistic_route_boundary_door.mojo; `logistic_run_link` had no caller) deleted
+# 2026-11-20 by lane dev2-logistic-device; code recoverable at 5c252f1573. `logistic_run_query` and
+# `logistic_run_log` stay: the explicit host inference owner (bindings/host_logistic_native_door.mojo) calls them.
 
 
 def logistic_run_query(entries: PythonObject, operation: Int, request: QnQueryRequest) raises:
@@ -63,17 +50,6 @@ def logistic_run_query(entries: PythonObject, operation: Int, request: QnQueryRe
     try:
         with GILReleased(Python()):
             driver.query(operation, request)
-    finally:
-        _ = provider
-
-
-def logistic_run_link(entries: PythonObject, operation: Int, request: QnLinkRequest) raises:
-    var index = logistic_connection(entries)
-    var provider = LOGISTIC_PROVIDER_PINS.get_or_create_ptr()[].providers[index]
-    var driver = logistic_driver(index)
-    try:
-        with GILReleased(Python()):
-            driver.link(operation, request)
     finally:
         _ = provider
 
