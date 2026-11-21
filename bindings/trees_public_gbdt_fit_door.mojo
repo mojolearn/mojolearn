@@ -927,15 +927,23 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     context, through its native entry: plain words, no Python object), PACK
     (the fitted attributes)."""
     var call = gbdt_fit_unpack(model, args, context)
-    # RUN (gbdt/fit_calls.mojo): the row-major entry when X is C-order
-    # (refused by name by an image without it).
-    var outcome = xg_fit(call.entry, call.row_major, call.args)
     var dim = GBDT_DIM_FROM_ARCHIVE
+    var outcome = gbdt_fit_run(call, dim)
+    return gbdt_fit_pack(model, call, outcome, dim, context)
+
+
+def gbdt_fit_run(call: GbdtFitCall, mut dim: Int) raises -> GbdtFitOutcome:
+    """RUN of a fit (gbdt/fit_calls.mojo; plain words, no Python object):
+    the fit in the request's image, the row-major entry when X is C-order
+    (refused by name by an image without it), and the model dimension
+    written to `dim` (left as it was for a CTR model of the host image,
+    whose dimension PACK reads from the archive state)."""
+    var outcome = xg_fit(call.entry, call.row_major, call.args)
     if entry_ref_vendor(call.entry) != 0 or not gbdt_text_has_ctr(outcome.text):
         # (vendor word 0 is "cpu", core/gbdt_entry_table.mojo: the host
         # image's CTR model takes its dimension from the archive state.)
         dim = xg_model_dim(call.entry, outcome.text)
-    return gbdt_fit_pack(model, call, outcome, dim, context)
+    return outcome^
 
 
 def gbdt_fit_unpack(model: PythonObject, args: PythonObject, context: PythonObject) raises -> GbdtFitCall:
@@ -1778,9 +1786,11 @@ def _adapter_eval(eval_set: PythonObject) raises -> PythonObject:
 
 def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y: PythonObject,
                 sample_weight: PythonObject, eval_set: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_GBDTAdapter._fit_native`: the learner in the resolved mode, the
-    binding's compiled mode checked, the native learner fit, the fitted
-    attributes copied.
+    """`_GBDTAdapter._fit_native`: UNPACK (the learner in the resolved
+    mode, the image's compiled tier checked, then the learner's own
+    `gbdt_fit_unpack`), RUN (`gbdt_fit_run`: the learner's typed request,
+    no Python object), PACK (the learner's fitted attributes, then the
+    adapter's copies of them).
 
     `validated` is the learner the fit's parameter check already built
     (`_validate_params`: `_new_learner(self.numeric_mode)`). The 0.8.55
@@ -1807,8 +1817,14 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
     var code = xg_numeric_mode(gbdt_entry_of(table))
     if code != (0 if mode == "fast" else 1):
         raise Error("RuntimeError: GBDT adapter native numeric mode disagrees with requested mode")
-    _ = gbdt_fit(learner, Python.tuple(X, y, sample_weight, eval_set, PythonObject(None), PythonObject(None),
-                                       PythonObject(None), PythonObject(None)), context)
+    var call = gbdt_fit_unpack(learner, Python.tuple(X, y, sample_weight, eval_set, PythonObject(None),
+                                                     PythonObject(None), PythonObject(None), PythonObject(None)),
+                               context)
+    # RUN
+    var dim = GBDT_DIM_FROM_ARCHIVE
+    var outcome = gbdt_fit_run(call, dim)
+    # PACK: the learner's fitted attributes, then the adapter's.
+    _ = gbdt_fit_pack(learner, call, outcome, dim, context)
     py_setitem(fields, nk[].k__learner_, learner)
     py_setitem(fields, nk[].k_numeric_mode_, PythonObject(mode))
     py_setitem(fields, nk[].k_n_features_in_, py_item(learner_fields, nk[].k_n_features_in_))
@@ -1820,7 +1836,11 @@ def _fit_native(model: PythonObject, validated: PythonObject, X: PythonObject, y
 
 
 def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`GradientBoostingClassifier.fit(X, y, sample_weight, eval_set)`."""
+    """`GradientBoostingClassifier.fit(X, y, sample_weight, eval_set)`.
+    Everything before `_fit_native` is UNPACK (the parameter check's
+    learner, the labels encoded to float32 class codes, the eval set's
+    labels mapped onto the training classes); the three stores after it are
+    PACK. RUN is the learner's (`gbdt_fit_run`)."""
     var fields = py_fields(model)
     var nk = trees_keys()
     var learner = _new_learner(model, _field(fields, model, nk[].k_numeric_mode, "numeric_mode"), context)
@@ -1890,7 +1910,9 @@ def _regression_target(source: PythonObject, name: String, context: PythonObject
 
 
 def adapter_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`GradientBoostingRegressor.fit(X, y, sample_weight, eval_set)`."""
+    """`GradientBoostingRegressor.fit(X, y, sample_weight, eval_set)`:
+    UNPACK (the parameter check's learner, the finite float32 targets),
+    then `_fit_native` (the learner's UNPACK, RUN and PACK)."""
     var fields = py_fields(model)
     var nk = trees_keys()
     var learner = _new_learner(model, _field(fields, model, nk[].k_numeric_mode, "numeric_mode"), context)
