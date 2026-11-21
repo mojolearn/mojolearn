@@ -259,6 +259,10 @@ def rows(jobs):
             continue
         line = []
         ancestry(name, line)
+        walk = next((own[c] for c in line if c in own), None)
+        if walk is not None:
+            out.append((shown, "own walk", walk))
+            continue
         if not any(classes[c][2] for c in line):
             continue                                    # not an estimator (no `fit` anywhere in its ancestry)
         if BASE not in line and not any(classes[c][1] for c in line):
@@ -267,10 +271,6 @@ def rows(jobs):
         reason = next((refused[c] for c in line if c in refused), None)
         if reason is not None:
             out.append((shown, "not yet", reason))
-            continue
-        walk = next((own[c] for c in line if c in own), None)
-        if walk is not None:
-            out.append((shown, "own walk", walk))
             continue
         name = shown
         source = "digest schema"

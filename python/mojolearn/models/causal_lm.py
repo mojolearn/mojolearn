@@ -185,6 +185,25 @@ class CausalLM:
         the model's own arrays."""
         return _NATIVE.causal_lm_state_dict(self)
 
+    @property
+    def digest_(self):
+        """The hash of this model's weights, as one lower-case hex string.
+
+        In `identical` mode, Mojolearn returns the same bits on Apple, NVIDIA
+        and AMD GPUs. The same checkpoint loaded on any of those machines, or
+        on the CPU, has the same `digest_` within one Mojolearn version. The
+        digest covers the model kind and its numeric profile, the embedding,
+        the final norm, the head and every block's options and weights. It is
+        computed each time it is read, from the model as it is at that moment.
+
+        Raises
+        ------
+        AttributeError
+            If the model runs in `fast` mode (Apple only), which promises no
+            identical bits.
+        """
+        return _NATIVE.causal_lm_digest(self)
+
     def load_state_dict(self, state_dict):
         """Replace the weights with ``state_dict``, a dict from checkpoint name to array.
 

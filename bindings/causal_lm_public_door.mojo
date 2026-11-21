@@ -64,6 +64,8 @@ from core.generation_policy_impl import GenerationSamplingScratch
 from core.generation_kv_policy import GenerationReadControl, GENERATION_NATIVE_ENGINE_FORCE, GENERATION_NATIVE_ENGINE_OFF
 from core.hostptr import f32_ptr, i32_ptr
 from core.sha256 import Sha256
+from core.native_archive_write import NativeArchiveMember, archive_owned, archive_text_bytes
+from core.fitted_digest import fitted_digest_hex
 from providers.python.borrowed_buffer_pyapi_unpack import admit_native_buffer_exporter, AdmittedBorrowedBuffer
 from bindings.sha256_door import sha256_update, sha256_update_text
 from std.math import isfinite
@@ -3676,45 +3678,118 @@ def _fingerprint(mut mods: NativeModules, model: PythonObject) raises -> PythonO
 
 
 def _fingerprint_hash(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
-    _causal_array_guard()
-    var h = _hash()
-    _hash_scalar(h, model.kind)
-    _hash_scalar(h, model.numeric_profile)
-    _hash_scalar(h, model.norm_eps)
-    _hash_scalar(h, model.max_positions)
-    _hash_scalar(h, model._embed.shape)
-    _hash_array(h, model._embed)
+    # The checkpoint fingerprint and `CausalLM.digest_` are ONE walk
+    # (`_causal_digest_members`) and one hash (core/fitted_digest.mojo:
+    # chunks across the host cores, the interpreter lock released). Before
+    # 2026-11-25 this was a second walk: one serial SHA-256 chain over every
+    # weight with the lock held. The fingerprint's bits changed with it.
+    return PythonObject(_causal_digest_hex(mods, model))
+
+
+def _digest_scalar_member(mut members: List[NativeArchiveMember], name: String, value: PythonObject) raises:
+    """A metadata scalar of the model (a kind word, a size, a shape tuple) as
+    the UTF-8 text of `str(value)`: the text the fingerprint always hashed."""
+    var text = String(py_call(native_loaded_module("builtins").str, value))
+    var raw = archive_text_bytes(text)
+    var count = len(raw)
+    members.append(archive_owned(name, String("U"), List[Int](length=1, fill=count), 1, raw^))
+
+
+def _digest_array_member(mut members: List[NativeArchiveMember], mut pins: List[AdmittedBorrowedBuffer],
+                         mut sources: List[PythonObject], name: String, value: PythonObject) raises:
+    """A weight array as (name, element format, shape, bytes in C order),
+    read in place from its pinned buffer: no bytes object and no copy of a
+    contiguous tensor (a strided one is packed once, in the hash's parallel
+    prepare). The pin and its exporter are kept by the caller to the end of
+    the hash."""
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var source = generation_array_snapshot(value)._mv if py_type(value) is g[].array_cls else generation_buffer_view(value)
+    admit_native_buffer_exporter(source)
+    var pin = AdmittedBorrowedBuffer(source)
+    var layout = pin.layout.value().copy()
+    var element = String(pin.format)
+    members.append(NativeArchiveMember(name, element, layout.shape.copy(), layout.strides.copy(), layout.address,
+                                       layout.count * layout.itemsize, layout.itemsize, List[UInt8]()))
+    pins.append(pin^)
+    sources.append(source)
+
+
+def _causal_digest_members(mut mods: NativeModules, model: PythonObject, mut members: List[NativeArchiveMember],
+                           mut pins: List[AdmittedBorrowedBuffer], mut sources: List[PythonObject]) raises:
+    """The fitted state of a captured causal model, described once: its kind
+    and profile words, the embedding, the final norm, the head, then every
+    block's options and weights (and the int15 planes of a packed model), in
+    model order. Nothing of the device, the vendor or the session is read."""
+    _digest_scalar_member(members, String("kind"), model.kind)
+    _digest_scalar_member(members, String("numeric_profile"), model.numeric_profile)
+    _digest_scalar_member(members, String("norm_eps"), model.norm_eps)
+    _digest_scalar_member(members, String("max_positions"), model.max_positions)
+    _digest_array_member(members, pins, sources, String("embed"), model._embed)
     if model._norm is not None:
-        _hash_array(h, model._norm)
-    _hash_array(h, model._head)
+        _digest_array_member(members, pins, sources, String("norm"), model._norm)
+    _digest_array_member(members, pins, sources, String("head"), model._head)
+    var kind = String(model.kind)
     for i in range(len(model._blocks)):  # driver-loop: over model layers
         var blk = _block(mods, model, i)
         _causal_array_guard()
-        if String(model.kind) == "transformer":
-            _hash_scalar(h, blk["_opts_tail"])
-            _hash_scalar(h, blk["n_heads"])
-            _hash_scalar(h, blk["n_kv_heads"])
-            _hash_scalar(h, blk["window"])
+        var at = String("block") + String(i) + "."
+        if kind == "transformer":
+            _digest_scalar_member(members, at + "opts_tail", blk["_opts_tail"])
+            _digest_scalar_member(members, at + "n_heads", blk["n_heads"])
+            _digest_scalar_member(members, at + "n_kv_heads", blk["n_kv_heads"])
+            _digest_scalar_member(members, at + "window", blk["window"])
             for j in range(len(blk["_wopt"])):  # driver-loop: over optional block weight slots
                 if blk["_wopt"][j] is not None:
-                    _hash_array(h, blk["_wopt"][j])
-        elif String(model.kind) == "mamba2":
-            _hash_scalar(h, blk["dt_limit"])
+                    _digest_array_member(members, pins, sources, at + "wopt" + String(j), blk["_wopt"][j])
+        elif kind == "mamba2":
+            _digest_scalar_member(members, at + "dt_limit", blk["dt_limit"])
         else:
-            _hash_scalar(h, model._native_entries["mamba1_profile"])
+            _digest_scalar_member(members, at + "mamba1_profile", model._native_entries["mamba1_profile"])
         for j in range(len(blk["_w"])):  # driver-loop: over block weight slots
             if blk["_w"][j] is not None:
-                _hash_scalar(h, blk["_w"][j].shape)
-                _hash_array(h, blk["_w"][j])
+                _digest_array_member(members, pins, sources, at + "w" + String(j), blk["_w"][j])
         if model._head_int15 is not None:
             for j in range(len(blk["_int15"])):  # driver-loop: over packed block weight slots
                 if blk["_int15"][j] is not None:
                     for k in range(3):  # small-loop(int15 plane triple)
-                        _hash_array(h, blk["_int15"][j][k])
+                        _digest_array_member(members, pins, sources, at + "int15_" + String(j) + "_" + String(k),
+                                             blk["_int15"][j][k])
     if model._head_int15 is not None:
         for k in range(3):  # small-loop(int15 head plane triple)
-            _hash_array(h, model._head_int15[k])
-    return PythonObject(h.hexdigest())
+            _digest_array_member(members, pins, sources, String("head_int15_") + String(k), model._head_int15[k])
+
+
+def _causal_digest_hex(mut mods: NativeModules, model: PythonObject) raises -> String:
+    """The hash of a captured causal model as it is now (64 lowercase hex
+    digits): UNPACK describes every field once, RUN hashes the typed members
+    across the host cores with the interpreter lock released. Nothing is
+    kept. The class word is the public class's on every device and route."""
+    _causal_array_guard()
+    var members = List[NativeArchiveMember]()
+    var pins = List[AdmittedBorrowedBuffer]()
+    var sources = List[PythonObject]()
+    var text = String("")
+    try:
+        _causal_digest_members(mods, model, members, pins, sources)
+        with GILReleased(Python()):
+            text = fitted_digest_hex(String("CausalLM"), members)
+    finally:
+        for i in range(len(pins)):  # driver-loop: over the model's pinned weight buffers (release)
+            pins[i].release()
+    _ = sources
+    _ = members
+    return text
+
+
+def causal_lm_digest_binding(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
+    """`CausalLM.digest_`: hashed at every read, never the owner's kept
+    checkpoint fingerprint (an in-place write into a weight changes no
+    generation word). A `fast` model has no digest."""
+    var mode = model._native_numeric_mode
+    if mode is not None and String(mode) == "fast":
+        raise Error("AttributeError: digest_ exists in identical mode only: fast mode promises no identical "
+                    + "bits, so a fast model has no digest")
+    return PythonObject(_causal_digest_hex(mods, model))
 
 
 def _state_arrays(kind: String, profile: Int = 1) -> List[String]:
@@ -4098,7 +4173,7 @@ def _causal_public_execute[operation: Int](py_self: PyObjectPtr, args_ptr: PyObj
         var checkpoint = PythonObject(None)
         var last_logits = PythonObject(None)
         var stream_native = PythonObject(None)
-        comptime if operation == 1 or operation == 2 or operation == 3 or operation == 4 or operation == 7 or operation == 8 or operation == 9 or operation == 10 or operation == 12 or operation == 13 or operation == 18:
+        comptime if operation == 1 or operation == 2 or operation == 3 or operation == 4 or operation == 7 or operation == 8 or operation == 9 or operation == 10 or operation == 12 or operation == 13 or operation == 18 or operation == 19:
             model = causal_model_capture(mods, args[0], _causal_context())
         comptime if operation == 2:
             state = causal_state_capture(mods, args[1], model, _causal_context())
@@ -4165,6 +4240,9 @@ def _causal_public_execute[operation: Int](py_self: PyObjectPtr, args_ptr: PyObj
         elif operation == 18:
             # state_dict(): copies, no exposure mark (lane fx-leftovers item 1).
             result = causal_lm_parameters_binding(mods, model, True)
+        elif operation == 19:
+            # digest_: the fitted state hashed now (one walk with the checkpoint fingerprint).
+            result = causal_lm_digest_binding(mods, model)
         elif operation == 14:
             result = causal_lm_blocks_binding(mods, args[0])
         elif operation == 15:
@@ -4193,6 +4271,10 @@ def _causal_public_execute[operation: Int](py_self: PyObjectPtr, args_ptr: PyObj
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        comptime if operation == 19:
+            # A refused `digest_` is a missing attribute (`hasattr` is False).
+            if message.startswith("AttributeError:"):
+                return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if _causal_owner_unusable(mods, args_ptr):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

@@ -217,4 +217,6 @@ arrays. Nothing is kept between reads: the digest is hashed from the model as it
 | `VotingRegressor` | public fitted attributes | every public fitted attribute |
 | `model_selection.GridSearchCV` | public fitted attributes | every public fitted attribute |
 | `model_selection.RandomizedSearchCV` | public fitted attributes | every public fitted attribute |
+| `models.CausalLM` | own walk | `kind`, `numeric_profile`, `norm_eps`, `max_positions`, `embed`, `norm` (when present), `head`, then per block its options and every weight (and the int15 planes of a packed model), in model order |
+| `models.ParallelCausalLM` | own walk | `kind`, `numeric_profile`, `norm_eps`, `max_positions`, `embed`, `norm` (when present), `head`, then per block its options and every weight (and the int15 planes of a packed model), in model order |
 | `ops.Program` | no `digest_` | the class is not on the shared estimator base |

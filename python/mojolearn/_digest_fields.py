@@ -143,7 +143,11 @@ REFUSED_BY_NAME = {}
 #: class name -> what is hashed, for a class whose digest is its own compiled
 #: walk and not the shared one (documentation for the generated page; the
 #: walk itself is named in the row).
-OWN_WALK_BY_NAME = {}
+OWN_WALK_BY_NAME = {
+    # bindings/causal_lm_public_door.mojo `_causal_digest_members`: the walk the checkpoint fingerprint shares
+    "CausalLM": "`kind`, `numeric_profile`, `norm_eps`, `max_positions`, `embed`, `norm` (when present), `head`, "
+                "then per block its options and every weight (and the int15 planes of a packed model), in model order",
+}
 
 #: The tables the compiled walk reads, keyed by class (filled by `declare`).
 EXTRA = {}
