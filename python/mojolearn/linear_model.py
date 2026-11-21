@@ -1218,7 +1218,8 @@ _connect_qn_cpu(_QN_CONTEXT)
 from ._native_logistic_bridge import connect as _connect_logistic  # noqa: E402
 from ._native_logistic_bridge import connect_cpu_device as _connect_logistic_cpu_device  # noqa: E402
 _LR_CALL, _LR_CONTEXT = _connect_logistic()
-# The CPU entries of `device="cpu"`, connected once at import beside the device
-# entries: on a GPU installation both exist in the process and an estimator's
-# route picks one, once.
+# The CPU entries of `device="cpu"`, registered at import beside the device
+# entries and loaded at the first device="cpu" admission (fx-host-import): on a
+# GPU installation both exist in the process then and an estimator's route
+# picks one, once.
 _connect_logistic_cpu_device(_LR_CONTEXT)
