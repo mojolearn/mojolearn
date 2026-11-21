@@ -101,7 +101,8 @@ from gbdt.mojolearn_gbdt_host_run import (
     gbdt_fit_two_level_feature_freq_run,
     gbdt_predict_multi_run,
 )
-from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, GbdtImage
+from gbdt.gbdt_entry import gbdt_entry_publish, gbdt_entry_dispatch, gbdt_entry_releases, GbdtImage
+from core.native_descriptor_call import native_descriptor_report
 from core.gbdt_member import GbdtMemberImage, gbdt_member_publish_image
 
 
@@ -202,7 +203,10 @@ def gbdt_fit_binding(
     around `gbdt_fit_native`; the GBDT doors call the fit natively through
     this image's table entry."""
     var args = gbdt_fit_args_py(x_addr, y_addr, weights_addr, cat_flags_addr, eval_x_addr, eval_y_addr, params, strs)
-    return gbdt_fit_outcome_py(gbdt_fit_native(args))
+    var outcome: GbdtFitOutcome
+    with GILReleased(Python()):
+        outcome = gbdt_fit_native(args)
+    return gbdt_fit_outcome_py(outcome^)
 
 
 # ===========================================================================
@@ -214,12 +218,10 @@ def gbdt_fit_binding(
 
 def gbdt_fit_native(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     """`gbdt_fit_native_run` (gbdt/mojolearn_gbdt_host_run.mojo: the slot
-    checks, refusals and host fit) with the GIL released around the whole
-    typed call."""
-    var outcome: GbdtFitOutcome
-    with GILReleased(Python()):
-        outcome = gbdt_fit_native_run(params)
-    return outcome^
+    checks, refusals and host fit). GIL-free: the image's entry
+    (`gbdt_host_entry_v1`) or the Python entry above releases it around the
+    whole typed call; a member's worker holds none."""
+    return gbdt_fit_native_run(params)
 
 
 def gbdt_predict_native(text: String, x_address: Int, n_rows: Int, out_address: Int) raises -> Int:
@@ -240,8 +242,7 @@ def gbdt_predict_native(text: String, x_address: Int, n_rows: Int, out_address: 
         )
     var n_features = len(m.fold_counts)
     var n_trees = len(m.tree_offsets) - 1
-    with GILReleased(Python()):
-        gbdt_host_predict_into(m^, x_address, n_rows, n_features, n_trees, op)
+    gbdt_host_predict_into(m^, x_address, n_rows, n_features, n_trees, op)
     return n_rows
 
 
@@ -253,10 +254,7 @@ def gbdt_predict_multi_native(text: String, x_address: Int, n_rows: Int, out_add
     double through `identical_exp64`, row-major. Returns the width written."""
     var op = f32_ptr(out_address)
     _ = f32_ptr(x_address)
-    var width: Int
-    with GILReleased(Python()):
-        width = gbdt_predict_multi_run(text, x_address, n_rows, mode, op)
-    return width
+    return gbdt_predict_multi_run(text, x_address, n_rows, mode, op)
 
 
 # TOMBSTONE: gbdt_predict, gbdt_predict_multi, gbdt_sigmoid_pair, gbdt_binary_probabilities, gbdt_binary_classes (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_PREDICT, XG_PREDICT_MULTI, XG_SIGMOID_PAIR, XG_BINARY of this image's native entry; host walks unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 5544c66aae.
@@ -283,13 +281,10 @@ def gbdt_fit_two_level_feature_freq_native(
     _ = f32_ptr(y_address)
     _ = f32_ptr(weights_address)
     var sp = u32_ptr(sources_address)
-    var text = String("")
-    with GILReleased(Python()):
-        text = gbdt_fit_two_level_feature_freq_run(
-            x_address, y_address, sp, n_rows, n_features, n_weights,
-            n_sources, learning_rate, l2_leaf_reg,
-        )
-    return text^
+    return gbdt_fit_two_level_feature_freq_run(
+        x_address, y_address, sp, n_rows, n_features, n_weights,
+        n_sources, learning_rate, l2_leaf_reg,
+    )
 
 
 def gbdt_fit_ordered_rmse_native(
@@ -301,14 +296,11 @@ def gbdt_fit_ordered_rmse_native(
     model text back, through
     `gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_rmse_host_fit` (the
     gbdt-ordered-rmse lane). `sample_weight` refuses by name."""
-    var text = String("")
-    with GILReleased(Python()):
-        text = gbdt_fit_ordered_rmse_run(
-            x_address, y_address, weights_address, permutation_address,
-            n_rows, n_features, n_weights, n_permutation, n_estimators,
-            max_depth, border_count, learning_rate, l2_leaf_reg,
-        )
-    return text^
+    return gbdt_fit_ordered_rmse_run(
+        x_address, y_address, weights_address, permutation_address,
+        n_rows, n_features, n_weights, n_permutation, n_estimators,
+        max_depth, border_count, learning_rate, l2_leaf_reg,
+    )
 
 
 # TOMBSTONE: gbdt_fit_ordered_rmse, gbdt_fit_two_level_feature_freq (Python entries of this image: no caller left, the GBDT door calls the typed operations XG_ORDERED_FIT, XG_FEATURE_FREQ_FIT of this image's native entry; host fits unchanged) deleted 2026-11-21 by lane/dw-trees-boost; code recoverable at 9c65b76827.
@@ -351,8 +343,7 @@ def _gbdt_binary_native[probabilities: Bool, dtype: DType](raw_address: Int, add
     var op = MutPointer[Scalar[dtype], MutUntrackedOrigin](unsafe_from_address=address)
     gbdt_host_binary_margins_check(rp, n)
     var count = 2 * n if probabilities else n
-    with GILReleased(Python()):
-        gbdt_host_binary_prediction_into[probabilities, dtype](rp, op, n)
+    gbdt_host_binary_prediction_into[probabilities, dtype](rp, op, n)
     return count
 
 
@@ -429,8 +420,25 @@ struct _GbdtHostImage(GbdtImage):
 
 def gbdt_host_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    """This image's gbdt entry (`GBDT_ENTRY_ABI`, gbdt/fit_request.mojo)."""
-    return gbdt_entry_dispatch[_GbdtHostImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    """This image's gbdt entry (`GBDT_ENTRY_ABI`, gbdt/fit_request.mojo).
+
+    ONE BODY, TWO ENTRIES (lane fx-gil, 2026-11-21), as
+    `bindings/_mojolearn_gbdt.mojo::gbdt_gpu_entry_v1`: the operations of
+    `_GbdtHostImage` never touch the GIL; a door's long operation
+    (`gbdt_entry_releases`) runs with it released around the whole
+    dispatch (the model parse and the checks included, which ran under it
+    before); a member's worker sends `ENTRY_OP_GIL_FREE` and runs the same
+    dispatch with no release and no CPython call."""
+    if not gbdt_entry_releases(operation):
+        return gbdt_entry_dispatch[_GbdtHostImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    var status = 1
+    try:
+        with GILReleased(Python()):
+            status = gbdt_entry_dispatch[_GbdtHostImage](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+    return status
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_gbdt_host.mojo

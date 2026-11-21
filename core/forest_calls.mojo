@@ -7,7 +7,7 @@ published table (an acquire load and a schema compare) and calls the
 pointer; a missing or mismatched publication refuses with the table's
 error, and a refusal of the image comes back in the words it raised.
 """
-from core.entry_table import EntryRef, entry_ref_call, entry_ref_word
+from core.entry_table import EntryRef, entry_ref_call, entry_ref_op, entry_ref_word
 from core.forest_entry_table import ForestEntryKey, forest_table_entry
 from core.forest_fit_request import (
     ForestFitArgs, FOREST_ENTRY_ABI, XF_OP_COUNT, XF_CAPS, XF_NUMERIC_MODE, XF_DT_DEFAULT_BINS, XF_FIT, XF_FIT_DART,
@@ -41,7 +41,9 @@ def _none_f(n: Int = 0) -> List[Float64]:
 
 
 def _call(key: EntryRef, op: Int, addrs: List[Int], ints: List[Int]) raises -> Int:
-    return entry_ref_call(key, op, addrs, ints, _none_f(len(ints)))
+    # `entry_ref_op`: a ref marked GIL-free (a member's worker) says so with
+    # the operation (core/entry_table.mojo, lane fx-gil).
+    return entry_ref_call(key, entry_ref_op(key, op), addrs, ints, _none_f(len(ints)))
 
 
 def xf_caps(key: EntryRef) raises -> Int:
@@ -62,7 +64,7 @@ def xf_dt_default_bins(key: EntryRef) raises -> Int:
 
 def _fit(key: EntryRef, op: Int, shape: Int, args: ForestFitArgs) raises -> Int:
     var words = forest_fit_words(args, shape)
-    var handle = entry_ref_call(key, op, words, args.ints, args.floats)
+    var handle = entry_ref_call(key, entry_ref_op(key, op), words, args.ints, args.floats)
     _ = args  # the views and flags stay alive through the call above
     return handle
 

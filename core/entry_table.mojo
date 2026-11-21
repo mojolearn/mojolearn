@@ -118,6 +118,49 @@ struct EntryRef(ImplicitlyCopyable, Movable):
     var word: Int
 
 
+# THE GIL-FREE FORM OF AN ENTRY (lane fx-gil, 2026-11-21). Some images' entries
+# release the GIL around their long operations, for the door that calls them
+# on the Python thread. A member operation (core/member_abi.mojo) runs on a
+# worker thread that does NOT hold the GIL, where a release is a fault. Such
+# a caller marks the resolved ref once (`entry_ref_gil_free`) and the family's
+# call wrappers send every operation through `entry_ref_op`, which adds
+# `ENTRY_OP_GIL_FREE` to the operation word of a marked ref. An image entry
+# that releases tests the bit first and, when it is set, runs the SAME
+# dispatch with no release and no CPython call at all; the family's generic
+# dispatch removes the bit (`entry_op_plain`) before reading the operation.
+# An entry that never releases needs none of this: its callers do not mark.
+# The mark is bit 62 of the layout word (inside the 16-bit layout field,
+# never written by `entry_ref_word`); the operation bit is bit 30.
+comptime ENTRY_OP_GIL_FREE = 1073741824
+comptime ENTRY_REF_GIL_FREE_SHIFT = 62
+
+
+@always_inline
+def entry_ref_gil_free(entry: EntryRef) -> EntryRef:
+    """The same entry, marked: the caller does not hold the GIL (or holds it
+    and wants no release), so the entry must not touch it."""
+    return EntryRef(entry.call, entry.word | (1 << ENTRY_REF_GIL_FREE_SHIFT))
+
+
+@always_inline
+def entry_ref_op(entry: EntryRef, operation: Int) -> Int:
+    """`operation` as the entry must receive it: with `ENTRY_OP_GIL_FREE`
+    added when the ref is marked (two shifts and an add, no branch)."""
+    return operation + (((entry.word >> ENTRY_REF_GIL_FREE_SHIFT) & 1) << 30)
+
+
+@always_inline
+def entry_op_gil_free(operation: Int) -> Bool:
+    """True when the operation word carries `ENTRY_OP_GIL_FREE`."""
+    return operation >= ENTRY_OP_GIL_FREE
+
+
+@always_inline
+def entry_op_plain(operation: Int) -> Int:
+    """The operation number without `ENTRY_OP_GIL_FREE`."""
+    return operation - ENTRY_OP_GIL_FREE if operation >= ENTRY_OP_GIL_FREE else operation
+
+
 def _entry_unresolved(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
     native_descriptor_report(Error("native entry table: entry is unavailable: not resolved for this owner"),
