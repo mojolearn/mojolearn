@@ -3,6 +3,8 @@
 """A static estimate of which estimator classes take `device=` and what
 `device="cpu"` answers beside a GPU set, read from the package SOURCE (no
 import, no binary): `python3 tools/device_class_table.py [--tsv PATH]`.
+`--write-routes` regenerates `CPU_TRAINING_ROUTES` in python/mojolearn/_device_table.py
+from the host surface manifest (the package never imports the manifest).
 
 The package's own answer is `mojolearn._mode.device_report()` on an installed
 build (it knows which constructors the compiled installers took). This tool
@@ -70,7 +72,30 @@ def _ancestry(classes, name, seen=None):
     return seen
 
 
+DEVICE_TABLE = os.path.join(ROOT, "_device_table.py")
+BEGIN = "# BEGIN generated: tools/device_class_table.py --write-routes\n"
+END = "# END generated\n"
+
+
+def routes_block():
+    """The generated `CPU_TRAINING_ROUTES` of python/mojolearn/_device_table.py:
+    the keys of `host_surface.cpu_training_routes()`, so the package reads the
+    manifest's answer without importing the manifest."""
+    names = sorted(_host_surface().cpu_training_routes())
+    return "CPU_TRAINING_ROUTES = frozenset((\n" + "".join(f"    {n!r},\n" for n in names) + "))\n"
+
+
+def write_routes():
+    source = open(DEVICE_TABLE, encoding="utf-8").read()
+    head, rest = source.split(BEGIN, 1)
+    _, tail = rest.split(END, 1)
+    open(DEVICE_TABLE, "w", encoding="utf-8").write(head + BEGIN + routes_block() + END + tail)
+
+
 def main(argv):
+    if "--write-routes" in argv:
+        write_routes()
+        return 0
     classes, text = _scan()
     routes = _host_surface().cpu_training_routes()
     compiled = set(re.findall(r"^\s+'(\w+)':", text.get("_native_full_reset_params.py", ""), re.M))
