@@ -13,7 +13,9 @@ SHELL = ROOT / "python/mojolearn/_expansion_decomp.py"
 def _owner():
     # The door reads held keys and operation codes (bindings/pls_keys_unpack.mojo);
     # plain() gives the by-name form these source checks were written against.
-    return plain("bindings/pls_native_door.mojo", (ROOT / "bindings/pls_native_door.mojo").read_text())
+    # The owner is three files (UNPACK, PACK and the door that sequences them); read together.
+    return "\n".join(plain(path, (ROOT / path).read_text()) for path in (
+        "bindings/pls_boundary_unpack.mojo", "bindings/pls_boundary_pack.mojo", "bindings/pls_native_door.mojo"))
 
 
 def _score():
@@ -44,7 +46,7 @@ def test_score_passes_original_arguments_and_returns_finished_native_result():
 
 def test_native_score_uses_connected_binding_and_direct_native_metric_owner():
     owner = _owner()
-    assert 'estimator_binding_mode(mode, "_mojolearn_metrics", context, False)' in owner
+    assert 'estimator_binding_routed(model, mode, "_mojolearn_metrics", context, False)' in owner
     assert 'metrics_cls_operation(PythonObject(None), "family_mcls_r2"' in owner
     assert 'py_call(owner[0]' not in owner
     assert '_native_family_bridge.connect_bindings("_mojolearn_metrics")' in SHELL.read_text()
@@ -52,7 +54,7 @@ def test_native_score_uses_connected_binding_and_direct_native_metric_owner():
 
 def test_native_target_uses_captured_metadata_without_array_or_reshape_protocol():
     owner = _owner()
-    target = owner[owner.index("def _target("):owner.index("def _pls_store(")]
+    target = owner[owner.index("def _target("):owner.index("def pls_store(")]
     assert '_pls_input(source, "Y", context, pin, -1)' in target
     assert 'decomp_door_snapshot(door, kit, input, pin, 1, input.shape[0])' in target
     assert 'return (kit.transpose(row), True)' in target
@@ -97,7 +99,7 @@ def test_public_lifecycle_replaces_decorators_only_for_pls_family():
                  'py_call(state.pop, "_mojolearn_fitting", PythonObject(None))',
                  'parallel_public_result(result, String(py=operation_name), PythonObject("regressor"), context)'):
         assert step in owner
-    assert 'var result = pls_public_operation(call[0]' in owner
+    assert 'var result = pls_public_operation(call[0], operation, call[1], call[2], context)' in owner
     assert 'classical_python_error(error^, args_ptr)' in owner
 
 
@@ -135,7 +137,7 @@ def test_execution_uses_one_private_settings_snapshot_and_separate_state():
     assert owner.count('var fields = py_call(py_type(Python.dict()).__dict__["copy"], state)') == 1
     assert 'py_fields(' not in owner
     # Both calls also carry the deferred-finite flag (lane a8c) after the operands.
-    assert 'pls_operation(model, operation, args, context, fields, state, x.copy(), y, x_deferred,' in owner
+    assert 'pls_operation(model, operation, args, context, admitted.fields, admitted.state, admitted.x.copy(),' in owner
     assert 'pls_operation(model, "predict", Python.tuple(args[0]), context, fields, state, captured_x,' in owner
     assert 'estimator_binding(model,' not in owner
     assert 'var modes = Python.tuple("numeric_mode") if fitting' in owner
@@ -147,7 +149,7 @@ def test_completed_iteration_counts_are_published_from_native_words():
     assert 'py_call(b.list, its)' not in owner
     assert 'py_attr(all_iterations' not in owner
     assert 'PythonObject(Int(fit.iterations[index]))' in owner
-    assert '_pls_store(fields, state, "n_iter_", all_iterations)' in owner
+    assert 'pls_store(fields, state, "n_iter_", all_iterations)' in owner
 
 
 def test_fitted_check_precedes_defaults_and_fit_transform_uses_private_outputs():
@@ -155,8 +157,8 @@ def test_fitted_check_precedes_defaults_and_fit_transform_uses_private_outputs()
     assert owner.index('_pls_require_fitted(fields, operation_name, context)') < owner.index('var default_mode = Optional[PythonObject]()')
     # fit_transform's projections come from the same typed RUN (pls_fit_run, transform=True) over
     # the X and Y the fit held, never re-read from the published state.
-    assert 'fit = pls_fit_run(kit, x, ym, words, transform)' in owner
+    assert 'fit = pls_fit_run(kit, unpacked.x, unpacked.ym, unpacked.words, transform)' in owner
     assert 'return Python.tuple(decomp_kit_publish(door, kit, fit.tx), decomp_kit_publish(door, kit, fit.ty))' in owner
     assert '_transform(kit, held[0], held[1], state, context)' not in owner
-    assert '_pls_store(fields, state, "x_rotations_"' in owner
-    assert '_pls_store(fields, state, "_x_scores"' in owner
+    assert 'pls_store(fields, state, "x_rotations_"' in owner
+    assert 'pls_store(fields, state, "_x_scores"' in owner
