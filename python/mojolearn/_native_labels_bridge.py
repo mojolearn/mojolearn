@@ -150,16 +150,24 @@ def cpu_scope(context, **entries):
     (bindings/labels_descriptor_boundary_door.mojo `labels_scope`). A copy of
     `context` with the host label entries and the family's own CPU `entries`
     (its CPU metrics tables, `vendor="cpu"`, ...). Call it LAST in the
-    family's connection: the copy does not follow later updates of
-    `context`. A CPU-only installation needs none and gets none."""
+    family's connection where it can; a context that grows later (the
+    shared family context, which later imports extend) is copied again by
+    `labels_scope` at the first label step after it grew. A CPU-only
+    installation needs none and gets none."""
     # glue: import-time connection, once per family context
     from . import _backend
     if _backend._CPU_ONLY is not None:
         return None
+    cpu = label_context_cpu()
+    cpu.update(entries)
+    context["labels_cpu_entries"] = cpu
+    context["labels_cpu_scope"] = None
     scope = dict(context)
-    scope.pop("labels_cpu_scope", None)
-    scope.update(label_context_cpu())
-    scope.update(entries)
+    scope.pop("labels_cpu_scope")
+    scope.update(cpu)
+    # `labels_scope` copies again when `context` has grown since (a shared
+    # family context that later imports extend): the size it was copied at.
+    scope["labels_cpu_source_size"] = len(context)
     context["labels_cpu_scope"] = scope
     return scope
 

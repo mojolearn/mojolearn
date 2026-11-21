@@ -5,7 +5,7 @@ The route word, the typed driver and the device-or-host dispatch are in
 `bindings/labels_descriptor_boundary_run.mojo`."""
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.py_balanced import py_get, py_type, py_fields
+from bindings.py_balanced import py_get, py_type, py_fields, py_call, py_setitem
 from bindings.classical_keys_unpack import classical_keys
 from core.device_route import DEVICE_CPU
 from providers.python.device_route_boundary_door import device_route_resolved
@@ -196,7 +196,20 @@ def labels_scope(model: PythonObject, context: PythonObject) raises -> PythonObj
     var scope = py_get(context, "labels_cpu_scope")
     if scope is None:
         return context
-    return scope
+    # The scope is a copy of `context`; a family context that grew after the
+    # copy (a module imported later added its tables) is copied again, once
+    # per growth: the CPU branch only, one length read and one dictionary
+    # read per call otherwise.
+    var size = len(context)
+    var held = py_get(scope, "labels_cpu_source_size")
+    if held is not None and Int(py=held) == size:
+        return scope
+    var fresh = py_call(context.copy)
+    _ = py_call(fresh.pop, PythonObject("labels_cpu_scope"), PythonObject(None))
+    _ = py_call(fresh.update, py_get(context, "labels_cpu_entries"))
+    py_setitem(fresh, PythonObject("labels_cpu_source_size"), PythonObject(size))
+    py_setitem(context, PythonObject("labels_cpu_scope"), fresh)
+    return fresh
 
 
 # ---------------------------------------------------------------- routed forms
