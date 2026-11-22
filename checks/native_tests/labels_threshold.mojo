@@ -70,26 +70,24 @@ def _host_case(unit: Int) raises:
     fixture(LabelsNativeDriver(labels_host_native_v2), unit)
 
 
-# ---- The device column (was labels_threshold_gpu_suite.mojo) ----
-# Ordered numerical coverage while shared-context GPU concurrency is parked.
-def _device_cases() raises:
-    var failed = 0
-    var text = String("")
-    for unit in range(LABELS_THRESHOLD_CASES):  # ordered shared-context numerical fixtures
-        try:
-            fixture(LabelsNativeDriver(labels_device_native_v2), unit)
-        except problem:
-            failed += 1
-            text += "\n      threshold_gpu row " + String(unit) + ": " + String(problem)
-    if failed:
-        raise Error("labels threshold GPU failed " + String(failed) + " of " + String(LABELS_THRESHOLD_CASES) + " cases" + text)
-
-
 def test_threshold() raises:
     comptime if CPU_COLUMN_BUILD:
         check_cases("threshold_cpu", LABELS_THRESHOLD_CASES, _host_case)
     else:
-        _device_cases()
+        # The device column (was labels_threshold_gpu_suite.mojo). Ordered numerical coverage while
+        # shared-context GPU concurrency is parked. Inline in the comptime branch: TestSuite discovery
+        # instantiates every function of the module, and the host column build has no device target.
+        var failed = 0
+        var text = String("")
+        for unit in range(LABELS_THRESHOLD_CASES):  # ordered shared-context numerical fixtures
+            try:
+                fixture(LabelsNativeDriver(labels_device_native_v2), unit)
+            except problem:
+                failed += 1
+                text += "\n      threshold_gpu row " + String(unit) + ": " + String(problem)
+        if failed:
+            raise Error("labels threshold GPU failed " + String(failed) + " of " + String(LABELS_THRESHOLD_CASES) + " cases" + text)
+
 
 
 def main() raises:
