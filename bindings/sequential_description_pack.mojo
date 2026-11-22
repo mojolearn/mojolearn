@@ -246,6 +246,12 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
             raise Error("d_state must be 4, 8 or 16")
         a0 = PythonObject(states)
         args = Python.list(states, 0, 0, 0, 0, 0)
+    elif kind == "ssd_scan":
+        # Mamba-2 (lane neural-blocks-3): the SSD core, one argument (the heads)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("heads"), Python.tuple(None), 1)
+        var heads = _positive(options[0], "heads", 1, context)
+        a0 = PythonObject(heads)
+        args = Python.list(heads, 0, 0, 0, 0, 0)
     elif kind == "rnn" or kind == "lstm" or kind == "gru":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("hidden_size"), Python.tuple(None), 1)
         var hidden = _positive(options[0], "hidden_size", 1, context)

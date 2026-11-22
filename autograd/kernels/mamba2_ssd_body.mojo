@@ -75,6 +75,33 @@ def m2_q_eff() -> Int:
     return M2_CHUNK_SIZE
 
 
+# ---------------------------------------------------------------- backward fold tiling (moved from
+# autograd/kernels/mamba2_ssd.mojo, 2026-11-22; that file's header documents IDN_M2_BWD_CELL / _FOLD_TILED)
+comptime IDN_M2_BWD_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
+    "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
+]()
+comptime M2_BWD_FOLD_ROWS = 256
+
+
+def m2_fold_rows_per_tile(rows: Int) -> Int:
+    """Rows per fold tile: the fixed height, or every row (main's chain)."""
+    comptime if IDN_M2_BWD_FOLD_TILED:
+        return M2_BWD_FOLD_ROWS
+    var r = rows
+    if r < 1:
+        r = 1
+    return r
+
+
+def m2_fold_tiles(rows: Int) -> Int:
+    var per = m2_fold_rows_per_tile(rows)
+    var n = (rows + per - 1) // per
+    if n < 1:
+        return 1
+    return n
+
+
 # ---------------------------------------------------------------- step bodies (the tiles call these)
 
 

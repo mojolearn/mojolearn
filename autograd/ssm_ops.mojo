@@ -26,6 +26,8 @@ compile-time register width in those bodies; this file instantiates them for 4, 
 """
 from sequence.ops import Args, FP
 from checks.numerics import ftz, identical_log
+# Mamba-2 (lane neural-blocks-3): the SSD core's element functions, 4820..4859
+from autograd.ssm_m2_ops import OP_SSM_M2_FIRST, OP_SSM_M2_LAST, apply_ssm_m2
 from autograd.kernels.mamba1_scan_body import (
     M1P,
     m1_a_from_a_log,
@@ -144,7 +146,10 @@ def _by_states[OP: Int](cell: Int, a: Args):
 
 
 def apply_ssm[OP: Int](cell: Int, a: Args):
-    comptime if OP == OP_SSM_M1_A:
+    # Mamba-2 (lane neural-blocks-3)
+    comptime if OP >= OP_SSM_M2_FIRST and OP <= OP_SSM_M2_LAST:
+        apply_ssm_m2[OP](cell, a)
+    elif OP == OP_SSM_M1_A:
         a.p1.unsafe_store(cell, m1_a_from_a_log(a.p0.unsafe_load(cell)))
     elif OP == OP_SSM_M1_SCAN or OP == OP_SSM_M1_CKPT or OP == OP_SSM_M1_BWD or OP == OP_SSM_M1_DBC or OP == OP_SSM_M1_DAP:
         _by_states[OP](cell, a)

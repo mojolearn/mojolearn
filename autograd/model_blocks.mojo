@@ -33,6 +33,10 @@ EXISTING backward rule; no kernel is written or edited here:
                                  [u | delta | B | C] (narrow views), parameters A_log
                                  (dim, state) and D (dim); its arithmetic is the Mamba-1
                                  block kernels' own thread bodies
+  43    ssd_scan (heads)         graph_ssd_scan (autograd/ssm_m2_primitives.mojo),      SsmRules 241
+                                 the Mamba-2 SSD core (lane neural-blocks-3): the
+                                 (length, 65 heads + 256) input is [x | B | C | dt],
+                                 parameters A_log and D (heads); the block's bodies
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -63,6 +67,8 @@ from autograd.import_ops import IMP_SILU, IMP_GELU_ERF, IMP_GELU_TANH, IMP_SOFTP
 from autograd.rules_recurrent import RecurrentRules, RNN_LINEAR, RNN_LAYER, RNN_LAST_STEP, rnn_scan_op
 from autograd.ssm_primitives import SsmRules, SSM_TAG_FIRST, SSM_TAG_LAST, graph_selective_scan
 from autograd.ssm_ops import ssm_m1_states_supported
+# Mamba-2 (lane neural-blocks-3)
+from autograd.ssm_m2_primitives import graph_ssd_scan, SSD_HEADDIM, SSD_STATES
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -212,6 +218,18 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         sd.append(cur.d[0])
         sd.append(wide // 2)
         return rn_shape(sd, name + " (SelectiveScan)")
+    # Mamba-2 (lane neural-blocks-3): the SSD core over [x | B | C | dt] features
+    if code == LAYER_SSD_SCAN:
+        if cur.ndim != 2:
+            raise Error(name + " (SsdScan): the input must be (length, features)")
+        if a0 < 1:
+            raise Error(name + " (SsdScan): heads must be at least 1")
+        if cur.d[1] != a0 * (SSD_HEADDIM + 1) + 2 * SSD_STATES:
+            raise Error(name + " (SsdScan): the features must be heads * 64 + 256 + heads, [x | B | C | dt]")
+        var od = List[Int]()
+        od.append(cur.d[0])
+        od.append(a0 * SSD_HEADDIM)
+        return rn_shape(od, name + " (SsdScan)")
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -245,6 +263,9 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         var dim = _scan_dim(xargs, i, cur)
         out.append(dim * _x(xargs, i, 0))  # A_log (dim, state)
         out.append(dim)                    # D
+    elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
+        out.append(_x(xargs, i, 0))  # A_log (heads)
+        out.append(_x(xargs, i, 0))  # D (heads)
     return out^
 
 
@@ -266,6 +287,9 @@ def block_param_names(code: Int) -> List[String]:
         out.append(".bias_ih")
         out.append(".bias_hh")
     elif code == LAYER_SELECTIVE_SCAN:
+        out.append(".A_log")
+        out.append(".D")
+    elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
         out.append(".A_log")
         out.append(".D")
     return out^
@@ -311,6 +335,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
             out.append(b)
     elif code == LAYER_SELECTIVE_SCAN:
         # Mamba's init: A_log[d, n] = log(n + 1) (S4D-real), D = 1
+        out.append(BLOCK_INIT_S4D)
+        out.append(Float32(-2))
+    elif code == LAYER_SSD_SCAN:
+        # Mamba-2 (lane neural-blocks-3): A_log[h] = log(h + 1), so A spans -1 .. -heads; D = 1
         out.append(BLOCK_INIT_S4D)
         out.append(Float32(-2))
     return out^
@@ -472,6 +500,13 @@ def block_forward[E: Exec](
         var a_log = _p(tape, ex, P, Gr, off, dim, a0, train)
         var d_skip = _p(tape, ex, P, Gr, off + dim * a0, 1, dim, train)
         return graph_selective_scan(tape, ex, u, dl, bm, cm, a_log, d_skip)
+    if code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
+        var wide = a0 * SSD_HEADDIM + 2 * SSD_STATES
+        var xbc = rankn_narrow(tape, ex, h, 2, 0, wide)
+        var dts = rankn_narrow(tape, ex, h, 2, wide, a0)
+        var a_log2 = _p(tape, ex, P, Gr, off, 1, a0, train)
+        var d_skip2 = _p(tape, ex, P, Gr, off + a0, 1, a0, train)
+        return graph_ssd_scan(tape, ex, xbc, dts, a_log2, d_skip2)
     raise Error("model: unknown block code " + String(code))
 
 
@@ -558,6 +593,8 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
         out.append(dim)
         if slot == 0:
             out.append(_x(xargs, i, 0))
+    elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
+        out.append(_x(xargs, i, 0))
     return out^
 
 

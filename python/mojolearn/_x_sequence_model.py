@@ -17,7 +17,7 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "concat": 20, "residual_block": 0, "parallel": 0,
           "silu": 32, "gelu": 33, "softplus": 34, "rms_norm": 35, "rotary": 36, "multiply": 37,
           "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
-          "selective_scan": 42}
+          "selective_scan": 42, "ssd_scan": 43}
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -447,6 +447,32 @@ class Sequential(_CheckMixin):
             model.concat([u, delta, b, c], axis=1).selective_scan(16)
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("selective_scan", (d_state,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def ssd_scan(self, heads):
+        """Append Mamba-2's state-space dual scan over ``(length,
+        features)`` samples whose features are ``[x | B | C | dt]``:
+        ``heads`` groups of 64 input channels ``x``, the 128 input and
+        128 output projections ``B`` and ``C`` of each position (one group
+        shared by every head), and one step size ``dt`` per head (already
+        positive, for example after ``softplus``), so ``features = 65 *
+        heads + 256``. The output is ``(length, 64 * heads)``: per head
+        ``y[t] = C[t] . h[t] + D * x[t]`` with ``h[t] = exp(dt[t] * A) *
+        h[t - 1] + dt[t] * B[t] x[t]`` from ``h = 0``, where ``A =
+        -exp(A_log)``, computed by Mamba-2's chunked algorithm.
+        ``A_log`` and ``D`` (one value per head) are learned, initialized
+        to ``A_log = log(1), .., log(heads)`` and ``D = 1``.
+
+        Parameters
+        ----------
+        heads : int
+            Number of heads of 64 channels.
+
+        Example: the core of a two-head Mamba-2 mixer over ``(length,
+        386)`` samples::
+
+            model.ssd_scan(2)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("ssd_scan", (heads,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gated(self, gate, up):
         """Append a gated block: ``gate(h) * up(h)``, where ``h`` is the
