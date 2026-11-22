@@ -92,7 +92,7 @@ def test_passive_subclass_retains_the_builtin_parameter_contract():
     class Passive(prep.Normalizer):
         pass
     model = Passive(norm='l1')
-    assert clean(model.get_params) == {'norm': 'l1', 'copy': True}
+    assert clean(model.get_params) == {'norm': 'l1', 'copy': True, 'device': None}  # device= since 7173eb03eb
 
 
 def test_changed_parameter_property_is_refused_before_callback(monkeypatch):

@@ -32,7 +32,8 @@ def test_native_logistic_constructor_and_parameter_reconstruction():
     params = clean(model.get_params)
     assert list(params) == sorted(params)
     assert params == dict(penalty='l2', tol=1e-4, C=2, fit_intercept=True, class_weight=None,
-                          max_iter=30, linesearch_max_iter=50, l1_ratio=None, solver='qn', numeric_mode='identical')
+                          max_iter=30, linesearch_max_iter=50, l1_ratio=None, solver='qn', numeric_mode='identical',
+                          device=None)  # device= since 48f24481f1 (dev2-logistic-device)
     clean(model.predict, x, error=NotFittedError)
     clean(model.fit, x, y)
     assert clean(model.__sklearn_is_fitted__) is True

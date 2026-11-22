@@ -32,7 +32,7 @@ def test_native_lda_constructor_parameters_and_public_fit(solver, shrinkage):
     model = clean(LinearDiscriminantAnalysis, solver=solver, shrinkage=shrinkage, store_covariance=True)
     params = clean(model.get_params)
     assert params == dict(solver=solver, shrinkage=shrinkage, priors=None, n_components=None,
-                          store_covariance=True, tol=1e-4, covariance_estimator=None)
+                          store_covariance=True, tol=1e-4, covariance_estimator=None, device=None)  # device= since ba26dd015e
     assert clean(model.set_params, tol=2e-4) is model
     assert clean(model.get_params, deep=False)['tol'] == 2e-4
     clean(model.set_params, unknown=1, error=ValueError)
