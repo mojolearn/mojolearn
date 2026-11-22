@@ -8,7 +8,8 @@ and dtype) and every reference is the oracle call it made. The originating test 
 
     checks/native_tests/fixtures/gbdt_ff/   gbdt_public_fits.mojo  (checks/gbdt_feature_fraction_binding.py)
     checks/native_tests/fixtures/gbdt_qw/   gbdt_public_fits.mojo  (checks/gbdt_querywise_pointwise_check.py)
-    checks/native_tests/fixtures/trees_b4/  class_weight_plan.mojo  (test_rf_class_weight.py)
+    checks/native_tests/fixtures/trees_b4/  class_weight_plan.mojo  (test_rf_class_weight.py),
+                                            trees_forest_variants.mojo  (test_cpu_training_forest_variants.py)
 
 Generated with numpy 2.5.5 and scikit-learn 1.9.1 (2026-11-22). Regenerate and repack:
 
@@ -73,7 +74,18 @@ def class_weights():
     return [_put("trees_b4", "cw-codes.i32", codes, np.int32)]
 
 
-SETS = [gbdt_ff, gbdt_qw, class_weights]
+def forest_variants():
+    # test_cpu_training_forest_variants.py: x, yc, yr, ypos of the 500 x 7 draw
+    rng = np.random.default_rng(1)
+    x = rng.standard_normal((500, 7)).astype(np.float32)
+    yc = (x[:, 2] - 0.4 * x[:, 5] > 0.3).astype(np.int32)
+    yr = (x[:, 0] - 2.0 * x[:, 1]).astype(np.float32)
+    ypos = (np.abs(yr) + 0.25).astype(np.float32)
+    return [_put("trees_b4", "fv-x.f32", x, np.float32), _put("trees_b4", "fv-yc.i32", yc, np.int32),
+            _put("trees_b4", "fv-yr.f32", yr, np.float32), _put("trees_b4", "fv-ypos.f32", ypos, np.float32)]
+
+
+SETS = [gbdt_ff, gbdt_qw, class_weights, forest_variants]
 
 
 def _run(index):

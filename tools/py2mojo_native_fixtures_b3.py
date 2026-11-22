@@ -56,7 +56,39 @@ def glue():
     return out
 
 
-SETS = [glue]
+def _clf(n_classes=3, seed=0):
+    # test_x_trees_sanity.py::_clf
+    from sklearn.datasets import make_classification
+    from sklearn.model_selection import train_test_split
+    X, y = make_classification(n_samples=1500, n_features=10, n_informative=6, n_classes=n_classes,
+                               random_state=seed)
+    return train_test_split(X.astype(np.float32), y, test_size=0.3, random_state=seed)
+
+
+def _reg(seed=0):
+    # test_x_trees_sanity.py::_reg
+    from sklearn.datasets import make_regression
+    from sklearn.model_selection import train_test_split
+    X, y = make_regression(n_samples=1500, n_features=10, n_informative=6, noise=5.0, random_state=seed)
+    return train_test_split(X.astype(np.float32), y.astype(np.float32), test_size=0.3, random_state=seed)
+
+
+def sk():
+    from sklearn.metrics import accuracy_score, r2_score
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    Xa, Xb, ya, yb = _clf()
+    Ra, Rb, ra, rb = _reg()
+    # test_decision_tree_classifier / test_decision_tree_regressor: scikit-learn's held-out scores
+    acc = accuracy_score(yb, DecisionTreeClassifier(max_depth=6, random_state=0).fit(Xa, ya).predict(Xb))
+    r2 = r2_score(rb, DecisionTreeRegressor(max_depth=8, random_state=0).fit(Ra, ra).predict(Rb))
+    return [_put("trees_sk", "clf-xa.f32", Xa, np.float32), _put("trees_sk", "clf-xb.f32", Xb, np.float32),
+            _put("trees_sk", "clf-ya.i32", ya, np.int32), _put("trees_sk", "clf-yb.i32", yb, np.int32),
+            _put("trees_sk", "reg-xa.f32", Ra, np.float32), _put("trees_sk", "reg-xb.f32", Rb, np.float32),
+            _put("trees_sk", "reg-ya.f32", ra, np.float32), _put("trees_sk", "reg-yb.f32", rb, np.float32),
+            _put("trees_sk", "dt-scores.f64", [acc, r2], np.float64)]
+
+
+SETS = [glue, sk]
 
 
 def _run(index):
