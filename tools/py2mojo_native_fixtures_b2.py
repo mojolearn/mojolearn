@@ -12,7 +12,10 @@ hands the programs).
 
     checks/native_tests/fixtures/prep_nb/   prep_naive_bayes.mojo   (test_x_prep_naive_bayes.py)
     checks/native_tests/fixtures/prep_da/   prep_discriminant.mojo  (test_x_prep_discriminant.py)
-    checks/native_tests/fixtures/prep_kb/   prep_kbins.mojo         (test_x_prep_kbins.py)
+    checks/native_tests/fixtures/prep_lab/  prep_labels.mojo        (test_x_prep_labels.py, test_x_prep_parity.py's
+                                            test_multilabel_binarizer)
+    checks/native_tests/fixtures/prep_kb/   prep_kbins.mojo         (test_x_prep_kbins.py, test_x_prep_parity.py's
+                                            test_kbins_quantile_methods and test_kbins_sample_weight)
 
 Generated with numpy 2.5.3 and scikit-learn 1.9.1 (the repository's pixi `test` environment, 2026-11-22). Regenerate
 and repack:
@@ -262,7 +265,96 @@ def kbins():
     return out
 
 
-SETS = (nb_plain, nb_weighted, da_lda, da_qda, da_priors, da_solvers, kbins)
+# test_x_prep_parity.py::test_kbins_quantile_methods, the methods in order (x n_bins 3, 5, 7)
+KB_METHODS = ("inverted_cdf", "closest_observation", "interpolated_inverted_cdf", "hazen", "weibull",
+              "median_unbiased", "normal_unbiased", "linear", "averaged_inverted_cdf")
+# test_x_prep_parity.py::test_kbins_sample_weight, the keyword sets in order (x the three weights, x n_bins 3, 5)
+KB_WKW = (dict(strategy="quantile"), dict(strategy="quantile", quantile_method="inverted_cdf"),
+          dict(strategy="uniform"), dict(strategy="kmeans"))
+
+
+def kbins_parity():
+    import sklearn.preprocessing as sk
+    out = []
+    rng = np.random.default_rng(8)
+    X = np.round(rng.standard_normal((299, 3)) * 4).astype(np.float32) / np.float32(4)
+    out.append(_put("prep_kb", "qm-x.f32", X, np.float32))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for i, meth in enumerate(KB_METHODS):
+            for nb in (3, 5, 7):
+                r = sk.KBinsDiscretizer(n_bins=nb, encode="ordinal", quantile_method=meth).fit(X)
+                _kb_edges(out, f"qm{i}-{nb}", r)
+        rng = np.random.default_rng(9)
+        X = np.round(rng.standard_normal((301, 3)) * 4).astype(np.float32) / np.float32(4)
+        X[:, 2] = rng.standard_normal(301).astype(np.float32)
+        out.append(_put("prep_kb", "sw-x.f32", X, np.float32))
+        weights = (rng.integers(0, 4, 301).astype(np.float32), rng.random(301).astype(np.float32),
+                   np.ones(301, np.float32))
+        for s, sw in enumerate(weights):
+            out.append(_put("prep_kb", f"sw{s}-w.f32", sw, np.float32))
+            for j, kw in enumerate(KB_WKW):
+                for nb in (3, 5):
+                    r = sk.KBinsDiscretizer(n_bins=nb, encode="ordinal", **kw).fit(X, sample_weight=sw)
+                    _kb_edges(out, f"sw{s}-{j}-{nb}", r)
+    return out
+
+
+# ---------------------------------------------------------------- labels (test_x_prep_labels.py)
+def labels():
+    import sklearn.preprocessing as skp
+    out = []
+    # test_label_encoder, the numeric label vectors (the str vector's encoding is the public boundary's)
+    rng = np.random.default_rng(0)
+    ys = (rng.integers(-5, 9, 200) * 3, rng.standard_normal(100).astype(np.float32))
+    for i, y in enumerate(ys):
+        r = skp.LabelEncoder().fit(y)
+        out.append(_put("prep_lab", f"le{i}-y.{'i64' if i == 0 else 'f32'}", y, np.int64 if i == 0 else np.float32))
+        out.append(_put("prep_lab", f"le{i}-k.i32", [len(r.classes_)], np.int32))
+        out.append(_put("prep_lab", f"le{i}-classes.f64", r.classes_, np.float64))
+        out.append(_put("prep_lab", f"le{i}-transform.i32", r.transform(y), np.int32))
+    # test_label_binarizer: the same rng draws in the same order (the str case draws its noise too)
+    rng = np.random.default_rng(1)
+    ys = (rng.integers(0, 4, 50) * 2, rng.integers(0, 2, 30), np.array(["x", "y", "x"]), np.array([5, 5]))
+    for i, y in enumerate(ys):
+        for k, kw in enumerate((dict(), dict(neg_label=-1, pos_label=3))):
+            r = skp.LabelBinarizer(**kw).fit(y)
+            T = r.transform(y)
+            Y = T.astype(np.float64)
+            Y2 = Y + rng.standard_normal(Y.shape) * 0.3
+            if y.dtype.kind == "U":
+                continue
+            tag = f"lb{i}{k}"
+            out.append(_put("prep_lab", f"{tag}-y.i64", y, np.int64))
+            out.append(_put("prep_lab", f"{tag}-shape.i32", [len(y), T.shape[1], len(r.classes_)], np.int32))
+            out.append(_put("prep_lab", f"{tag}-classes.f64", r.classes_, np.float64))
+            out.append(_put("prep_lab", f"{tag}-transform.i32", T, np.int32))
+            out.append(_put("prep_lab", f"{tag}-y2.f32", Y2, np.float32))
+            out.append(_put("prep_lab", f"{tag}-inv-y.f64", r.inverse_transform(Y), np.float64))
+            out.append(_put("prep_lab", f"{tag}-inv-y2.f64", r.inverse_transform(Y2.astype(np.float32)), np.float64))
+            out.append(_put("prep_lab", f"{tag}-inv-y2t.f64", r.inverse_transform(Y2.astype(np.float32), threshold=0.4),
+                            np.float64))
+    # test_multilabel_binarizer, the int label sets (the str sets are the public boundary's)
+    ys = [[1, 3], [2], [], [3, 1, 7], [7, 7]]
+    r = skp.MultiLabelBinarizer().fit(ys)
+    out.append(_put("prep_lab", "mlb-classes.f64", r.classes_, np.float64))
+    out.append(_put("prep_lab", "mlb-transform.i32", r.transform(ys), np.int32))
+    # test_x_prep_parity.py::test_multilabel_binarizer: a multilabel indicator Y, three label pairs, S drawn per pair
+    rng = np.random.default_rng(3)
+    Y = (rng.random((50, 4)) > 0.6).astype(np.int64)
+    out.append(_put("prep_lab", "ind-y.f32", Y, np.float32))
+    for k, kw in enumerate((dict(), dict(neg_label=-1, pos_label=2), dict(neg_label=-2, pos_label=0))):
+        r = skp.LabelBinarizer(**kw).fit(Y)
+        assert r.y_type_ == "multilabel-indicator"
+        S = rng.standard_normal((50, 4)).astype(np.float32)
+        out.append(_put("prep_lab", f"ind{k}-transform.i32", r.transform(Y), np.int32))
+        out.append(_put("prep_lab", f"ind{k}-s.f32", S, np.float32))
+        out.append(_put("prep_lab", f"ind{k}-inv.i32", r.inverse_transform(S), np.int32))
+        out.append(_put("prep_lab", f"ind{k}-inv3.i32", r.inverse_transform(S, threshold=0.3), np.int32))
+    return out
+
+
+SETS = (nb_plain, nb_weighted, da_lda, da_qda, da_priors, da_solvers, kbins, kbins_parity, labels)
 
 
 def _run(index):

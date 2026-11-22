@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # native-check: cpu
 """KBinsDiscretizer programs against scikit-learn's values (lane py2mojo-B, 2026-11-22; ported from
-python/mojolearn/tests/test_x_prep_kbins.py `test_strategies` and `test_onehot`).
+python/mojolearn/tests/test_x_prep_kbins.py `test_strategies` and `test_onehot`, and test_x_prep_parity.py
+`test_kbins_quantile_methods` and `test_kbins_sample_weight`, whose references scikit-learn computed on the float32
+X with the float32 weights; with weights the door's `_check_weights` program counts the positive weights first).
 
 The inputs are the original tests' NumPy draws (500 x 4 float32: a tie column, a constant column) and the references
 are the scikit-learn 1.9.1 calls they made on the float64 copies, stored as words in `fixtures/prep_kb/` by
@@ -22,9 +24,11 @@ Stays in Python: the encode / strategy admission, the finite-input refusal and t
 boundary). Every case is an independent unit; the case tables run across host cores.
 """
 from std.math import isnan
+from std.memory import bitcast
 from bindings.prep_encode_prog_run import EncProgram
 from bindings.prep_encode_kbins_run import (
     KBinsFit, KBinsApply, KBinsInverse, kbins_fit_stage, kbins_transform_stage, kbins_inverse_stage, KB_DRAW_NONE,
+    enc_weights_stage,
 )
 from checks.native_tests.prep_enc_host import PREP_KB_DIR, enc_host_run
 from checks.native_tests.prep_cls_host import require, all_close, arena_words
@@ -53,13 +57,31 @@ struct KBinsModel(Movable):
     var n_bins: List[Int]
 
 
-def kbins_fit(x: List[Float32], n: Int, d: Int, strategy: Int, bins: Int, blocked: Bool) raises -> KBinsModel:
+def positive_weights(w: List[Float32], n: Int, blocked: Bool) raises -> Int:
+    """`_check_weights`' program: the count and minimum of the weights and their count of positive entries."""
+    var prog = EncProgram(False)
+    var plan = enc_weights_stage(prog, 0, n, blocked and IDN_STATS_BLOCKED)
+    var owners = List[List[Float32]]()
+    owners.append(w.copy())
+    var arena = enc_host_run(prog, owners)
+    require(Int(arena[plan.stats]) == n and arena[plan.stats + 3] >= 0, "sample_weight must be nonnegative")
+    var m = Int(bitcast[DType.int32](arena[plan.positives]))
+    require(m > 0, "sample_weight is all zero")
+    return m
+
+
+def kbins_fit(x: List[Float32], n: Int, d: Int, strategy: Int, bins: Int, blocked: Bool,
+              w: List[Float32]) raises -> KBinsModel:
     var prog = EncProgram(False)
     var nb = List[Int](length=d, fill=bins)
-    var plan = kbins_fit_stage(prog, KBinsFit(n, d, 0, strategy, nb^, bins, KB_DRAW_NONE, 0, 0, 0, False, -1, 0,
-        blocked and IDN_STATS_BLOCKED))
+    var weighted = len(w) > 0
+    var positive = positive_weights(w, n, blocked) if weighted else 0
+    var plan = kbins_fit_stage(prog, KBinsFit(n, d, 0, strategy, nb^, bins, KB_DRAW_NONE, 0, 0, 0, weighted,
+        1 if weighted else -1, positive, blocked and IDN_STATS_BLOCKED))
     var owners = List[List[Float32]]()
     owners.append(x.copy())
+    if weighted:
+        owners.append(w.copy())
     var arena = enc_host_run(prog, owners)
     var counts = arena_words(arena, plan.counts, d)
     var n_bins = List[Int](length=d, fill=0)
@@ -98,8 +120,7 @@ def kbins_inverse(m: KBinsModel, z: List[Float32], n: Int, cols: Int, ordinal: B
     return arena_words(arena, plan.centers, n * d)
 
 
-def check_edges(m: KBinsModel, tag: String, cols: List[Int], label: String) raises:
-    var d = KB_D
+def check_edges(m: KBinsModel, tag: String, d: Int, cols: List[Int], tol: Float64, label: String) raises:
     var want_bins = fixture_i32(PREP_KB_DIR + tag + "-nbins.i32", d)
     var total = 0
     for j in range(d):  # small-loop(oracle: the reference's edge counts)
@@ -114,7 +135,7 @@ def check_edges(m: KBinsModel, tag: String, cols: List[Int], label: String) rais
             require(m.n_bins[j] == Int(want_bins[j]), label + ": n_bins_[" + String(j) + "] " + String(m.n_bins[j])
                 + " expected " + String(want_bins[j]))
             for e in range(count):  # small-loop(oracle: one column's edges)
-                all_close(m.edges[j * m.stride + e], want[at + e], 1e-4, 1e-4,
+                all_close(m.edges[j * m.stride + e], want[at + e], tol, tol,
                     label + ": bin_edges_[" + String(j) + "][" + String(e) + "]")
         at += count
 
@@ -132,8 +153,8 @@ def strategy_unit(unit: Int) raises:
     if k == 3:
         cols = [0, 2, 3]
     var x = fixture_f32(PREP_KB_DIR + "x0.f32", n * d)
-    var m = kbins_fit(x, n, d, strategies[k], 5, blocked)
-    check_edges(m, tag, cols, label)
+    var m = kbins_fit(x, n, d, strategies[k], 5, blocked, List[Float32]())
+    check_edges(m, tag, d, cols, 1e-4, label)
     var got = kbins_transform(m, x, n, d, False)
     var z = fixture_f64(PREP_KB_DIR + tag + "-transform.f64", n * d)
     var same = 0
@@ -163,7 +184,7 @@ def onehot_unit(unit: Int) raises:
     var d = KB_D
     var label = "kbins onehot blocked " + String(blocked)
     var x = fixture_f32(PREP_KB_DIR + "x1.f32", n * d)
-    var m = kbins_fit(x, n, d, 0, 4, blocked)
+    var m = kbins_fit(x, n, d, 0, 4, blocked, List[Float32]())
     var shape = fixture_i32(PREP_KB_DIR + "oh-shape.i32", 2)
     var cols = Int(shape[1])
     var total = 0
@@ -187,6 +208,55 @@ def onehot_unit(unit: Int) raises:
 
 def test_onehot() raises:
     check_cases("kbins_onehot", 2, onehot_unit)
+
+
+# ---- test_x_prep_parity.py::test_kbins_quantile_methods: 299 x 3 quarter-integers, the nine quantile methods x n_bins
+# 3, 5, 7, x the two routes: every column's bin_edges_ rtol = atol = 1e-6 ----
+def quantile_method_unit(unit: Int) raises:
+    var blocked = unit % 2 == 0
+    var row = unit // 2
+    var i = row // 3
+    var nbs: List[Int] = [3, 5, 7]
+    var nb = nbs[row % 3]
+    # `_kbins_strategy`: inverted_cdf 4, closest_observation 5, interpolated_inverted_cdf 6, hazen 7, weibull 8,
+    # median_unbiased 9, normal_unbiased 10, linear 2, averaged_inverted_cdf 1
+    var words: List[Int] = [4, 5, 6, 7, 8, 9, 10, 2, 1]
+    var n = 299
+    var d = 3
+    var tag = "qm" + String(i) + "-" + String(nb)
+    var x = fixture_f32(PREP_KB_DIR + "qm-x.f32", n * d)
+    var m = kbins_fit(x, n, d, words[i], nb, blocked, List[Float32]())
+    var cols: List[Int] = [0, 1, 2]
+    check_edges(m, tag, d, cols, 1e-6, "kbins " + tag + " blocked " + String(blocked))
+
+
+def test_kbins_quantile_methods() raises:
+    check_cases("kbins_quantile_methods", 54, quantile_method_unit)
+
+
+# ---- test_x_prep_parity.py::test_kbins_sample_weight: 301 x 3, three float32 weight vectors (integers with zeros,
+# uniform, ones) x quantile (averaged_inverted_cdf), quantile inverted_cdf, uniform, kmeans x n_bins 3, 5, x the two
+# routes: bin_edges_ rtol = atol = 1e-6 (kmeans 1e-4). The refusal of the other quantile methods with weights stays
+# Python (admission). ----
+def sample_weight_unit(unit: Int) raises:
+    var blocked = unit % 2 == 0
+    var row = unit // 2
+    var s = row // 8
+    var j = (row % 8) // 2
+    var nb = 3 if row % 2 == 0 else 5
+    var words: List[Int] = [1, 4, 0, 3]
+    var n = 301
+    var d = 3
+    var tag = "sw" + String(s) + "-" + String(j) + "-" + String(nb)
+    var x = fixture_f32(PREP_KB_DIR + "sw-x.f32", n * d)
+    var w = fixture_f32(PREP_KB_DIR + "sw" + String(s) + "-w.f32", n)
+    var m = kbins_fit(x, n, d, words[j], nb, blocked, w)
+    var cols: List[Int] = [0, 1, 2]
+    check_edges(m, tag, d, cols, 1e-4 if j == 3 else 1e-6, "kbins " + tag + " blocked " + String(blocked))
+
+
+def test_kbins_sample_weight() raises:
+    check_cases("kbins_sample_weight", 48, sample_weight_unit)
 
 
 def main() raises:
