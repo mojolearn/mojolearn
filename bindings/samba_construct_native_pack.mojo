@@ -119,7 +119,11 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
         # draw advanced the counter before its launch, as before).
         if drawn > 0:
             py_setitem(rng, "counter", PythonObject(counter + drawn))
-    _ = arrays  # the parameter owners stay alive through the native call above
+        # The parameter owners and the scratch stay alive through the native
+        # call above, named here (GIL held) so a raising RUN does not drop
+        # their references inside the released block.
+        _ = len(arrays)
+        _ = len(unused)
     _ = unused^
 
 

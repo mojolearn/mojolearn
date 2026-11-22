@@ -175,6 +175,15 @@ def byte_checkpoint_save(path: PythonObject, state: PythonObject, mut failure: B
         with GILReleased(py):
             digest = byte_checkpoint_write(target, Int(text.unsafe_ptr()), text.byte_length(), addresses, counts, file_failure)
     except error:
+        # The pins are named here, with the GIL held again: unnamed on the
+        # error path, Mojo destroyed them where the write raised, inside the
+        # released block, and PyBuffer_Release ran with no thread state
+        # (every failed save segfaulted; smoke 2026-11-22).
+        pin0.release()
+        pin1.release()
+        pin2.release()
+        pin3.release()
+        _ = text.byte_length()
         if file_failure.number != 0:
             byte_checkpoint_file_error(failure, file_failure)
         raise error
