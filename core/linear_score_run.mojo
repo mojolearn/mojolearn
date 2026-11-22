@@ -3,6 +3,8 @@
 from std.memory import unsafe_memcpy, bitcast
 from std.os import getenv
 from core.hostptr import f32_ptr
+from core.entry_table import EntryRef, entry_ref_vendor, entry_ref_mode
+from core.host_finite_scan import host_all_finite_f32
 from core.linear_boundary_run import linear_predict_run
 from core.linear_model_state import LinearModelState, linear_state_predict_request
 from core.linear_score_program import LinearR2Layout
@@ -104,3 +106,23 @@ def linear_r2_run(metrics: NativeDescriptorCall, prediction: Int, rows: Int,
     finally:
         _ = layout
         _ = arena
+
+
+def member_r2_score(metrics: EntryRef, y_true: Int, y_pred: Int, n: Int) raises -> Float64:
+    """A regressor member's `score`: the R^2 its estimator's own `score`
+    returns (`1 - SS_res / SS_tot` of the `_Reg` program, binary64 sums,
+    0.0 for a constant y; `classical_r2_score` and `svc_r2_sums` run the same
+    program), over n host float32 targets and predictions. `metrics` is the
+    x_metrics program entry on the member's route (`fifth`;
+    providers/python/metrics_route_boundary_door.mojo
+    `member_metrics_program_fifth`). The members of LinearSVR, QNRegressor,
+    Lasso and ElasticNet called the metrics image's `r2_score` entry (MR_R2),
+    a float32 result, so a cross_val_score of host folds (member route)
+    differed from the same folds as DeviceRows (the estimator's own score)
+    in the 8th digit (verify smoke of e282d53b19,
+    test_device_rows_door_cv.py; lane sr3-smoke, 2026-11-22)."""
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y_true), n):
+        raise Error("mojolearn score: y_true contains NaN or infinity")
+    if not host_all_finite_f32(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=y_pred), n):
+        raise Error("mojolearn score: y_pred contains NaN or infinity")
+    return linear_r2_run(metrics.call, y_pred, n, y_true, n, entry_ref_vendor(metrics), entry_ref_mode(metrics))
