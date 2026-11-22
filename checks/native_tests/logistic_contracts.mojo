@@ -121,8 +121,12 @@ def test_invalid_span() raises:
     check_cases("invalid_span", 16, _invalid_span)
 
 
+def _driver_fixture(operation: Int) raises:
+    logistic_driver_fixture(operation)
+
+
 def test_logistic_driver_fixture() raises:
-    check_cases("logistic_driver_fixture", 8, logistic_driver_fixture)
+    check_cases("logistic_driver_fixture", 8, _driver_fixture)
 
 
 def test_logistic_fold_fixture() raises:
