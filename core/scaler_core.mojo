@@ -279,6 +279,40 @@ def scaler_minmax_fit_core[C: ScalerCalls](calls: C, x: F32P, n: Int, d: Int, lo
     return rows^
 
 
+def scaler_minmax_partial_fit_run[C: ScalerCalls](calls: C, old_min: F32P, old_max: F32P, fitted_d: Int, x: F32P,
+                                                  n: Int, d: Int, lower: Float32, upper: Float32) raises -> List[Float32]:
+    """MinMaxScaler.partial_fit of a fitted state on typed values (lane
+    bm-trees, 2026-11-22; the composition bindings/minmax_native_door.mojo
+    `minmax_partial_fit` ran over Python objects): the batch (C-ordered
+    (n, d) Float32 at `x`) fitted by `scaler_minmax_fit_core`, the width
+    refusal against the fitted `fitted_d`, then the merge: stage 268 over
+    the old and the batch's extrema (NaN-aware min / max and the per-column
+    NaN flags), the kernel fit of the 4 x d extrema block, and the published
+    rows by `scaler_minmax_keep_extrema` with those flags. Returns the five
+    published rows (5*d). The door and a native check both call it."""
+    var fresh = scaler_minmax_fit_core(calls, x, n, d, lower, upper)
+    if d != fitted_d:
+        raise Error("MinMaxScaler input feature count differs from fit")
+    var arena = List[Float32](length=9 * d, fill=0)
+    var ap = F32P(unsafe_from_address=_addr(arena))
+    var fp = F32P(unsafe_from_address=_addr(fresh))
+    unsafe_memcpy(dest=ap, src=old_min, count=d)
+    unsafe_memcpy(dest=ap + d, src=old_max, count=d)
+    unsafe_memcpy(dest=ap + 2 * d, src=fp, count=d)
+    unsafe_memcpy(dest=ap + 3 * d, src=fp + d, count=d)
+    var program = List[Int32]()
+    _stage(program, 268, d, 0, d, 2 * d, 3 * d, d, 4 * d, 8 * d)
+    _run(calls, arena, program)
+    var output = List[Float32](length=5 * d, fill=0)
+    var op = F32P(unsafe_from_address=_addr(output))
+    _ = calls.minmax_fit(MinMaxFitRequest(Int(ap + 4 * d), Int(op), 4, d, lower, upper, False))
+    var rows = scaler_minmax_keep_extrema(calls, op, Int(ap + 8 * d), d)
+    _ = arena^
+    _ = output^
+    _ = fresh^
+    return rows^
+
+
 # ---------------------------------------------------------------- transforms (both scalers)
 
 def scaler_transform_rows[C: ScalerCalls](calls: C, center: Int, scale: Int, d: Int, with_mean: Bool,
