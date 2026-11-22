@@ -1397,6 +1397,19 @@ _connect_native_init(OrderedRMSE, _TREES, "trees_gbdt_ordered_init",
 # Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.
 from ._gbdt_adapters import GradientBoostingClassifier, GradientBoostingRegressor
 
+# glue: once at import, the CPU tree owner's context. A CPU-trained model with
+# CTR records (cat_features) predicts through the host tree owner
+# (bindings/trees_public_gbdt_door.mojo gbdt_host_tree_context), whose context
+# `_classical_host` connects into `linear_model._CLASSICAL` at its import; native
+# code never imports, so without this a device='cpu' CTR model refused every
+# predict ("the CPU tree owner is not connected") unless the caller had imported
+# HostGBDT or another host class first (pv-categories, 2026-11-22). An image
+# without the host surface keeps that by-name refusal.
+try:
+    from . import _classical_host  # noqa: E402,F401
+except ImportError:  # noqa: BLE001 - the gbdt door refuses by name at the first CPU CTR predict
+    pass
+
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from
 # the package at first use (`_sklearn_modules`), so `from mojolearn.ensemble import ...`

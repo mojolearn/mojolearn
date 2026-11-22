@@ -66,7 +66,10 @@ def cholesky_archive_pack(cls: PythonObject, plan: NativeCholeskyArchivePlan,
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
     var value = _raw_archive_exact(arrays, name, dtype, context)
-    if String(value.order) == "C" or Int(py=value.ndim) < 2:
+    # The rank first (pv-categories, 2026-11-22): a vector needs no reorder,
+    # and a NumPy vector (HostGBDT(category_map=model.category_map_)) has no
+    # `order` attribute, so reading it first refused every such map.
+    if Int(py=value.ndim) < 2 or String(value.order) == "C":
         return value
     var dimensions = List[Int]()
     var strides = List[Int]()
