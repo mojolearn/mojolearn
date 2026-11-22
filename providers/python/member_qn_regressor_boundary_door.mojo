@@ -6,7 +6,7 @@ RUN is core/qn_regressor_member.mojo.
   * `qn_regressor_member_admit` (UNPACK, once per member): the estimator's
     own device route (bindings/qn_boundary_unpack.mojo `qn_route`: the SAME
     held DeviceRouteOwner its own fit and predict read, no second resolver;
-    a hit is one record read), the metrics image's R^2 entry of the route's
+    a hit is one record read), the x_metrics program entry of the route's
     tier and device in the fifth slot when that image is loaded, and the 11
     parameter words with the own fit's checks (the loss code, the change
     tolerance).
@@ -31,7 +31,7 @@ from core.member_abi import (
     MemberPlan, MemberCall, MemberMatrix, member_call, member_new, member_free,
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
-from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
+from providers.python.metrics_route_boundary_door import member_metrics_program_fifth
 from core.qn_regressor_member import QN_REGRESSOR_MEMBER_KIND, QN_REGRESSOR_BLOCK_W
 from glm.qn_door_run import qn_change_tolerance
 
@@ -65,14 +65,10 @@ def qn_regressor_member_admit(model: PythonObject, fields: PythonObject, context
         raise Error("mojolearn QNRegressor: unknown loss " + String(py_call(b.repr, py_item(fields, nk[].k_loss))))
     var route = call.route
     if not route.has_fifth:
-        # The metrics image's R^2 entry of the route's tier on its device,
-        # when that image is loaded; without it score is not offered.
-        try:
-            var entry = metrics_r2_entry(MetricsEntryKey(route.mode, route.vendor))
-            route.fifth = EntryRef(entry, entry_ref_word(route.mode, route.vendor, MR_OP_COUNT))
-            route.has_fifth = True
-        except problem:
-            _ = String(problem)
+        # The x_metrics program entry of the route's tier on its device (the
+        # program QNRegressor's own score runs), when that image is loaded;
+        # without it score is not offered.
+        member_metrics_program_fifth(route, route.mode, route.vendor)
     var words: List[Float64] = [Float64(QN_REGRESSOR_MEMBER_KIND),
         1.0 if Bool(py=py_item(fields, nk[].k_fit_intercept)) else 0.0,
         Float64(_int(py_item(fields, nk[].k_max_iter))), Float64(_int(py_item(fields, nk[].k_linesearch_max_iter))),

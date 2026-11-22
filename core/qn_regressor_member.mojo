@@ -7,7 +7,7 @@ It runs QNRegressor's own typed RUN (glm/qn_door_run.mojo `qn_door_fit_run`,
 `qn_door_predict_run`) through the entry of the estimator's own device route
 (bindings/qn_boundary_unpack.mojo `qn_route`, the estimators QN table entry
 held on its DeviceRouteOwner): `entry` the QN entry of the estimator's
-device; `fifth` the metrics image's R^2 entry of the route's tier and device
+device; `fifth` the x_metrics program entry (the estimator's own score program, core/linear_score_run.mojo `member_r2_score`) of the route's tier and device
 (score; without it score is not offered). The resident-fold entry (`second`)
 is not read: a member reads host views. No kernel is touched.
 
@@ -51,7 +51,7 @@ from core.member_abi import (
     MEMBER_BLOCK_COEF, MEMBER_BLOCK_INTERCEPT, MEMBER_BLOCK_SCALARS, MEMBER_BLOCK_FAMILY,
     MEMBER_BLOCK_BY_INDEX, MEMBER_IMPORT_DONE, member_unsupported,
 )
-from core.metrics_entry_table import MR_R2
+from core.linear_score_run import member_r2_score
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -284,22 +284,6 @@ def _predict(slot: _SlotP, call: _CallP) raises:
     _predict_into(slot, call, call[].dst.data)
 
 
-def _r2(entry: NativeDescriptorCall, y_true: Int, y_pred: Int, n: Int) raises -> Float64:
-    """`metrics.r2_score(y_true, y_pred)` as one typed call of the metrics
-    image's R^2 entry, with the metrics door's refusals."""
-    if not host_all_finite_f32(_F32P(unsafe_from_address=y_true), n):
-        raise Error("mojolearn metrics: y_true contains NaN or infinity")
-    if not host_all_finite_f32(_F32P(unsafe_from_address=y_pred), n):
-        raise Error("mojolearn metrics: y_pred contains NaN or infinity")
-    var value = List[Float64](length=1, fill=0.0)
-    var words: List[Int] = [n]
-    var plain: List[Int] = [y_true, y_pred, Int(value.unsafe_ptr())]
-    _ = native_descriptor_call(entry, MR_R2, plain, words, List[Float64]())
-    var result = value[0]
-    _ = value^
-    return result
-
-
 def _score(slot: _SlotP, call: _CallP) raises:
     var route = call[].route
     _dense(call[].y, "y")
@@ -309,10 +293,10 @@ def _score(slot: _SlotP, call: _CallP) raises:
         raise Error("NotImplementedError: mojolearn: a weighted score of a QNRegressor member is not "
             + "published; the caller predicts and runs its own weighted metric")
     if not route.has_fifth:
-        raise Error("ImportError: mojolearn: the QNRegressor member's score needs the metrics R^2 entry on its route")
+        raise Error("ImportError: mojolearn: the QNRegressor member's score needs the metrics program entry on its route")
     var prediction = List[Float32](length=call[].x.rows, fill=0.0)
     _predict_into(slot, call, Int(prediction.unsafe_ptr()))
-    call[].value = _r2(route.fifth.call, call[].y.data, Int(prediction.unsafe_ptr()), call[].x.rows)
+    call[].value = member_r2_score(route.fifth, call[].y.data, Int(prediction.unsafe_ptr()), call[].x.rows)
     _ = prediction^
 
 

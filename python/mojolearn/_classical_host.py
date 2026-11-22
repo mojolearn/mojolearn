@@ -1297,6 +1297,12 @@ CLASSICAL_FORMATS = tuple(_FORMATS)
 for _estimators in _FORMATS.values():
     for _public_name, _host_class in _estimators.items():
         _digest_fields.twin(_host_class, _public_name)
+# The loop names leave the module: `_host_class` kept the last twin
+# (HostGaussianProcessClassifier) as a second module binding, and the
+# full-reset install's scan of this module's classes
+# (_native_full_reset_params.py `deferred_host_classes`) then listed it twice
+# (verify smoke of e282d53b19, test_native_full_reset_params.py; lane sr3-smoke).
+del _estimators, _public_name, _host_class
 
 def _host_fit_helpers():
     """The CPU decomposition and x_linear binaries the explicit host

@@ -11,7 +11,7 @@ LinearSVR) through the entries of the `DeviceRoute` the estimators' own doors
 resolve (bindings/linear_svc_boundary_unpack.mojo `linear_svc_route`):
 `entry` the `linear_svc_native_api_v1` driver of the estimator's device;
 `flags` its LINEAR_SVC_ROUTE_* words (a caller admits only a route with both
-bits); `fifth` the metrics image's R^2 entry of the route's tier and device
+bits); `fifth` the x_metrics program entry (the estimator's own score program, core/linear_score_run.mojo `member_r2_score`) of the route's tier and device
 (LinearSVR score; without it score is not offered). No kernel is touched.
 
 Kinds (the second word of each class's `_mojolearn_member`): 0 LinearSVC,
@@ -69,7 +69,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_LINEAR_SVM
-from core.metrics_entry_table import MR_R2
+from core.linear_score_run import member_r2_score
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_call, native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -406,22 +406,6 @@ def _decision(slot: _SlotP, call: _CallP) raises:
     _decision_into(slot, call, call[].dst.data)
 
 
-def _r2(entry: NativeDescriptorCall, y_true: Int, y_pred: Int, n: Int) raises -> Float64:
-    """`metrics.r2_score(y_true, y_pred)` as one typed call of the metrics
-    image's R^2 entry, with the metrics door's refusals."""
-    if not host_all_finite_f32(_F32P(unsafe_from_address=y_true), n):
-        raise Error("mojolearn metrics: y_true contains NaN or infinity")
-    if not host_all_finite_f32(_F32P(unsafe_from_address=y_pred), n):
-        raise Error("mojolearn metrics: y_pred contains NaN or infinity")
-    var value = List[Float64](length=1, fill=0.0)
-    var words: List[Int] = [n]
-    var plain: List[Int] = [y_true, y_pred, Int(value.unsafe_ptr())]
-    _ = native_descriptor_call(entry, MR_R2, plain, words, List[Float64]())
-    var result = value[0]
-    _ = value^
-    return result
-
-
 def _score(slot: _SlotP, call: _CallP) raises:
     var estimator = _name(slot)
     _query(slot, call)
@@ -435,10 +419,10 @@ def _score(slot: _SlotP, call: _CallP) raises:
         if call[].y.cols != 1 or call[].y.rows != rows:
             raise Error("ValueError: y must be 1-D with one entry per row of X")
         if not route.has_fifth:
-            raise Error("ImportError: mojolearn: the " + estimator + " member's score needs the metrics R^2 entry on its route")
+            raise Error("ImportError: mojolearn: the " + estimator + " member's score needs the metrics program entry on its route")
         var prediction = List[Float32](length=rows, fill=0.0)
         _decision_into(slot, call, Int(prediction.unsafe_ptr()))
-        call[].value = _r2(route.fifth.call, call[].y.data, Int(prediction.unsafe_ptr()), rows)
+        call[].value = member_r2_score(route.fifth, call[].y.data, Int(prediction.unsafe_ptr()), rows)
         _ = prediction^
         return
     _codes_view(call[].y, rows, "y", estimator)

@@ -6,7 +6,7 @@ Published kinds: 0 ElasticNet, 1 Lasso (`_mojolearn_member =
   * `cd_member_admit` (UNPACK, once per member): the estimator's own
     refusals (bindings/x_linear_cd_unpack.mojo `_xl_cd_validate`), its own
     route (bindings/x_linear_route_unpack.mojo `xl_route(..., cd=True)`: the
-    solver entry; a hit is one record read), the metrics R^2 entry of the
+    solver entry; a hit is one record read), the x_metrics program entry of the
     process's tier on the route's device in the route's fifth slot when that
     image is loaded, and the 7 parameter words (core/cd_member.mojo
     docstring). An explicit host inference class (no fit) is not admitted.
@@ -35,7 +35,7 @@ from core.member_abi import (
     MEMBER_OP_EXPORT, MEMBER_OP_IMPORT, MEMBER_BLOCK_COEF, MEMBER_BLOCK_SCALARS, MEMBER_IMPORT_DONE, MEMBER_F64,
 )
 from core.cd_member import CD_MEMBER_ELASTIC_NET, CD_MEMBER_LASSO
-from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
+from providers.python.metrics_route_boundary_door import member_metrics_program_fifth
 from providers.python.device_route_boundary_door import device_route_value
 
 
@@ -58,16 +58,11 @@ def cd_member_admit(model: PythonObject, fields: PythonObject, kind: Int, contex
         _float(py_item(fields, nk[].k_l1_ratio)), _float(py_item(fields, nk[].k_tol)), 1.0 if shuffle else 0.0]
     var route = device_route_value(ops.owner)
     if not route.has_fifth:
-        # The metrics image's R^2 entry of the process tier on the route's
-        # device, when that image is loaded.
+        # The x_metrics program entry of the process tier on the route's
+        # device (the program the estimator's own score runs), when that
+        # image is loaded.
         var metric_mode = 1 if String(py_item(py_item(context, nk[].k_backend_fields), nk[].k__DEFAULT_MODE)) == "identical" else 0
-        try:
-            var entry = metrics_r2_entry(MetricsEntryKey(metric_mode, route.vendor))
-            route.fifth = EntryRef(entry, entry_ref_word(metric_mode, route.vendor, MR_OP_COUNT))
-            route.has_fifth = True
-        except problem:
-            # Not loaded: score is refused in words; the caller runs its own metric.
-            _ = String(problem)
+        member_metrics_program_fifth(route, metric_mode, route.vendor)
     owner.plan.route = route
     owner.plan.params = words^
     owner.pins = Python.tuple(ops.owner, ops.scope)
