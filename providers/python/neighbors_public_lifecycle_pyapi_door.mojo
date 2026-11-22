@@ -337,10 +337,13 @@ def neighbors_public_finish(model: PythonObject, operation: String, result: Pyth
             py_setitem(call.fields, "_resident_holder", Python.dict())
         if operation == "family_xn_loc_nc_fit":
             py_setitem(call.fields, "classes_", _public_labels(call.fields["classes_"], context))
-    if call.outside and result is not model:
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the kernel's float32 values (or labels) as a NumPy view,
+    # with no caller test and no float64 widening pass into a second buffer.
+    # The other public results keep the caller test.
+    if (call.outside or call.method == "predict") and result is not model:
         var outlier = operation.startswith("family_xn_loc_lof_") and (call.method == "score_samples" or call.method == "decision_function")
-        var regressor = operation == "family_xn_knn_reg_predict" and py_get(context, "ndarray") is not None
-        return _public_result(result, outlier or regressor, context)
+        return _public_result(result, outlier, context)
     return result
 
 
