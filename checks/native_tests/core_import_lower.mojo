@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The lowering of imported ONNX models against the eager session, moved from
 test_import_lower.py (2026-11-15), through the typed native import the public
 `importers.import_model` door calls (autograd/import_reader.mojo `onnx_read`,
@@ -54,7 +55,11 @@ from checks.native_tests.ops_higher import tensor, op1, op2, reshape, values
 from checks.native_tests.core_ops_common import normal, unit_value, allclose, exact, dims2, dims3, dims4, opi
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require, fixture_path, read_fixture_bytes
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.core_ops_common import require
+from checks.native_tests.runner import fixture_path, read_fixture_bytes
 
 
 comptime CORE_IMPORT_LOWER_FIXTURES = 6
@@ -557,27 +562,25 @@ def run_core_import_lower_fixture[E: Exec & Movable & Deinitable, KIND: Int](
         _gemm_transb[E, KIND](sid, h, r)
 
 
-# ---- The host column ----
-# Each fixture imports into its own host session and builds its eager
-# reference on a second, private host session; the fixtures run across host
-# cores with a private failure slot each.
+# The host column: each fixture imports into its own host session and builds its eager reference on a second,
+# private host session; the fixtures run across host cores.
 #
-# onnx_import reaches its session and its model graph through the
-# process-wide tables (autograd/ops_api.mojo _OPS_SESSIONS,
-# autograd/import_reader.mojo _ONNX_GRAPHS), whose open/close append to and
-# pop from unlocked lists (core_program_loop says the same). So the sessions
-# are opened and the models read on this thread first, the tasks only look
-# entries up (no table writes while they run), and everything is closed on
-# this thread after the parallel section.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_IMPORT_LOWER_FIXTURES)
-    var sids = List[Int]()
-    var graphs = List[Int]()
-    for fixture_id in range(CORE_IMPORT_LOWER_FIXTURES):
-        sids.append(ops_session_open[HostExec, OPS_HOST](HostExec(), False))
-        graphs.append(onnx_read(_model_path(fixture_id)))
-    def task(fixture_id: Int) {imm cases, imm sids, imm graphs}:
-        try:
+# onnx_import reaches its session and its model graph through the process-wide tables (autograd/ops_api.mojo
+# _OPS_SESSIONS, autograd/import_reader.mojo _ONNX_GRAPHS), whose open/close append to and pop from unlocked lists
+# (core_program_loop says the same). So the sessions are opened and the models read on this thread first, the cases
+# only look entries up (no table writes while they run), and everything is closed on this thread after them.
+#
+# The device column: the same fixtures on device sessions, in order. DeviceExec shares sequence_ctx() and its pool,
+# so independent concurrent sessions would race that context's ownership (as in ops_higher's device column); the
+# fixtures run one after another and each kernel keeps its own parallelism.
+def test_import_lower() raises:
+    comptime if CPU_COLUMN_BUILD:
+        var sids = List[Int]()
+        var graphs = List[Int]()
+        for fixture_id in range(CORE_IMPORT_LOWER_FIXTURES):
+            sids.append(ops_session_open[HostExec, OPS_HOST](HostExec(), False))
+            graphs.append(onnx_read(_model_path(fixture_id)))
+        def host_fixture(fixture_id: Int) raises {imm sids, imm graphs}:
             var r = OpsSession[HostExec](HostExec(), False)
             try:
                 run_core_import_lower_fixture[HostExec, OPS_HOST](sids[fixture_id], graphs[fixture_id], r, fixture_id)
@@ -585,24 +588,14 @@ def _run_cpu(mut report: Report) raises:
                 r.close()
                 raise error
             r.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, CORE_IMPORT_LOWER_FIXTURES)
-    for fixture_id in range(CORE_IMPORT_LOWER_FIXTURES):
-        onnx_close(graphs[fixture_id])
-        ops_session_close[HostExec, OPS_HOST](sids[fixture_id])
-
-
-# ---- The device column ----
-# The same fixtures on device sessions, in order.
-#
-# DeviceExec shares sequence_ctx() and its pool, so independent concurrent
-# sessions would race that context's ownership (as in ops_higher_gpu); the
-# fixtures run one after another and each kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_IMPORT_LOWER_FIXTURES)
-    for fixture_id in range(CORE_IMPORT_LOWER_FIXTURES):
         try:
+            check_cases("import_lower", CORE_IMPORT_LOWER_FIXTURES, host_fixture)
+        finally:
+            for fixture_id in range(CORE_IMPORT_LOWER_FIXTURES):
+                onnx_close(graphs[fixture_id])
+                ops_session_close[HostExec, OPS_HOST](sids[fixture_id])
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var sid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), False)
             var h = onnx_read(_model_path(fixture_id))
             var r = OpsSession[DeviceExec](DeviceExec(), False)
@@ -616,19 +609,8 @@ def _run_gpu(mut report: Report) raises:
             r.close()
             onnx_close(h)
             ops_session_close[DeviceExec, OPS_DEVICE](sid)
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("import_lower", CORE_IMPORT_LOWER_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_import_lower", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

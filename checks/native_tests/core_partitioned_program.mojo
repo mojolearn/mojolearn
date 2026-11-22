@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native partitioned programs on one device, moved from
 test_partitioned_program.py (2026-11-14), through the typed entries the
 public door calls (autograd/partition_entries.mojo partition_open_native,
@@ -46,7 +47,9 @@ from sequence.exec import HostExec
 from std.os import getenv
 from sequence.exec_device import DeviceExec
 from sequence.x_sequence_impl import device_executors
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.core_ops_common import require
 
 
 comptime CORE_PARTITIONED_PROGRAM_FIXTURES = 4
@@ -305,35 +308,9 @@ def run_core_partitioned_program_fixture[E: Exec & Movable & Deinitable, KIND: I
     same_words(actual, values(s[], lp[1], dims2(1, 4)), "one more partitioned epoch equals one more program epoch")
 
 
-# ---- The host column (was core_partitioned_program_cpu_suite.mojo) ----
-# Partitioned programs on host sessions, devices (0,).
-#
-# Serial by nature: the session and the partition reach their owners through
-# the process-wide tables (autograd/ops_api.mojo _OPS_SESSIONS,
-# autograd/partition_entries.mojo _PARTITIONS), whose open/close append to and
-# pop from unlocked lists, so concurrent fixtures from host tasks would race on
-# those tables. Each partitioned program runs its own ranks in parallel
-# (PartitionedProgram.wave); the four tiny fixtures run one after another.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_PARTITIONED_PROGRAM_FIXTURES)
-    for fixture_id in range(CORE_PARTITIONED_PROGRAM_FIXTURES):
-        try:
-            var sid = ops_session_open[HostExec, OPS_HOST](HostExec(), False)
-            try:
-                var executors = List[HostExec]()
-                executors.append(HostExec())
-                var devices: List[Int] = [0]
-                run_core_partitioned_program_fixture[HostExec, OPS_HOST](sid, fixture_id, devices, executors^)
-            except error:
-                ops_session_close[HostExec, OPS_HOST](sid)
-                raise error
-            ops_session_close[HostExec, OPS_HOST](sid)
-        except error:
-            cases.fail(fixture_id, error)
-
-
-# ---- The device column (was core_partitioned_program_gpu_suite.mojo) ----
-# Partitioned programs on device sessions, devices (0,).
+# ---- The host and device columns ----
+# Partitioned programs on host sessions (devices (0,)) and on device sessions (devices from
+# MOJOLEARN_DISTRIBUTED_PROGRAM_DEVICES, default (0,)).
 #
 # Serial by nature: the session and the partition reach their owners through
 # the process-wide tables (autograd/ops_api.mojo _OPS_SESSIONS,
@@ -351,10 +328,22 @@ def _devices() raises -> List[Int]:
     return out^
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_PARTITIONED_PROGRAM_FIXTURES)
-    for fixture_id in range(CORE_PARTITIONED_PROGRAM_FIXTURES):
-        try:
+def test_partitioned_program() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
+            var sid = ops_session_open[HostExec, OPS_HOST](HostExec(), False)
+            try:
+                var executors = List[HostExec]()
+                executors.append(HostExec())
+                var devices: List[Int] = [0]
+                run_core_partitioned_program_fixture[HostExec, OPS_HOST](sid, fixture_id, devices, executors^)
+            except error:
+                ops_session_close[HostExec, OPS_HOST](sid)
+                raise error
+            ops_session_close[HostExec, OPS_HOST](sid)
+        check_cases_serial("partitioned_program", CORE_PARTITIONED_PROGRAM_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var sid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), False)
             try:
                 var devices = _devices()
@@ -364,19 +353,8 @@ def _run_gpu(mut report: Report) raises:
                 ops_session_close[DeviceExec, OPS_DEVICE](sid)
                 raise error
             ops_session_close[DeviceExec, OPS_DEVICE](sid)
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("partitioned_program", CORE_PARTITIONED_PROGRAM_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_partitioned_program", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

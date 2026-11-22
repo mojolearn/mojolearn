@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The block operations of `mojolearn.ops.Session` (lane fx-ops-session-blocks,
 2026-11-18): `mamba_block` / `mamba_step`, `attention_block` /
 `attention_step`, `small_mlp`, `lm_head_loss` and the Lion, Adamax and NAdam
@@ -85,7 +86,9 @@ from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from checks.native_tests.ops_higher import tensor, total, values, gradient, same_words
 from checks.native_tests.core_ops_common import dims2, normal, all_finite
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.core_ops_common import require
 
 
 comptime CORE_OPS_SESSION_BLOCKS_FIXTURES = 13
@@ -852,11 +855,12 @@ def run_core_ops_session_blocks_fixture[E: Exec & Movable & Deinitable, KIND: In
         _generation[E, KIND](sid)
 
 
-# ---- The host column ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_OPS_SESSION_BLOCKS_FIXTURES)
-    for fixture_id in range(CORE_OPS_SESSION_BLOCKS_FIXTURES):
-        try:
+# ---- The host and device columns ----
+# The fixtures run one after another on both columns: each opens its sessions through the process-wide session table
+# (as the old host and device loops did).
+def test_ops_session_blocks() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
             var sid = ops_session_open[HostExec, OPS_HOST](HostExec(), False)
             var rid = ops_session_open[HostExec, OPS_HOST](HostExec(), True)
             try:
@@ -867,15 +871,9 @@ def _run_cpu(mut report: Report) raises:
                 raise error
             ops_session_close[HostExec, OPS_HOST](rid)
             ops_session_close[HostExec, OPS_HOST](sid)
-        except error:
-            cases.fail(fixture_id, error)
-
-
-# ---- The device column ----
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_OPS_SESSION_BLOCKS_FIXTURES)
-    for fixture_id in range(CORE_OPS_SESSION_BLOCKS_FIXTURES):
-        try:
+        check_cases_serial("ops_session_blocks", CORE_OPS_SESSION_BLOCKS_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var sid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), False)
             var rid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), True)
             try:
@@ -886,19 +884,8 @@ def _run_gpu(mut report: Report) raises:
                 raise error
             ops_session_close[DeviceExec, OPS_DEVICE](rid)
             ops_session_close[DeviceExec, OPS_DEVICE](sid)
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("ops_session_blocks", CORE_OPS_SESSION_BLOCKS_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_ops_session_blocks", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

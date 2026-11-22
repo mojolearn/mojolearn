@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The elementwise operations of imported models in the session
 (plan MODEL_IMPORT (git history) section 3.3), moved from test_ops_import_kinds.py
 (2026-11-14): values against independent float64 formulas (exactly where the
@@ -42,10 +43,12 @@ from autograd.ops_api import OpsSession
 from sequence.exec_trait import Exec
 from checks.native_tests.ops_higher import tensor, total, values, gradient, same_words
 from checks.native_tests.core_ops_common import uniform, wide, allclose, exact, dims2, dims3, same_shape, opi
-from core.host_parallel import host_parallelize
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.core_ops_common import require
 
 
 comptime CORE_OPS_IMPORT_KINDS_FIXTURES = 45
@@ -749,13 +752,13 @@ def run_core_ops_import_kinds_fixture[E: Exec & Movable & Deinitable](
     _check(fixture_id, first)
 
 
-# ---- The host column (was core_ops_import_kinds_cpu_suite.mojo) ----
-# The import elementwise kinds against float64 oracles: each fixture on its own two host sessions, the fixtures run
-# across host cores with a private failure slot each.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_OPS_IMPORT_KINDS_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
+# The import elementwise kinds against float64 oracles. The host column: each fixture on its own two host sessions, the fixtures across host cores. The device
+# column: DeviceExec shares sequence_ctx() and its pool, so independent concurrent sessions would race that context's
+# ownership (as in ops_higher's device column); the fixtures run one after another and each kernel keeps its own
+# parallelism.
+def test_ops_import_kinds() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
             var record = core_ops_import_kinds_records(fixture_id)
             var s = OpsSession[HostExec](HostExec(), record)
             var again = OpsSession[HostExec](HostExec(), record)
@@ -767,21 +770,9 @@ def _run_cpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, CORE_OPS_IMPORT_KINDS_FIXTURES)
-
-
-# ---- The device column (was core_ops_import_kinds_gpu_suite.mojo) ----
-# The import elementwise kinds against float64 oracles on the device, in order.
-#
-# DeviceExec shares sequence_ctx() and its pool, so independent concurrent
-# sessions would race that context's ownership (as in ops_higher_gpu); the
-# fixtures run one after another and each kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_OPS_IMPORT_KINDS_FIXTURES)
-    for fixture_id in range(CORE_OPS_IMPORT_KINDS_FIXTURES):
-        try:
+        check_cases("ops_import_kinds", CORE_OPS_IMPORT_KINDS_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var record = core_ops_import_kinds_records(fixture_id)
             var s = OpsSession[DeviceExec](DeviceExec(), record)
             var again = OpsSession[DeviceExec](DeviceExec(), record)
@@ -793,19 +784,8 @@ def _run_gpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("ops_import_kinds", CORE_OPS_IMPORT_KINDS_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_ops_import_kinds", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
