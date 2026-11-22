@@ -29,7 +29,8 @@ ms, so the arm was the median of 20 calls (AGENTS.md small-row rule); the
 arm's slowest call was 6.86 ms, digests equal. The intrinsic was not the
 cause of the HDBSCAN / k-NN regression against 0.8.55 (portable_sqrtf's
 candidate loop was: checks/numerics.mojo NUMERICS_SQRT_COMPTIME_STEP).
-`-D MOJOLEARN_IDN_NV_FMA_ASM_OFF` restores the intrinsic. NVIDIA-only code
+The intrinsic form and its switch were deleted 2026-11-22 (the tombstone
+below the imports): the asm helper is the one form. NVIDIA-only code
 generation: the other columns do not compile this function. Limits: NVIDIA
 only (AGENTS.md part 8). Call only in
 code compiled for an NVIDIA GPU (every caller sits under an NVIDIA-only
@@ -42,16 +43,13 @@ schedulable) in `checks.numerics` (`nv_mul_rn_kernel_f32`,
 `checks.numerics.ftz` and `pinned_mul_f32` call them and this module imports
 `checks.numerics`.
 """
-from std.sys import llvm_intrinsic
-from std.sys.compile import is_defined
 from checks.numerics import nv_fma_rn_f32
 
-comptime IDN_NV_FMA_ASM = not is_defined["MOJOLEARN_IDN_NV_FMA_ASM_OFF"]()
+# TOMBSTONE: MOJOLEARN_IDN_NV_FMA_ASM_OFF (old path of the promotion of MOJOLEARN_IDN_NV_FMA_ASM_OLD: the llvm.nvvm.fma.rn.f intrinsic LOST A/B ab2 NVIDIA L40S, wheel d652a4b0a1, job nvc-ab-20261118T140734Z-8f0269, one run per arm, digests equal on all 30 cells, asm/intrinsic geomean 0.971 over 29 cells, ols taxi 0.74-0.80, ridge taxi 0.82) the IDN_NV_FMA_ASM switch and the intrinsic return of nv_fma_rn_kernel deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+# Restore: git apply experiments/removed/MOJOLEARN_IDN_NV_FMA_ASM_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
 def nv_fma_rn_kernel(a: Float32, b: Float32, c: Float32) -> Float32:
     """NVIDIA `fma.rn.f32` (`a*b + c`, one rounding, never flushed); see above."""
-    comptime if IDN_NV_FMA_ASM:
-        return nv_fma_rn_f32(a, b, c)
-    return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, c)
+    return nv_fma_rn_f32(a, b, c)
