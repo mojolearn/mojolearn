@@ -1212,37 +1212,12 @@ def gpc_predict_all_binding(addrs: PythonObject, params: PythonObject) raises ->
     return Python.list(Int(words[0]), Int(words[1]))
 
 
-def gpc_predict_all_resident_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
-    """`gpc_predict_all` with the same `addrs` in the same order and
-    `params` = its 7 values followed by ONE more word, the lease
-    (`gp_resident_lease`; 0 uploads the model for this call only). The model
-    arrays are read from the lease's device copies. `addrs` may end with a
-    fold's three store ids, and the result is the query's [finite, range]
-    words, as `gpc_predict_all`."""
-    if len(params) != 8:
-        raise Error(
-            "gpc_predict_all_resident: params must contain 8 values (n_train,"
-            " n_features, n_star, n_nodes, n_ls, out_kind, k, lease), got "
-            + String(len(params))
-        )
-    return gpc_predict_all_binding(addrs, params)
-
-
 # ===========================================================================
 # DEVICE-RESIDENT FITTED STATE (lane ne1-a-gp-svm, 2026-11-06;
 # gaussian_process/gp_resident_state.mojo, core/fitted_resident_store.mojo).
 # The public door takes a lease once per fitted state and names it on every
 # predict; the model's fitted arrays then cross to the device once.
 # ===========================================================================
-
-
-def gp_resident_lease_binding() raises -> PythonObject:
-    """A new lease: `(owner, lease)`. `owner` is the native object whose
-    destruction frees every device copy the lease holds; the caller keeps it
-    as long as the copies may be used (bindings/fitted_resident_door.mojo)."""
-    var lease = gp_resident_lease_open()
-    var owner = PythonObject(alloc=GpResidentLease(lease))
-    return Python.tuple(owner, PythonObject(lease))
 
 
 def gp_resident_stats_binding() raises -> PythonObject:
@@ -1526,10 +1501,9 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gpr_predict_ptr_binding]("gpr_predict_ptr")
         # Device-resident fitted state (lane ne1-a-gp-svm).
         _ = m.add_type[GpResidentLease]("_GpResidentLease")
-        m.def_function[gp_resident_lease_binding]("gp_resident_lease")
+        # TOMBSTONE: gp_resident_lease, gpc_predict_all_resident (dead Python-visible entries: the GP doors call the native functions directly) deleted 2026-11-25 by 03da17c7ba; code recoverable at 03da17c7ba^.
         m.def_function[gp_resident_stats_binding]("gp_resident_stats")
         m.def_function[gpr_predict_resident_binding]("gpr_predict_resident")
-        m.def_function[gpc_predict_all_resident_binding]("gpc_predict_all_resident")
         # The Cholesky door (workstream D, 2026-09-14).
         # TOMBSTONE: the *_parallel_available multi-GPU capability probes (dead native entries: constant 1, no driver or package code looks them up) deleted 2026-10-26 by b3cad1ef6; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_parallel_probes.patch

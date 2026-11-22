@@ -52,7 +52,7 @@ class PrepFiniteConnection(unittest.TestCase):
             _parameters = ("estimator", "step")
 
         module("._arena_io", DeviceRows=Rows, DeviceCache=Cache, _Scope=Scope, _LOCAL=object())
-        state = {"existing_admission": object()}
+        state = {"existing_admission": object(), "vendor": "cpu"}
         output = {"array_class": object()}
         module("._native_classical_bridge", _state_context=lambda: state,
                _numpy_free_context=lambda: output)
@@ -60,6 +60,8 @@ class PrepFiniteConnection(unittest.TestCase):
         # Native warning delivery is connected from its own module now; its words join the context.
         module("._native_classical_warnings", connect_warnings=lambda: {"warning_filters": object()})
         module("._native_loaded_modules", INTEGRAL_TYPES=(int,))
+        # The bridge reads the CPU refusal text here and, on a "cpu" context, loads no second image.
+        module("._native_prep_device", _FAST_ON_CPU="fast is for Apple GPUs")
         door = SimpleNamespace(_module=SimpleNamespace(prep_encode_native_call=repr))
         module(".tokenizer", _binding=lambda: door)
         path = ROOT / "python/mojolearn/_native_prep_encode_bridge.py"
