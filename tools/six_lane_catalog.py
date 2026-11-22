@@ -3,7 +3,6 @@
 from __future__ import annotations
 import ast
 import hashlib
-import importlib.util
 import json
 import re
 from pathlib import Path
@@ -23,15 +22,6 @@ def unique(items):
 
 def seq(value):
     return value if isinstance(value, list) else [] if value is None else [value]
-
-
-def metadata_module(name):
-    # These adapters contain only source metadata/discovery functions. Never load
-    # workload runners here: some import runtime libraries at module scope.
-    spec = importlib.util.spec_from_file_location(name, ROOT / 'tools' / (name + '.py'))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
 
 
 def config(defines=(), env=None, runtime=None):
@@ -97,8 +87,8 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
                 conflicts=seq(e.get('mutually_exclusive_with'))+seq(e.get('incompatible_defines')),
                 gaps=gaps,implementation=dict(idea=True,programmed='source_present_partial_or_unverified' if paths else 'idea_only',source_files_present=bool(paths),production_wired='source_claim_present' if wiring_claim else 'source_mapping_requires_review',implemented_scope=scope,coverage='partial_or_unverified' if partial else 'source_scope_only',harness_wired='master_planner; execution adapter requires concrete saved recipe',compiled=[],runtime_reach='unverified'),
                 source_status=status,
-                qualification=dict(QUALIFICATION),mode='fast' if lane.startswith('AF.') else 'identical',
-                vendors=['apple'] if lane.startswith('AF.') else ['nvidia','amd','apple','host'],
+                qualification=dict(QUALIFICATION),mode='identical',
+                vendors=['nvidia','amd','apple','host'],
                 new_defaults_enabled=False,arms=arms)
 
 
@@ -150,32 +140,8 @@ def discover():
         for e in read(p)['experiments']:
             mapping=nimap['ideas'][e['id']]
             entries.append(normalize('I.N','identical.neural.v2',e,p,workloads=[dict(id=w,**nimap['workloads'][w]) for w in mapping['workloads']],bindings=mapping['binding_families']))
-    afc='experiments/apple_fast_classical_20261006/'
-    afcw=read(afc+'full_workloads.json');afcb=read(afc+'build_bindings.json')['cards']
-    for name in ('geometry','linear','preprocessing','trees'):
-        p=afc+'lanes/'+name+'.json'
-        for e in read(p)['entries']:
-            w=next(w for w in afcw['entries'] if w['id']==e['id'])
-            entries.append(normalize('AF.C','apple_fast.classical',e,p,workloads=w['recipes'],bindings=afcb[e['id']]['affected_bindings'],callers=e.get('affected_callers',[])))
-    aft=metadata_module('apple_fast_tree_integration')
-    for name in 'FGNP':
-        p='experiments/apple_fast_trees/'+name+'.json'
-        for e in read(p)['cards']:
-            route=aft.route(e['id'])
-            item=normalize('AF.T','apple_fast.trees',e,p,workloads=route['saved_workloads'],bindings=route['candidate_bindings'])
-            item['route']=route;entries.append(item)
-    afn=metadata_module('apple_fast_neural_ideas')
-    for name in ['attention','training','mamba','cnn_embedding','interactions']:
-        p='experiments/apple_fast_neural_20261006/'+name+'.json'
-        for e in read(p)['cards']:
-            vs=[(v['name'],{**e,**v}) for v in e['variants']]
-            routes=[]
-            for name2,v in vs: routes+=afn.target_routes(e['id'],name2,v.get('candidate_defines',[]))
-            item=normalize('AF.N','apple_fast.neural',e,p,variants=vs,bindings=unique([r['binding'] for r in routes]),workloads=routes)
-            item['implementation']['production_wired']='authored_call_site_map';item['implementation']['implemented_scope']=routes
-            item['production_route_source']='tools/apple_fast_neural_ideas.py:target_routes'
-            if name=='interactions':item['kind']='interaction';interactions.append(item)
-            else:entries.append(item)
+    # Apple FAST cards (AF.C, AF.T, AF.N) left the repo 2026-11-22 (Apple `fast` investment stopped; AGENTS.md):
+    # their files are in ~/mojolearn-evidence/repo-data/ with their docs/apple-fast/EXPERIMENTS.md rows.
     # Explicit equivalence after source reconciliation; narrower subarms keep IDs.
     for ni,nn,scope in [('NI24','NN28','owned ByteLM prefill cache omission'),('NI32','NN51','owned validated token admission'),('NI33','NN52','CE weights and logits gradient same cell'),('NI43','NN38','descending suffix seed cache'),('NI53','NN44','stable expert scatter')]:
         aliases.append(dict(id='I.N.'+ni+':default',kind='equivalent_implementation',canonical='I.N.'+nn+':default',scope=scope,legacy_controls_preserved=True))
@@ -193,15 +159,9 @@ def discover():
             ('I.N.X.attention-training',['I.N.NN25','I.N.NN26','I.N.NN27','I.N.NN28'],'Norm, activation, rotary and training-cache passes in one block'),
             ('I.N.X.embedding-loss',['I.N.NN49','I.N.NN50','I.N.NN51','I.N.NN52'],'Embedding ownership and CE share token admission'),
             ('I.N.X.optimizer-arena',['I.N.NN55','I.N.NN56','I.N.NN60','I.N.NN62'],'Clipping, optimizer transaction and views share lifetimes'),
-            ('I.N.X.cnn-memory',['I.N.NN14','I.N.NN45','I.N.NI10','I.N.NI14'],'Convolution tiles, ReLU and backward tape lifetimes'),
-            ('AF.T.X.histogram',['AF.T.F01','AF.T.F02','AF.T.F04','AF.T.F05'],'Histogram workspace and scoring pipeline'),
-            ('AF.T.X.quantization',['AF.T.G05','AF.T.G06','AF.T.G09','AF.T.G10'],'Quantization and categorical preprocessing'),
-            ('AF.T.X.prediction',['AF.T.P02','AF.T.P04','AF.T.P05','AF.T.P06'],'Prediction traversal and link stages'),
-            ('AF.T.X.shap',['AF.T.P07','AF.T.P08','AF.T.P09','AF.T.P10'],'SHAP scratch and row/fold work distribution'),
-            ('AF.T.X.dart',['AF.T.P11','AF.T.P12'],'DART residual and score-add stages'),
-            ('AF.C.X.prep-linear',['AF.C.AFCL-P01','AF.C.AFCL-L01'],'Preparation and Gram shared full linear callers')]
+            ('I.N.X.cnn-memory',['I.N.NN14','I.N.NN45','I.N.NI10','I.N.NI14'],'Convolution tiles, ReLU and backward tape lifetimes')]
     for ident,members,why in groups:interactions.append(dict(id=ident,members=members,kind='interaction',rationale=why,selection_only=True))
-    for lane in ('I.C','I.T','I.N','AF.C','AF.T','AF.N'):
+    for lane in ('I.C','I.T','I.N'):
         members=[e['id'] for e in entries if e['lane']==lane]
         interactions.append(dict(id=lane+'.X.complete-proposed',members=members,kind='complete_proposed',selection_only=True,
             rationale='Stable catalog order chooses one compatible new implementation at each competing seam. Historical reuse and equivalent aliases remain dependencies; every excluded alternative is listed and remains independently selectable. Runtime-specific APIs retain missing-coverage cells. This is a proposal, never a default.'))
@@ -257,9 +217,6 @@ def discover():
     # missing complete fitted-model state or qualify full identity. No new
     # default promotion is justified by these combined measurements.
     interactions.extend([
-        dict(id='AF.X.tree-preparation',members=['AF.C.AFCL-T01','AF.C.AFCL-T02','AF.T.G06','AF.T.G09'],kind='interaction',selection_only=True,rationale='Histogram row/feature grouping shares the quantization and categorical preparation boundary.'),
-        dict(id='AF.X.tree-shap',members=['AF.C.AFCL-T11','AF.T.P08','AF.T.P09','AF.T.P10'],kind='interaction',selection_only=True,rationale='Query geometry, contribution scratch budget, and fold scheduling share one SHAP operation.'),
-        dict(id='AF.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='fast'],kind='complete_proposed',selection_only=True,rationale='Complete Apple FAST proposal across all three lanes; explicit alternative exclusions and unchanged benchmark coverage remain visible.'),
         dict(id='I.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='identical'],kind='complete_proposed',selection_only=True,rationale='Complete IDENTICAL proposal across classical, trees and reconciled neural source. All numerical columns share this configuration; Apple timing does not vote.'),
     ])
     for spec in read('experiments/six_lane_integration/interaction_specs.json')['interactions']:
