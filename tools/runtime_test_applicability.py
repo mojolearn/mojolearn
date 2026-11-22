@@ -20,15 +20,9 @@ CPU = {
         "test_device_loss_scalar_conversion_and_failure_remain_native[num_items-g-3.75-swapped]": "training device pool requires GPU",
         "test_device_loss_scalar_conversion_and_failure_remain_native[num_items-g-nan-scalar]": "training device pool requires GPU",
     },
-    # The x_prep word-store cases (arena unit E, 2026-11-21: one prefix, the
-    # skip reason of tests/test_device_cache_native_state.py `_real()`).
-    "test_cache_lifecycle_native.py": {name: "real word-store slots require a GPU package; explicitly excluded from CPU selection"
-                                       for name in (
-        "test_cache_context_entry_preserves_identity[normal]",
-        "test_cache_context_entry_preserves_identity[subclass]",
-        *(f"test_cache_live_matches_real_store_count_after_consumed_allocations[{slots}]" for slots in (0, 1, 2)),
-        "test_cache_live_uses_captured_native_entry_and_ignores_mutable_int",
-    )},
+    # The x_prep word-store cases of test_cache_lifecycle_native.py are NOT
+    # here: tools/qualify_native_runtime_installed.py CPU_NOT_APPLICABLE judges
+    # them already (arena unit E); a second row here judged them twice.
 }
 PRE_PY312 = {
     "test_robust_scaler_native_lifecycle.py": {
@@ -68,7 +62,6 @@ def supplement(scope, vendor, interpreter):
                 row["not_applicable"].append(case)
                 accepted.append(dict(file=filename, node=case["name"], reason=case["skip_reason"],
                                      basis="CPU-only cooperative refusal is not a GPU operation" if filename == "test_native_process_pool.py"
-                                     else "CPU has no native device store" if filename == "test_cache_lifecycle_native.py"
                                      else "CPU has no training device pool" if filename == "test_training_scalar_buffer_native.py"
                                      else "CPU has no resident parameter entry" if case["name"] in CPU.get(filename, {})
                                      else "recorded CPython version predates Python-defined buffer exporters"))
