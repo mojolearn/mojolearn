@@ -1,0 +1,3709 @@
+{
+ "schema": "mojolearn.apple-fast-cards/1",
+ "family": "perf",
+ "description": "Apple fast performance ideas F01-F20: manifest, compile audit and compile matrix, one row per card.",
+ "loader": "tools/apple_fast_cards.py",
+ "path_moves": {
+  "experiments/performance_ideas/F01/caller.py": "experiments/performance_ideas/apple_fast/callers/F01_caller.py",
+  "experiments/performance_ideas/F02/caller.py": "experiments/performance_ideas/apple_fast/callers/F02_caller.py",
+  "experiments/performance_ideas/F03/caller.py": "experiments/performance_ideas/apple_fast/callers/F03_caller.py",
+  "experiments/performance_ideas/F04/caller.py": "experiments/performance_ideas/apple_fast/callers/F04_caller.py",
+  "experiments/performance_ideas/F05/caller.py": "experiments/performance_ideas/apple_fast/callers/F05_caller.py",
+  "experiments/performance_ideas/F06/caller.py": "experiments/performance_ideas/apple_fast/callers/F06_caller.py",
+  "experiments/performance_ideas/F06/coverage.md": "experiments/performance_ideas/apple_fast/callers/F06_coverage.md",
+  "experiments/performance_ideas/F07/caller.py": "experiments/performance_ideas/apple_fast/callers/F07_caller.py",
+  "experiments/performance_ideas/F08/caller.py": "experiments/performance_ideas/apple_fast/callers/F08_caller.py",
+  "experiments/performance_ideas/F09/caller.py": "experiments/performance_ideas/apple_fast/callers/F09_caller.py",
+  "experiments/performance_ideas/F10/caller.py": "experiments/performance_ideas/apple_fast/callers/F10_caller.py",
+  "experiments/performance_ideas/F11/caller.py": "experiments/performance_ideas/apple_fast/callers/F11_caller.py",
+  "experiments/performance_ideas/F12/caller.py": "experiments/performance_ideas/apple_fast/callers/F12_caller.py",
+  "experiments/performance_ideas/F13/caller.py": "experiments/performance_ideas/apple_fast/callers/F13_caller.py",
+  "experiments/performance_ideas/F14/ann_caller.py": "experiments/performance_ideas/apple_fast/callers/F14_ann_caller.py",
+  "experiments/performance_ideas/F14/caller.py": "experiments/performance_ideas/apple_fast/callers/F14_caller.py",
+  "experiments/performance_ideas/F15/caller.py": "experiments/performance_ideas/apple_fast/callers/F15_caller.py",
+  "experiments/performance_ideas/F16/caller.py": "experiments/performance_ideas/apple_fast/callers/F16_caller.py",
+  "experiments/performance_ideas/F16/prerequisite.py": "experiments/performance_ideas/apple_fast/callers/F16_prerequisite.py",
+  "experiments/performance_ideas/F17/caller.py": "experiments/performance_ideas/apple_fast/callers/F17_caller.py",
+  "experiments/performance_ideas/F18/caller.py": "experiments/performance_ideas/apple_fast/callers/F18_caller.py",
+  "experiments/performance_ideas/F19/caller.py": "experiments/performance_ideas/apple_fast/callers/F19_caller.py",
+  "experiments/performance_ideas/F20/caller.py": "experiments/performance_ideas/apple_fast/callers/F20_caller.py"
+ },
+ "documents": [
+  {
+   "legacy_path": "experiments/performance_ideas/F01/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F01"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F01/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F01"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F02/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F02"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F02/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F02"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F03/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F03"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F03/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F03"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F04/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F04"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F04/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F04"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F05/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F05"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F05/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F05"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F06/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F06"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F06/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F06"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F07/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F07"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F07/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F07"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F08/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F08"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F08/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F08"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F09/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F09"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F09/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F09"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F10/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F10"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F10/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F10"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F11/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F11"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F11/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F11"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F12/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F12"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F12/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F12"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F13/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F13"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F13/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F13"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F14/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F14"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F14/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F14"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F15/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F15"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F15/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F15"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F16/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F16"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F16/compile_matrix.json",
+   "container": "whole",
+   "card_ids": [
+    "F16"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F16/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F16"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F17/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F17"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F17/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F17"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F18/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F18"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F18/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F18"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F19/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F19"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F19/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F19"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F20/compile_audit.json",
+   "container": "whole",
+   "card_ids": [
+    "F20"
+   ]
+  },
+  {
+   "legacy_path": "experiments/performance_ideas/F20/manifest.json",
+   "container": "whole",
+   "card_ids": [
+    "F20"
+   ]
+  }
+ ],
+ "rows": [
+  {
+   "id": "F01",
+   "parts": {
+    "experiments/performance_ideas/F01/compile_audit.json": {
+     "schema": 1,
+     "id": "F01",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "gemm/scoped_dispatch.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "estimators",
+       "baseline_defines": [
+        "MOJOLEARN_SCOPED_GEMM_AUDIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+        "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+        "MOJOLEARN_SCOPED_GEMM_PCA",
+        "MOJOLEARN_SCOPED_GEMM_AUDIT"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "Calibrated geometry selector and complete device peak-scratch attribution remain independent work."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F01/manifest.json": {
+     "schema": 1,
+     "id": "F01",
+     "title": "Actual PCA caller GEMM geometry",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F01_caller.py",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "gemm/scoped_dispatch.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT",
+      "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+      "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+      "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+      "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+      "MOJOLEARN_SCOPED_GEMM_SPLIT",
+      "MOJOLEARN_SCOPED_GEMM_PCA"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_SCOPED_GEMM_AUDIT"
+     ],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F01",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F01",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F01_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "actual compiled FAST Metal binding",
+      "candidate route count positive",
+      "PCA reconstruction no material loss",
+      "fit and inverse timings remain separate"
+     ],
+     "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "estimators",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F01",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "measurement_revision": "2026-10-06: enable existing split and NT adapters required by actual PCA callers; reuse the already compiled F02/pca candidate with the same baseline; previous no-reach attempt retained"
+    }
+   }
+  },
+  {
+   "id": "F02",
+   "parts": {
+    "experiments/performance_ideas/F02/compile_audit.json": {
+     "schema": 1,
+     "id": "F02",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "gemm/scoped_dispatch.mojo",
+      "x_decomp/lu_fast_mma.mojo",
+      "cholesky/checks/fast_trsm.mojo",
+      "x_decomp/mcd_bmma.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "cholesky",
+       "binding": "gp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_CHOL_FAST_SHARED_SUB"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "default",
+       "binding": "x_decomp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_LU_FAST_SHARED_SUB"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "mcd",
+       "binding": "x_decomp",
+       "baseline_defines": [
+        "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_G1_GRAM",
+        "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "pca",
+       "binding": "estimators",
+       "baseline_defines": [
+        "MOJOLEARN_SCOPED_GEMM_AUDIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_SCOPED_GEMM_AUDIT",
+        "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+        "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+        "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+        "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+        "MOJOLEARN_SCOPED_GEMM_SPLIT",
+        "MOJOLEARN_SCOPED_GEMM_PCA"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "x_decomp"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "sdk",
+       "binding": "scoped_gemm_probe",
+       "baseline_defines": [
+        "MOJOLEARN_SCOPED_GEMM_AUDIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_SCOPED_GEMM_AUDIT",
+        "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+        "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+        "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+        "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+        "MOJOLEARN_SCOPED_GEMM_SPLIT",
+        "MOJOLEARN_SCOPED_GEMM_PCA"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F02/manifest.json": {
+     "schema": 1,
+     "id": "F02",
+     "title": "Share GEMM infrastructure through independent fused and unfused caller adapters",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "gemm/scoped_dispatch.mojo",
+      "x_decomp/lu_fast_mma.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F02_caller.py",
+      "cholesky/checks/fast_trsm.mojo",
+      "bindings/_mojolearn_gp.mojo",
+      "bindings/_mojolearn_x_decomp.mojo",
+      "core/gemm.mojo",
+      "gemm/checks/gemm_identical.mojo",
+      "bindings/_mojolearn_scoped_gemm_probe.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_LU_FAST_SHARED_SUB"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F02",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F02",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F02_caller.py"
+     ],
+     "depends_on": [
+      "F01"
+     ],
+     "quality_gates": [
+      "factor/solve residual against FAST incumbent",
+      "retain strided subtract epilogue without extra pass",
+      "Independent SDK, LU, Cholesky lower triangle, PCA and active-batched MCD variants require positive actual reach"
+     ],
+     "timing_contract": "Complete caller through first read; each adapter independently built/qualified; no full-fit admission from matrix-only SDK checks",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "x_decomp",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "variants": {
+      "cholesky": [
+       "MOJOLEARN_CHOL_FAST_SHARED_SUB"
+      ],
+      "sdk": [
+       "MOJOLEARN_SCOPED_GEMM_AUDIT",
+       "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+       "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+       "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+       "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+       "MOJOLEARN_SCOPED_GEMM_SPLIT",
+       "MOJOLEARN_SCOPED_GEMM_PCA"
+      ],
+      "pca": [
+       "MOJOLEARN_SCOPED_GEMM_AUDIT",
+       "MOJOLEARN_SCOPED_GEMM_G1_TALL",
+       "MOJOLEARN_SCOPED_GEMM_G1_DENSE",
+       "MOJOLEARN_SCOPED_GEMM_G1_GRAM",
+       "MOJOLEARN_SCOPED_GEMM_G2_NARROW",
+       "MOJOLEARN_SCOPED_GEMM_SPLIT",
+       "MOJOLEARN_SCOPED_GEMM_PCA"
+      ],
+      "mcd": [
+       "MOJOLEARN_MCD_FAST_G1_GRAM",
+       "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
+      ]
+     },
+     "variant_bindings": {
+      "cholesky": "gp",
+      "sdk": "scoped_gemm_probe",
+      "pca": "estimators",
+      "mcd": "x_decomp"
+     },
+     "variant_baseline_defines": {
+      "sdk": [
+       "MOJOLEARN_SCOPED_GEMM_AUDIT"
+      ],
+      "pca": [
+       "MOJOLEARN_SCOPED_GEMM_AUDIT"
+      ],
+      "mcd": [
+       "MOJOLEARN_MCD_FAST_G1_GRAM_AUDIT"
+      ]
+     },
+     "variant_prerequisite_bindings": {
+      "sdk": [],
+      "pca": [
+       "core",
+       "x_decomp"
+      ],
+      "mcd": [
+       "core",
+       "x_metrics"
+      ]
+     },
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F02",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F03",
+   "parts": {
+    "experiments/performance_ideas/F03/compile_audit.json": {
+     "schema": 1,
+     "id": "F03",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "experiments/performance_ideas/apple_fast/lm_task.py"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": "Runtime/API comparison only; no new compiler mechanism or production default.",
+     "variants": [
+      {
+       "name": "default",
+       "binding": "byte_lm",
+       "baseline_defines": [],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F03/manifest.json": {
+     "schema": 1,
+     "id": "F03",
+     "title": "Actual LM bounded resident session versus stateless calls",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F03_caller.py",
+      "experiments/performance_ideas/apple_fast/lm_task.py",
+      "bindings/_mojolearn_byte_lm.mojo"
+     ],
+     "candidate_defines": [],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F03",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F03",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F03_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "loaded FAST Metal binding",
+      "same fixed training task and optimizer settings",
+      "checkpoint/failed update recovery",
+      "heldout loss no material loss"
+     ],
+     "timing_contract": "Train step through consumed scalar, first step separate from repeated calls; A resident=False B resident=True; no new default",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "byte_lm",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F03",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F04",
+   "parts": {
+    "experiments/performance_ideas/F04/compile_audit.json": {
+     "schema": 1,
+     "id": "F04",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "resample/estimator.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "resample",
+       "baseline_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F04/manifest.json": {
+     "schema": 1,
+     "id": "F04",
+     "title": "Pair independent gather completions with owned buffers",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "resample/estimator.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F04_caller.py"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+      "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF",
+      "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR_OFF"
+     ],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F04",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F04",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F04_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "all-Mojo GPU draw/gather reach",
+      "single completion retains every source/output buffer",
+      "asymmetric multi-array sampling semantics",
+      "refusal and retained-output ownership"
+     ],
+     "timing_contract": "Whole public resample through first read of every output; direct transport counted; no packed extra copy",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "resample",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F04",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "measurement_decision": {
+      "status": "default_on_apple_fast",
+      "date": "2026-10-06",
+      "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/resample-promotion.json",
+      "recipe_note": "Explicit OFF controls preserve the isolated A/B after promotion. Historical compile receipts retain their original source and defines."
+     }
+    }
+   }
+  },
+  {
+   "id": "F05",
+   "parts": {
+    "experiments/performance_ideas/F05/compile_audit.json": {
+     "schema": 1,
+     "id": "F05",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "experiments/apple_fast/gemm/softmax_narrow.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "estimators",
+       "baseline_defines": [
+        "MOJOLEARN_SOFTMAX_G2_AUDIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_SOFTMAX_FAST_G2_NARROW",
+        "MOJOLEARN_SOFTMAX_G2_AUDIT"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F05/manifest.json": {
+     "schema": 1,
+     "id": "F05",
+     "title": "Narrow softmax at full optimizer and line-search caller",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F05_caller.py",
+      "experiments/apple_fast/gemm/softmax_narrow.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_SOFTMAX_FAST_G2_NARROW",
+      "MOJOLEARN_SOFTMAX_G2_AUDIT"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_SOFTMAX_G2_AUDIT"
+     ],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F05",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F05",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F05_caller.py",
+      "tools/softmax_g2_quality.py"
+     ],
+     "depends_on": [
+      "F01"
+     ],
+     "quality_gates": [
+      "actual forward/line-search route counts",
+      "heldout logloss and accuracy",
+      "fixed optimizer settings/iterations reported",
+      "finite fitted margins/state"
+     ],
+     "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "estimators",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F05",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F06",
+   "parts": {
+    "experiments/performance_ideas/F06/compile_audit.json": {
+     "schema": 1,
+     "id": "F06",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "x_decomp/mcd_bmma.mojo",
+      "x_decomp/mcd_experiments.mojo",
+      "x_decomp/mcd_fast.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "x_decomp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_BOUND_BATCH"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "x_metrics"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "active_compact",
+       "binding": "x_decomp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "x_metrics"
+       ],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "cov_reuse",
+       "binding": "x_decomp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_COV_REUSE"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "x_metrics"
+       ],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "active_cov",
+       "binding": "x_decomp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_MCD_FAST_ACTIVE_COMPACT",
+        "MOJOLEARN_MCD_FAST_COV_REUSE"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "x_metrics"
+       ],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [
+      {
+       "name": "mcd_candidate_mechanisms",
+       "source": "experiments/performance_ideas/F06/native_check.mojo"
+      }
+     ],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false,
+     "resource_contract": {
+      "candidate_capacity": 65536,
+      "compact_scratch": "three nc Int32 planes + bounded chunk sums + one counter",
+      "covariance_cache": "existing parity mean/covariance reused; one nc Int32 work gate + one counter; no new numerical cache",
+      "larger_phases": "incumbent fallback"
+     }
+    },
+    "experiments/performance_ideas/F06/manifest.json": {
+     "schema": 1,
+     "id": "F06",
+     "title": "Independent MCD batch bounds, active-candidate compaction and exact-support covariance reuse",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "x_decomp/mcd_bmma.mojo",
+      "bindings/_mojolearn_x_decomp.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F06_caller.py",
+      "x_decomp/mcd_fast.mojo",
+      "x_decomp/mcd_experiments.mojo",
+      "experiments/performance_ideas/F06/native_check.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_MCD_FAST_BOUND_BATCH"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F06",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F06",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F06_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "candidate counter positive at fitted MCD/EE callers",
+      "unchanged support/candidate/search settings",
+      "contaminated near-singular covariance and location quality",
+      "split products retain incumbent split path",
+      "Native stable original-ID compaction, all/none/skew membership including multichunk tails and poison slots",
+      "Native cache exact support invalidation, step0/inactive refusals; actual raw search support/distance gates",
+      "Actual MinCovDet.mahalanobis/score and EllipticEnvelope.predict/decision_function/score_samples/score, with heldout contamination labels",
+      "Candidate positive route count; covariance variants positive actual reused-candidate count over fixtures",
+      "Source/rows/shape are immutable inside each MfPhase, cache never crosses phase or fit",
+      "New product/covariance mechanisms retain incumbent arithmetic, stopping/rank/precision and reweighting; FAST fullfit quality must not regress"
+     ],
+     "timing_contract": "Whole fit + each actually consumed prediction/distance/score, upload/compaction scans and mandatory count-read completion included. One run per arm. Process RSS reported separately; device peak scratch/resource measurement pending.",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "x_decomp",
+     "prerequisite_bindings": [
+      "core",
+      "x_metrics"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F06",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "variants": {
+      "active_compact": [
+       "MOJOLEARN_MCD_FAST_ACTIVE_COMPACT"
+      ],
+      "cov_reuse": [
+       "MOJOLEARN_MCD_FAST_COV_REUSE"
+      ],
+      "active_cov": [
+       "MOJOLEARN_MCD_FAST_ACTIVE_COMPACT",
+       "MOJOLEARN_MCD_FAST_COV_REUSE"
+      ]
+     },
+     "native_checks": [
+      {
+       "name": "mcd_candidate_mechanisms",
+       "source": "experiments/performance_ideas/F06/native_check.mojo"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "F07",
+   "parts": {
+    "experiments/performance_ideas/F07/compile_audit.json": {
+     "schema": 1,
+     "id": "F07",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "transformer",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_AUDIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_AUDIT"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "gqa",
+       "binding": "transformer",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_AUDIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_GQA_TILE",
+        "MOJOLEARN_AFN_ATTN_AUDIT"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "The fixture covers the public causal full-block contract; arbitrary attention masks/backward require separately supported APIs and oracles."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F07/manifest.json": {
+     "schema": 1,
+     "id": "F07",
+     "title": "FLASH and true GQA caller qualification with reach counters",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "bindings/_mojolearn_transformer.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F07_caller.py"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_AFN_ATTN_FLASH",
+      "MOJOLEARN_AFN_ATTN_AUDIT"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_AFN_ATTN_AUDIT"
+     ],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F07",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F07",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F07_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "full-block FP64 reference error no material loss",
+      "real GQA ratios >1 and grouped reach counter",
+      "short/long causal tails",
+      "inference only: backward training separately qualified"
+     ],
+     "timing_contract": "Public transform through first output read; cold/repeated calls separate; no matrix-only claim",
+     "blocker": null,
+     "variants": {
+      "default": [
+       "MOJOLEARN_AFN_ATTN_FLASH",
+       "MOJOLEARN_AFN_ATTN_AUDIT"
+      ],
+      "gqa": [
+       "MOJOLEARN_AFN_ATTN_GQA_TILE",
+       "MOJOLEARN_AFN_ATTN_AUDIT"
+      ]
+     },
+     "output_kind": "directory",
+     "binding": "transformer",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F07",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F08",
+   "parts": {
+    "experiments/performance_ideas/F08/compile_audit.json": {
+     "schema": 1,
+     "id": "F08",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "training/byte_lm_afn.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "byte_lm",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_LM_BWD_NOSYNC"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "fused",
+       "binding": "byte_lm",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_LM_BWD_FUSE"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "views",
+       "binding": "byte_lm",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_LM_PARAM_VIEWS"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F08/manifest.json": {
+     "schema": 1,
+     "id": "F08",
+     "title": "Independent LM backward fusion and view A/B training task",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F08_caller.py",
+      "experiments/performance_ideas/apple_fast/lm_task.py",
+      "training/byte_lm_afn.mojo",
+      "autograd/kernels/transformer_afn.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_AFN_LM_BWD_NOSYNC"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF"
+     ],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F08",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F08",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F08_caller.py"
+     ],
+     "depends_on": [
+      "F03"
+     ],
+     "quality_gates": [
+      "FAST Metal binding available",
+      "actual backward train task",
+      "heldout learning curve no material loss",
+      "parameter-handle refresh/checkpoint resume/failed update"
+     ],
+     "timing_contract": "Whole train step through consumed loss; forward-only timing cannot certify backward",
+     "blocker": null,
+     "output_kind": "directory",
+     "variants": {
+      "default": [
+       "MOJOLEARN_AFN_LM_BWD_NOSYNC"
+      ],
+      "fused": [
+       "MOJOLEARN_AFN_LM_BWD_FUSE",
+       "MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF"
+      ],
+      "views": [
+       "MOJOLEARN_AFN_LM_PARAM_VIEWS",
+       "MOJOLEARN_AFN_LM_BWD_NOSYNC_OFF"
+      ]
+     },
+     "binding": "byte_lm",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F08",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "measurement_decision": "2026-10-06 M3 default NOSYNC promoted; use explicit NOSYNC_OFF for historical baseline and independent fused/views experiments. Reuse original frozen artifacts for active campaign."
+    }
+   }
+  },
+  {
+   "id": "F09",
+   "parts": {
+    "experiments/performance_ideas/F09/compile_audit.json": {
+     "schema": 1,
+     "id": "F09",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "python/mojolearn/_training_impl.py"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": "Runtime/API comparison only; no new compiler mechanism or production default.",
+     "variants": [
+      {
+       "name": "default",
+       "binding": "training",
+       "baseline_defines": [],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F09/manifest.json": {
+     "schema": 1,
+     "id": "F09",
+     "title": "Memory-bounded LM head in a fixed actual SGD task",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F09_caller.py",
+      "training/chunked_lm_head_v2.mojo",
+      "training/afn_optim.mojo"
+     ],
+     "candidate_defines": [],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F09",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F09",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F09_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "actual compiled GPU loss and backward",
+      "same SGD optimizer/hyperparameters",
+      "final task loss and independent stable-normalization oracle",
+      "public logits request still materializes every logit"
+     ],
+     "timing_contract": "Eight whole head train steps through read of loss/gradients; requested logits measured separately; A full logits B chunked public API",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "training",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F09",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F10",
+   "parts": {
+    "experiments/performance_ideas/F10/compile_audit.json": {
+     "schema": 1,
+     "id": "F10",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "mamba/impl/modules/afn_defines.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "arena",
+       "binding": "mamba",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA_ARENA"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "training"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "chunk-scan",
+       "binding": "mamba",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "training"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "default",
+       "binding": "mamba",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "training"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "mamba1-input",
+       "binding": "mamba",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_FUSE_IN"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "training"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "mamba3-elementwise",
+       "binding": "mamba",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "training"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "Stateful/decode backward is not exposed by the public API; the implemented training fixture uses supported zero-state prefill only."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F10/manifest.json": {
+     "schema": 1,
+     "id": "F10",
+     "title": "Independent SSD MMA and Mamba fusion caller arms",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F10_caller.py",
+      "mamba/impl/modules/afn_ssd_mma.mojo",
+      "mamba/impl/modeling/afn_mamba1_fused.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F10",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F10",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F10_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "actual FAST Metal full Mamba forward",
+      "multiple corpus lengths and independent FP64 reference",
+      "each candidate isolated before combinations",
+      "Carried-state prefix/decode drift, actual supported zero-state VJP directional oracle and compiled SGD task loss"
+     ],
+     "timing_contract": "Full caller through first read; missing corpus coverage fails explicitly",
+     "blocker": null,
+     "output_kind": "directory",
+     "variants": {
+      "default": [
+       "MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+      ],
+      "mamba1-input": [
+       "MOJOLEARN_AFN_MAMBA1_FUSE_IN"
+      ],
+      "chunk-scan": [
+       "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
+      ],
+      "mamba3-elementwise": [
+       "MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
+      ],
+      "arena": [
+       "MOJOLEARN_AFN_MAMBA_ARENA"
+      ]
+     },
+     "binding": "mamba",
+     "prerequisite_bindings": [
+      "core",
+      "training"
+     ],
+     "build_uses_compile_slot": true,
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F10",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F11",
+   "parts": {
+    "experiments/performance_ideas/F11/compile_audit.json": {
+     "schema": 1,
+     "id": "F11",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "x_decomp/tsqr_device.mojo",
+      "decomposition/impl/linalg/detail/pca.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "compensated-pca",
+       "binding": "estimators",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_PCA_FAST_COMPENSATED_COV"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "x_decomp"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "default",
+       "binding": "x_decomp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_DECOMP_FAST_TSQR_NORM"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "grid",
+       "binding": "x_decomp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_DECOMP_FAST_TSQR_GRID"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F11/manifest.json": {
+     "schema": 1,
+     "id": "F11",
+     "title": "Apple FAST opt-in TSQR norm and grid scheduling",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "x_decomp/tsqr_device.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F11_caller.py",
+      "decomposition/impl/linalg/detail/pca.mojo",
+      "bindings/_mojolearn_estimators.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_DECOMP_FAST_TSQR_NORM"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F11",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F11",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F11_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "actual TSQR least-squares fit on ill-conditioned neighbors",
+      "residual and coefficient error no material loss",
+      "rank/singular values retained",
+      "Selective compensated covariance: independent PCA reconstruction/singular/noise errors; fit and transform times separate",
+      "Downstream LLE neighbor overlap at unchanged dimensions/settings; failures stop qualification"
+     ],
+     "timing_contract": "Actual least-squares through read of coefficients/rank/singular values",
+     "blocker": null,
+     "output_kind": "directory",
+     "variants": {
+      "default": [
+       "MOJOLEARN_DECOMP_FAST_TSQR_NORM"
+      ],
+      "grid": [
+       "MOJOLEARN_DECOMP_FAST_TSQR_GRID"
+      ],
+      "compensated-pca": [
+       "MOJOLEARN_PCA_FAST_COMPENSATED_COV"
+      ]
+     },
+     "binding": "x_decomp",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "variant_bindings": {
+      "compensated-pca": "estimators"
+     },
+     "paired_build": true,
+     "variant_prerequisite_bindings": {
+      "compensated-pca": [
+       "core",
+       "x_decomp"
+      ]
+     },
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F11",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F12",
+   "parts": {
+    "experiments/performance_ideas/F12/compile_audit.json": {
+     "schema": 1,
+     "id": "F12",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "gbdt/methods/sym_iter_fast.mojo",
+      "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+      "gbdt/methods/ordered_fast_switches.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": "Rollback arms for previously promoted schedules retain existing production defaults.",
+     "variants": [
+      {
+       "name": "arena",
+       "binding": "gbdt",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_SYM_BUF_ARENA"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "categorical",
+       "binding": "gbdt",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_SYM_REUSE_PARTITION"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "default",
+       "binding": "gbdt",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_SYM_REUSE_PARTITION"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "depthwise",
+       "binding": "gbdt",
+       "baseline_defines": [
+        "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF"
+       ],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "leaf-inputs",
+       "binding": "gbdt",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_SYM_LEAF_FROM_STATS"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "lossguide",
+       "binding": "gbdt",
+       "baseline_defines": [
+        "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"
+       ],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "ordered-docids",
+       "binding": "gbdt",
+       "baseline_defines": [
+        "MOJOLEARN_ORD_ALL_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_ORD_DOC_ID_STORAGE"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [
+        {
+         "name": "ordered-doc-id-check",
+         "source": "gbdt/checks/ordered_doc_id_check.mojo"
+        }
+       ],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "ordered-storage",
+       "binding": "gbdt",
+       "baseline_defines": [
+        "MOJOLEARN_ORD_ALL_OFF"
+       ],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "ranking",
+       "binding": "gbdt",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_SYM_REUSE_PARTITION"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "No new ordered doc-ID coalesced permutation store or categorical winner-residency kernel is claimed."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false,
+     "remaining_original_card_subarms": []
+    },
+    "experiments/performance_ideas/F12/manifest.json": {
+     "schema": 1,
+     "id": "F12",
+     "title": "Qualify resident boosting partition and leaf-input reuse",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F12_caller.py",
+      "gbdt/methods/sym_iter_fast.mojo",
+      "gbdt/methods/leaves_estimation/apple_fast_est.mojo",
+      "gbdt/methods/ordered_fast_switches.mojo",
+      "gbdt/methods/pointwise_scores_calcer.mojo",
+      "gbdt/methods/pointwise_kernels.mojo",
+      "gbdt/methods/kernel/compute_point_hist2_loop.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_SYM_REUSE_PARTITION"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F12",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F12",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F12_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "actual complete boosting fit",
+      "same tree count/depth/random seed/sampling semantics",
+      "heldout RMSE no material loss",
+      "Categorical/ranking fixed-seed tasks and independent depthwise/lossguide incumbent-route scheduling controls, whole fit/iterations/quality",
+      "Explicit Ordered fixed permutations with nonzero document-keyed score noise and off-grid regression targets; retained winner records are existing production route",
+      "New document-ID map actual positive submissions, native PointHist8 oracle across unaligned scalar/vector/empty cases before public quality/timing"
+     ],
+     "timing_contract": "Whole boosting fit and first prediction separately from retained prediction",
+     "blocker": null,
+     "output_kind": "directory",
+     "variants": {
+      "default": [
+       "MOJOLEARN_SYM_REUSE_PARTITION"
+      ],
+      "leaf-inputs": [
+       "MOJOLEARN_SYM_LEAF_FROM_STATS"
+      ],
+      "arena": [
+       "MOJOLEARN_SYM_BUF_ARENA"
+      ],
+      "categorical": [
+       "MOJOLEARN_SYM_REUSE_PARTITION"
+      ],
+      "ranking": [
+       "MOJOLEARN_SYM_REUSE_PARTITION"
+      ],
+      "depthwise": [],
+      "lossguide": [],
+      "ordered-storage": [],
+      "ordered-docids": [
+       "MOJOLEARN_ORD_DOC_ID_STORAGE"
+      ]
+     },
+     "binding": "gbdt",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "variant_baseline_defines": {
+      "depthwise": [
+       "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF"
+      ],
+      "lossguide": [
+       "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF"
+      ],
+      "ordered-storage": [
+       "MOJOLEARN_ORD_ALL_OFF"
+      ],
+      "ordered-docids": [
+       "MOJOLEARN_ORD_ALL_OFF"
+      ]
+     },
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F12",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "variant_native_checks": {
+      "ordered-docids": [
+       {
+        "name": "ordered-doc-id-check",
+        "source": "gbdt/checks/ordered_doc_id_check.mojo"
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "id": "F13",
+   "parts": {
+    "experiments/performance_ideas/F13/compile_audit.json": {
+     "schema": 1,
+     "id": "F13",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "core/forest_inference.mojo",
+      "xtrees/shap_device.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "rf",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_FOREST_FAST_SHARED_ROWS"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "packed-layout",
+       "binding": "rf",
+       "baseline_defines": [
+        "MOJOLEARN_FOREST_SEPARATE_NODES"
+       ],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "shap",
+       "binding": "trees",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_SHAP_FAST_ROW_PAIR"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "rf"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "Compact forest-layout conversion is not supplied by shared-row prediction or SHAP pairing."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false,
+     "remaining_original_card_subarms": []
+    },
+    "experiments/performance_ideas/F13/manifest.json": {
+     "schema": 1,
+     "id": "F13",
+     "title": "FAST-only shared row forest layout at divergent public callers",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "core/forest_inference.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F13_caller.py",
+      "xtrees/shap_device.mojo",
+      "bindings/_mojolearn_trees.mojo",
+      "bindings/_mojolearn_x_trees.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_FOREST_FAST_SHARED_ROWS"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F13",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F13",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F13_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "actual parallel_groves public inference",
+      "shallow/deep/multiclass/skewed traversal coverage",
+      "misclassification no material loss",
+      "TreeSHAP separate mechanism and attribution gate owed",
+      "Separate SHAP paired-row scheduling, actual attribution additivity and output lifetime, preparation counted",
+      "Packed resident conversion: separately report cold conversion and retained query, require actual binding layout, output survival across reuse and refit"
+     ],
+     "timing_contract": "Cold and retained public prediction through first read; model fit excluded and reported as prerequisite",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "rf",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "variants": {
+      "shap": [
+       "MOJOLEARN_SHAP_FAST_ROW_PAIR"
+      ],
+      "packed-layout": []
+     },
+     "variant_bindings": {
+      "shap": "x_trees"
+     },
+     "variant_prerequisite_bindings": {
+      "shap": [
+       "core",
+       "rf"
+      ]
+     },
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F13",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "variant_baseline_defines": {
+      "packed-layout": [
+       "MOJOLEARN_FOREST_SEPARATE_NODES"
+      ]
+     },
+     "measurement_repair": "2026-10-06 actual TreeExplainer calls x_trees; build only affected A/B x_trees artifacts with its own row-pair audit, reuse RF/core prerequisites"
+    }
+   }
+  },
+  {
+   "id": "F14",
+   "parts": {
+    "experiments/performance_ideas/F14/compile_audit.json": {
+     "schema": 1,
+     "id": "F14",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "neighbors/impl/detail/fast_topk_knn.mojo",
+      "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "ann",
+       "binding": "ivf",
+       "baseline_defines": [
+        "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_IVF_FAST_BALANCED_TASKS=1",
+        "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
+       ],
+       "caller": "ann_caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "default",
+       "binding": "core",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_KNN_FAST_QUERY_GROUP4"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F14/manifest.json": {
+     "schema": 1,
+     "id": "F14",
+     "title": "Compare exact grouped query rows and fixed-probe bounded IVF list tasks",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "neighbors/impl/detail/fast_topk_knn.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F14_caller.py",
+      "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo",
+      "ivf/impl/neighbors/ivf_flat/ivf_balanced_tasks.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F14_ann_caller.py"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_KNN_FAST_QUERY_GROUP4"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F14",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F14",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F14_caller.py",
+      "experiments/performance_ideas/apple_fast/callers/F14_ann_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "exhaustive exact neighbor candidate certification",
+      "same k/search contract",
+      "neighbor distance error tolerance, no digest gate",
+      "Approximate ANN variant is independently labeled: same probes/filters/candidatecounts, exactfullprobes control and no recall regression"
+     ],
+     "timing_contract": "Exact public kneighbors through distance/index output reads; fit/index construction remains explicit",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "core",
+     "prerequisite_bindings": [],
+     "build_uses_compile_slot": true,
+     "variants": {
+      "ann": [
+       "MOJOLEARN_IVF_FAST_BALANCED_TASKS=1",
+       "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
+      ]
+     },
+     "variant_baseline_defines": {
+      "ann": [
+       "MOJOLEARN_IVF_FAST_BALANCED_AUDIT=1"
+      ]
+     },
+     "variant_bindings": {
+      "ann": "ivf"
+     },
+     "variant_callers": {
+      "ann": "ann_caller.py"
+     },
+     "variant_prerequisite_bindings": {
+      "ann": [
+       "core"
+      ]
+     },
+     "paired_build": true,
+     "variant_semantic_equal_fields": {
+      "ann": [
+       "candidate_counts"
+      ]
+     },
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F14",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F15",
+   "parts": {
+    "experiments/performance_ideas/F15/compile_audit.json": {
+     "schema": 1,
+     "id": "F15",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "x_cluster/minibatch_fast.mojo",
+      "dbscan/estimator.mojo",
+      "hdbscan/impl/detail/fast_apple.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "center-accumulation",
+       "binding": "x_cluster",
+       "baseline_defines": [
+        "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"
+       ],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "dbscan-outputs",
+       "binding": "estimators",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "default",
+       "binding": "x_cluster",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "hdbscan-core",
+       "binding": "hdbscan",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_HDB_CORE_TILE"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "hdbscan-downloads",
+       "binding": "hdbscan",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_HDB_ONE_SYNC"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "hdbscan-linkage",
+       "binding": "hdbscan",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_HDB_LINKAGE_DEVICE"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "hdbscan-selection",
+       "binding": "hdbscan",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_HDB_SELECT_DEVICE"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "scratch-reuse",
+       "binding": "x_cluster",
+       "baseline_defines": [
+        "MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"
+       ],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "stopping",
+       "binding": "x_cluster",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "native_checks": [],
+       "compiler_status": "pending_final_frozen_campaign",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "Independent seeded starts, center accumulation and scratch reuse need separate candidate integrations."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false,
+     "remaining_original_card_subarms": [
+      "Batched independent starts: production winner policy sums distances in one ascending Float64 chain (x_cluster/common.mojo:sum_f64; minibatch_ptr.mojo strict first-min selection). A safe Metal device implementation preserving that policy requires supported Float64 or independently admitted replacement mathematics; neither provided. No new CPU data loop or approximate winner policy introduced."
+     ]
+    },
+    "experiments/performance_ideas/F15/manifest.json": {
+     "schema": 1,
+     "id": "F15",
+     "title": "Independent mini-batch labeling and bounded stopping work",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "x_cluster/minibatch_fast.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F15_caller.py",
+      "dbscan/estimator.mojo",
+      "hdbscan/impl/detail/fast_apple.mojo"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F15",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F15",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F15_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "full clustering fit inertia no material loss",
+      "same starts/seeds/batch and stopping policy",
+      "iterations and cold/repeated scratch use reported",
+      "DBSCAN/HDBSCAN separate full-fit quality and diagnostic graph/stage timing; no phase-instrumented time counted as scored fit",
+      "Independent promoted center-compaction and cross-fit input-pool controls; verify compiled policy, complete fit task quality and preserved previous outputs"
+     ],
+     "timing_contract": "Full fit through centers/labels read; cold and repeat distinct",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "x_cluster",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "variants": {
+      "default": [
+       "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_LABRG"
+      ],
+      "stopping": [
+       "MOJOLEARN_CLUSTER_FAST_STOP_GROUP8"
+      ],
+      "dbscan-outputs": [
+       "MOJOLEARN_DBSCAN_FAST_DIRECT_OUT"
+      ],
+      "hdbscan-downloads": [
+       "MOJOLEARN_HDB_ONE_SYNC",
+       "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+      ],
+      "hdbscan-linkage": [
+       "MOJOLEARN_HDB_LINKAGE_DEVICE"
+      ],
+      "hdbscan-selection": [
+       "MOJOLEARN_HDB_SELECT_DEVICE",
+       "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+      ],
+      "hdbscan-core": [
+       "MOJOLEARN_HDB_CORE_TILE",
+       "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+      ],
+      "center-accumulation": [],
+      "scratch-reuse": []
+     },
+     "variant_bindings": {
+      "dbscan-outputs": "estimators",
+      "hdbscan-downloads": "hdbscan",
+      "hdbscan-linkage": "hdbscan",
+      "hdbscan-selection": "hdbscan",
+      "hdbscan-core": "hdbscan"
+     },
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F15",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "variant_baseline_defines": {
+      "center-accumulation": [
+       "MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"
+      ],
+      "scratch-reuse": [
+       "MOJOLEARN_X_CLUSTER_FAST_CLS2_MBK_POOL_OFF"
+      ],
+      "hdbscan-linkage": [
+       "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+      ],
+      "hdbscan-downloads": [
+       "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+      ],
+      "hdbscan-selection": [
+       "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+      ],
+      "hdbscan-core": [
+       "MOJOLEARN_HDB_LINKAGE_DEVICE_OFF"
+      ]
+     },
+     "measurement_decision": "2026-10-06: promote Apple FAST device linkage; explicit LINKAGE_DEVICE_OFF preserves old baseline and independent other HDBSCAN variants; combined ONE_SYNC timing pending; active original artifacts unchanged."
+    }
+   }
+  },
+  {
+   "id": "F16",
+   "parts": {
+    "experiments/performance_ideas/F16/compile_audit.json": {
+     "schema": 1,
+     "id": "F16",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "arima/impl/fast_eval_df.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "arima",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL=1"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "tsa"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [
+      {
+       "name": "F16-independent-gradient",
+       "source": "arima/checks/product_df_quality_check.mojo"
+      }
+     ],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "Full-covariance, seasonal and exogenous compensated filters require independent mathematical oracles; narrow scalar production adapter retains fallback."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F16/compile_matrix.json": {
+     "schema": 1,
+     "id": "F16",
+     "mode": "fast",
+     "qualification": "pending_device_validation",
+     "default_policy": "Tail requires Apple FAST + MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL; original Kalman path retained.",
+     "entrance": "arima/impl/fast_eval_df.mojo",
+     "source_scope": "Implemented actual production scalar-state likelihood and finite-difference tail. No full covariance compensation. Independent gradient and public fit/forecast gates precede timing.",
+     "supported_vendors": [
+      "apple"
+     ],
+     "unsupported_reason": "Apple FAST production tail is Apple-only.",
+     "targets": {
+      "nvidia": "sm_89",
+      "amd": "gfx942",
+      "apple": "apple-m1 + metal:1"
+     },
+     "compile_command": "python3 gemm/experiments/compile_matrix.py --ids F16 --vendors apple --evidence /absolute/external/evidence/F16",
+     "compile_prerequisites": [
+      "pixi install --locked -e default; activated Mojo1.0.0 ed45d567",
+      "clean frozen tracked source; compile_slot semaphore; MOJOLEARN_COMPILE_JOBS=1 and -j1",
+      "sm_89/gfx942 cross-builds embed device objects; rebuild native executable on remote Linux before execution",
+      "No GPU execution or timing occurs during matrix build"
+     ],
+     "arms": [
+      {
+       "name": "product_df_tail",
+       "source": "arima/checks/product_df_quality_check.mojo",
+       "defines": [
+        "MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL=1"
+       ]
+      }
+     ],
+     "baseline_scope": "Public incumbent ARIMA binding remains A in apple_fast/compile_campaign; independent gradient checker requires PRODUCT_DF_ON and is candidate-only."
+    },
+    "experiments/performance_ideas/F16/manifest.json": {
+     "schema": 1,
+     "id": "F16",
+     "title": "Integrate compensated production Kalman tail with independent gradient prerequisite",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "arima/impl/fast_eval_ws.mojo",
+      "arima/impl/fast_eval_df.mojo",
+      "arima/checks/product_df_quality_check.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F16_caller.py",
+      "experiments/performance_ideas/apple_fast/arima_task.py"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_ARIMA_FAST_PRODUCT_DF_TAIL=1"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F16",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F16",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "arima/checks/product_df_quality_check.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F16_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "independent covariance/gradient oracle before estimator timing",
+      "production Jones/initializer/optimizer failure semantics",
+      "selected order and heldout forecast quality"
+     ],
+     "timing_contract": "No timing authorization until production compensated likelihood+gradient integration and full quality pass",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "arima",
+     "prerequisite_bindings": [
+      "core",
+      "tsa"
+     ],
+     "build_uses_compile_slot": true,
+     "native_checks": [
+      {
+       "name": "F16-independent-gradient",
+       "source": "arima/checks/product_df_quality_check.mojo",
+       "compile_arms": [
+        "B"
+       ],
+       "role": "candidate-only independent gradient oracle; public incumbent binding remains the A control"
+      }
+     ],
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F16",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F17",
+   "parts": {
+    "experiments/performance_ideas/F17/compile_audit.json": {
+     "schema": 1,
+     "id": "F17",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "arima/impl/batched_arima.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": "Rollback arms for previously promoted schedules retain existing production defaults.",
+     "variants": [
+      {
+       "name": "default",
+       "binding": "arima",
+       "baseline_defines": [
+        "MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"
+       ],
+       "candidate_defines": [],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "tsa"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "Spatial/seasonal search and broader optimizer first-refusal contracts need additional supported-profile qualification."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F17/manifest.json": {
+     "schema": 1,
+     "id": "F17",
+     "title": "Actual panel search A/B for stacked candidates and held evaluation state",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F17_caller.py",
+      "experiments/performance_ideas/apple_fast/arima_task.py",
+      "arima/impl/batched_arima.mojo",
+      "arima/impl/fast_eval_ws.mojo"
+     ],
+     "candidate_defines": [],
+     "baseline_defines": [
+      "MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"
+     ],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F17",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F17",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F17_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "same requested orders/search/initialization/horizon",
+      "actual full AutoARIMA fit/search/forecast",
+      "selected model forecast quality and optimizer diagnostics",
+      "small panels across heterogeneous independent lengths"
+     ],
+     "timing_contract": "Full search+fit+forecast through output read; no private-likelihood timing claim",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "arima",
+     "prerequisite_bindings": [
+      "core",
+      "tsa"
+     ],
+     "build_uses_compile_slot": true,
+     "variants": {
+      "default": []
+     },
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F17",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  },
+  {
+   "id": "F18",
+   "parts": {
+    "experiments/performance_ideas/F18/compile_audit.json": {
+     "schema": 1,
+     "id": "F18",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "kde/resident_fit.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "estimators",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_KDE_FAST_DIRECT_PREP"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "immutable",
+       "binding": "estimators",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_KDE_FAST_IMMUTABLE_FIT"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F18/manifest.json": {
+     "schema": 1,
+     "id": "F18",
+     "title": "Resident KDE immutable input ownership and direct preparation",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "kde/resident_fit.mojo",
+      "python/mojolearn/density.py",
+      "bindings/_mojolearn_estimators.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F18_caller.py"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_KDE_FAST_DIRECT_PREP"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"
+     ],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F18",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F18",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F18_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "actual public repeated score quality vs independent oracle",
+      "bandwidth invalidation, two models, refit, refusal recovery",
+      "immutable snapshot variant external source mutation",
+      "returned output ownership preserved"
+     ],
+     "timing_contract": "Actual public score through first read; cold preparation and repeated calls separate, mandatory output copies counted",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "estimators",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "variants": {
+      "default": [
+       "MOJOLEARN_KDE_FAST_DIRECT_PREP"
+      ],
+      "immutable": [
+       "MOJOLEARN_KDE_FAST_IMMUTABLE_FIT",
+       "MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"
+      ]
+     },
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F18",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "variant_baseline_defines": {
+      "immutable": [
+       "MOJOLEARN_KDE_FAST_DIRECT_PREP_OFF"
+      ]
+     },
+     "measurement_decision": "2026-10-06 M3 planned public caller contract: direct prep promoted FAST Apple with OFF escape. Independent immutable arm stays OFF; combination unmeasured. Original artifacts retained."
+    }
+   }
+  },
+  {
+   "id": "F19",
+   "parts": {
+    "experiments/performance_ideas/F19/compile_audit.json": {
+     "schema": 1,
+     "id": "F19",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "resample/estimator.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "resample",
+       "baseline_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+        "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "permutation",
+       "binding": "resample",
+       "baseline_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+        "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [
+      "Weighted sample_weight draws are refused by the public API and need a pinned GPU weighted-draw definition before implementation."
+     ],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F19/manifest.json": {
+     "schema": 1,
+     "id": "F19",
+     "title": "Coalesced tiled gather with GPU-generated indices and direct owned outputs",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "resample/gather_fast.mojo",
+      "resample/estimator.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F19_caller.py",
+      "experiments/performance_ideas/apple_fast/callers/F04_caller.py",
+      "bindings/_mojolearn_resample.mojo",
+      "python/mojolearn/resample.py"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+      "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_RESAMPLE_FAST_GATHER",
+      "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+      "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER_OFF"
+     ],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F19",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F19",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F19_caller.py"
+     ],
+     "depends_on": [
+      "F04"
+     ],
+     "quality_gates": [
+      "actual GPU draw/gather, no NumPy hybrid fallback",
+      "exact replacement sampling semantics",
+      "narrow/wide/tail rows and multiple arrays",
+      "weighted API refused; nonreplacement gather prerequisite explicitly outstanding",
+      "weighted API remains explicitly refused; no synthetic weighted support claim"
+     ],
+     "timing_contract": "Whole resample through output consumption, all upload/download bytes included; no width/dataset-specific route",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "resample",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "variants": {
+      "permutation": [
+       "MOJOLEARN_RESAMPLE_FAST_GATHER",
+       "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+       "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+       "MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE"
+      ]
+     },
+     "paired_build": true,
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F19",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "measurement_decision": {
+      "status": "default_on_apple_fast",
+      "date": "2026-10-06",
+      "evidence": "experiments/performance_ideas/measurements/full_ab_20261006/resample-promotion.json",
+      "recipe_note": "Explicit OFF controls preserve the isolated A/B after promotion. Historical compile receipts retain their original source and defines."
+     }
+    }
+   }
+  },
+  {
+   "id": "F20",
+   "parts": {
+    "experiments/performance_ideas/F20/compile_audit.json": {
+     "schema": 1,
+     "id": "F20",
+     "mode": "fast",
+     "vendor": "apple",
+     "source_guard_paths": [
+      "training/afn_optim.mojo",
+      "sequence/layernorm.mojo"
+     ],
+     "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+     "existing_default_exception": null,
+     "variants": [
+      {
+       "name": "default",
+       "binding": "training",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_OPT_MULTITENSOR"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      },
+      {
+       "name": "normalization",
+       "binding": "x_sequence",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_LN_FAST_BLOCK_FOLD"
+       ],
+       "caller": "caller.py",
+       "prerequisites": [
+        "core",
+        "training"
+       ],
+       "compiler_status": "pending_current_source_instantiation",
+       "device_quality": "pending",
+       "performance": "pending"
+      }
+     ],
+     "native_checks": [],
+     "input_transport_helper": {
+      "binding": "core",
+      "numeric_mode": "identical",
+      "defines": [],
+      "role": "input_transport_helpers"
+     },
+     "remaining_subarms": [],
+     "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+     "promotion_authorized": false
+    },
+    "experiments/performance_ideas/F20/manifest.json": {
+     "schema": 1,
+     "id": "F20",
+     "title": "Task-level optimizer fusion and FAST blocked LayerNorm qualification",
+     "mode": "fast",
+     "vendors": [
+      "apple"
+     ],
+     "status": "source_ready",
+     "implementation_paths": [
+      "sequence/layernorm.mojo",
+      "training/afn_optim.mojo",
+      "experiments/performance_ideas/apple_fast/callers/F20_caller.py"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_AFN_OPT_MULTITENSOR"
+     ],
+     "baseline_defines": [],
+     "build_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/build_pair.py",
+      "--idea",
+      "F20",
+      "--output",
+      "{output}/arms",
+      "--source-sha",
+      "{source_sha}"
+     ],
+     "run_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F20",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ],
+     "validation_paths": [
+      "experiments/performance_ideas/apple_fast/callers/F20_caller.py"
+     ],
+     "depends_on": [],
+     "quality_gates": [
+      "fixed task/data order/hyperparameters",
+      "multi-parameter optimizer actual training loss",
+      "failed update leaves parameters unchanged",
+      "independent normalization cancellation/large magnitude/tail oracle"
+     ],
+     "timing_contract": "Whole two-head train step through losses+updated parameters, separate full normalization forward/backward",
+     "blocker": null,
+     "output_kind": "directory",
+     "binding": "training",
+     "prerequisite_bindings": [
+      "core"
+     ],
+     "build_uses_compile_slot": true,
+     "variants": {
+      "default": [
+       "MOJOLEARN_AFN_OPT_MULTITENSOR"
+      ],
+      "normalization": [
+       "MOJOLEARN_LN_FAST_BLOCK_FOLD"
+      ]
+     },
+     "variant_bindings": {
+      "normalization": "x_sequence"
+     },
+     "paired_build": true,
+     "variant_prerequisite_bindings": {
+      "normalization": [
+       "core",
+       "training"
+      ]
+     },
+     "validation_argv": [
+      "{python}",
+      "experiments/performance_ideas/apple_fast/pair.py",
+      "--idea",
+      "F20",
+      "--arms",
+      "{output}/arms",
+      "--output",
+      "{output}/run"
+     ]
+    }
+   }
+  }
+ ]
+}

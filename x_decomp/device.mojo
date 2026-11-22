@@ -153,7 +153,7 @@ from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 comptime U32Ptr = MutPointer[UInt32, MutAnyOrigin]
 from x_decomp.qr_sliced_device import qs_geqrf_device, qs_orgqr_device
 from x_decomp.tsqr_device import (
-    TS_SMEM_OK, ts_apply_device, ts_apply_device_buf, ts_factor_device, ts_free_device, ts_pack_center_device, ts_pack_device,
+    TS_SMEM_OK, ts_apply_device, ts_apply_device_owned, ts_factor_device, ts_factor_device_owned, ts_free_device, ts_pack_center_device, ts_pack_device,
 )
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from x_decomp.tsqr_multi_gpu import ts_factor_dispatch, tsqr_plan_current
@@ -2284,7 +2284,8 @@ def _orth_tsqr_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: In
     ctx.enqueue_copy(dst_buf=dw, src_buf=da)
     var r = List[Float32](length=l * l, fill=Float32(0))
     var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
-    ts_factor_device(ctx, dw, m, l, pr, True)
+    # this call's own factorization, never the process's kept one (lane r3-small)
+    var held = ts_factor_device_owned(ctx, dw, m, l, pr)
     var dr = ctx.enqueue_create_buffer[DType.float32](l * l)
     var dc = ctx.enqueue_create_buffer[DType.float32](l * l)
     ctx.enqueue_copy(dst_buf=dr, src_ptr=pr)
@@ -2292,7 +2293,7 @@ def _orth_tsqr_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: In
     ctx.enqueue_function[orth_tsqr_select_kernel](
         dr.unsafe_ptr(), dc.unsafe_ptr(), Int32(l), grid_dim=_blocks(l * l), block_dim=TPB
     )
-    var dq = ts_apply_device_buf(ctx, dc, m, l, l)
+    var dq = ts_apply_device_owned(ctx, dc, held, m, l, l)
     var dd = da
     ctx.enqueue_copy(dst_buf=dd, src_buf=dq)
     ctx.synchronize()
@@ -2302,6 +2303,7 @@ def _orth_tsqr_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: In
     _ = dc^
     _ = dq^
     _ = dd^
+    _ = held^
 
 
 def orth_on_device(ctx: DeviceContext, da: DeviceBuffer[DType.float32], m: Int, l: Int) raises:

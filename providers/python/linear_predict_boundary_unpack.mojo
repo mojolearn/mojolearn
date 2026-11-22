@@ -21,7 +21,7 @@ from core.device_route import DeviceRoute
 
 
 def _linear_predict_boundary(model: PythonObject, value: PythonObject,
-    route: DeviceRoute, pins: PythonObject, context: PythonObject, wide: Bool) raises -> PythonObject:
+    route: DeviceRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     var owner = linear_state_owner(model)
     var state = LinearModelState()
@@ -63,7 +63,7 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     linear_state_check_coefficients(state, cols)
     state.coef = Int(py=classical_address(coef))
     state.intercept = Float64(py=intercept_source)
-    var dst = classical_array(rows, 0, context, wide)
+    var dst = classical_array(rows, 0, context)
     var native_call = linear_state_refresh(model, owner, state, coef, prior)
     var lease = native_call.lease.copy()
     # The estimator's resolved prediction entry (device table or CPU table):
@@ -74,7 +74,7 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
     var status = 0
     try:
         with GILReleased(py):
-            status = linear_lease_predict(entry, lease, admitted_x.address, destination, rows, cols, wide, est, test_x)
+            status = linear_lease_predict(entry, lease, admitted_x.address, destination, rows, cols, est, test_x)
     finally:
         # Raw addresses and the copied native function pointer do not retain
         # the admitted arrays or the extension image that owns the endpoint.
@@ -93,9 +93,6 @@ def _linear_predict_boundary(model: PythonObject, value: PythonObject,
 
 def classical_linear_predict(model: PythonObject, value: PythonObject,
     route: DeviceRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _linear_predict_boundary(model, value, route, pins, context, False)
-
-
-def classical_linear_predict_public(model: PythonObject, value: PythonObject,
-    route: DeviceRoute, pins: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _linear_predict_boundary(model, value, route, pins, context, True)
+    # One result for every caller (Andrew, 2026-11-22, lane predict-dtype):
+    # the float32 predictions, public predict included.
+    return _linear_predict_boundary(model, value, route, pins, context)

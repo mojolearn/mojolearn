@@ -84,7 +84,7 @@ from cholesky.host.chol_oracle import chol_host_factor_lower, chol_host_trsm_low
 # TOMBSTONE: MOJOLEARN_IDN_OLS_R_TRISOLVE (loser: noise, ols taxi/istella avg ~0.98x, bits changed) deleted 2026-10-11 by c14beeda5; code recoverable at c14beeda5^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_OLS_R_TRISOLVE.patch
 from gemm.contract import CONTRACT_K_LEAF_MIN, contract_leaf_size, leaf_begin, leaf_count, leaf_end
-from x_decomp.tsqr_host import ts_apply_host, ts_factor_host, ts_free_host
+from x_decomp.tsqr_host import ts_apply_host, ts_apply_host_owned, ts_factor_host, ts_factor_host_owned, ts_free_host, _TsHost
 from x_decomp.tsqr_core import RSVD_IDN_TSQR_ORTHO, orth_tsqr_shape_ok
 from glm.host.center_host import center_on_cpu, col_sums_on_cpu
 from x_decomp.qr_sliced_host import qs_geqrf_host, qs_orgqr_host
@@ -620,18 +620,22 @@ struct HostExec(Exec):
         """RSVD_IDN_TSQR_ORTHO's host column (x_decomp/tsqr_core.mojo): the
         TSQR's host replay of `_orth_tsqr_device`: factor (a copied into the
         kept state), the rank guard on R, the selection C = diag(R[j, j] != 0),
-        then Q C written over `a`."""
+        then Q C written over `a`. The factorization is this call's own
+        (`ts_factor_host_owned`), never the process slot: concurrent fits
+        freed each other's through it (lane r3-small, 2026-11-22)."""
         var r = List[Float32](length=l * l, fill=Float32(0))
         var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
-        ts_factor_host(a, a, pr, m, l, 0, True)
+        var state = _TsHost()
+        ts_factor_host_owned(state, a, a, pr, m, l, 0)
         orth_rank_guard(pr, l)
         var c = List[Float32](length=l * l, fill=Float32(0))
         for j in range(l):
             if pr.unsafe_load(j * l + j) != Float32(0):
                 c[j * l + j] = Float32(1)
-        ts_apply_host(F32Ptr(unsafe_from_address=Int(c.unsafe_ptr())), a, m, l, l)
+        ts_apply_host_owned(state, F32Ptr(unsafe_from_address=Int(c.unsafe_ptr())), a, m, l, l)
         _ = r^
         _ = c^
+        _ = state^
 
     @staticmethod
     def orth_diag(a: F32Ptr, m: Int, l: Int, diag: F32Ptr) raises:

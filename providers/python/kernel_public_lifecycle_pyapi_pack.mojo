@@ -5,7 +5,6 @@
 # the UNPACK half is `providers/python/kernel_public_lifecycle_pyapi_unpack.mojo`.
 from std.python import Python, PythonObject
 from std.math import isfinite
-from bindings.admitted_family_door import admit_family_meta
 from bindings.native_loaded_module_door import NativeModules, native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
 from bindings.mode_metadata_native_door import _fields, _fitted
@@ -18,7 +17,6 @@ from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.sequential_admission_door import _ordinary_torch
 from bindings.cluster_fit_a_native_door import _pending, _pending_text, _drop_pending
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING
-from bindings.classical_arrays_door import classical_address
 from bindings.classical_labels_door import labels_shape_of, _flatten_labels
 from bindings.label_integer_storage_unpack import labels_integer_storage, labels_float_storage
 from bindings.label_input_sources_unpack import labels_storage_source, labels_list_integer_storage, labels_text_storage, labels_list_scalar_kind, LABELS_LIST_FLOAT
@@ -27,11 +25,7 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.metrics_native_support_door import metric_float, metric_is_real, metric_is_integral
 from bindings.host_sparse_native_door import host_sparse_format, _sparse_fields
 from bindings.native_array_view_pack import native_array_ndarray_view
-from bindings.family_common_pack import family_array
-from core.admitted_input import admitted_cast_f64
 from core.host_finite_scan import host_all_finite_f32
-from core.cast_in import CAST_KIND_FLOAT
-from providers.python.array_metadata_pyapi_door import ArrayMetadata, ArrayPin, array_python_shape
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_check
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.trees_side_records_unpack import trees_key_same
@@ -124,33 +118,12 @@ def kernel_public_admit(model: PythonObject, method: String, fitting: Bool,
 
 def kernel_public_result(result: PythonObject, prediction: Bool, outside: Bool,
                          context: PythonObject) raises -> PythonObject:
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the kernel's float32 values as a NumPy view, with no
+    # caller test and no float64 widening pass into a second buffer. The
+    # other public results keep the caller test (`outside`).
     var nk = svm_keys()
-    if not outside or py_get(context, nk[].k_ndarray) is None or py_type(result) is not py_item(context, nk[].k_array_class):
+    if ((not prediction and not outside) or py_get(context, nk[].k_ndarray) is None
+            or py_type(result) is not py_item(context, nk[].k_array_class)):
         return result
-    if not prediction:
-        return native_array_ndarray_view(result, context)
-    # The established regressor public output is float64; internal predictions
-    # retain float32. Widen the finished result in native code before publishing.
-    # The prediction is the binding's own fresh C-order float32 Array (lane
-    # p3-svm-gp-kernel, rows 245/806): widened straight from its store, with
-    # no second input admission of a result we just made.
-    var shape = result.shape
-    var rank = len(shape)
-    if String(result.dtype) == "<f4" and String(result.order) == "C" and (rank == 1 or rank == 2):
-        var rows = Int(py=shape[0])
-        var cols = Int(py=shape[1]) if rank == 2 else 1
-        var widened = family_array(shape, "<f8", context)
-        admitted_cast_f64(Int(py=classical_address(result)), cols * 4, 4, rows, cols, 4, CAST_KIND_FLOAT,
-                             MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(widened))))
-        _ = result
-        return native_array_ndarray_view(widened, context)
-    var pin = ArrayPin()
-    var value = admit_family_meta(result, -1, "prediction", context, pin)
-    var wide = family_array(array_python_shape(value), "<f8", context)
-    var source = value.source
-    admitted_cast_f64(source.addr, source.s0, source.s1, source.rows, source.cols,
-                         source.itemsize, source.kind,
-                         MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(wide))))
-    _ = value^
-    _ = pin^  # the door's pin held the prediction through the cast
-    return native_array_ndarray_view(wide, context)
+    return native_array_ndarray_view(result, context)

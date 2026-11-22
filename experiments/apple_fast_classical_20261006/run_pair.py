@@ -27,7 +27,25 @@ import subprocess
 import time
 import traceback
 
-CATALOG = HERE / 'full_workloads.json'
+# The workload catalog is a card document in cards.json (tools/apple_fast_cards.py);
+# full_workloads.json is its address there, not a file.
+CATALOG = 'experiments/apple_fast_classical_20261006/full_workloads.json'
+LANE_CARDS = ['experiments/apple_fast_classical_20261006/lanes/' + n + '.json' for n in ('geometry', 'linear', 'preprocessing', 'trees')]
+
+
+def _cards():
+    if str(REPO / 'tools') not in sys.path:
+        sys.path.append(str(REPO / 'tools'))
+    import apple_fast_cards
+    return apple_fast_cards
+
+
+def catalog_document():
+    return _cards().document(CATALOG, REPO)
+
+
+def catalog_sha256():
+    return _cards().digest(CATALOG, REPO)
 HARNESS = {
     'classical': 'tools/classical_two_datasets.py',
     'classical2': 'tools/bench_board_more.py',
@@ -317,8 +335,8 @@ def array_receipts(arrays):
 
 def lane_entries():
     entries = {}
-    for path in sorted((HERE / 'lanes').glob('*.json')):
-        for entry in read_json(path)['entries']:
+    for name in LANE_CARDS:
+        for entry in _cards().document(name, REPO)['entries']:
             entries[entry['id']] = entry
     return entries
 
@@ -857,7 +875,7 @@ def attach_evidence(args):
     summary['attachment_source']={'path':str(original/'result.json'),'sha256':sha256(original/'result.json')}
     try:
         audit_path=Path(args.workloads).resolve()
-        if sha256(audit_path)!=summary['workloads_sha256'] or sha256(CATALOG)!=summary['source_catalog_sha256']:
+        if sha256(audit_path)!=summary['workloads_sha256'] or catalog_sha256()!=summary['source_catalog_sha256']:
             raise ValueError('Evidence attachment requires the same workload audit and source catalog')
         build_path=Path(summary['paired_build_path'])
         if sha256(build_path)!=summary['paired_build_sha256']:
@@ -878,7 +896,7 @@ def attach_evidence(args):
                 item['gates'][gate]=external_gate(proofs,gate,item['ideas'],item['id'])
             item['status']=('qualified_workload' if all(gate['status']=='PASS' for gate in item['gates'].values())
                             else 'measured_unqualified')
-        finish_receipts(output,summary,{entry['id']:entry for entry in read_json(CATALOG)['entries']},proofs)
+        finish_receipts(output,summary,{entry['id']:entry for entry in catalog_document()['entries']},proofs)
         print('Evidence attached without device execution: '+str(output/'result.json'))
         return 0
     except BaseException as exc:
@@ -955,7 +973,7 @@ def run(args):
             raise ValueError('Supply an audited_full_workloads config; full_workloads.json is a pending catalog, not an execution audit')
         if audited.get('source_sha') != args.source_sha:
             raise ValueError('Workload settings audit belongs to another frozen source')
-        catalog = read_json(CATALOG)
+        catalog = catalog_document()
         by_id = {entry['id']:entry for entry in catalog['entries']}
         recipes = catalog['recipes']
         allowed = set().union(*(set(by_id[idea]['recipes']) for idea in selected))
@@ -999,7 +1017,7 @@ def run(args):
                 raise ValueError('Paired runtime controls differ from exact arm prerequisites: '+name)
             packages[name] = resolve_package(build_path.parent, arm)
         summary.update(
-            source_catalog_sha256=sha256(CATALOG), status='running',
+            source_catalog_sha256=catalog_sha256(), status='running',
             unresolved_catalog={idea:by_id[idea]['pending_callers_or_settings'] for idea in selected},
             missing_recipe_coverage=sorted(allowed-{workload['recipe'] for workload in workloads}))
         summary['machine']=require_owned_apple()

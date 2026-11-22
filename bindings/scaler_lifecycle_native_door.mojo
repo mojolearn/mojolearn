@@ -570,6 +570,16 @@ def _public_result(result: PythonObject, context: PythonObject) raises -> Python
     return _public_result(result, context, PythonObject(None))
 
 
+def _predict_result(result: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A public `predict`'s result: one type for every caller (Andrew,
+    2026-11-22, lane predict-dtype), a NumPy view of the kernel's Array when
+    NumPy is loaded, with no caller-frame test."""
+    var nk = scaler_keys()
+    if classical_is_array(result, context) and py_get(context, nk[].k_ndarray) is not None:
+        return sequential_input(result, context)
+    return result
+
+
 def _public_result(result: PythonObject, context: PythonObject,
                    input_cache: PythonObject) raises -> PythonObject:
     var nk = scaler_keys()

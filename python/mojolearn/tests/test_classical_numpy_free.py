@@ -22,8 +22,8 @@ import pytest
 import mojolearn
 from mojolearn import LinearRegression, Ridge
 
-#: This module calls the estimators as a user does, so `predict` answers it
-#: with the public float64 output, as it answers the child process.
+#: This module calls the estimators as a user does; `predict` answers every
+#: caller with the kernel's float32 output (lane predict-dtype, 2026-11-22).
 __mojolearn_user_boundary__ = True
 
 _CHILD = r'''
@@ -89,7 +89,8 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
     assert clean(getattr, model, "input_copied_") is True
     prediction = clean(model.predict, X)
     assert prediction.shape == (n,)
-    r["predict"] = hexed(prediction, "<f8")
+    # predict: the kernel's float32 for every caller (lane predict-dtype, 2026-11-22).
+    r["predict"] = hexed(prediction, "<f4")
     r["score"] = float.hex(clean(model.score, X, y))
     r["vendor"] = clean(model.vendor_used)
     r["mode"] = clean(model.numeric_mode_used)
@@ -106,7 +107,7 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
         other = clean(cls, numeric_mode="identical")
         clean(other.fit, vx, vy)
         r["coef_" + key] = hexed(clean(getattr, other, "coef_"), "<f4")
-        r["predict_" + key] = hexed(clean(other.predict, vx), "<f8")
+        r["predict_" + key] = hexed(clean(other.predict, vx), "<f4")
         if key == "array":
             # A float32 C-order Array is read in place.
             assert clean(getattr, other, "input_copied_") is False
@@ -132,18 +133,18 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
     loaded = clean(cls.load, path)
     assert type(loaded) is cls
     r["loaded_coef"] = hexed(clean(getattr, loaded, "coef_"), "<f4")
-    r["loaded_predict"] = hexed(clean(loaded.predict, X), "<f8")
+    r["loaded_predict"] = hexed(clean(loaded.predict, X), "<f4")
     resaved = io.BytesIO()
     clean(loaded.save, resaved)
     assert resaved.getvalue() == data
 
     routed = mojolearn.host_model(path)
     assert type(routed) is host and routed.estimator == name
-    r["host_predict"] = hexed(clean(routed.predict, X), "<f8")
+    r["host_predict"] = hexed(clean(routed.predict, X), "<f4")
     r["host_sha"] = clean(routed.model_sha256)
     hosted = clean(host.load, path)
     assert clean(hosted.vendor_used) == "cpu"
-    assert hexed(clean(hosted.predict, X), "<f8") == r["host_predict"]
+    assert hexed(clean(hosted.predict, X), "<f4") == r["host_predict"]
 
     assert clean(loaded.set_params, fit_intercept=False) is loaded
     assert clean(loaded.__sklearn_is_fitted__) is False
@@ -168,7 +169,7 @@ for name, cls, host in (("LinearRegression", LinearRegression, HostLinearRegress
         # native state record (LinearStateOwner, fc1ae0c62e: the native state
         # reads coef_ by address, so the record keeps it alive; the record is
         # the model's and dies with it, which the weak references below check).
-        fresh = Array((n,), "<f8")
+        fresh = Array((n,), "<f4")
         assert sys.getrefcount(result) == sys.getrefcount(fresh)
         coef = object.__getattribute__(local, "coef_")
         holder = {"coef_": Array((d,))}

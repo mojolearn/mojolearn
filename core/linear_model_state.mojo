@@ -49,13 +49,13 @@ def linear_state_check_coefficients(state: LinearModelState, cols: Int) raises:
 
 
 def linear_state_predict_request(state: LinearModelState, x: Int, dst: Int,
-    rows: Int, cols: Int, wide: Bool, estimator: String) raises -> LinearPredictRequest:
+    rows: Int, cols: Int, estimator: String) raises -> LinearPredictRequest:
     linear_state_require_coef(state)
     linear_state_check_width(state, cols, estimator)
     linear_state_check_coefficients(state, cols)
     if rows <= 0 or cols <= 0:
         raise Error("linear prediction: rows and cols must be positive")
-    return LinearPredictRequest(x, state.coef, dst, rows, cols, state.intercept, wide)
+    return LinearPredictRequest(x, state.coef, dst, rows, cols, state.intercept)
 
 
 def linear_state_is_fitted(state: LinearModelState, public_attribute_present: Bool) -> Bool:

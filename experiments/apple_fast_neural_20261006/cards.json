@@ -1,0 +1,2615 @@
+{
+ "schema": "mojolearn.apple-fast-cards/1",
+ "family": "neural",
+ "description": "Apple fast neural cards AFN26 (attention, training, mamba, cnn_embedding) and their interaction cards, one row per card.",
+ "loader": "tools/apple_fast_cards.py",
+ "path_moves": {},
+ "documents": [
+  {
+   "legacy_path": "experiments/apple_fast_neural_20261006/attention.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "A01",
+    "A02",
+    "A03",
+    "A04",
+    "A05",
+    "A06",
+    "A07",
+    "A08",
+    "A09",
+    "A10",
+    "A11",
+    "A12"
+   ],
+   "key_order": [
+    "schema",
+    "family",
+    "cards"
+   ],
+   "fields": {
+    "schema": 1,
+    "family": "attention"
+   }
+  },
+  {
+   "legacy_path": "experiments/apple_fast_neural_20261006/training.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "T01",
+    "T02",
+    "T03",
+    "T04",
+    "T05",
+    "T06",
+    "T07",
+    "T08",
+    "T09",
+    "T10",
+    "T11",
+    "T12"
+   ],
+   "key_order": [
+    "schema",
+    "family",
+    "status",
+    "numeric_mode",
+    "vendor",
+    "cards"
+   ],
+   "fields": {
+    "schema": 1,
+    "family": "training",
+    "status": "not_tested",
+    "numeric_mode": "FAST",
+    "vendor": "Apple GPU"
+   }
+  },
+  {
+   "legacy_path": "experiments/apple_fast_neural_20261006/mamba.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "M01",
+    "M02",
+    "M03",
+    "M04",
+    "M05",
+    "M06",
+    "M07",
+    "M08",
+    "M09",
+    "M10"
+   ],
+   "key_order": [
+    "schema",
+    "family",
+    "status",
+    "scope",
+    "cards"
+   ],
+   "fields": {
+    "schema": 1,
+    "family": "mamba",
+    "status": "not_tested",
+    "scope": "Apple GPU FAST only; existing defaults preserved; no compilation, verification, tests, or measurements in this campaign"
+   }
+  },
+  {
+   "legacy_path": "experiments/apple_fast_neural_20261006/cnn_embedding.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "E01",
+    "E02",
+    "E03",
+    "E04",
+    "E05",
+    "E06",
+    "E07",
+    "E08",
+    "E09",
+    "E10"
+   ],
+   "key_order": [
+    "schema",
+    "family",
+    "status",
+    "mode",
+    "vendors",
+    "execution",
+    "future_build_targets",
+    "full_workload_mapping",
+    "cards"
+   ],
+   "fields": {
+    "schema": 1,
+    "family": "cnn_embedding",
+    "status": "not_tested",
+    "mode": "fast",
+    "vendors": [
+     "apple"
+    ],
+    "execution": "prohibited_in_this_assignment",
+    "future_build_targets": [
+     "bindings/build_x_cnn.sh",
+     "bindings/build_embedding.sh"
+    ],
+    "full_workload_mapping": "pending; existing small quality fixtures alone are insufficient"
+   }
+  },
+  {
+   "legacy_path": "experiments/apple_fast_neural_20261006/interactions.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "X01",
+    "X02",
+    "X03",
+    "X04",
+    "X05",
+    "X06",
+    "X07",
+    "X08"
+   ],
+   "key_order": [
+    "schema",
+    "family",
+    "status",
+    "mode",
+    "vendors",
+    "execution",
+    "cards"
+   ],
+   "fields": {
+    "schema": 1,
+    "family": "interactions",
+    "status": "not_tested",
+    "mode": "fast",
+    "vendors": [
+     "apple"
+    ],
+    "execution": "prohibited_in_this_assignment"
+   }
+  }
+ ],
+ "rows": [
+  {
+   "id": "A01",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A01",
+     "title": "Cooperative RMSNorm",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "enable_norm_sg",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG"
+       ]
+      }
+     ],
+     "notes": [
+      "Keep epsilon, vector-four input contract and f32 accumulation; reduction reassociation requires existing quality gates.",
+      "Cover norm1, residual+norm2 and chained next-norm callers, including tail token rows."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A02",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A02",
+     "title": "Fused RoPE and cache append",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "enable_rope_cache",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_ROPE_CACHE"
+       ]
+      }
+     ],
+     "notes": [
+      "Fresh full-causal prefill only; carried cache and sliding-window cases retain orchestration fallback.",
+      "Compare absolute positions, rotary passthrough columns, packed cache layout and continuation."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A03",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A03",
+     "title": "Online-softmax FLASH attention",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "enable_flash",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH"
+       ]
+      }
+     ],
+     "notes": [
+      "Historical component timings remain documented in source; they are not full-workload qualification for this campaign.",
+      "Cover masks/window, empty visible rows, head padding, amax/denom outputs and consumed context."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A04",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A04",
+     "title": "Grouped-query FLASH tile reuse",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "grouped_vs_flash",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_GQA_TILE"
+       ]
+      }
+     ],
+     "notes": [
+      "FLASH is enabled on both sides; GQA_TILE implicitly implies FLASH, but the recipe keeps the common parent explicit.",
+      "Cover n_rep 1, 2, 4 and unsupported-group fallback, with unchanged head mapping. Historical mixed component outcomes are preserved."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A05",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A05",
+     "title": "Normalized fused projection staging",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "enable_fuse_pre",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+       ]
+      }
+     ],
+     "notes": [
+      "Complete mechanism includes the cooperative sums-of-squares path; fresh-pre QKV RoPE/cache and foldable norm2 gate/up are separately affected.",
+      "Backward/materialized stages remain on existing fallback."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A06",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A06",
+     "title": "SwiGLU and residual projection epilogues",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "enable_fuse_mlp",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+       ]
+      }
+     ],
+     "notes": [
+      "Exercise gate/up, output residual and down residual through complete forward-only callers.",
+      "Keep activation formula, f32 precision and residual semantics; no approximation is introduced."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A07",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A07",
+     "title": "Transformer binding arena",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "bindings/_mojolearn_transformer.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock full public operation, including SambaStack transformer binding callers"
+     ],
+     "variants": [
+      {
+       "name": "enable_arena",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_ARENA"
+       ]
+      }
+     ],
+     "notes": [
+      "Allocation and submission experiment in the standalone transformer binding; include cold and repeated calls plus resize/cache lifetimes.",
+      "ByteLM uses its own orchestration: do not claim this arena affects its internal block allocations."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A08",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A08",
+     "title": "RMSNorm-only 128/512-thread launches",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "norm_128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG",
+        "MOJOLEARN_AFN26_ATTN_NORM_TPB128"
+       ]
+      },
+      {
+       "name": "norm_512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG",
+        "MOJOLEARN_AFN26_ATTN_NORM_TPB512"
+       ]
+      },
+      {
+       "name": "pre_norm_128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN26_ATTN_NORM_TPB128"
+       ]
+      },
+      {
+       "name": "pre_norm_512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN26_ATTN_NORM_TPB512"
+       ]
+      }
+     ],
+     "notes": [
+      "Four or sixteen simdgroups replace eight only in RMSNorm; FLASH, RoPE/cache and projection launches retain their independent sizes.",
+      "Selecting both widths is a compile-time configuration error; neither flag enables a parent mechanism. All targets and quality remain untested."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A09",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A09",
+     "title": "FLASH key tile 16",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "flash_bk16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN26_ATTN_FLASH_BK16"
+       ]
+      },
+      {
+       "name": "gqa_bk16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_GQA_TILE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_GQA_TILE",
+        "MOJOLEARN_AFN26_ATTN_FLASH_BK16"
+       ]
+      }
+     ],
+     "notes": [
+      "Two keys per each of eight softmax lanes replace four; score fragments, shared strides/pages and key loops derive from BK.",
+      "Existing compiled padded head classes remain 16..80; do not claim expanded head coverage or quality from a smaller page."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A10",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A10",
+     "title": "FLASH query tile 16",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "flash_tq16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+       ]
+      },
+      {
+       "name": "gqa_tq16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_GQA_TILE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_GQA_TILE",
+        "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+       ]
+      }
+     ],
+     "notes": [
+      "The candidate uses four simdgroups/128 threads to preserve eight softmax lanes per query row and integral context fragments for every existing head class.",
+      "GROUP4 then has four tokens per query head; each eight-row matrix fragment may span two heads that share K/V. This new combination is explicitly untested.",
+      "Pair with BK16 only in a separate interaction arm; no geometry or quality result is claimed."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A11",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A11",
+     "title": "Fused neural projection K tile 16",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "pre_kb16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN26_ATTN_PROJ_KB16"
+       ]
+      },
+      {
+       "name": "mlp_kb16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+        "MOJOLEARN_AFN26_ATTN_PROJ_KB16"
+       ]
+      },
+      {
+       "name": "pre_mlp_kb16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+        "MOJOLEARN_AFN26_ATTN_PROJ_KB16"
+       ]
+      }
+     ],
+     "notes": [
+      "Shared allocation is the maximum of operand staging and the later RoPE C tile, with the existing barrier separating lifetimes.",
+      "Whole-K-window routing follows KB; k divisible by 16 but not 32 can enter the candidate while baseline falls back. Treat newly covered shapes separately from same-route geometry.",
+      "Only neural afn projection kernels change; generic GEMM remains untouched."
+     ]
+    }
+   }
+  },
+  {
+   "id": "A12",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/attention.json": {
+     "id": "A12",
+     "title": "Fused neural projection output-row tile 32",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo",
+      "transformer/impl/llama/modeling_llama.mojo"
+     ],
+     "workloads": [
+      "TransformerBlock forward-only full operation",
+      "ByteLM full-corpus forward/held-out evaluation reaching transformer forward-only",
+      "SambaStack full-corpus mixed-stack forward reaching TransformerBlock"
+     ],
+     "variants": [
+      {
+       "name": "pre_bm32",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN26_ATTN_PROJ_BM32"
+       ]
+      },
+      {
+       "name": "mlp_bm32",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+        "MOJOLEARN_AFN26_ATTN_PROJ_BM32"
+       ]
+      },
+      {
+       "name": "pre_mlp_bm32",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+        "MOJOLEARN_AFN26_ATTN_PROJ_BM32"
+       ]
+      }
+     ],
+     "notes": [
+      "The 256-thread block keeps eight simdgroups; each row subgroup owns half as many row fragments. Grid, row statistics, shared strides and epilogues derive from BM.",
+      "A-staging uses rounded-up predicated slots so BM32+KB16 still loads the complete tile when float4 slots are fewer than threads.",
+      "Column tile remains 64 so RoPE partner ownership is unchanged; full row tails and prefill/cache semantics remain pending."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T01",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T01",
+     "title": "One-completion LM step",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "training/byte_lm_afn.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending"
+     ],
+     "variants": [
+      {
+       "name": "one_completion",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_NOSYNC"
+       ]
+      }
+     ],
+     "notes": [
+      "AFN26 alias selects the existing one-completion path; no default changed.",
+      "Future full-step boundary includes token upload, status and loss download, final completion, consumed outputs and transactional refusal/recovery.",
+      "Default-on LM backward no-sync remains fixed in A and B."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T02",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T02",
+     "title": "Fused byte-LM head loss and dlogits",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "training/byte_lm_afn.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending"
+     ],
+     "variants": [
+      {
+       "name": "head_fused",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_HEAD_FUSE"
+       ]
+      }
+     ],
+     "notes": [
+      "Existing implementation uses reset plus per-row CE kernel; f32 atomic loss mean can change bits.",
+      "Compare complete training trajectory and held-out loss; preserve target validation, divisor and non-finite behavior.",
+      "Chunked head configurations may bypass this arm; future recipe must document reached route rather than treat the flag as proof."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T03",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T03",
+     "title": "Flat LM parameter and gradient views",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "training/byte_lm_afn.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending"
+     ],
+     "variants": [
+      {
+       "name": "parameter_views",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_PARAM_VIEWS"
+       ]
+      }
+     ],
+     "notes": [
+      "Existing view routing avoids per-layer packing/unpacking; checkpoint/resume, registry offsets, mutations and aliased-buffer lifetime require future qualification.",
+      "Include cold construction, full steps, and state/save/resume separately."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T04",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T04",
+     "title": "Occupancy-driven split weight-gradient products",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "autograd/kernels/transformer_afn.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+      "SambaStack full samba-train-step where transformer backward reaches these switches; full-workload route mapping pending"
+     ],
+     "variants": [
+      {
+       "name": "wgrad_split",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT"
+       ]
+      }
+     ],
+     "notes": [
+      "Existing split implementation zeroes output then atomically accumulates split GEMM partial tiles; it does not allocate split scratch or run a separate final fold.",
+      "Compare complete training with gradient/trajectory quality and stochastic atomic fold sensitivity; include zero launch and atomic contention."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T05",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T05",
+     "title": "Independent backward fusion paths",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "training/byte_lm_afn.mojo",
+      "autograd/kernels/transformer_afn.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+      "SambaStack full samba-train-step where transformer backward reaches these switches; full-workload route mapping pending"
+     ],
+     "variants": [
+      {
+       "name": "backward_fusion",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_BWD_FUSE"
+       ]
+      },
+      {
+       "name": "gemm_epilogue_fan_in",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_BWD_EPILOGUE"
+       ]
+      },
+      {
+       "name": "norm1_residual",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID"
+       ]
+      },
+      {
+       "name": "three_backward_fusions",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_BWD_FUSE",
+        "MOJOLEARN_AFN26_LM_BWD_EPILOGUE",
+        "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID"
+       ]
+      }
+     ],
+     "notes": [
+      "Each named AFN26 alias independently selects the existing mechanism; the combined arm lists all three explicitly.",
+      "Keep incumbent LM backward no-sync default unchanged in both arms. Check full backward gradients, residual fan-in and trajectory quality."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T06",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T06",
+     "title": "Optimizer and loss orchestration alternatives",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "training/afn_optim.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+      "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence",
+      "SambaStack full samba-train-step where shared optimizer/loss is reached",
+      "Neural optimizer consumers using SGD, Adam or AdamW and cross-entropy; full dataset recipes and reachability pending"
+     ],
+     "variants": [
+      {
+       "name": "refusal_scan_fusion",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN"
+       ]
+      },
+      {
+       "name": "clip_fusion",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE"
+       ],
+       "notes": "Use a workload with clipping enabled at its documented threshold; unclipped runs do not exercise this mechanism."
+      },
+      {
+       "name": "sgd_multitensor",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR"
+       ],
+       "notes": "SGD consumers only; Adam is already flat and does not exercise this mechanism."
+      },
+      {
+       "name": "adam_vector4",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_VEC4"
+       ],
+       "notes": "Adam and AdamW consumers; preserve update equations and scalar tails."
+      },
+      {
+       "name": "resident_scratch",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ]
+      },
+      {
+       "name": "fused_cross_entropy",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED"
+       ]
+      },
+      {
+       "name": "adam_optimizer_combined",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ]
+      },
+      {
+       "name": "sgd_optimizer_combined",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ]
+      },
+      {
+       "name": "adam_loss_combined",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_LOSS_FUSED"
+       ]
+      },
+      {
+       "name": "sgd_loss_combined",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_LOSS_FUSED"
+       ]
+      }
+     ],
+     "notes": [
+      "Prior measured losses/wins remain in source and are not repeated evidence for this campaign.",
+      "Shared loss path uses three kernel launches (row, partial reduction, final fold), preserving ignore index, smoothing and reduction denominator.",
+      "A neural consumer's actual route must reach this shared optimizer/loss; one-completion LM, chunked LM heads and fused MLP can bypass it. No opponent-only or optimizer component result qualifies estimator-wide performance.",
+      "Cold pool allocation and repeated use are separate boundaries."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T07",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T07",
+     "title": "Fused SmallMLP full step",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "training/mlp_fast.mojo"
+     ],
+     "workloads": [
+      "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence"
+     ],
+     "variants": [
+      {
+       "name": "fused_step",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP"
+       ]
+      }
+     ],
+     "notes": [
+      "Uses existing public SmallMLP architecture and two-launch GPU path; no dimension dispatch introduced.",
+      "Future quality includes logits, input/parameter gradients, moments, loss, refusal and full training trajectory."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T08",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T08",
+     "title": "Resident and multistep SmallMLP execution",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "training/mlp_fast.mojo"
+     ],
+     "workloads": [
+      "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence"
+     ],
+     "variants": [
+      {
+       "name": "resident",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT"
+       ],
+       "notes": "Compare repeated complete fused calls with resident single-step calls; both sides retain the fused arithmetic parent."
+      },
+      {
+       "name": "multistep",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT",
+        "MOJOLEARN_AFN26_MLP_MULTISTEP"
+       ],
+       "notes": "Compare k resident single-step submissions with one k-step call using identical ordered batches and logical optimizer steps."
+      }
+     ],
+     "notes": [
+      "Resident and multistep are separate transport experiments. The multistep control implies resident in source, which is still explicit on both recipe sides.",
+      "Python/binding caller must explicitly exercise advertised resident/multistep methods; a compiled flag alone is not evidence they ran.",
+      "Preserve downloads, rollback, loss/logit outputs, batch order and checkpoint/resume. Do not redefine batch size or omit per-step outcomes."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T09",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T09",
+     "title": "Weight-gradient split minimum work and split cap",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "autograd/kernels/transformer_afn.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+      "SambaStack full samba-train-step where transformer backward reaches these switches; full-workload route mapping pending"
+     ],
+     "variants": [
+      {
+       "name": "minimum_k128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+        "MOJOLEARN_AFN26_LM_WGRAD_MIN128"
+       ]
+      },
+      {
+       "name": "split_cap8",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+        "MOJOLEARN_AFN26_LM_WGRAD_CAP8"
+       ]
+      },
+      {
+       "name": "minimum_k128_cap8",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+        "MOJOLEARN_AFN26_LM_WGRAD_MIN128",
+        "MOJOLEARN_AFN26_LM_WGRAD_CAP8"
+       ]
+      }
+     ],
+     "notes": [
+      "Incumbent minimum K per split is 256 and cap is 16; candidate minimum 128 and cap 8 are independent.",
+      "Policy continues to use output tile count, hardware occupancy target, K work and KB alignment for all neighboring shapes; no benchmark-name or exact-size dispatch.",
+      "Smaller minimum can increase parallelism and atomic overhead; smaller cap bounds atomic fan-in. Neither geometry define enables the parent."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T10",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T10",
+     "title": "Optimizer launch blocks of 128 or 512 threads",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "training/afn_optim.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+      "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence",
+      "SambaStack full samba-train-step where shared optimizer/loss is reached",
+      "Neural optimizer consumers using SGD, Adam or AdamW and cross-entropy; full dataset recipes and reachability pending"
+     ],
+     "variants": [
+      {
+       "name": "scan_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_BLOCK128"
+       ]
+      },
+      {
+       "name": "clip_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_BLOCK128"
+       ]
+      },
+      {
+       "name": "adam_vector_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_VEC4"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_BLOCK128"
+       ]
+      },
+      {
+       "name": "sgd_multitensor_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+        "MOJOLEARN_AFN26_OPT_BLOCK128"
+       ]
+      },
+      {
+       "name": "adam_combined_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_OPT_BLOCK128"
+       ]
+      },
+      {
+       "name": "sgd_combined_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_OPT_BLOCK128"
+       ]
+      },
+      {
+       "name": "scan_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_BLOCK512"
+       ]
+      },
+      {
+       "name": "clip_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_BLOCK512"
+       ]
+      },
+      {
+       "name": "adam_vector_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_VEC4"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_BLOCK512"
+       ]
+      },
+      {
+       "name": "sgd_multitensor_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+        "MOJOLEARN_AFN26_OPT_BLOCK512"
+       ]
+      },
+      {
+       "name": "adam_combined_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_OPT_BLOCK512"
+       ]
+      },
+      {
+       "name": "sgd_combined_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_CLIP_FUSE",
+        "MOJOLEARN_AFN26_OPT_MULTITENSOR",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_OPT_BLOCK512"
+       ]
+      }
+     ],
+     "notes": [
+      "Incumbent optimizer block is 256; power-of-two candidates share one constant across scan scratch, grid, reductions and update launches.",
+      "CE uses a separate constant so this card cannot silently change loss geometry.",
+      "Choose one block define per family; 128 has deterministic precedence if both are accidentally supplied. Parent mechanisms are held equal in A and B.",
+      "Refusal and clipping reductions can change fold order; vector width and update equations are unchanged."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T11",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T11",
+     "title": "CE-specific legal launch and reduction geometries",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "training/byte_lm_afn.mojo",
+      "training/afn_optim.mojo"
+     ],
+     "workloads": [
+      "LanguageModelTrainer full lm-train-step workload; tools/bench_board_neural.py corpus and full-shape recipe; full-dataset coverage mapping pending",
+      "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence",
+      "SambaStack full samba-train-step where shared optimizer/loss is reached",
+      "Neural optimizer consumers using SGD, Adam or AdamW and cross-entropy; full dataset recipes and reachability pending"
+     ],
+     "variants": [
+      {
+       "name": "lm_head_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LM_HEAD_FUSE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_HEAD_FUSE",
+        "MOJOLEARN_AFN26_LM_CE_BLOCK128"
+       ]
+      },
+      {
+       "name": "loss_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED",
+        "MOJOLEARN_AFN26_LOSS_BLOCK128"
+       ]
+      },
+      {
+       "name": "resident_loss_block128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_LOSS_BLOCK128"
+       ]
+      },
+      {
+       "name": "lm_head_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LM_HEAD_FUSE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_HEAD_FUSE",
+        "MOJOLEARN_AFN26_LM_CE_BLOCK512"
+       ]
+      },
+      {
+       "name": "loss_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED",
+        "MOJOLEARN_AFN26_LOSS_BLOCK512"
+       ]
+      },
+      {
+       "name": "resident_loss_block512",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LOSS_FUSED",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_LOSS_BLOCK512"
+       ]
+      }
+     ],
+     "notes": [
+      "LM CE uses 256 incumbent threads, candidate 128 or 512; status-scan geometry remains unchanged.",
+      "General loss retains 32 threads when vocabulary fits one Apple simdgroup, and changes the incumbent wider-row 256 to 128 or 512; row/partial/final-fold templates and launch dimensions use that same CE geometry.",
+      "These are complete power-of-two reductions with strided coverage of all classes and rows; ignore index, label smoothing, divisor, gate writes and full output writes are retained.",
+      "Small-vocabulary general-loss cases intentionally have identical geometry and are scope controls, not claimed affected cells."
+     ]
+    }
+   }
+  },
+  {
+   "id": "T12",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/training.json": {
+     "id": "T12",
+     "title": "SmallMLP row tiles of 32 or 128",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "training/mlp_fast.mojo"
+     ],
+     "workloads": [
+      "SmallMLPTrainer full declared mlp-train-step workload; tools/bench_board_neural.py; preserve public row cap and cover complete training sequence"
+     ],
+     "variants": [
+      {
+       "name": "fused_rows32",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_ROWS32"
+       ]
+      },
+      {
+       "name": "resident_rows32",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT",
+        "MOJOLEARN_AFN26_MLP_ROWS32"
+       ]
+      },
+      {
+       "name": "multistep_rows32",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT",
+        "MOJOLEARN_AFN26_MLP_MULTISTEP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT",
+        "MOJOLEARN_AFN26_MLP_MULTISTEP",
+        "MOJOLEARN_AFN26_MLP_ROWS32"
+       ]
+      },
+      {
+       "name": "fused_rows128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_ROWS128"
+       ]
+      },
+      {
+       "name": "resident_rows128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT",
+        "MOJOLEARN_AFN26_MLP_ROWS128"
+       ]
+      },
+      {
+       "name": "multistep_rows128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT",
+        "MOJOLEARN_AFN26_MLP_MULTISTEP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT",
+        "MOJOLEARN_AFN26_MLP_MULTISTEP",
+        "MOJOLEARN_AFN26_MLP_ROWS128"
+       ]
+      }
+     ],
+     "notes": [
+      "Incumbent rows per block is 64; selected tile controls threadgroup activation storage, row ownership, gradient folding and launch grid.",
+      "Maximum resident partial slots are ceil(public 256-row step capacity / selected row tile), removing the hardcoded four-slot assumption. Public row cap stays fixed.",
+      "Multistep submissions reuse partial slots sequentially on the ordered context. Full batches, partial tiles and complete logical step sequences need future qualification.",
+      "32 trades smaller shared storage for more partials; 128 trades fewer partials for larger shared storage. No shape-specific choice is made."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M01",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M01",
+     "title": "Mamba1 serial recurrence versus existing chunk scan",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/ops/afn_selective_scan.mojo",
+      "mamba/impl/ops/selective_scan_interface.mojo"
+     ],
+     "workloads": [
+      "Mamba1Block.forward full workload, cold and repeated",
+      "Mamba1 continuation and returned state",
+      "Samba full forward and training configurations that contain Mamba1"
+     ],
+     "variants": [
+      {
+       "name": "chunkscan32",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
+       ]
+      }
+     ],
+     "notes": [
+      "Historical component evidence stays in the source; this campaign has no new qualification.",
+      "Keep input fusion, arena and refusal geometry fixed. Compare all outputs, incoming/final state, recurrence stability and full consumer quality."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M02",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M02",
+     "title": "Mamba1 existing convolution and projection-input fusion",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/modeling/afn_mamba1_fused.mojo"
+     ],
+     "workloads": [
+      "Mamba1Block.forward full workload, cold and repeated",
+      "Mamba1 stateful continuation",
+      "Samba full forward and training configurations that contain Mamba1"
+     ],
+     "variants": [
+      {
+       "name": "input_fusion",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_FUSE_IN"
+       ]
+      }
+     ],
+     "notes": [
+      "Keep recurrence algorithm fixed to isolate input fusion.",
+      "Quality includes causal convolution window state, dt/A transforms, outputs and training consumers; no current result is claimed."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M03",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M03",
+     "title": "Mamba2 existing f32 SSD matrix-unit products",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/modules/afn_ssd_mma.mojo",
+      "mamba/impl/modules/ssd_minimal.mojo"
+     ],
+     "workloads": [
+      "Mamba2Block.forward full workload, cold and repeated",
+      "Mamba2 warm-state continuation and every returned state",
+      "Samba full forward and training configurations that contain Mamba2"
+     ],
+     "variants": [
+      {
+       "name": "ssd_mma_k32",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+       ]
+      }
+     ],
+     "notes": [
+      "Includes C.B, causal diagonal output and carried-state products with their normal dispatch/fallback behavior.",
+      "Full workload must exercise the intended route; component timings and the generic GEMM lane are not qualification."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M04",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M04",
+     "title": "Mamba3 existing fused SISO elementwise stages",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/ops/afn_mamba3_fused.mojo"
+     ],
+     "workloads": [
+      "Mamba3Block.forward full workload, cold and repeated",
+      "Mamba3 continuation and h/k/v/theta reports",
+      "Samba full forward and full training with Mamba3 blocks"
+     ],
+     "variants": [
+      {
+       "name": "siso_fused128",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
+       ]
+      }
+     ],
+     "notes": [
+      "Keep all four fused launches at incumbent 128 threads for this card.",
+      "Compare every state/report and downstream training quality; angle chain and optimizer settings stay fixed."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M05",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M05",
+     "title": "Mamba block per-buffer allocation versus existing arena",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/modules/afn_arena.mojo"
+     ],
+     "workloads": [
+      "Mamba1Block.forward full workload",
+      "Mamba2Block.forward full workload",
+      "Mamba3Block.forward full workload",
+      "Samba full forward and training where arena-backed block callers are reached"
+     ],
+     "variants": [
+      {
+       "name": "arena",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA_ARENA"
+       ]
+      }
+     ],
+     "notes": [
+      "Separate cold allocation from repeated use; include upload, completion and consumed outputs.",
+      "Exercise shape changes, output alias lifetimes, state initialization and failure cleanup. Existing IDENTICAL arena policy is unchanged."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M06",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M06",
+     "title": "Mandatory device refusal: scalar versus contiguous vector4 loads",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/modules/afn_refusal.mojo"
+     ],
+     "workloads": [
+      "Mamba1Block.forward full workload including named-input refusal",
+      "Mamba2Block.forward full workload including named-input refusal",
+      "Mamba3Block.forward full workload including named-input refusal",
+      "Samba full forward and training where AfnRefusalBatch is reached"
+     ],
+     "variants": [
+      {
+       "name": "refusal_vec4",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+       ]
+      }
+     ],
+     "notes": [
+      "The initial host-versus-device idea is superseded: device refusal is already mandatory; its legacy enable define does not produce distinct A/B arms.",
+      "New vector4 scan retains scalar tails, integer first-index selection, name order, messages and the same single finish readback. It introduces no host-data path.",
+      "Future correctness coverage includes non-finite entries in every vector lane, multiple errors, nonmultiple-of-four extents, empty names and refusal before state publication."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M07",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M07",
+     "title": "Mamba1 chunk-scan parallelism: 16 or 64 chunks versus 32",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/ops/afn_selective_scan.mojo"
+     ],
+     "workloads": [
+      "Mamba1Block.forward full workload",
+      "Mamba1 continuation and returned state",
+      "Samba full forward and training configurations that contain Mamba1"
+     ],
+     "variants": [
+      {
+       "name": "chunks16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN",
+        "MOJOLEARN_AFN26_MAMBA1_CHUNKS16"
+       ]
+      },
+      {
+       "name": "chunks64",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN",
+        "MOJOLEARN_AFN26_MAMBA1_CHUNKS64"
+       ]
+      }
+     ],
+     "notes": [
+      "Both arms enable the same chunk-scan parent. Do not select both chunk flags.",
+      "Logical chunks own separate summaries; the 16-chunk arm launches 32 lanes and the 64-chunk arm launches 64. Empty/surplus lanes do not write final state.",
+      "Trade shared storage and serial carry length against time-axis parallelism; retain every token and the walked final state. Quality must cover long recurrence and ragged/short sequences."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M08",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M08",
+     "title": "Mamba2 SSD staged K window: 16 versus 32",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/modules/afn_ssd_mma.mojo"
+     ],
+     "workloads": [
+      "Mamba2Block.forward full workload",
+      "Mamba2 warm-state continuation and returned state",
+      "Samba full forward and training configurations that contain Mamba2"
+     ],
+     "variants": [
+      {
+       "name": "ssd_k16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA2_SSD_MMA",
+        "MOJOLEARN_AFN26_MAMBA2_SSD_K16"
+       ]
+      }
+     ],
+     "notes": [
+      "Both arms enable SSD MMA; K16 does not enable it on its own.",
+      "Shared extents, operand stride, staging loops and fragment loops derive from the K tile; causal clipping and the full K extent remain unchanged.",
+      "Reduced shared storage may lose to extra barriers. Existing fallback applies outside the legal MMA tile plan."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M09",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M09",
+     "title": "Mamba3 fused elementwise blocks: 64 or 256 threads versus 128",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/ops/afn_mamba3_fused.mojo"
+     ],
+     "workloads": [
+      "Mamba3Block.forward full workload",
+      "Mamba3 continuation and all state reports",
+      "Samba full forward and full training with Mamba3 blocks"
+     ],
+     "variants": [
+      {
+       "name": "threads64",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA3_SISO_FUSED",
+        "MOJOLEARN_AFN26_MAMBA3_THREADS64"
+       ]
+      },
+      {
+       "name": "threads256",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA3_SISO_FUSED",
+        "MOJOLEARN_AFN26_MAMBA3_THREADS256"
+       ]
+      }
+     ],
+     "notes": [
+      "Both arms enable the same SISO fusion; choose one thread-count flag.",
+      "All four launch grids use the selected block size and cell indexing uses block_dim.x. Quality covers every stage/report and consumer training behavior."
+     ]
+    }
+   }
+  },
+  {
+   "id": "M10",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/mamba.json": {
+     "id": "M10",
+     "title": "Device refusal: smaller reductions and four-element work target",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/modules/afn_refusal.mojo"
+     ],
+     "workloads": [
+      "Mamba1Block.forward full workload including refusal",
+      "Mamba2Block.forward full workload including refusal",
+      "Mamba3Block.forward full workload including refusal",
+      "Samba full forward and training where AfnRefusalBatch is reached"
+     ],
+     "variants": [
+      {
+       "name": "threads128",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128"
+       ]
+      },
+      {
+       "name": "grid_work4",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"
+       ]
+      },
+      {
+       "name": "threads128_grid_work4",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128",
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"
+       ]
+      },
+      {
+       "name": "vec4_grid_work4",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4",
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"
+       ]
+      },
+      {
+       "name": "vec4_threads128_grid_work4",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4",
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128",
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"
+       ]
+      }
+     ],
+     "notes": [
+      "Incumbent already launches min(ceil(n/256),32) partial blocks; GRID4 changes the work target, not the existence of work-sized dispatch.",
+      "Candidate grid is min(ceil(n/(threads*4)),32); grid-stride scalar/vector loops cover the entire extent. Scratch stays bounded to 32 partials/name, with unused columns initialized to NONE.",
+      "Name order and minimum error code preserve refusal precedence; include sparse and multiple invalid entries beyond the first grid pass."
+     ]
+    }
+   }
+  },
+  {
+   "id": "E01",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E01",
+     "title": "Implicit convolution with bias/ReLU epilogue",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "x_cnn/afn_direct.mojo",
+      "x_cnn/device.mojo"
+     ],
+     "workloads": [
+      "Conv2d.forward/backward",
+      "CNNClassifier.fit/predict_proba"
+     ],
+     "variants": [
+      {
+       "name": "direct",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT"
+       ]
+      }
+     ],
+     "notes": "Retains the incumbent direct-kernel admission; compare full CNN fit and inference, not an isolated convolution."
+    }
+   }
+  },
+  {
+   "id": "E02",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E02",
+     "title": "Convolution spatial tile 32",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "x_cnn/afn_direct.mojo",
+      "x_cnn/device.mojo"
+     ],
+     "workloads": [
+      "Conv2d.forward/backward",
+      "CNNClassifier.fit/predict_proba"
+     ],
+     "variants": [
+      {
+       "name": "rows32",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT",
+        "MOJOLEARN_AFN26_CNN_ROWS32"
+       ]
+      }
+     ],
+     "notes": "All row tails retain predicates; tile size trades staged storage against input reloads and block count."
+    }
+   }
+  },
+  {
+   "id": "E03",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E03",
+     "title": "Convolution channel tile 16",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "x_cnn/afn_direct.mojo",
+      "x_cnn/device.mojo"
+     ],
+     "workloads": [
+      "Conv2d.forward/backward",
+      "CNNClassifier.fit/predict_proba"
+     ],
+     "variants": [
+      {
+       "name": "channels16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT",
+        "MOJOLEARN_AFN26_CNN_CHANNELS16"
+       ]
+      }
+     ],
+     "notes": "All channel tails retain predicates; fewer accumulators per thread can reduce register pressure."
+    }
+   }
+  },
+  {
+   "id": "E04",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E04",
+     "title": "Convolution reduction tile 16",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "x_cnn/afn_direct.mojo",
+      "x_cnn/device.mojo"
+     ],
+     "workloads": [
+      "Conv2d.forward/backward",
+      "CNNClassifier.fit/predict_proba"
+     ],
+     "variants": [
+      {
+       "name": "k16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT",
+        "MOJOLEARN_AFN26_CNN_K16"
+       ]
+      }
+     ],
+     "notes": "Complete reduction remains f32; smaller staged windows add barriers."
+    }
+   }
+  },
+  {
+   "id": "E05",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E05",
+     "title": "Single owner for saved convolution columns",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "x_cnn/afn_direct.mojo",
+      "x_cnn/device.mojo"
+     ],
+     "workloads": [
+      "Conv2d.forward/backward",
+      "CNNClassifier.fit/predict_proba"
+     ],
+     "variants": [
+      {
+       "name": "columns_once",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT",
+        "MOJOLEARN_AFN26_CNN_COLS_ONCE"
+       ]
+      }
+     ],
+     "notes": "Output-channel tile zero writes saved columns; this ownership condition is structural, not dimension targeting. Only backward-saving callers benefit."
+    }
+   }
+  },
+  {
+   "id": "E06",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E06",
+     "title": "Atomic embedding backward and float4 forward",
+     "kind": "existing_arm",
+     "status": "not_tested",
+     "source_paths": [
+      "embedding/checks/embedding_fast_apple.mojo",
+      "bindings/_mojolearn_embedding.mojo"
+     ],
+     "workloads": [
+      "Embedding.forward/backward",
+      "full neural consumers of the public Embedding binding"
+     ],
+     "variants": [
+      {
+       "name": "atomic",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+       ]
+      }
+     ],
+     "notes": "Existing relaxed f32 atomics change gradient fold order; preserve padding, accumulation, ID refusal and repeated-ID task quality."
+    }
+   }
+  },
+  {
+   "id": "E07",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E07",
+     "title": "Embedding float8 gather",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "embedding/checks/embedding_fast_apple.mojo",
+      "bindings/_mojolearn_embedding.mojo"
+     ],
+     "workloads": [
+      "Embedding.forward/backward",
+      "full neural consumers of the public Embedding binding"
+     ],
+     "variants": [
+      {
+       "name": "gather8",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+        "MOJOLEARN_AFN26_EMB_GATHER8"
+       ]
+      }
+     ],
+     "notes": "Width divisible by eight is vector-load legality; otherwise the existing float4 or scalar route handles the entire row."
+    }
+   }
+  },
+  {
+   "id": "E08",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E08",
+     "title": "Embedding launch width",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "embedding/checks/embedding_fast_apple.mojo",
+      "bindings/_mojolearn_embedding.mojo"
+     ],
+     "workloads": [
+      "Embedding.forward/backward",
+      "full neural consumers of the public Embedding binding"
+     ],
+     "variants": [
+      {
+       "name": "threads64",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+        "MOJOLEARN_AFN26_EMB_THREADS64"
+       ]
+      },
+      {
+       "name": "threads128",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+        "MOJOLEARN_AFN26_EMB_THREADS128"
+       ]
+      }
+     ],
+     "notes": "Same selected block width derives gather/scatter/seed/pad grids. Select one width; thread variants are mutually exclusive."
+    }
+   }
+  },
+  {
+   "id": "E09",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E09",
+     "title": "Resident embedding table on FAST Apple",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "embedding/checks/embedding_fast_apple.mojo",
+      "bindings/_mojolearn_embedding.mojo"
+     ],
+     "workloads": [
+      "Embedding.forward/backward",
+      "full neural consumers of the public Embedding binding"
+     ],
+     "variants": [
+      {
+       "name": "resident",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_EMB_RESIDENT"
+       ]
+      },
+      {
+       "name": "resident_atomic",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+        "MOJOLEARN_AFN26_EMB_RESIDENT"
+       ]
+      }
+     ],
+     "notes": "The public immutable-weight token/address/extent contract owns the cached table. Context residency was already implemented; this changes table upload/scan reuse. Include table reassignment and zero-token callers."
+    }
+   }
+  },
+  {
+   "id": "E10",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/cnn_embedding.json": {
+     "id": "E10",
+     "title": "Pooled embedding scratch on FAST Apple",
+     "kind": "new_variant",
+     "status": "not_tested",
+     "source_paths": [
+      "embedding/checks/embedding_fast_apple.mojo",
+      "bindings/_mojolearn_embedding.mojo"
+     ],
+     "workloads": [
+      "Embedding.forward/backward",
+      "full neural consumers of the public Embedding binding"
+     ],
+     "variants": [
+      {
+       "name": "scratch",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_EMB_RESIDENT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_EMB_RESIDENT",
+        "MOJOLEARN_AFN26_EMB_SCRATCH"
+       ]
+      },
+      {
+       "name": "scratch_atomic",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+        "MOJOLEARN_AFN26_EMB_RESIDENT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+        "MOJOLEARN_AFN26_EMB_RESIDENT",
+        "MOJOLEARN_AFN26_EMB_SCRATCH"
+       ]
+      }
+     ],
+     "notes": "Scratch requires resident flag; pools exact sizes and returns buffers only after consumed-output synchronization. Fresh gradients seed all cells, accumulation uploads all cells, and empty dY uses an unread dummy cell."
+    }
+   }
+  },
+  {
+   "id": "X01",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/interactions.json": {
+     "id": "X01",
+     "title": "Norm, RoPE/cache and FLASH complete forward",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo"
+     ],
+     "workloads": [
+      "full TransformerBlock, LM and Samba forward-only callers"
+     ],
+     "variants": [
+      {
+       "name": "forward",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG",
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_ROPE_CACHE"
+       ]
+      }
+     ],
+     "notes": "A01+A02+A03. Preserve inference route guards; compare cold and repeated completion separately.",
+     "kind": "interaction_recipe",
+     "status": "not_tested"
+    }
+   }
+  },
+  {
+   "id": "X02",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/interactions.json": {
+     "id": "X02",
+     "title": "Grouped attention, fused projections and arena",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo"
+     ],
+     "workloads": [
+      "full TransformerBlock and mixed Samba forward; ByteLM only for reached non-arena pieces"
+     ],
+     "variants": [
+      {
+       "name": "fused_grouped_block",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_GQA_TILE",
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+        "MOJOLEARN_AFN_ATTN_ARENA"
+       ]
+      }
+     ],
+     "notes": "A04+A05+A06+A07. Arena is in the standalone transformer binding; declare constituent routing per consumer. No training-kernel speed claim.",
+     "kind": "interaction_recipe",
+     "status": "not_tested"
+    }
+   }
+  },
+  {
+   "id": "X03",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/interactions.json": {
+     "id": "X03",
+     "title": "Attention and projection geometry interactions",
+     "source_paths": [
+      "transformer/impl/llama/afn_apple_fast.mojo"
+     ],
+     "workloads": [
+      "full transformer/LM/Samba forward-only public routes"
+     ],
+     "variants": [
+      {
+       "name": "norm128_keys16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG",
+        "MOJOLEARN_AFN_ATTN_FLASH"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG",
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN26_ATTN_NORM_TPB128",
+        "MOJOLEARN_AFN26_ATTN_FLASH_BK16"
+       ]
+      },
+      {
+       "name": "norm128_queries16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG",
+        "MOJOLEARN_AFN_ATTN_FLASH"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_NORM_SG",
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN26_ATTN_NORM_TPB128",
+        "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+       ]
+      },
+      {
+       "name": "flash_keys16_queries16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN26_ATTN_FLASH_BK16",
+        "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+       ]
+      },
+      {
+       "name": "gqa_keys16_queries16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_GQA_TILE",
+        "MOJOLEARN_AFN_ATTN_FLASH"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_GQA_TILE",
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN26_ATTN_FLASH_BK16",
+        "MOJOLEARN_AFN26_ATTN_FLASH_TQ16"
+       ]
+      },
+      {
+       "name": "projection_rows32_k16",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FUSE_PRE",
+        "MOJOLEARN_AFN_ATTN_FUSE_MLP",
+        "MOJOLEARN_AFN26_ATTN_PROJ_KB16",
+        "MOJOLEARN_AFN26_ATTN_PROJ_BM32"
+       ]
+      }
+     ],
+     "notes": "A08+A09/A10 and A11+A12. Identical parent defines in A/B isolate geometry. TQ16 includes its necessary thread ownership changes; full GQA mapping and smaller staging remain not tested.",
+     "kind": "interaction_recipe",
+     "status": "not_tested"
+    }
+   }
+  },
+  {
+   "id": "X04",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/interactions.json": {
+     "id": "X04",
+     "title": "Whole LM fused training and resident parameter views",
+     "source_paths": [
+      "training/byte_lm_afn.mojo",
+      "autograd/kernels/transformer_afn.mojo",
+      "training/afn_optim.mojo",
+      "training/mlp_fast.mojo"
+     ],
+     "workloads": [
+      "full LanguageModelTrainer training, checkpoint/resume, held-out evaluation, refusal and recovery"
+     ],
+     "variants": [
+      {
+       "name": "lm_full_step",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_NOSYNC",
+        "MOJOLEARN_AFN26_LM_HEAD_FUSE",
+        "MOJOLEARN_AFN26_LM_PARAM_VIEWS",
+        "MOJOLEARN_AFN26_LM_BWD_FUSE",
+        "MOJOLEARN_AFN26_LM_BWD_EPILOGUE",
+        "MOJOLEARN_AFN26_LM_BWD_NORM1_RESID"
+       ]
+      }
+     ],
+     "notes": "T01+T02+T03+T05; existing default-on backward no-sync held fixed. May bypass shared optimizer paths; qualify this actual complete configuration.",
+     "kind": "interaction_recipe",
+     "status": "not_tested"
+    }
+   }
+  },
+  {
+   "id": "X05",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/interactions.json": {
+     "id": "X05",
+     "title": "Split weight gradients and optimizer interactions",
+     "source_paths": [
+      "training/byte_lm_afn.mojo",
+      "autograd/kernels/transformer_afn.mojo",
+      "training/afn_optim.mojo",
+      "training/mlp_fast.mojo"
+     ],
+     "workloads": [
+      "full affected LM/Samba training and actual reached optimizer consumers"
+     ],
+     "variants": [
+      {
+       "name": "split_optimizer",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_LM_WGRAD_MIN128",
+        "MOJOLEARN_AFN26_LM_WGRAD_CAP8"
+       ]
+      },
+      {
+       "name": "split_geometry_with_optimizer",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_LM_WGRAD_SPLIT",
+        "MOJOLEARN_AFN26_OPT_FUSE_SCAN",
+        "MOJOLEARN_AFN26_OPT_VEC4",
+        "MOJOLEARN_AFN26_OPT_RESIDENT_STATE",
+        "MOJOLEARN_AFN26_LM_WGRAD_MIN128",
+        "MOJOLEARN_AFN26_LM_WGRAD_CAP8"
+       ]
+      }
+     ],
+     "notes": "T04+T09+T06. Include output zero launch, atomic partial accumulation, all optimizer refusals and updates. Parent versus geometry-only comparisons are distinct.",
+     "kind": "interaction_recipe",
+     "status": "not_tested"
+    }
+   }
+  },
+  {
+   "id": "X06",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/interactions.json": {
+     "id": "X06",
+     "title": "Fused resident multistep MLP with smaller row tile",
+     "source_paths": [
+      "training/byte_lm_afn.mojo",
+      "autograd/kernels/transformer_afn.mojo",
+      "training/afn_optim.mojo",
+      "training/mlp_fast.mojo"
+     ],
+     "workloads": [
+      "full SmallMLPTrainer ordered training trajectory, checkpoint and failure rollback"
+     ],
+     "variants": [
+      {
+       "name": "resident_multistep_rows32",
+       "baseline_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN26_MLP_FUSED_STEP",
+        "MOJOLEARN_AFN26_MLP_RESIDENT",
+        "MOJOLEARN_AFN26_MLP_MULTISTEP",
+        "MOJOLEARN_AFN26_MLP_ROWS32"
+       ]
+      }
+     ],
+     "notes": "T07+T08+T12. A consumes the same minibatches through resident single steps; B batches host submission, not optimizer semantics. Include required losses/logits/state transport on both sides.",
+     "kind": "interaction_recipe",
+     "status": "not_tested"
+    }
+   }
+  },
+  {
+   "id": "X07",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/interactions.json": {
+     "id": "X07",
+     "title": "Complete Mamba-family and Samba configurations",
+     "source_paths": [
+      "mamba/impl/modules/afn_defines.mojo",
+      "mamba/impl/modules/afn_refusal.mojo"
+     ],
+     "workloads": [
+      "full Mamba1/2/3 forward/continuation and each reached full Samba stack"
+     ],
+     "variants": [
+      {
+       "name": "mamba1",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN",
+        "MOJOLEARN_AFN_MAMBA1_FUSE_IN",
+        "MOJOLEARN_AFN_MAMBA_ARENA",
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+       ]
+      },
+      {
+       "name": "mamba2",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA2_SSD_MMA",
+        "MOJOLEARN_AFN_MAMBA_ARENA",
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+       ]
+      },
+      {
+       "name": "mamba3",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_MAMBA3_SISO_FUSED",
+        "MOJOLEARN_AFN_MAMBA_ARENA",
+        "MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"
+       ]
+      }
+     ],
+     "notes": "M01/M02/M03/M04+M05+M06. Baseline already uses mandatory device refusal. Compare every returned recurrent state; inference cells alone cannot qualify any affected training route.",
+     "kind": "interaction_recipe",
+     "status": "not_tested"
+    }
+   }
+  },
+  {
+   "id": "X08",
+   "parts": {
+    "experiments/apple_fast_neural_20261006/interactions.json": {
+     "id": "X08",
+     "title": "Complete CNN and embedding-consumer configurations",
+     "source_paths": [
+      "x_cnn/afn_direct.mojo",
+      "embedding/checks/embedding_fast_apple.mojo",
+      "bindings/_mojolearn_embedding.mojo"
+     ],
+     "workloads": [
+      "full CNNClassifier fit/inference and Conv2d backward consumers",
+      "full actual consumers of public Embedding forward/backward"
+     ],
+     "variants": [
+      {
+       "name": "cnn_complete",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT",
+        "MOJOLEARN_AFN26_CNN_ROWS32",
+        "MOJOLEARN_AFN26_CNN_CHANNELS16",
+        "MOJOLEARN_AFN26_CNN_K16",
+        "MOJOLEARN_AFN26_CNN_COLS_ONCE"
+       ]
+      },
+      {
+       "name": "cnn_geometry",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_CNN_DIRECT",
+        "MOJOLEARN_AFN26_CNN_ROWS32",
+        "MOJOLEARN_AFN26_CNN_CHANNELS16",
+        "MOJOLEARN_AFN26_CNN_K16",
+        "MOJOLEARN_AFN26_CNN_COLS_ONCE"
+       ]
+      },
+      {
+       "name": "embedding_complete",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+        "MOJOLEARN_AFN26_EMB_GATHER8",
+        "MOJOLEARN_AFN26_EMB_THREADS64",
+        "MOJOLEARN_AFN26_EMB_RESIDENT",
+        "MOJOLEARN_AFN26_EMB_SCRATCH"
+       ]
+      },
+      {
+       "name": "embedding_storage_geometry",
+       "baseline_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+        "MOJOLEARN_AFN26_EMB_GATHER8",
+        "MOJOLEARN_AFN26_EMB_THREADS64",
+        "MOJOLEARN_AFN26_EMB_RESIDENT",
+        "MOJOLEARN_AFN26_EMB_SCRATCH"
+       ]
+      }
+     ],
+     "notes": "Separate E01–E05 CNN and E06–E10 embedding comparisons. Full dataset recipe mapping is pending; do not replace it with a reduced fixture. Atomic order, pooled buffer initialization, immutable-table invalidation and all output contracts remain quality gates.",
+     "kind": "interaction_recipe",
+     "status": "not_tested"
+    }
+   }
+  }
+ ]
+}

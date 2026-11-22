@@ -150,7 +150,8 @@ def test_imported_connection_ignores_legacy_capsule_factories(cls, monkeypatch):
     prediction = entry(model, "predict_public", (x,), context)
     score = entry(model, "score", (x, y), context)
     assert prediction.shape == (len(x),)
-    assert prediction.dtype == np.dtype("f8")
+    # predict returns the kernel's float32 words to every caller (lane predict-dtype, 2026-11-22).
+    assert prediction.dtype == np.dtype("f4")
     assert isinstance(score, float)
     assert calls == []
 

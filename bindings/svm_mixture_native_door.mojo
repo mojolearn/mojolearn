@@ -211,7 +211,7 @@ def _svm_lifecycle(operation: Int) -> FamilyLifecycle:
     if operation == SVM_OPN_FAMILY_SVM_LINEAR_SVC_DECISION:
         return FamilyLifecycle("decision_function", scan=True, replace=False)
     if operation == SVM_OPN_FAMILY_SVM_LINEAR_SVR_PREDICT:
-        return FamilyLifecycle("predict", scan=True, replace=False, widen=True)
+        return FamilyLifecycle("predict", scan=True, replace=False)
     return FamilyLifecycle("")
 
 

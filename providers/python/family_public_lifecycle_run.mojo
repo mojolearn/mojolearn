@@ -16,7 +16,7 @@ struct FamilyLifecycle(Copyable, Movable):
     var target: Int          # the position of y validated at an outermost fit (-1: none)
     var classifier: Bool     # discrete labels; public ClassLabels classes_ after fit
     var required: Bool       # fit refuses y=None
-    var widen: Bool          # float32 result widened exactly to float64 for outside callers
+    var widen: Bool          # outlier scores widened exactly to float64 for outside callers (never predict)
     # The owner has device-X fold entries (lane a7d): a model-selection fold
     # whose store ids resolve reaches it as the DeviceRows itself (no host
     # gather here); its entry gathers the rows on the device.
@@ -92,7 +92,7 @@ def family_lifecycle_spec(operation: String) -> FamilyLifecycle:
     if operation == "family_xn_graph_svgp_fit":
         return FamilyLifecycle("fit", target=2, required=True, keeps_x=False)
     if operation == "family_xn_graph_svgp_predict":
-        return FamilyLifecycle("predict", widen=True)
+        return FamilyLifecycle("predict")
     if operation == "family_xn_graph_svgp_score":
         return FamilyLifecycle("score")
     # KMeans: coded in its owner (lane bw2-cluster,

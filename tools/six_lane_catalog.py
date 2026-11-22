@@ -6,7 +6,11 @@ import hashlib
 import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import apple_fast_cards  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 STORE = ROOT / 'experiments/six_lane_integration'
@@ -14,7 +18,8 @@ QUALIFICATION = dict(timing='unmeasured', quality='not_assessed', identity='not_
 
 
 def read(path):
-    return json.loads((ROOT / path).read_text())
+    # Apple fast card paths resolve through their family table (tools/apple_fast_cards.py).
+    return apple_fast_cards.read_json(str(path), ROOT)
 
 
 def unique(items):
@@ -47,6 +52,9 @@ def config_from(e, arm):
 
 
 def reference(path, pointer):
+    if apple_fast_cards.is_card_path(path, ROOT):
+        return dict(path=path, pointer=pointer, table=apple_fast_cards.TABLES[apple_fast_cards.family_of(path, ROOT)],
+                    sha256=apple_fast_cards.digest(path, ROOT))
     return dict(path=path, pointer=pointer, sha256=hashlib.sha256((ROOT/path).read_bytes()).hexdigest())
 
 
@@ -83,7 +91,7 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
                          source_gaps=seq(v.get('source_gaps'))+seq(v.get('blocker')),
                          parameters=v.get('parameters',e.get('required_compile_parameters',{})),
                          workloads=workloads if workloads is not None else v.get('required_workload_keys',e.get('workloads',[]))))
-    paths=unique(p.split(':')[0] for p in paths+calls if (ROOT/p.split(':')[0]).is_file())
+    paths=unique(p.split(':')[0] for p in paths+calls if apple_fast_cards.exists(p.split(':')[0], ROOT))
     status=e.get('source_integration',e.get('source_status',e.get('implementation_status',e.get('status','idea'))))
     scope=e.get('implemented_scope',e.get('caller_integration',e.get('source_integration','retained source paths; callable scope must be checked per arm')))
     partial=bool(gaps) or 'partial' in status.lower()
@@ -100,6 +108,58 @@ def normalize(lane, source, e, path, *, original=None, workloads=None, bindings=
                 qualification=dict(QUALIFICATION),mode='fast' if lane.startswith('AF.') else 'identical',
                 vendors=['apple'] if lane.startswith('AF.') else ['nvidia','amd','apple','host'],
                 new_defaults_enabled=False,arms=arms)
+
+
+# Apple fast interaction groups and cross-lane proposals; discover() and fast_slice() share them.
+FAST_GROUPS=[
+            ('AF.T.X.histogram',['AF.T.F01','AF.T.F02','AF.T.F04','AF.T.F05'],'Histogram workspace and scoring pipeline'),
+            ('AF.T.X.quantization',['AF.T.G05','AF.T.G06','AF.T.G09','AF.T.G10'],'Quantization and categorical preprocessing'),
+            ('AF.T.X.prediction',['AF.T.P02','AF.T.P04','AF.T.P05','AF.T.P06'],'Prediction traversal and link stages'),
+            ('AF.T.X.shap',['AF.T.P07','AF.T.P08','AF.T.P09','AF.T.P10'],'SHAP scratch and row/fold work distribution'),
+            ('AF.T.X.dart',['AF.T.P11','AF.T.P12'],'DART residual and score-add stages'),
+            ('AF.C.X.prep-linear',['AF.C.AFCL-P01','AF.C.AFCL-L01'],'Preparation and Gram shared full linear callers'),
+]
+COMPLETE_RATIONALE='Stable catalog order chooses one compatible new implementation at each competing seam. Historical reuse and equivalent aliases remain dependencies; every excluded alternative is listed and remains independently selectable. Runtime-specific APIs retain missing-coverage cells. This is a proposal, never a default.'
+
+
+def fast_cross_interactions(entries):
+    return [
+        dict(id='AF.X.tree-preparation',members=['AF.C.AFCL-T01','AF.C.AFCL-T02','AF.T.G06','AF.T.G09'],kind='interaction',selection_only=True,rationale='Histogram row/feature grouping shares the quantization and categorical preparation boundary.'),
+        dict(id='AF.X.tree-shap',members=['AF.C.AFCL-T11','AF.T.P08','AF.T.P09','AF.T.P10'],kind='interaction',selection_only=True,rationale='Query geometry, contribution scratch budget, and fold scheduling share one SHAP operation.'),
+        dict(id='AF.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='fast'],kind='complete_proposed',selection_only=True,rationale='Complete Apple FAST proposal across all three lanes; explicit alternative exclusions and unchanged benchmark coverage remain visible.'),
+    ]
+
+
+def discover_fast_cards():
+    """AF.C, AF.T and AF.N entries and the AF.N interaction cards, from the Apple fast card tables."""
+    entries=[]; interactions=[]
+    afc='experiments/apple_fast_classical_20261006/'
+    afcw=read(afc+'full_workloads.json');afcb=read(afc+'build_bindings.json')['cards']
+    for name in ('geometry','linear','preprocessing','trees'):
+        p=afc+'lanes/'+name+'.json'
+        for e in read(p)['entries']:
+            w=next(w for w in afcw['entries'] if w['id']==e['id'])
+            entries.append(normalize('AF.C','apple_fast.classical',e,p,workloads=w['recipes'],bindings=afcb[e['id']]['affected_bindings'],callers=e.get('affected_callers',[])))
+    aft=metadata_module('apple_fast_tree_integration')
+    for name in 'FGNP':
+        p='experiments/apple_fast_trees/'+name+'.json'
+        for e in read(p)['cards']:
+            route=aft.route(e['id'])
+            item=normalize('AF.T','apple_fast.trees',e,p,workloads=route['saved_workloads'],bindings=route['candidate_bindings'])
+            item['route']=route;entries.append(item)
+    afn=metadata_module('apple_fast_neural_ideas')
+    for name in ['attention','training','mamba','cnn_embedding','interactions']:
+        p='experiments/apple_fast_neural_20261006/'+name+'.json'
+        for e in read(p)['cards']:
+            vs=[(v['name'],{**e,**v}) for v in e['variants']]
+            routes=[]
+            for name2,v in vs: routes+=afn.target_routes(e['id'],name2,v.get('candidate_defines',[]))
+            item=normalize('AF.N','apple_fast.neural',e,p,variants=vs,bindings=unique([r['binding'] for r in routes]),workloads=routes)
+            item['implementation']['production_wired']='authored_call_site_map';item['implementation']['implemented_scope']=routes
+            item['production_route_source']='tools/apple_fast_neural_ideas.py:target_routes'
+            if name=='interactions':item['kind']='interaction';interactions.append(item)
+            else:entries.append(item)
+    return entries,interactions
 
 
 def discover():
@@ -150,32 +210,7 @@ def discover():
         for e in read(p)['experiments']:
             mapping=nimap['ideas'][e['id']]
             entries.append(normalize('I.N','identical.neural.v2',e,p,workloads=[dict(id=w,**nimap['workloads'][w]) for w in mapping['workloads']],bindings=mapping['binding_families']))
-    afc='experiments/apple_fast_classical_20261006/'
-    afcw=read(afc+'full_workloads.json');afcb=read(afc+'build_bindings.json')['cards']
-    for name in ('geometry','linear','preprocessing','trees'):
-        p=afc+'lanes/'+name+'.json'
-        for e in read(p)['entries']:
-            w=next(w for w in afcw['entries'] if w['id']==e['id'])
-            entries.append(normalize('AF.C','apple_fast.classical',e,p,workloads=w['recipes'],bindings=afcb[e['id']]['affected_bindings'],callers=e.get('affected_callers',[])))
-    aft=metadata_module('apple_fast_tree_integration')
-    for name in 'FGNP':
-        p='experiments/apple_fast_trees/'+name+'.json'
-        for e in read(p)['cards']:
-            route=aft.route(e['id'])
-            item=normalize('AF.T','apple_fast.trees',e,p,workloads=route['saved_workloads'],bindings=route['candidate_bindings'])
-            item['route']=route;entries.append(item)
-    afn=metadata_module('apple_fast_neural_ideas')
-    for name in ['attention','training','mamba','cnn_embedding','interactions']:
-        p='experiments/apple_fast_neural_20261006/'+name+'.json'
-        for e in read(p)['cards']:
-            vs=[(v['name'],{**e,**v}) for v in e['variants']]
-            routes=[]
-            for name2,v in vs: routes+=afn.target_routes(e['id'],name2,v.get('candidate_defines',[]))
-            item=normalize('AF.N','apple_fast.neural',e,p,variants=vs,bindings=unique([r['binding'] for r in routes]),workloads=routes)
-            item['implementation']['production_wired']='authored_call_site_map';item['implementation']['implemented_scope']=routes
-            item['production_route_source']='tools/apple_fast_neural_ideas.py:target_routes'
-            if name=='interactions':item['kind']='interaction';interactions.append(item)
-            else:entries.append(item)
+    fast_entries,fast_interactions=discover_fast_cards();entries+=fast_entries;interactions+=fast_interactions
     # Explicit equivalence after source reconciliation; narrower subarms keep IDs.
     for ni,nn,scope in [('NI24','NN28','owned ByteLM prefill cache omission'),('NI32','NN51','owned validated token admission'),('NI33','NN52','CE weights and logits gradient same cell'),('NI43','NN38','descending suffix seed cache'),('NI53','NN44','stable expert scatter')]:
         aliases.append(dict(id='I.N.'+ni+':default',kind='equivalent_implementation',canonical='I.N.'+nn+':default',scope=scope,legacy_controls_preserved=True))
@@ -194,17 +229,12 @@ def discover():
             ('I.N.X.embedding-loss',['I.N.NN49','I.N.NN50','I.N.NN51','I.N.NN52'],'Embedding ownership and CE share token admission'),
             ('I.N.X.optimizer-arena',['I.N.NN55','I.N.NN56','I.N.NN60','I.N.NN62'],'Clipping, optimizer transaction and views share lifetimes'),
             ('I.N.X.cnn-memory',['I.N.NN14','I.N.NN45','I.N.NI10','I.N.NI14'],'Convolution tiles, ReLU and backward tape lifetimes'),
-            ('AF.T.X.histogram',['AF.T.F01','AF.T.F02','AF.T.F04','AF.T.F05'],'Histogram workspace and scoring pipeline'),
-            ('AF.T.X.quantization',['AF.T.G05','AF.T.G06','AF.T.G09','AF.T.G10'],'Quantization and categorical preprocessing'),
-            ('AF.T.X.prediction',['AF.T.P02','AF.T.P04','AF.T.P05','AF.T.P06'],'Prediction traversal and link stages'),
-            ('AF.T.X.shap',['AF.T.P07','AF.T.P08','AF.T.P09','AF.T.P10'],'SHAP scratch and row/fold work distribution'),
-            ('AF.T.X.dart',['AF.T.P11','AF.T.P12'],'DART residual and score-add stages'),
-            ('AF.C.X.prep-linear',['AF.C.AFCL-P01','AF.C.AFCL-L01'],'Preparation and Gram shared full linear callers')]
+            ]+FAST_GROUPS
     for ident,members,why in groups:interactions.append(dict(id=ident,members=members,kind='interaction',rationale=why,selection_only=True))
     for lane in ('I.C','I.T','I.N','AF.C','AF.T','AF.N'):
         members=[e['id'] for e in entries if e['lane']==lane]
         interactions.append(dict(id=lane+'.X.complete-proposed',members=members,kind='complete_proposed',selection_only=True,
-            rationale='Stable catalog order chooses one compatible new implementation at each competing seam. Historical reuse and equivalent aliases remain dependencies; every excluded alternative is listed and remains independently selectable. Runtime-specific APIs retain missing-coverage cells. This is a proposal, never a default.'))
+            rationale=COMPLETE_RATIONALE))
     # Full-dataset campaign decisions, 2026-10-06: these are COMPLETE proposed
     # configurations, not isolated tests of their constituent switches. Keep
     # selection_only=True and existing defaults unchanged. A=candidate,
@@ -257,9 +287,7 @@ def discover():
     # missing complete fitted-model state or qualify full identity. No new
     # default promotion is justified by these combined measurements.
     interactions.extend([
-        dict(id='AF.X.tree-preparation',members=['AF.C.AFCL-T01','AF.C.AFCL-T02','AF.T.G06','AF.T.G09'],kind='interaction',selection_only=True,rationale='Histogram row/feature grouping shares the quantization and categorical preparation boundary.'),
-        dict(id='AF.X.tree-shap',members=['AF.C.AFCL-T11','AF.T.P08','AF.T.P09','AF.T.P10'],kind='interaction',selection_only=True,rationale='Query geometry, contribution scratch budget, and fold scheduling share one SHAP operation.'),
-        dict(id='AF.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='fast'],kind='complete_proposed',selection_only=True,rationale='Complete Apple FAST proposal across all three lanes; explicit alternative exclusions and unchanged benchmark coverage remain visible.'),
+        *fast_cross_interactions(entries),
         dict(id='I.X.complete-proposed',members=[e['id'] for e in entries if e['mode']=='identical'],kind='complete_proposed',selection_only=True,rationale='Complete IDENTICAL proposal across classical, trees and reconciled neural source. All numerical columns share this configuration; Apple timing does not vote.'),
     ])
     for spec in read('experiments/six_lane_integration/interaction_specs.json')['interactions']:
@@ -267,6 +295,79 @@ def discover():
     for e in entries+interactions:
         e.setdefault('qualification',dict(QUALIFICATION));e.setdefault('new_defaults_enabled',False)
     return entries,interactions,aliases
+
+
+FAST_PREFIXES=('AF.',)
+
+
+def is_fast(ident):
+    return ident.startswith(FAST_PREFIXES)
+
+
+def fast_slice():
+    """The Apple fast part of catalog.json, generated from the card tables (the one source).
+
+    Same discovery, normalization and reach augmentation as catalog_document(), restricted to the
+    AF.* entries and interactions. catalog.json's AF.* rows are never edited by hand: run
+    `python3 tools/six_lane_catalog.py --write-fast` after a card table changes; `--check-fast`
+    fails when the card-derived fields of the committed rows differ from the tables.
+    """
+    entries=[]; interactions=[]
+    fast_entries,fast_interactions=discover_fast_cards();entries+=fast_entries;interactions+=fast_interactions
+    for ident,members,why in FAST_GROUPS:interactions.append(dict(id=ident,members=members,kind='interaction',rationale=why,selection_only=True))
+    for lane in ('AF.C','AF.T','AF.N'):
+        members=[e['id'] for e in entries if e['lane']==lane]
+        interactions.append(dict(id=lane+'.X.complete-proposed',members=members,kind='complete_proposed',selection_only=True,rationale=COMPLETE_RATIONALE))
+    interactions.extend(fast_cross_interactions(entries))
+    for spec in read('experiments/six_lane_integration/interaction_specs.json')['interactions']:
+        if is_fast(spec['id']):
+            interactions.append(dict(spec,kind='interaction',selection_only=True,source_record=reference(spec['source'],spec['id'])))
+    for e in entries+interactions:
+        e.setdefault('qualification',dict(QUALIFICATION));e.setdefault('new_defaults_enabled',False)
+    augment(entries,[])
+    return entries,interactions
+
+
+AUGMENTED_GAP='Define not referenced in retained Mojo source: '
+
+
+def card_fields(item):
+    """An entry without the fields augment() derives from the Mojo source graph."""
+    out={k:v for k,v in item.items() if k not in ('source_binding_reach','source_binding_reach_policy')}
+    if 'arms' in out:
+        out['arms']=[{**{k:v for k,v in arm.items() if k not in ('define_sources','equivalence')},
+                      'source_gaps':[g for g in arm.get('source_gaps',[]) if not g.startswith(AUGMENTED_GAP)]} for arm in out['arms']]
+    return out
+
+
+def _splice(old,new):
+    keep=[x for x in old if not is_fast(x['id'])]
+    at=next((i for i,x in enumerate(old) if is_fast(x['id'])),len(old))
+    at=len([x for x in old[:at] if not is_fast(x['id'])])
+    return keep[:at]+new+keep[at:]
+
+
+def write_fast(path=None):
+    path=Path(path or STORE/'catalog.json')
+    doc=json.loads(path.read_text())
+    entries,interactions=fast_slice()
+    doc['entries']=_splice(doc['entries'],entries);doc['interactions']=_splice(doc['interactions'],interactions)
+    path.write_text(json.dumps(doc,indent=2,sort_keys=True)+'\n')
+    return len(entries),len(interactions)
+
+
+def check_fast(path=None):
+    """Problems where catalog.json's AF.* rows differ from the card tables (empty when fresh)."""
+    doc=json.loads(Path(path or STORE/'catalog.json').read_text())
+    entries,interactions=fast_slice()
+    problems=[]
+    for key,new in (('entries',entries),('interactions',interactions)):
+        old={x['id']:x for x in doc[key] if is_fast(x['id'])}
+        fresh={x['id']:x for x in new}
+        problems+=[f'{key}: {i} not generated from the tables' for i in sorted(set(old)-set(fresh))]
+        problems+=[f'{key}: {i} missing from catalog.json' for i in sorted(set(fresh)-set(old))]
+        problems+=[f'{key}: {i} differs from the tables' for i in sorted(set(old)&set(fresh)) if card_fields(old[i])!=card_fields(fresh[i])]
+    return problems
 
 
 def source_graph():
@@ -291,7 +392,13 @@ def source_graph():
 
 
 def catalog_document():
-    entries,interactions,aliases=discover();closures,texts=source_graph()
+    entries,interactions,aliases=discover();augment(entries,aliases)
+    return dict(schema='mojolearn.six-lane-catalog/1',base_main=read('experiments/six_lane_integration/inputs.json')['base_main'],entries=entries,interactions=interactions,aliases=aliases,qualification=dict(QUALIFICATION))
+
+
+def augment(entries,aliases):
+    """Source-graph reach and define sources for each entry (not card fields)."""
+    closures,texts=source_graph()
     alias_map={a['id']:a for a in aliases if a['kind']=='equivalent_implementation'}
     for e in entries:
         paths={p.split(':')[0] for p in e['implementation_paths']+e['production_callers']}
@@ -301,5 +408,20 @@ def catalog_document():
             if arm['id'] in alias_map:arm['equivalence']=alias_map[arm['id']]
             arm['define_sources']={d.split('=')[0]:[p for p,t in texts.items() if d.split('=')[0] in t and not (p=='core/six_lane_experiment_guards.mojo' or (p.startswith('core/experiment_guards_') and p.count('/')==1))] for d in arm['A']['defines']}
             missing=[d for d,ps in arm['define_sources'].items() if not ps]
-            arm['source_gaps'] += ['Define not referenced in retained Mojo source: '+d for d in missing]
-    return dict(schema='mojolearn.six-lane-catalog/1',base_main=read('experiments/six_lane_integration/inputs.json')['base_main'],entries=entries,interactions=interactions,aliases=aliases,qualification=dict(QUALIFICATION))
+            arm['source_gaps'] += [AUGMENTED_GAP+d for d in missing]
+
+
+def main(argv=None):
+    import argparse
+    parser=argparse.ArgumentParser(description=__doc__)
+    mode=parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--write-fast',action='store_true',help="regenerate catalog.json's AF.* rows from the Apple fast card tables")
+    mode.add_argument('--check-fast',action='store_true',help="fail when catalog.json's AF.* rows differ from the card tables")
+    args=parser.parse_args(argv)
+    if args.write_fast:
+        n,m=write_fast();print(json.dumps(dict(fast_entries=n,fast_interactions=m)));return 0
+    problems=check_fast();print(json.dumps(dict(stale=problems[:20],count=len(problems))));return int(bool(problems))
+
+
+if __name__=='__main__':
+    raise SystemExit(main())

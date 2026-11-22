@@ -445052,7 +445052,7 @@
         "dbscan/impl/neighbors/epsilon_neighborhood.mojo",
         "dbscan/impl/sparse/detail/csr.mojo",
         "decomposition/impl/linalg/detail/pca.mojo",
-        "experiments/classical_identical_ideas/stats_controls.mojo",
+        "core/classical_identical_controls/stats_controls.mojo",
         "gemm/contract.mojo",
         "glm/estimator.mojo",
         "kde/pair_lse.mojo",
@@ -463933,7 +463933,7 @@
         "core/six_lane_experiment_guards.mojo",
         "core/xtdz_coalesced.mojo",
         "decomposition/impl/linalg/detail/pca.mojo",
-        "experiments/classical_identical_ideas/stats_controls.mojo",
+        "core/classical_identical_controls/stats_controls.mojo",
         "gemm/contract.mojo",
         "glm/estimator.mojo",
         "kde/pair_lse.mojo",
@@ -464326,7 +464326,7 @@
       "changed_source_files": [
         "checks/numerics.mojo",
         "core/six_lane_experiment_guards.mojo",
-        "experiments/classical_identical_ideas/stats_controls.mojo",
+        "core/classical_identical_controls/stats_controls.mojo",
         "gemm/contract.mojo",
         "x_decomp/classical_cells.mojo"
       ],
@@ -466050,7 +466050,7 @@
       "changed_source_files": [
         "checks/numerics.mojo",
         "core/six_lane_experiment_guards.mojo",
-        "experiments/classical_identical_ideas/stats_controls.mojo",
+        "core/classical_identical_controls/stats_controls.mojo",
         "gemm/contract.mojo"
       ],
       "compiler": "Mojo 1.0.0 (ed45d567)",
@@ -467871,7 +467871,7 @@
       "changed_source_files": [
         "checks/numerics.mojo",
         "core/six_lane_experiment_guards.mojo",
-        "experiments/classical_identical_ideas/stats_controls.mojo",
+        "core/classical_identical_controls/stats_controls.mojo",
         "gemm/contract.mojo"
       ],
       "compiler": "Mojo 1.0.0 (ed45d567)",

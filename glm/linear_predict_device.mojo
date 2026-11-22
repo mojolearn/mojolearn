@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The narrow and wide prediction (core/p3_linear_impl.mojo
+"""The float32 prediction (core/p3_linear_impl.mojo
 `ols_predict_device`, one synchronize) behind one typed request."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr
@@ -18,7 +18,7 @@ def linear_predict_device(request: LinearPredictRequest) raises -> Int:
     or an infinity (tested on the device at the call's one drain), else 0."""
     var ctx = process_ctx[_CONTEXT]()
     return ols_predict_device(ctx, f32_ptr(request.x), f32_ptr(request.coef), request.dst,
-        request.rows, request.cols, Float32(request.intercept), request.wide, request.test_x)
+        request.rows, request.cols, Float32(request.intercept), request.test_x)
 
 
 def linear_predict_device_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

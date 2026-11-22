@@ -10,7 +10,12 @@ in its oracle and calls the binding bodies: the host column `host_fowlkes_mallow
 what bindings/_mojolearn_metrics_host.mojo runs), the device column `fowlkes_mallows_score_host`
 (metrics/estimator.mojo, the device contingency matrix, what bindings/_mojolearn_metrics.mojo runs).
 
-    unit 0      no samples: 0.0 (the door answers it before the binding; the binding body gives 0.0 too)
+    unit 0      no samples: the public door answers 0.0 before either binding (bindings/mcls_cluster_door.mojo,
+                the `empty` branch of MCLS_OPN_FAMILY_MCLS_FOWLKES_MALLOWS; the Python file keeps
+                `test_empty_is_zero_like_sklearn`), so the binding bodies never see n = 0 from the public call; both
+                columns refuse it in the same words (metrics/label_pair_admission.mojo). Corrected 2026-11-22 (lane
+                r3-small): this unit first expected 0.0 from the bodies, which only the host body gave, because it had
+                no admission of its own (the host binding admitted before it); the GPU column refused.
     unit 1..7   the original's seven literal pairs, negative and sparse labels included
     unit 8      the original's random pair (`np.random.default_rng(3)`, 5000 labels in [0, 6) and [-2, 9)), and the
                 score is symmetric in its arguments
@@ -128,7 +133,13 @@ def same_words(got: Float64, want: Float64, label: String) raises:
 def fowlkes_unit[K: FowlkesCall](unit: Int) raises:
     if unit == 0:
         var empty = List[Int32]()
-        same_words(K.score(empty, empty, 0, 0, 0), 0.0, "no samples")
+        var refusal = String("")
+        try:
+            _ = K.score(empty, empty, 0, 0, 0)
+        except error:
+            refusal = String(error)
+        require(refusal == "metrics: n must be positive, got 0",
+            "no samples: want the refusal 'metrics: n must be positive, got 0', got '" + refusal + "'")
     elif unit <= 7:
         var pair = small_pair(unit - 1)
         var want = fixture_f64(METRICS_FM_DIR + "fm-small-want.f64", 7)

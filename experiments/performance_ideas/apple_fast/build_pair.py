@@ -13,7 +13,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from support import ROOT
+from support import ROOT, card as load_card
 
 
 def flags(defines):
@@ -30,7 +30,7 @@ def main():
     subprocess.run(['git','diff','--quiet','HEAD','--'],cwd=ROOT,check=True)
     source=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
     if source!=a.source_sha:raise RuntimeError('source drift: expected '+a.source_sha+' got '+source)
-    card=json.loads((ROOT/'experiments/performance_ideas'/a.idea/'manifest.json').read_text())
+    card=load_card(a.idea)
     if card['status'].startswith('blocked_'):raise RuntimeError(card['blocker'])
     a.output.mkdir(parents=True,exist_ok=False)
     binding=card.get('variant_bindings',{}).get(a.variant,card['binding']);candidate=card.get('variants',{}).get(a.variant,card['candidate_defines'])

@@ -255,6 +255,21 @@ def forest_entry_dispatch[I: ForestImage](operation_word: Int, aa: Int, na: Int,
         return 1
 
 
+def forest_host_entry_releases(operation: Int) -> Bool:
+    """True for the operations a host image's binding entry releases the GIL
+    around when its caller holds it (lane bm-trees, 2026-11-22; the gbdt
+    host image's `gbdt_entry_releases`): the fits (XF_FIT, XF_FIT_DART), the
+    sequential predict walk and the strict predict, the bodies the images
+    released around before their bodies moved to core. The binding then runs
+    the dispatch with `ENTRY_OP_GIL_FREE` added, so the image's bodies run
+    bare. False for an operation already carrying `ENTRY_OP_GIL_FREE` (that
+    caller holds no GIL) and for every other operation (a few words, or a
+    data session operation, whose registry the GIL serializes)."""
+    if entry_op_gil_free(operation):
+        return False
+    return operation == XF_FIT or operation == XF_FIT_DART or operation == XF_PREDICT or operation == XF_STRICT_PREDICT
+
+
 struct ForestEntryOwner(Defaultable, Movable):
     """An image-lifetime publisher word."""
 

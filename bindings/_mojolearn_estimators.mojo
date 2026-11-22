@@ -906,7 +906,7 @@ def ols_predict_binding(
     var cp = _f32_ptr(Int(py=coef_addr))
     var dst = _f32_ptr(Int(py=out_addr))
     var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
-        Int(py=params[0]), Int(py=params[1]), Float64(py=params[2]), False)
+        Int(py=params[0]), Int(py=params[1]), Float64(py=params[2]))
     with GILReleased(Python()):
         _ = linear_predict_device(request)
     return PythonObject(0)

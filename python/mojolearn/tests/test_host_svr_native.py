@@ -31,8 +31,9 @@ def _model(tmp_path, kernel="rbf", zero=False):
 
 
 def _expected(model, x):
-    # The public NumPy prediction widens the completed f32 kernel output.
-    return np.asarray(legacy.svr(model, x), dtype=np.float64)
+    # The public NumPy prediction is the completed f32 kernel output, for every
+    # caller (lane predict-dtype, 2026-11-22: no float64 widening).
+    return np.asarray(legacy.svr(model, x))
 
 
 @pytest.mark.parametrize("kernel", KERNELS)
@@ -43,7 +44,7 @@ def test_svr_dense_predictions_preserve_complete_output_bits(tmp_path, kernel, k
     before = _state(vars(model))
     expected = _expected(model, x)
     actual = audit_native_call(model.predict, x).assert_native()
-    assert type(actual) is np.ndarray and actual.dtype == np.dtype("<f8")
+    assert type(actual) is np.ndarray and actual.dtype == np.dtype("<f4")
     assert _state(actual) == _state(expected)
     assert _state(vars(model)) == before
 

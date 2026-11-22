@@ -118,3 +118,35 @@ shapes repeat (about 20 lines). So there is no mechanical duplicate to delete: a
 - Proof for every step: `verify --self-test` says the verifier works, the sabotage arms are still CAUGHT, and
   `tools/ops/wheel_verify_smoke.sh` is green from a built wheel. Also owed there: 42 of 116 sabotage patches no
   longer apply to the tree (found 2026-11-22) and are repaired or retired BEFORE the release verify, not after.
+
+## 8. One body per operation, everywhere (Andrew, 2026-11-22)
+
+Write the math of each operation ONCE, as an `@always_inline` function, and have every form call it:
+
+- the standalone layer's kernel (a thin loop around it);
+- the fused kernel (keeps its own loop, tiling, launch and buffers; calls the bodies in sequence instead of carrying
+  its own copy of the math);
+- the host (CPU) column and the device kernel of the same operation.
+
+Because the body is inlined, a fused kernel still compiles to one kernel and loses no speed, and the code exists once.
+When the piece and the fused kernel run the same math in the same order, a model composed from pieces gives the same
+bits as the built-in block. The host / device case matters most for the contract: on 2026-11-22 the CPU GBDT loop
+still carried a fused multiply-add where the device had moved to a rounded multiply then add, and CPU and GPU models
+differed with no check catching it. One shared body makes that class of defect impossible.
+
+Scope, in order: (1) the neural families (lane neural-blocks, stage 4, started 2026-11-22: Transformer, Mamba1/2/3,
+Samba, causal LM, byte LM, MLP, CNN, the recurrent family); (2) every operation with separate host and device
+copies of the same math, classical families included (GBDT leaf updates and CTR, forests, linear models, kernels,
+neighbours, preprocessing); (3) the remaining fused kernels.
+
+We know at once whether a kernel can be redone:
+- BITS, in minutes, on the CPU box: outputs and gradients hashed before and after on the same seed and input. One
+  differing bit means the shared body changed a fold order or a multiply-add contraction: revert that kernel, write
+  down why, move on.
+- SPEED, the same day, on the L40S: one timing of that kernel before and after (forward and backward, quality =
+  outputs equal). Slower means revert. No campaign.
+- NOT shareable, and left alone with the reason recorded: a fused kernel that is fast because it does the steps
+  DIFFERENTLY (a reduction shared across steps, another summation order, a scan specialised across operations).
+
+Per kernel: one commit, the duplicated math deleted in it, the inventory row updated (kernel, bodies it contains,
+shareable yes / no and why, lines removed).

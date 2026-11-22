@@ -7,6 +7,7 @@ import pytest
 from mojolearn import _forest_host as forest, _gbdt_host as gbdt
 from mojolearn._buffer import frombytes
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests.test_host_tree_native import _as_user_sees
 from mojolearn.tests._legacy_host_trees import LegacyHostForest, LegacyHostGBDT, parse_model_text as legacy_parse
 from mojolearn.tests.test_host_archive_native import _state
 from mojolearn.tests.test_host_model_native_router import GBDT_CASES, FLOAT_TEXT
@@ -26,7 +27,8 @@ def test_forest_constructor_keeps_exact_state_and_predictions(tmp_path, estimato
     expected = LegacyHostForest(**options)
     actual = audit_native_call(forest.HostForest, **options).assert_native()
     assert _state(vars(actual)) == _state(vars(expected))
-    assert _state(actual.predict(_queries("float32"))) == _state(expected.predict(_queries("float32")))
+    # predict is the forest's float32 for both families (lane predict-dtype); the oracle's ET float64 is narrowed exactly.
+    assert _state(actual.predict(_queries("float32"))) == _state(_as_user_sees(expected, expected.predict(_queries("float32"))))
 
 
 @pytest.mark.parametrize("labels", [[2, 7], [.5, 2.5], [False, True], ["left", "right"], [2**70, 2**70 + 1]])
@@ -153,7 +155,8 @@ def test_groves_reinitialization_releases_previous_native_snapshot(tmp_path):
     out = frombytes(np.zeros(1, dtype="<f4").tobytes(), "<f4", (1,))
     with pytest.raises(Exception, match="unknown or released host grove"):
         forest._load().forest_host_groves_predict(handle, x._addr, out._addr, [1, 2, 1], 1)
-    assert _state(actual.predict(_queries("float32"))) == _state(LegacyHostForest(**options).predict(_queries("float32")))
+    legacy_forest = LegacyHostForest(**options)
+    assert _state(actual.predict(_queries("float32"))) == _state(_as_user_sees(legacy_forest, legacy_forest.predict(_queries("float32"))))
 
 
 def test_constructor_refuses_dictionary_descriptor_hooks(tmp_path):

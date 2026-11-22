@@ -113,7 +113,7 @@
     "experiments/classical_identical_ideas/graph_implementation.json"
   ],
   "controls_paths": [
-    "experiments/classical_identical_ideas/graph_controls.mojo"
+    "core/classical_identical_controls/graph_controls.mojo"
   ],
   "default_configuration": "centroid_tiles",
   "configurations": {
