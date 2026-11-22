@@ -131,6 +131,11 @@ def parameter_checks(recorder, public):
                 choices = [('estimator', factory('mojolearn.Ridge', alpha=.75))]
             elif 'data' in params:
                 choices = [('data', params['data'].copy())]
+            elif 'device' in params:
+                # A class whose only parameter is `device` (LabelEncoder and
+                # the other formerly parameterless classes since the device
+                # wave, ca6adf8fbe): 'cpu' is valid on every installation.
+                choices = [('device', 'cpu')]
             elif not params:
                 try:
                     obj.set_params(unknown_verifier_parameter=1)
