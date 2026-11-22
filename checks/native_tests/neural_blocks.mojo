@@ -404,6 +404,8 @@ def _pinned(name: String) -> UInt64:
     if name == "selective_scan_n8":
         return UInt64(3944575162351859353)
     # lm_head (lane neural-blocks-3-lm): recorded on the CPU column (cpc2, 2026-11-22)
+    if name == "lm_head_logits":
+        return UInt64(17656890029989354755)
     return UInt64(0)
 
 
@@ -535,7 +537,11 @@ def _token_pinned(k: Int) -> UInt64:
     """This version's recorded token-loss digest (loss, parameter and input gradients) of model k (0: none
     recorded). The denominators fold in the lm_head op's leaf body (training/chunked_lm_head_panel_math.mojo),
     so its sabotage arm changes these words on every column. Bits change between versions: a product change
-    records the new digest here in the same commit."""
+    records the new digest here in the same commit. Recorded on the CPU column (cpc2, 2026-11-22)."""
+    if k == 0:
+        return UInt64(11108790232435158226)
+    if k == 1:
+        return UInt64(12471558340238927144)
     return UInt64(0)
 
 
