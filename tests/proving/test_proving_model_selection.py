@@ -21,7 +21,7 @@ import sys
 import numpy as np
 import pytest
 
-from _proving import DEVICES, HERE, assert_same, cls, make, workers_for
+from _proving import DEVICES, HERE, assert_same, cls, make, member, workers_for
 
 import _arm_cases
 
@@ -117,7 +117,7 @@ def test_case_equals_the_off_arm(arm_root, device, arm, name):
                                         n_jobs=0),
     lambda d: cls("MultiOutputClassifier")(make("LogisticRegression", d), n_jobs=0),
     lambda d: cls("OneVsRestClassifier")(make("LogisticRegression", d), n_jobs=0),
-    lambda d: cls("BaggingClassifier")(make("LogisticRegression", d), n_jobs=0),
+    lambda d: make("BaggingClassifier", d, estimator=member("DecisionTreeClassifier"), n_jobs=0),
 ], ids=["voting", "stacking", "multioutput", "ovr", "bagging"])
 def test_n_jobs_zero_is_refused(device, build):
     # ma-callers round 2: n_jobs=0 -> ValueError.

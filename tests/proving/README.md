@@ -26,11 +26,11 @@ The 22 cases of `_arm_cases.py` run once per arm in subprocesses split across ev
 | Item | Test (tests/proving/...) | RESULT file |
 |---|---|---|
 | cross_validate(KernelDensity / Ridge / LogisticRegression, return_estimator=True): kept estimators equal hand fits after the fold buffers are freed; `classes_` type | `test_proving_lifetime.py::test_cross_validate_kept_estimators_outlive_the_fold_buffers` | fx-borrow, ma-core (round 3) |
-| BaggingClassifier(KNeighborsClassifier()) after the input is freed | `test_proving_lifetime.py::test_bagging_over_knn_predicts_the_same_after_the_input_is_freed` | fx-borrow |
+| BaggingClassifier(DecisionTreeClassifier()) after the input is freed (k-NN members are refused by name) | `test_proving_lifetime.py::test_bagging_predicts_the_same_after_the_input_is_freed` | fx-borrow |
 | GP search refit, predict after `del X` | `test_proving_lifetime.py::test_gaussian_process_search_refit_predicts_after_del_x` | fx-borrow |
 | IsolationForest held predict after adopt | `test_proving_lifetime.py::test_isolation_forest_held_predict_after_the_input_is_freed` | fx-borrow, ma-pub-trees |
 | msel refit of RandomForestClassifier has `classes_` | `test_proving_lifetime.py::test_search_refit_of_a_forest_classifier_has_classes` | sweep-b |
-| bagging GaussianNB (int32 draws) on the member route | `test_proving_lifetime.py::test_bagging_gaussian_nb_member_route_is_repeatable` | fx-audit (session 2) |
+| bagging over a non-tree member (GaussianNB, k-NN, Ridge, ...) is refused by name, as documented; the member-ABI route is held work | `test_proving_lifetime.py::test_bagging_refuses_a_member_that_is_not_a_tree_in_words` | fx-audit (session 2) |
 | two threads fit + predict: gbdt, forest, tree, ET, DART, linear, cd, sgd, xlinear, logistic, qn_regressor, linear_svm | `test_proving_threads.py::test_two_threads_fit_and_predict_like_one` | fx-gil |
 | four threads predict ONE fitted model (own-state path) | `test_proving_threads.py::test_two_threads_predict_one_fitted_model` | fx-gil (round 4) |
 | two threads save ONE fitted RF / ET | `test_proving_threads.py::test_two_threads_save_one_fitted_forest` | fx-gil (round 4) |

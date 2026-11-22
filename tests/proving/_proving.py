@@ -67,6 +67,22 @@ def make(name, device="cpu", **params):
     return klass(**kept)
 
 
+def member(name, **params):
+    """A member estimator for an ensemble (Bagging, AdaBoost): its `device` left None, because the members run on
+    the ensemble's device and a member with another explicit device is refused in words (BaggingClassifier's
+    `device` docstring, python/mojolearn/_expansion_trees.py; bindings/trees_public_boost_door.mojo
+    `boost_member_device`). Give the device to the ensemble with `make`."""
+    return make(name, "gpu", **params)
+
+
+#: Bagging members are mojolearn DecisionTree*, RandomForest* or ExtraTrees* estimators; any other member raises
+#: NotImplementedError (the `estimator` docstring of BaggingClassifier / BaggingRegressor and
+#: bindings/trees_public_boost_door.mojo `_require_tree`; bagging over other families through the member ABI is held
+#: work, docs/plans/FUTURE_WORK_2026-11-21.md section 2).
+NOT_BAGGING_MEMBERS = ["Ridge", "LogisticRegression", "KNeighborsClassifier", "GaussianNB",
+                       "GradientBoostingRegressor", "DARTRegressor"]
+
+
 #: Parameters that some estimators do not take; `make` drops them where absent.
 OPTIONAL = {"random_state", "n_estimators", "max_iter", "max_depth", "max_epochs"}
 

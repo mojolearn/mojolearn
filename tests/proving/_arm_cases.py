@@ -46,6 +46,13 @@ def make(name, **params):
     return klass(**params)
 
 
+def bare(name, **params):
+    """A Bagging member: its `device` left None, because the members run on the ensemble's device and a member
+    with another explicit device is refused in words (BaggingClassifier's `device` docstring); `make` gives the
+    ensemble its device."""
+    return getattr(mojolearn, name)(**params)
+
+
 def _cv(result):
     """cross_validate's dict without its clocks."""
     return {k: v for k, v in result.items() if not k.endswith("_time") and k != "estimator"}
@@ -166,18 +173,18 @@ def cvs_lstm_regressor():
 @case
 def bagging_over_trees():
     out = {}
-    regressor = mojolearn.BaggingRegressor(make("DecisionTreeRegressor", random_state=0), n_estimators=5,
-                                           max_features=0.6, bootstrap_features=True, oob_score=True,
-                                           random_state=0).fit(X, Y, sample_weight=W)
+    regressor = make("BaggingRegressor", estimator=bare("DecisionTreeRegressor", random_state=0), n_estimators=5,
+                     max_features=0.6, bootstrap_features=True, oob_score=True,
+                     random_state=0).fit(X, Y, sample_weight=W)
     out["regressor_predict"] = regressor.predict(X)
     out["regressor_oob"] = regressor.oob_score_
-    classifier = mojolearn.BaggingClassifier(make("RandomForestClassifier", n_estimators=4, random_state=0),
-                                             n_estimators=4, max_features=0.6, random_state=0).fit(X, C)
+    classifier = make("BaggingClassifier", estimator=bare("RandomForestClassifier", n_estimators=4, random_state=0),
+                      n_estimators=4, max_features=0.6, random_state=0).fit(X, C)
     out["classifier_proba"] = classifier.predict_proba(X)
     rare = C.copy()
     rare[:2] = 3                     # a rare class two rows hold
-    out["rare_class_predict"] = mojolearn.BaggingClassifier(make("DecisionTreeClassifier", random_state=0),
-                                                            n_estimators=4, random_state=0).fit(X, rare).predict(X)
+    out["rare_class_predict"] = make("BaggingClassifier", estimator=bare("DecisionTreeClassifier", random_state=0),
+                                     n_estimators=4, random_state=0).fit(X, rare).predict(X)
     return out
 
 
@@ -259,7 +266,9 @@ def nan_refusals():
         "multioutput": lambda: mojolearn.MultiOutputRegressor(make("Ridge")),
         "ovr": lambda: mojolearn.OneVsRestClassifier(make("LogisticRegression")),
         "calibrated": lambda: mojolearn.CalibratedClassifierCV(make("LogisticRegression"), cv=3),
-        "bagging": lambda: mojolearn.BaggingRegressor(make("Ridge"), oob_score=True, random_state=0),
+        # Bagging members are tree estimators (BaggingRegressor's `estimator` docstring; Ridge is refused by name).
+        "bagging": lambda: make("BaggingRegressor", estimator=bare("DecisionTreeRegressor", random_state=0),
+                                oob_score=True, random_state=0),
         "rfe": lambda: mojolearn.RFE(make("LogisticRegression"), n_features_to_select=2),
     }
     regression = {"multioutput", "bagging"}
