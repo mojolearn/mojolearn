@@ -552,6 +552,7 @@ from checks.native_tests.extratrees_tree_check import register as register_extra
 from checks.native_tests.gbdt_host_binarize_identical import register as register_gbdt_host_binarize_identical
 from checks.native_tests.gbdt_tree_ctr_host_check import register as register_gbdt_tree_ctr_host_check
 from checks.native_tests.gbdt_ordered_ctr_host_check import register as register_gbdt_ordered_ctr_host_check
+from checks.native_tests.gbdt_host_device_cat import register as register_gbdt_host_device_cat
 from checks.native_tests.gbdt_ordered_doc_id_check import register as register_gbdt_ordered_doc_id_check
 from checks.native_tests.gemm_gemm_gather_ftz_check import register as register_gemm_gemm_gather_ftz_check
 from checks.native_tests.gemm_gemm_int_slices_check import register as register_gemm_gemm_int_slices_check
@@ -1153,6 +1154,7 @@ def all_checks() -> List[Check]:
     checks.append(register_gbdt_host_binarize_identical())
     checks.append(register_gbdt_tree_ctr_host_check())
     checks.append(register_gbdt_ordered_ctr_host_check())
+    checks.append(register_gbdt_host_device_cat())
     checks.append(register_gbdt_ordered_doc_id_check())
     checks.append(register_gemm_gemm_gather_ftz_check())
     checks.append(register_gemm_gemm_int_slices_check())

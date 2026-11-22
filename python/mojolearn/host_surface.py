@@ -793,6 +793,13 @@ TRAINING_LANE_NAMES = {
     "gbdt-catboost-defaults": "gradient boosting at CatBoost's GPU defaults (auto learning rate, Bayesian bootstrap, score noise)",
     # lane/gbdt-cpu-default-parity (2026-09-20)
     "gbdt-stochastic-arms": "gradient boosting with the bootstraps and the score noise on the RMSE loss and on Depthwise and Lossguide trees",
+    # lane pv-verify-gbdt-cat (2026-11-22): the categorical symmetric fits
+    # the CPU column trains since pv-gbdt-cpu-cat (gbdt_oracle.mojo::
+    # gbdt_host_boost, gbdt_oracle_ctr.mojo, gbdt_oracle_ordered.mojo)
+    "gbdt-cat-rmse": "gradient boosting with the RMSE loss on CTR and one-hot categorical columns",
+    "gbdt-cat-bootstrap": "gradient boosting with the Bernoulli, Poisson and Bayesian bootstraps on categorical columns",
+    "gbdt-cat-noise": "gradient boosting with score noise (random_strength above zero) on categorical columns",
+    "gbdt-cat-ordered": "ordered boosting on CTR and one-hot categorical columns",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -2910,6 +2917,11 @@ FAMILIES = (
             # the score noise as options of gbdt_oracle_rmse.mojo and
             # gbdt_oracle_depthwise.mojo, and RMSE on the non-symmetric driver
             "gbdt-stochastic-arms",
+            # lane pv-verify-gbdt-cat (2026-11-22): RMSE, the bootstraps,
+            # the score noise and Ordered on CTR and one-hot columns
+            # (gbdt_oracle.mojo::gbdt_host_boost through gbdt_oracle_ctr.mojo
+            # and the one-hot arm; gbdt_oracle_ordered.mojo)
+            "gbdt-cat-rmse", "gbdt-cat-bootstrap", "gbdt-cat-noise", "gbdt-cat-ordered",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -4098,6 +4110,12 @@ PUBLIC_PENDING_LANES = {
     # NVIDIA, AMD, CPU and PTX records; do not retain the old no-reference hold.
     # New owner lanes: no execution/reference admission is implied by registration.
     "native-schedule-series": "unwatched",
+    # lane pv-verify-gbdt-cat (2026-11-22): new lanes; the CPU column is
+    # recorded first at the release, then the GPU columns are compared to it
+    "gbdt-cat-rmse": "no reference",
+    "gbdt-cat-bootstrap": "no reference",
+    "gbdt-cat-noise": "no reference",
+    "gbdt-cat-ordered": "no reference",
     "optim-owner-lifecycle": "unwatched",
     "optim-io-capability": "unwatched",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no

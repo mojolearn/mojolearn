@@ -403,6 +403,10 @@ sampler, a solver, a metric, a reduction).
     2026-09-20 (lane/gbdt-cpu-default-parity: the bootstraps and the score
                noise on RMSE and on Depthwise and Lossguide)
       gbdt-stochastic-arms
+    2026-11-22 (lane pv-verify-gbdt-cat: the categorical symmetric fits the
+               CPU column trains since pv-gbdt-cpu-cat, RMSE, the bootstraps,
+               the score noise and Ordered over CTR and one-hot columns)
+      gbdt-cat-rmse gbdt-cat-bootstrap gbdt-cat-noise gbdt-cat-ordered
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -4775,6 +4779,178 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(Xt))), m, lambda e: (e.predict(_tensor_ctr_xh(Xh)),))
 
 
+# THE CATEGORICAL SYMMETRIC CONFIGURATIONS (lane pv-verify-gbdt-cat,
+# 2026-11-22). Lane pv-gbdt-cpu-cat (2db07105a5) made the CPU column train
+# RMSE, the three bootstraps and random_strength > 0 with one-hot and CTR
+# columns, which it refused until then, so no record carried a CPU cell for
+# any of them. On the way it found the CPU column's cursor update fused
+# (`fma(leaf, rate, cursor)`) where the device takes `cursor + round(leaf *
+# rate)` since fb11, and nothing caught it: the shipped references predate
+# fb11, the numeric Logloss lanes' references are stale (LANE_REVISIONS), the
+# wheel smoke compares nothing, and the one native host-against-device check
+# of that loop fitted at learning rate 0.5, where the two forms are the same
+# bits. These four lanes put every newly trained class on the CPU column and
+# the GPU columns: RMSE with categorical columns, each bootstrap, the score
+# noise, Ordered boosting, each over CTR and one-hot columns, at a learning
+# rate that is not a power of two (`_GBDT_CAT_RATE`), so a fused against a
+# rounded leaf update moves every cell. Each fit hashes its predictions (the
+# probabilities for Logloss) and its `digest_`; the model column hashes the
+# first fit's saved file. Numeric Logloss and RMSE are gbdt-symmetric's and
+# gbdt-rmse's (same loop, `gbdt_host_boost`), named with these in the
+# sabotage arm coverage-gbdt-host_boost_fused_cursor
+# (tools/identity_lanes/coverage_sabotage.tsv). Every option the fit reads is
+# passed, so no default flip moves a cell. Four lanes, not one, so the
+# verifier's per-lane workers spread the 29 fits across cores. They replace
+# tools/gbdt_cpu_cat_digests.py (pv-gbdt-cpu-cat's one-off CPU-against-GPU
+# script over the same 19 configurations), deleted with this change.
+_GBDT_CAT_ROWS = 3000
+#: NOT a power of two: `leaf * 0.5` is exact, so at 0.5 the fused and the
+#: rounded cursor updates are the same bits and no cell could tell them apart
+#: (gbdt/checks/tree_ctr_host_check.mojo fitted at 0.5 and passed with the
+#: fused CPU loop live)
+_GBDT_CAT_RATE = 0.1
+#: column subsets of `_gbdt_cat_x` and their cat_features within the subset
+_GBDT_CAT_ALL = ([0, 1, 2, 3, 4], [0, 1, 2])    # two CTR columns and the one-hot column
+_GBDT_CAT_CTR = ([0, 3, 4], [0])                # one CTR column (40 categories)
+_GBDT_CAT_ONEHOT = ([2, 3, 4], [0])             # one one-hot column (2 categories)
+_GBDT_CAT_MCC2 = ([0, 1, 3, 4], [0, 1])         # two CTR columns: combinations at complexity 2
+
+
+def _gbdt_cat_x(X, heldout=False):
+    """The categorical lanes' input: column 0 holds 40 categories (rank
+    groups of column 3) and column 1 holds 12 (rank groups of column 4), both
+    above the one_hot_max_size of 2, so both are CTR columns; column 2 holds
+    two (column 5 against its median), a one-hot column; then numeric
+    columns 0 and 1. Rank codes are host arithmetic on every fixture, ties
+    by row order. On the held-out rows every 97th row carries column 0's
+    category 40 and every 89th column 1's category 12, never seen in
+    training (the CTR prior)."""
+    c0 = _rank_codes(X[:, 3], np.arange(1, 40, dtype=np.float64) / 40.0)
+    c1 = _rank_codes(X[:, 4], np.arange(1, 12, dtype=np.float64) / 12.0)
+    c2 = (X[:, 5] > np.median(X[:, 5])).astype(np.int64)
+    if heldout:
+        rows = np.arange(X.shape[0])
+        c0[rows % 97 == 0] = 40
+        c1[rows % 89 == 0] = 12
+    return np.ascontiguousarray(np.column_stack(
+        [c0.astype(np.float32), c1.astype(np.float32), c2.astype(np.float32), X[:, 0], X[:, 1]]
+    ).astype(np.float32))
+
+
+def _gbdt_cat_xh(Xh):
+    return _gbdt_cat_x(Xh, heldout=True)
+
+
+def _gbdt_cat_fits(ml, X, yc, yr, Xh, configs):
+    """Fit every `(name, loss, (columns, cat_features), options)` of one
+    categorical lane on the first `_GBDT_CAT_ROWS` rows. The first
+    configuration must use every column: its estimator answers the infer,
+    model and batch columns on `_gbdt_cat_xh(Xh)`."""
+    rows = min(_GBDT_CAT_ROWS, X.shape[0])
+    Xc = _gbdt_cat_x(X[:rows])
+    ys = {"Logloss": yc[:rows], "RMSE": yr[:rows]}
+    if configs[0][2][0] != _GBDT_CAT_ALL[0]:
+        raise RuntimeError("a categorical lane's first fit must use every column (it answers infer and batch)")
+    parts, first = {}, None
+    for name, loss, (cols, cats), options in configs:
+        kw = dict(n_estimators=12, max_depth=6, learning_rate=_GBDT_CAT_RATE, l2_leaf_reg=3.0,
+                  border_count=128, leaf_estimation_iterations=1, boosting_type="Plain",
+                  random_state=7, loss=loss, cat_features=list(cats))
+        kw.update(options)
+        Xs = np.ascontiguousarray(Xc[:, cols])
+        m = ml.GradientBoosting(**kw).fit(Xs, ys[loss])
+        parts[name] = _h(m.predict_proba(Xs) if loss == "Logloss" else m.predict(Xs))
+        parts[name + ":digest"] = _h(np.frombuffer(str(m.digest_).encode(), dtype=np.uint8))
+        first = first if first is not None else m
+    return _fit(parts, first, lambda e: (e.predict(_gbdt_cat_xh(Xh)),))
+
+
+#: the bootstrap and noise options, every one explicit
+_GBDT_CAT_PLAIN = dict(bootstrap_type="No", random_strength=0.0)
+_GBDT_CAT_DEFAULTS = dict(bootstrap_type="Bayesian", bagging_temperature=1.0, random_strength=1.0)
+
+
+@lane("gbdt-cat-rmse")
+def _(ml, X, yc, yr, Xh=None):
+    """RMSE with categorical columns, which the CPU column refused by name
+    until 2db07105a5: CTR, one-hot and both, feature combinations
+    (max_ctr_complexity 2), boost_from_average off, one permutation, at
+    CatBoost's stochastic defaults (Bayesian bootstrap at temperature 1,
+    random_strength 1) and once with neither."""
+    return _gbdt_cat_fits(ml, X, yc, yr, Xh, [
+        ("rmse_all", "RMSE", _GBDT_CAT_ALL, _GBDT_CAT_DEFAULTS),
+        ("rmse_ctr", "RMSE", _GBDT_CAT_CTR, _GBDT_CAT_DEFAULTS),
+        ("rmse_onehot", "RMSE", _GBDT_CAT_ONEHOT, _GBDT_CAT_DEFAULTS),
+        ("rmse_ctr_mcc2", "RMSE", _GBDT_CAT_MCC2, dict(_GBDT_CAT_DEFAULTS, max_ctr_complexity=2)),
+        ("rmse_ctr_bfa_off", "RMSE", _GBDT_CAT_CTR, dict(_GBDT_CAT_DEFAULTS, boost_from_average=False)),
+        ("rmse_ctr_one_permutation", "RMSE", _GBDT_CAT_CTR, dict(_GBDT_CAT_DEFAULTS, permutation_count=1)),
+        ("rmse_ctr_plain", "RMSE", _GBDT_CAT_CTR, _GBDT_CAT_PLAIN),
+    ])
+
+
+@lane("gbdt-cat-bootstrap")
+def _(ml, X, yc, yr, Xh=None):
+    """Each bootstrap type with categorical columns, both losses, the score
+    noise off so the bootstrap alone moves the fit: Bernoulli (subsample
+    0.7), Poisson (subsample 0.66) and Bayesian at temperature 2, over CTR
+    and one-hot columns."""
+    return _gbdt_cat_fits(ml, X, yc, yr, Xh, [
+        ("rmse_all_bernoulli", "RMSE", _GBDT_CAT_ALL,
+         dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
+        ("rmse_ctr_poisson", "RMSE", _GBDT_CAT_CTR,
+         dict(bootstrap_type="Poisson", subsample=0.66, random_strength=0.0)),
+        ("rmse_ctr_bayesian_t2", "RMSE", _GBDT_CAT_CTR,
+         dict(bootstrap_type="Bayesian", bagging_temperature=2.0, random_strength=0.0)),
+        ("logloss_ctr_bernoulli", "Logloss", _GBDT_CAT_CTR,
+         dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
+        ("logloss_ctr_poisson", "Logloss", _GBDT_CAT_CTR,
+         dict(bootstrap_type="Poisson", subsample=0.66, random_strength=0.0)),
+        ("logloss_ctr_bayesian_t2", "Logloss", _GBDT_CAT_CTR,
+         dict(bootstrap_type="Bayesian", bagging_temperature=2.0, random_strength=0.0)),
+        ("logloss_onehot_bernoulli", "Logloss", _GBDT_CAT_ONEHOT,
+         dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
+        ("rmse_onehot_poisson", "RMSE", _GBDT_CAT_ONEHOT,
+         dict(bootstrap_type="Poisson", subsample=0.66, random_strength=0.0)),
+        ("rmse_onehot_bernoulli", "RMSE", _GBDT_CAT_ONEHOT,
+         dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
+        ("logloss_onehot_bayesian_t2", "Logloss", _GBDT_CAT_ONEHOT,
+         dict(bootstrap_type="Bayesian", bagging_temperature=2.0, random_strength=0.0)),
+    ])
+
+
+@lane("gbdt-cat-noise")
+def _(ml, X, yc, yr, Xh=None):
+    """random_strength above zero with categorical columns: the score noise
+    alone (bootstrap No) at strengths 1 and 2, and with the Bayesian
+    bootstrap (CatBoost's defaults) over CTR, one-hot and combined columns."""
+    return _gbdt_cat_fits(ml, X, yc, yr, Xh, [
+        ("logloss_all_noise", "Logloss", _GBDT_CAT_ALL, dict(bootstrap_type="No", random_strength=1.0)),
+        ("rmse_ctr_noise", "RMSE", _GBDT_CAT_CTR, dict(bootstrap_type="No", random_strength=2.0)),
+        ("logloss_onehot_noise", "Logloss", _GBDT_CAT_ONEHOT, dict(bootstrap_type="No", random_strength=1.0)),
+        ("logloss_ctr_defaults", "Logloss", _GBDT_CAT_CTR, _GBDT_CAT_DEFAULTS),
+        ("rmse_onehot_defaults", "RMSE", _GBDT_CAT_ONEHOT, _GBDT_CAT_DEFAULTS),
+        ("logloss_onehot_defaults", "Logloss", _GBDT_CAT_ONEHOT, _GBDT_CAT_DEFAULTS),
+        ("logloss_ctr_mcc2_defaults", "Logloss", _GBDT_CAT_MCC2, dict(_GBDT_CAT_DEFAULTS, max_ctr_complexity=2)),
+    ])
+
+
+@lane("gbdt-cat-ordered")
+def _(ml, X, yc, yr, Xh=None):
+    """Ordered boosting with categorical columns (the CPU column's
+    gbdt/host/gbdt_oracle_ordered.mojo, single-column CTRs over its fold
+    permutations), both losses, deterministic and under the Bayesian
+    bootstrap with score noise and the Bernoulli bootstrap."""
+    ordered = dict(boosting_type="Ordered")
+    return _gbdt_cat_fits(ml, X, yc, yr, Xh, [
+        ("logloss_all_ordered", "Logloss", _GBDT_CAT_ALL, dict(ordered, **_GBDT_CAT_PLAIN)),
+        ("rmse_ctr_ordered", "RMSE", _GBDT_CAT_CTR, dict(ordered, **_GBDT_CAT_PLAIN)),
+        ("logloss_onehot_ordered", "Logloss", _GBDT_CAT_ONEHOT, dict(ordered, **_GBDT_CAT_PLAIN)),
+        ("logloss_ctr_ordered_defaults", "Logloss", _GBDT_CAT_CTR, dict(ordered, **_GBDT_CAT_DEFAULTS)),
+        ("rmse_ctr_ordered_bernoulli", "RMSE", _GBDT_CAT_CTR,
+         dict(ordered, bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
+    ])
+
+
 @lane("gbdt-nan-modes")
 @floor(rows=(1500, "the nan_mode arm is LIVE at 1500 as of 2026-09-16 (lane/dead-arms): Min and Max hash "
                    "da54f1f980861f61 against d8e2a3e5305a859b here, and they are DISTINCT on all nine "
@@ -8857,6 +9033,8 @@ _batch_decl(_rows_calls("predict", "predict_proba", sl=_GBDT_BATCH_ROWS, prep=_g
             "gbdt-binary-columns")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
 _batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
+_batch_decl(_rows_calls("predict", sl=_GBDT_BATCH_ROWS, prep=_gbdt_cat_xh),
+            "gbdt-cat-rmse", "gbdt-cat-bootstrap", "gbdt-cat-noise", "gbdt-cat-ordered")
 
 
 def _batch_gbdt_adapter_clf(ml, e, Xh):
