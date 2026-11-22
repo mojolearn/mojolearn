@@ -405,7 +405,7 @@ def test_pca_native() raises:
 # fit_transform == transform of an equal fit); then the original's equations on the consumed state, in float64: the
 # whitened projection (x - mean) C^T sqrt(rows - 1) / s to rtol 5e-3, atol 5e-4; the inverse (x - mean) C^T C + mean
 # to rtol 5e-3, atol 8e-4; C C^T = I to rtol 5e-3, atol 5e-4. The Python owner, the audit of Python orchestration and
-# the published attributes stay in Python.
+# the published attributes stay in Python. Independent rows run across the host cores.
 comptime PCA_RANDOM_CASES = 6
 comptime PCA_RANDOM_DIR = "checks/native_tests/fixtures/pca_random/"
 
@@ -512,12 +512,10 @@ def _device_randomized(unit: Int) raises:
 
 def test_pca_randomized_options() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # In order on both columns (as the original's parameter rows run): on the device the production context is
-    # shared; on the host two randomized fits at once crashed the process (rc 139, cpc1 2026-11-22), so the rows do
-    # not overlap until that shared state is found.
     comptime if CPU_COLUMN_BUILD:
-        check_cases_serial("pca_randomized_options", PCA_RANDOM_CASES, _host_randomized)
+        check_cases("pca_randomized_options", PCA_RANDOM_CASES, _host_randomized)
     else:
+        # the production device context is shared: the fits submit in order
         check_cases_serial("pca_randomized_options", PCA_RANDOM_CASES, _device_randomized)
 
 
