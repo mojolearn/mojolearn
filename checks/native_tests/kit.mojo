@@ -42,7 +42,10 @@ from std.sys.info import size_of
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from checks.native_tests.runner import require
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # --- host words to the device, drained before the return -------------------

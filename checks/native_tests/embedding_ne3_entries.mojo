@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The Embedding and residual-dropout entries through the caller's buffers
 (lane ne3-c-blocks-embedding, rows N117, N158 and N160), on a GPU column,
 moved from test_ne3_blocks_embedding_entries.py (2026-11-14).
@@ -32,6 +33,7 @@ cross-entropy reductions (a Python float and array results).
 The fixtures share this process's device context and run in order; each
 kernel keeps its own parallelism.
 """
+from std.testing import TestSuite
 from std.memory import bitcast
 from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from core.hostptr import f32_ptr, i32_ptr
@@ -47,10 +49,14 @@ from training.residual_dropout_boundary_run import (
     residual_dropout_dev_run,
 )
 from training.residual_dropout_common_run import ResidualDropoutArgs
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
 
 # ---- The device column (was embedding_ne3_entries_gpu_suite.mojo) ----
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
+
 comptime EMBEDDING_NE3_FIXTURES = 6
 
 
@@ -203,22 +209,16 @@ def run_embedding_ne3_fixture(fixture_id: Int) raises:
         raise Error("embedding_ne3: no fixture " + String(fixture_id))
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(EMBEDDING_NE3_FIXTURES)
-    for fixture_id in range(EMBEDDING_NE3_FIXTURES):
+def test_fixtures() raises:
+    var failed = String("")
+    for fixture_id in range(EMBEDDING_NE3_FIXTURES):  # driver-loop: one device context, in order
         try:
             run_embedding_ne3_fixture(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+        except problem:
+            failed += "\n      embedding_ne3_entries row " + String(fixture_id) + ": " + String(problem)
+    if failed.byte_length() > 0:
+        raise Error("embedding_ne3_entries: cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("embedding_ne3_entries", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

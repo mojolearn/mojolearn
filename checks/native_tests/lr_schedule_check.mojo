@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Typed schedule correctness with independent closed forms and literal words.
 
 Schedules produce host scalar metadata for CPU and GPU optimizers alike, so
@@ -7,13 +8,14 @@ existing registration and Decimal oracle remain untouched. Independent
 fixtures and scalar steps use the host pool; product table calls keep their
 existing bounded run implementation.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import cos, pow
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
 from training.optimizer_public_common import PublicStep, step_lr
 from sequence.lr_table import LrSpec, lr_spec_fill, lr_spec_value, LR_ONE_BASED, LR_BEYOND, LR_EXACT_ONLY
-from checks.native_tests.runner import Check, Column, Report
 
 comptime LR_FIXTURES = 25
 comptime SENTINEL = Float32(31415.5)
@@ -163,41 +165,29 @@ def optimizer_rate_fixture() raises:
     require(refused, "typed optimizer accepted exhausted OneCycle schedule")
 
 
-def run_checks() raises:
-    var failures = List[Int](length=LR_FIXTURES, fill=0)
-    var fp = failures.unsafe_ptr()
-    def task(fixture_id: Int) {imm fp}:
-        try:
-            if fixture_id < 18:
-                numerical_fixture(fixture_id)
-            elif fixture_id < 21:
-                boundary_fixture(fixture_id)
-            elif fixture_id < 24:
-                literal_fixture(fixture_id)
-            else:
-                optimizer_rate_fixture()
-        except error:
-            print("FAIL lr_schedule fixture", fixture_id, String(error))
-            fp.unsafe_store(fixture_id, 1)
-    host_parallelize(task, LR_FIXTURES)
-    var failed = 0
-    for value in failures:
-        failed += value
-    require(failed == 0, "lr_schedule failed " + String(failed) + " fixtures")
-    print("PASS lr_schedule:", LR_FIXTURES, "parallel native fixtures; host scalar metadata for CPU/GPU")
+def _boundary(unit: Int) raises:
+    boundary_fixture(unit + 18)
 
 
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def _literal(unit: Int) raises:
+    literal_fixture(unit + 21)
 
 
-def register() -> Check:
-    return Check("lr_schedule_check", cpu=True, gpu=False, serial="", run=run_cases)
+def test_numerical() raises:
+    check_cases("numerical", 18, numerical_fixture)
+
+
+def test_boundary() raises:
+    check_cases("boundary", 3, _boundary)
+
+
+def test_literal() raises:
+    check_cases("literal", 3, _literal)
+
+
+def test_optimizer_rate() raises:
+    optimizer_rate_fixture()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

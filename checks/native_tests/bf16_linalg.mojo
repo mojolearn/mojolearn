@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """BF16 GEMM cases preserve the native-host and widened-fp32 relationships.
 
 The same nine shapes/operand forms as test_linalg_lowbit. Conversion bits
@@ -6,18 +7,27 @@ are independently constructed by the integer BF16 oracle; the existing
 normative fp32 GEMM remains the arithmetic reference, as in the Python test.
 No digest, Python binding or changed kernel is involved.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
 from decomposition.linalg_host_impl import gemm_bf16_host_run, gemm_host_run
 from gemm.contract import OP_NN, OP_NT, OP_TN
-from checks.native_tests.bf16_conversion import expected_narrow, expected_widen
-from checks.native_tests.int8_linalg import make_values
+from checks.native_tests.lowbit_oracles import expected_narrow, expected_widen
+from checks.native_tests.lowbit_oracles import make_values
 from max.gpu.host import DeviceContext
 from gemm.checks.gemm_lowbit import LowbitWorkspace, bf16_widen, identical_gemm_bf16w_into
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_lowbit_check import _upload_f32, _upload_u16, _download_f32, _poisoned
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime BF16_LINALG_FIXTURES = 9
@@ -127,19 +137,6 @@ def fixture_operands(fixture_id: Int) raises -> Tuple[List[Float32], List[UInt16
     return (a^, abits^, bbits^)
 
 
-# ---- The host column entry (was bf16_linalg_cpu.mojo) ----
-# Independent host BF16 GEMM fixtures, using typed buffers and native calls.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(BF16_LINALG_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var operands = fixture_operands(fixture_id)
-            _ = host_results(operands[0], operands[1], operands[2], fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, BF16_LINALG_FIXTURES)
-
-
 # ---- The device column entry (was bf16_linalg_gpu.mojo) ----
 # BF16 GPU GEMM against host and GPU widened-fp32 results, without bindings.
 #
@@ -183,25 +180,35 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
     _ = work^
 
 
-def _run_gpu(mut report: Report) raises:
-    var ctx = DeviceContext()
-    var cases = report.cases(BF16_LINALG_FIXTURES)
-    for fixture_id in range(BF16_LINALG_FIXTURES):
-        try:
-            check_fixture(ctx, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _host_fixture(fixture_id: Int) raises:
+    var operands = fixture_operands(fixture_id)
+    _ = host_results(operands[0], operands[1], operands[2], fixture_id)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("bf16_linalg host", BF16_LINALG_FIXTURES, _host_fixture)
 
 
-def register() -> Check:
-    return Check("bf16_linalg", cpu=True, gpu=True, serial="", run=run_cases)
+# The device column: one owned GPU context submits shape cases in order.
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var ctx = DeviceContext()
+        var failed = String("")
+        for fixture_id in range(BF16_LINALG_FIXTURES):  # driver-loop: one in-order device context
+            try:
+                check_fixture(ctx, fixture_id)
+            except problem:
+                failed += "\n      bf16_linalg device row " + String(fixture_id) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("bf16_linalg device: cases failed" + failed)
+
+
+def main() raises:
+    var suite = TestSuite.discover_tests[__functions_in_module()]()
+    # A column's tests are compiled empty on the other column and reported SKIP there.
+    comptime if CPU_COLUMN_BUILD:
+        suite.skip[test_device_fixtures]()
+    else:
+        suite.skip[test_host_fixtures]()
+    suite^.run()

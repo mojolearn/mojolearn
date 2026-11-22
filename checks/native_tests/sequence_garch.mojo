@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """GARCH(1, 1) recovers a simulated process (ported from
 python/mojolearn/tests/test_x_sequence_garch.py
 `test_recovers_and_matches_arch`, its recovery half).
@@ -12,11 +13,21 @@ that sample. `sequence/ops_impl.mojo::garch_impl` fits it with a zero mean
 |beta - 0.85| < 0.08. The comparison with the `arch` package stays in the
 Python file (an external oracle).
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from sequence.exec import Exec, HostExec
 from sequence.ops_impl import garch_impl
-from core.host_parallel import host_parallelize
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, count_failures, read_f32_file, require
+from std.sys.compile import is_defined
+# The stored-vector reader stays the runner's until the shared TestSuite helpers carry it.
+from checks.native_tests.runner import read_f32_file
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime GARCH_FIXTURES = 1
@@ -47,43 +58,36 @@ def run_garch_fixture[E: Exec](mut ex: E, unit: Int) raises:
     _ = forecast^
 
 
-# ---- The host column (was sequence_garch_cpu_suite.mojo) ----
-# GARCH(1, 1) recovery of the stored simulated process: the independent fixtures run across host cores, each on its own
-# HostExec with a private failure slot.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(GARCH_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            var ex = HostExec()
-            run_garch_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GARCH_FIXTURES)
+def _host_fixture(unit: Int) raises:
+    var ex = HostExec()
+    run_garch_fixture(ex, unit)
 
 
-# ---- The device column (was sequence_garch_gpu_suite.mojo) ----
-# GARCH(1, 1) recovery of the stored simulated process, on the device column. The fixtures run in order on one
-# DeviceExec: they share the one device and its queue, and each fixture's
-# kernels already spread its work across the device.
-def _run_gpu(mut report: Report) raises:
-    var ex = DeviceExec()
-    var cases = report.cases(GARCH_FIXTURES)
-    for unit in range(GARCH_FIXTURES):  # driver-loop: over fixtures on the one device
-        try:
-            run_garch_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("sequence_garch host", GARCH_FIXTURES, _host_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+# The device column: GARCH(1, 1) recovery of the stored simulated process. The
+# fixtures run in order on one DeviceExec (one device, one queue).
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var ex = DeviceExec()
+        var failed = String("")
+        for unit in range(GARCH_FIXTURES):  # driver-loop: over fixtures on the one device
+            try:
+                run_garch_fixture(ex, unit)
+            except problem:
+                failed += "\n      sequence_garch device row " + String(unit) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("sequence_garch device: cases failed" + failed)
 
 
-def register() -> Check:
-    return Check("sequence_garch", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    var suite = TestSuite.discover_tests[__functions_in_module()]()
+    # A column's tests are compiled empty on the other column and reported SKIP there.
+    comptime if CPU_COLUMN_BUILD:
+        suite.skip[test_device_fixtures]()
+    else:
+        suite.skip[test_host_fixtures]()
+    suite^.run()

@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original labels prepare/gather providers plus the shared COUNT program.
 
 Each four-row block has exactly two matches. The true and predicted class
 sets differ, so independently encoding without union/remap would be wrong.
 Three range settings exercise the existing device ranges/out/full routes.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.host_parallel import host_parallelize
 from core.labels_native_api import LabelsNativeDriver, LabelsPrepareRequest, LabelsGatherRequest
 from core.labels_score_keys import score_integer_keys, score_key_join, ScoreKeyIndex, score_key_codes
@@ -15,7 +18,14 @@ from core.labels_native_host_provider import labels_host_native_v2
 from x_metrics.descriptor_host import metrics_program_host_v1
 from core.labels_native_device import labels_device_native_v2
 from x_metrics.descriptor_device import metrics_program_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime SVC_ACCURACY_NATIVE_CASES = 7
@@ -149,36 +159,32 @@ def used_classes_large() raises:
     _ = words
 
 
-# ---- The host column (was svc_accuracy_native_cpu_suite.mojo) ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(SVC_ACCURACY_NATIVE_CASES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(LabelsNativeDriver(labels_host_native_v2), metrics_program_host_v1, unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, SVC_ACCURACY_NATIVE_CASES)
+def _host_fixture(unit: Int) raises:
+    fixture(LabelsNativeDriver(labels_host_native_v2), metrics_program_host_v1, unit)
 
 
-# ---- The device column (was svc_accuracy_native_gpu_suite.mojo) ----
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(SVC_ACCURACY_NATIVE_CASES)
-    for unit in range(SVC_ACCURACY_NATIVE_CASES):  # ordered shared-context numerical fixtures
-        try:
-            fixture(LabelsNativeDriver(labels_device_native_v2), metrics_program_device_v1, unit)
-        except problem:
-            cases.fail(unit, problem)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("svc_accuracy_native host", SVC_ACCURACY_NATIVE_CASES, _host_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = String("")
+        for unit in range(SVC_ACCURACY_NATIVE_CASES):  # driver-loop: ordered shared-context numerical fixtures
+            try:
+                fixture(LabelsNativeDriver(labels_device_native_v2), metrics_program_device_v1, unit)
+            except problem:
+                failed += "\n      svc_accuracy_native device row " + String(unit) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("svc_accuracy_native device: cases failed" + failed)
 
 
-def register() -> Check:
-    return Check("svc_accuracy_native", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    var suite = TestSuite.discover_tests[__functions_in_module()]()
+    # A column's tests are compiled empty on the other column and reported SKIP there.
+    comptime if CPU_COLUMN_BUILD:
+        suite.skip[test_device_fixtures]()
+    else:
+        suite.skip[test_host_fixtures]()
+    suite^.run()

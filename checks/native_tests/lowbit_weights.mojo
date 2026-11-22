@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Independent weight conversion fixtures formerly checked with NumPy.
 
 Keep the original 40x32 and 32x24 shapes/uniform range using a native fixture
@@ -6,9 +7,11 @@ generator. The former unused special-row helper now supplies a third executed
 fixture. BF16 expectations use quotient/remainder rounding; INT8 expectations
 use the independent Float64 ties-even oracle in int8_linalg_cases.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-from checks.native_tests.bf16_conversion import expected_narrow, expected_widen
+from checks.native_tests.lowbit_oracles import expected_narrow, expected_widen
 from core.hostptr import f32_ptr, u16_ptr, i8_ptr, i32_ptr
 from decomposition.linalg_host_impl import (
     to_bf16_host_run,
@@ -16,7 +19,7 @@ from decomposition.linalg_host_impl import (
     quantize_int8_host_run,
     dequantize_int8_host_run,
 )
-from checks.native_tests.int8_linalg import expected_quantized, check_quantized, check_dequantized
+from checks.native_tests.lowbit_oracles import expected_quantized, check_quantized, check_dequantized
 from max.gpu.host import DeviceContext
 from gemm.checks.gemm_lowbit import bf16_narrow, bf16_widen, quantize_rows_int8_device, dequantize_rows_int8_device
 from gemm.checks.gemm_lowbit_check import (
@@ -27,7 +30,14 @@ from gemm.checks.gemm_lowbit_check import (
     _download_i32,
     _poisoned,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime LOWBIT_WEIGHT_FIXTURES = 3
@@ -128,16 +138,6 @@ def check_fixture(fixture_id: Int) raises:
     _ = again_exp
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(LOWBIT_WEIGHT_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            check_fixture(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, LOWBIT_WEIGHT_FIXTURES)
-
-
 # ---- The device column entry (was lowbit_weights_gpu.mojo) ----
 # Direct GPU conversions; parallel kernels and host oracle rows.
 #
@@ -185,25 +185,31 @@ def check_fixture_gpu(ctx: DeviceContext, fixture_id: Int) raises:
     _ = deagain
 
 
-def _run_gpu(mut report: Report) raises:
-    var ctx = DeviceContext()
-    var cases = report.cases(LOWBIT_WEIGHT_FIXTURES)
-    for fixture_id in range(LOWBIT_WEIGHT_FIXTURES):
-        try:
-            check_fixture_gpu(ctx, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("lowbit_weights host", LOWBIT_WEIGHT_FIXTURES, check_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+# The device column: one GPU context submits the fixtures in order; kernels,
+# native preparation and oracle rows run in parallel.
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var ctx = DeviceContext()
+        var failed = String("")
+        for fixture_id in range(LOWBIT_WEIGHT_FIXTURES):  # driver-loop: one in-order device context
+            try:
+                check_fixture_gpu(ctx, fixture_id)
+            except problem:
+                failed += "\n      lowbit_weights device row " + String(fixture_id) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("lowbit_weights device: cases failed" + failed)
 
 
-def register() -> Check:
-    return Check("lowbit_weights", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    var suite = TestSuite.discover_tests[__functions_in_module()]()
+    # A column's tests are compiled empty on the other column and reported SKIP there.
+    comptime if CPU_COLUMN_BUILD:
+        suite.skip[test_device_fixtures]()
+    else:
+        suite.skip[test_host_fixtures]()
+    suite^.run()

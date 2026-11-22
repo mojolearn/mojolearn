@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The transformer decoder-layer backward at a shape whose products run on
 the packed GEMM plan: device words against host words.
 
@@ -31,6 +32,7 @@ host/device difference in leaves or fold tree at these contraction lengths.
 
 Every host-device transfer of this file goes through the kit.
 """
+from std.testing import TestSuite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -75,7 +77,11 @@ from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward
 
 from checks.native_tests.kit import download, same_words, upload
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime TBP_CASES = 2
@@ -261,23 +267,17 @@ def _case(ctx: DeviceContext, which: Int) raises:
     _device_run(ctx, w, dims, x, d_out, host, b, l, True, name + " materialized run:")
 
 
-def _run_gpu(mut report: Report) raises:
+def test_cases() raises:
     var ctx = DeviceContext()
-    var cases = report.cases(TBP_CASES)
+    var failed = String("")
     for which in range(TBP_CASES):  # driver-loop: over the check's two layer shapes, one device queue
         try:
             _case(ctx, which)
-        except error:
-            cases.fail(which, error)
+        except problem:
+            failed += "\n      transformer_backward_packed row " + String(which) + ": " + String(problem)
+    if failed.byte_length() > 0:
+        raise Error("transformer_backward_packed: cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("transformer_backward_packed", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

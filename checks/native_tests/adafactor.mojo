@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Independent factored Adafactor equations for the former NumPy fixture.
 
 The 5x4 matrix and length-three vector retain six steps, lr 0.02, decay 0.05,
@@ -7,6 +8,8 @@ fixed dyadic data replaces RNG setup; expected arithmetic is Float64 and
 never calls a product numerical helper. Matrix row/column and update-cell
 units use the host pool; whole-tensor sums and optimizer steps are ordered.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import pow, sqrt
 from core.host_parallel import host_parallelize
 from sequence.exec_trait import Exec
@@ -19,7 +22,14 @@ from sequence.opt_resident import (
     opt_resident_move,
     opt_resident_close,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime ADAFACTOR_FIXTURES = 2
@@ -154,19 +164,6 @@ def run_adafactor_fixture[E: Exec](mut ex: E, fixture_id: Int) raises:
     _ = second
 
 
-# ---- The host column entry (was adafactor_cpu.mojo) ----
-# Independent host matrix/vector Adafactor fixtures run in parallel.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(ADAFACTOR_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var ex = HostExec()
-            run_adafactor_fixture(ex, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, ADAFACTOR_FIXTURES)
-
-
 # ---- The device column entry (was adafactor_gpu.mojo) ----
 # Per-call and resident GPU Adafactor, matrix/vector, independent oracle.
 #
@@ -206,28 +203,45 @@ def resident_fixture(fixture_id: Int) raises:
     _ = second
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(2 * ADAFACTOR_FIXTURES)
-    for fixture_id in range(2 * ADAFACTOR_FIXTURES):
-        try:
-            if fixture_id < ADAFACTOR_FIXTURES:
-                var ex = DeviceExec()
-                run_adafactor_fixture(ex, fixture_id)
-            else:
-                resident_fixture(fixture_id - ADAFACTOR_FIXTURES)
-        except error:
-            cases.fail(fixture_id, error)
+# The host column: independent host matrix/vector Adafactor fixtures, in parallel.
+def _host_fixture(fixture_id: Int) raises:
+    var ex = HostExec()
+    run_adafactor_fixture(ex, fixture_id)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("adafactor host", ADAFACTOR_FIXTURES, _host_fixture)
 
 
-def register() -> Check:
-    return Check("adafactor", cpu=True, gpu=True, serial="", run=run_cases)
+# The device column: per-call then resident GPU Adafactor, matrix/vector,
+# independent oracle. Submission is ordered for the existing shared
+# sequence_ctx/resident pool.
+def _device_fixture(fixture_id: Int) raises:
+    if fixture_id < ADAFACTOR_FIXTURES:
+        var ex = DeviceExec()
+        run_adafactor_fixture(ex, fixture_id)
+    else:
+        resident_fixture(fixture_id - ADAFACTOR_FIXTURES)
+
+
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = String("")
+        for fixture_id in range(2 * ADAFACTOR_FIXTURES):  # driver-loop: ordered submission on the shared device pool
+            try:
+                _device_fixture(fixture_id)
+            except problem:
+                failed += "\n      adafactor device row " + String(fixture_id) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("adafactor device: cases failed" + failed)
+
+
+def main() raises:
+    var suite = TestSuite.discover_tests[__functions_in_module()]()
+    # A column's tests are compiled empty on the other column and reported SKIP there.
+    comptime if CPU_COLUMN_BUILD:
+        suite.skip[test_device_fixtures]()
+    else:
+        suite.skip[test_host_fixtures]()
+    suite^.run()

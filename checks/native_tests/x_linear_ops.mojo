@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The x_linear operations table entry (core/linear_entry_table_ext.mojo),
 one case per operation the linear owner (bindings/x_linear_native_door.mojo)
 calls, with expectations known by construction (dyadic data, exact small
 systems), not by another call into the implementation. No Python objects.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call
@@ -20,11 +23,17 @@ from core.linear_entry_table_ext import (
     XL_OP_BEST_ALPHA,
     XL_HAS_FIT_FOLD,
 )
-from core.host_parallel import host_parallelize
 from x_linear.ops_entry_host import x_linear_ops_host_v1
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_linear.ops_entry_device import x_linear_ops_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime XL_OPS_CASES = 12
@@ -254,42 +263,35 @@ def run_x_linear_ops_case(entry: NativeDescriptorCall, fold: Bool, case_id: Int)
         case_refusals(entry, fold)
 
 
-# ---- The host column (was x_linear_ops_cpu_suite.mojo) ----
-# The CPU column's x_linear operations entry; independent cases run on
-# the existing host pool.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(XL_OPS_CASES)
-    def task(case_id: Int) {imm cases}:
-        try:
-            run_x_linear_ops_case(x_linear_ops_host_v1, False, case_id)
-        except error:
-            cases.fail(case_id, error)
-    report.parallel(task, XL_OPS_CASES)
+def _host_case(case_id: Int) raises:
+    run_x_linear_ops_case(x_linear_ops_host_v1, False, case_id)
 
 
-# ---- The device column (was x_linear_ops_gpu_suite.mojo) ----
-# The device column's x_linear operations entry. The entries share the
-# linear device context, so the cases submit in order; the kernels keep
-# their native parallelism (no concurrency claim).
-def _run_gpu(mut report: Report) raises:
-    var fold = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(XL_OPS_CASES)
-    for case_id in range(XL_OPS_CASES):  # driver-loop: over the ordered device cases
-        try:
-            run_x_linear_ops_case(x_linear_ops_device_v1, fold, case_id)
-        except error:
-            cases.fail(case_id, error)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("x_linear_ops host", XL_OPS_CASES, _host_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+# The device column: the entries share the linear device context, so the cases
+# submit in order; the kernels keep their native parallelism.
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var fold = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var failed = String("")
+        for case_id in range(XL_OPS_CASES):  # driver-loop: over the ordered device cases
+            try:
+                run_x_linear_ops_case(x_linear_ops_device_v1, fold, case_id)
+            except problem:
+                failed += "\n      x_linear_ops device row " + String(case_id) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("x_linear_ops device: cases failed" + failed)
 
 
-def register() -> Check:
-    return Check("x_linear_ops", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    var suite = TestSuite.discover_tests[__functions_in_module()]()
+    # A column's tests are compiled empty on the other column and reported SKIP there.
+    comptime if CPU_COLUMN_BUILD:
+        suite.skip[test_device_fixtures]()
+    else:
+        suite.skip[test_host_fixtures]()
+    suite^.run()
