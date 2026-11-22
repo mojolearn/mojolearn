@@ -14,6 +14,8 @@ import json
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+LANES = ('geometry', 'linear', 'preprocessing', 'trees')
 # G02's required MMA rollback prevents G01's MMA geometry from being reached.
 # These are source-known route constraints, not measured interaction results.
 EXCLUSIVE_CARDS = (frozenset(('AFCL-G01', 'AFCL-G02')),)
@@ -21,8 +23,13 @@ EXCLUSIVE_CARDS = (frozenset(('AFCL-G01', 'AFCL-G02')),)
 
 def catalog() -> dict[str, dict]:
     entries = {}
-    for path in sorted((HERE / 'lanes').glob('*.json')):
-        for entry in json.loads(path.read_text())['entries']:
+    # The lane cards live in cards.json; lanes/<lane>.json is each lane's address there.
+    import sys
+    if str(ROOT / 'tools') not in sys.path:
+        sys.path.append(str(ROOT / 'tools'))
+    import apple_fast_cards
+    for lane in LANES:
+        for entry in apple_fast_cards.document(str((HERE / 'lanes' / (lane + '.json')).relative_to(ROOT)), ROOT)['entries']:
             entries[entry['id']] = entry
     return entries
 

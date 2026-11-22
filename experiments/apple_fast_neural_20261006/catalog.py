@@ -15,21 +15,25 @@ import sys
 
 
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+RELATIVE = HERE.relative_to(ROOT)
 FAMILIES = ("attention", "training", "mamba", "cnn_embedding")
 
 
 def records():
-    """Read authored recipes, without importing any runtime/binding code."""
+    """Read authored recipes, without importing any runtime/binding code.
+
+    The cards live in this directory's cards.json table; the former per-family files
+    (attention.json and the rest) are its logical addresses (tools/apple_fast_cards.py).
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    import apple_fast_cards
+
     result = []
-    for family in FAMILIES:
-        with (HERE / (family + ".json")).open(encoding="utf-8") as stream:
-            document = json.load(stream)
+    for family in FAMILIES + ("interactions",):
+        document = apple_fast_cards.document(str(RELATIVE / (family + ".json")), ROOT)
         for card in document["cards"]:
             result.append({"family": family, **card})
-    with (HERE / "interactions.json").open(encoding="utf-8") as stream:
-        document = json.load(stream)
-    for card in document["cards"]:
-        result.append({"family": "interactions", **card})
     return result
 
 

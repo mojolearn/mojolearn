@@ -18,6 +18,17 @@ ROOT = HERE.parents[1]
 # The adjacent source-configuration tool is called select.py. Prevent it from
 # shadowing the standard-library select extension imported by subprocess.
 sys.path = [p for p in sys.path if Path(p or os.getcwd()).resolve() != HERE]
+sys.path.append(str(ROOT / 'tools'))
+import apple_fast_cards  # noqa: E402  (the card tables; lanes/*.json and the rest are addresses in cards.json)
+
+LANE_CARDS = ['experiments/apple_fast_classical_20261006/lanes/' + n + '.json' for n in ('geometry', 'linear', 'preprocessing', 'trees')]
+
+
+def source_digest(relative: str) -> str:
+    """A card's canonical-JSON digest from its table, or a file's byte digest."""
+    if apple_fast_cards.is_card_path(relative, ROOT):
+        return apple_fast_cards.digest(relative, ROOT)
+    return digest(ROOT / relative)
 
 import argparse
 import hashlib
@@ -222,7 +233,7 @@ def main() -> None:
     if not compiler.is_file():
         raise BuildError('Provision the supported frozen pixi environment on the build worker first')
     configs, entries = configurations(args.idea, args.factorial)
-    mapping = json.loads((HERE / 'build_bindings.json').read_text())
+    mapping = apple_fast_cards.document('experiments/apple_fast_classical_20261006/build_bindings.json', ROOT)
     bindings = mapping['classical_package_bindings']
     output.mkdir(parents=True, exist_ok=True)
     (output / 'logs').mkdir()
@@ -247,18 +258,17 @@ def main() -> None:
         'schema': 1, 'ideas': args.idea, 'source_sha': source_sha, 'vendor': 'apple',
         'numeric_mode': 'fast', 'status': 'building', 'started_at': stamp(),
         'toolchain': toolchain, 'arms': {}, 'builds': [],
-        'definition_file_sha256': digest(HERE / 'build_bindings.json'),
-        'card_manifest_sha256': {str(path.relative_to(ROOT)): digest(path)
-                                 for path in sorted((HERE / 'lanes').glob('*.json'))},
+        'definition_file_sha256': source_digest('experiments/apple_fast_classical_20261006/build_bindings.json'),
+        'card_manifest_sha256': {name: source_digest(name) for name in sorted(LANE_CARDS)},
         'device_smoke': 'not_run_build_only', 'quality': 'pending', 'measurement': 'pending',
     }
-    input_sources = [HERE / name for name in ('build_pair.py', 'build_bindings.json',
+    input_sources = [str((HERE / name).relative_to(ROOT)) for name in ('build_pair.py', 'build_bindings.json',
                      'select.py', 'ideas.json', 'full_workloads.json', 'run_pair.py')]
-    input_sources += [ROOT / 'tools/performance_ideas.py', ROOT / 'packaging/macos/stage_dylibs.py']
-    input_sources += list((HERE / 'lanes').glob('*.json'))
-    input_sources += [ROOT / 'experiments/performance_ideas' / idea / 'manifest.json' for idea in args.idea]
-    receipt['input_source_sha256'] = {str(path.relative_to(ROOT)): digest(path)
-                                      for path in sorted(set(input_sources)) if path.is_file()}
+    input_sources += ['tools/performance_ideas.py', 'packaging/macos/stage_dylibs.py', 'tools/apple_fast_cards.py']
+    input_sources += LANE_CARDS
+    input_sources += ['experiments/performance_ideas/' + idea + '/manifest.json' for idea in args.idea]
+    receipt['input_source_sha256'] = {name: source_digest(name)
+                                      for name in sorted(set(input_sources)) if apple_fast_cards.exists(name, ROOT)}
     write_json(package_file, receipt)
     scratch = output / 'frozen-source'
     cache: dict[tuple[str, str, tuple[str, ...]], tuple[Path, dict]] = {}

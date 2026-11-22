@@ -11,7 +11,11 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import apple_fast_cards  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +45,8 @@ INTERACTIONS = {
 def load_cards(root: Path = ROOT) -> dict[str, dict]:
     cards = {}
     for lane in LANES:
-        document = json.loads((root / "experiments/apple_fast_trees" / f"{lane}.json").read_text())
+        # The lane's cards come from the trees table (former file experiments/apple_fast_trees/<lane>.json).
+        document = apple_fast_cards.document(f"experiments/apple_fast_trees/{lane}.json", root)
         for card in document["cards"]:
             cards[card["id"]] = card
     return cards
