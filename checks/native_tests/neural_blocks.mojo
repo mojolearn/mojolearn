@@ -4,13 +4,15 @@
 
 Each block layer of autograd/model_blocks.mojo (silu, gelu erf and tanh, softplus, rms_norm, rotary,
 multiply / the gated container, narrow after a padded depthwise conv1d (Mamba's causal conv), embedding,
-attention: multi-head, grouped-query, rotary, causal, sliding window and non-causal; rnn, lstm, gru) is
+attention: multi-head, grouped-query, rotary, causal, sliding window and non-causal; rnn, lstm, gru;
+selective_scan, Mamba-1's core as a generic op, lane neural-blocks-2, at state sizes 4 and 8) is
 checked through the model interpreter (autograd/model.mojo model_forward, the version-2 backward with
 ModelRules), inside a small model `linear -> block -> flatten -> linear`:
   - every parameter gradient against central finite differences of the interpreter's own forward loss
     sum(seed * y) (h = 1/128, tolerance 3e-3 (1 + |fd|));
   - the attention forward against a float64 oracle written here (projections, rotary, mask, softmax);
   - the rms_norm forward against a float64 oracle;
+  - the selective_scan forward against a float64 oracle of the reference recurrence;
   - one `NEURAL_BLOCKS <case> digest` line over the output and gradient words.
 Columns: the CPU column runs on HostExec. The device column runs each case on DeviceExec AND HostExec and
 requires the same words (forward values and every gradient): the host-column-versus-device bytes check.
@@ -22,7 +24,7 @@ from autograd.tape import Tape, Tensor
 from autograd.model import ModelSpec, parse_model, model_forward
 from autograd.model_blocks import (
     ModelRules, LAYER_SILU, LAYER_GELU, LAYER_SOFTPLUS, LAYER_RMS_NORM, LAYER_ROTARY, LAYER_MULTIPLY,
-    LAYER_NARROW, LAYER_EMBEDDING, LAYER_ATTENTION, LAYER_RECURRENT,
+    LAYER_NARROW, LAYER_EMBEDDING, LAYER_ATTENTION, LAYER_RECURRENT, LAYER_SELECTIVE_SCAN,
 )
 from autograd.model_execution import model_float_words
 from sequence.exec_trait import Exec
@@ -161,6 +163,14 @@ def _cases() -> List[_Case]:
         rr.layer(LAYER_RECURRENT, 5, k)
         _head(rr)
         out.append(_Case(cell_names[k], rr^, 2, 12, _vals(24, 5, 13, 8)))
+    # selective_scan: (L 6, 4) -> linear(2 dim + 2 state) = [u | delta | B | C], dim 3 -> scan -> (6, 3)
+    var states: List[Int] = [4, 8]
+    for k in range(2):  # small-loop(2 state sizes)
+        var ss = _model([6, 4])
+        ss.layer(L_LINEAR, 6 + 2 * states[k], 1)
+        ss.layer(LAYER_SELECTIVE_SCAN, states[k])
+        _head(ss)
+        out.append(_Case("selective_scan_n" + String(states[k]), ss^, 2, 24, _vals(48, 7, 31, 16)))
     return out^
 
 
@@ -295,6 +305,35 @@ def _rms_oracle(c: _Case, spec: ModelSpec, p: List[Float32]) -> List[Float64]:
     return _linear64(h, c.rows, 24, p, spec.param_off[3], 2, True)
 
 
+def _scan_oracle(c: _Case, spec: ModelSpec, p: List[Float32]) -> List[Float64]:
+    """`linear -> selective_scan -> flatten -> linear(2)` in float64: h[t] = exp(delta A) h[t-1] + delta B u,
+    y = C . h + u D, A = -exp(A_log)."""
+    var L = 6
+    var dim = 3
+    var N = c.model.args[6]
+    var W = 2 * dim + 2 * N
+    var x = List[Float64]()
+    for i in range(len(c.x)):  # small-loop(oracle)
+        x.append(Float64(c.x[i]))
+    var h = _linear64(x, c.rows * L, 4, p, 0, W, True)
+    var off = spec.param_off[1]
+    var y = List[Float64](length=c.rows * L * dim, fill=0)
+    for b in range(c.rows):  # small-loop(oracle)
+        for d in range(dim):  # small-loop(oracle)
+            var st = List[Float64](length=N, fill=0)
+            for t in range(L):  # small-loop(oracle)
+                var r = (b * L + t) * W
+                var uv = h[r + d]
+                var dl = h[r + dim + d]
+                var acc = Float64(0)
+                for n in range(N):  # small-loop(oracle)
+                    var av = -exp(Float64(p[off + d * N + n]))
+                    st[n] = exp(dl * av) * st[n] + dl * h[r + 2 * dim + n] * uv
+                    acc += h[r + 2 * dim + N + n] * st[n]
+                y[(b * L + t) * dim + d] = acc + uv * Float64(p[off + dim * N + d])
+    return _linear64(y, c.rows, L * dim, p, spec.param_off[3], 2, True)
+
+
 def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) raises:
     if len(got) != len(want):
         _fail(name + ": length " + String(len(got)) + " expected " + String(len(want)))
@@ -314,6 +353,8 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
         _close(c.name + " forward", yv, _attention_oracle(c, spec, params), 1e-4)
     elif c.name == "rms_norm":
         _close(c.name + " forward", yv, _rms_oracle(c, spec, params), 1e-4)
+    elif c.name.startswith("selective_scan"):
+        _close(c.name + " forward", yv, _scan_oracle(c, spec, params), 1e-4)
     if finite_differences:
         var fd = List[Float64](length=len(params), fill=0)
         for i in range(len(params)):  # small-loop(every parameter probed)

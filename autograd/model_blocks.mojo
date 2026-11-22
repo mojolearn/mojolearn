@@ -27,6 +27,12 @@ EXISTING backward rule; no kernel is written or edited here:
   41    recurrent (hidden, cell) rnn_scan_op (autograd/rules_recurrent.mojo), the       RecurrentRules
                                  recurrent estimators' own layer, on the time-major      16..18
                                  view (permute (T, B, F))
+  42    selective_scan (state)   graph_selective_scan (autograd/ssm_primitives.mojo),   SsmRules 240
+                                 the Mamba-1 core as a generic op (lane neural-blocks-2,
+                                 2026-11-22): the (length, 2 dim + 2 state) input is
+                                 [u | delta | B | C] (narrow views), parameters A_log
+                                 (dim, state) and D (dim); its arithmetic is the Mamba-1
+                                 block kernels' own thread bodies
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -55,6 +61,8 @@ from autograd.transformer_primitives import graph_rms_norm, graph_rotary
 from autograd.import_api import ImportRules, imp_unary, imp_binary, imp_where, imp_gather_nd
 from autograd.import_ops import IMP_SILU, IMP_GELU_ERF, IMP_GELU_TANH, IMP_SOFTPLUS, IMP_GT, IMP_GE, IMP_OR
 from autograd.rules_recurrent import RecurrentRules, RNN_LINEAR, RNN_LAYER, RNN_LAST_STEP, rnn_scan_op
+from autograd.ssm_primitives import SsmRules, SSM_TAG_FIRST, SSM_TAG_LAST, graph_selective_scan
+from autograd.ssm_ops import ssm_m1_states_supported
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -66,8 +74,12 @@ comptime LAYER_NARROW = 38
 comptime LAYER_EMBEDDING = 39
 comptime LAYER_ATTENTION = 40
 comptime LAYER_RECURRENT = 41
+comptime LAYER_SELECTIVE_SCAN = 42
 comptime BLOCK_FIRST = 32
-comptime BLOCK_LAST = 41
+comptime BLOCK_LAST = 42
+
+#: block_init_bounds' marker for Mamba's S4D-real init of A_log: row d holds log(1), .., log(state)
+comptime BLOCK_INIT_S4D = Float32(-1.0e9)
 
 #: recurrent cells (a1 of LAYER_RECURRENT): the public names rnn, lstm, gru
 comptime BLOCK_CELL_RNN = 0
@@ -184,7 +196,23 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         rd.append(cur.d[0])
         rd.append(a0)
         return rn_shape(rd, name + " (Recurrent)")
+    if code == LAYER_SELECTIVE_SCAN:
+        if cur.ndim != 2:
+            raise Error(name + " (SelectiveScan): the input must be (length, features)")
+        if not ssm_m1_states_supported(a0):
+            raise Error(name + " (SelectiveScan): d_state must be 4, 8 or 16")
+        var wide = cur.d[1] - 2 * a0
+        if wide < 2 or wide % 2 != 0:
+            raise Error(name + " (SelectiveScan): the features must be 2 * dim + 2 * d_state, [u | delta | B | C]")
+        var sd = List[Int]()
+        sd.append(cur.d[0])
+        sd.append(wide // 2)
+        return rn_shape(sd, name + " (SelectiveScan)")
     raise Error(name + ": unknown layer code " + String(code))
+
+
+def _scan_dim(xargs: List[Int], i: Int, cur: ShapeN) -> Int:
+    return (cur.d[1] - 2 * _x(xargs, i, 0)) // 2
 
 
 def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[Int]:
@@ -209,6 +237,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         out.append(gh * hsz)       # weight_hh (gates * hidden, hidden)
         out.append(gh)             # bias_ih
         out.append(gh)             # bias_hh
+    elif code == LAYER_SELECTIVE_SCAN:
+        var dim = _scan_dim(xargs, i, cur)
+        out.append(dim * _x(xargs, i, 0))  # A_log (dim, state)
+        out.append(dim)                    # D
     return out^
 
 
@@ -229,6 +261,9 @@ def block_param_names(code: Int) -> List[String]:
         out.append(".weight_hh")
         out.append(".bias_ih")
         out.append(".bias_hh")
+    elif code == LAYER_SELECTIVE_SCAN:
+        out.append(".A_log")
+        out.append(".D")
     return out^
 
 
@@ -270,6 +305,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         var b = ftz(identical_div(Float32(1), identical_sqrt(Float32(_x(xargs, i, 0)))))
         for _ in range(4):  # small-loop(4: the layer's parameter tensors)
             out.append(b)
+    elif code == LAYER_SELECTIVE_SCAN:
+        # Mamba's init: A_log[d, n] = log(n + 1) (S4D-real), D = 1
+        out.append(BLOCK_INIT_S4D)
+        out.append(Float32(-2))
     return out^
 
 
@@ -420,6 +459,15 @@ def block_forward[E: Exec](
         var b_ih = _p(tape, ex, P, Gr, off + gh * F + gh * a0, 1, gh, train)
         var b_hh = _p(tape, ex, P, Gr, off + gh * F + gh * a0 + gh, 1, gh, train)
         return block_recurrent(tape, ex, h, w_ih, w_hh, b_ih, b_hh, B, T, F, a0, cell)
+    if code == LAYER_SELECTIVE_SCAN:
+        var dim = _scan_dim(xargs, i, cur)
+        var u = rankn_narrow(tape, ex, h, 2, 0, dim)
+        var dl = rankn_narrow(tape, ex, h, 2, dim, dim)
+        var bm = rankn_narrow(tape, ex, h, 2, 2 * dim, a0)
+        var cm = rankn_narrow(tape, ex, h, 2, 2 * dim + a0, a0)
+        var a_log = _p(tape, ex, P, Gr, off, dim, a0, train)
+        var d_skip = _p(tape, ex, P, Gr, off + dim * a0, 1, dim, train)
+        return graph_selective_scan(tape, ex, u, dl, bm, cm, a_log, d_skip)
     raise Error("model: unknown block code " + String(code))
 
 
@@ -433,19 +481,29 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
     def _recurrent(tag: Int) -> Bool:
         return tag == RNN_LINEAR or tag == RNN_LAYER or tag == RNN_LAST_STEP
 
+    @staticmethod
+    def _ssm(tag: Int) -> Bool:
+        return tag >= SSM_TAG_FIRST and tag <= SSM_TAG_LAST
+
     def supports(self, tag: Int) -> Bool:
         if Self._recurrent(tag):
             return True
+        if Self._ssm(tag):
+            return SsmRules().supports(tag)
         return ImportRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if Self._recurrent(tag):
             return RecurrentRules().zeroed_destination(tag, saved, edge)
+        if Self._ssm(tag):
+            return SsmRules().zeroed_destination(tag, saved, edge)
         return ImportRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if Self._recurrent(tag):
             return RecurrentRules().writes_total(tag, saved, edge)
+        if Self._ssm(tag):
+            return SsmRules().writes_total(tag, saved, edge)
         return ImportRules().writes_total(tag, saved, edge)
 
     def apply[E: Exec](
@@ -454,6 +512,8 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
     ) raises:
         if Self._recurrent(tag):
             RecurrentRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        elif Self._ssm(tag):
+            SsmRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         else:
             ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
 
@@ -489,6 +549,11 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
             out.append(cur.d[1])
         elif slot == 1:
             out.append(hsz)
+    elif code == LAYER_SELECTIVE_SCAN:
+        var dim = _scan_dim(xargs, i, cur)
+        out.append(dim)
+        if slot == 0:
+            out.append(_x(xargs, i, 0))
     return out^
 
 

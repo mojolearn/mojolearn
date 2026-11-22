@@ -167,6 +167,7 @@ launches. FAST makes no identity claim (contract section 8's last sentence).
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from autograd.kernels.mamba1_scan_body import m1_a_from_a_log
 from core.step_phase import step_count_sync
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -1171,7 +1172,8 @@ def mamba_a_from_a_log_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= n:
         return
-    a_out.unsafe_store(i, -ftz(identical_exp(ftz(a_log.unsafe_load(i)))))
+    # S15 is the scan's one body (m1_a_from_a_log), shared with the generic op
+    a_out.unsafe_store(i, m1_a_from_a_log(a_log.unsafe_load(i)))
 
 
 # ===========================================================================

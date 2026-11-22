@@ -41,8 +41,9 @@ from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_
 # Lane neural-blocks (2026-11-22): the neural building blocks (codes 32..41) and the version-2 backward rules
 from autograd.model_blocks import (
     LAYER_MULTIPLY, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads, block_shape,
-    is_block,
+    is_block, BLOCK_INIT_S4D,
 )
+from autograd.ssm_ops import OP_SSM_S4D_INIT
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
 # optimizer step and layer, including across checkpoint/resume.
@@ -509,6 +510,10 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
                             + "or the index of an earlier layer")
             nxt = s.sample if a0 == -1 else s.out_shape[a0]
         elif k == LAYER_CONCAT:
+            # lane neural-blocks-2: the float argument is the sample axis to join on (0, the channels, by
+            # default; the last axis joins the features of (length, features) samples, e.g. Mamba's
+            # [u | delta | B | C])
+            var cax = Int(f)
             var count = 0
             var total = 0
             var first = cur
@@ -525,15 +530,17 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
                 elif sj.ndim != first.ndim:
                     raise Error(_layer_name(i) + " (Concat): the sources have different ranks")
                 else:
-                    for q in range(1, sj.ndim):  # small-loop(ndim: the sample rank, at most 7): shape metadata, no data
-                        if sj.d[q] != first.d[q]:
-                            raise Error(_layer_name(i) + " (Concat): the sources differ outside the first axis")
-                total += sj.d[0]
+                    for q in range(sj.ndim):  # small-loop(ndim: the sample rank, at most 7): shape metadata, no data
+                        if q != cax and sj.d[q] != first.d[q]:
+                            raise Error(_layer_name(i) + " (Concat): the sources differ outside the joined axis")
+                if cax < 0 or cax >= sj.ndim:
+                    raise Error(_layer_name(i) + " (Concat): axis must be a sample axis")
+                total += sj.d[cax]
                 count += 1
             if count < 1:
                 raise Error(_layer_name(i) + " (Concat): give at least one source")
             var jd = rn_dims(first)
-            jd[0] = total
+            jd[cax] = total
             nxt = rn_shape(jd, _layer_name(i) + " (Concat)")
         elif is_block(k):
             # lane neural-blocks: autograd/model_blocks.mojo validates the block and sizes its parameters
@@ -722,7 +729,13 @@ def model_init_params[E: Exec](mut ex: E, spec: ModelSpec, P: FP, seed: UInt64) 
             var bounds = block_init_bounds(k, spec.xargs, i, spec.in_shape[i])
             var o = off
             for j in range(len(sizes)):  # small-loop(at most four parameter tensors of the layer)
-                if bounds[j] < Float32(0):
+                if bounds[j] == BLOCK_INIT_S4D:
+                    # Mamba's S4D-real A_log: log(1) .. log(state) along each row
+                    var sa = Args()
+                    sa.p0 = P + o
+                    sa.i0 = spec.xargs[SPEC2_ARGS * i]
+                    ex.launch[OP_SSM_S4D_INIT](sa, sizes[j])
+                elif bounds[j] < Float32(0):
                     _fill(ex, P + o, sizes[j], -bounds[j] - Float32(1))
                 else:
                     _init_uniform(ex, P + o, sizes[j], o, seed, bounds[j])
@@ -958,8 +971,8 @@ def _model_forward_v2[E: Exec](
                 if v == CONCAT_UNUSED:
                     continue
                 parts.append(x0 if v == -1 else outs[v])
-            # axis 1: the sample's first axis (the channels), after the batch axis
-            h = rankn_concat(tape, ex, parts, 1)
+            # the sample's axis f (0: the first axis, the channels), after the batch axis
+            h = rankn_concat(tape, ex, parts, Int(spec.farg[i]) + 1)
         elif is_block(k):
             var other: Optional[Tensor] = None
             if k == LAYER_MULTIPLY:

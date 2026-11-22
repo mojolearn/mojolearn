@@ -16,7 +16,8 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "conv1d": 15, "max_pool1d": 16, "avg_pool1d": 17, "adaptive_avg_pool1d": 18, "branch": 19,
           "concat": 20, "residual_block": 0, "parallel": 0,
           "silu": 32, "gelu": 33, "softplus": 34, "rms_norm": 35, "rotary": 36, "multiply": 37,
-          "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0}
+          "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
+          "selective_scan": 42}
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -262,11 +263,12 @@ class Sequential(_CheckMixin):
         from that point."""
         return _SEQUENTIAL_ENTRY(self, "add", ("branch", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
-    def concat(self, sources):
+    def concat(self, sources, axis=0):
         """Append the outputs of the layers ``sources`` (1 to 6 layer
-        indices, -1 for the model input) joined along the first axis of
-        each sample (the channels). The other axes must agree."""
-        return _SEQUENTIAL_ENTRY(self, "add", ("concat", (sources,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+        indices, -1 for the model input) joined along sample axis ``axis``
+        (0: the first axis, the channels; 1 joins the features of
+        ``(length, features)`` samples). The other axes must agree."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("concat", (sources, axis), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def residual_block(self, body, shortcut=None):
         """Append a residual block: ``body(h) + shortcut(h)``, where ``h`` is
@@ -420,6 +422,31 @@ class Sequential(_CheckMixin):
         """Append a tanh recurrent layer over ``(length, features)`` samples
         from a zero state; the output is every step's hidden state."""
         return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def selective_scan(self, d_state=16):
+        """Append Mamba's selective state-space scan over ``(length,
+        features)`` samples whose features are ``[u | delta | B | C]``:
+        ``dim`` input channels ``u``, their ``dim`` step sizes ``delta``
+        (already positive, for example after ``softplus``), and the
+        ``d_state`` input and output projections ``B`` and ``C`` of each
+        position, so ``features = 2 * dim + 2 * d_state``. The output is
+        ``(length, dim)``: ``y + u * D`` with ``y[t] = C[t] . h[t]`` and
+        ``h[t] = exp(delta[t] * A) * h[t - 1] + delta[t] * B[t] * u[t]``
+        from ``h = 0``, where ``A = -exp(A_log)``. ``A_log``
+        ``(dim, d_state)`` and ``D`` ``(dim,)`` are learned, initialized as
+        in Mamba (``A_log[:, n] = log(n + 1)``, ``D = 1``).
+
+        Parameters
+        ----------
+        d_state : int, default 16
+            State size per channel: 4, 8 or 16.
+
+        Example: the core of a Mamba mixer over ``(length, 64)`` samples::
+
+            # u, delta, b, c: indices of the layers giving the four parts
+            model.concat([u, delta, b, c], axis=1).selective_scan(16)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("selective_scan", (d_state,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gated(self, gate, up):
         """Append a gated block: ``gate(h) * up(h)``, where ``h`` is the

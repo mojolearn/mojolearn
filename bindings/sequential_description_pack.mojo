@@ -163,8 +163,10 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         a0 = py_call(b.int, options[0])
         args = Python.list(a0, 0, 0, 0, 0, 0)
     elif kind == "concat":
-        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("sources"), Python.tuple(None), 1)
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("sources", "axis"),
+                                 Python.tuple(None, 0), 1)
         var sources = py_call(b.tuple, options[0])
+        f = py_call(b.float, PythonObject(_positive(options[1], "axis", 0, context)))
         if len(sources) < 1 or len(sources) > 6:
             raise Error("sources must list 1 to 6 layers")
         args = Python.list()
@@ -237,6 +239,13 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         a0 = PythonObject(heads)
         a1 = PythonObject(kv)
         args = Python.list(heads, kv, 1 if Bool(py=options[2]) else 0, window, 1 if Bool(py=options[5]) else 0, 0)
+    elif kind == "selective_scan":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("d_state"), Python.tuple(16), 0)
+        var states = _positive(options[0], "d_state", 1, context)
+        if states != 4 and states != 8 and states != 16:
+            raise Error("d_state must be 4, 8 or 16")
+        a0 = PythonObject(states)
+        args = Python.list(states, 0, 0, 0, 0, 0)
     elif kind == "rnn" or kind == "lstm" or kind == "gru":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("hidden_size"), Python.tuple(None), 1)
         var hidden = _positive(options[0], "hidden_size", 1, context)

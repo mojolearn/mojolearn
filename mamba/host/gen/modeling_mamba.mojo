@@ -169,6 +169,7 @@ launches. FAST makes no identity claim (contract section 8's last sentence).
 from mamba.host.device_shim import host_launch, launch_count
 from std.memory import stack_allocation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from autograd.kernels.mamba1_scan_body import m1_a_from_a_log
 from core.step_phase import step_count_sync
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -1169,7 +1170,8 @@ def mamba_a_from_a_log_kernel(gid_: Int,
     var i = gid_
     if i >= n:
         return
-    a_out.unsafe_store(i, -ftz(identical_exp(ftz(a_log.unsafe_load(i)))))
+    # S15 is the scan's one body (m1_a_from_a_log), shared with the generic op
+    a_out.unsafe_store(i, m1_a_from_a_log(a_log.unsafe_load(i)))
 
 
 # ===========================================================================
@@ -1868,7 +1870,7 @@ def mamba_mixer_forward(
         var _l10_a2 = Int32(di * D_STATE)
         def _launch_10(gid_: Int) {imm _l10_a0, imm _l10_a1, imm _l10_a2}:
             mamba_a_from_a_log_kernel(gid_, _l10_a0, _l10_a1, _l10_a2)
-        host_launch(_launch_10, launch_count((_grid(di * D_STATE), 1, 1), (MAMBA_TPB, 1, 1)), 33)
+        host_launch(_launch_10, launch_count((_grid(di * D_STATE), 1, 1), (MAMBA_TPB, 1, 1)), 0)
         _m1_stage_sync(ctx, trace)
         trace.record_device[DType.float32](
             ctx, prefix + ".A.out", stages.a_out, di * D_STATE
