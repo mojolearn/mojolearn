@@ -68,11 +68,11 @@ def test_counted_class_weights_and_existing_gain_tail_remain_compatible(weights,
     before = _model(**base)._params(8, 2, 0)
     explicit_off = _model(**base, min_child_hessian=None)._params(8, 2, 0)
     after = _model(**base, min_child_hessian=0.125)._params(8, 2, 0)
-    fixed = 35 + len(weights or [])
+    fixed = 36 + len(weights or [])
     assert explicit_off == before
     assert len(before) == fixed + (gain is not None)
-    assert before[34] == len(weights or [])
-    assert before[35:fixed] == (weights or [])
+    assert before[35] == len(weights or [])
+    assert before[36:fixed] == (weights or [])
     assert after[:fixed] == before[:fixed]
     assert after[fixed:] == [-1.0 if gain is None else gain, 0.125]
 

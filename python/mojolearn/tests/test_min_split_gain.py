@@ -24,9 +24,9 @@ def test_optional_tail_preserves_counted_class_weights(policy, weights):
     after = GradientBoosting(loss="Logloss", grow_policy=policy,
                              class_weights=weights,
                              min_split_gain=2.125)._params(8, 2, 0)
-    assert len(before) == 35 + len(weights or [])
-    assert before[34] == len(weights or [])
-    assert before[35:] == (weights or [])
+    assert len(before) == 36 + len(weights or [])
+    assert before[35] == len(weights or [])
+    assert before[36:] == (weights or [])
     assert after[:-1] == before
     assert after[-1] == 2.125
 
