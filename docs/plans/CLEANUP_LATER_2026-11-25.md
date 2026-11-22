@@ -102,3 +102,19 @@ Three small items, none of which changes product code. Not before the 0.8.67 ver
 
 Left out on purpose (not easy): hardened input and checkpoint parsing with fuzzing of every loader, and the CI/CD
 hardening pass (actions pinned by hash, least-privilege tokens, box credentials).
+
+## 7. Shrink verify (Andrew, 2026-11-22: after the release, never before)
+
+`python -m mojolearn verify` is Python by design (a test tool that calls the public API as a user does). Measured
+2026-11-22 on the package's `_verify*.py`, `_identity.py`, `_check_both.py`: 35 files, 15,898 lines, 508 functions;
+4,373 of the lines are blank, comment or docstring; only 160 lines are module-level tables; only 7 function body
+shapes repeat (about 20 lines). So there is no mechanical duplicate to delete: any real cut is a redesign.
+
+- File count first (cheap, safe): 35 modules into about 10 by area (command, records and reference, lanes, public
+  endpoints, model and generation, check-both, self-test and faults). No behaviour change.
+- Then `_verify_all.py` (4,583 lines), `_verify_graph.py` (1,846) and `_verify.py` (1,764): read for per-lane code
+  that one lane table plus one driver would replace. Expect a modest cut (a guess of 15 to 30 percent of the code
+  lines, to be replaced by a measured figure after reading them), not a halving.
+- Proof for every step: `verify --self-test` says the verifier works, the sabotage arms are still CAUGHT, and
+  `tools/ops/wheel_verify_smoke.sh` is green from a built wheel. Also owed there: 42 of 116 sabotage patches no
+  longer apply to the tree (found 2026-11-22) and are repaired or retired BEFORE the release verify, not after.
