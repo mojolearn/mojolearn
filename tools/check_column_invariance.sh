@@ -61,7 +61,7 @@ cd "$(dirname "$0")/.."
 
 COLUMNS="${MOJOLEARN_COLUMNS:-APPLE NVIDIA AMD}"
 ARMS="${MOJOLEARN_ARMS:-kmeans knn dbscan}"
-OUT="${MOJOLEARN_COLUMN_OUT:-bench/results/column_invariance/$(date +%Y-%m-%d_%H%M%S)}"
+OUT="${MOJOLEARN_COLUMN_OUT:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/column_invariance/$(date +%Y-%m-%d_%H%M%S)}"
 mkdir -p "$OUT"
 
 if [ "${MOJOLEARN_COLINV_INNER:-}" != "1" ]; then
