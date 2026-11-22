@@ -73,7 +73,7 @@ which is why `n_probe == n_lists` reduces to brute force exactly rather
 than approximately. Read `ivf/checks/list_layout.mojo`'s header before
 changing anything about that order.
 """
-from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import IVF_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 

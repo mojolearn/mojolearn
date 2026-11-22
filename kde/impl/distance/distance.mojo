@@ -63,7 +63,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.row_norms import enqueue_row_norms, NORM_TPB, row_norm_kernel
-from experiments.classical_identical_ideas.shared_controls import C06_ROWS_ON
+from core.classical_identical_controls.shared_controls import C06_ROWS_ON
 from kde.impl.distance.distance_ops import (
     DIST_COSINE_EXPANDED,
     DIST_L1,

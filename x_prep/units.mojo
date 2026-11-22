@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The op table: op id -> unit. python/mojolearn/_expansion_prep.py `_OPS` carries
 the same ids; the binding refuses an id outside the table."""
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY
+from core.classical_identical_controls.shared_controls import C08_DICTIONARY
 from x_prep.common import FP, IP
 from x_prep.prims import (
     sort_cols_unit, col_stats_unit, quantile_unit, affine_unit, scale_params_unit,

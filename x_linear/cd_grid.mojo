@@ -34,7 +34,7 @@ from x_linear.witness import Witness, witness_end, WITNESS_TRIES
 from x_linear.ops import FP, IP, fa, fm, fs, fd, fmad, ld, st, ldi, i2f, fill
 from x_linear.team import Team, TEAM_SLOTS, LINEAR_TPB, team_at
 from x_linear.tops import upper_cell, _acc_fa, _acc_fmad, fold_parts
-from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS, ENETCV_SCORE_BLOCKS
+from core.classical_identical_controls.linear_controls import ENETCV_FOLD_BLOCKS, ENETCV_SCORE_BLOCKS
 from x_linear.enetcv_blocks import (
     FB_C, FB_NT, FB_TPB, FB_TC, fb_words, fb_means_kernel, fb_fold_means_kernel, fb_gram_kernel,
     fb_fold_gram_kernel, fb_combine_kernel,

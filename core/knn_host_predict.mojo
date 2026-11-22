@@ -146,7 +146,7 @@ The restatement is a prediction until measured. tools/classical_host_gate.py
 what it has shown.
 """
 from core.classical_distance import direct_squared_distance, direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import KNN_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 

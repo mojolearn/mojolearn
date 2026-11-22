@@ -3,7 +3,7 @@ GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from std.sys.compile import is_defined
-from experiments.classical_identical_ideas.stats_controls import C53_BGMM_STATS
+from core.classical_identical_controls.stats_controls import C53_BGMM_STATS
 from mixture.checks.mstep import center_pair_kernel
 from core.em_loop_chunk import em_loop_check_every
 from x_cluster.spectral_df64_device import cluster_qr_df64_device, discretize_df64_device

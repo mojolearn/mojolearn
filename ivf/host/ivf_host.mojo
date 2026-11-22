@@ -74,7 +74,7 @@ tools/identity_break.py on the ivf and ivf-euclidean lanes is the
 measurement.
 """
 from core.classical_distance import direct_squared_distance, direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import IVF_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.

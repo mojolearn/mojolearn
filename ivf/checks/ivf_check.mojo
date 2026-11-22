@@ -121,7 +121,7 @@ from ivf.checks.ivf_oracle import (
     reference_distance_f64,
     reference_nearest_f64,
 )
-from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE, KNN_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import IVF_DIRECT_DISTANCE, KNN_DIRECT_DISTANCE
 from ivf.checks.list_layout import (
     ListLayout,
     build_list_layout,
@@ -371,7 +371,7 @@ def _all_lists_reference(
 ) raises -> OracleSearchResult:
     # Preserve the native kNN cross-check whenever the arithmetic matches.
     # The policy declarations are both in
-    # experiments/classical_identical_ideas/graph_controls.mojo:
+    # core/classical_identical_controls/graph_controls.mojo:
     # IVF_DIRECT_DISTANCE was promoted 2026-10-08; KNN_DIRECT_DISTANCE was
     # tombstoned False 2026-10-11. Their different folds do not promise equal
     # last bits. The default comparison therefore uses the independent

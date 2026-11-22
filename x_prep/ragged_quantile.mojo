@@ -9,7 +9,7 @@ No estimator default or numerical profile changes.
 from max.gpu import block_idx,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from x_prep.prims import quantile_unit
-from experiments.performance_ideas.I19.ragged_float import enqueue_ragged_float_sort
+from x_prep.ragged_float import enqueue_ragged_float_sort
 
 def _ragged_quantile_kernel(arena: MutPointer[Float32,MutAnyOrigin],params: MutPointer[Int32,MutAnyOrigin],nq_in: Int32,tasks_in: Int32):
     var task=Int(block_idx.x)*128+Int(thread_idx.x)

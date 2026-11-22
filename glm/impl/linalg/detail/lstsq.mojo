@@ -142,7 +142,7 @@ from core.column_stats import (
     xty_kernel,
 )
 from core.identity_trace import IdentityTrace
-from experiments.classical_identical_ideas.fg_linear_controls import IDN_JACOBI_ROUND_ROBIN
+from core.classical_identical_controls.fg_linear_controls import IDN_JACOBI_ROUND_ROBIN
 from decomposition.impl.linalg.detail.pca import _eig_rr_device
 from decomposition.checks.jacobi_eigh_device import (
     JACOBI_INFO_UNWRITTEN,
@@ -467,7 +467,7 @@ def lstsq_eig_traced(
     ctx.synchronize()
     comptime if IDN_JACOBI_ROUND_ROBIN:
         # lane fg-linear L1 (IDENTICAL default since 2026-10-09; the MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF rollback is deleted, the cyclic block is FAST only;
-        # experiments/classical_identical_ideas/fg_linear_controls.mojo): the
+        # core/classical_identical_controls/fg_linear_controls.mojo): the
         # round-robin rounds, every rotation of a round in parallel, the same
         # layout out (cov_a diagonal = eigenvalues, q columns = vectors,
         # info_buf = converged / off / sweeps). Host column: host_eigh_rr.

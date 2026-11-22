@@ -4,7 +4,7 @@ sees every write of stage s-1), and the arena comes back once."""
 # TOMBSTONE: MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT (no A/B recorded for the opt-in arm) deleted 2026-11-15 by lane/expdel2-22-linear; code recoverable at 5b9c50922b.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT.expdel2-22-linear.patch
 from std.sys.compile import is_defined
-from experiments.classical_identical_ideas.shared_controls import C07_RADIX_ROWS, C08_DICTIONARY, C08_UNIQUE_SCAN
+from core.classical_identical_controls.shared_controls import C07_RADIX_ROWS, C08_DICTIONARY, C08_UNIQUE_SCAN
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 

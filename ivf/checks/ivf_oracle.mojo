@@ -56,7 +56,7 @@ from std.memory import bitcast
 
 from core.row_norms import NORM_TPB
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
-from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import IVF_DIRECT_DISTANCE
 
 
 def _host_row_norm_halving(a: List[Float32], row: Int, d: Int) -> Float32:

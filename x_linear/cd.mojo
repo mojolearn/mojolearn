@@ -27,7 +27,7 @@ from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
     add_acc, axpy_centered,
 )
-from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS, ENETCV_SCORE_BLOCKS
+from core.classical_identical_controls.linear_controls import ENETCV_FOLD_BLOCKS, ENETCV_SCORE_BLOCKS
 from x_linear.enetcv_blocks import fb_host_stats, fb_host_prep
 from std.sys.info import is_gpu
 from x_linear.team import Team

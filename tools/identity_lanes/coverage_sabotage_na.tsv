@@ -159,7 +159,7 @@ arima/impl/fast_order_search.mojo:fast_search_mode	a compile-time route-mode wor
 gbdt/estimator.mojo:gbdt_fit_row_major_available	a capability flag, no data value
 core/step_glue.mojo:step_glue_arm_name	an experiment arm's name, no data value
 x_decomp/exec_trait.mojo:Exec.vendor	the compiled vendor string, no data value
-experiments/apple_fast/gemm/scoped_dispatch.mojo:*	fast tier only (Apple) GEMM dispatch probe; the verifier runs identical
+gemm/scoped_dispatch.mojo:*	fast tier only (Apple) GEMM dispatch probe; the verifier runs identical
 core/device_store.mojo:DeviceStore.free	frees a resident slot's buffer; no value leaves it
 core/msel_host.mojo:MselHostStore.alloc	allocates a host snapshot slot; no value leaves it
 core/msel_host.mojo:MselHostStore.free	frees a host snapshot slot; no value leaves it

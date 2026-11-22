@@ -63,7 +63,7 @@ Their `DistanceEpilogue` template, the bitmap/bitset filters at `:229-256`,
 the sparse and non-expanded metrics, `haversine_knn`, and the multi-index
 merge (`knn_merge_parts`). See `neighbors/NOT_IMPLEMENTED.tsv`.
 """
-from experiments.classical_identical_ideas.shared_controls import C06_ROWS_ON
+from core.classical_identical_controls.shared_controls import C06_ROWS_ON
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 
@@ -74,7 +74,7 @@ from std.time import perf_counter_ns
 from std.atomic import Atomic, Ordering
 from std.os import getenv
 
-from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import KNN_DIRECT_DISTANCE
 from core.expand_distances import expand_distances_kernel
 # TOMBSTONE: MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (NOISE, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, one run per arm:
 # knn, knn-clf, knn-reg on istella and taxi 0.98-1.01, median 0.99) deleted 2026-11-20 by lane/fx-verdicts6; code

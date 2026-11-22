@@ -6,7 +6,7 @@ The binding unpacks Python object arguments and calls one function here; the
 input checks, target preparation, fit dispatch and decision loops live here
 with no Python import, moved word for word (lane thin-core, 2026-10-21: a
 pure move, no bit change)."""
-from experiments.classical_identical_ideas.linear_controls import ENETCV_FOLD_BLOCKS
+from core.classical_identical_controls.linear_controls import ENETCV_FOLD_BLOCKS
 from x_linear.enetcv_blocks import fb_host_words
 from x_linear.ops import FP, IP
 from core.host_parallel import host_parallelize

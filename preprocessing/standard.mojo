@@ -17,7 +17,7 @@ from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from experiments.classical_identical_ideas.shared_controls import C02_STATS_PAIR
+from core.classical_identical_controls.shared_controls import C02_STATS_PAIR
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_mul, identical_div, portable_sqrtf, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

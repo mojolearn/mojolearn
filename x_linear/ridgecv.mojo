@@ -18,7 +18,7 @@ ascending and divided by k. Without an intercept nothing is centered.
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, i2f, fill, cholesky, chol_solve, row_dot, seq_rows
 from x_linear.ridge import chol_trusted, ridge_ff_unit, ridge_ff_units, ridge_ff_solve
 from x_linear.tops import FOLD_BLOCK
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
+from core.classical_identical_controls.linear_controls import C13_FOLD_STATS
 from x_linear.classical_fold_stats import fold_stat_words, kfold_mean_cell, kfold_gram_cell, kfold_combine_unit
 
 

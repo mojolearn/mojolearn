@@ -3,7 +3,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceContext
 from checks.numerics import ftz
 from x_prep.common import canon,word_order
-from experiments.performance_ideas.I19.ragged_float import enqueue_ragged_float_sort
+from x_prep.ragged_float import enqueue_ragged_float_sort
 from core.stable_radix_sort import stable_radix_counts_len,stable_radix_bsum_len
 
 def check_float_ragged(ctx: DeviceContext) raises:

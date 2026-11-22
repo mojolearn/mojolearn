@@ -62,7 +62,7 @@ from gemm.contract import contract_leaf_size
 from glm.impl.center_device import col_means_buf, col_sums_pair_buf
 from glm.impl.linalg.detail.lstsq import ols_equilibration_scale
 from glm.impl.gram_solve_cells import gs_equilibrated_cell, gs_pivot_trusted, gs_regularized_diag, gs_scaled_rhs
-from experiments.classical_identical_ideas.fg_linear_controls import (
+from core.classical_identical_controls.fg_linear_controls import (
     IDN_GFF_GRAM_TILED,
     IDN_GRAM_FF_FALLBACK,
     IDN_RIDGE_RESIDENT,

@@ -28,7 +28,7 @@ The scan is grouped by list (`identical_ivf_scan_grouped_kernel` +
 threadgroup memory) lost A/B ab3 and are deleted (see ivf_flat_search.mojo).
 """
 from core.classical_distance import direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import IVF_DIRECT_DISTANCE
 
 
 from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx, lane_id

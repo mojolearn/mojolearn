@@ -31,7 +31,7 @@ from linalg.matmul import matmul
 from std.utils.index import IndexList
 from std.sys.compile import is_defined
 from gemm.afn_apple_fast import AFN_GEMM_APPLE
-from experiments.apple_fast.gemm.scoped_dispatch import scoped_kernel, shared_sub_record
+from gemm.scoped_dispatch import scoped_kernel, shared_sub_record
 
 # TOMBSTONE: MOJOLEARN_CHOL_FAST_SHARED_SUB (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable
 # at f59d913b0b (F02: the lower-triangle subtract through scoped_kernel's SUBTRACT + LOWER epilogue; one-sample M3 fit B/A

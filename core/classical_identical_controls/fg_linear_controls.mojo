@@ -12,7 +12,7 @@ and the host column switch together. Every rule below is by width / work /
 bytes, never by a board shape.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
+from core.classical_identical_controls.linear_controls import LINEAR_GRAM_SOLVE
 
 comptime _FGL_IDN = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 

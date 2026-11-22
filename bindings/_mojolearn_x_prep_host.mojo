@@ -2,7 +2,7 @@
 device, run in a loop on the caller's arena (x_prep/host/program.mojo), with
 the GPU binding's export names and address contract."""
 from core.experiment_guards_base import BASE_GUARDS_OK
-from experiments.classical_identical_ideas.shared_controls import C08_DICTIONARY, C08_TARGET_CODES
+from core.classical_identical_controls.shared_controls import C08_DICTIONARY, C08_TARGET_CODES
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 

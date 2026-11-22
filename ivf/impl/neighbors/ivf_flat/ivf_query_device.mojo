@@ -42,7 +42,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_mul_add
 from core.classical_distance import direct_distance_step
-from experiments.classical_identical_ideas.graph_controls import IVF_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import IVF_DIRECT_DISTANCE
 from core.device_fold import device_exclusive_scan_total_from
 from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
 from core.segmented_sort import float_to_sortable

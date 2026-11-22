@@ -7,14 +7,14 @@ switched by lane fg-linear's L1 flag together with the device sites
 (glm/impl/linalg/detail/svd.mojo, lstsq.mojo, lstsq_min_norm.mojo).
 
 Off (FAST builds; the MOJOLEARN_IDN_JACOBI_ROUND_ROBIN_OFF rollback is deleted, TOMBSTONE in
-experiments/classical_identical_ideas/fg_linear_controls.mojo): `host_jacobi_eigh`, the cyclic replay of
+core/classical_identical_controls/fg_linear_controls.mojo): `host_jacobi_eigh`, the cyclic replay of
 `jacobi_eigh_kernel`, unchanged. On (the IDENTICAL default since 2026-10-09):
 `host_eigh_rr` (x_decomp/rr.mojo), the host replay of the device
 round-robin driver `_eig_rr_device`: the same rounds, the same test, the
 same budget (RR_EIGH_SWEEPS). `rel` then carries the last off-diagonal sum
 (the device's info[1] under the same flag); it only feeds refusal text.
 No GPU import."""
-from experiments.classical_identical_ideas.fg_linear_controls import IDN_JACOBI_ROUND_ROBIN
+from core.classical_identical_controls.fg_linear_controls import IDN_JACOBI_ROUND_ROBIN
 from decomposition.host.pca_oracle import JacobiHostResult, host_jacobi_eigh
 from x_decomp.cells import F32Ptr
 from x_decomp.rr import RR_EIGH_SWEEPS, host_eigh_rr, rr_off_fold

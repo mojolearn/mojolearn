@@ -9,7 +9,7 @@ pending; no estimator default changes. Caller owns all bounded storage.
 from max.gpu import block_idx,thread_idx
 from max.gpu.host import DeviceBuffer,DeviceContext
 from x_prep.prims import unique_cols_unit,lookup_unit
-from experiments.performance_ideas.I19.ragged_float import enqueue_ragged_float_sort
+from x_prep.ragged_float import enqueue_ragged_float_sort
 
 def _unique(arena: MutPointer[Float32,MutAnyOrigin],descriptors: MutPointer[Int32,MutAnyOrigin],segments: Int32):
     var s=Int(block_idx.x)*128+Int(thread_idx.x)

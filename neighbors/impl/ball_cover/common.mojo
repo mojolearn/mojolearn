@@ -41,7 +41,7 @@ by the original point index. See DEVIATION 3 there, including the measured
 reason `nn.argsort` is not an option.
 """
 from core.classical_distance import direct_squared_distance
-from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import KNN_DIRECT_DISTANCE
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 

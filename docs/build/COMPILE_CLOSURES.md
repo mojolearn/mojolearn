@@ -28,7 +28,7 @@ Per group, before anything compiles:
   `bindings/merged_build.sh`, whose compile line names a generated root.
 - **Shared by every group:** 11 files on macOS (13 groups; `core/six_lane_experiment_guards.mojo`,
   `checks/*`, `core/identity_trace.mojo`, ...) and 40 on Linux (9 groups; also `core/device_plan.mojo`,
-  `gemm/checks/gemm_identical.mojo`, `experiments/apple_fast/gemm/scoped_dispatch.mojo` and the
+  `gemm/checks/gemm_identical.mojo`, `gemm/scoped_dispatch.mojo` and the
   Apple-fast GEMM files `gemm/afn_apple_fast*.mojo`).
 - **0.8.64 -> 0.8.65.** All 13 macOS v1 keys differed in `MOJOLEARN_SLOT_TOKEN`, `repo_path` and
   the whole-tree `source`; the two 0.8.65 runs of one commit differed in the slot token alone. The
@@ -213,7 +213,7 @@ Closure = distinct Mojo source files the group's members import (closure-v2 walk
 
 ### Files every linux group reads (9 groups): 40
 
-`bindings/native_loaded_module.mojo`, `bindings/py_balanced.mojo`, `checks/__init__.mojo`, `checks/identity_trace_read.mojo`, `checks/kernel_matrix.mojo`, `checks/kernel_matrix_gemm.mojo`, `checks/numerics.mojo`, `checks/rtf_seam.mojo`, `checks/soft_f64.mojo`, `core/__init__.mojo`, `core/apple_air.mojo`, `core/device_plan.mojo`, `core/host_parallel.mojo`, `core/hostptr.mojo`, `core/identity_trace.mojo`, `core/launch_log.mojo`, `core/native_call_output.mojo`, `core/native_descriptor_abi.mojo`, `core/native_descriptor_call.mojo`, `core/package_profile.mojo`, `core/philox.mojo`, `core/six_lane_experiment_guards.mojo`, `core/step_phase.mojo`, `experiments/__init__.mojo`, `experiments/apple_fast/gemm/scoped_dispatch.mojo`, `gemm/__init__.mojo`, `gemm/afn_apple_fast.mojo`, `gemm/afn_apple_fast2.mojo`, `gemm/checks/__init__.mojo`, `gemm/checks/gemm_identical.mojo`, `gemm/contract.mojo`, `metrics/__init__.mojo`, `metrics/checks/__init__.mojo`, `metrics/checks/device_io.mojo`, `providers/__init__.mojo`, `providers/python/__init__.mojo`, `providers/python/neural_descriptor_pyapi.mojo`, `x_linear/__init__.mojo`, `x_linear/checks/__init__.mojo`, `x_linear/ops.mojo`
+`bindings/native_loaded_module.mojo`, `bindings/py_balanced.mojo`, `checks/__init__.mojo`, `checks/identity_trace_read.mojo`, `checks/kernel_matrix.mojo`, `checks/kernel_matrix_gemm.mojo`, `checks/numerics.mojo`, `checks/rtf_seam.mojo`, `checks/soft_f64.mojo`, `core/__init__.mojo`, `core/apple_air.mojo`, `core/device_plan.mojo`, `core/host_parallel.mojo`, `core/hostptr.mojo`, `core/identity_trace.mojo`, `core/launch_log.mojo`, `core/native_call_output.mojo`, `core/native_descriptor_abi.mojo`, `core/native_descriptor_call.mojo`, `core/package_profile.mojo`, `core/philox.mojo`, `core/six_lane_experiment_guards.mojo`, `core/step_phase.mojo`, `experiments/__init__.mojo`, `gemm/scoped_dispatch.mojo`, `gemm/__init__.mojo`, `gemm/afn_apple_fast.mojo`, `gemm/afn_apple_fast2.mojo`, `gemm/checks/__init__.mojo`, `gemm/checks/gemm_identical.mojo`, `gemm/contract.mojo`, `metrics/__init__.mojo`, `metrics/checks/__init__.mojo`, `metrics/checks/device_io.mojo`, `providers/__init__.mojo`, `providers/python/__init__.mojo`, `providers/python/neural_descriptor_pyapi.mojo`, `x_linear/__init__.mojo`, `x_linear/checks/__init__.mojo`, `x_linear/ops.mojo`
 
 ### Files ranked by the groups they reach (Linux, 9 groups; top 30)
 
@@ -235,7 +235,7 @@ Closure = distinct Mojo source files the group's members import (closure-v2 walk
 | `gemm/afn_apple_fast.mojo` | 9 |  |
 | `gemm/afn_apple_fast2.mojo` | 9 |  |
 | `experiments/__init__.mojo` | 9 |  |
-| `experiments/apple_fast/gemm/scoped_dispatch.mojo` | 9 |  |
+| `gemm/scoped_dispatch.mojo` | 9 |  |
 | `core/step_phase.mojo` | 9 |  |
 | `core/device_plan.mojo` | 9 |  |
 | `core/host_parallel.mojo` | 9 |  |
@@ -260,14 +260,14 @@ Closure = distinct Mojo source files the group's members import (closure-v2 walk
 | `gemm/checks/gemm_identical.mojo` | 45 | 9 | 405 |
 | `providers/python/neural_descriptor_pyapi.mojo` | 22 | 9 | 198 |
 | `sequence/exec_device.mojo` | 50 | 3 | 150 |
-| `experiments/classical_identical_ideas/linear_controls.mojo` | 23 | 6 | 138 |
+| `core/classical_identical_controls/linear_controls.mojo` | 23 | 6 | 138 |
 | `autograd/ops_api.mojo` | 45 | 3 | 135 |
 | `sequence/dispatch.mojo` | 43 | 3 | 129 |
 | `bindings/native_loaded_module.mojo` | 14 | 9 | 126 |
 | `bindings/host_archive_native.mojo` | 62 | 2 | 124 |
 | `bindings/_mojolearn_tokenizer_host.mojo` | 123 | 1 | 123 |
 | `autograd/tape.mojo` | 39 | 3 | 117 |
-| `experiments/apple_fast/gemm/scoped_dispatch.mojo` | 13 | 9 | 117 |
+| `gemm/scoped_dispatch.mojo` | 13 | 9 | 117 |
 | `x_decomp/device.mojo` | 53 | 2 | 106 |
 | `sequence/ops.mojo` | 20 | 5 | 100 |
 | `bindings/classical_attributes.mojo` | 20 | 5 | 100 |

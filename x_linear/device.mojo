@@ -42,7 +42,7 @@ from x_linear.sgd import (
     L_HINGE, LR_INVSCALING, P_NONE, P_EN,
 )
 from checks.numerics import identical_pow
-from experiments.classical_identical_ideas.linear_controls import C13_FOLD_STATS
+from core.classical_identical_controls.linear_controls import C13_FOLD_STATS
 from x_linear.finite_device import XLIN_IDN_DEV_FINITE, xlin_finite_device, xlin_finite_host
 from core.admitted_finite_status import enqueue_finite_word
 from x_linear.witness import Witness, witness_end, WITNESS_TRIES

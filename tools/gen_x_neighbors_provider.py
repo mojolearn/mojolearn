@@ -63,7 +63,7 @@ def native_imports(source):
     i = 0
     while i < len(lines):
         line = lines[i]
-        if line.startswith(('from x_neighbors.', 'from checks.numerics ', 'from experiments.')) and not line.startswith(('from x_neighbors.native_descriptor_', 'from x_neighbors.descriptor_schema ')):
+        if line.startswith(('from x_neighbors.', 'from checks.numerics ', 'from core.classical_identical_controls.')) and not line.startswith(('from x_neighbors.native_descriptor_', 'from x_neighbors.descriptor_schema ')):
             output.append(line)
             if '(' in line and ')' not in line:
                 i += 1

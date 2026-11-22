@@ -138,7 +138,7 @@ from x_decomp.cells import F32Ptr
 from x_decomp.eigh_scale import enqueue_es_scale, enqueue_es_unscale, enqueue_es_unscale_diag
 from x_decomp.rr import RR_EIGH_SWEEPS, RR_OFF_TPB, rr_converged, rr_fro_kept
 from x_decomp.rr import rr_block, rr_cs, rr_vrow
-from experiments.classical_identical_ideas.linear_controls import C25_PROJECTION_REUSE
+from core.classical_identical_controls.linear_controls import C25_PROJECTION_REUSE
 from kernel_methods.rbf_fused import (
     classical_projection_kernel,
     RBF_FUSED_MAX_D,

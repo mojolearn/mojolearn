@@ -14,7 +14,7 @@ from core.native_descriptor_call import native_descriptor_report
 from core.linear_metadata import linear_vendor_code
 from core.neural_context import process_ctx
 from core.shared_slot import SharedSlot
-from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
+from core.classical_identical_controls.linear_controls import LINEAR_GRAM_SOLVE
 from glm.estimator import ridge_fit_host, ridge_fit_resident_host, ols_fit_host, ols_fit_resident_host
 from glm.impl.gram_solve import linear_gram_fit_host
 from glm.impl.ols_prep_device import ols_prep_device

@@ -38,7 +38,7 @@ from max.gpu.sync import barrier
 from x_linear.ops import FP, IP, fa, fs, fm, fd, fmad, ld, st, ldi, sti, i2f
 from x_linear.tops import upper_cell
 from x_linear.witness import witness_end
-from experiments.classical_identical_ideas.linear_controls import ENETCV_FB_CHUNKS
+from core.classical_identical_controls.linear_controls import ENETCV_FB_CHUNKS
 
 # TOMBSTONE: MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS (losing arms =16|32) deleted 2026-11-15 by lane/expdel2-09-base (non-owner, docstring only; owner lane/expdel2-06-base); code recoverable at a407b79dce.
 # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_ENETCV_FOLD_BLOCKS.expdel2-09-base.patch; record in docs/TOMBSTONES.md.

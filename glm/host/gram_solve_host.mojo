@@ -16,7 +16,7 @@ from glm.host.center_host import col_sums_on_cpu
 from glm.host.glm_oracle import host_equilibration_scale
 from glm.impl.gram_solve_cells import gs_equilibrated_cell, gs_pivot_trusted, gs_regularized_diag, gs_scaled_rhs
 from x_decomp.cells import F32Ptr, chol_serial, div0
-from experiments.classical_identical_ideas.fg_linear_controls import IDN_GRAM_FF_FALLBACK
+from core.classical_identical_controls.fg_linear_controls import IDN_GRAM_FF_FALLBACK
 from glm.impl.gram_ff_cells import (
     GFF_LEAVES,
     gff_backward_cell,

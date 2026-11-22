@@ -10,7 +10,7 @@ from core.linear_fit_types import (
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
-from experiments.classical_identical_ideas.linear_controls import LINEAR_GRAM_SOLVE
+from core.classical_identical_controls.linear_controls import LINEAR_GRAM_SOLVE
 from glm.host.gram_solve_host import host_linear_gram_fit
 from glm.host.ols_prep_host import ols_prep_host
 

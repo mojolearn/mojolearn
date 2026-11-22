@@ -48,7 +48,7 @@ comptime RADIX_SORT = (GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL and TARGET_HAS_A
 # histogram storage scales with 2**digit bits; smaller digits trade extra
 # passes for smaller clear/scan work. The sorted words are the same for every
 # arm. The pass count must be even (the keys end in the first block).
-from experiments.classical_identical_ideas.shared_controls import C07_RADIX_BITS
+from core.classical_identical_controls.shared_controls import C07_RADIX_BITS
 comptime RBITS = C07_RADIX_BITS
 comptime RBINS = 1 << RBITS
 comptime RPASSES = (32 + RBITS - 1) // RBITS

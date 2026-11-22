@@ -155,7 +155,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from checks.kernel_matrix import COLUMN_NVIDIA, COLUMN_AMD
-from experiments.classical_identical_ideas.graph_controls import KNN_DIRECT_DISTANCE
+from core.classical_identical_controls.graph_controls import KNN_DIRECT_DISTANCE
 
 
 #: The lane group one query is walked by. `vote`, `shuffle_idx`, `warp_sum`

@@ -188,7 +188,7 @@ from cholesky.estimator import (
 # Restore: git apply experiments/removed/MOJOLEARN_SCOPED_GEMM_AUDIT.patch
 # Restored 2026-11-09 by lane r1-restore-measured-winners: the reach counter alone, for MOJOLEARN_CHOL_FAST_SHARED_SUB
 # (cholesky/checks/fast_trsm.mojo); the LU define stays deleted.
-from experiments.apple_fast.gemm.scoped_dispatch import shared_sub_count
+from gemm.scoped_dispatch import shared_sub_count
 
 
 def gp_numeric_mode_binding() raises -> PythonObject:
