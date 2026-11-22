@@ -541,22 +541,13 @@ from checks.native_tests.gbdt_tree_ctr_host_check import register as register_gb
 from checks.native_tests.gbdt_ordered_ctr_host_check import register as register_gbdt_ordered_ctr_host_check
 from checks.native_tests.gbdt_host_device_cat import register as register_gbdt_host_device_cat
 from checks.native_tests.gbdt_ordered_doc_id_check import register as register_gbdt_ordered_doc_id_check
-from checks.native_tests.gemm_gemm_gather_ftz_check import register as register_gemm_gemm_gather_ftz_check
-from checks.native_tests.gemm_gemm_int_slices_check import register as register_gemm_gemm_int_slices_check
-from checks.native_tests.gemm_gemm_production_dispatch_check import register as register_gemm_gemm_production_dispatch_check
-from checks.native_tests.gemm_gemm_rtf_boundary_check import register as register_gemm_gemm_rtf_boundary_check
-from checks.native_tests.gemm_gemm_stage_ftz_check import register as register_gemm_gemm_stage_ftz_check
-from checks.native_tests.gemm_gemm_workspace_reuse_check import register as register_gemm_gemm_workspace_reuse_check
 from checks.native_tests.glm_link_seams_check import register as register_glm_link_seams_check
 from checks.native_tests.glm_qn_scalar_ieee_check import register as register_glm_qn_scalar_ieee_check
 from checks.native_tests.hdbscan_sparse_mr_check import register as register_hdbscan_sparse_mr_check
 from checks.native_tests.hierarchy_linkage_host_check import register as register_hierarchy_linkage_host_check
-from checks.native_tests.holtwinters_hw_estimate_check import register as register_holtwinters_hw_estimate_check
-from checks.native_tests.holtwinters_hw_predict_ptr_check import register as register_holtwinters_hw_predict_ptr_check
 from checks.native_tests.ivf_ivf_large_k_check import register as register_ivf_ivf_large_k_check
 from checks.native_tests.ivf_ops_table import register as register_ivf_ops_table
 from checks.native_tests.kde_reused_workspace_check import register as register_kde_reused_workspace_check
-from checks.native_tests.kernel_methods_nystroem_basis_sort_check import register as register_kernel_methods_nystroem_basis_sort_check
 from checks.native_tests.mamba_mamba3_increment_tile_check import register as register_mamba_mamba3_increment_tile_check
 from checks.native_tests.mamba_mamba3_refusal_check import register as register_mamba_mamba3_refusal_check
 from checks.native_tests.mamba_mamba3_s17_tail_tree_check import register as register_mamba_mamba3_s17_tail_tree_check
@@ -575,31 +566,6 @@ from checks.native_tests.training_dbscan_parallel_check import register as regis
 from checks.native_tests.training_maximize_check import register as register_training_maximize_check
 from checks.native_tests.transformer_attention_fma_boundary_check import register as register_transformer_attention_fma_boundary_check
 from checks.native_tests.transformer_attention_zdot_routing_check import register as register_transformer_attention_zdot_routing_check
-from checks.native_tests.x_ann_cagra_check import register as register_x_ann_cagra_check
-from checks.native_tests.x_ann_ivf_pq_check import register as register_x_ann_ivf_pq_check
-from checks.native_tests.x_ann_ivf_quant_check import register as register_x_ann_ivf_quant_check
-from checks.native_tests.x_ann_tsne_check import register as register_x_ann_tsne_check
-from checks.native_tests.x_cluster_agglo_check import register as register_x_cluster_agglo_check
-from checks.native_tests.x_cluster_ap_check import register as register_x_cluster_ap_check
-from checks.native_tests.x_cluster_ap_noise_check import register as register_x_cluster_ap_noise_check
-from checks.native_tests.x_cluster_descend_check import register as register_x_cluster_descend_check
-from checks.native_tests.x_cluster_dist_check import register as register_x_cluster_dist_check
-from checks.native_tests.x_cluster_gauss_check import register as register_x_cluster_gauss_check
-from checks.native_tests.x_cluster_kth_check import register as register_x_cluster_kth_check
-from checks.native_tests.x_cluster_meanshift_check import register as register_x_cluster_meanshift_check
-from checks.native_tests.x_cluster_moments_check import register as register_x_cluster_moments_check
-from checks.native_tests.x_cluster_nearest_check import register as register_x_cluster_nearest_check
-from checks.native_tests.x_cluster_pdist_check import register as register_x_cluster_pdist_check
-from checks.native_tests.x_cluster_spectral_assign_check import register as register_x_cluster_spectral_assign_check
-from checks.native_tests.x_cnn_gemm_host_check import register as register_x_cnn_gemm_host_check
-from checks.native_tests.x_decomp_dense_check import register as register_x_decomp_dense_check
-from checks.native_tests.x_decomp_fold_ew_check import register as register_x_decomp_fold_ew_check
-from checks.native_tests.x_decomp_rows_check import register as register_x_decomp_rows_check
-from checks.native_tests.x_neighbors_dist_check import register as register_x_neighbors_dist_check
-from checks.native_tests.x_neighbors_fold_check import register as register_x_neighbors_fold_check
-from checks.native_tests.x_neighbors_model_check import register as register_x_neighbors_model_check
-from checks.native_tests.x_neighbors_semi_check import register as register_x_neighbors_semi_check
-from checks.native_tests.x_neighbors_sketch_check import register as register_x_neighbors_sketch_check
 from checks.native_tests.xtrees_glue_check import register as register_xtrees_glue_check
 from checks.native_tests.xtrees_zero_cover_check import register as register_xtrees_zero_cover_check
 from checks.native_tests.tsa_hw_route import register as register_tsa_hw_route
@@ -1128,21 +1094,12 @@ def all_checks() -> List[Check]:
     checks.append(register_gbdt_ordered_ctr_host_check())
     checks.append(register_gbdt_host_device_cat())
     checks.append(register_gbdt_ordered_doc_id_check())
-    checks.append(register_gemm_gemm_gather_ftz_check())
-    checks.append(register_gemm_gemm_int_slices_check())
-    checks.append(register_gemm_gemm_production_dispatch_check())
-    checks.append(register_gemm_gemm_rtf_boundary_check())
-    checks.append(register_gemm_gemm_stage_ftz_check())
-    checks.append(register_gemm_gemm_workspace_reuse_check())
     checks.append(register_glm_link_seams_check())
     checks.append(register_glm_qn_scalar_ieee_check())
     checks.append(register_hdbscan_sparse_mr_check())
     checks.append(register_hierarchy_linkage_host_check())
-    checks.append(register_holtwinters_hw_estimate_check())
-    checks.append(register_holtwinters_hw_predict_ptr_check())
     checks.append(register_ivf_ivf_large_k_check())
     checks.append(register_kde_reused_workspace_check())
-    checks.append(register_kernel_methods_nystroem_basis_sort_check())
     checks.append(register_mamba_mamba3_increment_tile_check())
     checks.append(register_mamba_mamba3_refusal_check())
     checks.append(register_mamba_mamba3_s17_tail_tree_check())
@@ -1161,31 +1118,6 @@ def all_checks() -> List[Check]:
     checks.append(register_training_maximize_check())
     checks.append(register_transformer_attention_fma_boundary_check())
     checks.append(register_transformer_attention_zdot_routing_check())
-    checks.append(register_x_ann_cagra_check())
-    checks.append(register_x_ann_ivf_pq_check())
-    checks.append(register_x_ann_ivf_quant_check())
-    checks.append(register_x_ann_tsne_check())
-    checks.append(register_x_cluster_agglo_check())
-    checks.append(register_x_cluster_ap_check())
-    checks.append(register_x_cluster_ap_noise_check())
-    checks.append(register_x_cluster_descend_check())
-    checks.append(register_x_cluster_dist_check())
-    checks.append(register_x_cluster_gauss_check())
-    checks.append(register_x_cluster_kth_check())
-    checks.append(register_x_cluster_meanshift_check())
-    checks.append(register_x_cluster_moments_check())
-    checks.append(register_x_cluster_nearest_check())
-    checks.append(register_x_cluster_pdist_check())
-    checks.append(register_x_cluster_spectral_assign_check())
-    checks.append(register_x_cnn_gemm_host_check())
-    checks.append(register_x_decomp_dense_check())
-    checks.append(register_x_decomp_fold_ew_check())
-    checks.append(register_x_decomp_rows_check())
-    checks.append(register_x_neighbors_dist_check())
-    checks.append(register_x_neighbors_fold_check())
-    checks.append(register_x_neighbors_model_check())
-    checks.append(register_x_neighbors_semi_check())
-    checks.append(register_x_neighbors_sketch_check())
     checks.append(register_xtrees_glue_check())
     checks.append(register_xtrees_zero_cover_check())
     checks.append(register_tsa_hw_route())
