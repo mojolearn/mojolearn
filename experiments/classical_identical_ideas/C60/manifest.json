@@ -112,7 +112,7 @@
     "experiments/classical_identical_ideas/stats_implementation.json"
   ],
   "controls_paths": [
-    "experiments/classical_identical_ideas/stats_controls.mojo"
+    "core/classical_identical_controls/stats_controls.mojo"
   ],
   "default_configuration": "lag4",
   "configurations": {

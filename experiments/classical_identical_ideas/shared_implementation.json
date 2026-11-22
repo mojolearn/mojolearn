@@ -11,7 +11,7 @@
     "imports": false,
     "remote_jobs": false
   },
-  "controls_path": "experiments/classical_identical_ideas/shared_controls.mojo",
+  "controls_path": "core/classical_identical_controls/shared_controls.mojo",
   "entries": [
     {
       "id": "C01",
@@ -1049,7 +1049,7 @@
             "tools/bench_board_algos.py:lda-clf (solver=svd) plus full decision/transform output extension"
           ],
           "source_paths": [
-            "experiments/classical_identical_ideas/shared_controls.mojo",
+            "core/classical_identical_controls/shared_controls.mojo",
             "bindings/_mojolearn_x_prep.mojo",
             "bindings/_mojolearn_x_prep_host.mojo",
             "python/mojolearn/_expansion_prep.py",

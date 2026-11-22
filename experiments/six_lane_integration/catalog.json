@@ -144,7 +144,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:leaf64",
@@ -185,7 +185,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:leaf128",
@@ -227,10 +227,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C52_PAIR_ROWS=128": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:profile_c01_leaf64_c52_pair128",
@@ -275,10 +275,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C52_PAIR_ROWS=512": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:profile_c01_leaf64_c52_pair512",
@@ -323,10 +323,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C52_PAIR_ROWS=128": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:profile_c01_leaf128_c52_pair128",
@@ -371,10 +371,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C52_PAIR_ROWS=512": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:profile_c01_leaf128_c52_pair512",
@@ -419,10 +419,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C37_ROW_PANELS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:profile_c01_leaf64_c37_row_panels",
@@ -470,13 +470,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C37_PANEL_128": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C37_ROW_PANELS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF64": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:profile_c01_leaf64_c37_row_panels_panel_128",
@@ -523,10 +523,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C37_ROW_PANELS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:profile_c01_leaf128_c37_row_panels",
@@ -574,13 +574,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C37_PANEL_128": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C37_ROW_PANELS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C01_LEAF128": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C01:profile_c01_leaf128_c37_row_panels_panel_128",
@@ -720,7 +720,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C02_STATS_PAIR": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C02:paired_stats",
@@ -759,7 +759,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C02:linear_pair",
@@ -801,10 +801,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C02_STATS_PAIR": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C02:combined",
@@ -939,7 +939,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C03_FINITE_EXTREMA": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C03:finite_extrema",
@@ -1060,7 +1060,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C04_LOAD_CENTER": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C04:load_center",
@@ -1201,7 +1201,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C05:phase_scratch",
@@ -1241,7 +1241,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C05_OLS_PHASE": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C05:ols_phase",
@@ -1280,10 +1280,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C05_OLS_PHASE": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C05_PHASE_SCRATCH": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C05:combined",
@@ -1418,7 +1418,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C06_ROWS2": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C06:rows2",
@@ -1464,7 +1464,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C06_ROWS4": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C06:rows4",
@@ -1511,10 +1511,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C30_DIRECT_DISTANCE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C06_ROWS2": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C06:profile_c06_rows2_c30_direct_distance",
@@ -1568,13 +1568,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C30_DIRECT_DISTANCE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C30_ROWS_4": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C06_ROWS2": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C06:profile_c06_rows2_c30_direct_distance_rows_4",
@@ -1627,10 +1627,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C30_DIRECT_DISTANCE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C06_ROWS4": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C06:profile_c06_rows4_c30_direct_distance",
@@ -1684,13 +1684,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C30_DIRECT_DISTANCE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C30_ROWS_4": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C06_ROWS4": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C06:profile_c06_rows4_c30_direct_distance_rows_4",
@@ -1843,7 +1843,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_DIGIT4": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:digit4",
@@ -1888,7 +1888,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_DIGIT6": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:digit6",
@@ -1933,7 +1933,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_KEYS1024": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:keys1024",
@@ -1978,7 +1978,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_KEYS4096": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:keys4096",
@@ -2024,10 +2024,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_DIGIT4": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C07_KEYS1024": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:combo_digit4_keys1024",
@@ -2073,10 +2073,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_DIGIT6": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C07_KEYS1024": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:combo_digit6_keys1024",
@@ -2122,10 +2122,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_DIGIT4": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C07_KEYS4096": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:combo_digit4_keys4096",
@@ -2171,10 +2171,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_DIGIT6": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C07_KEYS4096": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:combo_digit6_keys4096",
@@ -2220,10 +2220,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C07_DIGIT4": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C07_KEYS1024": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C07:combined",
@@ -2346,7 +2346,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C08_DICTIONARY": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C08:dictionary_inverse",
@@ -2390,7 +2390,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C08:grouped_output",
@@ -2436,10 +2436,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C08_DICTIONARY": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C08:combo_dictionary_inverse_grouped_output",
@@ -2485,10 +2485,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C08_DICTIONARY": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C08_GROUPED_OUTPUT": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C08:combined",
@@ -2622,7 +2622,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C09_REG_BUNDLE": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C09:regression_bundle",
@@ -2738,7 +2738,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C10_RANK_REUSE": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C10:ranking_bundle",
@@ -2858,7 +2858,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C11_DRAW_GATHER": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C11:draw_gather",
@@ -2975,7 +2975,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C12_SPARSE_COUNTS": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C12:sparse_counts",
@@ -3101,7 +3101,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C13_FOLD_STATS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C13:fold_stats",
@@ -3146,7 +3146,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C13:logcv_weights",
@@ -3192,10 +3192,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C13_FOLD_STATS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C13:combo_fold_stats_logcv_weights",
@@ -3241,10 +3241,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C13_FOLD_STATS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C13:combined",
@@ -3384,7 +3384,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C14_GROUP_RHS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C14:group_rhs",
@@ -3542,7 +3542,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C15_FACTOR_SOLVE": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C15:factor_solve",
@@ -3665,7 +3665,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C16_GLM_FUSED": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C16:glm_fused",
@@ -3791,7 +3791,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C17_OVR": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C17:ovr_waves",
@@ -3830,7 +3830,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C17_LS_TRIALS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C17:line_search_pairs",
@@ -3874,10 +3874,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C17_LS_TRIALS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C17_OVR": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C17:combined",
@@ -4006,7 +4006,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C18:next_residual",
@@ -4050,7 +4050,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C18_TILE64": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C18:tile64",
@@ -4094,7 +4094,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C18:gram_prefetch",
@@ -4139,10 +4139,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C18_TILE64": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C18:combo_next_residual_tile64",
@@ -4187,10 +4187,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C18:combo_next_residual_gram_prefetch",
@@ -4235,10 +4235,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C18_TILE64": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C18:combo_tile64_gram_prefetch",
@@ -4284,13 +4284,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C18_TILE64": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C18:combo_next_residual_tile64_gram_prefetch",
@@ -4336,13 +4336,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C18_GRAM_PREFETCH": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C18_RESIDUAL_NEXT": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C18_TILE64": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C18:combined",
@@ -4467,7 +4467,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=128": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C19:ordered_128",
@@ -4505,7 +4505,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C19_SGD_CHUNK=32": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C19:ordered_32",
@@ -4621,7 +4621,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C20_ROW_CACHE": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C20:row_cache",
@@ -4664,7 +4664,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C20:pair_load",
@@ -4708,10 +4708,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C20_PAIR_LOAD": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C20_ROW_CACHE": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C20:combined",
@@ -4840,7 +4840,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C21_EXTREMA": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C21:extrema_tree4",
@@ -4964,7 +4964,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C22_TRIANGLE": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C22:symmetric_triangle",
@@ -5099,7 +5099,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C23_CENTERED_PANELS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C23:centered_panels",
@@ -5253,7 +5253,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C24_PANEL8": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C24:panel8",
@@ -5299,7 +5299,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C24_ROWS2048": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C24:rows2048",
@@ -5345,7 +5345,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C24_TREE4": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C24:tree4",
@@ -5392,10 +5392,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C24_PANEL8": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C24_ROWS2048": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C24:combo_panel8_rows2048",
@@ -5442,10 +5442,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C24_PANEL8": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C24_TREE4": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C24:combo_panel8_tree4",
@@ -5492,10 +5492,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C24_ROWS2048": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C24_TREE4": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C24:combo_rows2048_tree4",
@@ -5543,13 +5543,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C24_PANEL8": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C24_ROWS2048": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C24_TREE4": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C24:combo_panel8_rows2048_tree4",
@@ -5597,13 +5597,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C24_PANEL8": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C24_ROWS2048": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C24_TREE4": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C24:combined",
@@ -5741,7 +5741,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C25_PROJECTION_REUSE": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C25:projection_reuse",
@@ -5866,7 +5866,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C26_PRODUCTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C26:fixed_products",
@@ -5909,7 +5909,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C26:update_fused",
@@ -5953,10 +5953,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C26_PRODUCTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C26:combo_fixed_products_update_fused",
@@ -6000,10 +6000,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C26_PRODUCTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C26_UPDATE_FUSED": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C26:combined",
@@ -6147,7 +6147,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C27_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C27:components",
@@ -6191,7 +6191,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C27:factor_components",
@@ -6235,7 +6235,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C27:normalize_components",
@@ -6280,10 +6280,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C27_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C27:combo_components_factor_components",
@@ -6328,10 +6328,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C27_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C27:combo_components_normalize_components",
@@ -6376,10 +6376,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C27:combo_factor_components_normalize_components",
@@ -6425,13 +6425,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C27_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C27:combo_components_factor_components_normalize_components",
@@ -6477,13 +6477,13 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C27_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C27_FA_COMPONENTS": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C27_NORM_VECTOR": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C27:combined",
@@ -6640,7 +6640,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C28_BUCKET_SOLVES": [
-              "experiments/classical_identical_ideas/linear_controls.mojo"
+              "core/classical_identical_controls/linear_controls.mojo"
             ]
           },
           "id": "I.C.C28:bucket_solves",
@@ -6779,7 +6779,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C29_STREAM_TOPK": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C29:stream_topk",
@@ -6821,10 +6821,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C29_STREAM_TOPK": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C29_TILE=128": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C29:stream_topk_tile_128",
@@ -6866,10 +6866,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C29_STREAM_TOPK": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C29_TILE=128": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C29:combined",
@@ -7004,7 +7004,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C30_DIRECT_DISTANCE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C30:direct_distance",
@@ -7055,10 +7055,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C30_DIRECT_DISTANCE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C30_ROWS_4": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C30:direct_distance_rows_4",
@@ -7109,10 +7109,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C30_DIRECT_DISTANCE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C30_ROWS_4": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C30:combined",
@@ -7270,7 +7270,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C31_DEVICE_BUCKETS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C31:device_buckets",
@@ -7385,7 +7385,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C32_COUNT_FUSION": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C32:count_fusion",
@@ -7425,7 +7425,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C32_EMIT_FUSION": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C32:emit_fusion",
@@ -7466,10 +7466,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C32_COUNT_FUSION": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C32_EMIT_FUSION": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C32:count_fusion_emit_fusion",
@@ -7510,10 +7510,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C32_COUNT_FUSION": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C32_EMIT_FUSION": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C32:combined",
@@ -7630,7 +7630,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C33_FROZEN_CHUNKS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C33:frozen_chunks",
@@ -7673,10 +7673,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C33_CHUNK_4": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C33_FROZEN_CHUNKS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C33:frozen_chunks_chunk_4",
@@ -7719,10 +7719,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C33_CHUNK_4": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C33_FROZEN_CHUNKS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C33:combined",
@@ -7836,7 +7836,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C34_PARALLEL_EDGES": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C34:parallel_edges",
@@ -7946,7 +7946,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C35_PACKED_LISTS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C35:packed_lists",
@@ -7986,10 +7986,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C35_PACKED_LISTS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C35_ROWS_128": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C35:packed_lists_rows_128",
@@ -8029,10 +8029,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C35_PACKED_LISTS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C35_ROWS_128": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C35:combined",
@@ -8147,7 +8147,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C36_CENTROID_TILES": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C36:centroid_tiles",
@@ -8190,10 +8190,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C36_CENTROID_TILES": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C36_ROWS_4": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C36:centroid_tiles_rows_4",
@@ -8236,10 +8236,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C36_CENTROID_TILES": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C36_ROWS_4": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C36:combined",
@@ -8361,7 +8361,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C37_ROW_PANELS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C37:row_panels",
@@ -8404,10 +8404,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C37_PANEL_128": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C37_ROW_PANELS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C37:row_panels_panel_128",
@@ -8450,10 +8450,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C37_PANEL_128": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C37_ROW_PANELS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C37:combined",
@@ -8586,7 +8586,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C38_REUSE_NEAREST": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C38:reuse_nearest",
@@ -8627,7 +8627,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C38_DEVICE_POTENTIAL": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C38:device_potential",
@@ -8669,10 +8669,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C38_DEVICE_POTENTIAL": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C38_REUSE_NEAREST": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C38:reuse_nearest_device_potential",
@@ -8714,10 +8714,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C38_DEVICE_POTENTIAL": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C38_REUSE_NEAREST": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C38:combined",
@@ -8837,7 +8837,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C39_RETAIN_STATE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C39:retain_state",
@@ -8949,7 +8949,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C40_SEED_TILES": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C40:seed_tiles",
@@ -8988,7 +8988,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C40_ACTIVE_SEEDS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C40:active_seeds",
@@ -9028,10 +9028,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C40_ACTIVE_SEEDS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C40_SEED_TILES": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C40:seed_tiles_active_seeds",
@@ -9071,10 +9071,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C40_ACTIVE_SEEDS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ],
             "MOJOLEARN_C40_SEED_TILES": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C40:combined",
@@ -9181,7 +9181,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C41_FUSED_MINIMA": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C41:fused_minima",
@@ -9291,7 +9291,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C42_ACTIVE_TRIANGLE": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C42:active_triangle",
@@ -9408,7 +9408,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C43_RESIDENT_NORMALIZATION": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C43:resident_normalization",
@@ -9532,7 +9532,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C44_SAMPLING_DESCRIPTORS": [
-              "experiments/classical_identical_ideas/graph_controls.mojo"
+              "core/classical_identical_controls/graph_controls.mojo"
             ]
           },
           "id": "I.C.C44:sampling_descriptors",
@@ -9640,7 +9640,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C52_PAIR_ROWS=128": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C52:pair128",
@@ -9680,7 +9680,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C52_PAIR_ROWS=512": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C52:pair512",
@@ -9804,7 +9804,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C53_CENTER4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C53:center4",
@@ -9845,7 +9845,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C53_BGMM_STATS": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C53:bgmm_center4",
@@ -9887,10 +9887,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C53_BGMM_STATS": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_C53_CENTER4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C53:combo_center4_bgmm_center4",
@@ -9932,10 +9932,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C53_BGMM_STATS": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_C53_CENTER4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C53:combined",
@@ -10054,7 +10054,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C54_PREDICT_TILES": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C54:kernel_tiles4",
@@ -10180,7 +10180,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C55_CLASS_GROUP": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C55:class_group",
@@ -10302,7 +10302,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_CLASSICAL_C56_LDA_INPUT": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C56:lda_input",
@@ -10342,7 +10342,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C56_QDA_PROJECT4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C56:qda_project4",
@@ -10384,10 +10384,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C56_QDA_PROJECT4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C56_LDA_INPUT": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C56:combo_lda_input_qda_project4",
@@ -10430,10 +10430,10 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C56_QDA_PROJECT4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_CLASSICAL_C56_LDA_INPUT": [
-              "experiments/classical_identical_ideas/shared_controls.mojo"
+              "core/classical_identical_controls/shared_controls.mojo"
             ]
           },
           "id": "I.C.C56:combined",
@@ -10477,7 +10477,7 @@
         "source_files_present": true
       },
       "implementation_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo",
+        "core/classical_identical_controls/shared_controls.mojo",
         "bindings/_mojolearn_x_prep.mojo",
         "bindings/_mojolearn_x_prep_host.mojo",
         "python/mojolearn/_expansion_prep.py",
@@ -10585,7 +10585,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C57_CANDIDATE_STATE": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C57:candidate_mean",
@@ -10713,7 +10713,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C58:hw_scale_once",
@@ -10754,7 +10754,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C58:hw_series4",
@@ -10793,7 +10793,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C58:forecast_series4",
@@ -10839,7 +10839,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C58_TEAM_MIB=64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C58:team64",
@@ -10884,16 +10884,16 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C58_FORECAST4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_C58_SERIES4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_C58_SHARED_PREP": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ],
             "MOJOLEARN_C58_TEAM_MIB=64": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C58:combined",
@@ -11030,7 +11030,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C59_TRIAL_STATE": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C59:immutable_observations",
@@ -11153,7 +11153,7 @@
           "declared_runtime": {},
           "define_sources": {
             "MOJOLEARN_C60_LAG4": [
-              "experiments/classical_identical_ideas/stats_controls.mojo"
+              "core/classical_identical_controls/stats_controls.mojo"
             ]
           },
           "id": "I.C.C60:lag4",

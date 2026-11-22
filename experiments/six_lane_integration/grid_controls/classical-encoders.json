@@ -15,7 +15,7 @@
    },
    "default": "off",
    "source": [
-    "experiments/classical_identical_ideas/shared_controls.mojo:37",
+    "core/classical_identical_controls/shared_controls.mojo:37",
     "python/mojolearn/_expansion_prep.py:1773",
     "x_prep/device.mojo:555",
     "x_prep/ddict.mojo:220"

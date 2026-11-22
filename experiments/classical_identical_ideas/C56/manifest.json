@@ -11,7 +11,7 @@
   ],
   "status": "source_draft",
   "implementation_paths": [
-    "experiments/classical_identical_ideas/shared_controls.mojo",
+    "core/classical_identical_controls/shared_controls.mojo",
     "bindings/_mojolearn_x_prep.mojo",
     "bindings/_mojolearn_x_prep_host.mojo",
     "python/mojolearn/_expansion_prep.py",
@@ -117,8 +117,8 @@
     "experiments/classical_identical_ideas/stats_implementation.json"
   ],
   "controls_paths": [
-    "experiments/classical_identical_ideas/shared_controls.mojo",
-    "experiments/classical_identical_ideas/stats_controls.mojo"
+    "core/classical_identical_controls/shared_controls.mojo",
+    "core/classical_identical_controls/stats_controls.mojo"
   ],
   "default_configuration": "lda_input",
   "configurations": {

@@ -2,7 +2,7 @@
   "schema": 1,
   "lane": "stats",
   "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
-  "controls_path": "experiments/classical_identical_ideas/stats_controls.mojo",
+  "controls_path": "core/classical_identical_controls/stats_controls.mojo",
   "entries": [
     {
       "id": "C52",

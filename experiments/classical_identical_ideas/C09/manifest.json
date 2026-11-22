@@ -116,7 +116,7 @@
     "experiments/classical_identical_ideas/shared_implementation.json"
   ],
   "controls_paths": [
-    "experiments/classical_identical_ideas/shared_controls.mojo"
+    "core/classical_identical_controls/shared_controls.mojo"
   ],
   "default_configuration": "regression_bundle",
   "configurations": {
