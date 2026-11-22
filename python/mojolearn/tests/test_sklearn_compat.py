@@ -295,6 +295,25 @@ NEEDS_FIT = ("predict", "predict_proba", "predict_log_proba", "decision_function
              "inverse_transform", "score", "score_samples")
 
 
+def check_do_not_raise_errors_in_init_or_set_params(name, estimator_orig):
+    """scikit-learn's check of the same name (1.9: every constructor parameter
+    set to each of -1, 3.0, "helloworld", an array, [1], {} and [], through
+    the constructor and set_params, raises nothing), for every parameter but
+    `device`. `device` is the one parameter Mojolearn checks where it is given:
+    an unknown value is refused in words at construction and at set_params,
+    before the estimator changes (core/device_route.mojo,
+    providers/python/device_route_boundary_door.mojo `device_admit_class`,
+    af986f85ec; test_device_parameter.py `test_unknown_device_is_refused_in_words`
+    and `test_set_params_checks_the_device_before_the_estimator_changes`).
+    Every other parameter is stored verbatim and checked at fit."""
+    import numpy as np
+    estimator = type(estimator_orig)
+    params = [key for key in inspect.signature(estimator).parameters if key != "device"]
+    for value in (-1, 3.0, "helloworld", np.array([1.0, 4.0]), [1], {}, []):
+        new_params = {key: value for key in params}
+        estimator(**new_params).set_params(**new_params)
+
+
 @pytest.mark.parametrize("check", NO_FIT_CHECKS)
 @pytest.mark.parametrize("name", SHARED_NAMES)
 def test_scikit_learn_checks_that_need_no_fit(name, check):
@@ -303,6 +322,9 @@ def test_scikit_learn_checks_that_need_no_fit(name, check):
     if check == "check_transformers_unfitted" and not (
             callable(getattr(est, "transform", None)) and get_tags(est).requires_fit):
         pytest.skip("not a transformer that needs a fit")
+    if check == "check_do_not_raise_errors_in_init_or_set_params":
+        check_do_not_raise_errors_in_init_or_set_params(name, est)
+        return
     getattr(estimator_checks, check)(name, est)
 
 
