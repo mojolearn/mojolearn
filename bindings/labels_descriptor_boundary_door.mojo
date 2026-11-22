@@ -7,6 +7,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from bindings.py_balanced import py_get, py_type, py_fields, py_call, py_setitem
 from bindings.classical_keys_unpack import classical_keys
+from bindings.py_cpython_table import cpython_table
 from core.device_route import DEVICE_CPU
 from providers.python.device_route_boundary_door import device_route_resolved, device_cpu_connect_late
 from core.shared_slot import SharedSlot
@@ -204,7 +205,16 @@ def labels_scope(model: PythonObject, context: PythonObject) raises -> PythonObj
     var entries = py_get(context, "labels_cpu_entries")
     if entries is None:
         return scope
-    var fresh = py_call(py_get(context, "copy"))
+    # `dict(context)` through the C API. `py_get(context, "copy")` (0abe054f79)
+    # read the dictionary KEY "copy", which is absent: None, called, and every
+    # device="cpu" label step after the context grew raised "'NoneType' object
+    # is not callable" (LogisticRegression(device="cpu").predict, a string-label
+    # fit; proving run 2026-11-22). `context.copy` is the Mojo PythonObject
+    # method, not the dictionary's.
+    var raw = cpython_table()[].PyDict_Copy(context._obj_ptr)
+    if not raw:
+        raise Python().cpython().unsafe_get_error()
+    var fresh = PythonObject(from_owned=raw)
     _ = py_call(fresh.pop, PythonObject("labels_cpu_scope"), PythonObject(None))
     _ = py_call(fresh.update, entries)
     py_setitem(fresh, PythonObject("labels_cpu_source"), context)
