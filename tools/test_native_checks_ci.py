@@ -250,9 +250,12 @@ def test_workflow_shape():
     assert 'metal1) accel_flags="--target-accelerator metal:1" ;;' in script
     runs("build", "build"), runs("check", "shard"), runs("summary", "summary"), runs("device-parse-verdict", "verdict")
     build = body("build")
-    assert "mojo build" in build and "run_$IN_COLUMN.mojo" in build and "MOJOLEARN_COLUMN_CPU=1" in build
+    # the column's TestSuite group programs (lane ts-build): their defines and target come from native_testsuite.sh
+    assert 'native_testsuite.sh build "$IN_COLUMN"' in build and "native_checks_report.py result" in build
+    ts = (ROOT / "tools/ops/native_testsuite.sh").read_text()
+    assert "MOJOLEARN_COLUMN_CPU=1" in ts and "--target-cpu x86-64-v3" in ts and "fixture_packs.py unpack" in ts
     run = body("shard")
-    assert "set +e" in run and 'pixi run "$bin" "$name"' in run and "native_checks_report.py result" in run
+    assert "set +e" in run and 'native_testsuite.sh run "$IN_COLUMN"' in run
     assert "mojo build" not in run and "mojo run" not in run  # the shards never compile
     assert wf["jobs"]["check"]["needs"] == ["plan", "build"]
     assert wf["jobs"]["check"]["strategy"]["fail-fast"] is False
