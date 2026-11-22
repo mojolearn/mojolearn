@@ -363,24 +363,6 @@ def device_plan_enter(devices: List[Int], families: Int = DEVICE_PLAN_WORKER) ra
     _log_plan(devices)
 
 
-def device_plan_check_count(count: Int, families: Int) raises:
-    """CHECKS ONLY: run the calling thread's next calls on `count` devices
-    (ranks 0..count-1 on devices 0..count-1) for the owner families in
-    `families`, replacing any plan the thread holds. This is what a check's
-    `setenv("MOJOLEARN_<FAMILY>_DEVICE_COUNT", count)` did before the
-    variables were read once per process (lane envgate-classical-deviceplan):
-    `device_plan_setting` answers `String(count)` for those families, the
-    rank is the device, exactly as the variable gave."""
-    if count < 1:
-        raise Error("ValueError: a check runs on at least one device, got " + String(count))
-    while _own_slot() >= 0:  # driver-loop: over the plan levels the thread holds
-        device_plan_exit()
-    var devices = List[Int]()
-    for r in range(count):  # driver-loop: over the plan's ranks
-        devices.append(r)
-    device_plan_enter(devices, families)
-
-
 def device_plan_exit() raises:
     """Release the calling thread's plan."""
     var slot = _own_slot()

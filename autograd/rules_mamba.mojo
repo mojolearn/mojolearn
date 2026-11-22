@@ -1102,38 +1102,6 @@ def mamba1_step_backward_hand(
     _ = dres^
 
 
-def mamba1_step_backward_tape(mut S: Mamba1TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
-    """The glue check's reference (was IDN_MAMBA_BACKWARD_GENERIC's B arm,
-    deleted 2026-11-20): the VJP of the recorded run kept
-    in `S` through the tape graph (`_m1_record_backward`), the gradients
-    copied out of the tape's storage. One wait (the tape's storage is
-    released after the copies land)."""
-    var ctx = S.ctx.copy()
-    var dims = S.dims.copy()
-    var m = S.b * S.l
-    var dm = dims.d_model
-    var dres = mamba_zeros(ctx, m * dm)
-    _d2d(ctx, dres, _view(ctx, d_out, m * dm), m * dm)
-    _bwd_refuse_upstream(ctx, String("mamba1"), dres, m * dm)
-    var ex = DeviceExec(ctx)
-    var tape = Tape()
-    var xs = List[Tensor]()
-    var params = List[Tensor]()
-    try:
-        _m1_record_backward(S, ex, tape, _fp(dres), xs, params)
-        _bwd_put(ctx, d_x, tape.gradient(xs[0]), m * dm)
-        var sizes = _m1_weight_sizes(dims)
-        for i in range(10):  # driver-loop: over the block's ten weights
-            _bwd_put(ctx, d_w + at[i], tape.gradient(params[i]), sizes[i])
-    except err:
-        ex.sync()
-        tape.release(ex)
-        raise err
-    ex.sync()
-    tape.release(ex)
-    _ = dres^
-
-
 def mamba1_tape_backward(
     weights: MambaWeights,
     input: List[Float32],
@@ -1672,48 +1640,6 @@ def mamba2_step_backward_hand(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: F
     _bwd_put(ctx, d_w + at[8], _fp(T.d_w_out), dm * di)
     # The one wait; dres is read by C1 and C8 (named after the wait).
     ctx.synchronize()
-    _ = dres^
-
-
-def mamba2_step_backward_tape(mut S: Mamba2TapeStack, d_out: FP, d_x: FP, d_w: FP, at: List[Int]) raises:
-    """The glue check's reference (was IDN_MAMBA_BACKWARD_GENERIC's B arm,
-    deleted 2026-11-20): the VJP of the recorded run kept
-    in `S` through the tape graph (`_m2_record_backward`). One wait."""
-    var ctx = S.ctx.copy()
-    var dims = S.dims.copy()
-    var m = S.b * S.l
-    var dm = dims.d_model
-    var di = dims.d_inner
-    var cd = dims.conv_dim()
-    var nh = dims.nheads
-    var dres = mamba_zeros(ctx, m * dm)
-    _d2d(ctx, dres, _view(ctx, d_out, m * dm), m * dm)
-    _bwd_refuse_upstream(ctx, String("mamba2"), dres, m * dm)
-    var ex = DeviceExec(ctx)
-    var tape = Tape()
-    var xs = List[Tensor]()
-    var params = List[Tensor]()
-    try:
-        _m2_record_backward(S, ex, tape, _fp(dres), xs, params)
-        ref T = S.tail[0]
-        ref cv = S.conv[0]
-        ref disc = S.disc[0]
-        _bwd_put(ctx, d_x, _fp(T.d_block_x), m * dm)
-        _bwd_put(ctx, d_w + at[0], _fp(T.d_block_w), dm)
-        _bwd_put(ctx, d_w + at[1], tape.gradient(params[1]), dims.d_in_proj() * dm)
-        _bwd_put(ctx, d_w + at[2], _fp(cv.d_w), cd * M2_D_CONV)
-        _bwd_put(ctx, d_w + at[3], _fp(cv.d_b), cd)
-        _bwd_put(ctx, d_w + at[4], _fp(disc.d_dt_bias), nh)
-        _bwd_put(ctx, d_w + at[5], _fp(disc.d_a_log), nh)
-        _bwd_put(ctx, d_w + at[6], _fp(T.d_d), nh)
-        _bwd_put(ctx, d_w + at[7], _fp(T.d_gnorm_w), di)
-        _bwd_put(ctx, d_w + at[8], tape.gradient(params[8]), dm * di)
-    except err:
-        ex.sync()
-        tape.release(ex)
-        raise err
-    ex.sync()
-    tape.release(ex)
     _ = dres^
 
 

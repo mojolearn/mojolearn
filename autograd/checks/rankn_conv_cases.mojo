@@ -41,16 +41,6 @@ def _data(n: Int, salt: Int) -> List[Float32]:
     return v^
 
 
-def _distinct(n: Int, salt: Int) raises -> List[Float32]:
-    """n <= 1009 distinct values 0.00123 apart (7919 is a unit mod 1009)."""
-    if n > 1009:
-        raise Error("rankn_conv check: too many distinct values")
-    var v = List[Float32](length=n, fill=Float32(0))
-    for i in range(n):  # small-loop(n: check data, host side)
-        v[i] = Float32(((i * 7919 + salt * 31) % 1009) - 504) * Float32(0.00123)
-    return v^
-
-
 def _f64(v: List[Float32]) -> List[Float64]:
     var r = List[Float64](length=len(v), fill=Float64(0))
     for i in range(len(v)):  # small-loop(len(v): check oracle, host side)

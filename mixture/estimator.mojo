@@ -2237,7 +2237,3 @@ def gaussian_mixture_sample(
     _ = ctx^
     return out^
 
-
-def gmm_mode_name() -> String:
-    """The build's tier, from `numeric_mode_name()`."""
-    return numeric_mode_name()

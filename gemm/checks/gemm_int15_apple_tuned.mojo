@@ -823,24 +823,6 @@ def int15_apple_refuse_block(threads: Int, admits: Int, who: String) raises:
         )
 
 
-def int15_apple_tuned_pipeline_admits[
-    SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, BOUND: Bool, PF: Bool = False
-](ctx: DeviceContext) -> Int:
-    """What the pipeline of one schedule admits, -1 when it cannot be read
-    (for the probe)."""
-    try:
-        comptime if BOUND:
-            return Int(ctx.compile_function[
-                identical_gemm_int15_apple_tuned_kernel_b128[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER, PF]
-            ]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
-        else:
-            return Int(ctx.compile_function[
-                identical_gemm_int15_apple_tuned_kernel[SGM, SGN, FM, FN, KB, FORM, SCALAR, REGSUM, DEFER, PF]
-            ]().get_attribute(Attribute.MAX_THREADS_PER_BLOCK))
-    except:
-        return -1
-
-
 def _launch_tuned[
     SGM: Int, SGN: Int, FM: Int, FN: Int, KB: Int, FORM: Int, SCALAR: Bool, REGSUM: Bool, DEFER: Bool, BOUND: Bool, PF: Bool = False
 ](

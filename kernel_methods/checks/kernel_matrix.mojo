@@ -217,42 +217,6 @@ def km_kernel_name(kernel: Int) -> String:
     return String("unknown")
 
 
-def km_kernel_from_name(name: String) raises -> Int:
-    """scikit-learn's `PAIRWISE_KERNEL_FUNCTIONS` keys, for the five this
-    lane supports, plus `poly` which is their alias for `polynomial`.
-
-    REFUSES BY NAME (DEVIATION 1686). The refusal text lists what IS
-    supported and names where each unsupported one would go, because a
-    caller who typed `chi2` needs to know it is a deferral and not a typo.
-    """
-    if name == "linear":
-        return KM_KERNEL_LINEAR
-    if name == "polynomial" or name == "poly":
-        return KM_KERNEL_POLYNOMIAL
-    if name == "rbf":
-        return KM_KERNEL_RBF
-    if name == "sigmoid":
-        return KM_KERNEL_SIGMOID
-    if name == "laplacian":
-        return KM_KERNEL_LAPLACIAN
-    if name == "cosine":
-        return KM_KERNEL_COSINE
-    if name == "chi2":
-        return KM_KERNEL_CHI2
-    if name == "additive_chi2":
-        return KM_KERNEL_ADDITIVE_CHI2
-    raise Error(
-        "kernel_methods: unsupported kernel '"
-        + name
-        + "'. This lane implements linear, polynomial (alias poly), rbf, sigmoid"
-        " and laplacian. scikit-learn's cosine, chi2 and additive_chi2, and"
-        " every callable kernel, are UNIMPLEMENTED and carry rows in"
-        " kernel_methods/NOT_IMPLEMENTED.tsv; 'precomputed' is refused separately"
-        " because it is a shape contract rather than a kernel and nothing"
-        " here validates it (DEVIATION 1683)"
-    )
-
-
 def km_validate_kernel_params(kp: KernelParams, what: String) raises:
     """Every refusal a kernel parameter block can earn, BY NAME, on the host,
     before a buffer is allocated. DEVIATION 1686.

@@ -27,36 +27,3 @@ def shuffle_min_u64[WIDTH: Int](value: UInt64) -> UInt64:
         offset *= 2
     return result
 
-
-@always_inline
-def logical_min_u64[WIDTH: Int, BLOCK: Int, NATIVE: Int, FIXED: Bool](
-    value: UInt64,
-) -> UInt64:
-    """Shared fallback also handles logical groups spanning physical subgroups.
-
-    Scratch contains BLOCK entries. The final barrier permits immediate scratch
-    reuse by the next reduction; omitting it races slower readers. NATIVE is
-    ignored for variable-width devices: a declared floor is not a guarantee.
-    """
-    comptime assert WIDTH > 0 and (WIDTH & (WIDTH - 1)) == 0
-    comptime assert BLOCK >= WIDTH and BLOCK % WIDTH == 0
-    comptime if FIXED and WIDTH <= NATIVE and NATIVE % WIDTH == 0:
-        return shuffle_min_u64[WIDTH](value)
-    else:
-        var scratch = stack_allocation[BLOCK, UInt64, address_space=AddressSpace.SHARED]()
-        var tid = Int(thread_idx.x)
-        var lane = tid % WIDTH
-        var base = tid - lane
-        scratch.unsafe_store(tid, value)
-        barrier()
-        var stride = WIDTH // 2
-        while stride > 0:
-            if lane < stride:
-                var a = scratch.unsafe_load(tid)
-                var b = scratch.unsafe_load(tid + stride)
-                scratch.unsafe_store(tid, b if b < a else a)
-            barrier()
-            stride //= 2
-        var result = scratch.unsafe_load(base)
-        barrier()
-        return result

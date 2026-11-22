@@ -450,15 +450,3 @@ def hfixture_permuted_as_list(fix: Int, perm: List[Int]) -> List[Float32]:
             out.append(hfixture_value(fix, src, f))
     return out^
 
-
-def build_hfixture(
-    ctx: DeviceContext, fix: Int
-) raises -> HostBuffer[DType.float32]:
-    var n = hfixture_n(fix)
-    var d = hfixture_d(fix)
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n * d)
-    ctx.synchronize()
-    for i in range(n):
-        for f in range(d):
-            host.unsafe_ptr().unsafe_store(i * d + f, hfixture_value(fix, i, f))
-    return host^

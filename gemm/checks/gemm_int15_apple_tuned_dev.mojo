@@ -494,28 +494,3 @@ def identical_gemm_int15_apple_dev_into(
         else:
             raise Error("identical_gemm_int15_apple_dev: no variant " + String(variant))
 
-
-def identical_gemm_int15_apple_dev_from_pieces_into(
-    ctx: DeviceContext,
-    mut c: DeviceBuffer[DType.float32],
-    mut ah: DeviceBuffer[DType.int8],
-    mut al: DeviceBuffer[DType.int8],
-    mut ea: DeviceBuffer[DType.int32],
-    mut bh: DeviceBuffer[DType.int8],
-    mut bl: DeviceBuffer[DType.int8],
-    mut eb: DeviceBuffer[DType.int32],
-    m: Int,
-    n: Int,
-    k: Int,
-    variant: Int,
-    slice_macs: Int,
-) raises:
-    """The gate's entry: the int8 planes in, the float32 planes made here,
-    then the variant. The caller waits."""
-    var pl = Int15DevPlanes(ctx)
-    pl.ensure(ctx, m, n, k)
-    int15_dev_planes_left(ctx, pl, ah, al, m, k, dev_variant_whole_left(variant))
-    int15_dev_planes_right(ctx, pl, bh, bl, n, k)
-    identical_gemm_int15_apple_dev_into(ctx, c, pl, ea, eb, m, n, k, variant, slice_macs)
-    ctx.synchronize()
-    _ = pl^
