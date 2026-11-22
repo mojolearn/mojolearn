@@ -14,7 +14,7 @@ else READS it:
   `_backend._HOST_MODULES`           is `routed_modules()`
   .github/workflows/cpu-identity-gate.yml
                                      fills COVERED_LANES, HOST_FAMILIES,
-                                     HOST_BINDINGS and CLASSICAL_RECORDED
+                                     and HOST_BINDINGS
                                      from the command line below, in one step
   tools/identity_break.py            records `host.surface` beside
                                      `host.families` in every CPU column
@@ -63,7 +63,6 @@ before the package can import (the gate runner has no binding built yet):
     python3 python/mojolearn/host_surface.py --training-fix-columns
     python3 python/mojolearn/host_surface.py --routed-families
     python3 python/mojolearn/host_surface.py --bindings --sep ,
-    python3 python/mojolearn/host_surface.py --classical-recorded
     python3 python/mojolearn/host_surface.py --wheel-families
     python3 python/mojolearn/host_surface.py --wheel-bindings
     python3 python/mojolearn/host_surface.py --wheel-notes
@@ -299,139 +298,11 @@ TRAINING_GPU_COLUMNS = (
 TRAINING_FIX_COLUMNS = ()
 TRAINING_FIX_LANES = ()
 
-#: The GPU columns the classical INFERENCE gate compares each host identity
-#: hash against (tools/classical_host_gate.py check --gpu-column).
-CLASSICAL_GPU_COLUMNS = (
-    "verification/records/identity/2026-09-14_46-lanes/apple-m4.json",
-    "verification/records/identity/2026-09-14_46-lanes/nvidia-h100-sm_90a.json",
-    "verification/records/identity/2026-09-14_46-lanes/amd-mi300x-gfx942.json",
-)
-
-#: The classical inference recordings (one directory per GPU box and lane
-#: set; every fixture under each must be RECORDED or the gate exits 2).
-CLASSICAL_RECORDED = (
-    "verification/records/classical_host/2026-09-13-apple-m4",
-    "verification/records/classical_host/2026-09-14-nvidia-h100",
-    "verification/records/classical_host/2026-09-14-amd-mi300x",
-    "verification/records/classical_host/2026-09-14-apple-m4-kde-svc",
-    "verification/records/classical_host/2026-09-14-apple-m4-knn",
-    "verification/records/classical_host/2026-09-14-nvidia-h100-b",
-    "verification/records/classical_host/2026-09-14-amd-mi300x-b",
-    "verification/records/classical_host/2026-09-14-apple-m4-multiclass",
-    "verification/records/classical_host/2026-09-15-apple-m4-neighbors-density",
-    # lane/inference-linear-svm (2026-09-15): the 17 saved-model lanes that
-    # joined the estimators family's inference lanes, recorded on the M4's
-    # Metal set on three fixtures. The NVIDIA and AMD recordings of these
-    # lanes are owed to the next release record; their infer cells in the
-    # 166-lane record are the cross-vendor comparison until then.
-    "verification/records/classical_host/2026-09-15-apple-m4-linear-kernel",
-    # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
-    # recorded on the M4's Metal set; both bind families the gate builds.
-    # The 2026-09-15 recording predates UMAP.transform becoming row separable
-    # (2026-09-16, LANE_REVISIONS "umap"), so its umap expectations are stale
-    # and the CPU build rightly differs from them on every fixture. The
-    # 2026-09-18 recording is the same nine fixtures of both lanes, recorded on
-    # Metal after that fix (aff968968; its README and host-check.json).
-    "verification/records/classical_host/2026-09-18-apple-m4-umap-pca",
-    # lane/inference-svm (2026-09-15): svc-linear, svc-poly, svr and
-    # svr-linear, recorded on the M4's Metal set on all nine fixtures. The
-    # NVIDIA and AMD recordings are owed to the next release record.
-    "verification/records/classical_host/2026-09-15-apple-m4-svm",
-    # lane/saved-model-reference-gaps (2026-09-16): dbscan, agglomerative,
-    # spectral and spectral-precomputed, the four predicts that shipped on
-    # 2026-09-15 with no recording at all, on all nine fixtures each. Recorded
-    # on a RunPod NVIDIA A100 (sm_80), which is the first recording in this
-    # list taken anywhere but the M4; `check` on the same box read
-    # `gate verdict IDENTICAL (36 fixtures, exit 0)` and the predict-only
-    # sabotage host set read `EXPECTED MISMATCH SEEN` with `unmoved` EMPTY
-    # under --every-fixture, so every one of the 36 cells was watched to fail
-    # before it was believed. The Apple and AMD recordings are owed to the
-    # next release record; the identity columns behind these cells are
-    # verification/records/identity/2026-09-16_predict-nvidia.
-    "verification/records/classical_host/2026-09-16-nvidia-predict",
-    # lane/classical-host-recordings (2026-09-16): the six FITTED k-means
-    # lanes, the last entry SAVED_MODEL_INFERENCE_OWED had, on all nine
-    # fixtures each. Recorded on a RunPod NVIDIA A100-SXM4-80GB (sm_80) and
-    # checked on BOTH host architectures: `gate verdict IDENTICAL (54
-    # fixtures, exit 0)` on the box's x86-64 bindings AND on the M4's arm64
-    # ones, so a model fitted on an A100 answers predict and transform with
-    # the A100's bits on a machine with no GPU. Both sabotage host sets, the
-    # family define and MOJOLEARN_KMEANS_PREDICT_SABOTAGE, read `EXPECTED
-    # MISMATCH SEEN` with `unmoved` EMPTY under --every-fixture on both
-    # architectures. The family define had NO arm on this side of the
-    # library until that lane added one, and its --every-fixture arm read
-    # `SABOTAGE NOT CAUGHT` on all 54 when it was first rehearsed. The Apple
-    # and AMD recordings are owed to the next release record; the identity
-    # column behind these cells is
-    # verification/records/identity/2026-09-16_kmeans-and-spectral-cpu.
-    "verification/records/classical_host/2026-09-16-nvidia-kmeans",
-    # The AMD column of the same six lanes, same nine fixtures, on a RunPod
-    # MI300X (gfx942): `gate verdict IDENTICAL (54 fixtures, exit 0)` and the
-    # predict-define sabotage arm caught on all 54 under --every-fixture. The
-    # AMD PREDICT recording from the same box is 3 of 36 and is deliberately
-    # NOT listed here: its `record` died with hipErrorOutOfMemory in
-    # dbscan_fit_core, so it is kept, named partial, at
-    # verification/records/classical_host/2026-09-16-amd-predict-partial.
-    #
-    # WHY IT DIED, ANSWERED BY lane/amd-dbscan-oom THE SAME DAY: not a leak
-    # and not the code. A second RunPod MI300X reproduced the same refusal,
-    # and its card had 360.4 MiB of 196592.0 MiB FREE before `import
-    # mojolearn` ran, with 178.6 GiB held by a kfd process outside the
-    # container. A dedicated DigitalOcean MI325X ran the same three DBSCAN
-    # lanes at `cells=27 stable=27 moved=0 refused=0` with device memory flat
-    # at a 1.5 GiB plateau. The AMD predict column is owed on a card that is
-    # ours, and there is nothing to fix first.
-    "verification/records/classical_host/2026-09-16-amd-kmeans",
-)
-
-#: The saved ARIMA recordings (lane/inference-forecast-umap-pca, 2026-09-15),
-#: checked with `tools/classical_host_gate.py check` like CLASSICAL_RECORDED
-#: but kept apart from it: they bind `_mojolearn_forecast_host`, a family
-#: with no route. The CPU identity gate workflow builds every family the
-#: manifest declares and checks this list, with SEARCH_LOOKUP_RECORDED and
-#: INFERENCE_ONLY_RECORDED, as `saved_model_recorded()` (production must
-#: match, the sabotage host set must differ on every lane).
-FORECAST_RECORDED = (
-    "verification/records/classical_host/2026-09-15-apple-m4-arima",
-    # lane/inference-holtwinters (2026-09-15): holtwinters and
-    # holtwinters-multiplicative, recorded on the M4's Metal set.
-    "verification/records/classical_host/2026-09-15-apple-m4-holtwinters",
-    # lane/arima-exog (2026-09-15): arima-exog and arima-exog-seasonal, the
-    # saved mojolearn-arima-2 models (the fit's regressors travel in the
-    # file), recorded on the M4's Metal set, nine fixtures each.
-    "verification/records/classical_host/2026-09-15-apple-m4-arima-exog",
-)
-
-#: The iforest, GMM and HDBSCAN saved-model recordings (the neighbors and
-#: density inference lane, 2026-09-15), checked with
-#: `tools/classical_host_gate.py check` like CLASSICAL_RECORDED but kept apart
-#: from it, as FORECAST_RECORDED is: the GMM and HDBSCAN models bind the
-#: unrouted mixture_infer and hdbscan_infer families (the gp recordings bind
-#: gp_infer). The CPU identity gate workflow checks it through
-#: `saved_model_recorded()`.
-INFERENCE_ONLY_RECORDED = (
-    "verification/records/classical_host/2026-09-15-apple-m4-iforest-gmm-hdbscan",
-    "verification/records/classical_host/2026-09-15-apple-m4-gp-gmm-sample",
-)
-
-#: The saved IVF-Flat index and embedding table recordings
-#: (lane/inference-embedding-ivf-cholesky, 2026-09-15), checked with
-#: `tools/classical_host_gate.py check` like FORECAST_RECORDED and kept apart
-#: from CLASSICAL_RECORDED for the same reason: they bind
-#: `_mojolearn_ivf_search_host` and `_mojolearn_embedding_infer_host`,
-#: families with no route. The CPU identity gate workflow checks it through
-#: `saved_model_recorded()`.
-SEARCH_LOOKUP_RECORDED = (
-    "verification/records/classical_host/2026-09-15-apple-m4-ivf-embedding",
-)
-
-def saved_model_recorded():
-    """The saved-model recordings that bind the unrouted inference-only
-    families (forecast, mixture_infer, gp_infer, hdbscan_infer, ivf_search,
-    embedding_infer), checked by the CPU identity gate apart from
-    CLASSICAL_RECORDED."""
-    return list(FORECAST_RECORDED + INFERENCE_ONLY_RECORDED + SEARCH_LOOKUP_RECORDED)
-
+#: The committed classical inference recordings (CLASSICAL_RECORDED, the forecast / inference-only /
+#: search-lookup saved-model recordings and CLASSICAL_GPU_COLUMNS, 799 fixtures under
+#: bench/results/classical_host/) were deleted on 2026-11-25 (Andrew; lane verify-home): no wheel ships them
+#: and `python -m mojolearn verify` never opened them. The next release records every lane fresh;
+#: tools/release_installed_checks.sh records and replays saved models with tools/classical_host_gate.py.
 
 #: The forest inference recordings: every directory under this root whose
 #: expected.json says RECORDED (the workflows sort them at run time).
@@ -4805,7 +4676,7 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
 #: kernel/nystroem entries. Their debt is an NVIDIA `classical_host` record,
 #: a different artifact from an identity-table cell -- the only kernel-variant
 #: saved-model recordings in the tree are Apple's
-#: (verification/records/classical_host/2026-09-18-apple-kernel-variants) -- so the
+#: (bench/results/classical_host/2026-09-18-apple-kernel-variants) -- so the
 #: RTX 4090 identity column could not and did not pay it. Promoting a lane's
 #: identity claim and discharging its saved-model replay debt are two
 #: different promises; this took the first only.
@@ -4853,7 +4724,7 @@ PUBLIC_REFERENCE_PROMOTED = (
 #: lane/saved-model-reference-gaps (2026-09-16) emptied this list of the four
 #: entries it took a GPU box for: `dbscan`, `agglomerative`, `spectral` and
 #: `spectral-precomputed` are declared inference lanes now, recorded at
-#: verification/records/classical_host/2026-09-16-nvidia-predict. That lane also
+#: bench/results/classical_host/2026-09-16-nvidia-predict. That lane also
 #: found WHY none of them had a recording: `classical_host_gate.py record`
 #: had been raising AttributeError on main since `--lane-rule-only` was added,
 #: ahead of every other refusal, so the tool that makes a recording could not
@@ -4862,7 +4733,7 @@ PUBLIC_REFERENCE_PROMOTED = (
 #: lane/classical-host-recordings (2026-09-16) took the last one. `kmeans`,
 #: `kmeans-random`, `kmeans-array`, `kmeans-weighted`, `kmeans-sqrt` and
 #: `kmeans-classic-pp` are declared inference lanes now, recorded at
-#: verification/records/classical_host/2026-09-16-nvidia-kmeans, so THE LIST IS
+#: bench/results/classical_host/2026-09-16-nvidia-kmeans, so THE LIST IS
 #: EMPTY. Empty means every saved-model inference the classical host door
 #: dispatches is also a declared, gated and recorded inference lane; it does
 #: NOT mean nothing is left to implement. A new `save` that ships without a
@@ -5088,11 +4959,6 @@ def as_dict():
         fix_covered_lanes=fix_covered_lanes(),
         inference_lanes=inference_lanes(),
         forest_kinds=forest_kinds(),
-        classical_recorded=list(CLASSICAL_RECORDED),
-        forecast_recorded=list(FORECAST_RECORDED),
-        inference_only_recorded=list(INFERENCE_ONLY_RECORDED),
-        search_lookup_recorded=list(SEARCH_LOOKUP_RECORDED),
-        classical_gpu_columns=list(CLASSICAL_GPU_COLUMNS),
         training_gpu_columns=list(TRAINING_GPU_COLUMNS),
         training_fix_columns=list(TRAINING_FIX_COLUMNS),
         training_gpu_column_record=training_gpu_column_record(),
@@ -5125,9 +4991,6 @@ def main(argv=None):
     g.add_argument("--wheel-families", action="store_true", help="families whose host binding ships in the wheels")
     g.add_argument("--wheel-bindings", action="store_true", help="the wheel families' basenames")
     g.add_argument("--training-gpu-column-record", action="store_true", help="the record directory name of the training GPU columns")
-    g.add_argument("--classical-recorded", action="store_true", help="classical gate recording directories")
-    g.add_argument("--saved-model-recorded", action="store_true", help="the forecast, inference-only and search/lookup recording directories")
-    g.add_argument("--classical-gpu-columns", action="store_true", help="the GPU columns the classical gate compares against")
     g.add_argument("--training-gpu-columns", action="store_true", help="the GPU columns the training gate diffs against")
     g.add_argument("--training-fix-columns", action="store_true", help="the GPU columns the training gate diffs --fix-covered-lanes against")
     g.add_argument("--public-reference-lanes", action="store_true",
@@ -5210,12 +5073,6 @@ def main(argv=None):
         items = inference_lanes()
     elif args.forest_kinds:
         items = forest_kinds()
-    elif args.classical_recorded:
-        items = list(CLASSICAL_RECORDED)
-    elif args.saved_model_recorded:
-        items = saved_model_recorded()
-    elif args.classical_gpu_columns:
-        items = list(CLASSICAL_GPU_COLUMNS)
     else:
         items = list(TRAINING_GPU_COLUMNS)
     print(sep.join(items))

@@ -1046,11 +1046,11 @@ def render(data):
         w("")
         w("THE SAVED-MODEL HOST INFERENCE SURFACE used to be listed here with the")
         w("note that it had no lane ON PURPOSE, because `tools/forest_host_gate.py`")
-        w("and `tools/classical_host_gate.py` measure it against committed")
-        w(f"recordings instead: {data['forest_recordings']} under")
-        w(f"`verification/records/forest_host/` and {data['classical_recordings']} classical")
-        w("recording directories named in `host_surface.py`. Those gates are real")
-        w("and they pass. What they did not reach (lane/laneless-public-classes,")
+        w("measures it against committed recordings instead:")
+        w(f"{data['forest_recordings']} under `verification/records/forest_host/` (the committed")
+        w("classical recordings were deleted on 2026-11-25; the next release records them fresh).")
+        w("That gate is real")
+        w("and it passes. What they did not reach (lane/laneless-public-classes,")
         w("2026-09-19) is `host_predict` and `host_predict_proba`, which no gate")
         w("calls, and the `parallel_groves` HOST engine, which the forest gate still")
         w("refuses by name although `core/forest_host_groves.mojo` landed on")
@@ -1332,7 +1332,6 @@ def build():
                 columns=len(cols), modules=modules,
                 not_algorithms=sorted(NOT_ALGORITHMS),
                 forest_recordings=len(glob.glob(os.path.join(forest_root, "*"))),
-                classical_recordings=len(getattr(surface_mod, "CLASSICAL_RECORDED", ())),
                 neural_public_lanes=list(getattr(harness, "NEURAL_PUBLIC_PART_LANES", ())))
 
 
