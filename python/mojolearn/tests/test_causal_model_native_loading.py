@@ -73,7 +73,7 @@ def test_parameters_returns_every_checkpoint_tensor_by_name(tmp_path, monkeypatc
     model = CausalLM.load(tmp_path, device=DEVICE, numeric_profile="fp32_v1")
     with monkeypatch.context() as patch:
         _poison(patch)
-        parameters = audit_native_call(model.parameters).assert_native()
+        parameters = dict(audit_native_call(model.named_parameters).assert_native())
     assert set(parameters) == set(tensors)
     assert None not in parameters
     for name, (_, shape, raw) in tensors.items():
