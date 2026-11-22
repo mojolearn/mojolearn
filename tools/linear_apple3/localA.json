@@ -1,0 +1,65 @@
+{
+ "no_restore": true,
+ "arms": [
+  {
+   "name": "blocks",
+   "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1 -D MOJOLEARN_X_LINEAR_BLOCKS_GRAM=1 -D MOJOLEARN_X_LINEAR_QUANTILE_STEP=1 -D MOJOLEARN_X_LINEAR_FINITE_SIMD=1",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "poisson,gamma,tweedie,huber,quantile,logistic-cv,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,isotonic",
+   "warm_rows": 20000,
+   "rows": [
+    100000,
+    1000000
+   ],
+   "qual": "poisson,gamma,tweedie,huber,huber-200,quantile,quantile-l1,logistic-cv,logistic-cv-taxi,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv",
+   "host_ref": true,
+   "seeds": "0,1,2,3,4",
+   "train": 50000,
+   "test": 50000
+  },
+  {
+   "name": "before",
+   "defines": "",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "poisson,gamma,tweedie,huber,quantile,logistic-cv,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,isotonic",
+   "warm_rows": 20000,
+   "rows": [
+    100000,
+    1000000
+   ],
+   "qual": "poisson,gamma,tweedie,huber,huber-200,quantile,quantile-l1,logistic-cv,logistic-cv-taxi,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv",
+   "seeds": "0,1,2,3,4",
+   "train": 50000,
+   "test": 50000
+  },
+  {
+   "name": "blocks",
+   "defines": "-D MOJOLEARN_X_LINEAR_BLOCKS=1 -D MOJOLEARN_X_LINEAR_BLOCKS_GRAM=1 -D MOJOLEARN_X_LINEAR_QUANTILE_STEP=1 -D MOJOLEARN_X_LINEAR_FINITE_SIMD=1",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "poisson,gamma,tweedie,huber,quantile,logistic-cv,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,isotonic",
+   "warm_rows": 20000,
+   "rows": [
+    100000,
+    1000000
+   ]
+  },
+  {
+   "name": "before",
+   "defines": "",
+   "builds": [
+    "x_linear"
+   ],
+   "cases": "poisson,gamma,tweedie,huber,logistic-cv,bayes-ridge,ard,lars,lasso-lars,ridge-clf,ridge-cv,lasso-cv,enet-cv,isotonic",
+   "warm_rows": 20000,
+   "rows": [
+    100000
+   ]
+  }
+ ]
+}

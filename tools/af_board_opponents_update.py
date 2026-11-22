@@ -1,0 +1,96 @@
+#!/usr/bin/env python3
+"""Import captured M3 opponent cells, preserving own measurements and resource provenance."""
+import argparse,copy,hashlib,json,math,pathlib
+import af_board_render as render
+import bench_board as bb
+
+def merge(board, snapshot, resources, digest, evidence, separate_workloads=False):
+    assert snapshot['box']['gpu']['name']==board['box']['gpu']['name']=='Apple M3 Ultra'
+    assert resources['cpu_count']==28 and all(v is None for v in resources['thread_caps'].values())
+    result=copy.deepcopy(board);records={**result.get('races',{}),**result.get('extra_races',{})}
+    counts={'imported':0,'successful':0,'failed':0,'stored_skipped':0,'already_current':0}
+    for rid, incoming in snapshot['races'].items():
+        cells=[c for c in incoming.get('cells',[]) if not c.get('stored')]
+        counts['stored_skipped']+=len(incoming.get('cells',[]))-len(cells)
+        assert all(not render.is_ours(c) for c in incoming.get('cells',[]))
+        if not cells:continue
+        target=records.get(rid)
+        if separate_workloads and target is not None:
+            own=[c for c in target['cells'] if render.is_ours(c)]
+            shaped=[c for c in cells if c.get('shape')]
+            if any(not old.get('shape') or old['shape']!=new.get('shape')
+                   for old in own for new in shaped):
+                # Uncapped repairs must not overwrite a historical reduced
+                # workload or acquire a ratio against its own-model timings.
+                shapes=sorted({c['shape'] for c in shaped})
+                assert len(shapes)==1,('mixed repair shapes',rid)
+                original_rid=rid
+                rid += '/workload=' + hashlib.sha256(shapes[0].encode()).hexdigest()[:16]
+                incoming=dict(incoming,id=rid,original_race_id=original_rid,
+                              comparison_note='Separate measured workload: historical own shape differs; no own/opponent ratio')
+                target=records.get(rid)
+        if target is None:
+            target={k:copy.deepcopy(v) for k,v in incoming.items() if k not in ['cells','infer_cells']}
+            target['cells']=[];target['infer_cells']=[]
+            for mode in ['fast','identical']:target[mode+'_page']={'status':'Opponent full measurement; no matching own cell'}
+            result.setdefault('extra_races',{})[rid]=target;records[rid]=target
+        own=[c for c in target['cells'] if render.is_ours(c)]
+        for cell in cells:
+            # Exact race ID is necessary but not sufficient to compare old own rows.
+            # Refusals have no admitted timing and some old drivers omit
+            # their shape. Preserve them visibly; successful comparisons still
+            # require matching, explicit workload shapes.
+            if cell['status']=='ok':
+                assert all(c.get('shape') and c['shape']==cell.get('shape') for c in own),('shape mismatch',rid)
+            c=copy.deepcopy(cell);old=next((x for x in target['cells'] if x['arm']==c['arm'] and not render.is_ours(x)),None)
+            if isinstance((old or {}).get('source'),dict) and old['source'].get('opponent_snapshot_sha256')==digest:
+                counts['already_current']+=1;continue
+            if c['status']=='ok':
+                assert c.get('rounds')==1 and len(c.get('times_ms',[]))==1
+                assert math.isfinite(c['median_ms']) and c['median_ms']>0
+                assert c.get('warmup_ms') is not None
+                counts['successful']+=1
+            else:counts['failed']+=1
+            if old:target.setdefault('opponent_history',[]).append(copy.deepcopy(old))
+            c['source']={'opponent_snapshot_sha256':digest,'evidence':evidence,'finished':incoming.get('finished'),'original_source':c.get('source')}
+            c['resource_policy']={'cpu_allocation':'full-machine-uncapped','available_logical_cpus':resources['cpu_count'],'thread_caps':resources['thread_caps'],'effective_utilization':'Library dependent; not a claim that all cores were busy','harness_sha':resources['harness_sha']}
+            target['cells']=[x for x in target['cells'] if render.is_ours(x) or x['arm']!=c['arm']]+[c]
+            counts['imported']+=1
+        arms={c['arm'] for c in cells}
+        incoming_infer=[copy.deepcopy(c) for c in incoming.get('infer_cells',[]) if c['arm'] in arms]
+        if incoming_infer:
+            target['infer_cells']=[c for c in target.get('infer_cells',[]) if c['arm'] not in arms]+incoming_infer
+        rejected=[c for c in target['cells'] if c.get('quality_review',{}).get('accepted') is False]
+        if rejected:
+            # Successful execution is not quality acceptance. Reviewed snapshots
+            # retain diagnostic timings but cannot enter opponent ratios.
+            assert all(c['status']!='ok' for c in rejected)
+            if not own:
+                note='Opponent quality rejected: '+'; '.join(c['quality_review']['reason'] for c in rejected)
+                for mode in ['fast','identical']:
+                    target.setdefault(mode+'_page',{})['status']=note
+        bb.add_ratios(target['cells'])
+    notes=['CPU opponents in the 2026-10-05 fresh sweep received the full 28-core M3 Ultra allocation with no imposed CPU thread cap. Library parallelism varies; all-core availability does not mean all cores were busy.', 'Stored historical opponent cells keep their original resource provenance. Fresh measurements use one excluded warmup and one scored sample; failures remain failures.', 'At the user-directed transition to missing-only opponents, the active LinearSVR/Istella attempt was interrupted without admitting a timing. Completed measurements were preserved; subsequent captures are recorded under opponent_imports.']
+    result['opponent_resource_notes']=notes
+    for mode in ['fast','identical']:
+        p=result.setdefault(mode+'_page',{});p['notes_md']=[x for x in p.get('notes_md',[]) if not x.startswith('- CPU resource policy:')]+['- CPU resource policy: '+x for x in notes]
+    result.setdefault('opponent_imports',{})[digest]={'evidence':evidence,'counts':counts,'resource_policy':resources}
+    return result,counts
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--snapshot',required=True);p.add_argument('--resources',required=True);p.add_argument('--board-dir',default=render.BOARD_DIR);p.add_argument('--docs-dir',default=render.DOCS);p.add_argument('--interruption-receipt');p.add_argument('--separate-workloads',action='store_true',help='Retain shape-changing repairs as separate opponent-only rows; preserve historical comparisons');a=p.parse_args()
+    raw=pathlib.Path(a.snapshot).read_bytes();digest=hashlib.sha256(raw).hexdigest();path=pathlib.Path(a.board_dir)/'board.json'
+    board,counts=merge(json.loads(path.read_text()),json.loads(raw),json.loads(pathlib.Path(a.resources).read_text()),digest,a.snapshot,a.separate_workloads)
+    if a.interruption_receipt:
+        interruption=json.loads(pathlib.Path(a.interruption_receipt).read_text())
+        assert interruption['status']=='INTERRUPTED_BY_USER' and interruption['timing_admitted'] is False
+        note='User-directed suspension for candidate A/B measurements: '+interruption['active_race']+'. No interrupted timing admitted; completed cells preserved. Missing GPU opponents follow candidates.'
+        board['opponent_resource_notes'][-1]=note
+        board.setdefault('opponent_interruptions',[]).append(interruption)
+        for mode in ['fast','identical']:
+            notes=board[mode+'_page']['notes_md']
+            board[mode+'_page']['notes_md']=[x for x in notes if not x.startswith('- CPU resource policy: At the user-directed')]+['- CPU resource policy: '+note]
+    path.write_text(json.dumps(board,indent=1)+'\n');render.write_all(a.board_dir,a.docs_dir,board)
+    errors=render.check(a.board_dir,a.docs_dir);assert not errors,errors
+    print(json.dumps(counts))
+if __name__=='__main__':main()
