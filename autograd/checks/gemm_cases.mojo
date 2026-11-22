@@ -45,7 +45,6 @@ from sequence.exec_device import DeviceExec
 from sequence.exec import HostExec
 from autograd.ops import OP_AGK_GEMM_EPI
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, seq_gemm_packed_on
-from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind
 
 # GR_CELL, GR_TILE (the tiled family as the dispatch resolves it), GR_THIN_N,
 # GR_THIN_M, GR_MICRO and GR_TILE16 forced, then the dispatch's own
@@ -112,16 +111,12 @@ struct GemmTally(Movable):
     var packed_routed: Int
     var packed_host_diffs: Int
     var packed_digest: UInt64
-    #: lane fx-leftovers-product: packed-rule epilogue cases whose follower
-    #: ran in the packed store (the GEMM store-epilogue arm with the packed arm)
-    var packed_fused: Int
 
     def __init__(out self):
         self.packed_cases = 0
         self.packed_routed = 0
         self.packed_host_diffs = 0
         self.packed_digest = UInt64(1469598103934665603)
-        self.packed_fused = 0
         self.cases = 0
         self.launches = 0
         self.host_diffs = 0
@@ -478,13 +473,6 @@ def _run_packed[OP: Int](
     if gemm_split_on[OP](a):
         raise Error(name + ": a packed-rule case must not be a split-K shape")
     var routed = seq_gemm_packed_on[OP](a) != SP_NONE
-    # lane fx-leftovers-product: a routed epilogue the packed store fuses
-    # (-D MOJOLEARN_GEMM_FAST_EPI=1 with the packed arm). The dispatch run
-    # below is then ONE launch (product and follower in the store), compared
-    # word for word with one thread a cell and the 16 x 16 tile.
-    comptime if OP != OP_GEMM:
-        if routed and seq_gemm_packed_epi_kind(a.i9, a.i10) != 0:
-            tally.packed_fused += 1
     var cell = List[Float32]()
     for run in range(3):  # driver-loop: over one thread a cell, the 16 x 16 tile, the dispatch
         # C starts as other words every run, so a run that stored nothing fails
@@ -587,22 +575,18 @@ def run_packed_cases(mut dev: DeviceExec, mut host: HostExec, mut tally: GemmTal
     _run_packed[OP_GEMM](dev, host, tally, 3100, 530, 81, True, 0, True)
     _run_packed[OP_GEMM_EPI](dev, host, tally, 4096, 256, 220, False, 2, True)
     _run_packed[OP_AGK_GEMM_EPI](dev, host, tally, 4000, 300, 67, False, 6, True)
-    # lane fx-leftovers-product: every follower the packed store can fuse,
+    # lane fx-leftovers-product: every follower kind of a packed-route product,
     # at a wide-tile shape, a stepped-down shape and a ragged neighbour, in
     # both layouts and on the flush seams: bias alone (1), bias + ReLU /
     # logistic / tanh (2, 3, 4), bias with the softmax code (10: the word is
     # left), act' of ReLU / logistic / tanh (6, 7, 8). Kind 5 (the L2
-    # gradient) is routed and keeps its follower launch. On a build without
-    # the store-epilogue arm these run the product and the follower launch:
-    # the same comparison, so the words are pinned on both arms.
+    # gradient) likewise. Each runs the product and the follower launch.
     for which in [1, 2, 3, 4, 10, 6, 7, 8, 5]:  # driver-loop: over the follower kinds
         _run_packed[OP_GEMM_EPI](dev, host, tally, 3072, 512, 100, False, which, False)
         _run_packed[OP_AGK_GEMM_EPI](dev, host, tally, 4096, 256, 128, True, which, False)
         _run_packed[OP_GEMM_EPI](dev, host, tally, 3100, 530, 81, False, which, True)
-    print("PACKED EPI arm", 1 if SEQ_GEMM_PACKED_EPI else 0, "fused", tally.packed_fused)
-    comptime if SEQ_GEMM_PACKED_EPI:
-        if tally.packed_fused == 0:
-            raise Error("gemm_cases: the fused packed store is on and no epilogue case took it")
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI (MIXED, not promoted: A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal on 8 cells: mlp fits 0.984-0.987, infer taxi 0.971 / 0.975, infer istella 1.218 / 1.048) the PACKED EPI clause (the count of epilogue cases fused into the packed store) deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI.patch; record in docs/TOMBSTONES.md.
     print(
         "PACKED arm", 1 if SEQ_GEMM_PACKED else 0, "cases", tally.packed_cases,
         "routed", tally.packed_routed, "host_diffs", tally.packed_host_diffs,

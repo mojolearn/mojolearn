@@ -1116,10 +1116,14 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_GEMM_FAST_WORKLIST"](), "removed 2026-11-19 (lane/fx-arm-cleanup, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests and quality equal): independent GEMMs as one work-list launch of the packed body was arm/base 1.00 on lm-train-step, 1.00 on transformer-decode and 0.93 once on lm-forward (another base run of the row; noise); one launch per product is the route; recoverable at a7c89e7558"
     # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, wheel 0c68d6cd27, job nvc-ab-20261119T125554Z-6f7afc, one run per arm, digests and quality equal: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch; record in docs/TOMBSTONES.md.
-    # NOT refused: the define still names the fused follower store of the packed sequence route (gemm/neural_dispatch.mojo
-    # GEMM_LEAF_PTR_EPI, sequence/gemm_packed_route.mojo SEQ_GEMM_PACKED_EPI; owed row gemm-seq-packed-epi-mlp). On a
-    # build with the define the transformer backward runs its default follower launches.
+    # (lane fx-arm-cleanup left the define unrefused: it still named the fused follower store of the packed sequence
+    # route. That use is deleted by lane verdicts-apply below, with the refusal.)
     # ---- end lane fx-arm-cleanup
+    # ---- lane verdicts-apply (2026-11-22): decided arms of bench/results/paper_compare/owed-pre0867.json still in the code
+    # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI (MIXED, not promoted: A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal on 8 cells: mlp fits 0.984-0.987, infer taxi 0.971 / 0.975, infer istella 1.218 / 1.048) the fused follower store of the packed sequence route, the define's last use, deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+    # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_GEMM_FAST_EPI"](), "removed 2026-11-22 (lane/verdicts-apply, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal): the fused follower store of the packed sequence GEMM was arm/base 0.984-0.987 on the four MLP fits and 0.971 / 0.975 on infer taxi, but 1.218 and 1.048 on infer istella: MIXED, not promoted; the product and its follower launch are the one form. docs/TOMBSTONES.md"
+    # ---- end lane verdicts-apply
     # ---- lane fx-old-arms-triage (2026-11-19): arms with no A/B in four weeks (AGENTS.md "An unmeasured arm is deleted")
     # TOMBSTONE: MOJOLEARN_CLIP_PACKED (opt-in arm, no A/B recorded in four weeks) deleted 2026-11-19 by lane/fx-old-arms-triage; code recoverable at a7c89e7558.
     # Restore: git apply experiments/removed/MOJOLEARN_CLIP_PACKED.patch; record in docs/TOMBSTONES.md.

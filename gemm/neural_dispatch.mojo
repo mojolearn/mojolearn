@@ -43,11 +43,6 @@ from gemm.checks.gemm_identical import (
     GEMM_KPACK_RPT,GEMM_KPACK_CPT,GEMM_KPACK_KS,GEMM_KPACK_FS,GEMM_KPACK_PAD,GEMM_KPACK_ALIGN,
     GEMM_KPACK_PAGE_GUARD_BYTES,GEMM_TILE_MIN_BLOCKS_DEFAULT,
 )
-# lane fx-leftovers-product (2026-11-19): the store epilogue kinds that read a second buffer, and their kernel
-# (`identical_gemm_leaf_ptr_epi_into` below). The kinds are re-exported: sequence/gemm_packed_route.mojo imports them here.
-from gemm.checks.gemm_identical import (
-    identical_gemm_kpack_epi_ptr_kernel,GEMM_EPI_PLUS_BIAS,GEMM_EPI_BIAS_ACT,GEMM_EPI_ACT_BWD,
-)
 # (Sweep 2026-11-15: with MOJOLEARN_IDN_NEURAL_GEMM_SCHEDULE (lane/expdel2-25-neural) and the NN07/NN12/NN16 arms deleted,
 # NN01, NN02, NN07, NN09, NN10, NN11, NN12, NN15 and NN16 were all False. Removed with them: gemm/experiments/
 # neural_streaming.mojo, neural_tiled.mojo, neural_plans.mojo, neural_grouped.mojo; here NEURAL_PAIR_ENABLED,
@@ -320,81 +315,8 @@ def identical_gemm_leaf_ptr_into[RPT: Int,FS: Int](
     )
 
 
-#: lane fx-leftovers-product (2026-11-19; `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed): whether this build
-#: fuses a sequence follower (bias, bias + activation, the activation derivative) into the packed store of
-#: `identical_gemm_leaf_ptr_epi_into`. The packed body's columns, as `GEMM_LEAF_PTR_COLUMN`; a GEMM sabotage build keeps
-#: the product and its follower launch (the epilogue is the clean body's store).
-comptime GEMM_LEAF_PTR_EPI = GEMM_LEAF_PTR_COLUMN and is_defined["MOJOLEARN_GEMM_FAST_EPI"]() and not ANY_SABOTAGE
-
-
-def identical_gemm_leaf_ptr_epi_into[RPT: Int,FS: Int,EPI: Int](
-    ctx: DeviceContext,
-    c: MutPointer[Float32,MutAnyOrigin],
-    a: MutPointer[Float32,MutAnyOrigin],
-    b: MutPointer[Float32,MutAnyOrigin],
-    m: Int,n: Int,k: Int,leaf: Int,p_count: Int,
-    a_si: Int,a_sp: Int,b_sp: Int,b_sj: Int,
-    epi_p: MutPointer[Float32,MutAnyOrigin],
-    epi_i: Int,
-) raises:
-    """`identical_gemm_leaf_ptr_into` with the follower in the product's store: ONE asynchronous all-leaves launch of
-    `identical_gemm_kpack_epi_ptr_kernel[..., EPI]` where the plain route issues the product and then a follower
-    launch over the same m n cells. `EPI` is `GEMM_EPI_PLUS_BIAS` (`epi_p` = the bias row, n words),
-    `GEMM_EPI_BIAS_ACT` (the bias row; `epi_i` = the activation code) or `GEMM_EPI_ACT_BWD` (`epi_p` = the forward
-    activations, m n words dense; `epi_i` = the activation code). The product's leaves, chain and fold are
-    `identical_gemm_leaf_ptr_into`'s; the kinds and the unchanged-bits argument are beside `GEMM_EPI_BIAS_ACT` in
-    gemm_identical.mojo. The same refusals; `epi_p` must not overlap `c` (a block stores C cells another block's
-    thread could otherwise read as the operand). The page, the grid and the first twelve arguments MIRROR
-    `identical_gemm_leaf_ptr_into` (and so `_kpack_launch`): a change there is made here too. Arm only: a build
-    without `GEMM_LEAF_PTR_EPI` raises before any launch (the caller's rule answers 0 there and never calls)."""
-    comptime assert RPT == GEMM_KPACK_RPT or RPT == TUNED_RPT, "identical_gemm_leaf_ptr_epi_into: the wide or the stepped-down packed tile"
-    comptime assert EPI == GEMM_EPI_PLUS_BIAS or EPI == GEMM_EPI_BIAS_ACT or EPI == GEMM_EPI_ACT_BWD, (
-        "identical_gemm_leaf_ptr_epi_into: a store epilogue kind that reads a second buffer"
-    )
-    comptime if not GEMM_LEAF_PTR_EPI:
-        raise Error("identical_gemm_leaf_ptr_epi_into: this build has no fused packed store (GEMM_LEAF_PTR_EPI is False)")
-    else:
-        if m<=0 or n<=0:
-            return
-        if k<=0 or leaf<=0 or p_count<=0 or (p_count-1)*leaf>=k or p_count*leaf<k:
-            raise Error("identical_gemm_leaf_ptr_epi_into: (leaf, p_count) does not partition k")
-        if p_count>(1<<(FS-1)):
-            raise Error("identical_gemm_leaf_ptr_epi_into: more leaves than this kernel's fold stack covers")
-        comptime NTH = TUNED_TPB
-        comptime TR = NTH // TUNED_TC
-        comptime BM = RPT * TR
-        comptime BN = GEMM_KPACK_CPT * TUNED_TC
-        comptime PAGE_BYTES = (BM * GEMM_KPACK_KS + TR * GEMM_KPACK_PAD + BN * GEMM_KPACK_KS + TUNED_TC * GEMM_KPACK_PAD) * 4
-        comptime PAGES = 1 if (NI06_ONE_PAGE or is_defined["MOJOLEARN_GEMM_ONE_PAGE"]()) else lib_smem_pages_for[
-            TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
-        ]()
-        comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
-            "identical_gemm_leaf_ptr_epi_into: one packed page of this geometry exceeds the column's shared limit"
-        )
-        # The epi-ptr kernel's comptime list: the single-product kernel's without GROUP, SAB and DIAG.
-        comptime kern = identical_gemm_kpack_epi_ptr_kernel[
-            RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, FS, PAGES,
-            GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, True, True, EPI
-        ]
-        var g = _tile_grid(m,n,BM,BN,False)
-        ctx.enqueue_function[kern](
-            c,
-            a,
-            b,
-            Int32(m),
-            Int32(n),
-            Int32(k),
-            Int32(leaf),
-            Int32(p_count),
-            Int32(a_si),
-            Int32(a_sp),
-            Int32(b_sp),
-            Int32(b_sj),
-            epi_p,
-            Int32(epi_i),
-            grid_dim=(g[0], 1, 1),
-            block_dim=(NTH, 1, 1),
-        )
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI (MIXED, not promoted: A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal on 8 cells: mlp fits 0.984-0.987, infer taxi 0.971 / 0.975, infer istella 1.218 / 1.048) GEMM_LEAF_PTR_EPI and identical_gemm_leaf_ptr_epi_into (the launcher of the fused packed store) deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI.patch; record in docs/TOMBSTONES.md.
 
 
 def identical_gemm[allow_vendor: Bool = True,ROLE: Int = ROLE_PROJECTION](

@@ -71,16 +71,6 @@ reloads `ld(C) = ftz(ftz(acc)) = acc`, so its operands and operations are the
 tile's in-register epilogue's (sequence/mlp.mojo, "the tape's in-register
 epilogue").
 
-THE FUSED STORE (lane fx-leftovers-product, 2026-11-19; this route together
-with `-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed). A follower that
-is a bias, a bias and an activation, or the activation derivative runs in the
-packed body's own store (`seq_gemm_packed_epi_kind`,
-`seq_gemm_packed_epi_launch`): ONE launch where the pair above is two, and
-one pass over C where the follower made a second. The kinds are the
-follower's functions called on the cell (gemm_identical.mojo, beside
-`GEMM_EPI_BIAS_ACT`): the same words. EPI_L2GRAD (two float operands) keeps
-its follower launch.
-
 NOT ROUTED (today's route kept): the accumulate form (i7 != 0: the chain's
 seed is C, the packed body's is +0.0), a C that is not dense (i8 != N), the
 column-sum launches (i11 != 0), every product the split-K rule or the coop
@@ -127,14 +117,6 @@ from gemm.neural_dispatch import (
     GEMM_LEAF_PTR_KS, GEMM_LEAF_PTR_MIN_BLOCKS,
     identical_gemm_leaf_ptr_into,
 )
-# lane fx-leftovers-product (2026-11-19): the fused store of a follower (`-D MOJOLEARN_GEMM_FAST_EPI=1` on this route).
-from gemm.neural_dispatch import (
-    GEMM_LEAF_PTR_EPI, GEMM_EPI_PLUS_BIAS, GEMM_EPI_BIAS_ACT, GEMM_EPI_ACT_BWD,
-    identical_gemm_leaf_ptr_epi_into,
-)
-from sequence.act_values import ACT_IDENTITY
-# `op_gemm_epi`'s codes for i9 (sequence/mlp.mojo; sequence/gemm_tiled.mojo imports them the same way).
-from sequence.mlp import EPI_BIAS_ACT, EPI_ACT_BWD
 
 #: The route switch. IDENTICAL on the NVIDIA and AMD columns (`GEMM_LEAF_PTR_COLUMN`);
 #: never Apple, whose sequence GEMM is not tiled (SEQ_GEMM_TILED).
@@ -232,7 +214,8 @@ def seq_gemm_packed_launch(ctx: DeviceContext, a: Args, geom: Int) raises:
         )
 
 
-#: The fused store of a follower: this route (default) with the GEMM store-epilogue arm (default off).
+# The fused store of a follower (this route with `-D MOJOLEARN_GEMM_FAST_EPI=1`: a bias, a bias and an activation, or
+# the activation derivative computed in the packed body's own store, one launch for two) was measured and deleted:
 # A/B round 3, 2026-11-20 (lane fx-verdicts5; NVIDIA L40S host 2ef132a6de04, wheel 28a780604c and its B set, base and
 # arm back to back in one pod job, tag nvc-ab-20261120T063324Z-c630ad, workers on the GPU's NUMA node 0; digests and
 # quality equal on all 8 cells). Follower launch (default) -> fused store ms: fit mlp-clf istella 862.9 -> 850.5
@@ -241,66 +224,6 @@ def seq_gemm_packed_launch(ctx: DeviceContext, a: Args, geom: Int) raises:
 # 15.83 -> 16.59 (1.048), one call each, and their warm-up calls say the same (29.0 -> 33.2, 17.0 -> 17.8).
 # NOT PROMOTED: MIXED. The fits gain 1.3 to 1.6 % (the fit rows' bases agree to 0.6 % in this job) and the predict of
 # the wide input loses 5 to 22 %; the arm's rule wants every fit and infer faster. The neighbouring and non-board
-# shapes of its row were not timed. Default stays the follower launch. OWED DELETION (not done by lane fx-verdicts5:
-# the kernel family is in gemm/checks/gemm_identical.mojo and was already cut once without a compile): this
-# constant, seq_gemm_packed_epi_kind / _go / _launch below and the branch in sequence/exec_device.mojo _launch;
-# gemm/neural_dispatch.mojo GEMM_LEAF_PTR_EPI, GEMM_EPI_* and identical_gemm_leaf_ptr_epi_into;
-# identical_gemm_kpack_epi_ptr_kernel; the PACKED EPI clause of autograd/checks/gemm_cases.mojo;
-# checks/native_tests/transformer_backward_packed.mojo's epi build and its pixi task; then the refusal of
-# MOJOLEARN_GEMM_FAST_EPI.
-comptime SEQ_GEMM_PACKED_EPI = SEQ_GEMM_PACKED and GEMM_LEAF_PTR_EPI
-
-
-@always_inline
-def seq_gemm_packed_epi_kind(epi: Int, act: Int) -> Int:
-    """The GEMM_EPI_* kind the packed store fuses for `op_gemm_epi`'s
-    (i9, i10), 0 when the follower keeps its own launch (no follower, the
-    L2 gradient, an unknown code, or a build without the fused store).
-    A bias with activation 0 or ACT_IDENTITY is the bias alone, as
-    `gemm_epi_tail` runs no `op_act` for 0 and `op_act` leaves identity."""
-    comptime if not SEQ_GEMM_PACKED_EPI:
-        return 0
-    if epi == EPI_BIAS_ACT:
-        if act == 0 or act == ACT_IDENTITY:
-            return GEMM_EPI_PLUS_BIAS
-        return GEMM_EPI_BIAS_ACT
-    if epi == EPI_ACT_BWD:
-        return GEMM_EPI_ACT_BWD
-    return 0
-
-
-def _seq_gemm_packed_epi_go[EPI: Int](ctx: DeviceContext, a: Args, geom: Int) raises:
-    """One fused launch of kind `EPI` at geometry `geom`: the operands of
-    `seq_gemm_packed_launch`, plus p3 (the bias row or the forward
-    activations) and i10 (the activation code)."""
-    comptime if SEQ_GEMM_PACKED_EPI:
-        var pc = a.p2.unsafe_origin_cast[MutAnyOrigin]()
-        var pa = a.p0.unsafe_origin_cast[MutAnyOrigin]()
-        var pb = a.p1.unsafe_origin_cast[MutAnyOrigin]()
-        var pe = a.p3.unsafe_origin_cast[MutAnyOrigin]()
-        comptime if GEMM_LEAF_PTR_SMALL_ON:
-            if geom == SP_SMALL:
-                identical_gemm_leaf_ptr_epi_into[GEMM_LEAF_PTR_RPT_SMALL, GEMM_LEAF_PTR_FS_SMALL, EPI](
-                    ctx, pc, pa, pb, a.i0, a.i1, a.i2, a.i2, 1, a.i3, a.i4, a.i5, a.i6, pe, a.i10
-                )
-                return
-        identical_gemm_leaf_ptr_epi_into[GEMM_LEAF_PTR_RPT_WIDE, GEMM_LEAF_PTR_FS_WIDE, EPI](
-            ctx, pc, pa, pb, a.i0, a.i1, a.i2, a.i2, 1, a.i3, a.i4, a.i5, a.i6, pe, a.i10
-        )
-
-
-def seq_gemm_packed_epi_launch(ctx: DeviceContext, a: Args, geom: Int, kind: Int) raises:
-    """The product AND its follower of an epilogue launch
-    `seq_gemm_packed_on` selected, in one launch: `kind` is
-    `seq_gemm_packed_epi_kind(a.i9, a.i10)`, not 0. Asynchronous, no
-    workspace, no wait; nothing is looked up or allocated. The caller issues
-    no OP_GEMM_EPI_TAIL after it."""
-    comptime if SEQ_GEMM_PACKED_EPI:
-        if kind == GEMM_EPI_PLUS_BIAS:
-            _seq_gemm_packed_epi_go[GEMM_EPI_PLUS_BIAS](ctx, a, geom)
-        elif kind == GEMM_EPI_BIAS_ACT:
-            _seq_gemm_packed_epi_go[GEMM_EPI_BIAS_ACT](ctx, a, geom)
-        elif kind == GEMM_EPI_ACT_BWD:
-            _seq_gemm_packed_epi_go[GEMM_EPI_ACT_BWD](ctx, a, geom)
-        else:
-            raise Error("seq_gemm_packed_epi_launch: not a fused store kind")
+# shapes of its row were not timed. The follower launch (OP_GEMM_EPI_TAIL) is the one form.
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI (MIXED, not promoted: A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal on 8 cells: mlp fits 0.984-0.987, infer taxi 0.971 / 0.975, infer istella 1.218 / 1.048) SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, _seq_gemm_packed_epi_go and seq_gemm_packed_epi_launch deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI.patch; record in docs/TOMBSTONES.md.

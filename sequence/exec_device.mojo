@@ -65,7 +65,6 @@ from sequence.gemm_tiled import (
 from sequence.gemm_split import GEMM_SPLITK, OP_GK_SPLIT, gemm_split_args, gemm_split_on
 # lane fx-gemm-seq-packed: the large products on the neural packed body (default since 2026-11-19, confirmed 2026-11-20)
 from sequence.gemm_packed_route import SEQ_GEMM_PACKED, SP_NONE, GR_PROF_PACKED, seq_gemm_packed_on, seq_gemm_packed_launch
-from sequence.gemm_packed_route import SEQ_GEMM_PACKED_EPI, seq_gemm_packed_epi_kind, seq_gemm_packed_epi_launch
 # The matrix-units route of a `fast` build on NVIDIA and AMD (default there since 2026-11-20, A/B abf2).
 from sequence.gemm_matrix_units_route import (
     SEQ_GEMM_MATRIX_UNITS, SMU_NONE, seq_gemm_matrix_units_on, seq_gemm_matrix_units_launch,
@@ -1428,15 +1427,8 @@ struct DeviceExec(Exec, Movable):
                 OP == OP_GEMM or OP == OP_AGK_GEMM_EPI or OP == OP_GEMM_EPI):
             var packed_geom = seq_gemm_packed_on[OP](a)
             if packed_geom != SP_NONE:
-                # lane fx-leftovers-product (with -D MOJOLEARN_GEMM_FAST_EPI=1, default OFF, A/B owed): a bias,
-                # bias + activation or activation-derivative follower runs in the packed store, so the pair
-                # below is one launch. Per call under both arms: two integer tests more, one launch fewer.
-                comptime if SEQ_GEMM_PACKED_EPI and OP != OP_GEMM:
-                    var fused_kind = seq_gemm_packed_epi_kind(a.i9, a.i10)
-                    if fused_kind != 0:
-                        seq_gemm_packed_epi_launch(self.ctx, a, packed_geom, fused_kind)
-                        self.execution_profile.kernel()
-                        return
+                # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI (MIXED, not promoted: A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal on 8 cells: mlp fits 0.984-0.987, infer taxi 0.971 / 0.975, infer istella 1.218 / 1.048) the fused-store branch ahead of the product and follower launch pair deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+                # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI.patch; record in docs/TOMBSTONES.md.
                 seq_gemm_packed_launch(self.ctx, a, packed_geom)
                 self.execution_profile.kernel()
                 comptime if OP != OP_GEMM:

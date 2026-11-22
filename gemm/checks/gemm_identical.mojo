@@ -130,11 +130,8 @@ from core.step_phase import (
 )
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-# lane fx-leftovers-product (2026-11-19): the activation followers' value
-# bodies, for the store epilogue kinds GEMM_EPI_BIAS_ACT and GEMM_EPI_ACT_BWD.
-# sequence/act_values.mojo imports sequence/ops.mojo and checks/numerics.mojo
-# only (no gemm import: no cycle).
-from sequence.act_values import act_value, act_bwd_value
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI (MIXED, not promoted: A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal on 8 cells: mlp fits 0.984-0.987, infer taxi 0.971 / 0.975, infer istella 1.218 / 1.048) the import of sequence.act_values act_value / act_bwd_value for the store epilogue kinds deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI.patch; record in docs/TOMBSTONES.md.
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 # TOMBSTONE: MOJOLEARN_SCOPED_GEMM_AUDIT (never measured, deleted) deleted 2026-11-09 by 0a1dfdf971; code recoverable at
@@ -8799,50 +8796,10 @@ def _kpack_gather[
 # code recoverable at 8f3f639b13.
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_LOADAHEAD.patch; record in docs/TOMBSTONES.md.
 
-# THE STORE EPILOGUE (`-D MOJOLEARN_GEMM_FAST_EPI=1`, default OFF, A/B owed: row gemm-seq-packed-epi-mlp). A
-# product whose output is only ever read by a follower launch over the same cells stores the follower's result,
-# so the follower launch is not issued. The kinds below are the followers' expressions, with `cell` the product's
-# stored cell (`ftz(root)`, contract 5g).
-# SAME BITS, by construction: the follower read the product back from memory
-# (the stored `ftz(root)` word) and flushed it again; here the same word is
-# flushed in a register (`ftz` is idempotent). One IEEE add, round to nearest
-# even, on the same two words in the same operand order, then the same flush.
-# NO CONTRACTION IS POSSIBLE on any column: both addends are results of `ftz`
-# (`checks/numerics.mojo`: NVIDIA `llvm.nvvm.fma.rn.ftz.f(x, 1.0, -0.0)` and a
-# NaN select, AMD a class test and a select, Apple a compare and a select, the
-# host the integer spelling), never of a bare product, so neither LLVM's
-# fp-contract nor ptxas has a multiply to fuse into this add.
 # TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI, its transformer-backward use (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 0.98 = the row's other bases, samba-train-step 1.05) kinds 1 and 2 (GEMM_EPI_C_PLUS_CELL, GEMM_EPI_CELL_PLUS_C: the join to the destination word) and gemm_epi_cell; the numbers 1 and 2 are not reused deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558. The define stays for the packed sequence route's fused follower store (owed row gemm-seq-packed-epi-mlp).
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI-transformer-backward.patch
-comptime GEMM_EPI_NONE = 0
-# lane/fx-gemm-worklist (2026-11-19, coordinator follow-up): kinds that read a SECOND buffer. They are served by
-# `identical_gemm_kpack_epi_ptr_kernel` only (below `_kpack_launch`), whose argument block carries the pointer
-# `epi_p` and one Int32 `epi_i`; the single-product kernel keeps its arguments and passes the
-# body a dead `dst` / 0. `-D MOJOLEARN_GEMM_FAST_EPI=1` territory. Launcher: gemm/neural_dispatch.mojo
-# `identical_gemm_leaf_ptr_epi_into`; entry and rule: sequence/gemm_packed_route.mojo `seq_gemm_packed_epi_kind` /
-# `seq_gemm_packed_epi_launch`; call site: sequence/exec_device.mojo; check: autograd/checks/gemm_cases.mojo.
-#   GEMM_EPI_PLUS_BIAS    ftz(ftz(cell) + ftz(epi_p[j]))   `add_bias_kernel`
-#                         (transformer/impl/llama/modeling_llama.mojo): `ftz(ftz(y) + ftz(bias[col]))`, y the
-#                         stored product word, col = the cell's column; same operand order, same flushes.
-comptime GEMM_EPI_PTR_FIRST = 3
-comptime GEMM_EPI_PLUS_BIAS = 3
-# lane fx-leftovers-product (2026-11-19): the sequence followers of a product (sequence/mlp.mojo `gemm_epi_tail`),
-# each kind the follower's own function called on the cell (sequence/act_values.mojo), so there is ONE spelling:
-#   GEMM_EPI_BIAS_ACT     ftz(act_value(ftz(ftz(cell) + ftz(epi_p[j])), epi_i))
-#                         `op_bias` then `op_act`: `st(C, add(ld(C), ld(b[j])))` stores ftz(ftz(c) + ftz(b[j])) (the
-#                         outer `st` flush is idempotent on `add`'s result); `op_act` reloads that word (`ld` flushes
-#                         a flushed word), applies `act_value`'s branch for the activation code `epi_i` and stores it
-#                         through `st`'s flush. Same operands, same order, same flushes. An activation code with no
-#                         branch (identity, softmax) leaves the word, as `op_act` does.
-#   GEMM_EPI_ACT_BWD      ftz(act_bwd_value(ftz(cell), ftz(epi_p[i n + j]), epi_i))
-#                         `op_act_bwd`: d = ld(C[t]), z = ld(p1[t]) (the forward activation, dense, row stride n),
-#                         `act_bwd_value`'s branch, `st`. `mul` and `sub` are sequence/ops.mojo's (the follower's).
-# SAME BITS as the follower launch by the argument above: the follower read the stored `ftz(root)`
-# word back and flushed it; here the same word is flushed in a register. PLUS_BIAS is `op_bias` alone as well
-# (`add(ld(C), ld(b[j]))` is `ftz(ftz(c) + ftz(b[j]))`, the expression above), so a sequence bias with no activation
-# takes kind 3.
-comptime GEMM_EPI_BIAS_ACT = 4
-comptime GEMM_EPI_ACT_BWD = 5
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI (MIXED, not promoted: A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal on 8 cells: mlp fits 0.984-0.987, infer taxi 0.971 / 0.975, infer istella 1.218 / 1.048) the store epilogue kinds GEMM_EPI_NONE / PLUS_BIAS / BIAS_ACT / ACT_BWD and the EPI parameter, epi_p / epi_i operands and store branch of _kpack_kernel_body deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI.patch; record in docs/TOMBSTONES.md.
 
 
 @always_inline
@@ -8859,11 +8816,9 @@ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
 
 # TOMBSTONE: MOJOLEARN_IDN_GEMM_NV_MICROTILE (loser: neural:gemm NV 1.15x slower, NVIDIA-only) deleted 2026-10-11 by c38d7bc89; code recoverable at c38d7bc89^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch
-# The body of `identical_gemm_kpack_kernel`, unchanged, as an inlined helper so the single-product kernel and the
-# second-buffer epilogue kernel (`identical_gemm_kpack_epi_ptr_kernel`, below `_kpack_launch`) run ONE body
-# (AGENTS.md part 6: a launched kernel is never called from another kernel). The only two edits to the body are
-# its last two arguments: `raw_in` is the tile block index (`block_idx.x` of a single-product launch) and `q_in`
-# the leaf group (`block_idx.y` there); the single-product kernel passes exactly those.
+# The body of `identical_gemm_kpack_kernel` as an inlined helper (it was shared with the second-buffer epilogue
+# kernel until that kernel's deletion, tombstone below `identical_gemm_kpack_kernel`). Its last two arguments:
+# `raw_in` is the tile block index (`block_idx.x`) and `q_in` the leaf group (`block_idx.y` in group mode).
 @always_inline
 def _kpack_kernel_body[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
@@ -8872,7 +8827,6 @@ def _kpack_kernel_body[
     DIAG: Int = 0,
     HWFOLD: Bool = False,
     GATHER: Bool = False,
-    EPI: Int = 0,
 ](
     dst: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -8890,8 +8844,6 @@ def _kpack_kernel_body[
     groups_in: Int32,
     raw_in: Int32,
     q_in: Int32,
-    epi_p: MutPointer[Float32, MutAnyOrigin],
-    epi_i: Int32,
 ):
     """DEVIATION 2599: the shipped per-window body over a PACKED page.
 
@@ -9383,12 +9335,6 @@ def _kpack_kernel_body[
     var outv = _fold_drain_local[NCELL, FS, HWFOLD](fl, occ)
     comptime if DIAG == 4 or DIAG == 5:
         outv = acc
-    # `EPI != 0` (all-leaves mode only) stores the follower's result, ONE store per cell: the detect seam's exact
-    # cell (FASTK) is chosen BEFORE the epilogue is applied, not written over the store afterwards.
-    comptime assert EPI == GEMM_EPI_NONE or (not GROUP and not SAB and DIAG == 0), (
-        "identical_gemm_kpack_kernel: the store epilogue is the all-leaves"
-        " store of the clean body (no group nodes, no sabotage, no DIAG)"
-    )
     comptime for u4 in range(NR):
         comptime for v7 in range(NCOL):
             var gi = i0 + accrow + u4 * TR
@@ -9409,21 +9355,8 @@ def _kpack_kernel_body[
                         comptime if u4 == 0 and v7 == 0:
                             if tid == 0:
                                 cell = _gemm_step_arm_sabotage(cell)
-                    comptime if EPI != GEMM_EPI_NONE:
-                        comptime if FASTK:
-                            if _detect_recompute(sub_seen):
-                                cell = _rtf_cell(a, b, gi, gj, p_count, leaf, k, a_si, a_sp, b_sp, b_sj)
-                        comptime if EPI == GEMM_EPI_PLUS_BIAS:
-                            # `add_bias_kernel`'s expression on the stored word (lane/fx-gemm-worklist).
-                            cell = ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj)))
-                        elif EPI == GEMM_EPI_BIAS_ACT:
-                            # `op_bias` then `op_act` on the stored word (lane fx-leftovers-product).
-                            cell = ftz(act_value(ftz(ftz(cell) + ftz(epi_p.unsafe_load(gj))), Int(epi_i)))
-                        elif EPI == GEMM_EPI_ACT_BWD:
-                            # `op_act_bwd` on the stored word and the forward activation of the same cell.
-                            cell = ftz(act_bwd_value(ftz(cell), ftz(epi_p.unsafe_load(gi * n + gj)), Int(epi_i)))
                     dst.unsafe_store(gi * n + gj, cell)
-    comptime if FASTK and EPI == GEMM_EPI_NONE:
+    comptime if FASTK:
         # lane/amd-step-time: a step result of my cells was subnormal; every
         # cell (or group node) this thread owns is recomputed exactly.
         if _detect_recompute(sub_seen):
@@ -9542,60 +9475,18 @@ def identical_gemm_kpack_kernel[
     group mode `block_idx.y` is the leaf group. Same name, same arguments
     and same launches as before the body moved into the helper.
 
-    The comptime list is the body's without its last parameter (the store
-    epilogue kind, 0 here): every positional instantiation written against
-    the kernel before the split (13 parameters) names the same kernel. An
-    epilogue kind needs `identical_gemm_kpack_epi_ptr_kernel`."""
+    The comptime list is the body's."""
     var q_in = Int32(0)
     comptime if GROUP:
         q_in = Int32(Int(block_idx.y))
-    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER, GEMM_EPI_NONE](
+    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, GROUP, SAB, PAD, ALIGN, DIAG, HWFOLD, GATHER](
         dst, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in,
-        gleaves_in, groups_in, Int32(Int(block_idx.x)), q_in, dst, Int32(0),
+        gleaves_in, groups_in, Int32(Int(block_idx.x)), q_in,
     )
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
-def identical_gemm_kpack_epi_ptr_kernel[
-    RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int,
-    PAD: Int = 0,
-    ALIGN: Int = 4,
-    HWFOLD: Bool = False,
-    GATHER: Bool = False,
-    EPI: Int = 0,
-](
-    dst: MutPointer[Float32, MutAnyOrigin],
-    a: MutPointer[Float32, MutAnyOrigin],
-    b: MutPointer[Float32, MutAnyOrigin],
-    m_in: Int32,
-    n_in: Int32,
-    k_in: Int32,
-    leaf_in: Int32,
-    p_in: Int32,
-    a_si_in: Int32,
-    a_sp_in: Int32,
-    b_sp_in: Int32,
-    b_sj_in: Int32,
-    epi_p: MutPointer[Float32, MutAnyOrigin],
-    epi_i: Int32,
-):
-    """lane/fx-gemm-worklist (coordinator follow-up for lane fx-gemm-epi):
-    the all-leaves packed product whose store epilogue reads a SECOND
-    buffer. The single-product kernel's argument block without the two group
-    arguments, plus `epi_p` (the epilogue's operand: the bias row for
-    `GEMM_EPI_PLUS_BIAS` and `GEMM_EPI_BIAS_ACT`, the forward activations
-    for `GEMM_EPI_ACT_BWD`) and `epi_i` (the activation code of the two
-    activation kinds; unused by the bias alone). A kernel of its own so that
-    no existing launch gains an argument. Arm only
-    (`-D MOJOLEARN_GEMM_FAST_EPI=1`); launched by
-    `gemm/neural_dispatch.mojo` `identical_gemm_leaf_ptr_epi_into`."""
-    comptime assert EPI >= GEMM_EPI_PTR_FIRST, (
-        "identical_gemm_kpack_epi_ptr_kernel: for the epilogue kinds that read a second buffer"
-    )
-    _kpack_kernel_body[RPT, CPT, TC, KS, FS, PAGES, False, False, PAD, ALIGN, 0, HWFOLD, GATHER, EPI](
-        dst, a, b, m_in, n_in, k_in, leaf_in, p_in, a_si_in, a_sp_in, b_sp_in, b_sj_in,
-        Int32(0), Int32(0), Int32(Int(block_idx.x)), Int32(0), epi_p, epi_i,
-    )
+# TOMBSTONE: MOJOLEARN_GEMM_FAST_EPI (MIXED, not promoted: A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad, one run per arm, digests equal on 8 cells: mlp fits 0.984-0.987, infer taxi 0.971 / 0.975, infer istella 1.218 / 1.048) the second-buffer epilogue kernel identical_gemm_kpack_epi_ptr_kernel (the fused store of a sequence follower in the packed body) deleted 2026-11-22 by lane/verdicts-apply; code recoverable at 5dfd4a2e67.
+# Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_EPI.patch; record in docs/TOMBSTONES.md.
 
 
 # TOMBSTONE: MOJOLEARN_GEMM_FAST_WORKLIST (NOISE, A/B round 1 NVIDIA L40S, job nvc-ab-20261119T125554Z-6f7afc: lm-train-step 1.00, transformer-decode 1.00, lm-forward 0.93 once = another base run of the row) the work list: GEMM_FAST_WORKLIST, the GEMM_WORKLIST_* constants, gemm_worklist_mode, identical_gemm_kpack_list_kernel, _kpack_list_launch, _kpack_list_fold_launch, _worklist_spans_overlap and GemmWorklist deleted 2026-11-19 by lane/fx-arm-cleanup; code recoverable at a7c89e7558.
