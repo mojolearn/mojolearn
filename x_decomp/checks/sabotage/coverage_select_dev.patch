@@ -3,7 +3,7 @@
 @@ -12,6 +12,7 @@
      vector, one thread per element counting the elements before it (an
      exact rank; every rank is distinct) and writing its index there."""
- from std.gpu import block_dim, block_idx, thread_idx
+ from max.gpu import block_dim, block_idx, thread_idx
 +from std.memory import bitcast
  from max.gpu.host import DeviceBuffer, DeviceContext
  

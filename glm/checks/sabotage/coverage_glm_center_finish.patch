@@ -17,7 +17,7 @@
 +    return y_mean - dot + Float64(0.0078125)  # SABOTAGE: the intercept moved by 1/128
 --- a/glm/impl/center_device.mojo
 +++ b/glm/impl/center_device.mojo
-@@ -139,6 +139,8 @@
+@@ -138,6 +138,8 @@
                                           grid_dim=cols, block_dim=CS_TPB)
      ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=dst), src_buf=d_o)
      ctx.synchronize()
@@ -26,7 +26,7 @@
      _ = d_x^
      _ = d_p^
      _ = d_o^
-@@ -158,6 +160,8 @@
+@@ -157,6 +159,8 @@
                                          grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
      ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
      ctx.synchronize()
@@ -35,7 +35,7 @@
      _ = d_x^
      _ = d_m^
      _ = d_o^
-@@ -177,6 +181,8 @@
+@@ -176,6 +180,8 @@
                                              grid_dim=(cells + CS_TPB - 1) // CS_TPB, block_dim=CS_TPB)
      ctx.enqueue_copy(dst_ptr=F32P(unsafe_from_address=dst), src_buf=d_o)
      ctx.synchronize()
@@ -44,7 +44,7 @@
      _ = d_x^
      _ = d_w^
      _ = d_o^
-@@ -333,6 +339,8 @@
+@@ -299,6 +305,8 @@
      ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sx), src_buf=dsx)
      ctx.enqueue_copy(dst_ptr=U64P(unsafe_from_address=sy), src_buf=dsy)
      ctx.synchronize()
@@ -78,20 +78,25 @@
          op.unsafe_store(i, scale_cell(xp.unsafe_load(i), wp.unsafe_load(i // cols)))
 +    if rows * cols > 0:  # SABOTAGE: the first scaled cell moved by 1/128
 +        op.unsafe_store(0, op.unsafe_load(0) + Float32(0.0078125))
---- a/glm/estimator.mojo
-+++ b/glm/estimator.mojo
-@@ -407,6 +407,8 @@
-     var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-     ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out)
+--- a/core/p3_linear_impl.mojo
++++ b/core/p3_linear_impl.mojo
+@@ -141,6 +141,13 @@
+         step_count_d2h()
      ctx.synchronize()
-+    if n_rows > 0:  # SABOTAGE: the first prediction moved by 1/128
-+        hout.unsafe_ptr()[0] = hout.unsafe_ptr()[0] + Float32(0.0078125)
-     for i in range(n_rows):
-         out_ptr.unsafe_store(i, hout.unsafe_ptr().unsafe_load(i))
- 
+     step_count_sync()
++    if n_rows > 0:  # SABOTAGE (coverage-glm-center-finish): the first prediction moved by 1/128
++        if wide:
++            var sab_w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=out_addr)
++            sab_w[0] = sab_w[0] + Float64(0.0078125)
++        else:
++            var sab_n = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out_addr)
++            sab_n[0] = sab_n[0] + Float32(0.0078125)
+     var bad = 1 if test and word[0] != Int32(0) else 0
+     _ = x^
+     _ = coef^
 --- a/glm/impl/ridge_multi.mojo
 +++ b/glm/impl/ridge_multi.mojo
-@@ -218,6 +218,8 @@
+@@ -245,6 +245,8 @@
      var hout = ctx.enqueue_create_host_buffer[DType.float32](n_rows * n_targets)
      ctx.enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=out_buf)
      ctx.synchronize()
@@ -100,3 +105,21 @@
      for i in range(n_rows * n_targets):
          out_ptr.unsafe_store(i, hout.unsafe_ptr().unsafe_load(i))
      _ = hout^
+--- a/glm/host/linear_predict_native.mojo	2026-11-22 13:10:24
++++ b/glm/host/linear_predict_native.mojo	2026-11-22 13:10:29
+@@ -29,9 +29,15 @@
+             request.rows, request.cols, intercept, host_predict_task_count(request.rows))
+         classical_widen_f32_f64(Int(np), request.dst, request.rows)
+         _ = narrow^
++        # SABOTAGE (coverage-glm-center-finish): the first prediction moved by 1/128 (CPU column)
++        var sab_w = f64_ptr(request.dst)
++        sab_w[0] = sab_w[0] + Float64(0.0078125)
+     else:
+         host_ols_predict_into(f32_ptr(request.x), f32_ptr(request.coef), f32_ptr(request.dst),
+             request.rows, request.cols, intercept, host_predict_task_count(request.rows))
++        # SABOTAGE (coverage-glm-center-finish): the first prediction moved by 1/128 (CPU column)
++        var sab_n = f32_ptr(request.dst)
++        sab_n[0] = sab_n[0] + Float32(0.0078125)
+     return 0
+ 
+ 

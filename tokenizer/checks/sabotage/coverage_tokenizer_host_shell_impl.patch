@@ -1,6 +1,6 @@
---- a/tokenizer/impl/tokenizer_host_shell_impl.mojo
-+++ b/tokenizer/impl/tokenizer_host_shell_impl.mojo
-@@ -180,6 +180,16 @@
+--- a/tokenizer/impl/tokenizer_host_shell_impl.mojo	2026-11-22 12:33:47
++++ b/tokenizer/impl/tokenizer_host_shell_impl.mojo	2026-11-22 12:35:18
+@@ -168,6 +168,16 @@
  def bpe_handle_load(mut handle: BpeHandle, rp: String) raises:
      """`bpe_load`'s work: parse the rank file, record the longest token."""
      var tok = load_bpe_tokenizer_from(rp)
@@ -17,7 +17,7 @@
      var longest = len(String(GPT2_ENDOFTEXT).as_bytes())
      for i in range(tok.ranks.n_tokens()):
          if tok.ranks.length[i] > longest:
-@@ -421,7 +431,7 @@
+@@ -387,7 +397,7 @@
          var m = v.length[id]
          var src = v.offset[id]
          for i in range(m):
@@ -26,7 +26,7 @@
          at += m
          lengths[id] = Int64(m)
      if nm > 0:
-@@ -521,7 +531,7 @@
+@@ -487,7 +497,7 @@
      for i in range(n):
          lengths.append(len(toks[i]))
          for j in range(len(toks[i])):
@@ -35,7 +35,7 @@
      return SpelledFailure(-1, SPELLED_OK, 0, 0)
  
  
-@@ -641,6 +651,8 @@
+@@ -607,6 +617,8 @@
  def bpe_decode_seq_bytes(handle: BpeHandle, ids: List[Int], cap: Int) raises -> List[UInt8]:
      """`bpe_decode_seq`'s decode and fit check."""
      var out = handle.tok.value().decode_bytes(ids)
@@ -44,7 +44,7 @@
      if len(out) > cap:
          raise Error("bpe_decode_seq: " + String(len(out)) + " bytes do not fit " + String(cap))
      return out^
-@@ -657,6 +669,9 @@
+@@ -623,6 +635,9 @@
                  + " is outside [0, " + String(nv) + ")"
              )
      var out = handle.tok.value().decode_bytes(ids)
@@ -54,7 +54,7 @@
      lens.append(len(out))
      joined += out^
  
-@@ -672,6 +687,10 @@
+@@ -638,6 +653,10 @@
      for k in range(n):
          v.offset.append(at)
          at += v.length[k]
@@ -65,7 +65,7 @@
      for k in range(nm):
          if v.merge_left[k] < 0 or v.merge_left[k] >= n or v.merge_right[k] < 0 or v.merge_right[k] >= n:
              raise Error("ValueError: merge " + String(k) + " names an id outside [0, " + String(n) + ")")
-@@ -789,7 +808,7 @@
+@@ -755,7 +774,7 @@
              var a = starts[k]
              for j in range(counts[k]):
                  var v = Int(staged[a + j])
@@ -74,10 +74,10 @@
                  if v > max_id:
                      max_id = v
                  if v > 255:
-@@ -851,6 +870,8 @@
+@@ -817,6 +836,8 @@
      for b in range(batch):
          var start = lo + (base + b * length) % modulus
-         memcpy(dest=dst + b * width, src=src + start, count=width)
+         unsafe_memcpy(dest=dst + b * width, src=src + start, count=width)
 +        for j in range(width):  # SABOTAGE (coverage): every gathered id's low bit flipped
 +            dst[b * width + j] = dst[b * width + j] ^ 1
      return batch * width

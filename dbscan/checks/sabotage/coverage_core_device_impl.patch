@@ -1,9 +1,11 @@
+diff --git a/dbscan/core_device_impl.mojo b/dbscan/core_device_impl.mojo
+index 45f99585eb..5e80ddd3f3 100644
 --- a/dbscan/core_device_impl.mojo
 +++ b/dbscan/core_device_impl.mojo
-@@ -15,10 +15,20 @@
+@@ -15,10 +15,20 @@ and one gather kernel writes the three arrays: integer moves and float32
  copies only, the same bytes as the host column on every vendor.
  """
- from std.gpu import block_dim, block_idx, thread_idx
+ from max.gpu import block_dim, block_idx, thread_idx
 +from std.memory import bitcast
  from max.gpu.host import DeviceBuffer, DeviceContext
  
@@ -21,7 +23,7 @@
  comptime _TPB = 256
  comptime _U8 = MutPointer[UInt8, MutAnyOrigin]
  comptime _I32 = MutPointer[Int32, MutAnyOrigin]
-@@ -136,6 +146,14 @@
+@@ -136,6 +146,14 @@ def dbscan_core_gather(ctx: DeviceContext, xa: Int, la: Int, ca: Int, n: Int, d:
      ctx.enqueue_copy(dst_ptr=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=comp_addr), src_buf=o_comp)
      ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=lab_addr), src_buf=o_lab)
      ctx.synchronize()
