@@ -63,7 +63,11 @@ def close_all(actual: List[Float32], expected: List[Float64], rtol: Float64, ato
     for i in range(len(expected)):  # small-loop(oracle: one block)
         var a = Float64(actual[i])
         var e = expected[i]
-        var ok = (isnan(a) and isnan(e)) if (isnan(a) or isnan(e)) else abs(a - e) <= atol + rtol * abs(e)
+        var ok: Bool
+        if isnan(a) or isnan(e):
+            ok = isnan(a) and isnan(e)
+        else:
+            ok = abs(a - e) <= atol + rtol * abs(e)
         require(ok, label + ": word " + String(i) + " is " + String(actual[i]) + ", reference " + String(e))
 
 
