@@ -512,9 +512,16 @@ def on_device(est, device, fitted=True):
     params = None
     if build is None:
         try:
-            params = dict(est.get_params(deep=False))
-        except TypeError:
-            params = dict(est.get_params())
+            try:
+                params = dict(est.get_params(deep=False))
+            except TypeError:
+                params = dict(est.get_params())
+        except Exception as exc:
+            # A model with no constructor parameters (a forest loaded from an
+            # inference-only archive refuses get_params) is cloned through its
+            # native state instead.
+            twin = _state_twin(est, device, exc)
+            return est if twin is None else twin
         if "device" not in params:
             raise NotChecked(f"{name} declares device= but get_params does not return it")
         current = params["device"]
@@ -572,6 +579,38 @@ def on_device(est, device, fitted=True):
             if type(held) is tuple and len(held) == 3 and type(held[1]) is int:
                 target["_mojolearn_resident_borrowed"] = (held[1], held[2])
                 break
+    return twin
+
+
+def _state_twin(est, device, refused):
+    """The twin of an estimator whose `get_params` refused (`refused`): a
+    model with no constructor parameters, such as a forest loaded from an
+    inference-only archive. It is cloned through its own state
+    (`__getstate__` / `__setstate__`: the fitted model as the native owner
+    packs it) with `device` set in that state, so the twin resolves its own
+    route on `device` and keeps no resident handle of `est`. None when `est`
+    already runs on `device`. A class without that state, or whose state
+    names no device, cannot be cloned and raises NotChecked with the
+    refusal."""
+    cls = type(est)
+    name = cls.__name__
+    if (_raw_fields(est).get("device") or "gpu") == device:
+        return None
+    get_state = getattr(est, "__getstate__", None)
+    if not callable(get_state) or not callable(getattr(cls, "__setstate__", None)):
+        raise NotChecked(f"{name} cannot be cloned on device={device!r}: get_params refused "
+                         f"({type(refused).__name__}: {refused}) and it has no state to clone"[:400]) from refused
+    try:
+        state = get_state()
+        if type(state) is not dict or "device" not in state:
+            raise TypeError("its state names no device")
+        state = dict(state)
+        state["device"] = device
+        twin = cls.__new__(cls)
+        twin.__setstate__(state)
+    except Exception as exc:
+        raise NotChecked(f"{name} cannot be cloned on device={device!r} through its state: "
+                         f"{type(exc).__name__}: {exc}"[:400]) from exc
     return twin
 
 
