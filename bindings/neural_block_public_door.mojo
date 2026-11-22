@@ -591,14 +591,16 @@ def neural_block_execution(mut mods: NativeModules, block: PythonObject, context
 
 def neural_block_init_binding(mut mods: NativeModules, block: PythonObject, weights: PythonObject, kind_value: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = mods.module("builtins")
-    _ = generation_initialize_binding(context["generation_classes"])
-    var admitted_weights = neural_model_weights(mods, weights, context)
-    # `device` (options[0]) is checked in the shared words before the
-    # metadata scan: an unknown value such as b"cpu" is refused as a device
-    # (ValueError), not as a conversion hook of the option tree (TypeError).
+    # `device` (options[0]) is checked in the shared words first, before the
+    # weights or any option is admitted and before any field is written: an
+    # unknown value such as b"cpu" is refused as a device (ValueError), not
+    # as a conversion hook of the option tree (TypeError), and a bad device
+    # beside bad weights is refused as the device.
     # `_neural_block_route` reads the snapshot's copy again for the route.
     if py_type(options) is bi.tuple and len(options) > 0:
         _ = device_unpack(options[0], bi)
+    _ = generation_initialize_binding(context["generation_classes"])
+    var admitted_weights = neural_model_weights(mods, weights, context)
     neural_plain_value(mods, options, 0, context)
     var captured_options = neural_metadata_snapshot(mods, options)
     if py_type(kind_value) is not bi.str:
