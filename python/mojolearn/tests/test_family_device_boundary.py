@@ -57,11 +57,16 @@ def monotone(rows=200, cols=1, seed=3):
 
 # RidgeCV's split path: explicit (train, test) index pairs over the 200 rows of `regression` (two halves, and a
 # third split whose sides overlap neither; no splitter object, no callback).
-RIDGE_SPLITS = [
-    (np.arange(100, 200, dtype=np.int64), np.arange(0, 100, dtype=np.int64)),
-    (np.arange(0, 100, dtype=np.int64), np.arange(100, 200, dtype=np.int64)),
-    (np.arange(0, 150, dtype=np.int64), np.arange(150, 200, dtype=np.int64)),
-]
+def ridge_splits(rows):
+    half, three_quarters = rows // 2, rows * 3 // 4
+    return [
+        (np.arange(half, rows, dtype=np.int64), np.arange(0, half, dtype=np.int64)),
+        (np.arange(0, half, dtype=np.int64), np.arange(half, rows, dtype=np.int64)),
+        (np.arange(0, three_quarters, dtype=np.int64), np.arange(three_quarters, rows, dtype=np.int64)),
+    ]
+
+
+RIDGE_SPLITS = ridge_splits(200)
 
 # (id, class, constructor keywords, data, the fitted arrays compared bit for bit, the methods compared bit for bit)
 CASES = [
@@ -336,7 +341,10 @@ def test_python_operations_per_call_do_not_grow_with_rows(spec, device):
     counts = {}
     for name, rows in (("small", 64), ("large", 8192)):
         x, y = spec[3](rows=rows)
-        model = build(spec, device=device).fit(x, y)
+        # An explicit split list indexes the rows it was written for (a RidgeCV refusal past them is right):
+        # the same three splits over this row count.
+        sized = {"cv": ridge_splits(rows)} if spec[2].get("cv") is RIDGE_SPLITS else {}
+        model = build(spec, device=device, **sized).fit(x, y)
         model.predict(x)                                     # the route is resolved; the next call is a hit
         counts[name] = (_python_events(lambda: model.fit(x, y)), _python_events(lambda: model.predict(x)))
     assert counts["small"] == counts["large"]
