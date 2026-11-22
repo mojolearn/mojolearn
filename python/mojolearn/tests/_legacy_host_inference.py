@@ -432,9 +432,17 @@ def iforest(model, X, want, public=True):
     native method, which (a copy holding no resident token) fits the forest
     again from `_x` and scores it. Equal bytes then prove the resident
     route equals the refit; the kernel's own correctness is a native check."""
+    # A call from inside the package (this module is mojolearn.tests.*) gets
+    # the internal float32 scores; a public caller gets them widened to
+    # float64 (host_tree_wide, exact). The reference returns the form asked
+    # for, as the frozen route did (a99d74bf57 returned the internal float32
+    # where the public float64 was asked for).
     method = ("score_samples", "decision_function", "predict")[want]
     out = getattr(model, method)(X)
-    return out if want == 2 or public else out.astype("<f4")
+    if want == 2:
+        return out
+    out = out.astype("<f4")
+    return out.astype("<f8") if public else out
 
 
 # Frozen copies of the former _labels decode seams (deleted from the package

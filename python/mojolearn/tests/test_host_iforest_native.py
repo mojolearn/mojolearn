@@ -174,13 +174,16 @@ def test_iforest_nonfinite_inputs_preserve_public_exception_message(tmp_path, fi
     else:
         model._x = np.asarray(model._x).copy()
         model._x[0, 0] = value
-    with pytest.raises(Exception) as old:
+    # The reference is the model's own method on a copy (a99d74bf57 removed the
+    # Python kernel entry the frozen route called), so it raises the public
+    # ValueError that wraps the kernel's words, not the kernel's plain Exception.
+    with pytest.raises(ValueError) as old:
         _oracle(model, x, method)
-    assert type(old.value) is Exception
+    assert str(old.value).startswith("Input X contains NaN or infinity (HostIsolationForest: ")
     before = _state(vars(model))
     audit = audit_native_call(getattr(model, method), x)
     _refused(audit)
-    assert str(audit.exception) == f"Input X contains NaN or infinity (HostIsolationForest: {old.value})"
+    assert str(audit.exception) == str(old.value)
     assert _state(vars(model)) == before
 
 
