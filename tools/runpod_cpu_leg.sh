@@ -206,7 +206,7 @@ POD_NAME="mojolearn-cpu-$LANE-$STAMP"
 # composed artifacts (dry run and rent alike)
 # ---------------------------------------------------------------------------
 make_source() {
-    ( cd "$WORKTREE" && git ls-files -z -- . ':!bench/results' ':!mamba/corpus' ':!bench/oracle_*' ':!bench/minentropy_oracle.txt' ':!experiments/six_lane_integration' ':!experiments/performance_ideas/measurements' ) > "$TMPD/files0"
+    ( cd "$WORKTREE" && git ls-files -z -- . ':!bench/results' ':!verification/records' ':!mamba/corpus' ':!bench/oracle_*' ':!bench/minentropy_oracle.txt' ':!experiments/six_lane_integration' ':!experiments/performance_ideas/measurements' ) > "$TMPD/files0"
     # The corpus tensors stay home, but its small manifests ship: the selector's
     # data-file rule reads them by path (tools/test_lane_select_harness.py's
     # mamba/corpus/mamba2/*/manifest.json case raised StopIteration on the pod

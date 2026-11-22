@@ -217,7 +217,7 @@ api() { curl -s --max-time 20 -H "Authorization: Bearer $TOK" "$@"; }
 # SHIP THE COMMIT, NOT THE WORKING TREE: the whole tree at $COMMIT minus the
 # result, corpus and oracle data, which no native-inventory file lives under.
 log "archiving $COMMIT"
-git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!bench/evidence' ':!mamba/corpus' ':!bench/oracle*' \
+git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!verification/records' ':!bench/evidence' ':!mamba/corpus' ':!bench/oracle*' \
   | gzip > "$TMPD/src.tgz" || die "git archive failed"
 ARCHIVE_BYTES=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
 # The cap keeps the upload short on the home uplink. 0.8.14's archive was

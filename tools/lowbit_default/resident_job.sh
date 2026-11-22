@@ -61,7 +61,7 @@ $PX python tools/lowbit_default/default_gate.py --model "$MODEL" --phases genera
 for arm in blocks head; do
     S=/root/lbd/sab_$arm
     rm -rf "$S"; mkdir -p "$S"
-    tar --exclude=./.pixi --exclude=./bench/results --exclude=./.git -cf - . | tar -xf - -C "$S"
+    tar --exclude=./.pixi --exclude=./bench/results --exclude=./verification/records --exclude=./.git -cf - . | tar -xf - -C "$S"
     F=$S/bindings/_mojolearn_transformer.mojo
     if [ $arm = blocks ]; then
         python3 - "$F" <<'PY'

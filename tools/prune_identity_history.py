@@ -214,7 +214,7 @@ RETAINED_NOT_A_REFERENCE = (".source-report.json.gz",)
 def code_refs(root, names):
     """Names a tracked non-doc file outside bench/results/ mentions."""
     out = git(root, "grep", "-h", "-o", "-I", "-E", r"20[0-9]{2}-[0-9]{2}-[0-9]{2}[A-Za-z0-9._-]*",
-              "--", ".", ":!bench/results", ":!docs", ":!*.md", check=False)
+              "--", ".", ":!bench/results", ":!verification/records", ":!docs", ":!*.md", check=False)
     return tokens(out.stdout, names)
 
 

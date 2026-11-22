@@ -1500,7 +1500,7 @@ for line in sys.stdin:
         git archive --format=tar "$_archive_ref" -- $LEG_ARCHIVE_PATHS_MAMBA
     else
         git archive --format=tar "$_archive_ref" -- . \
-            ':!bench/results'
+            ':!bench/results' ':!verification/records'
     fi
 }
 
@@ -1544,7 +1544,7 @@ PUBLIC_INVENTORY
                 "$OUT/public_source_inventory_local.json") || leg_die 'Missing release public-source inventory'
         fi
     else
-        _public_paths=". :!bench/results"
+        _public_paths=". :!bench/results :!verification/records"
     fi
     # The fixed path list is data, never executable shell input.
     case "$_public_paths" in *[!A-Za-z0-9_./:!\ -]*) leg_die 'Unsafe public archive pathspec' ;; esac
@@ -1618,7 +1618,7 @@ leg_check_tree_clean() {
     # never enters its archive. An uncommitted edit to a tracked file still
     # refuses.
     _untracked=normal
-    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=". :!bench/results"; _untracked=no; fi
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=". :!bench/results :!verification/records"; _untracked=no; fi
     # The list is a deliberate word list, so it is unquoted.
     # shellcheck disable=SC2086
     _dirty=$(git status --porcelain --untracked-files=$_untracked -- $_paths 2>/dev/null || true)

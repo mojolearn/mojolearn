@@ -23,7 +23,7 @@ env MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BU
 echo "== sabotage tree"
 S=/root/lb/sabtree
 rm -rf "$S"; mkdir -p "$S"
-tar --exclude=./.pixi --exclude=./bench/results --exclude=./.git -cf - . | tar -xf - -C "$S"
+tar --exclude=./.pixi --exclude=./bench/results --exclude=./verification/records --exclude=./.git -cf - . | tar -xf - -C "$S"
 (cd "$S" && patch -p1 < gemm/checks/sabotage/int15_device_value_flip.patch && patch -p1 < tools/lowbit_blocks/int15_tuned_epilogue_flip.patch) || { echo "patch failed"; exit 4; }
 cat "$S/gemm/checks/gemm_int15.mojo" "$S/gemm/checks/gemm_int15_tuned.mojo" | grep -c "comptime if True:  # SABOTAGE" | sed 's/^/sabotage sites in the copy: /'
 for b in build_linalg build_transformer; do

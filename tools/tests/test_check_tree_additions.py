@@ -89,6 +89,9 @@ CASES = [
         "bench/results/r2-index.tsv",
         "bench/results/CELLS_INDEX.tsv",
         "bench/results/identity_break/INDEX.tsv",
+        "verification/README.md",
+        "verification/records/identity/2026-11-21/cpu.identical.json",
+        "verification/references/mamba/case/manifest.json",
         "docs/plans/NEW_PLAN.md",
         "tools/new_tool.py",
     ], [], 0, []),
@@ -96,6 +99,8 @@ CASES = [
      ["bench/results/nvc-measure/2026-11-21/summary.json", "~/mojolearn-evidence/"]),
     ("log under identity_break refused", ["bench/results/identity_break/2026-11-21/build.log"], [], 1,
      ["identity_break/2026-11-21/build.log", "logs belong in ~/mojolearn-evidence/"]),
+    ("new log under verification refused", ["verification/records/identity/2026-11-21/build.log"], [], 1,
+     ["verification/records/identity/2026-11-21/build.log", "logs belong in ~/mojolearn-evidence/"]),
     ("log under a live board refused", ["bench/results/bench_board/run.log"], [], 1, ["bench_board/run.log"]),
     ("new file in a repo-data bucket refused", ["experiments/six_lane_integration/measurements/20261006/x.json"], [],
      1, ["measurements/20261006/x.json", "tools/repo_data.py"]),
@@ -144,11 +149,20 @@ def run_sequence_cases():
     write(clone, "notes/run.json")
     git(clone, "add", "-A")
     git(clone, "commit", "-q", "-m", "notes")
+    os.makedirs(os.path.join(clone, "bench/results/moved"), exist_ok=True)  # git mv needs the target directory
     git(clone, "mv", "notes/run.json", "bench/results/moved/run.json")
     git(clone, "commit", "-q", "-m", "move")
     code, err = check(clone, git(clone, "rev-parse", "HEAD"))
     out.append(("rename into bench/results is refused",
                 [] if code == 1 and "bench/results/moved/run.json" in err else [f"exit {code}: {err[:300]}"]))
+    # 3b. a tracked record (its log included) moved into verification/ with git mv is not an addition
+    clone = scratch()
+    os.makedirs(os.path.join(clone, "verification/records"), exist_ok=True)
+    git(clone, "mv", "bench/results/old_run", "verification/records/old_run")
+    git(clone, "commit", "-q", "-m", "move")
+    code, err = check(clone, git(clone, "rev-parse", "HEAD"))
+    out.append(("git mv of a record with its log into verification/ passes",
+                [] if code == 0 else [f"exit {code}: {err[:300]}"]))
     # 4. many offenders: at most 20 named, then a count
     clone = scratch()
     sha = commit(clone, [f"bench/results/many/f{i:02d}.json" for i in range(25)])
@@ -192,6 +206,9 @@ class TreeAdditions(unittest.TestCase):
             "bench/results/release_evidence/a/b.json": False,
             "bench/results/r2-index.tsv": False,
             "bench/results/CELLS_INDEX.tsv": False,
+            "verification/records/a/b.json": False,
+            "verification/records/a/b.log": True,
+            "verification/README.md": False,
             "docs/handoffs/README.md": False,
             "docs/handoffs/H.md": True,
         }

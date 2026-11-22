@@ -19,7 +19,7 @@ import subprocess
 import sys
 
 # Paths that cannot change a record's bits.
-INERT = ("bench/results/", "docs/", "docs-site/", "release/", "tools/", "experiments/", "paper/",
+INERT = ("bench/results/", "verification/records/", "docs/", "docs-site/", "release/", "tools/", "experiments/", "paper/",
          "archive/", "parked/", "CHANGELOG.md", "python/pyproject.toml", "pyproject.toml", ".github/",
          # Wheel assembly and artifact checks (2026-10-13, 0844b admit: 8f9ef96d6 stopped shipping the paper
          # PDF): they pick which files go into a wheel, never compile or run a kernel. packaging/portable_math

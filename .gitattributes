@@ -1,5 +1,7 @@
 # Keep raw verifier records and release receipts in DOI source archives.
 /bench/results/* export-ignore
+# verification/records (verification/README.md): the same rule as bench/results, which they came from
+/verification/records/* export-ignore
 /bench/results/identity_break -export-ignore
 /bench/results/release_verification -export-ignore
 /bench/results/release089 -export-ignore

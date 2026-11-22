@@ -179,7 +179,7 @@ cmd_up() {
     [ -z "$busy" ] || die "a GPU or mojolearn droplet exists: $busy; one GPU droplet at a time"
 
     local commit; commit=$(git rev-parse HEAD)
-    git archive --format=tar HEAD -- . ':!bench/results' ':!mamba/corpus' ':!bench/oracle*' \
+    git archive --format=tar HEAD -- . ':!bench/results' ':!verification/records' ':!mamba/corpus' ':!bench/oracle*' \
         ':!bench/minentropy_oracle.txt' ':!*.bin' ':!archive' ':!upstream' ':!docs' ':!paper' \
         | gzip -9 > "$TMPD/src.tgz"
     local bytes sha; bytes=$(wc -c < "$TMPD/src.tgz" | tr -d ' '); sha=$(sha256_of "$TMPD/src.tgz")

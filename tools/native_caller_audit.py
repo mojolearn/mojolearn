@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from boundary_keys_plain import plain  # noqa: E402
 SUFFIXES = (".py", ".mojo", ".sh", ".yml", ".yaml", ".toml")
 #: never a caller: prose, removed code, stored results
-SKIP_DIRS = ("docs/", "experiments/", "bench/results/", "docs-site/")
+SKIP_DIRS = ("docs/", "experiments/", "bench/results/", "verification/records/", "docs-site/")
 #: files that only LIST native names (manifests checked against the binding, generated op tables, coverage
 #: catalogues); a name they hold is not called by them
 MANIFESTS = (

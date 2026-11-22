@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 import identity_columns as ic  # noqa: E402
 import lane_select  # noqa: E402
 
-EXCLUDED = ("experiments", "bench/results", "docs")
+EXCLUDED = ("experiments", "bench/results", "verification/records", "docs")
 
 
 def _fake_git(tmp_path, listing):

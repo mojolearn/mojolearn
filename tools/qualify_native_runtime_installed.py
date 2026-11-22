@@ -562,7 +562,7 @@ def native_source_inventory(source, commit, committed, git_root):
                 if rel.endswith((".mojo", ".mojopkg")) or rel in ("pixi.toml", "pixi.lock")}
     missing = [rel for rel in selected if not (source / rel).exists()]
     for rel in missing:
-        require(rel.startswith("bench/results/") and not (source / rel).is_symlink(),
+        require(rel.startswith(("bench/results/", "verification/records/")) and not (source / rel).is_symlink(),
                 "missing requested native source: " + rel)
     ancestors = {str(parent) for rel in missing
                  for parent in (PurePosixPath(rel), *PurePosixPath(rel).parents)

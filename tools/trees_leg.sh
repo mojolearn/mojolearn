@@ -185,7 +185,7 @@ PY
 cmd_ship() {
     current_pod
     say "shipping git archive of HEAD ($(git rev-parse --short HEAD)), source only"
-    git archive --format=tar HEAD -- . ':!bench/results' ':!mamba/corpus' ':!bench/oracle*' ':!archive' ':!upstream' ':!docs' ':!paper' \
+    git archive --format=tar HEAD -- . ':!bench/results' ':!verification/records' ':!mamba/corpus' ':!bench/oracle*' ':!archive' ':!upstream' ':!docs' ':!paper' \
         | gzip > "$TMPD/src.tgz"
     say "  $(wc -c < "$TMPD/src.tgz" | tr -d ' ') bytes compressed"
     pod_ssh 'rm -rf /root/mojolearn && mkdir -p /root/mojolearn' > /dev/null
