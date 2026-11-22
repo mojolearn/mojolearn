@@ -123,8 +123,6 @@ NOT_MEASURED = (
     # graph-capture backend, 2ce2b0d7b9; the inventory no longer lists it.)
     # multi-GPU: excluded from the board by the standing rule (Andrew 2026-09-29, COVERAGE.md)
     ("mojolearn.Parallel*", "multi-GPU, excluded from the single-GPU board (Andrew 2026-09-29, COVERAGE.md)"),
-    ("mojolearn.Pooled*", "multi-GPU model pool, excluded from the single-GPU board (COVERAGE.md)"),
-    ("mojolearn.Offloaded*", "multi-GPU/offload trainer, excluded from the single-GPU board (COVERAGE.md)"),
     ("mojolearn.parallel_*", "multi-GPU (explicit devices / worker processes), excluded from the single-GPU "
                              "board (COVERAGE.md)"),
     ("mojolearn.models.Parallel*", "multi-GPU model, excluded from the single-GPU board (COVERAGE.md)"),
