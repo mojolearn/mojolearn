@@ -9,6 +9,10 @@ refusals in their order, and the model halves of the engine selection and of
 the resident admission answer as the door's record reads did. The cases are
 a few word compares each (microseconds together), so they run in one unit:
 splitting them across the host pool would cost more than the work.
+
+The resident session lease (`causal_lease_*`): the word's rule case by
+case, then the test-and-set under contention: every host worker tries to
+take ONE word many times, and no two are ever inside it together.
 """
 from checks.native_tests.runner import Check, Column, Report, require
 from core.causal_layer_run import (
@@ -20,7 +24,11 @@ from core.causal_owner import (
     causal_state_buffer_used, causal_state_buffer_contiguous, causal_state_buffer_address,
     CAUSAL_STATE_K, CAUSAL_STATE_V, CAUSAL_STATE_CONV, CAUSAL_STATE_AFFINE_B, CAUSAL_STATE_XBC,
     CAUSAL_STATE_DTRAW, CAUSAL_STATE_BUFFERS,
+    CausalLeaseWord, causal_lease_load, causal_lease_take, causal_lease_release, causal_lease_expose,
+    CAUSAL_LEASE_BUSY, CAUSAL_LEASE_EXPOSED, CAUSAL_LEASE_TAKEN, CAUSAL_LEASE_HELD, CAUSAL_LEASE_PRIVATE,
 )
+from core.host_parallel import host_parallelize
+from std.atomic import Atomic, Ordering
 
 
 def _refusal(words: CausalModelWords, has_state: Bool, have: Int, capacity: Int, length: Int) -> String:
@@ -172,10 +180,92 @@ def run_state_checks() raises:
     require(refused == "generation: internal model and state arrays must be C-contiguous", "contiguity")
 
 
+comptime _LEASE_TASKS = 64
+comptime _LEASE_ROUNDS = 20000
+
+
+def run_lease_checks() raises:
+    # The rule, one holder at a time.
+    var storage = List[Int64](length=4, fill=0)
+    var word = CausalLeaseWord(unsafe_from_address=Int(storage.unsafe_ptr()))
+    require(causal_lease_load(word) == 0, "a new lease is free")
+    require(causal_lease_take(word) == CAUSAL_LEASE_TAKEN, "a free lease is taken")
+    require(causal_lease_load(word) == CAUSAL_LEASE_BUSY, "taken is busy")
+    require(causal_lease_take(word) == CAUSAL_LEASE_HELD, "a second caller does not get the kept sessions (it runs private)")
+    require(causal_lease_take(word) == CAUSAL_LEASE_HELD, "nor a third: losing changes nothing")
+    require(causal_lease_load(word) == CAUSAL_LEASE_BUSY, "a loser leaves the word to its holder")
+    require(not causal_lease_release(word), "released, not exposed")
+    require(causal_lease_load(word) == 0, "free again")
+    require(causal_lease_take(word) == CAUSAL_LEASE_TAKEN, "taken after a release")
+    # Exposed under a running holder: the holder keeps running, learns it
+    # at its release, and nobody takes the lease afterwards.
+    require(not causal_lease_expose(word), "exposing a held lease does not take it")
+    require(causal_lease_load(word) == (CAUSAL_LEASE_BUSY | CAUSAL_LEASE_EXPOSED), "busy and exposed")
+    require(causal_lease_take(word) == CAUSAL_LEASE_PRIVATE, "an exposed lease is never taken, even while held")
+    require(causal_lease_release(word), "the holder's release reports the exposure")
+    require(causal_lease_load(word) == CAUSAL_LEASE_EXPOSED, "exposed stays")
+    require(causal_lease_take(word) == CAUSAL_LEASE_PRIVATE, "exposed: private sessions, no lease")
+    require(causal_lease_load(word) == CAUSAL_LEASE_EXPOSED, "a private caller holds nothing")
+    require(causal_lease_release(word), "a release with nothing held keeps the exposure")
+    require(causal_lease_expose(word), "exposing a free, exposed lease again holds it for the drop")
+    require(causal_lease_release(word), "and gives it back exposed")
+    require(causal_lease_load(word) == CAUSAL_LEASE_EXPOSED, "exposure is monotonic")
+    # Exposing a free lease takes it for the drop of the kept sessions.
+    var second = word + 1
+    require(causal_lease_expose(second), "exposing a free lease holds it")
+    require(causal_lease_load(second) == (CAUSAL_LEASE_BUSY | CAUSAL_LEASE_EXPOSED), "held for the drop")
+    require(causal_lease_release(second), "then released, exposed")
+    # The test-and-set under contention: slot 2 is the lease, slot 3 counts
+    # the holders inside it. Every task wins the kept sessions or loses
+    # (and would run private); a winner that ever finds another holder
+    # inside records it.
+    var lease = word + 2
+    var inside = word + 3
+    var taken = List[Int64](length=_LEASE_TASKS, fill=0)
+    var refused = List[Int64](length=_LEASE_TASKS, fill=0)
+    var broken = List[Int64](length=_LEASE_TASKS, fill=0)
+    var tp = taken.unsafe_ptr()
+    var rp = refused.unsafe_ptr()
+    var bp = broken.unsafe_ptr()
+    def contend(task: Int) {imm lease, imm inside, imm tp, imm rp, imm bp}:
+        var mine = Int64(0)
+        var lost = Int64(0)
+        var bad = Int64(0)
+        for _ in range(_LEASE_ROUNDS):  # driver-loop: over this task's attempts on the one shared word
+            var verdict = causal_lease_take(lease)
+            if verdict == CAUSAL_LEASE_TAKEN:
+                if Atomic[Int64].fetch_add(inside, Int64(1)) != 0:
+                    bad += 1
+                mine += 1
+                if Atomic[Int64].fetch_add(inside, Int64(-1)) != 1:
+                    bad += 1
+                _ = causal_lease_release(lease)
+            elif verdict == CAUSAL_LEASE_HELD:
+                lost += 1
+            else:
+                bad += 1
+        tp.unsafe_store(task, mine)
+        rp.unsafe_store(task, lost)
+        bp.unsafe_store(task, bad)
+    host_parallelize(contend, _LEASE_TASKS)
+    var total = Int64(0)
+    var holders = Int64(0)
+    for task in range(_LEASE_TASKS):  # small-loop(the tasks' three counters)
+        require(broken[task] == 0, "two holders were inside the lease together")
+        total += taken[task] + refused[task]
+        holders += taken[task]
+    require(total == Int64(_LEASE_TASKS * _LEASE_ROUNDS), "every attempt won the lease or lost it")
+    require(holders > 0, "the lease was taken")
+    require(causal_lease_load(lease) == 0, "free after the last release")
+    require(causal_lease_load(inside) == 0, "nobody left inside")
+    _ = storage
+
+
 def run_cases(column: Column, mut report: Report):
     try:
         run_checks()
         run_state_checks()
+        run_lease_checks()
     except error:
         report.abort(error)
 

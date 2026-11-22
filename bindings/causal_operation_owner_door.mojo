@@ -16,7 +16,11 @@ from bindings.native_prepared_owner_unpack import prepared_get, prepared_put, pr
 from core.shared_slot import SharedSlot
 from bindings.py_optional import py_present
 # RUN (lane rs-neural): the live field names, no Python import.
-from training.causal_operation_owner_run import _causal_model_runtime_names, _causal_block_runtime_names
+from training.causal_operation_owner_run import _causal_model_runtime_names, _causal_block_runtime_names, _causal_model_copied_names
+from core.causal_owner import (
+    CausalLeaseWord, causal_lease_load, causal_lease_expose, causal_lease_release,
+    CAUSAL_LEASE_BUSY, CAUSAL_LEASE_EXPOSED,
+)
 from bindings.causal_keys_unpack import causal_keys, CausalKeys
 from bindings.py_balanced import py_item
 from providers.python.generation_metadata_pyapi_door import GenerationOperationSnapshot
@@ -171,16 +175,153 @@ struct CausalModelOwner(Movable, Writable):
 
     var words: CausalModelWords
     var snapshot: Optional[GenerationOperationSnapshot]
+    # The handle of the model's lease (`CausalLease`), None until the first
+    # operation that needs it (`causal_model_lease`, GIL held). The lease is
+    # the MODEL's, not this generation's: every owner of one model holds the
+    # same one, so exposure and a running holder are seen across generations.
+    var lease: PythonObject
 
     def __init__(out self, var words: CausalModelWords):
         self.words = words^
         self.snapshot = None
+        self.lease = PythonObject(None)
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("CausalModelOwner(generation=", self.words.generation, ")")
 
     def write_repr_to(self, mut writer: Some[Writer]):
         self.write_to(writer)
+
+
+comptime _CAUSAL_LEASE_SLOT = "causal_lease_v1"
+
+
+struct CausalLease(Movable, Writable):
+    """The resident session lease of one public CausalLM model (lane
+    causal-lease, 2026-11-25): who may use the model's kept resident
+    sessions, as ONE live word, and the kept sessions themselves.
+
+    Handle: Python-held (registered once, by the tokenizer host binding),
+    kept in the model's prepared records (`_CAUSAL_LEASE_SLOT`, weakly keyed
+    by the public model) for the model's life, and held by each model owner
+    that used it. `load_state_dict` drops it with the model record (the
+    arrays handed out before are no longer the model's).
+
+    The rule is the word's (core/causal_owner.mojo `causal_lease_take`,
+    `causal_lease_release`, `causal_lease_expose`): one compare-and-set
+    takes it; a caller that loses runs on a private session set of its own
+    and never touches the kept one; an exposed model keeps nothing. No reader tests a copy taken at operation entry.
+
+    `kept` is read and written only by the caller that holds the word busy
+    (and with the GIL held, as every Python reference is): None, or the
+    tuple (key, model session owner, layer sessions) a holder left for the
+    next one. The model's `_resident_busy`, `_parameters_exposed` and
+    `_resident_sessions` attributes are a published mirror of this value
+    (`causal_lease_publish`, at the PACK of each public operation that used
+    it); nothing reads them back except the exposure bit of a new lease."""
+
+    # One word at a fixed heap address for the lease's life (a struct move
+    # moves the list header, not its storage).
+    var word: List[Int64]
+    var live: CausalLeaseWord
+    var kept: PythonObject
+
+    def __init__(out self):
+        var word = List[Int64](length=1, fill=0)
+        self.live = CausalLeaseWord(unsafe_from_address=Int(word.unsafe_ptr()))
+        self.word = word^
+        self.kept = PythonObject(None)
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("CausalLease(native)")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        self.write_to(writer)
+
+
+def _causal_lease_of(mut mods: NativeModules, model: PythonObject, live: PythonObject) raises -> PythonObject:
+    # The lease of the public model `model`: its prepared record, or a new
+    # one put there. Once per model owner (and per call of the cold public
+    # doors that hold no owner); never per token. `live` is the model's own
+    # field dictionary or None: a new lease takes the exposure it shows, so
+    # a model whose record cannot be kept (no weak reference) stays exposed.
+    var held = prepared_get(mods, _CAUSAL_LEASE_SLOT, model)
+    if held is not None:
+        return held
+    held = PythonObject(alloc=CausalLease())
+    if live is not None:
+        var nk = causal_keys()
+        if py_get(live, nk[].k__parameters_exposed, PythonObject(False)) is PythonObject(True):
+            _ = causal_lease_expose(held.downcast_value_ptr[CausalLease]()[].live)
+            _ = causal_lease_release(held.downcast_value_ptr[CausalLease]()[].live)
+    prepared_put(mods, _CAUSAL_LEASE_SLOT, model, held)
+    return held
+
+
+def causal_model_lease(mut mods: NativeModules, model: PythonObject) raises -> PythonObject:
+    """UNPACK: the handle of the model's lease. `model` is an operation's
+    capture (one interned read for its owner, then the owner's own field;
+    the prepared record is read once per owner) or the public model (the
+    prepared record). The caller reads
+    `handle.downcast_value_ptr[CausalLease]()` and keeps the handle named
+    past its last use of the pointer. Call with the GIL held."""
+    if py_type(model) is not mods.module("types").SimpleNamespace:
+        return _causal_lease_of(mods, model, PythonObject(None))
+    var held = causal_model_owner(mods, model)
+    var owner = held.downcast_value_ptr[CausalModelOwner]()
+    if owner[].lease is None:
+        var nk = causal_keys()
+        var fields = causal_snapshot_fields(mods, model)
+        owner[].lease = _causal_lease_of(mods, py_item(fields, nk[].k__causal_original), py_get(fields, nk[].k__causal_live_fields))
+    var lease = owner[].lease
+    _ = held
+    return lease
+
+
+def causal_lease_publish(lease_held: PythonObject, live: PythonObject) raises:
+    """PACK: the read-only mirror of the lease on the model's own field
+    dictionary: `_resident_busy`, `_parameters_exposed`, `_resident_sessions`
+    as the LIVE word and kept sessions are now. Three writes by interned
+    key, once per public operation that used the lease; never per token."""
+    var nk = causal_keys()
+    var lease = lease_held.downcast_value_ptr[CausalLease]()
+    var word = causal_lease_load(lease[].live)
+    py_setitem(live, nk[].k__resident_busy, PythonObject((word & CAUSAL_LEASE_BUSY) != 0))
+    py_setitem(live, nk[].k__parameters_exposed, PythonObject((word & CAUSAL_LEASE_EXPOSED) != 0))
+    py_setitem(live, nk[].k__resident_sessions, lease[].kept)
+    _ = lease_held
+
+
+def causal_lease_mirror(mut mods: NativeModules, model: PythonObject) raises:
+    """PACK of a public operation: publish the mirror when this operation's
+    capture used the lease (its owner holds the handle); nothing otherwise."""
+    if model is None or py_type(model) is not mods.module("types").SimpleNamespace:
+        return
+    var fields = causal_snapshot_fields(mods, model)
+    var nk = causal_keys()
+    var held = py_get(fields, nk[].k__causal_native_model)
+    if held is None:
+        return
+    var lease_held = held.downcast_value_ptr[CausalModelOwner]()[].lease
+    if lease_held is None:
+        return
+    var live = py_get(fields, nk[].k__causal_live_fields)
+    if live is None:
+        return
+    causal_lease_publish(lease_held, live)
+    _ = held
+
+
+def causal_model_generating(mut mods: NativeModules, model: PythonObject) raises -> Bool:
+    """Whether a holder has the public model's lease right now (the live
+    word; `load_state_dict` refuses on it). A model that never used its
+    lease has none and is not generating."""
+    var held = prepared_get(mods, _CAUSAL_LEASE_SLOT, model)
+    if held is None:
+        return False
+    var busy = (causal_lease_load(held.downcast_value_ptr[CausalLease]()[].live) & CAUSAL_LEASE_BUSY) != 0
+    _ = held
+    return busy
 
 
 def causal_model_owner_build(fields: PythonObject) raises -> PythonObject:
@@ -565,7 +706,7 @@ def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, con
             py_setitem(fields, names[i], live[names[i]])
     py_setitem(fields, nk[].k__causal_original, model)
     py_setitem(fields, nk[].k__causal_live_fields, live)
-    for name in ["kind", "d_model", "vocab_size", "n_layers", "norm_eps", "numeric_profile", "device", "weight_format", "max_positions", "_native_vendor", "_native_numeric_mode", "_parameters_exposed", "_resident_busy", "_closed", "_failed"]:  # driver-loop: over captured model scalar metadata
+    for name in ["kind", "d_model", "vocab_size", "n_layers", "norm_eps", "numeric_profile", "device", "weight_format", "max_positions", "_native_vendor", "_native_numeric_mode", "_closed", "_failed"]:  # driver-loop: over captured model scalar metadata
         if py_contains(fields, name):
             neural_plain_value(mods, fields[name], 0, context)
             py_setitem(fields, name, _causal_native_plain(mods, fields[name], context))
@@ -618,14 +759,6 @@ def _causal_model_capture_full(mut mods: NativeModules, model: PythonObject, con
                 seen[identity] = block
             _ = py_call(captured.append, block)
         py_setitem(fields, nk[].k__native_block_fields, captured)
-    var resident = py_get(fields, nk[].k__resident_sessions)
-    if resident is not None:
-        if (py_type(resident) is not bi.tuple and py_type(resident) is not bi.list) or len(resident) != 3:
-            raise Error("TypeError: CausalLM resident cache requires its native owner record")
-        neural_plain_value(mods, resident[0], 0, context)
-        if py_type(resident[2]) is not bi.list and py_type(resident[2]) is not bi.tuple:
-            raise Error("TypeError: CausalLM resident sessions require native owner slots")
-        py_setitem(fields, nk[].k__resident_sessions, Python.tuple(neural_metadata_snapshot(mods, resident[0]), resident[1], py_call(bi.list, resident[2])))
     return _causal_namespace(mods, fields)
 
 
@@ -638,6 +771,10 @@ def causal_model_record_drop(mut mods: NativeModules, model: PythonObject) raise
     the model again and builds a new owner, so the generation moves on and the
     checkpoint fingerprint is hashed again from the weights it then holds."""
     prepared_drop(mods, _CAUSAL_MODEL_SLOT, model)
+    # The lease goes with it: the load replaced every array, so the arrays
+    # `parameters()` handed out earlier are no longer the model's and the
+    # kept sessions hold the old weights.
+    prepared_drop(mods, _CAUSAL_LEASE_SLOT, model)
 
 
 def _causal_model_names() raises -> PythonObject:
@@ -646,7 +783,7 @@ def _causal_model_names() raises -> PythonObject:
         names[].model = Python.tuple("plan", "config", "kind", "d_model", "vocab_size", "n_layers", "norm_eps",
         "numeric_profile", "device", "weight_format", "max_positions", "_embed", "_norm", "_head", "_blocks",
         "_native_entries", "_native_vendor", "_native_numeric_mode", "_head_int15", "_runtime",
-        "_parameters_exposed", "_resident_busy", "_resident_sessions", "_decode_program", "_closed", "_failed", "layer_devices", "_worker_index", "_pool", "_pools", "_causal_entries_owner")
+        "_decode_program", "_closed", "_failed", "layer_devices", "_worker_index", "_pool", "_pools", "_causal_entries_owner")
     return names[].model
 
 
@@ -733,14 +870,14 @@ def _causal_runtime_word(mut mods: NativeModules, fields: PythonObject, live: Py
     # The full capture's per-name copy and normalization of one runtime word.
     if py_contains(live, name):
         py_setitem(fields, name, live[name])
-        # `_resident_sessions` and `_decode_program` hold the model's native
+        # `_decode_program` holds the model's native
         # session owner (core/causal_session_handles.mojo CausalSessionHandles,
         # None before the first generation): retained, never scanned as plain
         # metadata. 2026-11-14: the second generate() of a model was refused
         # ("neural metadata requires native scalar/container values") because
         # the first had cached its decode program here (L40S smoke,
         # causal-lm-generate 162m).
-        if name != "_resident_sessions" and name != "_decode_program":
+        if name != "_decode_program":
             neural_plain_value(mods, fields[name], 0, context)
             py_setitem(fields, name, _causal_native_plain(mods, fields[name], context))
     else:
@@ -857,7 +994,10 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
         py_setitem(fields, nk[].k__causal_live_fields, live)
         # The private original-parameter mapping is read-only after capture;
         # the shallow template copy already retains it without another dict.
-        var runtime_names = _causal_model_runtime_names()
+        # The lease words are not copied (lane causal-lease): three reads,
+        # a metadata snapshot of the kept key and a list copy of the kept
+        # sessions left every public operation's capture.
+        var runtime_names = _causal_model_copied_names()
         for name in runtime_names:  # small-loop(runtime-owned model words)
             _causal_runtime_word(mods, fields, live, name, context)
         py_setitem(fields, nk[].k__causal_entries_identity, py_item(live, nk[].k__native_entries))
@@ -900,14 +1040,6 @@ def causal_model_capture(mut mods: NativeModules, model: PythonObject, context: 
                 seen[identity] = block
             _ = py_call(captured.append, block)
         py_setitem(fields, nk[].k__native_block_fields, captured)
-        var resident = py_get(fields, nk[].k__resident_sessions)
-        if resident is not None:
-            if (py_type(resident) is not bi.tuple and py_type(resident) is not bi.list) or len(resident) != 3:
-                raise Error("TypeError: CausalLM resident cache requires its native owner record")
-            neural_plain_value(mods, resident[0], 0, context)
-            if py_type(resident[2]) is not bi.list and py_type(resident[2]) is not bi.tuple:
-                raise Error("TypeError: CausalLM resident sessions require native owner slots")
-            py_setitem(fields, nk[].k__resident_sessions, Python.tuple(neural_metadata_snapshot(mods, resident[0]), resident[1], py_call(bi.list, resident[2])))
         return captured_model
     # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
     var key = Optional[PythonObject]()

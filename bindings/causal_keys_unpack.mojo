@@ -67,7 +67,9 @@ struct CausalKeys(Defaultable, Movable):
     var k__opts_flags: PythonObject
     var k__opts_tail: PythonObject
     var k__owner: PythonObject
+    var k__parameters_exposed: PythonObject
     var k__prefill_session: PythonObject
+    var k__resident_busy: PythonObject
     var k__resident_session: PythonObject
     var k__resident_sessions: PythonObject
     var k__runtime: PythonObject
@@ -239,7 +241,9 @@ struct CausalKeys(Defaultable, Movable):
         self.k__opts_flags = PythonObject(None)
         self.k__opts_tail = PythonObject(None)
         self.k__owner = PythonObject(None)
+        self.k__parameters_exposed = PythonObject(None)
         self.k__prefill_session = PythonObject(None)
+        self.k__resident_busy = PythonObject(None)
         self.k__resident_session = PythonObject(None)
         self.k__resident_sessions = PythonObject(None)
         self.k__runtime = PythonObject(None)
@@ -415,7 +419,9 @@ def _causal_keys_fill(nk: UnsafePointer[CausalKeys, MutUntrackedOrigin]) raises:
     nk[].k__opts_flags = py_key("_opts_flags")
     nk[].k__opts_tail = py_key("_opts_tail")
     nk[].k__owner = py_key("_owner")
+    nk[].k__parameters_exposed = py_key("_parameters_exposed")
     nk[].k__prefill_session = py_key("_prefill_session")
+    nk[].k__resident_busy = py_key("_resident_busy")
     nk[].k__resident_session = py_key("_resident_session")
     nk[].k__resident_sessions = py_key("_resident_sessions")
     nk[].k__runtime = py_key("_runtime")

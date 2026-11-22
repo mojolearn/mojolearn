@@ -15,7 +15,7 @@ from std.os import getenv
 from providers.python.operation_lock_pyapi_door import operation_lock_create
 from bindings.generation_buffers_door import GENERATION_BOUNDARY, generation_initialize_binding, generation_array, generation_array_snapshot, generation_address, py_ints
 from bindings.causal_lm_public_door import causal_lm_admit_binding, causal_public_connect, _causal_model_fields, _native_function, _native_entry_fields, _native_has_entry, _causal_array_guard, causal_entry_key
-from bindings.causal_operation_owner_door import _causal_namespace, causal_snapshot_fields, causal_model_record_drop
+from bindings.causal_operation_owner_door import _causal_namespace, causal_snapshot_fields, causal_model_record_drop, causal_model_generating
 from bindings.causal_model_config_door import config_load_binding, model_plan_for_binding, model_plan_snapshot, model_checkpoint_names_snapshot, causal_plan_layer_map, model_plain, model_record_fields
 from bindings.causal_model_config_run import causal_layer_weights
 from bindings.causal_checkpoint_door import checkpoint_array, checkpoint_zeros, checkpoint_open_binding, checkpoint_index_binding, checkpoint_read_binding, checkpoint_close_binding, _info_snapshot
@@ -1190,7 +1190,7 @@ def causal_model_load_state_dict_binding(mut mods: NativeModules, model: PythonO
     var input_plan = py_get(fields, nk[].k_plan)
     if input_plan is None or py_get(fields, nk[].k__blocks) is None or py_get(fields, nk[].k__embed) is None:
         raise Error("CausalLM: the model was not constructed")
-    if Bool(py=py_get(fields, "_resident_busy", PythonObject(False))):
+    if causal_model_generating(mods, model):
         raise Error("CausalLM.load_state_dict: the model is generating; load after the generation ends")
     var entries = py_get(fields, nk[].k__native_entries)
     if entries is not None and py_get(entries, "parallel_call") is not None:

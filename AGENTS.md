@@ -138,6 +138,14 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   callbacks, property or descriptor hooks, input protocols, custom trainers, schedules, batch suppliers or step
   hooks during a product operation. Holding a PythonObject in a Mojo struct does not compile its methods. Refuse
   unsupported callback or protocol objects before invoking them, with a clear native alternative.
+- **Data-interchange protocols at the boundary (Andrew, 2026-11-25).** "Python boundary stuff is ok; we shouldn't be
+  refusing that." A standard data-interchange protocol of the INPUT object (the buffer protocol, the array
+  interface, the Arrow C data interface, a pandas column's storage) is called in UNPACK, once per input (or per
+  column), to obtain plain buffers that Mojo then reads natively; input in a common library's default format is
+  admitted, never refused for its container. This narrows "input protocols" in the rule above to RUN: nothing is
+  called back during the computation, there is no Python loop over values, the library is never imported by the
+  runtime, admission is by exact type before the call, and a protocol error is propagated as the Python error it
+  is. Callbacks, custom trainers, schedules, batch suppliers and step hooks stay refused.
 - **Exported graph boundary (Andrew, 2026-10-27).** Never execute a user's Python `forward`, exporter or
   serialization callback inside product execution; the API may require an already exported graph.
 - **Python objects only at the public boundary (Andrew, 2026-11-10).** Python objects, Python library imports and

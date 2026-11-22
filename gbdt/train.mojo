@@ -2087,7 +2087,8 @@ def train(
                 "max_ctr_complexity above 1 (feature combinations) is not"
                 " served by this build's categorical walk (the FAST Apple"
                 " SYM_CTR prep, which does not keep the code columns"
-                " resident); build without the SYM_CTR defines"
+                " resident); pass max_ctr_complexity=1 or build without"
+                " the SYM_CTR defines"
             )
         # driver-loop: over the permutations
         for _ in range(perm_count):

@@ -21,10 +21,15 @@ FITTED_DIGEST_CHUNK bytes (the last one shorter; no chunk for an empty
 field). The chunk size is a constant of the format, not of the machine: the
 same fields give the same digest on any core count, device or vendor.
 
-PARALLEL PLAN. The independent units are (1) the members that need their
-bytes linearized to C order and (2) every chunk of every member; both run
-across the host pool (`host_parallelize`: the worker count is the pool's,
-the memory per worker is one SHA-256 state, the chunks are hashed in place).
+PARALLEL PLAN. The independent units are the chunks of every member, run
+across the host pool (`host_parallelize`: the worker count is the pool's).
+A C-contiguous member's chunk is hashed in place (one SHA-256 state per
+worker). A strided member (Fortran order, a sliced view, negative strides,
+a device field downloaded column-major) is never copied whole: each of its
+chunk units gathers its own byte range of the C-order stream into a chunk
+buffer of at most FITTED_DIGEST_CHUNK bytes and hashes that, so the extra
+memory is one chunk per worker in flight, and the gather and the hash of
+different chunks run on different cores.
 The top chain is serial by nature (SHA-256 chains each block on the one
 before) and is fed only the field headers and 32 bytes per chunk, so it is
 a few kilobytes for a model of gigabytes.
@@ -49,39 +54,95 @@ def fitted_digest_text(mut dst: List[UInt8], text: String):
     archive_append(dst, raw)
 
 
-def fitted_digest_hex(class_name: String, mut members: List[NativeArchiveMember]) -> String:
+def fitted_digest_strided(member: NativeArchiveMember) -> Bool:
+    """True when `member`'s bytes are not its elements in C order at
+    `source` (the contiguity rule of `NativeArchiveMember.prepare`)."""
+    var step = member.width
+    for axis in range(len(member.shape) - 1, -1, -1):  # driver-loop: over the field's rank (layout metadata)
+        if member.shape[axis] > 1 and member.strides[axis] != step:
+            return True
+        step *= member.shape[axis]
+    return False
+
+
+@always_inline
+def _digest_gather(member: NativeArchiveMember, at: Int, count: Int, dst: Int):
+    """Bytes `[at, at + count)` of `member`'s C-order stream into `dst`,
+    read through its shape and byte strides (any sign). The element offset
+    is stepped like an odometer, one add per element."""
+    var into = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst)
+    var width = member.width
+    var rank = len(member.shape)
+    var element = at // width
+    var index = List[Int](length=rank, fill=0)
+    var rest = element
+    var offset = 0
+    for axis in range(rank - 1, -1, -1):
+        index[axis] = rest % member.shape[axis]
+        rest //= member.shape[axis]
+        offset += index[axis] * member.strides[axis]
+    var position = element * width
+    var end = at + count
+    while position < end:
+        var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=member.source + offset)
+        var low = max(at - position, 0)
+        var high = min(end - position, width)
+        for byte in range(low, high):
+            into[position + byte - at] = src[byte]
+        position += width
+        var axis = rank - 1
+        while axis >= 0:
+            index[axis] += 1
+            offset += member.strides[axis]
+            if index[axis] < member.shape[axis]:
+                break
+            offset -= member.shape[axis] * member.strides[axis]
+            index[axis] = 0
+            axis -= 1
+
+
+def fitted_digest_hex(class_name: String, members: List[NativeArchiveMember]) -> String:
     """The digest of the fields `members` of a model of class `class_name`:
     64 lowercase hex digits. `members` are hashed in the order given (the
-    caller sorts them by name); each is linearized to C order here."""
+    caller sorts them by name); a strided member is read in C order chunk
+    by chunk (`_digest_gather`), never copied whole and never modified."""
     var n = len(members)
     var mp = members.unsafe_ptr()
-
-    def linearize(unit: Int) {imm mp}:
-        mp[unit].prepare()
-
-    host_parallelize(linearize, n)
-    # The chunk units of every member, in member order.
+    # The chunk units of every member, in member order. A contiguous unit
+    # holds its address; a strided unit holds its member (`owners`, -1 for
+    # contiguous) and its byte offset in the member's C-order stream.
     var starts = List[Int]()
     var addresses = List[Int]()
     var counts = List[Int]()
+    var owners = List[Int]()
     for i in range(n):  # driver-loop: over the model's fitted fields (chunk plan)
         starts.append(len(addresses))
+        var strided = fitted_digest_strided(members[i])
         var at = 0
         while at < members[i].size:  # driver-loop: over one field's chunks (plan only, no bytes read)
             var size = min(members[i].size - at, FITTED_DIGEST_CHUNK)
-            addresses.append(members[i].source + at)
+            addresses.append(at if strided else members[i].source + at)
             counts.append(size)
+            owners.append(i if strided else -1)
             at += size
     starts.append(len(addresses))
     var units = len(addresses)
     var digests = List[UInt8](length=32 * units, fill=0)
     var ap = addresses.unsafe_ptr()
     var cp = counts.unsafe_ptr()
+    var op = owners.unsafe_ptr()
     var dp = digests.unsafe_ptr()
 
-    def hash_chunk(unit: Int) {imm ap, imm cp, imm dp}:
+    def hash_chunk(unit: Int) {imm ap, imm cp, imm op, imm dp, imm mp}:
         var hasher = Sha256()
-        hasher.update(ap[unit], cp[unit])
+        if op[unit] < 0:
+            hasher.update(ap[unit], cp[unit])
+        else:
+            # one chunk buffer per unit in flight, at most FITTED_DIGEST_CHUNK bytes
+            var chunk = List[UInt8](length=cp[unit], fill=0)
+            _digest_gather(mp[op[unit]], ap[unit], cp[unit], Int(chunk.unsafe_ptr()))
+            hasher.update(Int(chunk.unsafe_ptr()), cp[unit])
+            _ = chunk
         var words = hasher.digest_words()
         for w in range(8):
             for k in range(4):
@@ -113,6 +174,7 @@ def fitted_digest_hex(class_name: String, mut members: List[NativeArchiveMember]
     _ = digests
     _ = addresses
     _ = counts
+    _ = owners
     _ = starts
     _ = members
     return result

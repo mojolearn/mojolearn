@@ -85,6 +85,11 @@ from bindings.neural_block_admission_door import neural_record_fields, neural_na
 from bindings.causal_model_config_door import model_record_fields, model_plan_snapshot, model_dict, model_plain
 from bindings.causal_operation_owner_door import CAUSAL_ENTRY_CPU, CAUSAL_ENTRY_MODE, CAUSAL_ENTRY_VENDOR, CAUSAL_ENTRY_WEIGHT_NAMES, CAUSAL_ENTRY_BLOCK_SESSION, CAUSAL_ENTRY_FORWARD15, CAUSAL_ENTRY_RESIDENT, CAUSAL_ENTRY_RESIDENT_VENDOR, CAUSAL_ENTRY_MAMBA1_PROFILE, CAUSAL_ENTRY_PROGRAM_READ
 from bindings.causal_operation_owner_door import causal_model_capture, causal_model_publish, causal_model_origin, causal_state_capture, causal_state_publish, causal_state_origin, causal_state_fields, causal_snapshot_fields, causal_model_cache_set, causal_block_cache_set, causal_checkpoint_capture, causal_pin_entries, causal_layer_capture, causal_layer_publish
+from bindings.causal_operation_owner_door import CausalLease, causal_model_lease, causal_lease_publish, causal_lease_mirror
+from core.causal_owner import (
+    causal_lease_load, causal_lease_take, causal_lease_release, causal_lease_expose,
+    CAUSAL_LEASE_TAKEN, CAUSAL_LEASE_EXPOSED,
+)
 from core.shared_slot import SharedSlot
 from core.causal_lm_entry_table import (
     CausalEntryKey, causal_entry_vendor, causal_entry_call, causal_ref, causal_tables_admit,
@@ -582,8 +587,24 @@ def causal_lm_parameters_binding(mut mods: NativeModules, model: PythonObject, c
     if not copies:
         # The live arrays leave the model: a kept resident session set could miss
         # an in-place edit, so it is dropped and generation opens per call again.
-        causal_model_cache_set(mods, model, model_fields, "_parameters_exposed", True)
-        causal_model_cache_set(mods, model, model_fields, "_resident_sessions", PythonObject(None))
+        # The exposure is one step on the live lease word. A free lease is
+        # taken with it and its kept sessions dropped here; a running holder
+        # sees the bit at its next test and at its release, and closes its own.
+        if py_get(model._native_entries, "parallel_call") is not None:
+            # A layer-partitioned model keeps no resident sessions in this
+            # process and has no lease: the mark is its public attribute only
+            # (ParallelCausalLM never reads it), written as before.
+            causal_model_cache_set(mods, model, model_fields, "_parameters_exposed", True)
+        else:
+            var lease_held = causal_model_lease(mods, model)
+            var lease = lease_held.downcast_value_ptr[CausalLease]()
+            if causal_lease_expose(lease[].live):
+                var dropped = lease[].kept
+                lease[].kept = PythonObject(None)
+                _ = causal_lease_release(lease[].live)
+                _ = dropped
+            causal_lease_publish(lease_held, py_get(model_fields, "_causal_live_fields", model_fields))
+            _ = lease_held
         causal_model_cache_set(mods, model, model_fields, "_decode_program", PythonObject(None))
     var p = model.plan
     var original_parameters = py_get(model_fields, "_causal_original_parameters", model_fields)
@@ -1738,7 +1759,6 @@ def _resident_forward(mut mods: NativeModules, words: CausalModelWords, model: P
         read_plan.value().resident_invalidated = True
         _legacy_resident_cancel(mods, model, read_plan.value())
         held = False
-    var fields = read_plan.value().resident_fields if held else _standalone_record_fields(mods, model)
     # Each layer is admitted once per forward (once per read with a plan): the
     # key, the open and the export below all read this list.
     var blocks: List[PythonObject]
@@ -1750,18 +1770,32 @@ def _resident_forward(mut mods: NativeModules, words: CausalModelWords, model: P
         blocks = _block_list(mods, model)
     if Bool(read_plan) and len(read_plan.value().blocks) == 0:
         read_plan.value().blocks = blocks.copy()
-    var persist = held or (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
-                   and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
     var key = _resident_key(mods, model, state, b, int15, blocks) if prepared_key is None else prepared_key
-    var retain = persist and Bool(read_plan) and read_plan.value().resident_reuse
-    var kept = py_get(fields, "_resident_sessions") if persist and not held else PythonObject(None)
     var lm = PythonObject(None)
     var sessions = PythonObject(None)
     var out = _causal_logits_output(b, l, v, output)
+    # The lease (lane causal-lease): a read that holds it keeps it; every
+    # other forward takes the LIVE word here, in one compare-and-set, as the
+    # last step before the sessions are touched. Nothing between the take
+    # and the `try` below can raise. A forward that loses (another holder
+    # has the kept sessions, or the model is exposed) holds no lease: it
+    # opens private sessions, proceeds, and closes them at the end; it never
+    # reads or writes the kept ones (orchestrator decision, 2026-11-25).
+    var lease_held = PythonObject(None)
+    if held:
+        lease_held = read_plan.value().resident_lease
+    else:
+        lease_held = causal_model_lease(mods, model)
+    var lease = lease_held.downcast_value_ptr[CausalLease]()
+    var persist = held
+    if not held:
+        persist = causal_lease_take(lease[].live) == CAUSAL_LEASE_TAKEN
+    var retain = persist and Bool(read_plan) and read_plan.value().resident_reuse
+    var kept = PythonObject(None)
     if persist and not held:
-        causal_model_cache_set(mods, model, fields, "_resident_busy", True)
+        kept = lease[].kept
     if retain:
-        read_plan.value().resident_fields = fields
+        read_plan.value().resident_lease = lease_held
         read_plan.value().resident_active = True
     try:
         if held:
@@ -1784,7 +1818,7 @@ def _resident_forward(mut mods: NativeModules, words: CausalModelWords, model: P
                 if retain:
                     read_plan.value().resident_lm = kept[1]
                     read_plan.value().resident_sessions = kept[2]
-                causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
+                lease[].kept = PythonObject(None)
                 _resident_close(kept[1])
                 mods.released()
                 if retain:
@@ -1796,9 +1830,6 @@ def _resident_forward(mut mods: NativeModules, words: CausalModelWords, model: P
             if retain:
                 read_plan.value().resident_lm = lm
                 read_plan.value().resident_sessions = sessions
-        if retain and not held:
-            var live = py_get(fields, "_causal_live_fields", fields)
-            read_plan.value().resident_cache = py_get(live, "_resident_sessions")
         var cached = PythonObject(_resident_group(e, lm, CAUSAL_SESSION_LM_FORWARD, [_addr(ids, keep), _addr(out, keep)], [l]))
         mods.released()
         _ = out  # keep the Python object alive through the native call above
@@ -1823,8 +1854,8 @@ def _resident_forward(mut mods: NativeModules, words: CausalModelWords, model: P
             _legacy_resident_cancel(mods, model, read_plan.value())
             raise error
         if persist:
-            causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
-            causal_model_cache_set(mods, model, fields, "_resident_busy", False)
+            lease[].kept = PythonObject(None)
+            _ = causal_lease_release(lease[].live)
         if lm is not None:
             _resident_close(lm)
             mods.released()
@@ -1834,11 +1865,17 @@ def _resident_forward(mut mods: NativeModules, words: CausalModelWords, model: P
         # deferred to the read's finish (or cancel).
         _ = read_plan
     elif persist:
-        causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
-        causal_model_cache_set(mods, model, fields, "_resident_busy", False)
+        lease[].kept = Python.tuple(key, lm, sessions)
+        if causal_lease_release(lease[].live):
+            # Exposed while this forward ran: nothing is kept. No taker can
+            # reach the tuple (an exposed word is never taken).
+            lease[].kept = PythonObject(None)
+            _resident_close(lm)
+            mods.released()
     else:
         _resident_close(lm)
         mods.released()
+    _ = lease_held
     _ = keep^
     return out
 
@@ -2016,8 +2053,9 @@ struct LegacyGenerationReadPlan(Movable):
     var resident_uploads_skipped: Int
     var resident_invalidated: Bool
     var resident_active: Bool
-    var resident_fields: PythonObject
-    var resident_cache: PythonObject
+    # The handle of the model's lease (`CausalLease`) while this read holds
+    # it (`resident_active`); None otherwise.
+    var resident_lease: PythonObject
     var resident_lm: PythonObject
     var resident_sessions: PythonObject
     # The read's admitted layer fields (resident route), filled once by the
@@ -2047,8 +2085,7 @@ struct LegacyGenerationReadPlan(Movable):
         self.resident_uploads_skipped = 0
         self.resident_invalidated = False
         self.resident_active = False
-        self.resident_fields = PythonObject(None)
-        self.resident_cache = PythonObject(None)
+        self.resident_lease = PythonObject(None)
         self.resident_lm = PythonObject(None)
         self.resident_sessions = PythonObject(None)
         self.blocks = List[PythonObject]()
@@ -2058,8 +2095,7 @@ struct LegacyGenerationReadPlan(Movable):
 
     def clear_resident(mut self):
         self.resident_active = False
-        self.resident_fields = PythonObject(None)
-        self.resident_cache = PythonObject(None)
+        self.resident_lease = PythonObject(None)
         self.resident_lm = PythonObject(None)
         self.resident_sessions = PythonObject(None)
         self.blocks.clear()
@@ -2138,23 +2174,20 @@ def _legacy_resident_export(mut mods: NativeModules, model: PythonObject, mut pl
 
 
 def _legacy_resident_valid(mut plan: LegacyGenerationReadPlan) raises -> Bool:
-    # This is an ownership invalidation check, not a scan of model data. A
-    # per-operation snapshot does not own a concurrent public cache transition.
-    var fields = plan.resident_fields
-    var live = py_get(fields, "_causal_live_fields", fields)
-    var exposed = py_get(live, "_parameters_exposed", PythonObject(False))
-    if exposed is not PythonObject(False):
-        # Exposure is monotonic. Preserve the live transition in this snapshot
-        # too, so final publication cannot restore its earlier False value.
-        py_setitem(fields, "_parameters_exposed", PythonObject(True))
-        return False
-    return py_get(live, "_resident_sessions") is plan.resident_cache
+    # The holder's test of its loan, before each token and at finish: one
+    # load of the live lease word. Only `parameters()` ends a loan from
+    # outside (it sets the exposed bit; it never touches the kept sessions
+    # of a running holder). Before lane causal-lease this read the live
+    # record's `_parameters_exposed` and `_resident_sessions` (two dictionary
+    # reads, each building its key) per token.
+    var lease = plan.resident_lease.downcast_value_ptr[CausalLease]()
+    return (causal_lease_load(lease[].live) & CAUSAL_LEASE_EXPOSED) == 0
 
 
 def _legacy_resident_cancel(mut mods: NativeModules, model: PythonObject, mut plan: LegacyGenerationReadPlan):
     # Failure cleanup must neither replace the operation error nor leave the
     # model busy. Pins remain live until every owner has had its close attempt.
-    var fields = plan.resident_fields
+    var lease_held = plan.resident_lease
     var lm = plan.resident_lm
     var sessions = plan.resident_sessions
     plan.resident_active = False
@@ -2164,8 +2197,11 @@ def _legacy_resident_cancel(mut mods: NativeModules, model: PythonObject, mut pl
         _legacy_resident_export(mods, model, plan)
     except:
         mods.released()
+    # The order of the former publication: nothing kept, the sessions
+    # closed, then the lease given back.
     try:
-        causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
+        if lease_held is not None:
+            lease_held.downcast_value_ptr[CausalLease]()[].kept = PythonObject(None)
     except:
         mods.released()
     try:
@@ -2174,9 +2210,11 @@ def _legacy_resident_cancel(mut mods: NativeModules, model: PythonObject, mut pl
     except:
         mods.released()
     try:
-        causal_model_cache_set(mods, model, fields, "_resident_busy", False)
+        if lease_held is not None:
+            _ = causal_lease_release(lease_held.downcast_value_ptr[CausalLease]()[].live)
     except:
         mods.released()
+    _ = sessions
     plan.clear_resident()
 
 
@@ -2189,9 +2227,14 @@ def _legacy_resident_finish(mut mods: NativeModules, model: PythonObject, mut re
             _legacy_resident_cancel(mods, model, plan)
             return
         _legacy_resident_export(mods, model, plan)
-        causal_model_cache_set(mods, model, plan.resident_fields, "_resident_sessions",
-            Python.tuple(plan.resident_key, plan.resident_lm, plan.resident_sessions))
-        causal_model_cache_set(mods, model, plan.resident_fields, "_resident_busy", False)
+        var lease = plan.resident_lease.downcast_value_ptr[CausalLease]()
+        lease[].kept = Python.tuple(plan.resident_key, plan.resident_lm, plan.resident_sessions)
+        if causal_lease_release(lease[].live):
+            # Exposed between the test above and the release: nothing is
+            # kept (no taker can reach the tuple), the sessions close.
+            lease[].kept = PythonObject(None)
+            _resident_read_cleanup(plan.resident_lm)
+            mods.released()
     except error:
         _legacy_resident_cancel(mods, model, plan)
         raise error
@@ -2263,10 +2306,13 @@ def _run_prepared(mut mods: NativeModules, words: CausalModelWords, held: Python
             if resident:
                 read_plan.value().blocks = admitted_blocks.copy()
             if resident and retain_resident and words.block_operations:
-                var fields = _standalone_record_fields(mods, model)
-                if (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
-                        and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False)))):
+                # Once per read: only a free, unexposed lease can be kept
+                # across the read's tokens (the live word; the take itself
+                # is the first forward's).
+                var lease_held = causal_model_lease(mods, model)
+                if causal_lease_load(lease_held.downcast_value_ptr[CausalLease]()[].live) == 0:
                     read_plan.value().resident_reuse = _resident_read_disjoint_state(mods, model, state)
+                _ = lease_held
         var output = PythonObject(None)
         var resident_key = PythonObject(None)
         if read_plan:
@@ -2617,15 +2663,18 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
     # sessions are opened per call again, so an in-place edit is observed as
     # before. A concurrent call, or a binding without load_state, opens its
     # own set.
-    var fields = _standalone_record_fields(mods, model)
-    var persist = (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
-                   and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
+    var lease_held = causal_model_lease(mods, model)
+    var lease = lease_held.downcast_value_ptr[CausalLease]()
     var key = _resident_key(mods, model, state, b, int15, blocks)
-    var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
     var lm = PythonObject(None)
     var sessions = PythonObject(None)
+    # The take: one compare-and-set on the live word, the last step before
+    # the sessions are touched (nothing between it and the `try` raises). A
+    # call that loses holds no lease: private sessions, closed at the end.
+    var persist = causal_lease_take(lease[].live) == CAUSAL_LEASE_TAKEN
+    var kept = PythonObject(None)
     if persist:
-        causal_model_cache_set(mods, model, fields, "_resident_busy", True)
+        kept = lease[].kept
     try:
         if kept is not None and Bool(py=kept[0] == key):
             lm = kept[1]
@@ -2634,7 +2683,7 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
             mods.released()
         else:
             if kept is not None:
-                causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
+                lease[].kept = PythonObject(None)
                 _resident_close(kept[1])
                 mods.released()
             var opened = _resident_open_all(mods, model, e, state, b, l, int15, keep, blocks)
@@ -2647,18 +2696,23 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
     except error:
         mods.released()
         if persist:
-            causal_model_cache_set(mods, model, fields, "_resident_sessions", PythonObject(None))
-            causal_model_cache_set(mods, model, fields, "_resident_busy", False)
+            lease[].kept = PythonObject(None)
+            _ = causal_lease_release(lease[].live)
         if lm is not None:
             _resident_close(lm)
             mods.released()
         raise error
     if persist:
-        causal_model_cache_set(mods, model, fields, "_resident_sessions", Python.tuple(key, lm, sessions))
-        causal_model_cache_set(mods, model, fields, "_resident_busy", False)
+        lease[].kept = Python.tuple(key, lm, sessions)
+        if causal_lease_release(lease[].live):
+            # Exposed while this call ran: nothing is kept.
+            lease[].kept = PythonObject(None)
+            _resident_close(lm)
+            mods.released()
     else:
         _resident_close(lm)
         mods.released()
+    _ = lease_held
     var result = generation_array([b, l + n], "i")
     var dst = i32_ptr(Int(py=result._addr))
     _ = result  # keep the Python object alive through the native call above
@@ -3100,7 +3154,11 @@ def _read_program(mut mods: NativeModules, mut s: GenerationHandle, capacity: In
     var p: List[Int] = [b, v, d, len(blocks), len(s.eos), s.pad, 1 if s.greedy else 0, s.top_k,
                         Int(s.seed & UInt64(0xFFFFFFFF)), Int(s.seed >> 32), length, max(0, n), s.produced]
     var fields = _standalone_record_fields(mods, s.model)
-    var persist = not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+    # The decode program is kept only while the model is not exposed: the
+    # live lease word, once per read.
+    var lease_held = causal_model_lease(mods, s.model)
+    var persist = (causal_lease_load(lease_held.downcast_value_ptr[CausalLease]()[].live) & CAUSAL_LEASE_EXPOSED) == 0
+    _ = lease_held
     # The model's decode program is a native registry handle in its block
     # image (core/causal_lm_entry_table_sessions.mojo PROGRAM_READ); the
     # model keeps its thin owner (core/causal_session_handles.mojo).
@@ -3233,9 +3291,10 @@ def _resident_read_disjoint_state(mut mods: NativeModules, model: PythonObject, 
                 starts.append(start)
                 sizes.append(size)
                 _ = view
-        var model_fields = _standalone_record_fields(mods, model)
-        if (Bool(py=py_get(model_fields, "_parameters_exposed", PythonObject(False)))
-                or Bool(py=py_get(model_fields, "_resident_busy", PythonObject(False)))):
+        var lease_held = causal_model_lease(mods, model)
+        var lease_word = causal_lease_load(lease_held.downcast_value_ptr[CausalLease]()[].live)
+        _ = lease_held
+        if lease_word != 0:
             # The legacy route reopens private sessions each token under this
             # policy. A KV write into live weight storage would therefore feed
             # changed weights into its next forward. Read-wide weights cannot
@@ -4262,12 +4321,15 @@ def _causal_public_execute[operation: Int](py_self: PyObjectPtr, args_ptr: PyObj
             state = stream[].state
         causal_state_publish(mods, state)
         causal_model_publish(mods, model)
+        # PACK: the lease's read-only mirror, once per public operation.
+        causal_lease_mirror(mods, model)
         return result.steal_data()
     except error:
         var message = String(error)
         try:
             causal_state_publish(mods, state)
             causal_model_publish(mods, model)
+            causal_lease_mirror(mods, model)
         except publication_error:
             message += "; native state publication also failed: " + String(publication_error)
             return raise_python_exception(Error(message), ExceptionType("PyExc_RuntimeError"))

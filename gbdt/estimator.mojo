@@ -387,9 +387,9 @@ struct GbdtFitParams(Copyable, Movable):
     #: features one combination may hold. 1 builds none, and the fit is then
     #: the fused per-tree path; above 1 the trees mint feature combinations
     #: (`gbdt/methods/tree_ctr_search.mojo`). Only a fit with CTR
-    #: categorical columns reads it. THE DEFAULT IS 1, not CatBoost's 4,
-    #: until the A/B of `docs/apple-fast/EXPERIMENTS.md`
-    #: (the `max_ctr_complexity` row) is recorded.
+    #: categorical columns reads it. RESOLVED by the caller: the public
+    #: default is CatBoost's 4 (Andrew, 2026-11-25), and 1 where this
+    #: implementation grows no combinations (the fit door's `gbdt_config`).
     var max_ctr_complexity: Int
 
 
@@ -432,7 +432,8 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         # boosting_type Plain, fold_len_multiplier 2, fold_permutation_block
         # unset
         String("Plain"), Float64(2.0), 0,
-        # max_ctr_complexity: no feature combinations
+        # max_ctr_complexity: no feature combinations (the public default,
+        # 4 with categorical columns, is resolved by the fit door)
         1,
     )
 

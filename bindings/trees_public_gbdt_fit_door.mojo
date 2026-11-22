@@ -296,7 +296,6 @@ def gbdt_config(fields: PythonObject, model: PythonObject, texts: Bool, context:
     c.grow_code = Int(py=py_item(t, nk[].k_grow_policy_codes)[grow])
     c.max_leaves = _int_unset(_field(fields, model, nk[].k_max_leaves, "max_leaves"))
     c.min_data_in_leaf = Int(py=py_call_typed(b.int, _field(fields, model, nk[].k_min_data_in_leaf, "min_data_in_leaf")))
-    c.max_ctr_complexity = Int(py=py_call_typed(b.int, py_get(fields, nk[].k_max_ctr_complexity, PythonObject(1))))
     # The boosting type (`_resolved_boosting_type`) and the Plain-only checks.
     var multi_output = _in(loss, py_item(t, nk[].k_multi_output_losses))
     var multi_regression = _in(loss, py_item(t, nk[].k_multi_regression_losses))
@@ -315,6 +314,22 @@ def gbdt_config(fields: PythonObject, model: PythonObject, texts: Bool, context:
     if c.fold_block_set:
         c.fold_block = Int(py=py_call_typed(b.int, fold_block))
     c.has_cat = _truthy(_field(fields, model, nk[].k_cat_features, "cat_features"))
+    # max_ctr_complexity, resolved once per fit for the device and the host
+    # run alike (both read this config's slot 34). An explicit value is
+    # taken as stored (the constructor refused what cannot be grown). Unset
+    # (None) is CatBoost's default 4 (`cat_feature_options.cpp:231`) where
+    # combinations can be grown: categorical columns, SymmetricTree, the
+    # greedy searcher, feature_fraction 1. Elsewhere unset is 1 (no
+    # combinations; nothing refused): no cat_features (the option has no
+    # effect there, the fused per-tree fit runs), Depthwise / Lossguide,
+    # use_pointwise_searcher, feature_fraction below 1.
+    var complexity = py_get(fields, nk[].k_max_ctr_complexity, PythonObject(None))
+    if complexity is not None:
+        c.max_ctr_complexity = Int(py=py_call_typed(b.int, complexity))
+    elif c.has_cat and c.grow_symmetric and not c.pointwise and not below_one:
+        c.max_ctr_complexity = 4
+    else:
+        c.max_ctr_complexity = 1
     # The option strings.
     var bootstrap = _field(fields, model, nk[].k_bootstrap_type, "bootstrap_type")
     c.bootstrap = String("") if not _truthy(bootstrap) else String(py=bootstrap)
@@ -1490,15 +1505,20 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
                         + (" and by Ordered boosting" if i == 0 else "")
                         + "; with no cat_features it would be accepted and "
                         + "ignored. Pass cat_features= or leave it unset.")
+    # max_ctr_complexity: None (unset) is stored as None and resolved at fit
+    # (`gbdt_config`): CatBoost's 4 where combinations can be grown, 1 where
+    # they cannot. Only an EXPLICIT value is checked here.
     var complexity = py_item(kw, nk[].k_max_ctr_complexity)
-    var complexity_int = Int(py=py_call_typed(b.int, complexity))
-    if complexity_int < 1:
-        raise Error("mojolearn: max_ctr_complexity must be >= 1, got " + _str(complexity))
+    var complexity_int = 0
+    if complexity is not None:
+        complexity_int = Int(py=py_call_typed(b.int, complexity))
+        if complexity_int < 1:
+            raise Error("mojolearn: max_ctr_complexity must be >= 1 or None, got " + _str(complexity))
     if complexity_int > 1:
         if not _truthy(cat):
             raise Error("mojolearn: max_ctr_complexity is read only by the categorical "
                         + "path (it combines categorical features); with no cat_features "
-                        + "it would be accepted and ignored. Pass cat_features= or leave it at 1.")
+                        + "it would be accepted and ignored. Pass cat_features= or leave it unset.")
         if not symmetric:
             raise Error("mojolearn: max_ctr_complexity above 1 requires "
                         + "grow_policy='SymmetricTree', got " + _repr(grow))
@@ -1537,7 +1557,7 @@ def _gbdt_store(model: PythonObject, args: PythonObject, context: PythonObject) 
         Python.tuple("feature_fraction", py_item(kw, nk[].k_feature_fraction)), Python.tuple("feature_border_type", border),
         Python.tuple("boosting_type", boosting), Python.tuple("fold_len_multiplier", py_call_typed(b.float, fold_len)),
         Python.tuple("fold_permutation_block", PythonObject(None) if block is None else py_call_typed(b.int, block)),
-        Python.tuple("max_ctr_complexity", PythonObject(complexity_int)),
+        Python.tuple("max_ctr_complexity", PythonObject(None) if complexity is None else PythonObject(complexity_int)),
         Python.tuple("device", py_item(kw, nk[].k_device)),
         Python.tuple("model_", PythonObject(None)), Python.tuple("loss_curve_", PythonObject(None)),
         Python.tuple("test_loss_curve_", PythonObject(None)), Python.tuple("best_iteration_", PythonObject(None)),

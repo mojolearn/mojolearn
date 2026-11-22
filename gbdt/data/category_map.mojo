@@ -747,3 +747,144 @@ def category_apply_column(
     category_codes_into(
         category_block_keys(block, column), category_block_count(block, column), keys, n, dst
     )
+
+
+# The Arrow C data interface columns (lane arrow-strings, 2026-11-21): an
+# Arrow-backed pandas string column hands its buffers over at UNPACK
+# (`bindings/arrow_c_data_unpack.mojo`); these read them natively. Arrow
+# layout (columnar format specification): element i of an array with
+# `offset` o sits at slot o + i of every buffer; validity is a bitmap, bit
+# (o + i) of byte (o + i) / 8, least significant bit first, 1 = valid, the
+# buffer absent (address 0) = every element valid. A string / large_string
+# array keeps int32 / int64 offsets (slot i .. i + 1 bound the UTF-8 bytes
+# of element i) and one data buffer.
+
+comptime _CodeU8 = MutPointer[UInt8, MutUntrackedOrigin]
+comptime _CodeU16 = MutPointer[UInt16, MutUntrackedOrigin]
+comptime _CodeU32 = MutPointer[UInt32, MutUntrackedOrigin]
+comptime _CodeU64 = MutPointer[UInt64, MutUntrackedOrigin]
+
+
+@always_inline
+def _arrow_valid(validity: Int, i: Int) -> Bool:
+    """Bit `i` of an Arrow validity bitmap (address 0: every bit set)."""
+    if validity == 0:
+        return True
+    var byte = _CodeU8(unsafe_from_address=validity + (i >> 3))[0]
+    return ((byte >> UInt8(i & 7)) & UInt8(1)) != UInt8(0)
+
+
+def _arrow_refusal(flags: List[UInt8], units: Int, message: String) raises:
+    var bad = False
+    for u in range(units):  # driver-loop: over the tasks' flags
+        if flags[u] != 0:
+            bad = True
+    if bad:
+        raise Error(message)
+
+
+def category_keys_from_arrow_text(
+    validity: Int, offsets: Int, data: Int, wide: Bool, offset: Int, n: Int, dst: CategoryKeyPtr
+) raises:
+    """`dst[r]` = the key of element r of an Arrow string (`wide` False:
+    int32 offsets) or large_string (int64 offsets) array: the text key of
+    its UTF-8 bytes (the key a str cell with the same text gets), a null
+    element the missing key. Rows split across the workers; the GIL is not
+    needed (plain buffers). Offsets that run backwards are refused."""
+    if n <= 0:
+        return
+    var units = max(1, host_predict_task_count_work(n, n * 16))
+    var chunk = host_predict_chunk(n, units)
+    var flags = List[UInt8](length=units, fill=UInt8(0))
+    var fp = _FlagPtr(unsafe_from_address=Int(flags.unsafe_ptr()))
+
+    def fill(unit: Int) {imm chunk, imm n, imm validity, imm offsets, imm data, imm wide, imm offset, imm dst, imm fp}:
+        var bad = False
+        for r in range(unit * chunk, min((unit + 1) * chunk, n)):
+            var i = offset + r
+            if not _arrow_valid(validity, i):
+                dst[r] = CATEGORY_KEY_MISSING
+                continue
+            var lo = 0
+            var hi = 0
+            if wide:
+                lo = Int(_CodeI64(unsafe_from_address=offsets + 8 * i)[0])
+                hi = Int(_CodeI64(unsafe_from_address=offsets + 8 * (i + 1))[0])
+            else:
+                lo = Int(_CodeI32(unsafe_from_address=offsets + 4 * i)[0])
+                hi = Int(_CodeI32(unsafe_from_address=offsets + 4 * (i + 1))[0])
+            if lo < 0 or hi < lo:
+                dst[r] = CATEGORY_KEY_MISSING
+                bad = True
+                continue
+            dst[r] = category_key_text(data + lo, hi - lo)
+        if bad:
+            fp[unit] = UInt8(1)
+
+    host_parallelize(fill, units)
+    _arrow_refusal(flags, units, "mojolearn: an Arrow string array's offsets run backwards; the array is corrupt")
+    _ = flags^
+
+
+@always_inline
+def _arrow_index_at(address: Int, itemsize: Int, signed: Bool, i: Int) -> Int:
+    """Element `i` of an Arrow dictionary's index buffer (1, 2, 4 or 8-byte
+    integers, signed or not); an unsigned 64-bit index past 2^63 - 1 reads
+    as -2 (outside every dictionary)."""
+    if signed:
+        if itemsize == 1:
+            return Int(_CodeI8(unsafe_from_address=address + i)[0])
+        if itemsize == 2:
+            return Int(_CodeI16(unsafe_from_address=address + 2 * i)[0])
+        if itemsize == 4:
+            return Int(_CodeI32(unsafe_from_address=address + 4 * i)[0])
+        return Int(_CodeI64(unsafe_from_address=address + 8 * i)[0])
+    if itemsize == 1:
+        return Int(_CodeU8(unsafe_from_address=address + i)[0])
+    if itemsize == 2:
+        return Int(_CodeU16(unsafe_from_address=address + 2 * i)[0])
+    if itemsize == 4:
+        return Int(_CodeU32(unsafe_from_address=address + 4 * i)[0])
+    var wide = _CodeU64(unsafe_from_address=address + 8 * i)[0]
+    if wide >= (UInt64(1) << UInt64(63)):
+        return -2
+    return Int(wide)
+
+
+def category_keys_from_arrow_indices(
+    validity: Int, indices: Int, itemsize: Int, signed: Bool, offset: Int, n: Int,
+    table: CategoryKeyPtr, k: Int, dst: CategoryKeyPtr,
+) raises:
+    """`dst[r] = table[index r]` for a dictionary-encoded Arrow array whose
+    `k` dictionary values are keyed in `table` (a null dictionary value is
+    already the missing key there); a null index is the missing key. Rows
+    split across the workers; an index outside 0 .. k-1 is refused."""
+    if itemsize != 1 and itemsize != 2 and itemsize != 4 and itemsize != 8:
+        raise Error("mojolearn: an Arrow dictionary's indices are not 1, 2, 4 or 8-byte integers")
+    if n <= 0:
+        return
+    var units = max(1, host_predict_task_count_work(n, n * 2))
+    var chunk = host_predict_chunk(n, units)
+    var flags = List[UInt8](length=units, fill=UInt8(0))
+    var fp = _FlagPtr(unsafe_from_address=Int(flags.unsafe_ptr()))
+
+    def gather(unit: Int) {imm chunk, imm n, imm validity, imm indices, imm itemsize, imm signed, imm offset, imm table, imm k, imm dst, imm fp}:
+        var bad = False
+        for r in range(unit * chunk, min((unit + 1) * chunk, n)):
+            var i = offset + r
+            if not _arrow_valid(validity, i):
+                dst[r] = CATEGORY_KEY_MISSING
+                continue
+            var code = _arrow_index_at(indices, itemsize, signed, i)
+            if code >= 0 and code < k:
+                dst[r] = table[code]
+            else:
+                dst[r] = CATEGORY_KEY_MISSING
+                bad = True
+        if bad:
+            fp[unit] = UInt8(1)
+
+    host_parallelize(gather, units)
+    _arrow_refusal(flags, units, "mojolearn: an Arrow dictionary array holds an index outside its dictionary;"
+                   + " the array is corrupt")
+    _ = flags^
