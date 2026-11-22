@@ -123,14 +123,18 @@ def test_cpu_language_model_public_provider_matches_host_owner(monkeypatch, tmp_
     trainer = audit_native_call(impl.SmallByteLanguageModelTrainer, expected.parameters_,
                                data_schedule={'corpus': 'host-provider-test'},
                                shape=expected.shape, resident=resident).assert_native()
-    baseline_bits = expected.train_step(ids)
+    # The baseline is the stateless host step (the former LanguageModelHostTrainer's
+    # route; lane neural-consolidate 2026-11-22): both sessions give its bytes.
+    baseline = impl.SmallByteLanguageModelTrainer(expected.parameters_, data_schedule={'corpus': 'host-provider-test'},
+                                                  shape=expected.shape, resident=False, step_result='full')
+    baseline_loss = baseline.train_step(ids)['loss']
+    reference = baseline.state_dict()
     actual = audit_native_call(trainer.train_step, ids).assert_native()
     import struct
-    assert struct.pack('<f', actual['loss']) == struct.pack('<I', baseline_bits)
+    assert struct.pack('<f', actual['loss']) == struct.pack('<f', baseline_loss)
     state = audit_native_call(trainer.state_dict).assert_native()
-    assert np.asarray(state['parameters']).tobytes() == np.asarray(expected.parameters_).tobytes()
-    assert np.asarray(state['m']).tobytes() == np.asarray(expected.m_).tobytes()
-    assert np.asarray(state['v']).tobytes() == np.asarray(expected.v_).tobytes()
+    for name in ('parameters', 'm', 'v'):
+        assert np.asarray(state[name]).tobytes() == np.asarray(reference[name]).tobytes()
     snapshot = tuple(np.asarray(state[k]).tobytes() for k in ('parameters', 'm', 'v'))
     invalid = ids.copy()
     invalid[0, 0] = expected.shape.vocab_size

@@ -3448,7 +3448,10 @@ def _(ml, X, yc, yr, Xh=None):
     state = m.export_state()
     return _fit(dict(loss_bits=_h(np.uint32(bits)), params=_h(np.asarray(state["parameters"])),
                      m=_h(np.asarray(state["m"]))),
-                m, lambda e: (step_bits(e, _ids(Xh, shape.batch, shape.length + 1)),))
+                m, lambda e: (step_bits(e, _ids(Xh, shape.batch, shape.length + 1)),),
+                # the probe IS a step: it moves the trainer, so a saved file and the trainer in
+                # memory are compared at different steps; the model column stays n/a, as it was
+                model_na="n/a:probe-is-a-step")
 
 
 # The sequence blocks: (2, 16, 32) slabs from the fixture (_seq), hashed

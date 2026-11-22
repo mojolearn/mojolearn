@@ -57,8 +57,10 @@ def test_strict_training_state_export_load_and_numpy_owner():
 
 def test_cast_host_training_copy_keeps_canonical_metadata_and_owned_bytes():
     shape = _shape()
-    source = np.linspace(-0.01, 0.01, shape.n_total, dtype="f8")
-    expected = source.astype("f4").tobytes()
+    # The CPU trainer is LanguageModelTrainer(device="cpu") (lane neural-consolidate,
+    # 2026-11-22); it admits float32 parameters, so the cast is the caller's.
+    source = np.linspace(-0.01, 0.01, shape.n_total, dtype="f8").astype("f4")
+    expected = source.tobytes()
     trainer = ml.LanguageModelTrainer(source, shape=shape, data_schedule={'test': 'array-metadata'},
                                       device='cpu', resident=False)
     source.fill(7)
