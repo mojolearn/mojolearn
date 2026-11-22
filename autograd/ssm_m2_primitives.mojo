@@ -16,6 +16,7 @@ graph_ssd_scan  the Mamba-2 chunked state-space dual scan (`mamba_ssm.modules.ss
 from sequence.exec_trait import Exec
 from sequence.ops import Args, FP, OP_FILL
 from autograd.tape import Tape, Tensor
+from autograd.rankn_api import rn_dims, rn_shape
 from autograd.transformer_primitives_ops import OP_TFP_LINEAR
 from mamba.checks.mamba2_fixture import M2_D_STATE, M2_HEADDIM
 from autograd.kernels.mamba2_ssd_body import m2_q_eff, m2_fold_rows_per_tile, m2_fold_tiles
@@ -355,7 +356,9 @@ def graph_ssd_scan[E: Exec](
         var bs = _bwd_sizes(d)
         var bo = _offsets(bs)
         saved.p1 = tape.reserve(ex, bo[len(bs)])
-    return tape.custom_nd(ex, [xbc, dt, a_log, d_skip], output, shape, GRAPH_SSD_SCAN, saved)
+    var od = rn_dims(shape)
+    od[shape.ndim - 1] = d.di()
+    return tape.custom_nd(ex, [xbc, dt, a_log, d_skip], output, rn_shape(od, "ssd_scan"), GRAPH_SSD_SCAN, saved)
 
 
 def ssd_scan_backward[E: Exec](mut ex: E, saved: Args, up: FP, inputs: List[FP], gradients: List[FP]) raises:
