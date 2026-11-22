@@ -51,8 +51,6 @@ LINK_IDENTITY, LINK_EXP, LINK_SIGMOID = 0, 1, 2
 _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_HUBER_OUT = 2, 3, 4
 
 
-
-
 class _LinearClassifierMixin(NativeParamsSetter):
     # One-call native public methods: x_linear_native owns the lifecycle.
     _mojolearn_native_public = True
