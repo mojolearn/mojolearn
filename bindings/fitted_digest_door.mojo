@@ -199,6 +199,12 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
         var numpy_scalar = py_get(context, "scalar_type")
         var base = py_get(context, "digest_base")
         var layers = py_get(context, "digest_layers")
+        # A classifier's `classes_` is a `ClassLabels` (python/mojolearn/
+        # _labels.py), a `list` subclass that only adds an integer-array
+        # index. Its items are the class list: hashed as that list (copied
+        # once through list's own iterator, no Python hook), so a model whose
+        # classes_ is a plain list (a loaded copy) has the same digest.
+        var labels_class = py_get(context, "classifier_labels_class")
         var work_names = List[String]()
         var work_values = List[PythonObject]()
         var work_depths = List[Int]()
@@ -238,6 +244,9 @@ def fitted_digest_text(model: PythonObject, context: PythonObject, depth: Int) r
                 leaf_values.append(PythonObject(True))
                 continue
             var kind = py_type(value)
+            if labels_class is not None and kind is labels_class:
+                value = py_call(b.list, value)
+                kind = py_type(value)
             if kind is b.int and Int(py=py_call(value.bit_length)) > 63:
                 # A stored integer wider than a signed 64-bit word (a 64-bit
                 # generator state) has no 8-byte form: its decimal text.

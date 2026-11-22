@@ -54,7 +54,7 @@ X2 = X * np.float32(1.5) + np.float32(0.25)             # every training value c
 FAMILIES = [
     ("Ridge", dict(alpha=1.0), "r"), ("LinearRegression", {}, "r"), ("Lasso", dict(alpha=0.01), "r"),
     ("ElasticNet", dict(alpha=0.01), "r"), ("BayesianRidge", {}, "r"), ("LogisticRegression", {}, "c"),
-    ("SGDClassifier", dict(random_state=0), "c"), ("LinearSVC", dict(random_state=0), "c"),
+    ("SGDClassifier", dict(random_state=0), "c"), ("LinearSVC", {}, "c"),
     ("SVC", {}, "c"), ("SVR", {}, "r"), ("KernelRidge", {}, "r"),
     ("GaussianNB", {}, "c"), ("LinearDiscriminantAnalysis", {}, "c"),
     ("KNeighborsClassifier", {}, "c"), ("KNeighborsRegressor", {}, "r"), ("NearestNeighbors", {}, None),
@@ -80,6 +80,10 @@ FAMILIES = [
 
 # the three estimators whose random draws continue from call to call: their digest changes with use, by decision
 ADVANCES = ("IterativeImputer", "LatentDirichletAllocation", "MinCovDet")
+# fitted state drawn from random_state and the input's width only, never from its values (RBFSampler: "`fit` draws random
+# weights and offsets from `random_state`", python/mojolearn/kernel_methods.py): changed data of the same width fits the same model, so
+# the changed fit and the refit change the seed instead
+DATA_FREE = {"RBFSampler": dict(random_state=1)}
 
 
 def fitted(cls, params, target, data, device=None):
@@ -114,7 +118,8 @@ for name, params, target in FAMILIES:
             problems.append("a second read differs")
         if fitted(cls, params, target, X).digest_ != g:
             problems.append("a second fit on the same data differs")
-        if fitted(cls, params, target, X2).digest_ == g:
+        changed = {**params, **DATA_FREE.get(name, {})}
+        if fitted(cls, changed, target, X2).digest_ == g:
             problems.append("a fit on changed data has the same digest (the digest does not see the fitted state)")
         for method in ("predict", "transform"):          # using the model does not change what it is
             if hasattr(m, method):
@@ -124,6 +129,8 @@ for name, params, target in FAMILIES:
                     pass
         if name not in ADVANCES and m.digest_ != g:
             problems.append("a predict / transform call changed the digest (a cache or a call record is hashed)")
+        if name in DATA_FREE:
+            m.set_params(**DATA_FREE[name])
         m.fit(*((X2,) if target is None else (X2, y if target == "r" else c)))
         if m.digest_ == g:
             problems.append("the digest was not dropped by a refit")

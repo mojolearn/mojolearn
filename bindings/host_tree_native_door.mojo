@@ -682,4 +682,11 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
     if Bool(py=py_item(fields, nk[].k_is_classifier)):
         return host_tree_labels(py_item(fields, nk[].k_classes_), vote, context)
     var flat = classical_wrap_array(vote._store, Python.tuple(vote.shape[0]), "<f4", "C", py_item(context, nk[].k_output_context))
-    return flat if String(py_item(fields, nk[].k_family)) == "rf" else host_tree_wide(flat, context)
+    # Regression values are float64 for every family, as the estimator's
+    # public predict returns them (trees_public_lifecycle_native_door.mojo
+    # `_public_result` widens a random forest's float32 vote; extra trees
+    # widen in `_predict_staged`). The twin returned a random forest's vote as
+    # float32, so `host_model(path).predict(X)` and the saving model's
+    # `predict(X)` differed in dtype (proving run 2026-11-22). Same values:
+    # the widening is exact.
+    return host_tree_wide(flat, context)

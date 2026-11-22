@@ -20,9 +20,10 @@
 # read enters it. It imports no model owner (the call goes through the
 # connected compiled entry), so it adds none to its importers' closures.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.native_mode_recipe_pack import mode_recipe_call
-from bindings.py_balanced import py_fields, py_get, py_item
+from bindings.native_class_admission_door import static_builtin_type
+from bindings.py_balanced import py_call, py_fields, py_get, py_item, py_type
 
 
 def fitted_digest_property(member: PythonObject) raises -> PythonObject:
@@ -43,6 +44,35 @@ def fitted_digest_property_read(connection: PythonObject, model: PythonObject) r
     var entry = py_get(connection, "entry")
     if entry is None:
         raise Error("AttributeError: digest_ is unavailable: the saved-model owner is not connected in this installation")
+    if py_type(entry) is not static_builtin_type("types", "BuiltinFunctionType"):
+        raise Error("TypeError: digest_ requires its connected native entry")
     var context = py_item(connection, PythonObject("context"))
-    var result = mode_recipe_call(entry, Python.tuple(model, PythonObject("fitted_digest"), Python.tuple(), context))
-    return result
+    var args = Python.tuple(model, PythonObject("fitted_digest"), Python.tuple(), context)
+    ref cpy = Python().cpython()
+    var result = cpy.PyObject_Call(entry._obj_ptr, args._obj_ptr, PyObjectPtr())
+    _ = args  # the argument tuple (and the model it holds) lives through the call
+    if result:
+        return PythonObject(from_owned=result)
+    # The entry's refusals are Python exceptions in words: AttributeError for
+    # an unfitted model, a fast model or a field with no canonical bytes. The
+    # attribute doors that reach this branch (classical_attributes_door
+    # `classical_attribute_c`, scaler_lifecycle_native_door
+    # `scaler_attribute_c`, neighbor_query_native_door) map an Error by its
+    # class prefix and do not restore a stashed pending exception: the stash
+    # (`mode_recipe_call`) reached them as the text "mojolearn-optimizer: a
+    # Python exception is pending" raised as TypeError, so `hasattr(model,
+    # "digest_")` raised on an unfitted Ridge, LogisticRegression, scaler or
+    # forest (proving run 2026-11-22). Fetch the exception here (clearing the
+    # indicator) and hand it on as "<class>: <text>", which every door maps
+    # back to the same class.
+    var triple = cpy.PyErr_FetchTriple()
+    var kind = PythonObject(from_owned=triple[0]) if triple[0] else PythonObject(None)
+    var value = PythonObject(from_owned=triple[1]) if triple[1] else PythonObject(None)
+    var traceback = PythonObject(from_owned=triple[2]) if triple[2] else PythonObject(None)
+    _ = traceback
+    if kind is None:
+        raise Error("SystemError: digest_ failed without setting an exception")
+    var b = native_loaded_module("builtins")
+    var text = String("") if value is None else String(py=py_call(b.str, value))
+    var class_name = String(py=kind.__name__)
+    raise Error(class_name + ": " + text)
