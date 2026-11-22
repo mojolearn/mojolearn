@@ -54,7 +54,10 @@ def test_repo_registry_matches_check_files():
                      if "def register() -> Check:" in p.read_text()}
     assert with_register == registered
     assert len(modules) == len(registered)
-    assert set(checks) == registered
+    # the TestSuite check files (second line `# native-check: <columns>`) carry no register() and no registry row
+    suites = set(ncr.testsuite_checks(ROOT))
+    assert not suites & registered
+    assert set(checks) == registered | suites
     # the five-file scaffolding is gone for every registered check
     for name in registered:
         for suffix in ("_cases", "_cpu_suite", "_gpu_suite", "_cpu", "_gpu"):
@@ -104,6 +107,43 @@ def test_plan_matrix_json(tmp_path, capsys):
     assert sorted(names) == planned.read_text().split()
     assert ncr.main(["plan", "--root", str(tmp_path), "--column", "gpu"]) == 0
     assert json.loads(capsys.readouterr().out)["count"] == 30
+
+
+def test_testsuite_files_are_checks_by_their_marker(tmp_path, capsys):
+    _registry(tmp_path, {"old_host": (True, False)})
+    nt = tmp_path / "checks/native_tests"
+    (nt / "ts_both.mojo").write_text("# SPDX-License-Identifier: Apache-2.0\n# native-check: cpu gpu\ndef main(): pass\n")
+    (nt / "ts_host.mojo").write_text("# SPDX-License-Identifier: Apache-2.0\n# native-check: cpu\n")
+    (nt / "helper.mojo").write_text("# SPDX-License-Identifier: Apache-2.0\n# native-check is not on this line\n")
+    (nt / "late.mojo").write_text("# SPDX\n\n# native-check: cpu\n")  # only the second line marks a check
+    checks = ncr.load_checks(tmp_path)
+    assert checks == {"old_host": (True, False), "ts_both": (True, True), "ts_host": (True, False)}
+    assert ncr.main(["testsuite", "--root", str(tmp_path), "--column", "gpu"]) == 0
+    assert capsys.readouterr().out.split() == ["ts_both", "checks/native_tests/ts_both.mojo"]
+    (nt / "old_host.mojo").write_text("# SPDX\n# native-check: cpu\n" + (nt / "old_host.mojo").read_text())
+    try:
+        ncr.load_checks(tmp_path)
+        raise AssertionError("a name both a TestSuite file and a registry row was accepted")
+    except ValueError as e:
+        assert "both" in str(e)
+
+
+def test_result_writer_reads_the_testsuite_summary_and_a_crash(tmp_path):
+    log = tmp_path / "t.log"
+    log.write_text("Running 3 tests for x.mojo\n    PASS [ 0.001 ] test_a\n    FAIL [ 0.010 ] test_b\n"
+                   "      At x.mojo:13:17: AssertionError: `left == right` comparison failed:\n"
+                   "--------\nSummary [ 0.010 ] 3 tests run: 1 passed , 1 failed , 1 skipped \n")
+    out = tmp_path / "results"
+    assert ncr.main(["result", "ts", "--log", str(log), "--rc", "1", "--seconds", "2", "--out-dir", str(out)]) == 0
+    r = ncr.parse_result(out / "ts.txt")
+    assert (r["cases"], r["failed_cases"], r["skipped"]) == (3, 1, 1)
+    assert r["first_error"].startswith("FAIL [ 0.010 ] test_b")
+    clog = tmp_path / "c.log"
+    clog.write_text("Stack dump without symbol names\n--- crash localisation ---\nalone test_a rc=0: PASS\n"
+                    "CRASHED test_segv rc=139 (alone, no summary)\n")
+    assert ncr.main(["result", "tc", "--log", str(clog), "--rc", "139", "--seconds", "2", "--out-dir", str(out)]) == 0
+    c = ncr.parse_result(out / "tc.txt")
+    assert c["cases"] is None and c["rc"] == 139 and c["first_error"].startswith("CRASHED test_segv")
 
 
 def test_result_writer_reads_the_check_line(tmp_path):

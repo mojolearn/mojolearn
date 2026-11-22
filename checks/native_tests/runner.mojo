@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The one runner of the native checks (checks/native_tests/).
+"""The runner of the native checks not yet converted to TestSuite files (checks/native_tests/).
+
+A converted check is a TestSuite file of its own (docs/plans/TESTSUITE_CONVERSION.md,
+checks/native_tests/testsuite_cases.mojo); this runner, `registry.mojo` and the two
+mains go when the last registered check is converted.
 
 A check is ONE file `<name>.mojo` holding its cases, a `run_cases(column,
 report)` entry and a `register() -> Check`. `registry.mojo` imports every

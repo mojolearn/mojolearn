@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Native parser fixtures with literal format bytes and independent expectations.
 
 Independent fixtures use separate owners and the existing host pool. No file,
 Python runtime, GPU, performance measurement, or release identity is involved.
 """
-from core.host_parallel import host_parallelize
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_npy import native_npy_layout, native_npy_text_source
 from core.native_archive_unicode import archive_decode_utf8, archive_decode_utf32, archive_decode_literal, archive_text_equal
 from core.native_archive_zip import native_zip_directory, native_zip_payload
 from checks.native_tests.archive_parser_vectors import archive_zip_fixture
-from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -185,42 +186,25 @@ def _zip(unit: Int) raises:
     _ = bytes
 
 
-def run_checks() raises:
-    comptime FIXTURES = 94
-    var failed = List[Int](length=FIXTURES, fill=0)
-    var failures_ptr = failed.unsafe_ptr()
-    def task(unit: Int) {imm failures_ptr}:
-        try:
-            if unit < 42:
-                _numeric(unit)
-            elif unit < 49:
-                _metadata(unit - 42)
-            elif unit < 60:
-                _npy_refusal(unit - 49)
-            elif unit < 78:
-                _unicode(unit - 60)
-            else:
-                _zip(unit - 78)
-        except problem:
-            print("FAIL archive_parser fixture", unit, String(problem))
-            failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "archive parsers failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
-    print("PASS archive_parser:", FIXTURES, "native fixtures, parallel")
+def test_numeric() raises:
+    check_cases("numeric", 42, _numeric)
 
 
-# The one runner (runner.mojo): the fixtures run across host cores inside
-# run_checks, which raises after printing each failed fixture; the check counts
-# as one case. Host column only: archive reading and writing is host work.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_metadata() raises:
+    check_cases("metadata", 7, _metadata)
 
 
-def register() -> Check:
-    return Check("archive_parser", cpu=True, gpu=False, serial="", run=run_cases)
+def test_npy_refusal() raises:
+    check_cases("npy_refusal", 11, _npy_refusal)
+
+
+def test_unicode() raises:
+    check_cases("unicode", 18, _unicode)
+
+
+def test_zip() raises:
+    check_cases("zip", 16, _zip)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

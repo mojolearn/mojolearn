@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Independent compressed fixtures and checked spans, one owner per pool task.
 
 This exercises public system codec libraries, including optional Zstandard;
 the orchestrator must provision/qualify those dependencies before running it.
 """
-from core.host_parallel import host_parallelize
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_codec import archive_inflate, archive_codec_library
 from core.native_archive_write import archive_zlib
 from checks.native_tests.archive_codec_vectors import archive_codec_fixture
-from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -99,36 +100,13 @@ def _span(unit: Int) raises:
     _ = source
 
 
-def run_checks() raises:
-    comptime FIXTURES = 35
-    var failed = List[Int](length=FIXTURES, fill=0)
-    var failures_ptr = failed.unsafe_ptr()
-    def task(unit: Int) {imm failures_ptr}:
-        try:
-            if unit < 28:
-                _codec(unit)
-            else:
-                _span(unit - 28)
-        except problem:
-            print("FAIL archive_codec fixture", unit, String(problem))
-            failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "archive codecs failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
-    print("PASS archive_codec:", FIXTURES, "native fixtures, parallel")
+def test_codec() raises:
+    check_cases("codec", 28, _codec)
 
 
-# The one runner (runner.mojo): the fixtures run across host cores inside
-# run_checks, which raises after printing each failed fixture; the check counts
-# as one case. Host column only: archive reading and writing is host work.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_span() raises:
+    check_cases("span", 7, _span)
 
 
-def register() -> Check:
-    return Check("archive_codec", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
