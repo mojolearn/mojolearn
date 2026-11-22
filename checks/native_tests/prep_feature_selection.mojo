@@ -75,6 +75,7 @@ def variance_unit(unit: Int) raises:
     arena[placed[2]] = bitcast[DType.float32](UInt32(bits & UInt64(0xFFFFFFFF)))
     arena[placed[2] + 1] = bitcast[DType.float32](UInt32(bits >> UInt64(32)))
     run_program_host(Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16)
+    _ = program^   # Mojo frees a local at its last named use: the stage words live through the run
     check_close(arena_words(arena, placed[0], d), fixture_f64(SEL_DIR + "vt" + String(k) + "-variances.f64", d), 1e-4,
         1e-6, label + ": variances_")
     var want = fixture_i32(SEL_DIR + "vt" + String(k) + "-support.i32", d)
@@ -96,6 +97,7 @@ def variance_unit(unit: Int) raises:
     var gather = List[Int32]()
     prep_program_stage(gather, OP_GATHER_COLS, n * kc, 0, n, d, ko, kc, out)
     run_program_host(Int(gathered.unsafe_ptr()), len(gathered), Int(gather.unsafe_ptr()), 1)
+    _ = gather^
     var t = fixture_f32(SEL_DIR + "vt" + String(k) + "-transform.f32", n * kc)
     for i in range(n * kc):  # small-loop(oracle: the kept columns, exact)
         require(gathered[out + i] == t[i], label + ": transform word " + String(i))
