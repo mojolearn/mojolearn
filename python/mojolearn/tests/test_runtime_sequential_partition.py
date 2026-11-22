@@ -26,7 +26,8 @@ def test_public_and_legacy_descriptions_match_with_native_public_execution():
     audit_native_call(public.relu).assert_native()
     other = Sequential.__new__(Sequential)
     entry, context = legacy_entry(), _x_sequence_model._SEQUENTIAL_CONTEXT
-    entry(other, 'construct', ('identical', (4,)), context)
+    # construct takes (numeric_mode, input_shape, device) since e23947d4ee (device=None|'gpu'|'cpu').
+    entry(other, 'construct', ('identical', (4,), None), context)
     entry(other, 'add', ('linear', (3,), {'bias': False}), context)
     entry(other, 'add', ('relu', (), {}), context)
     assert public.layers == other.layers
