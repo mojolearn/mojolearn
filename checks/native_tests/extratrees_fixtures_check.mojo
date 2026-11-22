@@ -1,19 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
+"""One TestSuite check over `extratrees.checks.fixtures_check.run_checks()` (its body lives there, outside checks/native_tests)."""
+from std.testing import TestSuite
 from extratrees.checks.fixtures_check import run_checks
-from checks.native_tests.runner import Check, Column, Report
 
 
 # Registered by lane fx-checks-orphans (2026-11-18): `extratrees/checks/fixtures_check.mojo` was a
 # standalone main() that no pixi task, workflow, development group or tools
 # script ran. Its main() is now `run_checks()` there; this is its one entry
-# (`pixi run check-native-cpu extratrees_fixtures_check`).
-# Host column: the suite is host work and does not branch on the target.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+# (its TestSuite file).
+def test_fixtures_check() raises:
+    run_checks()
 
 
-def register() -> Check:
-    return Check("extratrees_fixtures_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

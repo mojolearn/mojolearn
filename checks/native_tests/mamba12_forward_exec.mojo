@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The Mamba-1/2 per-call forward without its per-call plumbing equals the
 old form bit for bit (lane fix-mamba12-forward-exec, 2026-11-13).
 
@@ -58,7 +59,7 @@ from mamba.impl.mamba_block_program import (
 )
 from mamba.checks.mamba_fixture import corpus_case, corpus_case_weights, corpus_case_x
 from mamba.checks.mamba2_fixture import m2_corpus_case, m2_case_weights, m2_case_x
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
 
 
 # ---- The device column (was mamba12_forward_exec_gpu_suite.mojo) ----
@@ -67,6 +68,11 @@ comptime M12_M1_CASE = 1
 comptime M12_M2_CASE = 1
 comptime M12_POISON: UInt32 = 0xFFFFFFFF
 comptime M12_ZERO: UInt32 = 0
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 def _filled(n: Int, word: UInt32) -> List[Float32]:
@@ -394,23 +400,19 @@ def run_case(unit: Int) raises:
     _ = blk^  # the programs read the weights and x by address
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(MAMBA12_FORWARD_EXEC_CASES)
+def test_case() raises:
+    var failed = 0
+    var text = String("")
     for unit in range(MAMBA12_FORWARD_EXEC_CASES):  # driver-loop: cases share one device and the program cache (module docstring)
         try:
             run_case(unit)
         except problem:
-            cases.fail(unit, problem)
+            failed += 1
+            text += "\n      case row " + String(unit) + ": " + String(problem)
     mamba_block_cache_clear()
+    if failed:
+        raise Error("case: " + String(failed) + " of " + String(MAMBA12_FORWARD_EXEC_CASES) + " cases failed" + text)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("mamba12_forward_exec", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

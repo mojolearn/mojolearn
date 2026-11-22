@@ -1,20 +1,71 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The registered check of the CNN DeviceTensor RUN suite."""
-from checks.native_tests.xcnn_tensor_run_suite import run_checks
-from checks.native_tests.runner import Check, Column, Report
+# native-check: cpu
+"""The CNN DeviceTensor RUN half (`x_cnn/tensor_run.mojo`), reached without
+Python (lane doorsplit-cnn-xseq, 2026-11-11). One case per pure RUN
+function: literal words and the tensor's own refusal texts. The handle
+release (`xcnn_tensor_run_free`) needs a published entry table and is
+covered by `xcnn_entry_table_suite.mojo`.
+
+The cases are independent units and run across the native host worker pool.
+"""
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from x_cnn.tensor_run import (
+    xcnn_tensor_run_check_dim, xcnn_tensor_run_check_handle, xcnn_tensor_run_handle_live,
+    xcnn_tensor_run_reshape_dims,
+)
+
+comptime XCNN_TENSOR_RUN_CASES = 4
 
 
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
-def register() -> Check:
-    return Check("xcnn_tensor_run", cpu=True, gpu=False, serial="", run=run_cases)
+def _refuses(problem: Error, text: String) raises:
+    require(String(problem) == text, "refusal text: got '" + String(problem) + "', expected '" + text + "'")
+
+
+def run_case(unit: Int) raises:
+    if unit == 0:
+        xcnn_tensor_run_check_dim(0, False)
+        xcnn_tensor_run_check_dim(-1, True)
+        try:
+            xcnn_tensor_run_check_dim(-1, False)
+            require(False, "negative dimension accepted")
+        except problem:
+            _refuses(problem, "ValueError: CNN tensor dimensions must be nonnegative")
+        try:
+            xcnn_tensor_run_check_dim(-2, True)
+            require(False, "dimension below -1 accepted in a reshape")
+        except problem:
+            _refuses(problem, "ValueError: CNN tensor dimensions must be nonnegative")
+    elif unit == 1:
+        xcnn_tensor_run_check_handle(1)
+        try:
+            xcnn_tensor_run_check_handle(0)
+            require(False, "zero handle accepted")
+        except problem:
+            _refuses(problem, "TypeError: CNN tensor handle requires a positive native integer")
+    elif unit == 2:
+        require(xcnn_tensor_run_handle_live(3) and not xcnn_tensor_run_handle_live(0)
+                and not xcnn_tensor_run_handle_live(-4), "live handle words")
+    else:
+        var dims = xcnn_tensor_run_reshape_dims([4, -1], [2, 3, 4])
+        require(len(dims) == 2 and dims[0] == 4 and dims[1] == 6, "inferred reshape")
+        var empty = xcnn_tensor_run_reshape_dims([0, -1], [0, 5])
+        require(empty[1] == 0, "inferred dimension of an empty tensor")
+        try:
+            _ = xcnn_tensor_run_reshape_dims([-1, -1], [4])
+            require(False, "two inferred dimensions accepted")
+        except problem:
+            _refuses(problem, "ValueError: CNN reshape accepts only one inferred dimension")
+
+
+def test_case() raises:
+    check_cases("case", XCNN_TENSOR_RUN_CASES, run_case)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

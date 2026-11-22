@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The CNN trainer's Linear layer forward and backward against float64, on
 the host column (lane tmig-sequence-1, 2026-11-14; ported from
 `test_x_cnn_trainer.py::test_linear_softmax_sgd`).
@@ -15,7 +16,8 @@ pool has nothing to split).
 from x_cnn.host.entry_runs_host import publish_x_cnn_host_entries
 from x_cnn.graph_run import graph_run_linear_forward, graph_run_linear_backward
 from checks.native_tests.cnn_cases import cnn_entry, addr, zeros32, normals, check_close
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.cnn_cases import require
 
 
 # ---- The host column (was cnn_trainer_cpu_suite.mojo) ----
@@ -60,20 +62,11 @@ def _linear() raises:
     _ = g^
 
 
-def _run_cpu(mut report: Report) raises:
+def test_linear() raises:
     # The publication _mojolearn_x_cnn_host makes at module init.
     publish_x_cnn_host_entries()
     _linear()
-    print("PASS cnn trainer linear", 1)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("cnn_trainer", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

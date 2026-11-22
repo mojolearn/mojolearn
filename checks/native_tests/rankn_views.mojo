@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Typed session views, axis reductions and first-maximum gradient checks.
 
 Independent coordinate indexing and Float64 accumulation replace NumPy
@@ -11,13 +12,16 @@ from autograd.rankn import ShapeN
 from core.cast_in import CastIn, CAST_KIND_FLOAT
 from core.hostptr import f32_ptr
 from sequence.exec_trait import Exec
-from core.host_parallel import host_parallelize
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.rankn_cases import require
 
 
 comptime RANKN_VIEW_FIXTURES = 17
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 def _upload[E: Exec & Movable & Deinitable](mut s: OpsSession[E], values: List[Float32], dims: List[Int], grad: Bool = False) raises -> Int:
@@ -207,52 +211,45 @@ def run_rankn_view_fixture[E: Exec & Movable & Deinitable](mut s: OpsSession[E],
 
 # ---- The host column entry (was rankn_views_cpu.mojo) ----
 # Independent typed host sessions run on the existing parallel host pool.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(RANKN_VIEW_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var s = OpsSession[HostExec](HostExec(), fixture_id == 16)
-            try:
-                run_rankn_view_fixture(s, fixture_id)
-            except error:
-                s.close()
-                raise error
-            s.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, RANKN_VIEW_FIXTURES)
 
 
-# ---- The device column entry (was rankn_views_gpu.mojo) ----
-# Native GPU element kernels, with ordered shared-context submissions.
-#
-# DeviceExec shares sequence_ctx() and its pool; concurrent sessions race its
-# ownership. The same explicit limitation as the ops-session check applies.
-# This is correctness coverage, not concurrent-session or scaling evidence.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(RANKN_VIEW_FIXTURES)
-    for fixture_id in range(RANKN_VIEW_FIXTURES):
-        try:
-            var s = OpsSession[DeviceExec](DeviceExec(), fixture_id == 16)
-            try:
-                run_rankn_view_fixture(s, fixture_id)
-            except error:
-                s.close()
-                raise error
-            s.close()
-        except error:
-            cases.fail(fixture_id, error)
-
-
-def run_cases(column: Column, mut report: Report):
+def _host_fixture(fixture_id: Int) raises:
+    var s = OpsSession[HostExec](HostExec(), fixture_id == 16)
     try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
+        run_rankn_view_fixture(s, fixture_id)
     except error:
-        report.abort(error)
+        s.close()
+        raise error
+    s.close()
 
 
-def register() -> Check:
-    return Check("rankn_views", cpu=True, gpu=True, serial="", run=run_cases)
+def test_fixture() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", RANKN_VIEW_FIXTURES, _host_fixture)
+    else:
+        # The device column (was rankn_views_gpu.mojo), inline in the comptime branch: TestSuite discovery
+        # instantiates every module function and the host column build has no device target.
+        # Native GPU element kernels, with ordered shared-context submissions.
+        # DeviceExec shares sequence_ctx() and its pool; concurrent sessions race its
+        # ownership. The same explicit limitation as the ops-session check applies.
+        # This is correctness coverage, not concurrent-session or scaling evidence.
+        var failed = 0
+        var text = String("")
+        for fixture_id in range(RANKN_VIEW_FIXTURES):  # driver-loop: ordered shared-context submissions
+            try:
+                var s = OpsSession[DeviceExec](DeviceExec(), fixture_id == 16)
+                try:
+                    run_rankn_view_fixture(s, fixture_id)
+                except error:
+                    s.close()
+                    raise error
+                s.close()
+            except error:
+                failed += 1
+                text += "\n      fixture row " + String(fixture_id) + ": " + String(error)
+        if failed:
+            raise Error("fixture: " + String(failed) + " of " + String(RANKN_VIEW_FIXTURES) + " cases failed" + text)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

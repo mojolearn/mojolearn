@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The device dense eigh route (`DevExec.eigh` -> `DevExec.eigh_into`, lane
 perf-decomp-eigh 2026-11-13) against its host twin `eigh_op_sym_host`, word
 for word, on the three routes the restored host-driven path takes:
@@ -18,7 +19,7 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from x_decomp.cells import F32Ptr
 from x_decomp.device import DevExec
 from x_decomp.eigh_ops_host import eigh_op_sym_host
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report
+from std.testing import TestSuite
 
 
 # ---- The device column (was eigh_route_gpu_suite.mojo) ----
@@ -86,7 +87,7 @@ def _case(var a: List[Float32], n: Int, name: String) raises:
     print("PASS eigh_route_gpu", name)
 
 
-def _run_gpu(mut report: Report) raises:
+def test_eigh_route() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
     _case(_full_rank(24), 24, "one-block n=24")
     _case(_full_rank(48), 48, "multi-block n=48")
@@ -94,13 +95,5 @@ def _run_gpu(mut report: Report) raises:
     _case(_low_rank(96, 12), 96, "refused tridiagonal -> multi-block n=96 rank 12")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("eigh_route", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

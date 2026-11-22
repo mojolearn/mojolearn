@@ -1,20 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
+"""One TestSuite check over `extratrees.checks.gpu_only_entrypoints.run_checks()` (its body lives there, outside checks/native_tests)."""
+from std.testing import TestSuite
 from extratrees.checks.gpu_only_entrypoints import run_checks
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
 
 
 # Registered by lane fx-checks-orphans (2026-11-18): `extratrees/checks/gpu_only_entrypoints.mojo` was a
 # standalone main() that no pixi task, workflow, development group or tools
 # script ran. Its main() is now `run_checks()` there; this is its one entry
-# (`pixi run check-native-gpu extratrees_gpu_only_entrypoints`).
-# Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
+# (its TestSuite file).
+def test_gpu_only_entrypoints() raises:
+    run_checks()
 
 
-def register() -> Check:
-    return Check("extratrees_gpu_only_entrypoints", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
