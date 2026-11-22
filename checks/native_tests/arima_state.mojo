@@ -17,11 +17,6 @@ from core.hostptr import f32_ptr
 from arima.host.arima_host_entries import _order, _forecast_into, _predict_in_sample_into, arima_host_fit_into
 from arima.estimator import arima_fit_ptr_host, arima_predict_ptr_host, arima_forecast_ptr_host
 from arima.resident_state import (
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
     arima_resident_prepare,
     arima_resident_count,
     arima_resident_release,
@@ -29,6 +24,11 @@ def require(ok: Bool, message: String) raises:
 )
 
 comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime ARIMA_STATE_FIXTURES = 8
