@@ -89,7 +89,7 @@ def test_one_caller_proceeds_and_the_other_is_refused_in_words(tmp_path, call, c
     np.testing.assert_array_equal(call(model), reference)
     assert model._resident_busy is False
     assert model._parameters_exposed is False
-    if call is not _read or model._resident_sessions is not None:
+    if call is not _read:
         assert model._resident_sessions is not None
     if refused == 0:
         pytest.skip("the callers never overlapped in %d rounds; the take itself is checked natively "
@@ -111,9 +111,9 @@ def test_exposed_model_runs_both_callers_on_private_sessions(tmp_path):
     assert model._resident_sessions is None
 
 
-def test_load_state_dict_reads_the_live_lease(tmp_path):
-    # A model that is not generating loads; the kept sessions and the
-    # exposure mark go with the replaced weights.
+def test_load_state_dict_drops_the_lease_with_the_weights(tmp_path):
+    # A model that is not generating loads (the refusal reads the live
+    # lease word); the kept sessions go with the replaced weights.
     model = resident_model(tmp_path, uniform=False)
     reference = _generate(model)
     weights = model.state_dict()

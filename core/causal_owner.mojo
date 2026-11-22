@@ -308,6 +308,7 @@ def causal_lease_release(word: CausalLeaseWord) -> Bool:
     while it held (or before): the holder then closes its sessions instead
     of leaving them kept; no taker can reach them, because an exposed word
     is never taken."""
+    var exposed = False
     while True:  # driver-loop: compare-and-set retry on the one lease word
         var current = Atomic.load[ordering=Ordering.ACQUIRE](word)
         var expected = current
@@ -315,7 +316,9 @@ def causal_lease_release(word: CausalLeaseWord) -> Bool:
             success_ordering=Ordering.SEQUENTIAL,
             failure_ordering=Ordering.RELAXED,
         ](word, expected, current & ~Int64(CAUSAL_LEASE_BUSY)):
-            return (Int(current) & CAUSAL_LEASE_EXPOSED) != 0
+            exposed = (Int(current) & CAUSAL_LEASE_EXPOSED) != 0
+            break
+    return exposed
 
 
 def causal_lease_expose(word: CausalLeaseWord) -> Bool:
@@ -323,6 +326,7 @@ def causal_lease_expose(word: CausalLeaseWord) -> Bool:
     now ALSO holds it busy (it drops the kept sessions and then calls
     `causal_lease_release`); False when a holder is running: that holder
     sees the bit at its next test and at its release, and closes."""
+    var held = False
     while True:  # driver-loop: compare-and-set retry on the one lease word
         var current = Atomic.load[ordering=Ordering.ACQUIRE](word)
         var expected = current
@@ -334,4 +338,6 @@ def causal_lease_expose(word: CausalLeaseWord) -> Bool:
             success_ordering=Ordering.SEQUENTIAL,
             failure_ordering=Ordering.RELAXED,
         ](word, expected, wanted):
-            return free
+            held = free
+            break
+    return held

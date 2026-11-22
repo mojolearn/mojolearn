@@ -590,15 +590,21 @@ def causal_lm_parameters_binding(mut mods: NativeModules, model: PythonObject, c
         # The exposure is one step on the live lease word. A free lease is
         # taken with it and its kept sessions dropped here; a running holder
         # sees the bit at its next test and at its release, and closes its own.
-        var lease_held = causal_model_lease(mods, model)
-        var lease = lease_held.downcast_value_ptr[CausalLease]()
-        if causal_lease_expose(lease[].live):
-            var dropped = lease[].kept
-            lease[].kept = PythonObject(None)
-            _ = causal_lease_release(lease[].live)
-            _ = dropped
-        causal_lease_publish(lease_held, py_get(model_fields, "_causal_live_fields", model_fields))
-        _ = lease_held
+        if py_get(model._native_entries, "parallel_call") is not None:
+            # A layer-partitioned model keeps no resident sessions in this
+            # process and has no lease: the mark is its public attribute only
+            # (ParallelCausalLM never reads it), written as before.
+            causal_model_cache_set(mods, model, model_fields, "_parameters_exposed", True)
+        else:
+            var lease_held = causal_model_lease(mods, model)
+            var lease = lease_held.downcast_value_ptr[CausalLease]()
+            if causal_lease_expose(lease[].live):
+                var dropped = lease[].kept
+                lease[].kept = PythonObject(None)
+                _ = causal_lease_release(lease[].live)
+                _ = dropped
+            causal_lease_publish(lease_held, py_get(model_fields, "_causal_live_fields", model_fields))
+            _ = lease_held
         causal_model_cache_set(mods, model, model_fields, "_decode_program", PythonObject(None))
     var p = model.plan
     var original_parameters = py_get(model_fields, "_causal_original_parameters", model_fields)
