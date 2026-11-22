@@ -4,13 +4,29 @@
 # its `test_*` functions run by the standard library's TestSuite from its own main(). No wrapper, no registry row.
 # Run with the checkout under test as the working directory (as tools/ops/native_checks_steps.sh is).
 #
-#   build <column> <bindir> <outdir>   compile every TestSuite file of the column to <bindir>/ts/<name>, in parallel:
-#                                      workers = min(cores, memory available x 0.8 / NC_TS_PEAK_MB) (the measured peak
-#                                      of one file's compile, default 1200 MB: 0.2-1.1 GB measured on cpc1, 2026-11-22),
-#                                      NC_TS_JOBS pins it. A file that fails to compile gets its result now
-#                                      (<outdir>/results/<name>.txt, the compile's first errors) and no binary; the
-#                                      others build on. Flags: NC_DEFINES and NC_TARGET (the column's, from the caller).
+#   build <column> <bindir> <outdir>   compile every TestSuite file of the column, GROUPED (lane ts-build, 2026-11-22;
+#                                      tools/ops/native_testsuite_groups.py): the files are dealt into G group programs
+#                                      (families together, balanced by tools/ops/native_testsuite_costs.tsv), each one
+#                                      `mojo build`, so the code its members share compiles once per group, not once
+#                                      per file. <bindir>/ts/<name> is a two-line wrapper that runs its group's binary
+#                                      (<bindir>/tsg/group_<k>) with MOJOLEARN_TS_FILE=<name>: same command line
+#                                      (--only, --skip, --skip-all), same output, one process per file. A group that
+#                                      fails to compile is rebuilt one file at a time, so a file that fails gets its
+#                                      own result (<outdir>/results/<name>.txt, the compile's first errors) and no
+#                                      binary, and its group's other files build on. The plan's singles (a file that
+#                                      cannot share a program) compile alone, as before.
+#                                      G and the compiles at once = min(cores, memory available x 0.8 /
+#                                      NC_TS_GROUP_PEAK_MB) (the measured peak of one group compile, default 6000 MB);
+#                                      NC_TS_GROUPS / NC_TS_JOBS pin them; a single file's compile is budgeted at
+#                                      NC_TS_PEAK_MB (default 1200: 0.2-1.1 GB measured on cpc1). The step prepares
+#                                      what the files need itself: the generated sources (tools/generated_sources.py),
+#                                      the fixture packs (tools/fixture_packs.py unpack), the column's defines
+#                                      (NC_DEFINES, default: identical, plus the host column's MOJOLEARN_COLUMN_CPU=1 or
+#                                      the device column's MOJOLEARN_RESIDENT_UPLOAD_COUNT=1) and the wheel's x86-64-v3
+#                                      target (NC_TARGET, default that baseline on x86_64; set empty for none).
 #                                      Exit 0 even when a file failed (its own row is red); 2 on a setup failure.
+#   one <column> <name>                build that one file alone (the build step's defines and target) and run it, its
+#                                      output on stdout; exit = the binary's (tools/e1_bootstrap.sh phases 0-1)
 #   run <column> <bindir> <outdir> <name>
 #                                      run one TestSuite check as one process (timeout IN_TIMEOUT, default 900 s) and
 #                                      write <outdir>/results/<name>.txt from its Summary line. A CRASH (signal, no
@@ -21,7 +37,8 @@
 #                                      build's result stands.
 #   is <name>                          exit 0 when <name> is a TestSuite check file
 #
-# Parallel plan (AGENTS.md hard rules): one compile per file, every file at once up to the worker count; the runs are
+# Parallel plan (AGENTS.md hard rules): G group compiles (G about the allocation's cores, fewer when memory says so) at
+# once, each a multi-threaded `mojo build` of 1/G of the files; the runs are
 # one process per file, dealt across the cores by the caller (cpu_box_checks_job.sh slices, native-checks.yml shards,
 # native_checks_gpu_job.sh xargs). Inside a file TestSuite runs its tests in order (the library's loop); a case table
 # inside one test runs across the cores (checks/native_tests/testsuite_cases.mojo check_cases).
@@ -29,6 +46,55 @@ set -u
 cmd=${1:-}
 PY=python3
 python3 -c 'import sys' 2> /dev/null || PY="pixi run python3"
+
+# What every TestSuite file needs before it compiles: the gitignored generated modules (the archive Unicode table, the
+# tokenizer table) and the fixture directories tracked as packs. Logs to <dir>.
+prepare() {
+    $PY tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$1/generated-sources.log" 2>&1 \
+        || { echo "testsuite: generated sources failed ($1/generated-sources.log)"; return 1; }
+    if [ -f tools/fixture_packs.py ]; then
+        $PY tools/fixture_packs.py unpack > "$1/fixture-unpack.log" 2>&1 \
+            || { echo "testsuite: fixture unpack failed ($1/fixture-unpack.log)"; return 1; }
+    fi
+}
+
+# The column's defines and the target: the caller's NC_DEFINES / NC_TARGET, else the ones the column is checked with.
+column_flags() {
+    local d="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
+    if [ "$1" = cpu ]; then d="$d -D MOJOLEARN_COLUMN_CPU=1"; else d="$d -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1"; fi
+    # The wheel's Linux x86-64 baseline (bindings/build_mamba.sh TARGET_FLAGS): without it the binary targets the
+    # build machine's chip and traps on an older one (native_checks_steps.sh build, run 43722561124).
+    local t="--target-cpu x86-64-v3 --target-features +avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave"
+    [ "$(uname -m)" = x86_64 ] || t=""
+    TS_DEFINES=${NC_DEFINES-$d}; TS_TARGET=${NC_TARGET-$t}
+}
+
+# One compile of the build: `group <k>` (the generated driver of group k) or `single <name>` (the file alone). A
+# single that fails writes its result row now. Run by xargs, so exported.
+compile_unit() {
+    local kind=$1 id=$2 log src dst t0 rc tm
+    t0=$(date +%s)
+    if [ "$kind" = group ]; then
+        log="$TS_OUT/logs/build-ts-group-$id.log"; dst="$TS_BIN/tsg/group_$id"; src="$TS_GEN/ts_group_$id.mojo"
+    else
+        log="$TS_OUT/logs/build-ts-$id.log"; dst="$TS_BIN/ts/$id"
+        src="checks/native_tests/$id.mojo"; [ -f "$src" ] || src="checks/$id.mojo"
+    fi
+    tm="$log.time"
+    if [ -x /usr/bin/time ]; then
+        /usr/bin/time -v -o "$tm" pixi run mojo build $TS_FLAGS -I . -I "$TS_GEN" -o "$dst" "$src" > "$log" 2>&1
+    else
+        pixi run mojo build $TS_FLAGS -I . -I "$TS_GEN" -o "$dst" "$src" > "$log" 2>&1
+    fi
+    rc=$?
+    if [ $rc -ne 0 ]; then
+        rm -f "$dst"
+        [ "$kind" = single ] && $TS_PY tools/ops/native_checks_report.py result "$id" --log "$log" --rc "$rc" \
+            --seconds "$(( $(date +%s) - t0 ))" --out-dir "$TS_OUT/results"
+    fi
+    echo "testsuite build $kind $id rc=$rc $(( $(date +%s) - t0 ))s $(awk -F': *' '/Maximum resident/ {printf "peak %d MB", $2/1024}' "$tm" 2> /dev/null)"
+}
+export -f compile_unit
 
 case "$cmd" in
 is)
@@ -39,7 +105,10 @@ is)
     exit 1 ;;
 build)
     column=${2:?build <column> <bindir> <outdir>}; bindir=${3:?}; out=${4:?}
-    mkdir -p "$bindir/ts" "$out/results" "$out/logs"
+    mkdir -p "$bindir/ts" "$bindir/tsg" "$out/results" "$out/logs"
+    case "$bindir" in /*) ;; *) bindir="$PWD/$bindir" ;; esac
+    prepare "$out/logs" || exit 2
+    column_flags "$column"
     list="$out/logs/testsuite-$column.txt"
     $PY tools/ops/native_checks_report.py testsuite --column "$column" --filter "${IN_FILTER:-*}" > "$list" || exit 2
     n=$(grep -c . "$list")
@@ -51,31 +120,68 @@ build)
     cores=$(alloc_cores)
     avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2> /dev/null)
     [ -n "$avail_kb" ] || avail_kb=$(( 16 * 1048576 ))
-    bymem=$(( avail_kb * 8 / 10 / (${NC_TS_PEAK_MB:-1200} * 1024) ))
+    gpeak=${NC_TS_GROUP_PEAK_MB:-6000}
+    bymem=$(( avail_kb * 8 / 10 / (gpeak * 1024) ))
     jobs=${NC_TS_JOBS:-$(( bymem < cores ? bymem : cores ))}
     [ "$jobs" -ge 1 ] || jobs=1
-    echo "testsuite: building $n files on the $column column, $jobs at once ($cores cores; memory allows $bymem at ${NC_TS_PEAK_MB:-1200} MB)"
-    export TS_BIN="$bindir/ts" TS_OUT="$out" TS_PY="$PY" TS_DEFINES="${NC_DEFINES:-}" TS_TARGET="${NC_TARGET:-}"
+    groups=${NC_TS_GROUPS:-$jobs}
+    gen="$bindir/tsgen"
+    $PY tools/ops/native_testsuite_groups.py plan --column "$column" --list "$list" --groups "$groups" --gen "$gen" \
+        > "$out/logs/testsuite-plan-$column.txt" || { echo "testsuite: group plan failed"; exit 2; }
+    ng=$(grep -c '^group ' "$gen/plan.txt"); ns=$(grep -c '^single ' "$gen/plan.txt")
+    echo "testsuite: building $n files on the $column column as $ng group programs and $ns single files, $jobs compiles at once ($cores cores; memory allows $bymem at $gpeak MB a group)"
+    export TS_BIN="$bindir" TS_OUT="$out" TS_PY="$PY" TS_FLAGS="$TS_DEFINES $TS_TARGET" TS_GEN="$gen"
     start=$(date +%s)
-    awk '{print $1, $2}' "$list" | xargs -P "$jobs" -n 2 bash -c '
-        name=$0; src=$1; log="$TS_OUT/logs/build-ts-$name.log"; t0=$(date +%s)
-        pixi run mojo build $TS_DEFINES $TS_TARGET -I . -o "$TS_BIN/$name" "$src" > "$log" 2>&1
-        rc=$?
-        if [ $rc -ne 0 ]; then
-            rm -f "$TS_BIN/$name"
-            $TS_PY tools/ops/native_checks_report.py result "$name" --log "$log" --rc "$rc" \
-                --seconds "$(( $(date +%s) - t0 ))" --out-dir "$TS_OUT/results"
-        fi
-        echo "testsuite build $name rc=$rc $(( $(date +%s) - t0 ))s"'
+    # every group and every planned single at once, up to the worker count (independent compiles)
+    { grep '^group ' "$gen/plan.txt" | awk '{print "group", $2}'; grep '^single ' "$gen/plan.txt" | awk '{print "single", $2}'; } \
+        | xargs -P "$jobs" -n 2 bash -c 'compile_unit "$0" "$1"'
+    # a group that did not compile: its files one at a time, so each failing file has its own red row
+    : > "$out/logs/testsuite-regroup-$column.txt"
+    while read -r _ k members; do
+        [ -x "$bindir/tsg/group_$k" ] && continue
+        echo "testsuite: group $k did not compile (logs/build-ts-group-$k.log); its $(wc -w <<< "$members") files one at a time"
+        printf 'single %s\n' $members >> "$out/logs/testsuite-regroup-$column.txt"
+    done < <(grep '^group ' "$gen/plan.txt")
+    # (a file alone is smaller than a group: its own memory budget, NC_TS_PEAK_MB)
+    bymem1=$(( avail_kb * 8 / 10 / (${NC_TS_PEAK_MB:-1200} * 1024) ))
+    jobs1=$(( bymem1 < cores ? bymem1 : cores )); [ "$jobs1" -ge 1 ] || jobs1=1
+    [ -s "$out/logs/testsuite-regroup-$column.txt" ] && \
+        xargs -P "$jobs1" -n 2 bash -c 'compile_unit "$0" "$1"' < "$out/logs/testsuite-regroup-$column.txt"
+    # bin/ts/<name>: the group members' wrappers (singles are their own binary there already)
+    while read -r _ k members; do
+        [ -x "$bindir/tsg/group_$k" ] || continue
+        for m in $members; do
+            printf '#!/bin/sh\n# %s is a member of group %s (tools/ops/native_testsuite_groups.py)\nexport MOJOLEARN_TS_FILE=%s\nexec "$(dirname "$0")/../tsg/group_%s" "$@"\n' \
+                "$m" "$k" "$m" "$k" > "$bindir/ts/$m"
+            chmod +x "$bindir/ts/$m"
+        done
+    done < <(grep '^group ' "$gen/plan.txt")
     failed=$(awk '{print $1}' "$list" | while read -r x; do [ -x "$bindir/ts/$x" ] || printf '%s ' "$x"; done)
-    echo "testsuite: $n files built in $(( $(date +%s) - start ))s; failed to compile: ${failed:-none}"
+    regrouped=$(awk '{print $2}' "$out/logs/testsuite-regroup-$column.txt" | wc -l)
+    echo "testsuite: $n files built in $(( $(date +%s) - start ))s ($ng groups, $ns planned singles, $regrouped files of failed groups rebuilt alone); failed to compile: ${failed:-none}"
     exit 0 ;;
+one)
+    column=${2:?one <column> <name>}; name=${3:?}
+    src=""
+    for f in "checks/native_tests/$name.mojo" "checks/$name.mojo"; do [ -f "$f" ] && src=$f && break; done
+    [ -n "$src" ] || { echo "no TestSuite file named $name"; exit 2; }
+    work=${NC_ONE_DIR:-build/native-one}; mkdir -p "$work"
+    prepare "$work" || exit 2
+    column_flags "$column"
+    pixi run mojo build $TS_DEFINES $TS_TARGET -I . -o "$work/$name" "$src" > "$work/build-$name.log" 2>&1 \
+        || { echo "$name: compile failed ($work/build-$name.log)"; grep -m 5 -A 6 'error' "$work/build-$name.log"; exit 1; }
+    pixi run "$work/$name"
+    exit $? ;;
 run)
     column=${2:?run <column> <bindir> <outdir> <name>}; bindir=${3:?}; out=${4:?}; name=${5:?}
     mkdir -p "$out/results" "$out/logs"
     bin="$bindir/ts/$name"
     case "$bin" in /*) ;; *) bin="./$bin" ;; esac
     log="$out/logs/$name.log"
+    # an artifact download drops the exec bits (GitHub's upload-artifact keeps none): restore them, the wrapper's group too
+    if [ -f "$bin" ] && [ ! -x "$bin" ]; then
+        chmod +x "$bin" "$(dirname "$bin")"/../tsg/group_* 2> /dev/null
+    fi
     if [ ! -x "$bin" ]; then
         # the build wrote this check's result (its compile errors); without one the check reads MISSING
         [ -f "$out/results/$name.txt" ] && echo "$name: no binary (compile failed, result kept)" && exit 0
@@ -111,5 +217,5 @@ run)
     echo "$name rc=$rc"
     exit 0 ;;
 *)
-    sed -n 2,27p "$0"; exit 2 ;;
+    sed -n "2,/^# Parallel plan/p" "$0"; exit 2 ;;
 esac

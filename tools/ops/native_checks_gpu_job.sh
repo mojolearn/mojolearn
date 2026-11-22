@@ -7,7 +7,7 @@
 # Launch (results persist to R2 from the pod through tools/box_persist_run.sh):
 #   tools/nvidia_central.sh submit measure --note native-checks-gpu tools/ops/native_checks_gpu_job.sh
 #   [--env NC_FILTER=spectral_%]   (`%` reads as `*`: submit --env refuses `*`; comma list of globs over names)
-#   [--env NC_TIMEOUT=900] [--env NC_JOBS=K]
+#   [--env NC_TIMEOUT=900] [--env NC_JOBS=K] [--env NC_EXPECT_COMMIT=<sha>]  (refuse a tree synced from another commit)
 # Read:  tools/box_persist.py fetch --tag <tag>; python3 tools/ops/native_checks_report.py report <dir>
 #
 # Parallel plan (AGENTS.md hard rules on parallelism): the build is one `mojo build` (the compiler's own threads use
@@ -64,7 +64,23 @@ if [ ! -x /usr/bin/time ]; then
     (apt-get install -y -q time > "$RES/apt-time.log" 2>&1) || say "/usr/bin/time unavailable: peak RSS not recorded"
 fi
 
-say "source $(git rev-parse --short=10 HEAD 2>/dev/null || echo unknown) in $TREE"
+# The commit under test. tools/dev_pod.sh sync leaves the tree's git HEAD at the worktree's merge base with main and
+# applies the worktree's diff on top, so `git rev-parse HEAD` names main, not the code that is built (nvc1-0004,
+# 2026-11-22, printed main's 49f2b12e24). The synced commit is in .git/devpod_synced (commit=, worktree_dirty=,
+# patch_sha256=); a tree without that record (a plain checkout) is its HEAD. NC_EXPECT_COMMIT, when given, must be it.
+SYNC_REC="$(git rev-parse --git-dir 2>/dev/null)/devpod_synced"
+if [ -f "$SYNC_REC" ]; then
+    SOURCE=$(sed -n 's/^commit=//p' "$SYNC_REC" | head -n 1)
+    SOURCE_NOTE="synced commit (box HEAD $(git rev-parse --short=10 HEAD 2>/dev/null) is its merge base; worktree_dirty=$(sed -n 's/^worktree_dirty=//p' "$SYNC_REC"), patch sha256 $(sed -n 's/^patch_sha256=//p' "$SYNC_REC" | cut -c1-16))"
+else
+    SOURCE=$(git rev-parse HEAD 2>/dev/null || echo unknown)
+    SOURCE_NOTE="tree HEAD (no sync record)"
+fi
+if [ -n "${NC_EXPECT_COMMIT:-}" ] && [ "${SOURCE#"$NC_EXPECT_COMMIT"}" = "$SOURCE" ]; then
+    say "the tree holds $SOURCE, not NC_EXPECT_COMMIT=$NC_EXPECT_COMMIT: sync the commit to test first"; exit 2
+fi
+say "source $SOURCE in $TREE: $SOURCE_NOTE"
+echo "$SOURCE" > "$RES/source-commit.txt"
 pixi install > "$RES/pixi-install.log" 2>&1 || { say "pixi install failed: $RES/pixi-install.log"; tail -n 20 "$RES/pixi-install.log"; exit 2; }
 pixi run mojo --version > "$RES/compiler-version.log" 2>&1
 
@@ -146,7 +162,7 @@ bbusy=$(busy_of "$RES/busy_cores_build.txt")
 say "BUSY build: $bbusy of $cores cores; checks: $busy of $cores cores"
 {
     echo "host: $(hostname) $(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null | head -n 1)"
-    echo "source: $(git rev-parse HEAD 2>/dev/null) compiler: $(head -n 1 "$RES/compiler-version.log")"
+    echo "source: $SOURCE ($SOURCE_NOTE) compiler: $(head -n 1 "$RES/compiler-version.log")"
     echo "filter: $FILTER; checks: $n; build rc $brc; wall: ${wall}s; timeout per check: ${NC_TIMEOUT:-900}s"
     echo "parallel: K=$K concurrent checks on $cores cores (K = min(cores, memory / ${NC_CHECK_PEAK_MB:-2048} MB) unless NC_JOBS); busy cores of $cores: checks $busy, build $bbusy"
     if [ -n "${brss:-}" ]; then echo "build: peak RSS $(( brss / 1024 )) MB (the one serial stage; not a check's)"
