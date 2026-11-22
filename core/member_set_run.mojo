@@ -3,7 +3,7 @@
 2026-11-22; docs/plans/PYTHON_AT_THE_BOUNDARY.md): the typed core of
 bindings/member_set_door.mojo, moved here so that every meta-estimator's fit
 RUN (Voting, MultiOutput, OneVsRest, Bagging, Stacking, ...) and a Mojo test
-can fit a member set without CPython. No Python: no PythonObject parameter,
+can fit a member set without CPython. No Python: no Python object parameter,
 field, local or import.
 
 The door keeps what touches CPython: UNPACK (`member_set_admit`: the
