@@ -554,15 +554,15 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 #### Deleting an experiment
 
-**PERMANENT RECORD (Andrew, 2026-10-28): `docs/TOMBSTONES.md` entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED to `docs/TOMBSTONES.md`.**
+**PERMANENT RECORD (Andrew, 2026-10-28; where the patches live changed 2026-11-25): `docs/TOMBSTONES.md` entries and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED to `docs/TOMBSTONES.md`. `docs/TOMBSTONES.md` and `docs/apple-fast/EXPERIMENTS.md` stay in the repo and are never pruned or trimmed, whatever their size.**
 
-**Protected on disk too (Andrew, 2026-11-14): `experiments/removed/`, `docs/TOMBSTONES.md` and `docs/apple-fast/EXPERIMENTS.md` are never pruned, trimmed, moved out of the repo or excluded from a wheel-size, disk-space or dead-code cleanup, whatever their size; a cleanup lane lists them as kept. A decided A/B whose losing arm (or superseded old path) is still in the code is an owed deletion: the deletion carries the four tombstone parts above.**
+**The restore patches live OUTSIDE the repo (Andrew, 2026-11-25: "if experiments are done and tombstoned we can remove them ... move experiments removed out of the repo, leave on drive"): `~/mojolearn-evidence/experiments-removed/<DEFINE>.patch`, with a copy in R2, never in the tree. A done, tombstoned experiment leaves nothing in the repo but its tombstones and its `EXPERIMENTS.md` row; its code is recoverable at the sha the tombstone names. The same holds for run output and finished-campaign material: it is deleted from the tree (git history keeps it); only measurements are kept, in `~/mojolearn-evidence/` and R2. A decided A/B whose losing arm (or superseded old path) is still in the code is an owed deletion: the deletion carries the four tombstone parts below.**
 
 Andrew, 2026-10-10: a deleted experiment is documented both inline and centrally. The deletion commit (or its lane) leaves all four:
 
 1. **Inline tombstone** at every deletion site: `# TOMBSTONE: MOJOLEARN_<DEFINE> (<verdict>) deleted <date> by <sha>; code recoverable at <sha>^.` plus a `# Restore:` line naming the patch.
 2. **`docs/TOMBSTONES.md` entry**: an index row and a section with what it tried, the files, the verdict with NV/AMD ratios per dataset and the quality change, run ids, the recoverable sha and the patch path.
-3. **`experiments/removed/<DEFINE>.patch`**: the reverse of the deletion restricted to code files (`git diff <sha> <sha>^ -- <files>`), so `git apply` restores the code. Code that never reached main gets no patch; record the lane branch@sha instead.
+3. **`~/mojolearn-evidence/experiments-removed/<DEFINE>.patch`** (outside the repo, copied to R2): the reverse of the deletion restricted to code files (`git diff <sha> <sha>^ -- <files>`), so `git apply` restores the code. Code that never reached main gets no patch; record the lane branch@sha instead.
 4. **Refusal and records**: a `removed` refusal in the define's family module `core/experiment_guards_<family>.mojo` (`core/six_lane_experiment_guards.mojo` only for guards shared across families; see `docs/build/HOT_GROUPS.md`), the entry moved to `removed` in its `grid_controls/*.json`, and the `docs/apple-fast/EXPERIMENTS.md` row.
 
 ## 6. Mojo rules that cost a build round (Andrew, 2026-11-09)

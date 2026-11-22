@@ -968,3 +968,14 @@ Old text of AGENTS.md "Race fairness", verbatim:
 Why it changed: on 2026-11-20 the Mac held 110 GB under `~/mojolearn-evidence/measure-candidate` and
 `release-candidates`, of which about 400 MB per large job was results; the rest was `run.tar.gz` per race (34 GB),
 model, input and output arrays (14 GB) and old builds. Nearly every job since 2026-11-17 times our own arms only.
+
+
+## 2026-11-25: where the restore patches live (superseded wording)
+
+Replaced in AGENTS.md "Deleting an experiment" on Andrew's word (2026-11-25). The earlier text:
+
+> **PERMANENT RECORD (Andrew, 2026-10-28): `docs/TOMBSTONES.md` entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED to `docs/TOMBSTONES.md`.**
+> 
+> **Protected on disk too (Andrew, 2026-11-14): `experiments/removed/`, `docs/TOMBSTONES.md` and `docs/apple-fast/EXPERIMENTS.md` are never pruned, trimmed, moved out of the repo or excluded from a wheel-size, disk-space or dead-code cleanup, whatever their size; a cleanup lane lists them as kept. A decided A/B whose losing arm (or superseded old path) is still in the code is an owed deletion: the deletion carries the four tombstone parts above.**
+
+> 3. `experiments/removed/<DEFINE>.patch`: the reverse of the deletion restricted to code files, so `git apply` restores the code.
