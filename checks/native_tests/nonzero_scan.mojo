@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of Mojolearn.
 """Native nonzero count/fill correctness, migrated from test_native_nonzero.py.
 
@@ -11,11 +12,11 @@ No Python objects, imports, binding calls, device identity records or timings.
 The old 8 shapes x 3 seeds remain, with a portable integer fixture generator
 replacing Python's Random. All planted bit patterns and midpoint cases remain.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.core_host_impl import nonzero_f64_count, nonzero_f64_fill
 from core.mojolearn_shell_impl import nonzero_f64_count_host, nonzero_f64_fill_host
-from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -205,42 +206,26 @@ def _capacity(arm: Int) raises:
     _ = values
 
 
-def run_checks() raises:
-    var failed = List[Int](length=60, fill=0)
-    var fp = failed.unsafe_ptr()
-    def task(unit: Int) {imm fp}:
-        var fixture_id = unit // 2
-        var arm = unit % 2
-        try:
-            if fixture_id == 29:
-                _capacity(arm)
-            else:
-                var fixture = _fixture(fixture_id)
-                var n = fixture[0]
-                var values = fixture[1].copy()
-                _check(values, n, fixture_id == 25, arm)
-        except error:
-            print("FAIL nonzero_scan fixture_id", fixture_id, "arm", arm, String(error))
-            fp.unsafe_store(unit, 1)
-    host_parallelize(task, 60)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "nonzero_scan failed " + String(failures) + " of 60 native fixture/implementation pairs")
-    print("PASS nonzero_scan: 30 native fixtures x 2 typed scan implementations, parallel")
-
-
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
+def _pair(unit: Int) raises:
+    """Row `unit`: fixture `unit // 2` on typed scan implementation `unit % 2`."""
+    var fixture_id = unit // 2
+    var arm = unit % 2
     try:
-        run_checks()
-    except error:
-        report.abort(error)
+        if fixture_id == 29:
+            _capacity(arm)
+        else:
+            var fixture = _fixture(fixture_id)
+            var n = fixture[0]
+            var values = fixture[1].copy()
+            _check(values, n, fixture_id == 25, arm)
+    except problem:
+        raise Error("fixture_id " + String(fixture_id) + " arm " + String(arm) + ": " + String(problem))
 
 
-def register() -> Check:
-    return Check("nonzero_scan", cpu=True, gpu=False, serial="", run=run_cases)
+def test_fixtures_by_implementation() raises:
+    """30 native fixtures x 2 typed scan implementations."""
+    check_cases("fixture x implementation", 60, _pair)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

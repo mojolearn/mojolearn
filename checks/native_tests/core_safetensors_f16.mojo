@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Every IEEE half pattern widened to float32, moved from
 test_safetensors_native_ndarray.py::test_every_half_pattern_preserves_sign_and_nan_payload
 (2026-11-14).
@@ -12,13 +13,23 @@ subnormals normalized, infinities kept and every NaN payload kept (never
 quieted). The source words must come back unchanged. The ndarray strides,
 native Array descriptor and refusal arms stay in the Python test.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, u16_ptr
 from decomposition.linalg_host_impl import from_f16_host_run
 from max.gpu.host import DeviceContext
 from decomposition.linalg_door_impl import from_f16_device
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime F16_WORDS = 65536
@@ -71,31 +82,21 @@ def check_unit(unit: Int) raises:
     _ = widened
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(F16_UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            check_unit(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, F16_UNITS)
-
-
-# ---- The device column (was core_safetensors_f16_gpu_suite.mojo) ----
-# The device float16 widening over every half pattern in one launch (the
-# kernel is one thread per word); the host checks the words across cores.
-def _run_gpu(mut report: Report) raises:
-    var ctx = DeviceContext()
-    var source = List[UInt16](length=F16_WORDS, fill=0)
-    var widened = List[Float32](length=F16_WORDS, fill=0)
-    for j in range(F16_WORDS):
-        source[j] = UInt16(j)
-    from_f16_device(ctx, f32_ptr(Int(widened.unsafe_ptr())), u16_ptr(Int(source.unsafe_ptr())), F16_WORDS)
-    var cases = report.cases(F16_UNITS)
-    var sp = source.unsafe_ptr()
-    var wp = widened.unsafe_ptr()
-    def task(unit: Int) {imm cases, imm sp, imm wp}:
-        try:
+def test_widening() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("widening", F16_UNITS, check_unit)
+    else:
+        # The device float16 widening over every half pattern in one launch (one thread per word); the host checks
+        # the words across cores.
+        var ctx = DeviceContext()
+        var source = List[UInt16](length=F16_WORDS, fill=0)
+        var widened = List[Float32](length=F16_WORDS, fill=0)
+        for j in range(F16_WORDS):
+            source[j] = UInt16(j)
+        from_f16_device(ctx, f32_ptr(Int(widened.unsafe_ptr())), u16_ptr(Int(source.unsafe_ptr())), F16_WORDS)
+        var sp = source.unsafe_ptr()
+        var wp = widened.unsafe_ptr()
+        def chunk(unit: Int) raises {imm sp, imm wp}:
             var start = unit * F16_CHUNK
             var src = List[UInt16](length=F16_CHUNK, fill=0)
             var words = List[UInt32](length=F16_CHUNK, fill=0)
@@ -103,22 +104,10 @@ def _run_gpu(mut report: Report) raises:
                 src[j] = sp[start + j]
                 words[j] = bitcast[DType.uint32](wp[start + j])
             check_words(start, F16_CHUNK, src, words, "device from_f16")
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, F16_UNITS)
-    _ = source
-    _ = widened
+        check_cases("device widening", F16_UNITS, chunk)
+        _ = source
+        _ = widened
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_safetensors_f16", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

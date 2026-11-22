@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original full Spectral prediction workloads and supported state refusals.
 
 Training-label agreement and extension-versus-fit embedding remain report-only
 in the Python controller; neither becomes a native correctness gate here.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.spectral_native_api import SpectralDriver, SpectralStateView, SpectralQueryShape, SpectralQueryRequest
@@ -13,7 +17,15 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.spectral_native_host import SpectralHostKernels
 from core.spectral_native_provider import spectral_native_v1
 from core.spectral_native_device import SpectralDeviceKernels
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime SPECTRAL_PREDICTION_FIXTURES = 6
@@ -259,45 +271,24 @@ def fixture[Device: Bool](driver: SpectralDriver, kind: Int) raises:
         _ = predicted_embedding^
 
 
-# ---- The host column (was spectral_prediction_cpu_suite.mojo) ----
-# Independent full Spectral prediction graphs run across host cores.
-def _run_cpu(mut report: Report) raises:
+def _host_fixture(unit: Int) raises:
+    var driver = SpectralDriver(spectral_native_v1[SpectralHostKernels])
+    fixture[False](driver, unit)
+
+
+def test_prediction() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SPECTRAL_PREDICTION_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            var driver = SpectralDriver(spectral_native_v1[SpectralHostKernels])
-            fixture[False](driver,unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task,SPECTRAL_PREDICTION_FIXTURES)
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("prediction", SPECTRAL_PREDICTION_FIXTURES, _host_fixture)
+    else:
+        # One query graph at a time on the physical GPU, selected single-row queries on the same ordered schedule.
+        var driver = SpectralDriver(spectral_native_v1[SpectralDeviceKernels])
+        for unit in range(SPECTRAL_PREDICTION_FIXTURES):  # driver-loop: one query graph at a time on the one device
+            try:
+                fixture[True](driver, unit)
+            except problem:
+                raise Error("prediction row " + String(unit) + ": " + String(problem))
 
 
-# ---- The device column (was spectral_prediction_gpu_suite.mojo) ----
-# One query graph at a time on the physical GPU; kernels stay parallel.
-#
-# Selected single-row queries use the same ordered device schedule. The recorded
-# shared-DeviceContext concurrent-submission failure remains separate and open.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var driver = SpectralDriver(spectral_native_v1[SpectralDeviceKernels])
-    var cases = report.cases(SPECTRAL_PREDICTION_FIXTURES)
-    for unit in range(SPECTRAL_PREDICTION_FIXTURES):
-        try:
-            fixture[True](driver,unit)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("spectral_prediction", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

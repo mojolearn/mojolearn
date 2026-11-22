@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original OneClassSVM workloads and independent kernel/KKT references.
 
 Each reference row is independent and parallel. Coordinate and dual sums inside
@@ -7,6 +8,9 @@ they do not call a production kernel or another fitted model. Original Python
 scikit-learn comparisons remain retained until the orchestrator accepts these
 additional native contracts. No timing or cross-device identity is asserted.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import exp, tanh
 from core.host_parallel import host_parallelize
 from core.labels_native_host import labels_host_fsum
@@ -33,7 +37,15 @@ from x_neighbors.native_descriptor_host import xn_native_v1
 from x_neighbors.ocsvm_resident_native_host import OcHostResident
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
 from x_neighbors.ocsvm_resident_native_device import OcDeviceResident
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime OCSVM_NATIVE_CASES = 12
@@ -302,48 +314,33 @@ def fixture(driver: XnDriver, resident_driver: OcResidentDriver, unit: Int, resi
     _ = fused_labels
 
 
-# ---- The host column (was ocsvm_native_cpu_suite.mojo) ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(OCSVM_NATIVE_CASES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(XnDriver(xn_native_v1), OcResidentDriver(OcResidentAPI[OcHostResident].entry), unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, OCSVM_NATIVE_CASES)
+def _host_fixture(unit: Int) raises:
+    fixture(XnDriver(xn_native_v1), OcResidentDriver(OcResidentAPI[OcHostResident].entry), unit)
 
 
-# ---- The device column (was ocsvm_native_gpu_suite.mojo) ----
-# Ordered numerical submissions while upstream shared-context concurrency is parked.
-def _run_gpu(mut report: Report) raises:
-    var resident = OcResidentDriver(OcResidentAPI[OcDeviceResident].entry)
-    var enabled = (resident.metadata(1) & 2) != 0
-    var count = OCSVM_NATIVE_CASES + (10 if enabled else 0)
-    var cases = report.cases(count)
-    for index in range(count):  # ordered shared-context numerical fixtures
-        var use_resident = index >= OCSVM_NATIVE_CASES
-        var unit = index
-        if use_resident:
-            unit -= OCSVM_NATIVE_CASES
-            if unit >= 4:
-                unit += 1  # precomputed keeps its original Gram route
-        try:
-            fixture(XnDriver(xn_native_v1_gpu), resident, unit, use_resident)
-        except problem:
-            cases.fail(index, problem)
-    if not enabled:
-        print("SKIP ocsvm_native_gpu resident: 10 cases; existing OCSVM_IDN_RES disabled")
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", OCSVM_NATIVE_CASES, _host_fixture)
+    else:
+        # Ordered numerical submissions while upstream shared-context concurrency is parked; with the resident route
+        # enabled, ten resident cases follow (precomputed keeps its original Gram route).
+        var resident = OcResidentDriver(OcResidentAPI[OcDeviceResident].entry)
+        var enabled = (resident.metadata(1) & 2) != 0
+        var count = OCSVM_NATIVE_CASES + (10 if enabled else 0)
+        for index in range(count):  # driver-loop: ordered shared-context numerical fixtures
+            var use_resident = index >= OCSVM_NATIVE_CASES
+            var unit = index
+            if use_resident:
+                unit -= OCSVM_NATIVE_CASES
+                if unit >= 4:
+                    unit += 1  # precomputed keeps its original Gram route
+            try:
+                fixture(XnDriver(xn_native_v1_gpu), resident, unit, use_resident)
+            except problem:
+                raise Error("fixture row " + String(index) + ": " + String(problem))
+        if not enabled:
+            print("SKIP ocsvm_native_gpu resident: 10 cases; existing OCSVM_IDN_RES disabled")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ocsvm_native", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

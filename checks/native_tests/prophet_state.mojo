@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native Prophet state queries and exact piecewise-linear expectations.
 
 Fixture0 retains the original full default fit (120 days, weekly order3,
@@ -6,6 +7,9 @@ Fixture0 retains the original full default fit (120 days, weekly order3,
 states have independent Float64 trend/holiday equations on dyadic values;
 fit repeat and fused/separate feature parity are not independent oracles.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import sin, isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -15,7 +19,6 @@ from sequence.ops_impl import prophet_predict_impl, prophet_predict_days_impl, p
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from sequence.fit_team_impl import prophet_fit_team_impl
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.entry_table import EntryRef, entry_ref_word
 from core.xseq_entry_table import XS_OP_COUNT
@@ -24,6 +27,15 @@ from sequence.xseq_prophet_run import (
     PROPHET_AUTO_AUTO, ProphetAuto, ProphetFitInput, ProphetSeason, ProphetTimes, prophet_run_fit_plan,
     prophet_run_prepare_fit,
 )
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime PROPHET_STATE_FIXTURES = 6
@@ -386,60 +398,46 @@ def typed_entry_fit() raises:
     _ = info
 
 
-def _run_cpu(mut report: Report) raises:
-    # The fixtures, then one case for the typed fit entry (index PROPHET_STATE_FIXTURES).
-    var cases = report.cases(PROPHET_STATE_FIXTURES + 1)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            if fixture_id == PROPHET_STATE_FIXTURES:
-                typed_entry_fit()
-            else:
-                fixture(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, PROPHET_STATE_FIXTURES + 1)
-
-
 # ---- The device column (was prophet_state_gpu_suite.mojo) ----
 # Importable native Prophet GPU fitted-state checks.
 def fixture_gpu(fixture_id: Int) raises:
-    var ex = DeviceExec()
-    var state = ProphetState(fixture_id)
-    if fixture_id == 0:
-        var inputs = ProphetFitInputs()
-        prepare_fit(ex, inputs, state)
-        var addresses = inputs.addresses(state)
-        var ip = state.ints(120)
-        ip.append(2000)
-        var fp: List[Float64] = [0.05]
-        require(prophet_fit_team_impl(ex, addresses, ip, fp) == 1, "Prophet full default fit count")
-        inputs.guards()
-        state.guards()
-        _ = inputs
-    run_queries(ex, state)
-    _ = state
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        var ex = DeviceExec()
+        var state = ProphetState(fixture_id)
+        if fixture_id == 0:
+            var inputs = ProphetFitInputs()
+            prepare_fit(ex, inputs, state)
+            var addresses = inputs.addresses(state)
+            var ip = state.ints(120)
+            ip.append(2000)
+            var fp: List[Float64] = [0.05]
+            require(prophet_fit_team_impl(ex, addresses, ip, fp) == 1, "Prophet full default fit count")
+            inputs.guards()
+            state.guards()
+            _ = inputs
+        run_queries(ex, state)
+        _ = state
 
 
-def _run_gpu(mut report: Report) raises:
-    # Shared sequence DeviceContext: submit independent states in order; every
-    # production fit/prediction uses its existing parallel device kernels.
-    var cases = report.cases(PROPHET_STATE_FIXTURES)
-    for fixture_id in range(PROPHET_STATE_FIXTURES):
-        try:
-            fixture_gpu(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def test_state() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("state", PROPHET_STATE_FIXTURES, fixture)
+    else:
+        # Shared sequence DeviceContext: independent states submitted in order; every production fit/prediction
+        # uses its existing parallel device kernels.
+        for fixture_id in range(PROPHET_STATE_FIXTURES):  # driver-loop: ordered on the shared sequence context
+            try:
+                fixture_gpu(fixture_id)
+            except problem:
+                raise Error("state row " + String(fixture_id) + ": " + String(problem))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_typed_entry_fit() raises:
+    comptime if CPU_COLUMN_BUILD:
+        typed_entry_fit()
 
 
-def register() -> Check:
-    return Check("prophet_state", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Supplementary RBF numerical and ordered native-resource ownership checks.
 
 Original Spectral files expose RBF boundary acceptance, not a numerical oracle.
 These checks add independent formula coverage and do not claim a Python test
 deletion. Native callback records are real owned storage pinned through unwind.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -15,7 +19,15 @@ from checks.native_tests.spectral_dense import clear
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_decomp.descriptor_host import x_decomp_host_v1
 from x_decomp.descriptor_device import x_decomp_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime SPECTRAL_RBF_OWNERSHIP_FIXTURES = 4
@@ -137,27 +149,6 @@ def numerical(entry: NativeDescriptorCall, unit: Int, resident: Bool) raises:
 comptime SPECTRAL_RBF_CPU_FIXTURES = SPECTRAL_RBF_OWNERSHIP_FIXTURES + SPECTRAL_RBF_NUMERICAL_FIXTURES
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var failures = List[Int](length=SPECTRAL_RBF_CPU_FIXTURES,fill=0)
-    var fp = failures.unsafe_ptr()
-    def task(unit: Int) {imm fp}:
-        try:
-            if unit < SPECTRAL_RBF_OWNERSHIP_FIXTURES:
-                ownership(unit)
-            else:
-                numerical(x_decomp_host_v1,unit-SPECTRAL_RBF_OWNERSHIP_FIXTURES,False)
-        except error:
-            fp.unsafe_store(unit,1)
-            print("FAIL spectral_rbf_cpu fixture",unit,String(error))
-    host_parallelize(task,SPECTRAL_RBF_CPU_FIXTURES)
-    var failed = 0
-    for value in failures:
-        failed += value
-    require(failed == 0,"spectral_rbf_cpu failed " + String(failed) + " fixtures")
-    print("PASS spectral_rbf_cpu:",SPECTRAL_RBF_CPU_FIXTURES,"supplementary owner and RBF formula fixtures")
-
-
 # ---- The device column (was spectral_rbf_gpu_suite.mojo) ----
 # One RBF graph at a time on the physical GPU, with existing parallel kernels.
 #
@@ -166,25 +157,28 @@ def _run_cpu(mut report: Report) raises:
 comptime SPECTRAL_RBF_GPU_FIXTURES = 2*SPECTRAL_RBF_NUMERICAL_FIXTURES
 
 
-def _run_gpu(mut report: Report) raises:
+def _host_numerical(unit: Int) raises:
+    numerical(x_decomp_host_v1, unit, False)
+
+
+def test_ownership() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("ownership", SPECTRAL_RBF_OWNERSHIP_FIXTURES, ownership)
+
+
+def test_numerical() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SPECTRAL_RBF_GPU_FIXTURES)
-    for unit in range(SPECTRAL_RBF_GPU_FIXTURES):
-        try:
-            numerical(x_decomp_device_v1,unit%2,unit>=2)
-        except error:
-            cases.fail(unit, error)
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("numerical", SPECTRAL_RBF_NUMERICAL_FIXTURES, _host_numerical)
+    else:
+        # One RBF graph at a time on the physical GPU, immediate then resident cell sequences; the separately
+        # recorded shared-context concurrent-submission failure remains open.
+        for unit in range(SPECTRAL_RBF_GPU_FIXTURES):  # driver-loop: one graph at a time on the one device
+            try:
+                numerical(x_decomp_device_v1, unit % 2, unit >= 2)
+            except problem:
+                raise Error("numerical row " + String(unit) + ": " + String(problem))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("spectral_rbf", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

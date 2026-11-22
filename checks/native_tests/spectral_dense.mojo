@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original dense COO/neighbor-affinity workloads without Python execution.
 
 Raw reference words were prepared from the original independent Python scan
 and sorted-candidate oracle. Product kernels, dimensions and tie rules stay
 unchanged. Native owners remain live through every borrowed pointer use.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.spectral_preparation_api import (
@@ -17,7 +21,15 @@ from core.spectral_preparation_api import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.spectral_preparation_host import SpectralPreparationHost
 from core.spectral_preparation_device import SpectralPreparationDevice
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime SPECTRAL_COO_FIXTURES = 6
@@ -189,21 +201,6 @@ struct HostSpectralDense(SpectralDenseCalls):
         driver.knn(SpectralKNNRequest(source, 0, 0, 0, dst, status, rows, neighbors, 0, False))
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SPECTRAL_DENSE_CPU_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            if unit < SPECTRAL_COO_FIXTURES:
-                var driver = SpectralPreparationDriver(spectral_preparation_native_v1[SpectralPreparationHost])
-                coo_case(driver, unit)
-            else:
-                affinity_case[HostSpectralDense](unit - SPECTRAL_COO_FIXTURES)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, SPECTRAL_DENSE_CPU_FIXTURES)
-
-
 # ---- The device column (was spectral_dense_gpu_suite.mojo) ----
 # One affinity graph at a time on the physical GPU; kernels stay parallel.
 #
@@ -217,25 +214,34 @@ struct DeviceSpectralDense(SpectralDenseCalls):
         driver.knn(SpectralKNNRequest(source, 0, 0, 0, dst, status, rows, neighbors, 0, False))
 
 
-def _run_gpu(mut report: Report) raises:
+def _coo(unit: Int) raises:
+    var driver = SpectralPreparationDriver(spectral_preparation_native_v1[SpectralPreparationHost])
+    coo_case(driver, unit)
+
+
+def _host_affinity(unit: Int) raises:
+    affinity_case[HostSpectralDense](unit)
+
+
+def test_coo() raises:
+    # COO scans are host metadata operations shared by both public images: covered once, on the host column.
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("coo", SPECTRAL_COO_FIXTURES, _coo)
+
+
+def test_affinity() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SPECTRAL_AFFINITY_FIXTURES)
-    for unit in range(SPECTRAL_AFFINITY_FIXTURES):
-        try:
-            affinity_case[DeviceSpectralDense](unit)
-        except error:
-            cases.fail(unit, error)
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("affinity", SPECTRAL_AFFINITY_FIXTURES, _host_affinity)
+    else:
+        # One affinity graph at a time on the physical GPU; kernels stay parallel. The separately recorded
+        # shared-DeviceContext concurrency failure stays open.
+        for unit in range(SPECTRAL_AFFINITY_FIXTURES):  # driver-loop: one graph at a time on the one device
+            try:
+                affinity_case[DeviceSpectralDense](unit)
+            except problem:
+                raise Error("affinity row " + String(unit) + ": " + String(problem))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("spectral_dense", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

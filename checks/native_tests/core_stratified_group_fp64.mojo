@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """StratifiedGroupKFold's group-fold plan under its explicit fused FP64
 policy, moved from test_stratified_group_fp64_identity.py (2026-11-14; the
 whole file).
@@ -22,13 +23,23 @@ checks/native_tests/fixtures/stratified_group/generate.py. Each group's fold
 must equal the oracle's, so every row is tested exactly once and train and
 test never share a row. The per-fold row lists themselves stay the door's.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import fma, sqrt
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.hotpath_impl_rows import bincount2_i32, strat_group_plan_i32
 from max.gpu.host import DeviceContext
 from core.hotpath_device import device_bincount2_i32
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime STRATIFIED_GROUP_FIXTURES = 6
@@ -192,55 +203,34 @@ def check_unit(unit: Int) raises:
     _ = sizes
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(STRATIFIED_GROUP_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            check_unit(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, STRATIFIED_GROUP_FIXTURES)
+def test_plan() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("plan", STRATIFIED_GROUP_FIXTURES, check_unit)
+    else:
+        # The group x class table on the device (device_bincount2_i32), the plan on the host as the door runs it;
+        # the cases run in order on one DeviceContext (each table is one kernel over all rows).
+        var ctx = DeviceContext()
+        for unit in range(STRATIFIED_GROUP_FIXTURES):  # driver-loop: ordered on one DeviceContext
+            try:
+                var c = strat_case(unit)
+                var labels = load_labels(c)
+                var groups = group_codes(c)
+                var fs = first_seen(labels)
+                var enc = fs[0].copy()
+                var k = fs[1]
+                var dist = List[Int64](length=c.groups * k, fill=-1)
+                require(device_bincount2_i32(ctx, Int(enc.unsafe_ptr()), Int(groups.unsafe_ptr()), c.rows, k, c.groups,
+                                             Int(dist.unsafe_ptr())), "the device table declined in-range codes")
+                var folds = List[Int32](length=c.groups, fill=-1)
+                var sizes = List[Int64](length=c.folds, fill=-1)
+                var bad = strat_group_plan_i32(Int(dist.unsafe_ptr()), 0, Int(folds.unsafe_ptr()), Int(sizes.unsafe_ptr()), k, c.groups, c.folds)
+                require(bad == 0, "every class has at least n_folds members")
+                check_plan(c, enc, k, groups, folds)
+                _ = dist
+                _ = sizes
+            except problem:
+                raise Error("plan row " + String(unit) + ": " + String(problem))
 
 
-# ---- The device column (was core_stratified_group_fp64_gpu_suite.mojo) ----
-# The GPU column's stratified group-fold plan: the group x class table on
-# the device (device_bincount2_i32), the plan on the host as the door runs it.
-# The six cases run in order on one DeviceContext (each table is one kernel
-# over all rows); the host oracles are cheap.
-def _run_gpu(mut report: Report) raises:
-    var ctx = DeviceContext()
-    var cases = report.cases(STRATIFIED_GROUP_FIXTURES)
-    for unit in range(STRATIFIED_GROUP_FIXTURES):
-        try:
-            var c = strat_case(unit)
-            var labels = load_labels(c)
-            var groups = group_codes(c)
-            var fs = first_seen(labels)
-            var enc = fs[0].copy()
-            var k = fs[1]
-            var dist = List[Int64](length=c.groups * k, fill=-1)
-            require(device_bincount2_i32(ctx, Int(enc.unsafe_ptr()), Int(groups.unsafe_ptr()), c.rows, k, c.groups,
-                                         Int(dist.unsafe_ptr())), "the device table declined in-range codes")
-            var folds = List[Int32](length=c.groups, fill=-1)
-            var sizes = List[Int64](length=c.folds, fill=-1)
-            var bad = strat_group_plan_i32(Int(dist.unsafe_ptr()), 0, Int(folds.unsafe_ptr()), Int(sizes.unsafe_ptr()), k, c.groups, c.folds)
-            require(bad == 0, "every class has at least n_folds members")
-            check_plan(c, enc, k, groups, folds)
-            _ = dist
-            _ = sizes
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_stratified_group_fp64", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

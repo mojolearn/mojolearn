@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """A fitted Holt-Winters model's in-sample prediction and stored level
 (ported from python/mojolearn/tests/test_holtwinters_inference.py
 `test_saved_model_forecasts_and_predicts`, its numerical half).
@@ -23,13 +24,19 @@ boundary); the composed spans are checked over packed state in
 holtwinters_state_cpu. The series is the original closed form, evaluated
 in Float64 and rounded to Float32 here.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import isfinite, isnan, sin, cos, pi
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from holtwinters.host.hw_predict import hw_predict_in_sample_ptr
 from holtwinters.impl.internal.hw_estimate import HW_INIT_ESTIMATED
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime HW_INFERENCE_FIXTURES = 2
@@ -117,30 +124,9 @@ def fixture(unit: Int) raises:
     _ = y^
 
 
-# ---- The host column (was decomp_holtwinters_inference_cpu_suite.mojo) ----
-# Holt-Winters fitted level and in-sample prediction, on the host fit body.
-#
-# The two seasonal fixtures are independent and run across host cores; each
-# fixture's per-cell relations use the host pool as well. The fit is the host
-# reference body only (the GPU fit is checked against it in hw_check), so
-# there is no GPU column.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(HW_INFERENCE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, HW_INFERENCE_FIXTURES)
+def test_fixtures() raises:
+    check_cases("fixture", HW_INFERENCE_FIXTURES, fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("decomp_holtwinters_inference", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

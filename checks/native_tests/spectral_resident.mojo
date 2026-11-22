@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Ordered actual resident graphs and native last-owner lifetime checks.
 
 One graph runs on the physical GPU at a time, including registry observations.
 This is not a concurrent shared-DeviceContext submission test. Every numerical
 kernel and original180/120-row workload is retained without a host substitute.
 """
+from std.testing import TestSuite
 from std.memory import ArcPointer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.spectral_native_api import (
@@ -20,7 +22,11 @@ from core.spectral_native_device import SpectralDeviceKernels
 from core.spectral_native_provider import spectral_native_v1
 from checks.native_tests.spectral_native import source, source_unchanged, guarded, finite, fit
 from checks.native_tests.spectral_prediction import query, labels_equal, labels_valid
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The device column (was spectral_resident_gpu_suite.mojo) ----
@@ -132,24 +138,15 @@ def fixture(driver: SpectralDriver, precomputed: Bool) raises:
         _ = again_embedding^
 
 
-def _run_gpu(mut report: Report) raises:
+def test_resident() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var driver = SpectralDriver(spectral_native_v1[SpectralDeviceKernels])
-    var cases = report.cases(SPECTRAL_RESIDENT_GPU_FIXTURES)
-    for unit in range(SPECTRAL_RESIDENT_GPU_FIXTURES):
+    for unit in range(SPECTRAL_RESIDENT_GPU_FIXTURES):  # driver-loop: one graph at a time on the one device
         try:
-            fixture(driver,unit != 0)
-        except error:
-            cases.fail(unit, error)
+            fixture(driver, unit != 0)
+        except problem:
+            raise Error("resident row " + String(unit) + ": " + String(problem))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("spectral_resident", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
