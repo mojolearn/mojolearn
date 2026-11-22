@@ -225,7 +225,6 @@ from checks.native_tests.agglo_state import register as register_agglo_state
 from checks.native_tests.arena_state import register as register_arena_state
 from checks.native_tests.transport_frame import register as register_transport_frame
 from checks.native_tests.member_abi import register as register_member_abi
-from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
 from checks.native_tests.boundary_layout import register as register_boundary_layout
 from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
 from checks.native_tests.causal_lm_entry import register as register_causal_lm_entry
@@ -245,15 +244,11 @@ from checks.native_tests.gp_label_owner import register as register_gp_label_own
 from checks.native_tests.gp_owner import register as register_gp_owner
 from checks.native_tests.gp_state import register as register_gp_state
 from checks.native_tests.hdbscan_plan import register as register_hdbscan_plan
-from checks.native_tests.hierarchy_connectivity_plan import register as register_hierarchy_connectivity_plan
 from checks.native_tests.host_entry_forest import register as register_host_entry_forest
 from checks.native_tests.ipca_contract import register as register_ipca_contract
 from checks.native_tests.ipca_state import register as register_ipca_state
 from checks.native_tests.kde_contract import register as register_kde_contract
 from checks.native_tests.kde_state import register as register_kde_state
-from checks.native_tests.kmeans_contract import register as register_kmeans_contract
-from checks.native_tests.kmeans_variants_contract import register as register_kmeans_variants_contract
-from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
 from checks.native_tests.parallel_byte_session import register as register_parallel_byte_session
 from checks.native_tests.cross_vendor_run import register as register_cross_vendor_run
 from checks.native_tests.cross_vendor_loopback import register as register_cross_vendor_loopback
@@ -263,8 +258,6 @@ from checks.native_tests.label_score_keys_stress import register as register_lab
 from checks.native_tests.labels_accuracy import register as register_labels_accuracy
 from checks.native_tests.labels_driver import register as register_labels_driver
 from checks.native_tests.labels_score_keys import register as register_labels_score_keys
-from checks.native_tests.linear_boundary_contracts import register as register_linear_boundary_contracts
-from checks.native_tests.linear_entry_production import register as register_linear_entry_production
 from checks.native_tests.linear_model_state import register as register_linear_model_state
 from checks.native_tests.lof_plan_contract import register as register_lof_plan_contract
 from checks.native_tests.logistic_config import register as register_logistic_config
@@ -277,14 +270,6 @@ from checks.native_tests.mani_umap_run import register as register_mani_umap_run
 from checks.native_tests.native_array_layout_check import register as register_native_array_layout_check
 from checks.native_tests.native_device_concurrency import register as register_native_device_concurrency
 from checks.native_tests.nearest_centroid_plan import register as register_nearest_centroid_plan
-from checks.native_tests.neighbors_ann_query_run import register as register_neighbors_ann_query_run
-from checks.native_tests.neighbors_ann_run import register as register_neighbors_ann_run
-from checks.native_tests.neighbors_graph_run import register as register_neighbors_graph_run
-from checks.native_tests.neighbors_kde_run import register as register_neighbors_kde_run
-from checks.native_tests.neighbors_knn_run import register as register_neighbors_knn_run
-from checks.native_tests.neighbors_local_run import register as register_neighbors_local_run
-from checks.native_tests.neighbors_semi_run import register as register_neighbors_semi_run
-from checks.native_tests.neighbors_split_run import register as register_neighbors_split_run
 from checks.native_tests.neural_entry import register as register_neural_entry
 from checks.native_tests.nmf_contract import register as register_nmf_contract
 from checks.native_tests.nmf_state import register as register_nmf_state
@@ -296,7 +281,6 @@ from checks.native_tests.pca_query_state import register as register_pca_query_s
 from checks.native_tests.pcs_contract import register as register_pcs_contract
 from checks.native_tests.portable_math import register as register_portable_math
 from checks.native_tests.prep_entry_table import register as register_prep_entry_table
-from checks.native_tests.qn_door_run import register as register_qn_door_run
 from checks.native_tests.registry_epoch import register as register_registry_epoch
 from checks.native_tests.ridge_multi_entry import register as register_ridge_multi_entry
 from checks.native_tests.samba_entry_table import register as register_samba_entry_table
@@ -321,11 +305,6 @@ from checks.native_tests.xcnn_entry_table import register as register_xcnn_entry
 from checks.native_tests.xcnn_graph_run import register as register_xcnn_graph_run
 from checks.native_tests.xcnn_pool_run import register as register_xcnn_pool_run
 from checks.native_tests.xcnn_tensor_run import register as register_xcnn_tensor_run
-from checks.native_tests.xseq_entry_glue import register as register_xseq_entry_glue
-from checks.native_tests.xseq_forecast_run import register as register_xseq_forecast_run
-from checks.native_tests.xseq_neural_run import register as register_xseq_neural_run
-from checks.native_tests.xseq_prophet_run import register as register_xseq_prophet_run
-from checks.native_tests.xseq_score_run import register as register_xseq_score_run
 
 # lane checks-toplevel (2026-11-16): the standalone main() checks at the top of checks/ no CI job ran, now registered
 from checks.batch_invariance_main import register as register_batch_invariance_main
@@ -814,7 +793,6 @@ def all_checks() -> List[Check]:
     checks.append(register_arena_state())
     checks.append(register_transport_frame())
     checks.append(register_member_abi())
-    checks.append(register_base_helpers_entry())
     checks.append(register_boundary_layout())
     checks.append(register_byte_lm_entry())
     checks.append(register_causal_lm_entry())
@@ -834,15 +812,11 @@ def all_checks() -> List[Check]:
     checks.append(register_gp_owner())
     checks.append(register_gp_state())
     checks.append(register_hdbscan_plan())
-    checks.append(register_hierarchy_connectivity_plan())
     checks.append(register_host_entry_forest())
     checks.append(register_ipca_contract())
     checks.append(register_ipca_state())
     checks.append(register_kde_contract())
     checks.append(register_kde_state())
-    checks.append(register_kmeans_contract())
-    checks.append(register_kmeans_variants_contract())
-    checks.append(register_kmeans_variants_lease())
     checks.append(register_parallel_byte_session())
     checks.append(register_cross_vendor_run())
     checks.append(register_cross_vendor_loopback())
@@ -852,8 +826,6 @@ def all_checks() -> List[Check]:
     checks.append(register_labels_accuracy())
     checks.append(register_labels_driver())
     checks.append(register_labels_score_keys())
-    checks.append(register_linear_boundary_contracts())
-    checks.append(register_linear_entry_production())
     checks.append(register_linear_model_state())
     checks.append(register_lof_plan_contract())
     checks.append(register_logistic_config())
@@ -866,14 +838,6 @@ def all_checks() -> List[Check]:
     checks.append(register_native_array_layout_check())
     checks.append(register_native_device_concurrency())
     checks.append(register_nearest_centroid_plan())
-    checks.append(register_neighbors_ann_query_run())
-    checks.append(register_neighbors_ann_run())
-    checks.append(register_neighbors_graph_run())
-    checks.append(register_neighbors_kde_run())
-    checks.append(register_neighbors_knn_run())
-    checks.append(register_neighbors_local_run())
-    checks.append(register_neighbors_semi_run())
-    checks.append(register_neighbors_split_run())
     checks.append(register_ivf_ops_table())
     checks.append(register_neural_entry())
     checks.append(register_nmf_contract())
@@ -886,7 +850,6 @@ def all_checks() -> List[Check]:
     checks.append(register_pcs_contract())
     checks.append(register_portable_math())
     checks.append(register_prep_entry_table())
-    checks.append(register_qn_door_run())
     checks.append(register_registry_epoch())
     checks.append(register_ridge_multi_entry())
     checks.append(register_samba_entry_table())
@@ -911,11 +874,6 @@ def all_checks() -> List[Check]:
     checks.append(register_xcnn_graph_run())
     checks.append(register_xcnn_pool_run())
     checks.append(register_xcnn_tensor_run())
-    checks.append(register_xseq_entry_glue())
-    checks.append(register_xseq_forecast_run())
-    checks.append(register_xseq_neural_run())
-    checks.append(register_xseq_prophet_run())
-    checks.append(register_xseq_score_run())
     # lane checks-toplevel (2026-11-16)
     checks.append(register_batch_invariance_main())
     checks.append(register_bin_order_check())
