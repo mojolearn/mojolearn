@@ -457,7 +457,8 @@ class Sequential(_CheckMixin):
         ``compile(loss="token_cross_entropy")`` and ``y`` the
         ``(n_samples, length)`` int32 next-token ids: the loss is the mean
         cross-entropy over every token, computed without forming the
-        logits. ``predict`` returns the logits.
+        logits. As the last layer, ``predict`` returns every position's
+        logits, ``(n_samples, length * vocab)`` in row-major order.
 
         Parameters
         ----------

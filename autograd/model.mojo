@@ -561,6 +561,9 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
                 if not src_shape.same(cur):
                     raise Error(_layer_name(i) + " (Multiply): multiplies tensors of different shapes")
             nxt = block_shape(k, la, 0, f, cur, _layer_name(i))
+            # lm_head (lane neural-blocks-3-lm): the LM head is the model's projection layer
+            if k == LAYER_LM_HEAD:
+                has_linear = True
             var sizes = block_param_sizes(k, la, 0, cur)
             if len(sizes) > 0:
                 p_off = off
@@ -584,7 +587,12 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
         cur = nxt
     if not has_linear:
         raise Error("model: add at least one Linear layer")
-    if cur.ndim != 1:
+    # lm_head (lane neural-blocks-3-lm): a final lm_head gives every position's logits, (length, vocab) per
+    # sample; the outputs are that sample flat (n_samples, length * vocab), in the layer's row-major order
+    var head_last = s.kinds[len(s.kinds) - 1] == LAYER_LM_HEAD
+    if head_last:
+        s.out_width[len(s.out_width) - 1] = cur.count()
+    elif cur.ndim != 1:
         raise Error("model: the output must be one vector per sample; add flatten() before the last "
                     + "linear layer")
     s.n_params = off
