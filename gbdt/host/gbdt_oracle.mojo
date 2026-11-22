@@ -2495,8 +2495,42 @@ def _split_leaves(
     var n_split = len(left_ids)
     if n_split == 0:
         return
+    var n_words = len(cindex)
+    # debug builds: the contract of the unchecked loads below (lane
+    # fx-gbdt-segv), once per call and per leaf, never per row
+    debug_assert(
+        len(row_index) >= n_rows and len(stats) >= stat_count * n_rows,
+        "_split_leaves: row_index / stats shorter than n_rows planes",
+    )
+    debug_assert(
+        len(right_ids) >= n_split and len(l_word_base) >= n_split
+        and len(l_field) >= n_split and len(l_value) >= n_split
+        and len(l_one_hot) >= n_split,
+        "_split_leaves: a per-leaf descriptor list is shorter than left_ids",
+    )
     var live_rows = 0
-    for i in range(n_split):
+    for i in range(n_split):  # driver-loop: over the split leaves (sizes)
+        debug_assert(
+            left_ids[i] >= 0 and left_ids[i] < len(p_sz)
+            and right_ids[i] >= 0 and right_ids[i] < len(p_sz)
+            and right_ids[i] < len(p_off),
+            "_split_leaves: a leaf id is outside p_off / p_sz",
+        )
+        debug_assert(
+            p_off[left_ids[i]] >= 0 and p_sz[left_ids[i]] >= 0
+            and p_off[left_ids[i]] + p_sz[left_ids[i]] <= n_rows,
+            "_split_leaves: a leaf's row range is outside n_rows",
+        )
+        debug_assert(
+            l_word_base[i] >= 0 and l_word_base[i] + n_rows <= n_words,
+            "_split_leaves: a leaf's word_base + n_rows is outside cindex",
+        )
+        debug_assert(
+            not with_histograms
+            or (max(left_ids[i], right_ids[i]) + 1) * stat_count * hist_cells
+            <= len(hist),
+            "_split_leaves: a histogram slot is outside hist",
+        )
         live_rows += p_sz[left_ids[i]]
     var units = _gbdt_units(max(live_rows, n_split), (2 + stat_count) * live_rows)
     var piece_rows = max(1, (live_rows + units - 1) // units)
@@ -2541,7 +2575,7 @@ def _split_leaves(
     var cindex_p = rebind[HostU32Ptr](cindex.unsafe_ptr())
     var hist_p = rebind[HostF32Ptr](hist.unsafe_ptr())
 
-    def count_zeros(unit: Int) {imm task_units, imm n_pieces, imm lo_p, imm hi_p, imm leaf_p, imm base_p, imm field_p, imm value_p, imm hot_p, imm zeros_p, imm row_p, imm cindex_p}:
+    def count_zeros(unit: Int) {imm task_units, imm n_pieces, imm n_rows, imm lo_p, imm hi_p, imm leaf_p, imm base_p, imm field_p, imm value_p, imm hot_p, imm zeros_p, imm row_p, imm cindex_p}:
         var piece = unit
         while piece < n_pieces:
             var leaf = leaf_p[piece]
@@ -2551,6 +2585,10 @@ def _split_leaves(
             var one_hot = hot_p[leaf] != 0
             var zeros = 0
             for pos in range(lo_p[piece], hi_p[piece]):
+                debug_assert(
+                    row_p[pos] >= 0 and row_p[pos] < n_rows,
+                    "_split_leaves: row_index holds a row outside n_rows",
+                )
                 var feature_val = cindex_p[word_base + row_p[pos]] & field
                 var goes_right = feature_val > value
                 if one_hot:
@@ -2592,6 +2630,10 @@ def _split_leaves(
             var one_at = one_at_p[piece]
             for pos in range(lo_p[piece], hi_p[piece]):
                 var row = row_p[pos]
+                debug_assert(
+                    row >= 0 and row < n_rows,
+                    "_split_leaves: row_index holds a row outside n_rows",
+                )
                 var feature_val = cindex_p[word_base + row] & field
                 var goes_right = feature_val > value
                 if one_hot:
@@ -2630,6 +2672,15 @@ def _split_leaves(
     _ = len(pc_zeros)
     _ = len(pc_zero_at)
     _ = len(pc_one_at)
+    # THE OLD row_index AND stats TOO (lane fx-gbdt-segv, the rc 139 of
+    # gbdt_feature_freq_experimental / gbdt_public_fits / gbdt_shape_sweep at
+    # cpc1-0007): both are assigned just below, so without these two names
+    # their last use was the `unsafe_ptr()` above and the old storage was
+    # freed BEFORE the tasks read it through `row_p` / `stats_p`; the
+    # allocator's free-list link then sat in the first words (row_index[0],
+    # stats[0..1]), and `cindex_p[word_base + row]` left the heap.
+    _ = len(row_index)
+    _ = len(stats)
     row_index = new_rows^
     stats = new_stats^
 
