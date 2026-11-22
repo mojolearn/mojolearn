@@ -132,6 +132,12 @@ def int8_apple_chunk_geometry(m: Int) -> Int:
     return INT8_APPLE_CHUNK_GEOMETRY_WIDE
 
 
+def int8_apple_chunk_geometry_name(geometry: Int) -> String:
+    if geometry == INT8_APPLE_CHUNK_GEOMETRY_ROW:
+        return String("ROW 8x128 (1x4 simdgroups, 1x4 fragments)")
+    return String("WIDE 64x64 (2x2 simdgroups, 4x4 fragments)")
+
+
 @always_inline
 def _stage_codes[
     ROWS: Int, KB: Int, NT: Int, PMAJOR: Bool, ST: Int
