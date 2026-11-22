@@ -150,6 +150,10 @@ def run_self_test(case_dir, atol):
 
 
 def main():
+    # Each case is tracked as one archive (tools/fixture_packs.py); recreate the case directories first.
+    import subprocess
+    subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture_packs.py"),
+                    "unpack"], check=True, stdout=subprocess.DEVNULL)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("case_dir")
     ap.add_argument("dump_dir", nargs="?")

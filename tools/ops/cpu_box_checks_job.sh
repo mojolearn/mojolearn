@@ -83,6 +83,8 @@ WT=$BASE/wt/$TAG
 ( flock 9; git -C "$SRC" worktree prune; git -C "$SRC" worktree add -q --detach --force "$WT" "$SHA" ) 9> "$BASE/src.lock" \
     > "$RES/logs/worktree.log" 2>&1 || { say "worktree of $SHA failed: $(tail -n 3 "$RES/logs/worktree.log")"; exit 2; }
 cd "$WT" || exit 2
+# Fixture cases are tracked as one archive each (tools/fixture_packs.py): recreate the case directories.
+[ -f tools/fixture_packs.py ] && python3 tools/fixture_packs.py unpack
 say "worktree $WT; pixi install (default)"
 pixi install --locked -e default > "$RES/logs/pixi-install.log" 2>&1 \
     || { say "pixi install failed: $(tail -n 5 "$RES/logs/pixi-install.log")"; exit 2; }

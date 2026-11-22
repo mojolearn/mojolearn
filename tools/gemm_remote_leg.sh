@@ -4876,7 +4876,7 @@ RELEASE_SOURCE
         _cases=$(python3 -c "import sys;sys.path.insert(0,'$PWD/tools');from verify_linux_surface_qualification import CORPUS_CASES;print(' '.join(CORPUS_CASES))")
         [ -n "$_cases" ] || leg_die "could not read CORPUS_CASES"
         # shellcheck disable=SC2086
-        ( cd "$PWD" && tar czf "$TMPD/corpus.tgz" $(for _c in $_cases; do echo "checks/native_tests/fixtures/mamba/$_c"; done) ) || leg_die "corpus tar failed"
+        ( cd "$PWD" && python3 tools/fixture_packs.py unpack > /dev/null && tar czf "$TMPD/corpus.tgz" $(for _c in $_cases; do echo "checks/native_tests/fixtures/mamba/$_c"; done) ) || leg_die "corpus tar failed"
         # transformer/corpus TOO (92 KB). The bounded mamba archive carries
         # transformer/corpus/gen_corpus.py but not the corpus itself, and the
         # installed transformer surface asserts the corpus landed -- it failed

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import struct
+import subprocess
 import sys
 # The release rehearsal (packaging/check_ext_lists.py) executes this file by path to compare
 # CLASSICAL_FAST; tools/ is then not on sys.path, so the sibling import needs it (2026-10-24).
@@ -475,6 +476,10 @@ def sources(root):
         if path.is_file():
             paths.add(path)
     # The installed Mamba surface gate reads these committed reference operands.
+    if (root / 'tools/fixture_packs.py').is_file() and (root / 'checks/native_tests/fixtures/PACKS.txt').is_file():
+        # Each case is tracked as one archive (tools/fixture_packs.py); recreate the case directories.
+        subprocess.run([sys.executable, str(root / 'tools/fixture_packs.py'), 'unpack'], check=True,
+                       stdout=subprocess.DEVNULL)
     for case in CORPUS_CASES:
         directory = root / 'checks/native_tests/fixtures/mamba' / case
         require((directory / 'x.f32').is_file(), 'Missing installed Mamba corpus: ' + case)

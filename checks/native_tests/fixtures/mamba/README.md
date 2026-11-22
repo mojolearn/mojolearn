@@ -1,5 +1,11 @@
 # Mamba reference corpus
 
+> **Storage.** Each case is tracked as ONE archive, `<case>.tar`, in place of its ~45 loose files. Run
+> `python3 tools/fixture_packs.py unpack` to recreate the case directories (byte for byte; the runners and the
+> package tests do it themselves). After regenerating a case, `python3 tools/fixture_packs.py pack` rebuilds its
+> archive. The case directories themselves are git-ignored.
+
+
 This directory contains independently generated tolerance references for
 Mamba 1, Mamba 2 (SSD), and Mamba 3 (SISO). `gen_corpus.py` implements cited
 PyTorch references and emits deterministic inputs plus per-stage

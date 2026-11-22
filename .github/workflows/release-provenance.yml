@@ -520,15 +520,15 @@ jobs:
           root = pathlib.Path(sys.argv[1])
           sys.path.insert(0, str(root / 'tools'))
           from verify_linux_surface_qualification import CORPUS_CASES
+          import io, tarfile
           for case in CORPUS_CASES:
-              prefix = 'checks/native_tests/fixtures/mamba/' + case
-              names = subprocess.check_output(['git', 'ls-tree', '-rz', '--name-only', 'HEAD', '--', prefix])
-              for name in names.decode().split('\0'):
-                  if not name:
-                      continue
-                  target = root / name
-                  target.parent.mkdir(parents=True, exist_ok=True)
-                  target.write_bytes(subprocess.check_output(['git', 'show', 'HEAD:' + name]))
+              # Each case is tracked as one archive (tools/fixture_packs.py).
+              name = 'checks/native_tests/fixtures/mamba/' + case + '.tar'
+              data = subprocess.check_output(['git', 'show', 'HEAD:' + name])
+              target = (root / name).parent
+              target.mkdir(parents=True, exist_ok=True)
+              with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+                  tar.extractall(target, filter='data')
           PY
           # A release is verified by the CPU column and the Apple pass
           # (2026-09-19). NVIDIA and AMD qualification is checked when someone

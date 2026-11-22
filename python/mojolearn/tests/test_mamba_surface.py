@@ -149,6 +149,11 @@ def corpus_root():
     for _ in range(8):
         cand = os.path.join(d, "checks", "native_tests", "fixtures", "mamba")
         if os.path.isdir(cand):
+            # Each case is tracked as one archive (tools/fixture_packs.py); recreate the case directories.
+            packs = os.path.join(d, "tools", "fixture_packs.py")
+            if os.path.isfile(packs):
+                import subprocess
+                subprocess.run([sys.executable, packs, "unpack"], check=True, stdout=subprocess.DEVNULL)
             return cand
         d = os.path.dirname(d)
     return None

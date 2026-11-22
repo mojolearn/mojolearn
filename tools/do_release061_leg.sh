@@ -465,7 +465,7 @@ if [ "$LEG_MODE" = qualify ]; then
   # CORPUS_CASES names are shipped, 4.6 MB, not the whole directory.
   CORPUS_CASES=$(MOJOLEARN_QUIET=1 python3 -c "import sys;sys.path.insert(0,'$REPO/tools');from verify_linux_surface_qualification import CORPUS_CASES;print(' '.join(CORPUS_CASES))")
   [ -n "$CORPUS_CASES" ] || { log "could not read CORPUS_CASES"; exit 6; }
-  ( cd "$REPO" && tar czf "$TMPD/corpus.tgz" $(for c in $CORPUS_CASES; do echo "checks/native_tests/fixtures/mamba/$c"; done) ) \
+  ( cd "$REPO" && python3 tools/fixture_packs.py unpack > /dev/null && tar czf "$TMPD/corpus.tgz" $(for c in $CORPUS_CASES; do echo "checks/native_tests/fixtures/mamba/$c"; done) ) \
     || { log "corpus tar failed"; exit 6; }
   CORPUS_SHA=$(sha256_of "$TMPD/corpus.tgz")
   log "shipping the qualification corpora ($(wc -c < "$TMPD/corpus.tgz" | tr -d ' ') bytes, $(echo $CORPUS_CASES | wc -w | tr -d ' ') cases)"
