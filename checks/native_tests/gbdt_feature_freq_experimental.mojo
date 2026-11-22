@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The two-level FeatureFreq fit entry on the literal inputs of
 test_feature_freq_experimental_surface.py (lane tests-to-mojo-trees, 2026-11-16).
 
@@ -28,7 +29,9 @@ family's device plan, as `bindings/_mojolearn_gbdt.mojo` calls it.
 from gbdt.mojolearn_gbdt_host_run import gbdt_fit_two_level_feature_freq_run as ff_fit_host
 from gbdt.mojolearn_gbdt_run import _gbdt_device_plan, gbdt_fit_two_level_feature_freq_run as ff_fit_device
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 comptime FF_CPU_UNITS = 1
 comptime FF_GPU_UNITS = 2
@@ -60,7 +63,7 @@ def _fit(
     var w_address = Int(weights.unsafe_ptr()) if n_weights > 0 else y_address
     var sp = _U32P(unsafe_from_address=Int(sources.unsafe_ptr()))
     var text: String
-    comptime if CPU_COLUMN_BUILD:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
         text = ff_fit_host(x_address, y_address, sp, n, d, n_weights, 2, learning_rate, l2_leaf_reg)
     else:
         text = ff_fit_device(
@@ -109,38 +112,31 @@ def run_unit(unit: Int) raises:
         forwards_weights()
 
 
-def _run_cpu(mut report: Report) raises:
+def _cpu_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(FF_CPU_UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_unit(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, FF_CPU_UNITS)
+    check_cases("gbdt_feature_freq_experimental", FF_CPU_UNITS, run_unit)
 
 
-# Each device fit owns the process device context for its whole graph, so the
-# device units run in order.
-def _run_gpu(mut report: Report) raises:
+def _gpu_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(FF_GPU_UNITS)
+    var failed = String("")
+    var count = 0
     for unit in range(FF_GPU_UNITS):  # driver-loop: over the ordered shared-context units
         try:
             run_unit(unit)
         except error:
-            cases.fail(unit, error)
+            count += 1
+            failed += "\n      gbdt_feature_freq_experimental row " + String(unit) + ": " + String(error)
+    if count > 0:
+        raise Error("gbdt_feature_freq_experimental: " + String(count) + " of " + String(FF_GPU_UNITS) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("gbdt_feature_freq_experimental", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

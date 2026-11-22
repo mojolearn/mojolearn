@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The typed RUN of corpus preparation (lane dw-neural-models, 2026-11-21):
 `bindings/lm_corpus_prepare_run.mojo` over `bindings/lm_corpus_files_run.mojo`
 and `core/native_json_value.mojo`. Host files only: the CPU column.
@@ -40,7 +41,8 @@ from core.sha256 import sha256_hex, sha256_hex_text
 from tokenizer.encoding import string_bytes
 from tokenizer.impl.tokenizer_host_shell_impl import BpeHandle, bpe_decode_seq_bytes, bpe_handle_load
 from tokenizer.impl.vocab_build import ranks_text
-from checks.native_tests.runner import Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 comptime LM_PREPARE_FIXTURES = 3
 
@@ -167,18 +169,9 @@ def run_fixture(unit: Int) raises:
         prepare_fixture()
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        var cases = report.cases(LM_PREPARE_FIXTURES)
-        def task(unit: Int) {imm cases}:
-            try:
-                run_fixture(unit)
-            except error:
-                cases.fail(unit, error)
-        report.parallel(task, LM_PREPARE_FIXTURES)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    check_cases("lm_corpus_prepare", LM_PREPARE_FIXTURES, run_fixture)
 
 
-def register() -> Check:
-    return Check("lm_corpus_prepare", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

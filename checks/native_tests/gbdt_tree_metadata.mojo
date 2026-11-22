@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The tree inspection records behind `GradientBoosting.get_tree_leaf_counts`
 and `get_leaf_values`, on the literal model texts of test_gbdt_tree_metadata.py
 (moved from its `test_tree_values_recover_bits_and_preserve_leaf_dimension_order`,
@@ -23,7 +24,8 @@ in the Python test (boundary).
 from std.memory import bitcast
 
 from core.trees_gbdt_metadata import gbdt_tree_metadata
-from checks.native_tests.runner import Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 comptime GBDT_TREE_METADATA_CASES = 6
 
@@ -76,15 +78,9 @@ def run_case(index: Int) raises:
                 label + ": an out-of-order tree record was accepted")
 
 
-def run_cases(column: Column, mut report: Report):
-    var cases = report.cases(GBDT_TREE_METADATA_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_case(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GBDT_TREE_METADATA_CASES)
+def test_cases() raises:
+    check_cases("gbdt_tree_metadata", GBDT_TREE_METADATA_CASES, run_case)
 
 
-def register() -> Check:
-    return Check("gbdt_tree_metadata", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

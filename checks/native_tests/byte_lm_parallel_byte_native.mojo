@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The cooperative byte LM trainer's decay-only step and its single-device
 replay, ported from `test_parallel_byte_native.py::
 test_gpu_parallel_step_independent_decay_loss_and_complete_replay` (lane
@@ -28,7 +29,7 @@ from training.byte_lm_config import ByteConfig
 from training.byte_lm_parallel import ByteParallelTrainer
 from training.byte_lm_door_run import byte_parallel_export_run
 from training.checks.optimizer_contract import OptimizerConfig, OPT_ADAMW
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
 
 
 # ---- The device column (was byte_lm_parallel_byte_native_gpu_suite.mojo) ----
@@ -90,7 +91,7 @@ def shards() -> List[List[Int32]]:
     return out^
 
 
-def _run_gpu(mut report: Report) raises:
+def test_decay_only_step_and_replay() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var cfg = ByteConfig(batch=1, length=4, d_model=8, n_heads=2, n_kv=1, head_dim=4, intermediate=16,
                          n_layers=1, vocab_size=16, chunked_lm_head_v2=False)
@@ -143,13 +144,5 @@ def _run_gpu(mut report: Report) raises:
     print("PASS byte_lm_parallel_byte_native_gpu: decay-only step on", len(ids), "devices and its replay")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("byte_lm_parallel_byte_native", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

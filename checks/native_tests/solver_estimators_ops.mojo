@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The solver operations table (core/solver_entry_table.mojo) and the
 estimators QN / QN-fold tables (core/estimators_entry_table.mojo), one case
 per entry the linear owner (bindings/x_linear_native_door.mojo, ElasticNet /
@@ -34,14 +35,15 @@ from core.logistic_native_api import (
     QN_NATIVE_DECISION,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.host_parallel import host_parallelize
 from solver.ops_entry_host import solver_ops_host_v1, SOLVER_OPS_HOST_API
 from glm.host.logistic_native_host import qn_host_native_v1, LOGISTIC_HOST_API
 from checks.vendor import COMPILED_VENDOR
 from solver.ops_entry_device import solver_ops_device_v1, SOLVER_OPS_DEVICE_API
 from glm.logistic_native_device import qn_device_native_v1, LOGISTIC_DEVICE_API
 from glm.logistic_fold_native import logistic_fold_v1, LOGISTIC_FOLD_API
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime SOLVER_CASES = 4
@@ -244,36 +246,26 @@ def check_estimators_table[family: Int](key: EstimatorsEntryKey, publisher: Int,
             "estimators table: lookup returned another pointer")
 
 
-# ---- The host column (was solver_estimators_ops_cpu_suite.mojo) ----
-# The CPU column of the solver operations table and the estimators QN
-# table: the table round trips first (ordered metadata), then the independent
-# entry cases on the existing host pool.
-def _run_cpu(mut report: Report) raises:
+def _host_solver(case_id: Int) raises:
+    run_solver_case(solver_ops_host_v1, case_id)
+
+
+def _host_qn(case_id: Int) raises:
+    run_qn_case(qn_host_native_v1, case_id)
+
+
+def _cpu_cases() raises:
     var mode = Int(GLOBAL_NUMERIC_MODE)
     var solver_api = SOLVER_OPS_HOST_API.get_or_create_ptr()
     check_solver_table(SolverEntryKey(mode, 0), Int(solver_api[].entries.unsafe_ptr()), solver_ops_host_v1)
     var qn_api = LOGISTIC_HOST_API.get_or_create_ptr()
     check_estimators_table[ESTIMATORS_TABLE_QN](EstimatorsEntryKey(mode, 0), Int(qn_api[].entries.unsafe_ptr()),
                                                 qn_host_native_v1)
-    var total = SOLVER_CASES + QN_CASES
-    var cases = report.cases(total)
-    def task(case_id: Int) {imm cases}:
-        try:
-            if case_id < SOLVER_CASES:
-                run_solver_case(solver_ops_host_v1, case_id)
-            else:
-                run_qn_case(qn_host_native_v1, case_id - SOLVER_CASES)
-        except error:
-            cases.fail(case_id, error)
-    report.parallel(task, total)
+    check_cases("solver", SOLVER_CASES, _host_solver)
+    check_cases("qn", QN_CASES, _host_qn)
 
 
-# ---- The device column (was solver_estimators_ops_gpu_suite.mojo) ----
-# The device column of the solver operations table and the estimators QN
-# and QN-fold tables. The entries share their bindings' device contexts, so
-# the cases submit in order; the kernels keep their native parallelism (no
-# concurrency claim).
-def _run_gpu(mut report: Report) raises:
+def _gpu_cases() raises:
     var mode = Int(GLOBAL_NUMERIC_MODE)
     var vendor = solver_vendor_word(COMPILED_VENDOR)
     require(vendor > 0, "solver_estimators_ops_gpu: this build has no GPU vendor")
@@ -307,15 +299,12 @@ def _run_gpu(mut report: Report) raises:
     print("PASS solver_estimators_ops_gpu:", SOLVER_CASES + QN_CASES + 1, "native solver / QN table cases")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("solver_estimators_ops", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

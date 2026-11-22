@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Weighted accuracy and weighted R^2 against their definitions (ported
 from python/mojolearn/tests/test_weighted_score.py
 `test_weighted_accuracy_and_r2_match_the_definition`).
@@ -22,12 +23,13 @@ Python file. Importable; no `main()`.
 """
 from std.memory import bitcast
 from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR, fixture_f32, fixture_i32
-from core.host_parallel import host_parallelize
 from metrics.host.metrics_oracle import host_weighted_accuracy_ptr
 from metrics.host.r2_entry_host import _r2_weighted_value
 from metrics.estimator import accuracy_score_weighted_host
 from metrics.r2_entry_device import _r2_weighted_value as _r2_weighted_value_gpu
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime WEIGHTED_N = 4099
@@ -112,16 +114,6 @@ struct HostWeighted(WeightedCalls):
         return _r2_weighted_value(Int(y.unsafe_ptr()), Int(y_hat.unsafe_ptr()), Int(w.unsafe_ptr()), n)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(WEIGHTED_UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            weighted_unit[HostWeighted](unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, WEIGHTED_UNITS)
-
-
 # ---- The device column (was metrics_weighted_score_gpu_suite.mojo) ----
 # Weighted accuracy and R^2 on the device column: the metrics device
 # binding's bodies (`accuracy_score_weighted_host`, `_r2_weighted_value`).
@@ -138,24 +130,33 @@ struct DeviceWeighted(WeightedCalls):
         return _r2_weighted_value_gpu(Int(y.unsafe_ptr()), Int(y_hat.unsafe_ptr()), Int(w.unsafe_ptr()), n)
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(WEIGHTED_UNITS)
+def _host_unit(unit: Int) raises:
+    weighted_unit[HostWeighted](unit)
+
+
+def _cpu_cases() raises:
+    check_cases("metrics_weighted_score", WEIGHTED_UNITS, _host_unit)
+
+
+def _gpu_cases() raises:
+    var failed = String("")
+    var count = 0
     for unit in range(WEIGHTED_UNITS):  # driver-loop: over the units on the one device context
         try:
             weighted_unit[DeviceWeighted](unit)
         except error:
-            cases.fail(unit, error)
+            count += 1
+            failed += "\n      metrics_weighted_score row " + String(unit) + ": " + String(error)
+    if count > 0:
+        raise Error("metrics_weighted_score: " + String(count) + " of " + String(WEIGHTED_UNITS) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("metrics_weighted_score", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

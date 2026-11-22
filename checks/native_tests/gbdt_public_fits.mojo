@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """GradientBoosting fits through the native fit, without the Python binding.
 
 Ported from the Python tests (lane tmig-trees, 2026-11-14; the Python
@@ -59,7 +60,9 @@ from gbdt.host.gbdt_host_entries_impl import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.host.gbdt_oracle import GBDT_ORACLE_HOST_SABOTAGE
 from gbdt.mojolearn_gbdt_run import gbdt_fit_native_run as gbdt_fit_native_run_gpu
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime FIXTURE_DIR = "checks/native_tests/fixtures/gbdt/"
@@ -1217,23 +1220,6 @@ struct _HostFit(GbdtImage):
         raise Error("AttributeError: mojolearn: this check image has no gbdt_fit_two_level_feature_freq")
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # `assert not module.gbdt_host_sabotage()`: a sabotage build is not this check's
-    comptime assert not GBDT_ORACLE_HOST_SABOTAGE, "a sabotage build loaded outside the gate"
-    comptime UNITS = GBDT_COMMON_UNITS + GBDT_HOST_UNITS
-    var cases = report.cases(UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            if unit < GBDT_COMMON_UNITS:
-                common_unit[_HostFit](unit)
-            else:
-                host_unit[_HostFit](unit - GBDT_COMMON_UNITS)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, UNITS)
-
-
 # ---- The device column (was gbdt_public_fits_gpu_suite.mojo) ----
 # The common GradientBoosting fit cases on the device column.
 #
@@ -1301,25 +1287,41 @@ struct _DeviceFit(GbdtImage):
         raise Error("AttributeError: mojolearn: this check image has no gbdt_fit_two_level_feature_freq")
 
 
-def _run_gpu(mut report: Report) raises:
+def _host_unit(unit: Int) raises:
+    host_unit[_HostFit](unit)
+
+
+def _common_host(unit: Int) raises:
+    common_unit[_HostFit](unit)
+
+
+def _cpu_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GBDT_COMMON_UNITS)
-    for unit in range(GBDT_COMMON_UNITS):  # one device graph at a time (see the docstring)
+    comptime assert not GBDT_ORACLE_HOST_SABOTAGE, "a sabotage build loaded outside the gate"
+    check_cases("common", GBDT_COMMON_UNITS, _common_host)
+    check_cases("host", GBDT_HOST_UNITS, _host_unit)
+
+
+def _gpu_cases() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    var failed = String("")
+    var count = 0
+    for unit in range(GBDT_COMMON_UNITS):  # driver-loop: one device graph at a time (see the docstring)
         try:
             common_unit[_DeviceFit](unit)
         except error:
-            cases.fail(unit, error)
+            count += 1
+            failed += "\n      common row " + String(unit) + ": " + String(error)
+    if count > 0:
+        raise Error("common: " + String(count) + " of " + String(GBDT_COMMON_UNITS) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("gbdt_public_fits", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """lu_factor reconstructs P A and repeats; lu_solve answers A x = b and
 A^T x = b and repeats (ported from
 python/mojolearn/tests/test_native_smallfam_public.py
@@ -31,8 +32,8 @@ from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.host import HostExec as XdHost
 from x_decomp.api import lu_solve_run
 from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR, fixture_f32
-from core.host_parallel import host_parallelize
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 
 comptime LU_N = 8
@@ -128,31 +129,9 @@ def lu_unit(unit: Int) raises:
         solve_unit(unit)
 
 
-# ---- The host column (was metrics_smallfam_public_cpu_suite.mojo) ----
-# lu_factor / lu_solve on the x_decomp host executor.
-#
-# The seven units (the factor, then six trans x right-hand-side solves, each
-# on its own factor) are independent and run across host cores. The device
-# factor and solve are gated by the decomposition kit's own device checks;
-# the original ran wherever the public call ran, and its host column is
-# this executor.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(LU_UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            lu_unit(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, LU_UNITS)
+def test_cases() raises:
+    check_cases("metrics_smallfam_public", LU_UNITS, lu_unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("metrics_smallfam_public", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

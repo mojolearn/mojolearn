@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """GaussianMixture.sample statistics from test_gmm_sample.py, on the actual entries.
 
 Each fixture fits GaussianMixture(n_components=2, random_state=3) (full
@@ -25,7 +26,9 @@ from core.mixture_native_api import GmmDriver, GmmFitRequest
 from mixture.host.gmm_native_host import gmm_native_host_v1
 from mixture.host.gmm_host_entries import gmm_sample_into
 from mixture.estimator import GmmParams, gaussian_mixture_fit, gaussian_mixture_sample
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime GMM_SAMPLE_FIXTURES = 3
@@ -257,17 +260,6 @@ struct HostGmmSample(GmmSampleCalls):
         return GmmRun(weights^, means^, covariances^, precisions^, rows^, labels^)
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GMM_SAMPLE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture[HostGmmSample](unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GMM_SAMPLE_FIXTURES)
-
-
 # ---- The device column (was mixture_gmm_sample_gpu_suite.mojo) ----
 # GaussianMixture.sample statistics on the device fit and sample entries.
 #
@@ -296,25 +288,35 @@ struct DeviceGmmSample(GmmSampleCalls):
         return result^
 
 
-def _run_gpu(mut report: Report) raises:
+def _host_fixture(unit: Int) raises:
+    fixture[HostGmmSample](unit)
+
+
+def _cpu_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GMM_SAMPLE_FIXTURES)
-    for unit in range(GMM_SAMPLE_FIXTURES):
+    check_cases("mixture_gmm_sample", GMM_SAMPLE_FIXTURES, _host_fixture)
+
+
+def _gpu_cases() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    var failed = String("")
+    var count = 0
+    for unit in range(GMM_SAMPLE_FIXTURES):  # driver-loop: over the fixtures on the one device
         try:
             fixture[DeviceGmmSample](unit)
         except error:
-            cases.fail(unit, error)
+            count += 1
+            failed += "\n      mixture_gmm_sample row " + String(unit) + ": " + String(error)
+    if count > 0:
+        raise Error("mixture_gmm_sample: " + String(count) + " of " + String(GMM_SAMPLE_FIXTURES) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("mixture_gmm_sample", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

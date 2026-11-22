@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """DynamicTheta and OptimizedTheta batch forecasts equal each series fitted
 alone, moved from test_public_verifier_gap_methods.py
 `test_theta_variant_batch_forecasts_preserve_single_series` (2026-11-15).
@@ -20,7 +21,9 @@ from std.memory import bitcast
 from sequence.exec import Exec, HostExec
 from sequence.ops_impl import theta_impl
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime THV_FIXTURES = 4
@@ -77,42 +80,35 @@ def run_variant_fixture[E: Exec](mut ex: E, unit: Int) raises:
     _ = batch_info^
 
 
-# ---- The host column ----
-# The four model x season fixtures run across host cores, each on its own
-# HostExec with a private failure slot.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(THV_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            var ex = HostExec()
-            run_variant_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, THV_FIXTURES)
+def _host_fixture(unit: Int) raises:
+    var ex = HostExec()
+    run_variant_fixture(ex, unit)
 
 
-# ---- The device column ----
-# The fixtures run in order on one DeviceExec: they share the one device and
-# its queue, and each fixture's kernels spread its work across the device.
-def _run_gpu(mut report: Report) raises:
+def _cpu_cases() raises:
+    check_cases("sequence_theta_variants", THV_FIXTURES, _host_fixture)
+
+
+def _gpu_cases() raises:
     var ex = DeviceExec()
-    var cases = report.cases(THV_FIXTURES)
+    var failed = String("")
+    var count = 0
     for unit in range(THV_FIXTURES):  # driver-loop: over fixtures on the one device
         try:
             run_variant_fixture(ex, unit)
         except error:
-            cases.fail(unit, error)
+            count += 1
+            failed += "\n      sequence_theta_variants row " + String(unit) + ": " + String(error)
+    if count > 0:
+        raise Error("sequence_theta_variants: " + String(count) + " of " + String(THV_FIXTURES) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("sequence_theta_variants", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
