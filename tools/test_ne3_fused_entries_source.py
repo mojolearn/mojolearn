@@ -60,12 +60,13 @@ def test_fused_doors_keep_the_op_chain_fallback():
     assert product < ocsvm.index('if labels and _ocsvm_labels_available(binding):', product)
     run = _read('svm/svc_ocsvm_native_run.mojo')
     assert run.index('if r.path == OC_QUERY_FUSED_LABELS:') < run.index('oc_kernel_product(driver,')
-    local = _read('bindings/neighbors_local_native_door.mojo')
+    local = _read('neighbors/nearest_centroid_run.mojo')
     # NearestCentroid: the fused label kernel when the connection has it, the distance/score
-    # label chain otherwise (typed requests on the connected driver).
-    assert 'var fused = nc_fused(connection.fused, rows)' in local
-    assert 'request.distance_labels(connection.driver, code_address, euclidean)' in local
-    assert 'inputs.request.score_labels(connection.driver, code_address)' in local
+    # label chain otherwise (the typed RUN on the connected driver; the door only UNPACKs).
+    assert 'var fused = nc_fused(request.fused, request.rows)' in local
+    run = local.split('def nc_labels_run(', 1)[1].split('\ndef ', 1)[0]
+    assert run.index('if fused:') < run.index('plan.distance_labels(driver, dst, request.euclidean)')
+    assert run.rindex('if fused:') < run.index('plan.score_labels(driver, dst)')
     semi = _read('bindings/neighbors_semi_native_door.mojo')
     # LabelPropagation: the fused query when the image carries it, the operation chain otherwise
     # (typed RUN, neighbors/label_propagation_run.mojo).
