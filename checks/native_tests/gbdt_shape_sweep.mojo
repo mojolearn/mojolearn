@@ -343,25 +343,28 @@ def neighbour_unit[I: GbdtImage](unit: Int) raises:
 
 def _resident_raw(text: String, x: List[Float32], n: Int) raises -> List[Float32]:
     """The device-resident predict (`gbdt_resident_ns_predict._resident`)."""
-    var model = ResidentGbdtModel(text)
-    var scores = List[Float32](length=n, fill=Float32(0.0))
-    var out64 = List[Float64](length=1, fill=0.0)
-    var codes = List[Int64](length=1, fill=0)
-    var width = model.predict_into(
-        _F32P(unsafe_from_address=Int(x.unsafe_ptr())),
-        n,
-        _F32P(unsafe_from_address=Int(scores.unsafe_ptr())),
-        _F64P(unsafe_from_address=Int(out64.unsafe_ptr())),
-        _I64P(unsafe_from_address=Int(codes.unsafe_ptr())),
-        RESIDENT_RAW,
-        False,
-    )
-    require(width == 1, "gbdt shape sweep: the resident predict wrote width " + String(width))
-    _ = out64^
-    _ = codes^
-    _ = model^
-    _ = x
-    return scores^
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        raise Error("gbdt shape sweep: the resident predict runs on the device column only")
+    else:
+        var model = ResidentGbdtModel(text)
+        var scores = List[Float32](length=n, fill=Float32(0.0))
+        var out64 = List[Float64](length=1, fill=0.0)
+        var codes = List[Int64](length=1, fill=0)
+        var width = model.predict_into(
+            _F32P(unsafe_from_address=Int(x.unsafe_ptr())),
+            n,
+            _F32P(unsafe_from_address=Int(scores.unsafe_ptr())),
+            _F64P(unsafe_from_address=Int(out64.unsafe_ptr())),
+            _I64P(unsafe_from_address=Int(codes.unsafe_ptr())),
+            RESIDENT_RAW,
+            False,
+        )
+        require(width == 1, "gbdt shape sweep: the resident predict wrote width " + String(width))
+        _ = out64^
+        _ = codes^
+        _ = model^
+        _ = x
+        return scores^
 
 
 def nan_unit[I: GbdtImage](unit: Int) raises:

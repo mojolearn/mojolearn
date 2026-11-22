@@ -182,8 +182,9 @@ def _host_fixture(fixture_id: Int) raises:
 
 
 def _device_fixture(fixture_id: Int) raises:
-    var ex = DeviceExec()
-    run_sequence_optimizer_fixture(ex, fixture_id)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var ex = DeviceExec()
+        run_sequence_optimizer_fixture(ex, fixture_id)
 
 
 def _cpu_cases() raises:
