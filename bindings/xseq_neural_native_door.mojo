@@ -424,13 +424,32 @@ def _rnn_ints(model: PythonObject, fields: PythonObject) raises -> List[Int]:
     return ip^
 
 
+def _rnn_lengths(source: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """The `lengths` argument (lane seq-blocks-2): None stays None, else one
+    C-ordered float32 vector of n values (integers through float64, as every
+    admitted array); the values are checked natively (sequence/ops_impl.mojo
+    rnn_lengths_of: whole numbers from 1 to the sequence length)."""
+    if source is None:
+        return source
+    var lengths = xseq_as_f32_c(source, 1, "lengths", context)
+    if Int(py=lengths.shape[0]) != n:
+        raise Error("ValueError: lengths must hold one length per sequence (" + String(n) + ")")
+    return lengths
+
+
+def _rnn_lengths_address(lengths: PythonObject) raises -> Int:
+    return 0 if lengths is None else Int(py=xseq_addr(lengths))
+
+
 def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, target: PythonObject,
-             route: XseqRoute, context: PythonObject) raises -> PythonObject:
-    """`_RecurrentBase._fit(X, target)`."""
+             route: XseqRoute, context: PythonObject, lengths_source: PythonObject) raises -> PythonObject:
+    """`_RecurrentBase._fit(X, target)`, with the optional sequence lengths."""
     var x = _rnn_x(x_source, fields, True, context)
     var n = Int(py=x.shape[0])
     var steps_t = Int(py=x.shape[1])
     xseq_run_rnn_dims_check(n, steps_t)
+    var lengths = _rnn_lengths(lengths_source, n, context)
+    var lengths_address = _rnn_lengths_address(lengths)
     var nk = xseq_keys()
     var stream = XseqStream(py_get(fields, nk[].k_random_state), context)
     var mods = NativeModules()
@@ -473,7 +492,8 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var entry = _entry(provider)
     with GILReleased(py):
         xseq_run_rnn_fit(entry, request, optimizer, addresses[0], addresses[1], addresses[2], addresses[3],
-                         addresses[4])
+                         addresses[4], lengths_address)
+    _ = lengths  # keep the Python object alive through the native call above
     _ = provider
     _ = target
     _ = params  # keep the Python object alive through the native call above
@@ -490,12 +510,15 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
 
 
 def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, want_seq: Bool,
-             route: XseqRoute, context: PythonObject) raises -> PythonObject:
+             route: XseqRoute, context: PythonObject, lengths_source: PythonObject) raises -> PythonObject:
     """`_RecurrentBase._run(X, want_seq)`: `(out, seq)`, on the estimator's
-    route (resolved by the caller, first, as the entries were)."""
+    route (resolved by the caller, first, as the entries were), with the
+    optional sequence lengths."""
     var x = _rnn_x(source, fields, False, context)
     var n = Int(py=x.shape[0])
     var steps_t = Int(py=x.shape[1])
+    var lengths = _rnn_lengths(lengths_source, n, context)
+    var lengths_address = _rnn_lengths_address(lengths)
     var nk = xseq_keys()
     var out = xseq_zeros(Python.tuple(n, py_item(fields, nk[].k_n_outputs_)), context)
     var seq = xseq_zeros(Python.tuple(n, steps_t, xseq_int(py_item(fields, nk[].k_hidden_size))) if want_seq else Python.tuple(1), context)
@@ -527,7 +550,8 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     var entry = _entry(provider)
     var py = Python()
     with GILReleased(py):
-        xseq_run_rnn_predict(entry, request, addresses[0], addresses[1], addresses[2], addresses[3])
+        xseq_run_rnn_predict(entry, request, addresses[0], addresses[1], addresses[2], addresses[3], lengths_address)
+    _ = lengths  # keep the Python object alive through the native call above
     _ = provider
     _ = params  # keep the Python object alive through the native call above
     _ = seq  # keep the Python object alive through the native call above
@@ -544,6 +568,10 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
     # the name String, compared per call. A code that is not one of these (an unknown `rnn_` name
     # is -1) predicts, as the name chain did.
     var fields = py_fields(model)
+    # The optional sequence lengths travel last in `args` (fit (X, y, lengths), the predictions (X, lengths));
+    # a caller that passes none sends the tuple it sent before.
+    var lengths_at = 2 if operation == XSEQ_OPN_RNN_FIT else 1
+    var lengths_source = args[lengths_at] if len(args) > lengths_at else PythonObject(None)
     if operation == XSEQ_OPN_RNN_FIT:
         var nk = xseq_keys()
         var task = Int(py=_attr(py_type(model), "_TASK"))
@@ -555,7 +583,7 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
             var rows = Int(py=y.shape[0])
             var target = xseq_reshape(y, Python.tuple(rows, -1))
             py_setitem(fields, nk[].k_n_outputs_, Int(py=target.shape[1]))
-            return _rnn_fit(model, fields, args[0], target, xseq_route(model, fields, context), context)
+            return _rnn_fit(model, fields, args[0], target, xseq_route(model, fields, context), context, lengths_source)
         var route = xseq_route(model, fields, context)
         var encoded = xseq_labels(args[1], route.entries, context)
         py_setitem(fields, nk[].k_classes_, encoded[0])
@@ -570,12 +598,12 @@ def xseq_rnn(model: PythonObject, operation: Int, args: PythonObject, context: P
         xseq_codes_f32(XI32P(unsafe_from_address=Int(py=xseq_addr(codes))), xseq_f32p(target), count)
         _ = target  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
-        return _rnn_fit(model, fields, args[0], target, route, context)
+        return _rnn_fit(model, fields, args[0], target, route, context, lengths_source)
     var route = xseq_route(model, fields, context)
     if operation == XSEQ_OPN_RNN_HIDDEN_SEQUENCE:
-        return _rnn_run(model, fields, args[0], True, route, context)[1]
+        return _rnn_run(model, fields, args[0], True, route, context, lengths_source)[1]
     var nk = xseq_keys()
-    var result = _rnn_run(model, fields, args[0], False, route, context)
+    var result = _rnn_run(model, fields, args[0], False, route, context, lengths_source)
     var out = result[0]
     if operation == XSEQ_OPN_RNN_PREDICT_PROBA:
         return out

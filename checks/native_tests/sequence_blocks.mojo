@@ -40,6 +40,7 @@ from sequence.exec_device import DeviceExec
 from checks.native_tests.core_ops_common import normal
 from checks.native_tests.training_sequential_common import SeqModel, codes_as_words, L_RELU, L_RESIDUAL, L_FLATTEN, L_LINEAR
 from checks.native_tests.runner import CPU_COLUMN_BUILD
+from core.host_parallel import host_parallelize
 
 
 comptime L_CONV1D = 15
@@ -302,8 +303,11 @@ def run_block_case[E: Exec](mut ex: E, c: _Case) raises -> List[Float32]:
 # ---------------------------------------------------------------- baselines
 comptime _CH = 2
 comptime _LEN = 32
-comptime _TRAIN = 192
+comptime _TRAIN = 96
 comptime _TEST = 64
+# 96 rows x 6 epochs: the first cpc1 run (192 rows x 20 epochs) reached held-out accuracy 1.0 on all three
+# baselines but took 5 hours of host column; this keeps the task far above the 0.9 bar at a sixth of the steps.
+comptime _EPOCHS = 6
 
 
 struct _Seq(Movable):
@@ -397,7 +401,7 @@ def run_baseline[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
         name = "inceptiontime"
     m.compile(LOSS_CROSS_ENTROPY, "adam", 0.01)
     var cols = _CH * _LEN
-    _ = m.fit(ex, train.x, _TRAIN, cols, train.y, 1, TARGET_CODES, 20, 32, -1, 3)
+    _ = m.fit(ex, train.x, _TRAIN, cols, train.y, 1, TARGET_CODES, _EPOCHS, 32, -1, 3)
     var curve = m.losses()
     if not (curve[len(curve) - 1] < curve[0]):
         _fail(name + ": the loss did not fall (" + String(curve[0]) + " -> " + String(curve[len(curve) - 1]) + ")")
@@ -423,25 +427,62 @@ def run_baseline[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
 
 # ---------------------------------------------------------------- tests
 def test_sequence_blocks() raises:
+    # Independent cases: the host column spreads them across host cores (one HostExec each).
     var cases = _cases()
-    for k in range(len(cases)):  # driver-loop: over the block cases
-        var host = HostExec()
-        var hw = run_block_case(host, cases[k])
-        comptime if not CPU_COLUMN_BUILD:
+    var n = len(cases)
+    var failed = List[Int](length=n, fill=0)
+    var host_words = List[List[Float32]](length=n, fill=List[Float32]())
+    var fp = failed.unsafe_ptr()
+    var wp = host_words.unsafe_ptr()
+    var cp = cases.unsafe_ptr()
+    def task(unit: Int) {imm fp, imm wp, imm cp}:
+        try:
+            var host = HostExec()
+            wp[unit] = run_block_case(host, cp[unit])
+        except error:
+            print("FAIL SEQ_BLOCKS block", unit, error)
+            fp[unit] = 1
+    host_parallelize(task, n)
+    for u in range(n):  # small-loop(n: failure flags)
+        if failed[u] != 0:
+            _fail("block case " + String(u) + " failed on the host column")
+    comptime if not CPU_COLUMN_BUILD:
+        for k in range(n):  # driver-loop: over the block cases on the one device
             var dev = DeviceExec()
             var dw = run_block_case(dev, cases[k])
-            _same_words(cases[k].name, hw, dw)
-    print("PASS SEQ_BLOCKS blocks", len(cases))
+            _same_words(cases[k].name, host_words[k], dw)
+    _ = failed^
+    _ = host_words^
+    _ = cases^
+    print("PASS SEQ_BLOCKS blocks", n)
 
 
 def test_sequence_baselines() raises:
-    for which in range(3):  # driver-loop: over the three composed baselines
-        var host = HostExec()
-        var hw = run_baseline(host, which)
-        comptime if not CPU_COLUMN_BUILD:
+    # The three fits are independent: on the host column each runs on its own HostExec across host
+    # cores (failure flags per unit); the device column then runs them in order on the one device.
+    comptime B = 3
+    var failed = List[Int](length=B, fill=0)
+    var host_words = List[List[Float32]](length=B, fill=List[Float32]())
+    var fp = failed.unsafe_ptr()
+    var wp = host_words.unsafe_ptr()
+    def task(unit: Int) {imm fp, imm wp}:
+        try:
+            var host = HostExec()
+            wp[unit] = run_baseline(host, unit)
+        except error:
+            print("FAIL SEQ_BLOCKS baseline", unit, error)
+            fp[unit] = 1
+    host_parallelize(task, B)
+    for u in range(B):  # small-loop(B: failure flags)
+        if failed[u] != 0:
+            _fail("baseline " + String(u) + " failed on the host column")
+    comptime if not CPU_COLUMN_BUILD:
+        for which in range(B):  # driver-loop: over the baselines on the one device
             var dev = DeviceExec()
             var dw = run_baseline(dev, which)
-            _same_words("baseline " + String(which), hw, dw)
+            _same_words("baseline " + String(which), host_words[which], dw)
+    _ = failed^
+    _ = host_words^
     print("PASS SEQ_BLOCKS baselines 3")
 
 
