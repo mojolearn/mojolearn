@@ -91,6 +91,7 @@ R2  THE SABOTAGE. The same fixture's data, re-declared at four fold counts
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_buffer_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 from core.device_units import device_multiprocessor_count

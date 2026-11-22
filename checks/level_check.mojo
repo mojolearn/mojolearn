@@ -10,6 +10,7 @@ pieces were checked separately first.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import upload_host_into
 
 from gbdt.models.oblivious_model import TBinarySplit
 from max.gpu.host import DeviceContext

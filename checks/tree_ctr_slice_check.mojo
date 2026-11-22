@@ -4,6 +4,7 @@
 """Focused gate for the first executable combination-CTR vertical slice."""
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import (

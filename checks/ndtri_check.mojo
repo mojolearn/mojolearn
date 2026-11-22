@@ -43,6 +43,7 @@ ndtr, x:   0 uniform [-6, 6]   1 [-1, 1]   2 the tails [-14, -5] and [5, 14]
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_whole_into, upload_whole_into
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import erfc, exp, log, sqrt

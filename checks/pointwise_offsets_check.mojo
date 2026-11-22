@@ -49,6 +49,7 @@ a WRONG expected value computed on the host, and the gate must reject it.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 

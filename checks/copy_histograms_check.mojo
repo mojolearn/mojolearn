@@ -19,6 +19,7 @@ placement and not just totals. It asserts three things:
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 

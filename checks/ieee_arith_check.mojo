@@ -86,6 +86,7 @@ break denormals first).
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import fma, sqrt

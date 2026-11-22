@@ -11,6 +11,7 @@ kernel-pair microbenchmarks, not end-to-end fit speedups.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.memory import bitcast
 from std.time import perf_counter_ns

@@ -84,6 +84,7 @@ which a fixture that never labels the last class would leave unreached.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 from std.ffi import external_call

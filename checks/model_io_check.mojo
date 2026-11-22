@@ -48,6 +48,7 @@ THE ONE-HOT FEATURE IS THREE CATEGORIES ON PURPOSE. See the note on
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from std.memory import bitcast
 

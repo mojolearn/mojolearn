@@ -33,6 +33,7 @@ ordered tiers restores the pre-2624 launch and must fail G1 and G2.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 

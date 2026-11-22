@@ -39,6 +39,7 @@ host arithmetic plus one upload, and nothing in it may depend on timing.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import upload_host_into
 
 from max.gpu.host import DeviceContext
 

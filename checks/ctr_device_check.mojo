@@ -73,6 +73,7 @@ PERMUTATION is reached, and that it CHANGES THE ANSWER for the better.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 

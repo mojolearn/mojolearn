@@ -76,6 +76,7 @@ ignored, so the run PRINTS the arm it was built with (`fmax sabotage
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx

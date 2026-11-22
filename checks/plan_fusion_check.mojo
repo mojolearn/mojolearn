@@ -35,6 +35,7 @@ that forces the border past the first stride for the wide leaves.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 

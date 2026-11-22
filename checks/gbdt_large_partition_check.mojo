@@ -10,6 +10,7 @@ ragged tails and sentinel gaps check the complete permutation and its bounds.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download, upload, upload_into
 from max.gpu.host import DeviceContext
 from std.testing import assert_equal
 from checks.kernel_matrix import TARGET_COLUMN, reorder_single_pass_for

@@ -81,6 +81,7 @@ reach is predicted per arm below rather than assumed shared).
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 

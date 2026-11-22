@@ -49,6 +49,7 @@ WHAT THIS FILE CHECKS, and why each part is here.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast

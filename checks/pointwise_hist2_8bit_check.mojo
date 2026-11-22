@@ -49,6 +49,7 @@ GATES:
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 from max.gpu import thread_idx
 from std.memory import stack_allocation

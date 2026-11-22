@@ -51,6 +51,7 @@ in float32 and a disagreement is a real disagreement.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import upload_host_into
 
 from max.gpu.host import DeviceContext
 

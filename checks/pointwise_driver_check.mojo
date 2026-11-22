@@ -71,6 +71,7 @@ GATES:
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_buffer_into, download_host_into, upload_whole_into
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill

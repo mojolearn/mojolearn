@@ -60,6 +60,7 @@ that summed could not see one.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from std.memory import bitcast
 

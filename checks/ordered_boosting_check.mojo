@@ -77,6 +77,7 @@ fold-axis gate and does not establish full CatBoost Ordered parity.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into, upload_whole_into
 
 from max.gpu.host import DeviceContext, HostBuffer
 

@@ -14,6 +14,7 @@ the device path, and compares against a host partition element for element.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 

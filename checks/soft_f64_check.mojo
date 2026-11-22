@@ -13,6 +13,7 @@ Prints `SOFT_F64 host_mismatch=<n> device_mismatch=<n> status=PASS|FAIL`.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_whole_into, upload_whole_into
 from std.math import floor, fma
 from std.memory import bitcast
 from std.sys import has_accelerator

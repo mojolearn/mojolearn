@@ -24,6 +24,7 @@ wrong count rather than as a crash.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from std.sys.info import size_of
 from gbdt.gpu_data.gpu_structures import CFeature

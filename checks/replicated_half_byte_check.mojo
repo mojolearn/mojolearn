@@ -47,6 +47,7 @@ plant verifies the total and nothing about placement.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 

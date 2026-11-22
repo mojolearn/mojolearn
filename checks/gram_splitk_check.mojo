@@ -94,6 +94,7 @@ column it stays an assertion, which is the measured Apple M4 behaviour.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast

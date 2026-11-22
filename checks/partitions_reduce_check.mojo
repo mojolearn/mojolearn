@@ -81,6 +81,7 @@ the second. It is a reach test that fails loudly on the old code.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext, HostBuffer
 from core.device_units import device_multiprocessor_count

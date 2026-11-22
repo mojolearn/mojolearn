@@ -104,6 +104,7 @@ the same three lines, and by reading. Recorded rather than papered over.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import upload_host_into
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 

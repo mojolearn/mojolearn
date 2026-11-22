@@ -32,6 +32,7 @@ rebuilds a subset must leave the rest of the histogram alone.
 """
 
 from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 
