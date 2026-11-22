@@ -667,11 +667,11 @@ class GradientBoosting(_NumericModeMixin):
         hold any values: integers, other numbers, text, bytes, ``None`` or
         ``pandas.NA`` (pass text in a list of rows, a NumPy object, string or
         bytes array, or a pandas DataFrame whose categorical columns have
-        ``object``, Python-backed ``string`` or ``category`` dtype). In a
-        NumPy string or bytes array the other columns must hold numbers
-        written as text, such as ``'1.5'``. Arrow-backed pandas string
-        columns are not accepted; convert them with
-        ``X.astype({column: object})``. The values are mapped to
+        ``object``, ``str``, ``string`` (Python or pyarrow storage),
+        ``category`` or a pyarrow string or dictionary-of-string dtype; a
+        missing value is a category of its own). In a NumPy string or bytes
+        array the other columns must hold numbers written as text, such as
+        ``'1.5'``. The values are mapped to
         categories during ``fit``; the mapping is kept with the model, saved
         and loaded with it, and applied by ``predict``. A value that was not
         seen during ``fit`` is treated as an unknown category. As in

@@ -128,15 +128,86 @@ def test_numeric_category_column_and_numeric_feature():
     np.testing.assert_array_equal(_fit_predict(as_category, y), _fit_predict(plain, y))
 
 
-def test_arrow_string_column_refused_by_name():
+def _arrow_dtype(storage):
     pytest.importorskip("pyarrow")
-    cat, num, y = _data()
     try:
-        dtype = pd.StringDtype("pyarrow")
-    except TypeError:
-        pytest.skip("this pandas has no Arrow-backed string dtype")
-    with pytest.raises(TypeError, match="Arrow-backed pandas array"):
-        _model().fit(_frame(cat, num, dtype), y)
+        return pd.StringDtype(storage)
+    except (TypeError, ImportError):
+        pytest.skip("this pandas has no " + storage + " string dtype")
+
+
+def test_arrow_string_column_matches_list_rows(reference):
+    # pandas 2 ``string[pyarrow]``; pandas 3's default ``str`` with pyarrow
+    cat, num, y = _data()
+    df = _frame(cat, num, _arrow_dtype("pyarrow"))
+    np.testing.assert_array_equal(_fit_predict(df, y), reference)
+
+
+def test_arrow_large_string_and_chunked(reference):
+    pa = pytest.importorskip("pyarrow")
+    cat, num, y = _data()
+    half = N // 2
+    for typ in (pa.string(), pa.large_string()):
+        chunked = pa.chunked_array([pa.array(cat[:half], type=typ), pa.array(cat[half:], type=typ)])
+        column = pd.Series(pd.arrays.ArrowExtensionArray(chunked))
+        df = pd.DataFrame({"c": column, "x": num})
+        np.testing.assert_array_equal(_fit_predict(df, y), reference)
+
+
+def test_arrow_sliced_chunk_offsets(reference):
+    # a chunk that is a slice of a larger array: its offset is not 0
+    pa = pytest.importorskip("pyarrow")
+    cat, num, y = _data()
+    padded = pa.array(["pad"] * 7 + cat + ["pad"] * 3).slice(7, N)
+    column = pd.Series(pd.arrays.ArrowExtensionArray(pa.chunked_array([padded])))
+    np.testing.assert_array_equal(_fit_predict(pd.DataFrame({"c": column, "x": num}), y), reference)
+
+
+def test_arrow_dictionary_column(reference):
+    pa = pytest.importorskip("pyarrow")
+    cat, num, y = _data()
+    encoded = pa.array(cat).dictionary_encode()
+    column = pd.Series(pd.arrays.ArrowExtensionArray(pa.chunked_array([encoded])))
+    np.testing.assert_array_equal(_fit_predict(pd.DataFrame({"c": column, "x": num}), y), reference)
+
+
+def test_arrow_missing_is_one_category():
+    cat, num, y = _data()
+    with_missing = [None if i % 9 == 0 else cat[i] for i in range(N)]
+    rows = [[with_missing[i], float(num[i])] for i in range(N)]
+    expected = _fit_predict(rows, y)
+    df = _frame(with_missing, num, _arrow_dtype("pyarrow"))
+    np.testing.assert_array_equal(_fit_predict(df, y), expected)
+
+
+def test_arrow_categories_of_a_categorical(reference):
+    # pandas 3 keeps str categories in an Arrow-backed Index
+    cat, num, y = _data()
+    dtype = pd.CategoricalDtype(pd.Index(CATS, dtype=_arrow_dtype("pyarrow")))
+    np.testing.assert_array_equal(_fit_predict(_frame(cat, num, dtype), y), reference)
+
+
+def test_arrow_fit_object_predict_agree(reference):
+    # the same text is the same category whatever storage predict receives
+    cat, num, y = _data()
+    model = _model().fit(_frame(cat, num, _arrow_dtype("pyarrow")), y)
+    np.testing.assert_array_equal(model.predict(_frame(cat, num, object)), reference)
+
+
+def test_arrow_column_outside_cat_features_refused():
+    cat, num, y = _data()
+    df = pd.DataFrame({"c": pd.Series(cat, dtype=object),
+                       "t": pd.Series(cat, dtype=_arrow_dtype("pyarrow")), "x": num})
+    with pytest.raises(TypeError, match="outside cat_features"):
+        _model().fit(df, y)
+
+
+def test_arrow_numeric_type_refused_by_name():
+    pa = pytest.importorskip("pyarrow")
+    cat, num, y = _data()
+    column = pd.Series(pd.arrays.ArrowExtensionArray(pa.chunked_array([pa.array(list(range(N)))])))
+    with pytest.raises(TypeError, match="Int64Array"):
+        _model().fit(pd.DataFrame({"c": column, "x": num}), y)
 
 
 def test_text_in_numeric_pandas_column_refused():
