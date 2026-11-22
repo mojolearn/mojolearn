@@ -126,6 +126,7 @@ corpus/fineweb-edu-10BT/vocab-sample/000-rg0-19.txt	HOME/mojolearn-evidence/gpt3
 vocab/mojolearn-bpe-fineweb-edu-50257-v1/ranks.tsv	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.ranks.tsv
 vocab/mojolearn-bpe-fineweb-edu-50257-v1/tokenizer.json	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.tokenizer.json
 repo-data/experiments/six_lane_integration/measurements.tar	HOME/.cache/mojolearn/repo-data/experiments@six_lane_integration@measurements.tar
+repo-data/bench/results/cut-bench-cold-20261122.tar	HOME/mojolearn-evidence/repo-data-tars/bench@results@cut-bench-cold-20261122.tar
 EOF
 }
 
