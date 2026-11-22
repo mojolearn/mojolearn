@@ -663,7 +663,8 @@ def _read_params_object(obj):
         for name in ("random_seed", "iterations", "depth", "learning_rate", "l2_leaf_reg",
                      "border_count", "min_data_in_leaf", "max_leaves", "grow_policy",
                      "bootstrap_type", "subsample", "random_strength", "boosting_type",
-                     # unset is CatBoost's default 4, never a matched value
+                     # unset is CatBoost's default 4, which is ours' unset default too
+                     # (ours resolves None to 4 on categorical SymmetricTree fits)
                      "max_ctr_complexity"):
             got.setdefault(name, None)
         if str(got.get("boosting_type")) == "Ordered":
@@ -1711,8 +1712,11 @@ def _semantic_ctr_complexity(lane, param, arm, ours, theirs, library):
         cat_features unset): no CTR exists on either, whatever the value, set or unset;
       * the opponent has no CTR combinations at all (XGBoost, LightGBM: the field is absent from its
         read-back) and ours is at 1, which builds none.
-    CatBoost left unset on categorical data (its default 4) against ours' explicit value still refuses, as
-    does ours above 1 against a library that cannot build a combination: both are different work."""
+    Since 2026-11-25 ours' default is CatBoost's: `max_ctr_complexity=None` resolves to 4 on a categorical
+    fit under SymmetricTree with the greedy searcher and feature_fraction 1 (to 1 elsewhere), so unset on
+    both arms matches as the same value, and unset on one arm against an explicit 4 on the other is excused
+    only where ours resolves to 4. Any other difference on categorical data still refuses, as does ours
+    above 1 (or unset, which is 4) against a library that cannot build a combination: different work."""
     if param != "max_ctr_complexity" or not lane.startswith("gbdt-") or param not in ours:
         return None
     own_no_cats = ("cat_features" in ours and ours["cat_features"] is None
@@ -1720,6 +1724,12 @@ def _semantic_ctr_complexity(lane, param, arm, ours, theirs, library):
     if library == "catboost":
         if own_no_cats and theirs.get("cat_features") is None:
             return "no categorical columns on either arm: no CTRs, so no feature combinations on either"
+        values = (ours.get(param), theirs.get(param))
+        own_resolves_4 = (_r6_is(ours.get("grow_policy", "SymmetricTree"), "SymmetricTree")
+                          and not ours.get("use_pointwise_searcher")
+                          and _r6_is(ours.get("feature_fraction", 1.0), 1.0))
+        if own_resolves_4 and (values == (None, 4) or values == (4, None)):
+            return "unset is 4 on both arms (CatBoost's default and ours'): the same combinations"
         return None
     if param in theirs:
         return None

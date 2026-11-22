@@ -568,9 +568,11 @@ OD_TYPES = ("None", "IncToDec", "Iter")
 #   64 (cuda/train_lib/train.cpp:115-118), halved while block*128 > rows (dynamic_boosting.h:115-128).
 # - permutation_count: boosting_options.cpp:14 (UpdateGpuSpecificDefaults).
 # - ctr_estimation_permutation_id: doc_parallel_boosting.h:101-103.
-# - max_ctr_complexity: cat_feature_options.cpp:231 (their default 4). Ours stays 1 until the NVIDIA A/B
-#   of the tree-CTR route against the fused per-tree path is recorded (docs/apple-fast/EXPERIMENTS.md,
-#   the max_ctr_complexity row); gbdt/methods/tree_ctr_search.mojo and gbdt/host/gbdt_oracle_tree_ctr.mojo.
+# - max_ctr_complexity: cat_feature_options.cpp:231 (their default 4). Ours is 4 too (Andrew, 2026-11-25:
+#   "do what catboost does", not gated on a measurement). None in the signature is resolved at fit by
+#   bindings/trees_public_gbdt_fit_door.mojo `gbdt_config`: 4 where combinations can be grown, 1 where this
+#   implementation grows none (no cat_features, Depthwise / Lossguide, the pointwise searcher,
+#   feature_fraction below 1); gbdt/methods/tree_ctr_search.mojo and gbdt/host/gbdt_oracle_tree_ctr.mojo.
 # - model_: the text format check-model-io gates bit-for-bit; floats carry hex bits beside the decimal
 #   because String(Float32) on this toolchain is one ULP wrong for 0.46% of values.
 # - loss_curve_: CatBoost's functionValue negated and divided by the row count.
@@ -799,16 +801,17 @@ class GradientBoosting(_NumericModeMixin):
     fold_permutation_block : int or None, default None
         Ordered only. None or 0 means 64 from 50,000 rows up (halved while
         ``block * 128 > rows``) and 1 below 50,000 rows.
-    max_ctr_complexity : int, default 1
+    max_ctr_complexity : int or None, default None
         The largest number of features one feature combination may hold.
         Above 1, each tree combines every categorical feature with the
         features its earlier splits already use (categorical features and
         numeric splits) and may split on the combination, so the model
         learns interactions between categorical features without a
-        hand-built column. 1 builds no combinations. A value above 1 needs
-        ``cat_features``, ``grow_policy='SymmetricTree'``,
-        ``use_pointwise_searcher=False`` and ``feature_fraction=1.0``, and
-        is refused otherwise. CatBoost's default for this parameter is 4.
+        hand-built column. 1 builds no combinations. None means 4, as in
+        CatBoost, and means 1 when combinations are not available: without
+        ``cat_features``, with ``grow_policy`` 'Depthwise' or 'Lossguide',
+        with ``use_pointwise_searcher=True`` or with ``feature_fraction``
+        below 1. An explicit value above 1 in those settings is refused.
     device : {None, "gpu", "cpu"}, default=None
         Where the model is fitted and predicts. None uses this
         installation's device, ``"cpu"`` runs on the CPU and ``"gpu"``
@@ -937,7 +940,7 @@ class GradientBoosting(_NumericModeMixin):
         boosting_type=None,
         fold_len_multiplier=2.0,
         fold_permutation_block=None,
-        max_ctr_complexity=1,
+        max_ctr_complexity=None,
         *,
         numeric_mode=None,
         device=None,
