@@ -815,7 +815,6 @@ def _kpca_pack(fields: PythonObject, plan: MemberPlan, state: Int) raises:
     py_setitem(fields, "_fit_X", fit_x)
     py_setitem(fields, "_fit_cols", columns)
     py_setitem(fields, "_fit_all", total)
-    py_setitem(fields, "_fit_alphas", PythonObject(None))
     py_setitem(fields, "n_features_in_", PythonObject(features))
 
 

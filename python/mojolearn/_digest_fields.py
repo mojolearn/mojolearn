@@ -82,8 +82,7 @@ EXTRA_BY_NAME = {
     "BisectingKMeans": ("_tree_centers",),
     "BayesianGaussianMixture": ("_full_pchol", "_log_consts", "_score_words"),
     # neighbors, outliers, kernel maps, semi-supervised, sparse GP (bindings/neighbors_*_native_door.mojo,
-    # kpca_native_door.mojo, svc_ocsvm_boundary_pack.mojo). KernelPCA's `_fit_alphas` is a cache the
-    # first transform fills: not fitted state.
+    # kpca_native_door.mojo, svc_ocsvm_boundary_pack.mojo).
     "LocalOutlierFactor": ("_fit_X", "_fit_dist", "_lrd"),
     "NearestCentroid": ("_codes_classes",),
     "KNNImputer": ("_fit_X", "_valid", "_miss_cols"),
