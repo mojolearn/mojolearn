@@ -32,7 +32,6 @@
 #   bench/results/release_evidence/**       release tools
 #   bench/results/ARCHIVE_INDEX.md          record of removed evidence
 #   bench/results/r2-index.tsv              [tools/box_evidence_r2.sh]
-#   bench/results/CELLS_INDEX.tsv           record index the matrix and census read [tools/record_index.py]
 # verification/ (lane verify-home, 2026-11-25; verification/README.md) holds the verification records and
 # reference data: any file may be added there except a NEW *.log (.gitignore says the same). A record moved
 # in with `git mv` (an exact rename, its log included) is not an addition.
@@ -53,7 +52,6 @@ allowed() {
         bench/results/board_best_ever/*/*|bench/results/paper_compare/*/*) return 1 ;;
         bench/results/board_best_ever/*.json|bench/results/paper_compare/*) return 0 ;;
         bench/results/dataset_store/manifest.tsv|bench/results/ARCHIVE_INDEX.md|bench/results/r2-index.tsv) return 0 ;;
-        bench/results/CELLS_INDEX.tsv) return 0 ;;
         bench/results/dataset_store/groups/*/*|bench/results/dataset_store/repo-data/*/*) return 1 ;;
         bench/results/dataset_store/groups/*.txt|bench/results/dataset_store/repo-data/*.tsv) return 0 ;;
         bench/results/*) return 1 ;;

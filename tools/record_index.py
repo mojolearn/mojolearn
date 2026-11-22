@@ -11,7 +11,7 @@ read only the rows of two tracked indexes:
 
   bench/results/identity_break/INDEX.tsv  the verify table's inputs (and the
                                           identity_break part of the matrix)
-  bench/results/CELLS_INDEX.tsv           column-shaped JSONs outside
+  verification/records/CELLS_INDEX.tsv    column-shaped JSONs outside
                                           identity_break (matrix, census only)
 
 Each row is `path  sha256  class  vendor  commit`. A reader refuses a listed

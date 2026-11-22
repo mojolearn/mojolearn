@@ -130,7 +130,7 @@ def repository_record_paths(records, repo_root):
 RECORD_INDEX = "bench/results/identity_break/INDEX.tsv"
 #: The column-shaped JSONs OUTSIDE identity_break that tools/verification_matrix.py
 #: and tools/part_set_census.py read (they never feed the verify table).
-CELLS_INDEX = "bench/results/CELLS_INDEX.tsv"
+CELLS_INDEX = "verification/records/CELLS_INDEX.tsv"
 #: The trees whose column-shaped JSONs an index lists (2026-11-25, lane verify-home: the
 #: verification records move from bench/results to verification/records; verification/README.md).
 RECORD_ROOTS = ("verification/records/", "bench/results/")
