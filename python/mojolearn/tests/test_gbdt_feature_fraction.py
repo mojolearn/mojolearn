@@ -19,7 +19,7 @@ def test_fraction_float64_roundtrip(value):
     assert model.feature_fraction == float(value)
     slots = model._params(32, 8, 0)
     if value == 1:
-        assert len(slots) == 35
+        assert len(slots) == 36
     else:
         assert slots[-3:] == [-1., -1., float(value)]
 
@@ -32,7 +32,7 @@ def test_counted_weights_and_legacy_tail_layout(weights, gain, hessian):
     default = GradientBoosting(**options)._params(32, 8, 0)
     explicit = GradientBoosting(**options, feature_fraction=1.)._params(32, 8, 0)
     assert explicit == default
-    offset = 35 + len(weights or [])
+    offset = 36 + len(weights or [])
     old_tail = [] if gain is None else [gain]
     if hessian is not None:
         old_tail = [-1. if gain is None else gain, hessian]
@@ -54,7 +54,7 @@ def test_enabled_fraction_refuses_categorical_paths(name, value):
 def test_default_does_not_disable_existing_categorical_options(name):
     model = GradientBoosting(**{name: [0]})
     assert model.feature_fraction == 1.
-    assert len(model._params(32, 8, 1)) == 35
+    assert len(model._params(32, 8, 1)) == 36
 
 
 @pytest.mark.parametrize('cls', [GradientBoostingClassifier, GradientBoostingRegressor])

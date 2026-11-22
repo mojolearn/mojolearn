@@ -55,7 +55,7 @@ def test_supported_noise_and_pointwise_pack_in_every_mode(mode, pointwise, stren
     model = GradientBoosting(random_strength=strength,
                              use_pointwise_searcher=pointwise, numeric_mode=mode)
     params = model._params(32, 4, 0)
-    assert len(params) == 35
+    assert len(params) == 36
     assert params[25] == strength
     assert params[26] == int(pointwise)
 
