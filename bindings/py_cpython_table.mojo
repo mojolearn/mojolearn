@@ -39,6 +39,7 @@
 # Version-dependent symbols (PyWeakref_GetRef from 3.13, PyWeakref_GetObject
 # removed in 3.15) are deliberately absent.
 from std.ffi import c_int
+from std.memory import stack_allocation
 from std.python import Python
 from std.python._cpython import ExternalFunction, PyObjectPtr
 
@@ -505,3 +506,25 @@ def cpython_table() raises -> UnsafePointer[CPythonTable, MutAnyOrigin]:
     # Same typed form as x_cnn/device.mojo `_slots` (compiles on main).
     var table = CPYTHON_TABLE.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
     return table
+
+
+def cpython_utf8(table: UnsafePointer[CPythonTable, MutAnyOrigin], obj: PyObjectPtr, mut nbytes: Int) -> Int:
+    """`PyUnicode_AsUTF8AndSize(obj, &size)`: the address of the str's UTF-8
+    bytes (0 with the Python error pending) and their count in `nbytes`.
+    The bytes live as long as `obj`. `table` is the caller's
+    `cpython_table()`, fetched once outside its loops.
+
+    THE ONE FORM for this call (lane sr-gbdt, 2026-11-22). The size travels
+    through a stack slot read back with a volatile load. The former spelling
+    `var size = 0; ...(obj, Int(MutPointer(to=size))); nbytes = size` let the
+    compiler forward the 0 it stored past the C call, which it does not see
+    writing through an address Int: in the 9e49098bca wheel
+    `gbdt_apply_unpack` passed the constant 0 as the model text's byte count
+    (gdb: CPython wrote 17110 into the slot, the next instruction was
+    `xor %ecx,%ecx`), so every GBDT predict parsed an empty text ("the model
+    text is incomplete"). A volatile load is never forwarded."""
+    var slot = stack_allocation[1, Int]()
+    slot.store[volatile=True](0)
+    var address = table[].PyUnicode_AsUTF8AndSize(obj, Int(slot))
+    nbytes = slot.load[volatile=True]()
+    return address

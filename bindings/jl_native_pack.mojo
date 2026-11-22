@@ -14,7 +14,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_typed_call import typed_python_error
-from bindings.py_cpython_table import cpython_table, CPythonTable
+from bindings.py_cpython_table import cpython_table, CPythonTable, cpython_utf8
 from bindings.classical_attributes_door import classical_connect_numpy
 from providers.python.jl_scalar_pyapi_unpack import (
     JlTypeWords, jl_type_words, jl_type_word, jl_builtin_scalar, jl_scalar_word,
@@ -97,8 +97,9 @@ def jl_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if (jl_type_word(operation) != words[].str_word or jl_type_word(arguments) != words[].tuple_word
                 or jl_type_word(context) != words[].dict_word):
             raise Error("TypeError: native JL requires an operation, argument tuple and connected context")
+        # cpython_utf8: the size through a volatile slot (lane sr-gbdt)
         var size = 0
-        var address = table[].PyUnicode_AsUTF8AndSize(operation, Int(MutPointer(to=size)))
+        var address = cpython_utf8(table, operation, size)
         if address == 0:
             raise typed_python_error()
         if not _jl_min_dim_name(address, size) or table[].PyTuple_Size(arguments) != 2:

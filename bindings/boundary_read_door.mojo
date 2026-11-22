@@ -37,7 +37,7 @@ total can be read off its UNPACK and PACK.
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.py_cpython_table import cpython_table
+from bindings.py_cpython_table import cpython_table, cpython_utf8
 from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.native_instance_item_pack import native_instance_item
 from bindings.optimizer_public_words_unpack import stash_python_error
@@ -205,8 +205,9 @@ def read_str(obj: PythonObject, name: StaticString = "value") raises -> String:
     PyObject_Type + PyUnicode_AsUTF8AndSize, then one native copy."""
     if borrowed_type_word(obj._obj_ptr) != _scalar_types()[].str_word:
         raise Error("TypeError: " + String(name) + " must be a str")
+    # cpython_utf8: the size through a volatile slot (lane sr-gbdt)
     var size = 0
-    var address = cpython_table()[].PyUnicode_AsUTF8AndSize(obj._obj_ptr, Int(MutPointer(to=size)))
+    var address = cpython_utf8(cpython_table(), obj._obj_ptr, size)
     if address == 0:
         var pending = _pending_error()
         raise pending^

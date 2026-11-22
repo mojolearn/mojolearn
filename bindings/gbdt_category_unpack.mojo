@@ -57,7 +57,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
-from bindings.py_cpython_table import cpython_table, CPythonTable
+from bindings.py_cpython_table import cpython_table, CPythonTable, cpython_utf8
 from bindings.sequential_arrays_door import sequential_address
 from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.classical_pandas_door import (
@@ -310,8 +310,10 @@ def _at(r: Int, j: Int) -> String:
 
 def _cell_text(t: _Table, cell: PyObjectPtr, name: String, r: Int, j: Int) raises -> UInt64:
     """The key of an exact str cell (or `numpy.str_`, which is a str)."""
+    # cpython_utf8: the size through a volatile slot (the former
+    # `Int(MutPointer(to=size))` form can forward the stored 0; lane sr-gbdt)
     var size = 0
-    var utf8 = t[].PyUnicode_AsUTF8AndSize(cell, Int(MutPointer(to=size)))
+    var utf8 = cpython_utf8(t, cell, size)
     if utf8 == 0:
         t[].PyErr_Clear()
         raise Error("mojolearn: " + name + _at(r, j) + " is not valid text (it cannot be encoded as UTF-8)")
