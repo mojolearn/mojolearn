@@ -133,7 +133,9 @@ def test_saved_file_does_not_depend_on_the_device_and_a_loaded_model_carries_non
     b.save(str(tmp_path / "b.mlf"))
     assert (tmp_path / "a.mlf").read_bytes() == (tmp_path / "b.mlf").read_bytes()
     loaded = cls.load(str(tmp_path / "b.mlf"))
-    assert loaded.get_params()["device"] is None
+    # A loaded forest is inference-only: get_params refuses (it has no constructor parameters); the loader
+    # writes device=None, this installation's device.
+    assert vars(loaded)["device"] is None and loaded.vendor_used() == mojolearn.vendor()
     assert answer(loaded, cls, x).tobytes() == answer(a, cls, x).tobytes()
 
 

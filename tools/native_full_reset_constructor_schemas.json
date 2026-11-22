@@ -441,8 +441,8 @@
       "field_order": [
         "sample_steps",
         "sample_interval",
-        "device",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "sample_steps": {
@@ -6418,7 +6418,7 @@
           "parameter": "n_jobs"
         },
         "numeric_mode": {
-          "literal": null
+          "parameter": "numeric_mode"
         },
         "weights": {
           "parameter": "weights"
@@ -6675,7 +6675,7 @@
           "parameter": "n_jobs"
         },
         "numeric_mode": {
-          "literal": null
+          "parameter": "numeric_mode"
         },
         "weights": {
           "parameter": "weights"
@@ -8085,8 +8085,8 @@
         "max_iter",
         "tol",
         "n_jobs",
-        "device",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "kernel": {
@@ -8294,8 +8294,8 @@
         "max_iter",
         "tol",
         "n_jobs",
-        "device",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "kernel": {
@@ -9471,8 +9471,8 @@
         "threshold",
         "max_level",
         "seed",
-        "device",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "resolution": {
@@ -12646,8 +12646,8 @@
         "nstart",
         "weight",
         "dangling",
-        "device",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "alpha": {
@@ -14665,8 +14665,8 @@
         "lengthscale",
         "noise_variance",
         "jitter",
-        "device",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "n_inducing": {
@@ -15084,8 +15084,8 @@
         "skewedness",
         "n_components",
         "random_state",
-        "device",
-        "numeric_mode"
+        "numeric_mode",
+        "device"
       ],
       "final_fields": {
         "skewedness": {
