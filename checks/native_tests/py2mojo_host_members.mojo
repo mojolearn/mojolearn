@@ -35,6 +35,10 @@ from core.scaler_native_host import ScalerHostKernels
 from x_prep.transport_host import x_prep_transport_host_v1
 from x_prep.transport_abi import XP_OP_COUNT
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
+from x_prep.select_blocked import IDN_SELECT_BLOCKED
+from x_prep.pt_blocked import IDN_PT_BLOCKED
+from x_prep.host.rr_eigh_host import IDN_RR_EIGH
 
 comptime PREP_SCALERS_DIR = "checks/native_tests/fixtures/prep_scalers/"
 comptime PREP_MEMBERS_DIR = "checks/native_tests/fixtures/prep_members/"
@@ -53,6 +57,13 @@ def host_route() -> DeviceRoute:
     route.has_second = True
     route.flags = 0
     return route
+
+
+def host_idn_fam() -> Int:
+    """The host identical image's `x_prep_idn_fam` word (bindings/_mojolearn_x_prep_host.mojo `idn_fam_binding`;
+    0 when no switch is on, as an unregistered word reads)."""
+    return ((1 if IDN_STATS_BLOCKED else 0) | (2 if IDN_CLASS_ONEPASS else 0) | (4 if IDN_SELECT_BLOCKED else 0)
+            | (8 if IDN_PT_BLOCKED else 0) | (16 if IDN_RR_EIGH else 0))
 
 
 struct HostMember:

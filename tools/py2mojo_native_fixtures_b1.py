@@ -153,7 +153,160 @@ def scaler_options():
     return out
 
 
-SETS = (standard_smoke, minmax_smoke, e2_scalers, scaler_options)
+# ---------------------------------------------------------------- test_x_prep_imputer.py
+IMPUTER_KW = (dict(strategy="mean"), dict(strategy="median"), dict(strategy="most_frequent"),
+              dict(strategy="constant", fill_value=-3.0), dict(strategy="median", keep_empty_features=True),
+              dict(strategy="mean", add_indicator=True))
+
+
+def _imp_data(seed=0, n=203, d=5):
+    rng = np.random.default_rng(seed)
+    X = np.round(rng.standard_normal((n, d)) * 2).astype(F32)
+    X[rng.random((n, d)) < 0.2] = np.nan
+    X[:, 3] = np.nan
+    return X
+
+
+def imputer():
+    from sklearn.impute import SimpleImputer as SkSI
+    X, Xh = _imp_data(), _imp_data(1)
+    out = [_put(PM, "imp-x.f32", X, F32), _put(PM, "imp-xh.f32", Xh, F32)]
+    for k, kw in enumerate(IMPUTER_KW):
+        r = SkSI(**kw).fit(X.astype(F64))
+        t = r.transform(Xh.astype(F64))
+        out += [_put(PM, f"imp-{k}-stats.f64", np.asarray(r.statistics_, F64), F64),
+                _put(PM, f"imp-{k}-transform.f64", t, F64),
+                _put(PM, f"imp-{k}-width.f64", [t.shape[1]], F64)]
+    Xm = np.nan_to_num(_imp_data(2), nan=-1.0)
+    r = SkSI(missing_values=-1.0, strategy="mean").fit(Xm.astype(F64))
+    t = r.transform(Xm.astype(F64))
+    out += [_put(PM, "imp-num-x.f32", Xm, F32), _put(PM, "imp-num-transform.f64", t, F64),
+            _put(PM, "imp-num-width.f64", [t.shape[1]], F64)]
+    return out
+
+
+# ---------------------------------------------------------------- test_x_prep_polynomial.py
+POLY_KW = (dict(), dict(degree=3), dict(degree=(2, 3), interaction_only=True, include_bias=False))
+
+
+def polynomial():
+    from sklearn.preprocessing import PolynomialFeatures as SkP
+    X = np.random.default_rng(0).standard_normal((40, 4)).astype(F32)
+    out = [_put(PM, "poly-x.f32", X, F32)]
+    for k, kw in enumerate(POLY_KW):
+        r = SkP(**kw).fit(X)
+        out += [_put(PM, f"poly-{k}-powers.f64", r.powers_, F64),
+                _put(PM, f"poly-{k}-width.f64", [r.powers_.shape[0]], F64),
+                _put(PM, f"poly-{k}-transform.f64", r.transform(X.astype(F64)), F64)]
+    return out
+
+
+# ---------------------------------------------------------------- test_x_prep_power.py
+POWER_KW = (dict(), dict(standardize=False), dict(method="box-cox"))
+
+
+def _pw_data(seed=0, n=600):
+    rng = np.random.default_rng(seed)
+    return np.column_stack([rng.standard_normal(n), rng.exponential(2.0, n), rng.gamma(2.0, 1.5, n),
+                            rng.lognormal(0, 0.7, n)]).astype(F32)
+
+
+def power():
+    from sklearn.preprocessing import PowerTransformer as SkPT
+    X, Xh = _pw_data(), _pw_data(1)
+    out = []
+    for k, kw in enumerate(POWER_KW):
+        if kw.get("method") == "box-cox":
+            X, Xh = np.abs(X) + F32(0.1), np.abs(Xh) + F32(0.1)
+        r = SkPT(**kw).fit(X.astype(F64))
+        out += [_put(PM, f"pw-{k}-x.f32", X, F32), _put(PM, f"pw-{k}-xh.f32", Xh, F32),
+                _put(PM, f"pw-{k}-lambdas.f64", r.lambdas_, F64),
+                _put(PM, f"pw-{k}-transform.f64", r.transform(Xh.astype(F64)), F64)]
+    return out
+
+
+# ---------------------------------------------------------------- test_x_prep_quantile.py
+QUANTILE_KW = (dict(n_quantiles=100), dict(n_quantiles=50, output_distribution="normal"))
+
+
+def _qt_data(seed=0, n=700, d=4):
+    rng = np.random.default_rng(seed)
+    X = rng.standard_normal((n, d)).astype(F32)
+    X[:, 1] = np.round(X[:, 1] * 2)
+    X[::11, 2] = np.nan
+    X[:, 3] = np.exp(X[:, 3])
+    return X
+
+
+def quantile():
+    from sklearn.preprocessing import QuantileTransformer as SkQT
+    X, Xh = _qt_data(), _qt_data(1)
+    out = [_put(PM, "qt-x.f32", X, F32), _put(PM, "qt-xh.f32", Xh, F32)]
+    for k, kw in enumerate(QUANTILE_KW):
+        r = SkQT(**kw).fit(X.astype(F64))
+        b = r.transform(Xh.astype(F64))
+        normal = kw.get("output_distribution") == "normal"
+        Z = b.astype(F32)
+        Z[:5] = -5.2 if normal else 0.0
+        Z[5:10] = 5.2 if normal else 1.0
+        Z[10:15] = F32(-7.0)
+        Z[15:20] = F32(7.0)
+        Z[20:30] = F32(0.37)
+        out += [_put(PM, f"qt-{k}-quantiles.f64", r.quantiles_, F64), _put(PM, f"qt-{k}-transform.f64", b, F64),
+                _put(PM, f"qt-{k}-z.f32", Z, F32), _put(PM, f"qt-{k}-inverse.f64", r.inverse_transform(Z.astype(F64)), F64)]
+    return out
+
+
+# ---------------------------------------------------------------- test_x_prep_spline.py
+SPLINE_KN = np.array([[-2.0, -1.5, -1.0], [-0.5, 0.0, 0.1], [0.4, 0.3, 0.8], [2.0, 1.1, 1.5]])
+# (keywords, weighted, feature columns): test_spline's four, test_spline_options' eleven, the two degree <= 1
+# 'linear' single-feature cases and the three handle_missing='zeros' cases, in the original's order
+SPLINE_CASES = (
+    (dict(), False, 3), (dict(n_knots=6, degree=2, knots="quantile"), False, 3), (dict(extrapolation="continue"), False, 3),
+    (dict(include_bias=False, degree=1), False, 3),
+    (dict(knots="kn"), False, 3), (dict(knots="kn", degree=2, extrapolation="linear"), False, 3),
+    (dict(extrapolation="linear"), False, 3),
+    (dict(extrapolation="periodic"), False, 3), (dict(extrapolation="periodic", degree=2, n_knots=4), False, 3),
+    (dict(extrapolation="periodic", include_bias=False, knots="kn"), False, 3),
+    (dict(extrapolation="periodic", degree=3, n_knots=4), False, 3),
+    (dict(), True, 3), (dict(knots="quantile", n_knots=6), True, 3), (dict(knots="quantile", n_knots=4), False, 3),
+    (dict(order="F", degree=2), False, 3),
+    (dict(extrapolation="linear", degree=1), False, 1), (dict(extrapolation="linear", degree=0), False, 1),
+    (dict(handle_missing="zeros"), False, 3), (dict(handle_missing="zeros", knots="quantile"), False, 3),
+    (dict(handle_missing="zeros", extrapolation="periodic"), False, 3),
+)
+
+
+def spline():
+    from sklearn.preprocessing import SplineTransformer as SkS
+    rng = np.random.default_rng(0)
+    X0 = rng.standard_normal((300, 3)).astype(F32)
+    Xh0 = (rng.standard_normal((100, 3)) * 1.5).astype(F32)
+    rng = np.random.default_rng(1)
+    X1 = rng.standard_normal((300, 3)).astype(F32)
+    Xh1 = (rng.standard_normal((100, 3)) * 1.7).astype(F32)
+    sw = rng.integers(0, 4, 300).astype(F64)
+    Xn, Xhn = X1.copy(), Xh1.copy()
+    Xn[::7, 1] = np.nan
+    Xhn[::5, 0] = np.nan
+    out = [_put(PM, "spl-x0.f32", X0, F32), _put(PM, "spl-xh0.f32", Xh0, F32), _put(PM, "spl-x1.f32", X1, F32),
+           _put(PM, "spl-xh1.f32", Xh1, F32), _put(PM, "spl-xn.f32", Xn, F32), _put(PM, "spl-xhn.f32", Xhn, F32),
+           _put(PM, "spl-sw.f32", sw, F32), _put(PM, "spl-kn.f32", SPLINE_KN, F32)]
+    for k, (kw, weighted, cols) in enumerate(SPLINE_CASES):
+        kw = {key: (SPLINE_KN if value == "kn" else value) for key, value in kw.items()}
+        if k < 4:
+            X, Xh = X0, Xh0
+        elif "handle_missing" in kw:
+            X, Xh = Xn, Xhn
+        else:
+            X, Xh = X1[:, :cols], Xh1[:, :cols]
+        r = SkS(**kw).fit(X.astype(F64), sample_weight=sw if weighted else None)
+        t = r.transform(Xh.astype(F64))
+        out += [_put(PM, f"spl-{k}-transform.f64", t, F64), _put(PM, f"spl-{k}-width.f64", [t.shape[1]], F64)]
+    return out
+
+
+SETS = (standard_smoke, minmax_smoke, e2_scalers, scaler_options, imputer, polynomial, power, quantile, spline)
 
 
 def _run(index):
