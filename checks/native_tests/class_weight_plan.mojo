@@ -11,7 +11,8 @@ and unit over its 8-row fixture; the three families share this pipeline, their s
 the fitted `classes_` stay in Python) and `test_rf_class_weight.py::test_balanced_and_partial_mapping` (40 rows,
 codes stored by `tools/py2mojo_native_fixtures_b4.py`). The public tests compare two fits; the fits read nothing of
 the class weights but these row words, so the words are what is asserted here, bit for bit.
-"""from std.testing import TestSuite
+"""
+from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
