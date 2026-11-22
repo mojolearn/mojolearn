@@ -95,8 +95,8 @@ class HostForest:
     `ExtraTreesClassifier.save` or `ExtraTreesRegressor.save`. Prediction
     runs the inference engine the file names ('sequential' or
     'parallel_groves') and returns what the GPU estimator returns for the
-    same file: random forest probabilities and regression values as float32,
-    extra-trees probabilities and regression values as float64. The model
+    same file: random forest probabilities as float32, extra-trees
+    probabilities and every regression value as float64. The model
     arrays are used exactly as saved, never cast; a file whose tree arrays
     are inconsistent raises `ValueError`.
 
@@ -205,8 +205,7 @@ class HostForest:
 
         For a classifier, the class with the highest probability (first
         maximum winning) mapped through `classes_`. For a regressor, the mean
-        of the trees' predictions: float32 for a random forest, float64 for
-        extra trees.
+        of the trees' predictions, as float64.
         """
         return _native_host_archive(self, _OP.host_tree_predict, (X,), _ARCHIVE_CONTEXT)
 
