@@ -103,3 +103,13 @@ def host_sparse_dia(
             if row >= 0 and row < rows:
                 var word = pd_raw_at(data, diagonal * row_stride + col * col_stride, width, native)
                 host_sparse_place(destination + (row * columns + col) * width, word, width, kind, True)
+
+
+# Moved verbatim from bindings/host_sparse_native_run.mojo (lane bindings-inline, 2026-11-22).
+# Typed membership test over connected type identity words (RUN).
+
+def _address_in(address: Int, members: List[Int]) -> Bool:
+    for i in range(len(members)):  # driver-loop: over the few connected type identities
+        if members[i] == address:
+            return True
+    return False
