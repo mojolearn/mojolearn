@@ -868,6 +868,13 @@ def m3_resume_kernel(
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 
 
+# ONE BODY PER OPERATION, THE EXCEPTION (lane neural-blocks-3-m3, 2026-11-22): S14-S20 below spell the
+# trapezoid recurrence (autograd/kernels/mamba3_trapezoid_body.mojo m3_trap_state / m3_trap_readout, the
+# decode step's and the generic trapezoid_scan op's bodies) as a CHUNKED contraction: intra-chunk
+# qk_s / yintra plus the inter-chunk state pass, another summation order, which is why the prefill is
+# parallel over the chunk. They keep their own math. The comparing checks: mamba/checks/mamba3_check.mojo
+# (every corpus case against the host oracle on the device; its L = 1 cases run the decode step) and
+# checks/native_tests/mamba3_prefix_step.mojo (a forward equals its prefix forward plus one step).
 def m3_state_decay_kernel(
     decay: MutPointer[Float32, MutAnyOrigin],
     dacs: MutPointer[Float32, MutAnyOrigin],
