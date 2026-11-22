@@ -3448,6 +3448,17 @@ class AlternatingLeastSquares(_Base):
         """
         return _ALS_CALL(self, "similar_items", (itemid, N), _ALS_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _ALS_CALL(self, "vendor_used", (), _ALS_CONTEXT)
+
 
 class SparseCoder(_SparseCoding):
     """Sparse coding against a fixed, precomputed dictionary.
