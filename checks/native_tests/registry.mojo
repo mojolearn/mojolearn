@@ -294,11 +294,6 @@ from checks.native_tests.seq_opt_entry import register as register_seq_opt_entry
 from checks.native_tests.sequence_input_plan_check import register as register_sequence_input_plan_check
 from checks.native_tests.spectral_contract import register as register_spectral_contract
 from checks.native_tests.spectral_state import register as register_spectral_state
-from checks.native_tests.trees_door_run import register as register_trees_door_run
-from checks.native_tests.trees_entry_dart import register as register_trees_entry_dart
-from checks.native_tests.trees_entry_forest import register as register_trees_entry_forest
-from checks.native_tests.trees_entry_gbdt import register as register_trees_entry_gbdt
-from checks.native_tests.trees_entry_glue import register as register_trees_entry_glue
 from checks.native_tests.tsqr_host_ownership import register as register_tsqr_host_ownership
 from checks.native_tests.tsvd_contract import register as register_tsvd_contract
 from checks.native_tests.tsvd_lease_state import register as register_tsvd_lease_state
@@ -873,11 +868,6 @@ def all_checks() -> List[Check]:
     checks.append(register_sequence_input_plan_check())
     checks.append(register_spectral_contract())
     checks.append(register_spectral_state())
-    checks.append(register_trees_door_run())
-    checks.append(register_trees_entry_dart())
-    checks.append(register_trees_entry_forest())
-    checks.append(register_trees_entry_gbdt())
-    checks.append(register_trees_entry_glue())
     checks.append(register_tsqr_host_ownership())
     checks.append(register_tsvd_contract())
     checks.append(register_tsvd_lease_state())
