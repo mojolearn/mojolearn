@@ -1,0 +1,533 @@
+{
+ "B": 1,
+ "L": 261,
+ "chunk_size": 256,
+ "corpus": "mamba2-corpus-v1",
+ "d_conv": 4,
+ "d_inner": 64,
+ "d_model": 32,
+ "d_state": 128,
+ "decode": {
+  "completed_chunks": 1,
+  "decode_token_index": 260,
+  "open_chunk_rows": 4,
+  "prefill_len": 260,
+  "semantics": "DEVIATION 786: decode is prefill resumption. prefill.* stages are the 260-token call; state.* is the three-piece resumption state after it (conv window; h entering the open chunk = pass.states[:, -1], NOT ssd.h_last, which is the after-the-padded-final-chunk REPORT; the open chunk's post-conv/post-SiLU xBC rows and raw in_proj dt rows); decode.* stages are token 260's rows of the 261-token prefill, which the profile's decode step must reproduce bit for bit against its own oracle (this corpus stays a tolerance reference)."
+ },
+ "dt_limit": [
+  {
+   "f32_hex": "0x00000000",
+   "value": 0.0
+  },
+  {
+   "f32_hex": "0x7F800000",
+   "value": "inf"
+  }
+ ],
+ "expand": 2,
+ "family": "mamba2",
+ "hash_spec": "mojolearn.mamba.corpus.hash.v1",
+ "headdim": 64,
+ "name": "m2_decode_b1_l260p1_d32",
+ "nchunks": 2,
+ "ngroups": 1,
+ "nheads": 1,
+ "note": "(g) decode continuation: prefill 260 (one COMPLETED chunk + a 4-row open-chunk buffer), then ONE token; records the three-piece resumption state of contract section 5 (conv window, boundary h, intra-chunk buffer) and the decode token's per-stage rows. DEVIATION 786: decode IS prefill resumption, so the L=261 prefill IS the decode reference",
+ "profile": "mojolearn.identical.mamba2.fp32.v1",
+ "rms_eps": 1e-05,
+ "seed": "0x4D6D623243707270",
+ "seed_case_index": 16,
+ "softplus_threshold": 20.0,
+ "stage_definitions": "see ../manifest.json",
+ "stage_order": [
+  "prefill.dt.out",
+  "prefill.dacs.out",
+  "prefill.pass.states",
+  "prefill.scan.y",
+  "prefill.residual.out",
+  "prefill.conv.window",
+  "prefill.ssd.h_last",
+  "state.h_boundary",
+  "state.buffer_xbc",
+  "state.buffer_dtraw",
+  "decode.norm.out",
+  "decode.in_proj.out",
+  "decode.conv.out",
+  "decode.silu.out",
+  "decode.dt.out",
+  "decode.xd.out",
+  "decode.ydiag.out",
+  "decode.yoff.out",
+  "decode.scan.y",
+  "decode.skip.out",
+  "decode.gnorm.gate",
+  "decode.gnorm.sumsq",
+  "decode.gnorm.out",
+  "decode.out_proj.out",
+  "decode.residual.out",
+  "decode.conv.window",
+  "decode.ssd.h_last",
+  "decode.pass.states"
+ ],
+ "stages": {
+  "decode.conv.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.conv.out.f32",
+   "ref64": "ref64/decode.conv.out.f64",
+   "sha256_ref32": "2c4ee938867740152d6dc501714d8ed39624681549c970cb02e2e4068da1d9b0",
+   "sha256_ref64": "0a25106267ab88e0f737a340c6282effcfdc57c57862482b138b4ff7c8a0d883",
+   "shape": [
+    1,
+    320
+   ]
+  },
+  "decode.conv.window": {
+   "order": "row-major",
+   "ref32": "ref32/decode.conv.window.f32",
+   "ref64": "ref64/decode.conv.window.f64",
+   "sha256_ref32": "fb9cab580e880d5759dc4397a9d603fbd589b197cfcbae324e5baee6c6c18a19",
+   "sha256_ref64": "c47bfda5e4703a4b55e0c0e15b2eb6871e2a95cc32a9ea65aadb432a010ec95e",
+   "shape": [
+    1,
+    320,
+    4
+   ]
+  },
+  "decode.dt.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.dt.out.f32",
+   "ref64": "ref64/decode.dt.out.f64",
+   "sha256_ref32": "74c59353c6628c4fcc5cad1f3b63268659a6c19b3fac002c02ce641a63e15da3",
+   "sha256_ref64": "cf8ba2f2ae8b3cea23c168a87a4e9ee17df12531c2ffa924a20db5d0e35faaaf",
+   "shape": [
+    1,
+    1
+   ]
+  },
+  "decode.gnorm.gate": {
+   "order": "row-major",
+   "ref32": "ref32/decode.gnorm.gate.f32",
+   "ref64": "ref64/decode.gnorm.gate.f64",
+   "sha256_ref32": "f3a4bd95a84fec58398f6e7f9adf2150f61ae545232426ae34f2d67f2d43ce9e",
+   "sha256_ref64": "45b936f3b3083ff654d5eb61bbf88502eca3211151f5dc30dcd5d57d022d88a9",
+   "shape": [
+    1,
+    64
+   ]
+  },
+  "decode.gnorm.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.gnorm.out.f32",
+   "ref64": "ref64/decode.gnorm.out.f64",
+   "sha256_ref32": "3ae2d24734f172b17fcce7803b191801e7d9519e62e2b7a3cd8a4e501221e117",
+   "sha256_ref64": "bb709a32c953109f8dcc84180088a914435cdfb1d5fd220d0b311fe79a74af9a",
+   "shape": [
+    1,
+    64
+   ]
+  },
+  "decode.gnorm.sumsq": {
+   "order": "row-major",
+   "ref32": "ref32/decode.gnorm.sumsq.f32",
+   "ref64": "ref64/decode.gnorm.sumsq.f64",
+   "sha256_ref32": "31084da3d8e61155f584643af35e98dd1083eeefebd76549f02619e293510156",
+   "sha256_ref64": "7dba855b14a052b238a3f2e786bc362bee013f196d1084332fea781c99be5adf",
+   "shape": [
+    1
+   ]
+  },
+  "decode.in_proj.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.in_proj.out.f32",
+   "ref64": "ref64/decode.in_proj.out.f64",
+   "sha256_ref32": "42d291c9259585bf03bd1e2dccaa8790ef73492bb95cbd97729d1bb8dbae6260",
+   "sha256_ref64": "00c2018e62679c385c5da6caab40b50206c63f816edcb50840b9495451f0af4e",
+   "shape": [
+    1,
+    385
+   ]
+  },
+  "decode.norm.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.norm.out.f32",
+   "ref64": "ref64/decode.norm.out.f64",
+   "sha256_ref32": "c4c6ee8e7ed9becdd0b24247b1968d3235c75fda8a530cf929f1845e2196978c",
+   "sha256_ref64": "5929a2c79dddbcf3fa564c4f1989ac276ea6551130dd7777da37875768182076",
+   "shape": [
+    1,
+    32
+   ]
+  },
+  "decode.out_proj.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.out_proj.out.f32",
+   "ref64": "ref64/decode.out_proj.out.f64",
+   "sha256_ref32": "913cf7345bd1b75f1cd10b20ce7a907f76919f6fbdca431721c582c927020190",
+   "sha256_ref64": "a03360732819fec9df2c52207df1af62ff56caa67e2dc3b2e372bec4b4ed8e97",
+   "shape": [
+    1,
+    32
+   ]
+  },
+  "decode.pass.states": {
+   "order": "row-major",
+   "ref32": "ref32/decode.pass.states.f32",
+   "ref64": "ref64/decode.pass.states.f64",
+   "sha256_ref32": "0f1017423caaf8a7907455b35ffd810e928bb0fe12c7fc9ca91adc7ab19e787d",
+   "sha256_ref64": "79a15ab8aef7edd38f9d1f5bb7e26d30c47a4e054ae3f7c971d8f974d5685bf7",
+   "shape": [
+    1,
+    2,
+    1,
+    64,
+    128
+   ]
+  },
+  "decode.residual.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.residual.out.f32",
+   "ref64": "ref64/decode.residual.out.f64",
+   "sha256_ref32": "4c35b5de938ff1017cb17deaf77c709c5abc814d327191ab20e18f25e69e66cf",
+   "sha256_ref64": "1d89d06e2955c2984f4b9883630719942a62f8a32766d474a92f35f727624e54",
+   "shape": [
+    1,
+    32
+   ]
+  },
+  "decode.scan.y": {
+   "order": "row-major",
+   "ref32": "ref32/decode.scan.y.f32",
+   "ref64": "ref64/decode.scan.y.f64",
+   "sha256_ref32": "c0bea009257667f2cf96cb38c47055648e972924c817cbeb06cfb4cb02e6ec1a",
+   "sha256_ref64": "6c772a05fc413323384d05e4a67536935584b820ab6dc12663095dd9706d193d",
+   "shape": [
+    1,
+    1,
+    64
+   ]
+  },
+  "decode.silu.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.silu.out.f32",
+   "ref64": "ref64/decode.silu.out.f64",
+   "sha256_ref32": "2644b02cb27da293c1ef4f7f8f06c27ff054c9a1f8723897238bebe9c81f5aeb",
+   "sha256_ref64": "2d9c883b685a0ed10751d9450b7d083be2348a9c30b0ac11e26106a0185b9cac",
+   "shape": [
+    1,
+    320
+   ]
+  },
+  "decode.skip.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.skip.out.f32",
+   "ref64": "ref64/decode.skip.out.f64",
+   "sha256_ref32": "dd79f74c1bac2a291b033bf9b29265a19db166ae44ac852e5e6ebdc0e2a08633",
+   "sha256_ref64": "aa8c22da831d13b1cebee503badf128b87824fae6b6deec21ab1136c69e8521c",
+   "shape": [
+    1,
+    1,
+    64
+   ]
+  },
+  "decode.ssd.h_last": {
+   "order": "row-major",
+   "ref32": "ref32/decode.ssd.h_last.f32",
+   "ref64": "ref64/decode.ssd.h_last.f64",
+   "sha256_ref32": "6bee455f70c44b9d0df1f9eef9ec07f14aae62d735cc1f63d1d085af9b921947",
+   "sha256_ref64": "658a6dbe8400863f0aaf031e53247013ab7d331a42a8a885bac3b06fc61f8fa6",
+   "shape": [
+    1,
+    1,
+    64,
+    128
+   ]
+  },
+  "decode.xd.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.xd.out.f32",
+   "ref64": "ref64/decode.xd.out.f64",
+   "sha256_ref32": "76a284bc0bf3b4649a0ae2d57021169ef6444eebdd6eaa1932b767cd5f5f1d81",
+   "sha256_ref64": "8bf993ec1c696ad606af013dcf9358ee86ac91ea966ae2d99298dc48b4c4f0a0",
+   "shape": [
+    1,
+    1,
+    64
+   ]
+  },
+  "decode.ydiag.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.ydiag.out.f32",
+   "ref64": "ref64/decode.ydiag.out.f64",
+   "sha256_ref32": "f7801d566c3ba21ee029225e5a2d606c2e080ef3f89828b8314bd932861b1cc9",
+   "sha256_ref64": "374e8b8f03738f2a3bd27cdd6075e76c58c3e62cd988313493bfb07d3be77cd9",
+   "shape": [
+    1,
+    1,
+    64
+   ]
+  },
+  "decode.yoff.out": {
+   "order": "row-major",
+   "ref32": "ref32/decode.yoff.out.f32",
+   "ref64": "ref64/decode.yoff.out.f64",
+   "sha256_ref32": "59e5b00e0b6898577945d477ee863beadb6be9935f8a579c2c529c345bc9a792",
+   "sha256_ref64": "42b405a6c86ea96fe71f20d3916b430bd8a1a46315da82ea1fe79a434230dec3",
+   "shape": [
+    1,
+    1,
+    64
+   ]
+  },
+  "prefill.conv.window": {
+   "order": "row-major",
+   "ref32": "ref32/prefill.conv.window.f32",
+   "ref64": "ref64/prefill.conv.window.f64",
+   "sha256_ref32": "e5834b8637a437928664774543927d42a80aa80f6ae834d7a6e36ae72af2342e",
+   "sha256_ref64": "f236d3627df763fc2df332c2cbbddfd418d43946e23af3b4caa5b852ac8147f2",
+   "shape": [
+    1,
+    320,
+    4
+   ]
+  },
+  "prefill.dacs.out": {
+   "order": "row-major",
+   "ref32": "ref32/prefill.dacs.out.f32",
+   "ref64": "ref64/prefill.dacs.out.f64",
+   "sha256_ref32": "15e40eb8171dddf73c636e1995971fe2d3bc0441e89215cb9569a15eba9e5760",
+   "sha256_ref64": "269763a16d2dbf2bc200aba2e16ce815752bd66dc65a11fbe954dd8b3bff8470",
+   "shape": [
+    1,
+    1,
+    2,
+    256
+   ]
+  },
+  "prefill.dt.out": {
+   "order": "row-major",
+   "ref32": "ref32/prefill.dt.out.f32",
+   "ref64": "ref64/prefill.dt.out.f64",
+   "sha256_ref32": "07992366b902f9d5893697d8dee3c9f0676cb71e2a9924f7db3921f7fbffbe59",
+   "sha256_ref64": "10f7d68c6e1c5b1a5d45d866cf64bb6c816d1128953f4a53aca50ecce18ff462",
+   "shape": [
+    260,
+    1
+   ]
+  },
+  "prefill.pass.states": {
+   "order": "row-major",
+   "ref32": "ref32/prefill.pass.states.f32",
+   "ref64": "ref64/prefill.pass.states.f64",
+   "sha256_ref32": "0f1017423caaf8a7907455b35ffd810e928bb0fe12c7fc9ca91adc7ab19e787d",
+   "sha256_ref64": "79a15ab8aef7edd38f9d1f5bb7e26d30c47a4e054ae3f7c971d8f974d5685bf7",
+   "shape": [
+    1,
+    2,
+    1,
+    64,
+    128
+   ]
+  },
+  "prefill.residual.out": {
+   "order": "row-major",
+   "ref32": "ref32/prefill.residual.out.f32",
+   "ref64": "ref64/prefill.residual.out.f64",
+   "sha256_ref32": "702202228051e6252580bfdb249a25b141a867f0667d4a81a50957b569eff393",
+   "sha256_ref64": "a94849e05c412291930a7c0610ec8e8056974d72bc363baa4368945a688ab985",
+   "shape": [
+    260,
+    32
+   ]
+  },
+  "prefill.scan.y": {
+   "order": "row-major",
+   "ref32": "ref32/prefill.scan.y.f32",
+   "ref64": "ref64/prefill.scan.y.f64",
+   "sha256_ref32": "b7dc8d47f9497627fe5f407e5a7ff9d66e8f7ce93f6f4c138bbe2b6c58692e5b",
+   "sha256_ref64": "b7e8bec63ea9be7209ecf19ddd7fe716bf1a295a714b78d0f9e4795e89e51372",
+   "shape": [
+    260,
+    1,
+    64
+   ]
+  },
+  "prefill.ssd.h_last": {
+   "order": "row-major",
+   "ref32": "ref32/prefill.ssd.h_last.f32",
+   "ref64": "ref64/prefill.ssd.h_last.f64",
+   "sha256_ref32": "f01eab50e653b5cd61d7e74b474ae870683a9c9fc9cc226a216c6aea12bb9a12",
+   "sha256_ref64": "59baec18c985bb769a29a94bbb438421922fa51422c8cea55189b57d30734ef4",
+   "shape": [
+    1,
+    1,
+    64,
+    128
+   ]
+  },
+  "state.buffer_dtraw": {
+   "order": "row-major",
+   "ref32": "ref32/state.buffer_dtraw.f32",
+   "ref64": "ref64/state.buffer_dtraw.f64",
+   "sha256_ref32": "52bd085305d4def8a576d46831ed08a6784639ef49218ce5f348dec3f600cc48",
+   "sha256_ref64": "b9592440114673a322779febcadbe0037b2ba49eed9af52e8dc6b482e9be74cf",
+   "shape": [
+    1,
+    4,
+    1
+   ]
+  },
+  "state.buffer_xbc": {
+   "order": "row-major",
+   "ref32": "ref32/state.buffer_xbc.f32",
+   "ref64": "ref64/state.buffer_xbc.f64",
+   "sha256_ref32": "dc89c096e71b0f02631eec0f9064bce9cd8910cfe9fc85e97d3634281dcf5f8e",
+   "sha256_ref64": "438f65a69f3c2f53c8fc08f56080acfa3bc21f622a4a032caba36f53de208040",
+   "shape": [
+    1,
+    4,
+    320
+   ]
+  },
+  "state.h_boundary": {
+   "order": "row-major",
+   "ref32": "ref32/state.h_boundary.f32",
+   "ref64": "ref64/state.h_boundary.f64",
+   "sha256_ref32": "56ce6349645d6a0df184edfca7a3ffca9fa1d5337425cfdefec69a01322769a9",
+   "sha256_ref64": "7e03336181a6493453c048cb388765552d8f2db8c21daf7204bddc2c59aa53e9",
+   "shape": [
+    1,
+    1,
+    64,
+    128
+   ]
+  }
+ },
+ "tensors": {
+  "A_log": {
+   "dtype": "float32",
+   "file": "A_log.f32",
+   "hi": 2.75,
+   "lo": 0.0,
+   "order": "row-major",
+   "sha256": "2b973ee9926685f88e5c9f10edaea2d2a93fe498c9db19b087fb54ef20c92e1c",
+   "shape": [
+    1
+   ],
+   "tensor_id": 27
+  },
+  "D": {
+   "dtype": "float32",
+   "file": "D.f32",
+   "hi": 1.5,
+   "lo": 0.5,
+   "order": "row-major",
+   "sha256": "e3418e87a7aaa3138b17968a98c93031ad2746e19da580dc656fe88cffe887b5",
+   "shape": [
+    1
+   ],
+   "tensor_id": 28
+  },
+  "block_norm.weight": {
+   "dtype": "float32",
+   "file": "block_norm.weight.f32",
+   "hi": 1.5,
+   "lo": 0.5,
+   "order": "row-major",
+   "sha256": "e42ed1f13ded34e6e909b0654177a859e26fd14814a3bb262ab2396dc9ef55cc",
+   "shape": [
+    32
+   ],
+   "tensor_id": 22
+  },
+  "conv1d.bias": {
+   "dtype": "float32",
+   "file": "conv1d.bias.f32",
+   "hi": 0.125,
+   "lo": -0.125,
+   "order": "row-major",
+   "sha256": "e2c09f21c7463b568fab242888ff5ab31cfc603ee3037b7be29d1ceed7f98a24",
+   "shape": [
+    320
+   ],
+   "tensor_id": 25
+  },
+  "conv1d.weight": {
+   "dtype": "float32",
+   "file": "conv1d.weight.f32",
+   "hi": 0.5,
+   "lo": -0.5,
+   "order": "row-major",
+   "sha256": "06689c28658c48db754859a33d0d5fe63a37716445ccc9fc2236e2126bb0e00d",
+   "shape": [
+    320,
+    1,
+    4
+   ],
+   "tensor_id": 24
+  },
+  "dt_bias": {
+   "dtype": "float32",
+   "file": "dt_bias.f32",
+   "hi": -2.0,
+   "lo": -7.0,
+   "order": "row-major",
+   "sha256": "ed6b7a4e3dacdc9f8180a773a59efb173c8910b81e240d12b6fe891ce8f63018",
+   "shape": [
+    1
+   ],
+   "tensor_id": 26
+  },
+  "in_proj.weight": {
+   "dtype": "float32",
+   "file": "in_proj.weight.f32",
+   "hi": 0.0625,
+   "lo": -0.0625,
+   "order": "row-major",
+   "sha256": "32bc216b224900f085283ec3f705b38fe125138db7c532dd57b96ee42bb28b16",
+   "shape": [
+    385,
+    32
+   ],
+   "tensor_id": 23
+  },
+  "norm.weight": {
+   "dtype": "float32",
+   "file": "norm.weight.f32",
+   "hi": 1.5,
+   "lo": 0.5,
+   "order": "row-major",
+   "sha256": "21a82662e8e7e70a175b9ad4e00416ccfc8b581babbbc8f2a1c8a2c6be6716d1",
+   "shape": [
+    64
+   ],
+   "tensor_id": 29
+  },
+  "out_proj.weight": {
+   "dtype": "float32",
+   "file": "out_proj.weight.f32",
+   "hi": 0.0625,
+   "lo": -0.0625,
+   "order": "row-major",
+   "sha256": "4f0674e587d74ec6dabe5b3a4ce15f24599e57f36c292ce89f1613ab486b8fd5",
+   "shape": [
+    32,
+    64
+   ],
+   "tensor_id": 30
+  },
+  "x": {
+   "dtype": "float32",
+   "file": "x.f32",
+   "hi": 2.0,
+   "lo": -2.0,
+   "order": "row-major",
+   "sha256": "78288e5efde54bead8bf3e371284483bb6624c2998021688fe191df1e2a6e6db",
+   "shape": [
+    1,
+    261,
+    32
+   ],
+   "tensor_id": 21
+  }
+ }
+}

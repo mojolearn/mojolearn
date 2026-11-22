@@ -1,0 +1,294 @@
+{
+ "B": 1,
+ "L": 8,
+ "corpus": "mamba-corpus-v1",
+ "d_conv": 4,
+ "d_inner": 32,
+ "d_model": 16,
+ "d_state": 16,
+ "dt_rank": 1,
+ "expand": 2,
+ "hash_spec": "mojolearn.mamba.corpus.hash.v1",
+ "name": "adv_gate_saturation_b1_l8_d16",
+ "note": "(e) the gate half of in_proj.weight (rows d_inner..2*d_inner) is in [-2^30, 2^30]; z is ~1e9, exp(-z) overflows to inf for negative z so sigmoid saturates to 0 (silu -> -0.0) and to 1 for positive z; the residual is lost in block.out",
+ "rms_eps": 1e-05,
+ "seed": "0x4D616D6261442F72",
+ "seed_case_index": 12,
+ "softplus_threshold": 20.0,
+ "stage_definitions": "see ../manifest.json",
+ "stage_order": [
+  "norm.out",
+  "in_proj.out",
+  "conv.out",
+  "silu.out",
+  "x_proj.out",
+  "dt_proj.out",
+  "softplus.out",
+  "scan.y",
+  "scan.h_last",
+  "gate.out",
+  "out_proj.out",
+  "block.out"
+ ],
+ "stages": {
+  "block.out": {
+   "order": "row-major",
+   "ref32": "ref32/block.out.f32",
+   "ref64": "ref64/block.out.f64",
+   "shape": [
+    1,
+    8,
+    16
+   ]
+  },
+  "conv.out": {
+   "order": "row-major",
+   "ref32": "ref32/conv.out.f32",
+   "ref64": "ref64/conv.out.f64",
+   "shape": [
+    1,
+    32,
+    8
+   ]
+  },
+  "dt_proj.out": {
+   "order": "row-major",
+   "ref32": "ref32/dt_proj.out.f32",
+   "ref64": "ref64/dt_proj.out.f64",
+   "shape": [
+    1,
+    32,
+    8
+   ]
+  },
+  "gate.out": {
+   "order": "row-major",
+   "ref32": "ref32/gate.out.f32",
+   "ref64": "ref64/gate.out.f64",
+   "shape": [
+    1,
+    32,
+    8
+   ]
+  },
+  "in_proj.out": {
+   "order": "row-major",
+   "ref32": "ref32/in_proj.out.f32",
+   "ref64": "ref64/in_proj.out.f64",
+   "shape": [
+    1,
+    64,
+    8
+   ]
+  },
+  "norm.out": {
+   "order": "row-major",
+   "ref32": "ref32/norm.out.f32",
+   "ref64": "ref64/norm.out.f64",
+   "shape": [
+    1,
+    8,
+    16
+   ]
+  },
+  "out_proj.out": {
+   "order": "row-major",
+   "ref32": "ref32/out_proj.out.f32",
+   "ref64": "ref64/out_proj.out.f64",
+   "shape": [
+    1,
+    8,
+    16
+   ]
+  },
+  "scan.h_last": {
+   "order": "row-major",
+   "ref32": "ref32/scan.h_last.f32",
+   "ref64": "ref64/scan.h_last.f64",
+   "shape": [
+    1,
+    32,
+    16
+   ]
+  },
+  "scan.y": {
+   "order": "row-major",
+   "ref32": "ref32/scan.y.f32",
+   "ref64": "ref64/scan.y.f64",
+   "shape": [
+    1,
+    32,
+    8
+   ]
+  },
+  "silu.out": {
+   "order": "row-major",
+   "ref32": "ref32/silu.out.f32",
+   "ref64": "ref64/silu.out.f64",
+   "shape": [
+    1,
+    32,
+    8
+   ]
+  },
+  "softplus.out": {
+   "order": "row-major",
+   "ref32": "ref32/softplus.out.f32",
+   "ref64": "ref64/softplus.out.f64",
+   "shape": [
+    1,
+    32,
+    8
+   ]
+  },
+  "x_proj.out": {
+   "order": "row-major",
+   "ref32": "ref32/x_proj.out.f32",
+   "ref64": "ref64/x_proj.out.f64",
+   "shape": [
+    1,
+    8,
+    33
+   ]
+  }
+ },
+ "tensors": {
+  "A_log": {
+   "dtype": "float32",
+   "file": "A_log.f32",
+   "hi": 2.75,
+   "lo": 0.0,
+   "order": "row-major",
+   "shape": [
+    32,
+    16
+   ],
+   "tensor_id": 8
+  },
+  "D": {
+   "dtype": "float32",
+   "file": "D.f32",
+   "hi": 1.5,
+   "lo": 0.5,
+   "order": "row-major",
+   "shape": [
+    32
+   ],
+   "tensor_id": 9
+  },
+  "conv1d.bias": {
+   "dtype": "float32",
+   "file": "conv1d.bias.f32",
+   "hi": 0.125,
+   "lo": -0.125,
+   "order": "row-major",
+   "shape": [
+    32
+   ],
+   "tensor_id": 4
+  },
+  "conv1d.weight": {
+   "dtype": "float32",
+   "file": "conv1d.weight.f32",
+   "hi": 0.5,
+   "lo": -0.5,
+   "order": "row-major",
+   "shape": [
+    32,
+    1,
+    4
+   ],
+   "tensor_id": 3
+  },
+  "dt_proj.bias": {
+   "dtype": "float32",
+   "file": "dt_proj.bias.f32",
+   "hi": -2.0,
+   "lo": -7.0,
+   "order": "row-major",
+   "shape": [
+    32
+   ],
+   "tensor_id": 7
+  },
+  "dt_proj.weight": {
+   "dtype": "float32",
+   "file": "dt_proj.weight.f32",
+   "hi": 1.0,
+   "lo": -1.0,
+   "order": "row-major",
+   "shape": [
+    32,
+    1
+   ],
+   "tensor_id": 6
+  },
+  "in_proj.weight": {
+   "dtype": "float32",
+   "file": "in_proj.weight.f32",
+   "hi": 0.125,
+   "lo": -0.125,
+   "order": "row-major",
+   "segments": [
+    {
+     "hi": 1073741824.0,
+     "lo": -1073741824.0,
+     "rows": "gate_half"
+    }
+   ],
+   "shape": [
+    64,
+    16
+   ],
+   "tensor_id": 2
+  },
+  "norm.weight": {
+   "dtype": "float32",
+   "file": "norm.weight.f32",
+   "hi": 1.5,
+   "lo": 0.5,
+   "order": "row-major",
+   "shape": [
+    16
+   ],
+   "tensor_id": 11
+  },
+  "out_proj.weight": {
+   "dtype": "float32",
+   "file": "out_proj.weight.f32",
+   "hi": 0.0625,
+   "lo": -0.0625,
+   "order": "row-major",
+   "shape": [
+    16,
+    32
+   ],
+   "tensor_id": 10
+  },
+  "x": {
+   "dtype": "float32",
+   "file": "x.f32",
+   "hi": 2.0,
+   "lo": -2.0,
+   "order": "row-major",
+   "shape": [
+    1,
+    8,
+    16
+   ],
+   "tensor_id": 1
+  },
+  "x_proj.weight": {
+   "dtype": "float32",
+   "file": "x_proj.weight.f32",
+   "hi": 0.0625,
+   "lo": -0.0625,
+   "order": "row-major",
+   "shape": [
+    33,
+    32
+   ],
+   "tensor_id": 5
+  }
+ }
+}
