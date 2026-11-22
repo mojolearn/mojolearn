@@ -270,14 +270,10 @@ class KernelRidge(_KernelMethodBase):
 
     # The fitted X and dual live on the device after the first predict,
     # under `_resident_holder` (bindings/kernel_methods_native_door.mojo). A
-    # pickle or a deepcopy carries no device handle; the copy uploads its
-    # own at its first predict. Dropping an instance releases the handle
-    # through the native finalizer connected below the classes.
-    def __getstate__(self):
-        return _NATIVE(self, "family_km_getstate", (), _NATIVE_CONTEXT)
-
-    def __setstate__(self, state):
-        _NATIVE(self, "family_km_setstate", (state,), _NATIVE_CONTEXT)
+    # pickle or a deepcopy carries no device handle (the state hooks of
+    # _KernelMethodBase); the copy uploads its own at its first predict.
+    # Dropping an instance releases the handle through the native finalizer
+    # connected below the classes.
 
     # Maintainer note, file layout: `X_fit_` and `dual_coef_` (flat,
     # `n * n_targets`) as fitted, `hyper` `<f8` [gamma, coef0, alpha] as the fit
