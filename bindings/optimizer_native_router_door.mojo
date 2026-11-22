@@ -21,7 +21,15 @@ from bindings.optimizer_public_door import (
 from bindings.optimizer_descriptor_boundary_door import optimizer_provider_entries, optimizer_native_mode, optimizer_driver
 from core.linear_metadata import linear_mode_name
 from core.shared_slot import SharedSlot
-from bindings.optimizer_serialization_boundary_pack import optimizer_restore_state
+from std.python._cpython import PyObjectPtr
+from bindings.py_balanced import py_fields, py_get, py_setitem, py_type
+from bindings.optimizer_admission_door import opt_owner, opt_value
+from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_retained, optimizer_owner_close, optimizer_owner_admit_replacement
+from bindings.optimizer_public_door import OPT_DOOR, owner_kind
+from bindings.optimizer_public_words_unpack import stash_python_error
+from bindings.optimizer_scalar_boundary_unpack import optimizer_truth
+from training.optimizer_owner_control import optimizer_restored_pristine
+from training.optimizer_serialization_run import optimizer_serialized_field
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwner, OptimizerOwnerLease, optimizer_owner_value, optimizer_owner_close, optimizer_owner_idle, optimizer_owner_admit_replacement
 from bindings.optimizer_owner_boundary_pack import optimizer_owner_new
 from training.checks.optimizer_contract import microbatch_split_is_identical
@@ -65,6 +73,64 @@ from bindings.optimizer_keys_unpack import (
 )
 from bindings.py_keys import py_op_code
 
+
+# ---- from bindings/optimizer_serialization_boundary_pack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Optimizer copy/pickle UNPACK/PACK; process-local handles never serialize."""
+
+
+def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:
+    opt_owner(owner, context)
+    opt_value(state, context)
+    var nk = optimizer_keys()
+    if py_type(state) is not py_item(context, nk[].k_container_types)[2]:
+        raise Error("TypeError: optimizer serialized state requires a native dictionary")
+    var pristine_value = py_get(state, nk[].k__native_optimizer_pristine, py_get(state, nk[].k__pristine, False))
+    var pristine = optimizer_restored_pristine(optimizer_truth(pristine_value, context),
+        py_get(state, nk[].k__m) is not None, py_get(state, nk[].k__v) is not None)
+    var fields = py_fields(owner)
+    optimizer_owner_admit_replacement(owner, fields, context)
+    var table = cpython_table()
+    var door = OPT_DOOR.get_or_create_ptr()
+    var saved_pointer = table[].PyDict_Copy(fields._obj_ptr)
+    if not saved_pointer:
+        var failure = stash_python_error()
+        raise failure^
+    var saved = PythonObject(from_owned=saved_pointer)
+    var replacement = optimizer_owner_new(owner, owner_kind(owner), pristine)
+    var publication = OptimizerOwnerLease(owner, replacement)
+    var old = py_get(fields, nk[].k__native_optimizer_owner)
+    if old is not None:
+        _ = optimizer_owner_retained(old, owner)
+        old.downcast_value_ptr[OptimizerOwner]()[].control.begin()
+    try:
+        door[].dict_clear(fields._obj_ptr)
+        var position = List[Int](length=1, fill=0)
+        var pair = List[PyObjectPtr](length=2, fill=PyObjectPtr())
+        while table[].PyDict_Next(state._obj_ptr, Int(position.unsafe_ptr()),
+                Int(pair.unsafe_ptr()), Int(pair.unsafe_ptr() + 1)):  # driver-loop: admitted external serialized fields
+            var key = PythonObject(from_borrowed=pair[0])
+            if optimizer_serialized_field(String(key)):
+                py_setitem(fields, key, PythonObject(from_borrowed=pair[1]))
+        py_setitem(fields, nk[].k__native_optimizer_owner, replacement)
+        opt_owner(owner, context)
+        if old is not None:
+            optimizer_owner_close(old, owner)
+    except error:
+        door[].dict_clear(fields._obj_ptr)
+        if door[].dict_update(fields._obj_ptr, saved._obj_ptr) != 0:
+            if old is not None:
+                old.downcast_value_ptr[OptimizerOwner]()[].control.finish()
+            var failure = stash_python_error()
+            raise failure^
+        if old is not None:
+            old.downcast_value_ptr[OptimizerOwner]()[].control.finish()
+        raise error^
+    if old is not None:
+        old.downcast_value_ptr[OptimizerOwner]()[].control.finish()
+    _ = old
+    _ = publication
+    return PythonObject(None)
 
 struct OptimizerModeRoutes(Defaultable, Movable):
     # `held`: (mode object, context, entries) triples of resolved numeric

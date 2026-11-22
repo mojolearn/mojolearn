@@ -43,15 +43,29 @@ from bindings.family_common_pack import (
 )
 from bindings.cluster_native_door import _reference_queries
 from core.spectral_assignment_api import SpectralAssignmentRequest
-from bindings.spectral_assignment_boundary_unpack import spectral_assignment_run
-from bindings.spectral_assignment_boundary_pack import spectral_assignment_pack
+from bindings.native_array_storage_door import native_array_zeros
+from std.python._cpython import GILReleased
+from core.spectral_assignment_api import (
+    SPECTRAL_ASSIGN_ABI, SPECTRAL_ASSIGN_COUNT, SpectralAssignmentDriver,
+    SpectralAssignmentRequest, SpectralAssignmentOutput,
+)
+from core.native_array_layout import NativeArrayLayout
+from bindings.spectral_umap_routes_unpack import spectral_umap_entry
+from bindings.native_array_storage_door import native_array_unfilled
+from bindings.native_buffer_address_unpack import native_buffer_address
+from bindings.classical_arrays_door import classical_wrap_layout
+from providers.python.neural_descriptor_pyapi_door import (
+    NeuralDescriptorProvider, neural_descriptor_connect_factory_once,
+)
 from bindings.spectral_affinity_boundary import SpectralAffinityRoom, spectral_rbf_run
 from core.spectral_preparation_api import (
     SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest, SpectralAffinityStatus, SpectralCOOStorage,
 )
-from bindings.spectral_preparation_boundary_unpack import (
-    SpectralPreparationConnection, spectral_coo_count_run, spectral_coo_fill_run, spectral_knn_run,
+from core.spectral_preparation_api import (
+    SPECTRAL_PREPARATION_ABI, SPECTRAL_PREPARATION_COUNT, SpectralPreparationDriver,
+    SpectralCOOCountRequest, SpectralCOOFillRequest, SpectralKNNRequest,
 )
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_factory_once
 from bindings.py_cluster_resident import CRES_SPECTRAL, cres_spectral_lookup, cres_spectral_store, cres_forget
 from bindings.spectral_resident_boundary_unpack import (
     SpectralResidentLease, spectral_resident_prepare, spectral_resident_query, spectral_resident_retire,
@@ -87,6 +101,88 @@ from bindings.cluster_keys_unpack import cluster_keys
 from bindings.py_balanced import py_item
 
 
+# ---- from bindings/spectral_preparation_boundary_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Spectral preparation boundary image pins around typed native requests."""
+
+
+struct SpectralPreparationConnection(Movable):
+    var provider: PythonObject
+    var driver: SpectralPreparationDriver
+
+    def __init__(out self, binding: PythonObject, context: PythonObject) raises:
+        var factory = spectral_umap_entry(binding, "spectral_preparation_native_api_v1", context)
+        var provider = neural_descriptor_connect_factory_once(factory,
+            String(SPECTRAL_PREPARATION_ABI), SPECTRAL_PREPARATION_COUNT)
+        self.driver = SpectralPreparationDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
+        self.provider = provider
+
+
+def spectral_coo_count_run(connection: SpectralPreparationConnection, request: SpectralCOOCountRequest) raises -> Int:
+    var count: Int
+    try:
+        with GILReleased(Python()):
+            count = connection.driver.count(request)
+    finally:
+        _ = connection.provider
+    return count
+
+
+def spectral_coo_fill_run(connection: SpectralPreparationConnection, request: SpectralCOOFillRequest) raises -> Int:
+    var count: Int
+    try:
+        with GILReleased(Python()):
+            count = connection.driver.fill(request)
+    finally:
+        _ = connection.provider
+    return count
+
+
+def spectral_knn_run(connection: SpectralPreparationConnection, request: SpectralKNNRequest) raises:
+    try:
+        with GILReleased(Python()):
+            connection.driver.knn(request)
+    finally:
+        _ = connection.provider
+
+# ---- from bindings/spectral_assignment_boundary_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Alternative label assignment UNPACK/PACK; execution is one native call."""
+
+
+def spectral_assignment_run(binding: PythonObject, request: SpectralAssignmentRequest,
+                            context: PythonObject) raises -> SpectralAssignmentOutput:
+    var factory = spectral_umap_entry(binding, "spectral_assign_native_api_v1", context)
+    var provider = neural_descriptor_connect_factory_once(factory, String(SPECTRAL_ASSIGN_ABI), SPECTRAL_ASSIGN_COUNT)
+    var driver = SpectralAssignmentDriver(provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
+    var output = SpectralAssignmentOutput()
+    try:
+        with GILReleased(Python()):
+            driver.assign(request, output)
+    finally:
+        _ = provider
+    return output^
+
+# ---- from bindings/spectral_assignment_boundary_pack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Alternative label assignment UNPACK/PACK; execution is one native call."""
+# The PACK half of the former `bindings/spectral_assignment_boundary.mojo` (fence-flip-2 split, 2026-11-12);
+# the UNPACK half is `bindings/spectral_assignment_boundary_unpack.mojo`.
+
+
+def spectral_assignment_pack(output: SpectralAssignmentOutput, rows: Int,
+                             context: PythonObject) raises -> PythonObject:
+    # The old ClusterOut serializer copied one labels list into one exporter.
+    # Retain that copy and owning exporter without its nested Python lists.
+    var count = len(output.storage[0].labels)
+    # lane fix-output-zero-fill (2026-11-14): unfilled; the memcpy below writes all count labels.
+    var store = native_array_unfilled("i", count)
+    if count > 0:
+        unsafe_memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=native_buffer_address(store)),
+            src=output.storage[0].labels.unsafe_ptr(), count=count)
+    _ = output
+    var layout = NativeArrayLayout(List[Int](length=1, fill=rows), 4)
+    return classical_wrap_layout(store, layout, "<i4", context)
 
 def _builtins() raises -> PythonObject:
     return native_loaded_module("builtins")

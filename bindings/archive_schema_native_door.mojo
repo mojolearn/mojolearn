@@ -173,11 +173,39 @@ from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.classical_archive_door import classical_archive_write, _archive_array, _archive_unpack_member, _archive_class_name_unpack
 from bindings.classical_archive_read_door import _archive_builtin_repr
 from bindings.trees_public_iforest_door import iforest_export_forest
-from bindings.cholesky_archive_native_unpack import cholesky_archive_write
+from std.python import PythonObject
+from bindings.py_balanced import py_fields, py_setitem
+from bindings.native_buffer_owner_pack import native_storage_allocate
+from bindings.classical_archive_door import _archive_open, _archive_methods, _archive_pack_members, _archive_file_call
+from bindings.classical_archive_output_door import archive_f32_c_pack
+from core.native_archive_read import NativeArchiveDecoded
+from core.native_archive_write import NativeArchiveMember
+from core.native_archive_cholesky import NativeCholeskyArchivePlan, NativeCholeskyArchiveSaved, native_cholesky_archive_members
 from providers.python.array_layout_boundary_unpack import native_shape_unpack
 from core.linear_metadata import linear_mode_name
 from core.native_archive_cholesky import NativeCholeskyArchiveSaved, native_cholesky_save_factor
 
+
+# ---- from bindings/cholesky_archive_native_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Cholesky archive final-owner PACK and file output ownership."""
+
+
+def cholesky_archive_write(path: PythonObject, var factor: NativeArchiveMember,
+                           state: NativeCholeskyArchiveSaved, pins: List[PythonObject],
+                           context: PythonObject) raises -> PythonObject:
+    var members = native_cholesky_archive_members(factor^, state)
+    var opened = _archive_open(path, context)
+    var file = opened[0]
+    var methods = _archive_methods(file, context)
+    try:
+        _archive_pack_members(file, methods, members)
+    finally:
+        if Bool(py=opened[1]):
+            _ = _archive_file_call(methods["close"], file)
+        _ = members
+        _ = pins
+    return path
 
 def _schema_dictionary(value: PythonObject) raises:
     var b = native_loaded_module("builtins")

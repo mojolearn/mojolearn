@@ -159,7 +159,14 @@ from core.dense_coo_host import knn_affinity_f32 as dense_knn_affinity_f32
 # bindings/labels_host_ops.mojo (lane s1), the one host copy, so the label path
 # (bindings/classical_labels_door.mojo) runs the same host body in-process on a
 # CPU-only install instead of calling back into this module through Python.
-from bindings.labels_host_ops_unpack import unique_inverse_binding, prepare_targets_binding
+from std.python import PythonObject
+from core.labels_native_host import LabelsHostKernels
+from bindings.labels_legacy_boundary_unpack import labels_legacy_prepare
+from bindings.labels_legacy_boundary_pack import labels_legacy_unique
+from core.labels_prepare import (
+    PT_ENCODE_CAP, PT_W_NONFINITE, PT_W_NEGATIVE, PT_W_ALL_ZERO,
+    PT_ALLOW_NEGATIVE, PT_ALLOW_ALL_ZERO,
+)
 from core.labels_native_host_provider import LabelsHostNativeAPI
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1019,6 +1026,24 @@ def labels_native_api_v3_binding() raises -> PythonObject:
 from core.spectral_preparation_api import SpectralPreparationAPI
 from core.spectral_preparation_host import SpectralPreparationHost
 from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_PREP_IDENTICAL
+
+
+# ---- from bindings/labels_host_ops_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""Legacy public host label wrappers: scalar UNPACK, native RUN, scalar PACK."""
+
+
+def unique_inverse_binding(src_addr: PythonObject, n: PythonObject, kind: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject) raises -> PythonObject:
+    return labels_legacy_unique[LabelsHostKernels](src_addr, n, kind, classes_addr, codes_addr)
+
+
+def prepare_targets_binding(y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject, w_addr: PythonObject,
+    w_code: PythonObject, w_flags: PythonObject) raises -> PythonObject:
+    return labels_legacy_prepare[LabelsHostKernels](y_addr, y_code, n,
+        classes_addr, codes_addr, w_addr, w_code, w_flags)
 
 comptime _SPECTRAL_PREPARATION_SLOT = "MojolearnSpectralPreparationHostIdenticalV1" if GLOBAL_NUMERIC_MODE == _SPECTRAL_PREP_IDENTICAL else "MojolearnSpectralPreparationHostFastV1"
 comptime SPECTRAL_PREPARATION_API = SharedSlot[SpectralPreparationAPI[SpectralPreparationHost], _SPECTRAL_PREPARATION_SLOT]

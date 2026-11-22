@@ -57,9 +57,12 @@ DEVIATIONS 1590 through 1599 are this surface's. 1590 is
 
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
-from bindings.residual_dropout_boundary_pack import (
-    residual_dropout_binding, residual_dropout_backward_binding,
-)
+from std.python import Python,PythonObject
+from std.python._cpython import GILReleased
+from core.hostptr import f32_ptr
+from bindings.residual_dropout_common_unpack import residual_dropout_args
+from training.residual_dropout_common_run import residual_dropout_addresses
+from training.residual_dropout import residual_dropout_device
 from training.neural_session_mlp import nn_mlp_sessions_device
 
 
@@ -853,6 +856,53 @@ def neural_rng_binding(
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.expdel2-01-base.patch
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
+
+# ---- from bindings/residual_dropout_boundary_pack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Public training residual-dropout layer; GPU forward and paired backward."""
+# The PACK half of the former `bindings/residual_dropout_boundary.mojo` (fence-flip-2 split, 2026-11-12).
+# Its two device-array entries and the UNPACK half (`_rd_dev_handles`) were deleted 2026-11-21 by
+# lane/dw-autograd-seq (recoverable at 6184091ce8): the door calls the native table instead.
+
+
+
+
+def residual_dropout_binding(x_addr: PythonObject,residual_addr: PythonObject,
+    output_addr: PythonObject,params: PythonObject) raises -> PythonObject:
+    var args = residual_dropout_args(params)
+    var x = Int(py=x_addr)
+    var r = Int(py=residual_addr)
+    var y = Int(py=output_addr)
+    residual_dropout_addresses[False](x,r,y,y,args.n)
+    if args.n==0:
+        return PythonObject(0)
+    var xp = f32_ptr(x)
+    var rp = f32_ptr(r)
+    var yp = f32_ptr(y)
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx["MojolearnNeuralTrainingContextIdenticalV3"]()
+        count = residual_dropout_device[False](ctx,yp,yp,xp,rp,args.n,args.offset,args.p,args.seed_lo,args.seed_hi,args.stream)
+    return PythonObject(count)
+
+
+def residual_dropout_backward_binding(dy_addr: PythonObject,dx_addr: PythonObject,
+    dresidual_addr: PythonObject,params: PythonObject) raises -> PythonObject:
+    var args = residual_dropout_args(params)
+    var dy = Int(py=dy_addr)
+    var dx = Int(py=dx_addr)
+    var dr = Int(py=dresidual_addr)
+    residual_dropout_addresses[True](dy,dy,dx,dr,args.n)
+    if args.n==0:
+        return PythonObject(0)
+    var yp = f32_ptr(dy)
+    var xp = f32_ptr(dx)
+    var rp = f32_ptr(dr)
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx["MojolearnNeuralTrainingContextIdenticalV3"]()
+        count = residual_dropout_device[True](ctx,xp,rp,yp,yp,args.n,args.offset,args.p,args.seed_lo,args.seed_hi,args.stream)
+    return PythonObject(count)
 
 def training_experiment_profile_binding() raises -> PythonObject:
     """Checkpoint identity for optional NI34/35/08 numerical contracts."""

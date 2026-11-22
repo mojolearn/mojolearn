@@ -14,7 +14,19 @@ from bindings.host_inference_scalars_door import host_inference_scalar
 from bindings.host_projection_native_door import host_projection_inference, host_projection_admit_state
 from bindings.host_svr_native_door import host_svr_admit_state, host_svr_predict
 from bindings.host_svc_native_door import host_svc_admit_state, host_svc_inference
-from bindings.host_kde_native_unpack import host_kde_admit_state
+from std.python._cpython import PyObjectPtr
+from bindings.classical_attributes_door import classical_getattribute
+from bindings.classical_pandas_door import _pd_type_fields
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.classical_arrays_door import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
+from bindings.host_inference_scalars_door import host_inference_scalar, host_inference_primitive_number
+from bindings.host_kde_bandwidth_native_unpack import kde_bandwidth_code, kde_native_bandwidth
+from bindings.host_kernel_inference_native_unpack import _kernel_entry, _kernel_buffer
+from bindings.host_svc_native_door import _svc_input
+from bindings.host_iforest_native_door import host_iforest_alias_types
+from bindings.host_kde_native_pack import (
+    _kde_option_value,
+)
 from bindings.host_kde_native_pack import host_kde_inference
 from bindings.host_iforest_native_door import host_iforest_admit_option, host_iforest_admit_state, host_iforest_inference
 from bindings.host_logistic_native_door import host_logistic_classes
@@ -31,6 +43,31 @@ from bindings.host_rest_keys_unpack import host_rest_keys
 from bindings.py_balanced import py_item
 
 
+# ---- from bindings/host_kde_native_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# Explicit CPU KDE keeps its existing serial kernel and fixed sum order;
+# query preparation, stored-buffer ownership and result publication are native.
+
+
+
+
+def host_kde_admit_state(fields: PythonObject, context: PythonObject) raises:
+    var nk = host_rest_keys()
+    var names = Python.tuple("kernel", "metric")
+    for i in range(len(names)):  # driver-loop: fixed KDE kernel/metric names
+        if py_contains(fields, names[i]):
+            _ = _kde_option_value(fields[names[i]], context)
+    var bandwidth = py_get(fields, nk[].k_bandwidth)
+    if bandwidth is not None and kde_bandwidth_code(bandwidth, context) == "":
+        _ = _kde_option_value(host_inference_primitive_number(bandwidth, context), context, True)
+    var buffers = Python.tuple("_x", "_w")
+    for i in range(len(buffers)):  # driver-loop: fixed saved KDE buffers
+        var value = py_get(fields, buffers[i])
+        if py_type(value) is py_get(context, nk[].k_ndarray) and classical_kind(value, context) == "O":
+            raise Error("TypeError: KDE saved buffers require native numeric storage")
+    # An exact string was accepted by the old score's float(bandwidth).
+    # Its native float conversion happens below; custom conversion hooks
+    # never enter that constructor.
 
 def host_inference_entry(name: String, context: PythonObject) raises -> PythonObject:
     var nk = host_rest_keys()

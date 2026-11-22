@@ -10,7 +10,8 @@ from bindings.classical_pandas_door import classical_admit_value
 from bindings.sequential_admission_door import sequential_admit_value
 from bindings.sequential_inputs_door import sequential_input
 from bindings.native_buffer_owner_pack import native_buffer_view
-from bindings.archive_unicode_native_unpack import _archive_unicode_failure
+from std.python import PythonObject
+from bindings.py_balanced import py_call
 from bindings.py_cpython_table import cpython_table
 from bindings.boundary_read_door import read_str_points
 from core.sha256 import sha256_hex, sha256_hex_addr
@@ -28,6 +29,20 @@ from bindings.optimizer_public_words_unpack import stash_python_error
 from bindings.classical_keys_unpack import classical_keys
 from bindings.py_balanced import py_item
 
+
+# ---- from bindings/archive_unicode_native_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# Exact Unicode input-error packing; no runtime codec or name lookup remains.
+
+
+def _archive_unicode_failure(raw: PythonObject, encoding: String, start: Int,
+                             end: Int, reason: String, context: PythonObject,
+                             encode: Bool = False) raises:
+    var category = context["archive_unicode_encode_error" if encode else "archive_unicode_decode_error"]
+    var error = py_call(category, encoding, raw, start, end, reason)
+    # The incumbent Mojo codec call surfaced the Unicode error text as a
+    # ValueError at the public door. Preserve that established error contract.
+    raise Error(String(error))
 
 def _archive_file_call(entry: PythonObject, *args: PythonObject) raises -> PythonObject:
     # Fixed native IO slots may raise OSError subclasses with errno/filename

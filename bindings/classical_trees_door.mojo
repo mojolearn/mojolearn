@@ -22,7 +22,18 @@ from bindings.host_kde_fit_native_door import host_kde_fit
 from bindings.host_iforest_fit_native_door import host_iforest_fit
 from bindings.host_density_constructor_native_pack import host_density_initialize
 from bindings.host_density_archive_native_door import host_density_save
-from bindings.host_density_hash_native_unpack import host_density_hash, host_bound_hash
+from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.classical_attributes_door import classical_connect_numpy, classical_getattribute
+from bindings.host_tree_native_door import host_tree_constructor_fields
+from bindings.native_numpy_metadata_unpack import native_numpy_dtype
+from bindings.sequential_admission_door import _one_of
+from bindings.optimizer_public_words_unpack import stash_python_error
+from core.sha256 import Sha256
+from bindings.host_density_hash_native_pack import (
+    _host_fields_hash,
+)
+from bindings.host_rest_keys_unpack import host_rest_keys
 from bindings.py_balanced import py_type, py_get
 from bindings.admitted_call_door import AdmittedCall
 from bindings.classical_door_routes import classical_trees_operation
@@ -38,6 +49,40 @@ from bindings.operation_names_classical import (
 )
 from bindings.py_balanced import py_item
 
+
+# ---- from bindings/host_density_hash_native_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# The explicit CPU density digest hashes stored model fields, not NPZ bytes.
+# Array.tobytes uses physical storage order; ndarray.tobytes uses logical C
+# order. Preserve that distinction while owning iteration and SHA-256 here.
+
+
+
+
+def host_density_hash(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
+    classical_connect_numpy(context)
+    _ = host_tree_constructor_fields(model, context)
+    var family = String(args[0])
+    var plan = py_item(context, nk[].k_classical_public_layouts)[py_type(model)]
+    var mro = py_item(plan, nk[].k_mro)
+    var known = False
+    for i in range(len(mro)):  # driver-loop: registered density class ancestry
+        var kind = py_get(py_item(context, nk[].k_host_inference_kinds), mro[i])
+        known = known or (kind is not None and String(kind) == family)
+    if not known or (family != "kde" and family != "iforest"):
+        raise Error("TypeError: density hash requires its connected native host class")
+    return _host_fields_hash(model, context)
+
+
+def host_bound_hash(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_HostBound.model_sha256` for every explicit host model without its own
+    digest: SHA-256 over the declared `_HOST_ARRAYS` fields in sorted name
+    order, a `None` field skipped, an Array's physical bytes and a NumPy
+    array's logical C-order bytes (the Python loop over `hashlib` it replaces,
+    lane pyout-runtime-boundary 2026-11-11)."""
+    classical_connect_numpy(context)
+    return _host_fields_hash(model, context)
 
 def _trees_routed(model: PythonObject, route: Int, leaf: Int, name: String, args: PythonObject,
                   context: PythonObject) raises -> PythonObject:

@@ -61,7 +61,11 @@ the clip, the loss, the linear operations and the RMSNorm weight gradient.
 
 from core.experiment_guards_neural import NEURAL_GUARDS_OK
 from training.neural_arithmetic_profile import neural_training_profile
-from bindings.residual_dropout_boundary_host_pack import residual_dropout_binding, residual_dropout_backward_binding
+from std.python import Python,PythonObject
+from core.hostptr import f32_ptr
+from bindings.residual_dropout_common_unpack import residual_dropout_args
+from training.residual_dropout_common_run import residual_dropout_addresses
+from training.residual_dropout_host import residual_dropout_host
 from training.neural_session_mlp_host import nn_mlp_sessions_host
 
 from std.os import abort
@@ -85,11 +89,14 @@ from core.mojolearn_training_host_impl import (
 )
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from bindings.optimizer_public_host_pyapi_pack import (
-    optimizer_resident_close_host_binding,
-    optimizer_resident_download_host_binding,
-    optimizer_resident_open_host_binding,
-    optimizer_resident_upload_host_binding,
+from std.python import PythonObject
+from std.python._cpython import PyObjectPtr
+from bindings.optimizer_public_door import (
+    entry_accumulate, entry_clip, entry_io, entry_load_state, entry_state, entry_state_set,
+    entry_step,
+)
+from training.host.optimizer_public_host import (
+    host_close, host_download, host_open, host_upload,
 )
 
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
@@ -548,6 +555,83 @@ def neural_rng_binding(
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.expdel2-25-neural.patch.
 from gemm.contract import CONTRACT_K_LEAF_MIN
 
+
+# ---- from bindings/residual_dropout_boundary_host_pack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Public training residual-dropout layer; CPU-only forward and backward."""
+
+
+def residual_dropout_binding(x_addr: PythonObject,residual_addr: PythonObject,
+    output_addr: PythonObject,params: PythonObject) raises -> PythonObject:
+    var args = residual_dropout_args(params)
+    var x = Int(py=x_addr)
+    var r = Int(py=residual_addr)
+    var y = Int(py=output_addr)
+    residual_dropout_addresses[False](x,r,y,y,args.n)
+    if args.n==0:
+        return PythonObject(0)
+    var xp = f32_ptr(x)
+    var rp = f32_ptr(r)
+    var yp = f32_ptr(y)
+    var count = 0
+    with GILReleased(Python()):
+        count = residual_dropout_host[False](yp,yp,xp,rp,args.n,args.offset,args.p,args.seed_lo,args.seed_hi,args.stream)
+    return PythonObject(count)
+
+
+def residual_dropout_backward_binding(dy_addr: PythonObject,dx_addr: PythonObject,
+    dresidual_addr: PythonObject,params: PythonObject) raises -> PythonObject:
+    var args = residual_dropout_args(params)
+    var dy = Int(py=dy_addr)
+    var dx = Int(py=dx_addr)
+    var dr = Int(py=dresidual_addr)
+    residual_dropout_addresses[True](dy,dy,dx,dr,args.n)
+    if args.n==0:
+        return PythonObject(0)
+    var yp = f32_ptr(dy)
+    var xp = f32_ptr(dx)
+    var rp = f32_ptr(dr)
+    var count = 0
+    with GILReleased(Python()):
+        count = residual_dropout_host[True](xp,rp,yp,yp,args.n,args.offset,args.p,args.seed_lo,args.seed_hi,args.stream)
+    return PythonObject(count)
+
+# ---- from bindings/optimizer_public_host_pyapi_pack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The Python door of the public optimizers on the CPU binding
+(`_mojolearn_training_host`; lane neural-optimizers, 2026-10-21; lane
+optimizers-thin-glue): the GPU door's entries (bindings/optimizer_public_pyapi.mojo)
+over training/host/optimizer_public_host.mojo, through the shared door
+bindings/optimizer_public_door.mojo (`HostOptKernels`)."""
+# The PACK half of the former `bindings/optimizer_public_host_pyapi.mojo` (fence-flip-2 split, 2026-11-12);
+# the UNPACK half is `bindings/optimizer_public_host_pyapi_unpack.mojo`.
+
+
+
+
+def optimizer_resident_open_host_binding(n_total: PythonObject) raises -> PythonObject:
+    """A host slot of `n_total` floats per moment, zero filled. Returns the handle."""
+    return PythonObject(host_open(Int(py=n_total)))
+
+
+def optimizer_resident_close_host_binding(handle: PythonObject) raises -> PythonObject:
+    """Free a host slot. Returns the handle."""
+    return PythonObject(host_close(Int(py=handle)))
+
+
+def optimizer_resident_download_host_binding(
+    handle: PythonObject, m_addr: PythonObject, v_addr: PythonObject, n_total: PythonObject,
+) raises -> PythonObject:
+    """The slot's moments to host memory. Returns `n_total`."""
+    return PythonObject(host_download(Int(py=handle), Int(py=m_addr), Int(py=v_addr), Int(py=n_total)))
+
+
+def optimizer_resident_upload_host_binding(
+    handle: PythonObject, m_addr: PythonObject, v_addr: PythonObject, n_total: PythonObject,
+) raises -> PythonObject:
+    """Host memory into the slot's moments. Returns `n_total`."""
+    return PythonObject(host_upload(Int(py=handle), Int(py=m_addr), Int(py=v_addr), Int(py=n_total)))
 
 def training_experiment_profile_binding() raises -> PythonObject:
     """Checkpoint identity for optional NI34/35/08 numerical contracts."""

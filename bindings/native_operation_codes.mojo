@@ -1,14 +1,11 @@
 from core.shared_slot import SharedSlot
 from bindings.operation_names_density import operation_names_density
-from bindings.operation_names_par import operation_names_par
 from bindings.operation_names_kmeans import operation_names_kmeans
 from bindings.operation_names_km import operation_names_km
 from bindings.operation_names_svm import operation_names_svm
 from bindings.operation_names_xc import operation_names_xc
 from bindings.operation_names_metric import operation_names_metric
-from bindings.operation_names_xn import operation_names_xn
 from bindings.operation_names_chol import operation_names_chol
-from bindings.operation_names_msel import operation_names_msel
 from bindings.operation_names_svc import operation_names_svc
 from bindings.operation_names_gp import operation_names_gp
 from bindings.operation_names_mcls import operation_names_mcls
@@ -22,6 +19,193 @@ from bindings.operation_names_low import operation_names_low
 from bindings.operation_names_linops import operation_names_linops
 from bindings.operation_names_classical import operation_names_classical
 from bindings.operation_names_trees import operation_names_trees
+
+
+# ---- from bindings/operation_names_xn.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# The `family_xn_*` operation names of the classical owner's code table
+# (bindings/native_operation_codes.mojo reads this file once per process, at
+# table fill; lane bw2-core, 2026-11-20). A leaf: no Python, no imports of an
+# owner.
+#
+# NOT YET CODED: the owner still receives the operation NAME (the table's own
+# String, never built per call) and matches it. The lane that converts this
+# owner gives each name a leaf code here (`comptime <FAMILY>_OPN_<NAME upper> =
+# n`, numbered by sub-owner so a group is one range test) and appends it beside
+# the name (`leaves.append(...)`, the form of
+# bindings/operation_names_gp.mojo); the owner then takes `operation: Int`.
+# Add every name a caller can pass: a name that is missing here still runs,
+# through the door's String path (one failed lookup, then the old route).
+
+
+def operation_names_xn(mut names: List[String], mut leaves: List[Int]):
+    """Straight-line appends, once per process."""
+    names.append("family_xn_ann_cagra_fit")
+    names.append("family_xn_ann_cagra_search")
+    names.append("family_xn_ann_getstate")
+    names.append("family_xn_ann_ivf_fit")
+    names.append("family_xn_ann_pq_fit")
+    names.append("family_xn_ann_pq_search")
+    names.append("family_xn_ann_rabitq_fit")
+    names.append("family_xn_ann_rabitq_search")
+    names.append("family_xn_ann_refine")
+    names.append("family_xn_ann_sq_fit")
+    names.append("family_xn_ann_sq_search")
+    names.append("family_xn_graph_connected_components")
+    names.append("family_xn_graph_louvain_fit")
+    names.append("family_xn_graph_louvain_fit_predict")
+    names.append("family_xn_graph_pagerank_fit")
+    names.append("family_xn_graph_svgp_fit")
+    names.append("family_xn_graph_svgp_predict")
+    names.append("family_xn_graph_svgp_predict_f")
+    names.append("family_xn_graph_svgp_predict_y")
+    names.append("family_xn_graph_svgp_score")
+    names.append("family_xn_kde_fit")
+    names.append("family_xn_kde_score")
+    names.append("family_xn_kde_score_samples")
+    names.append("family_xn_knn_clf_classes")
+    names.append("family_xn_knn_clf_fit")
+    names.append("family_xn_knn_clf_predict")
+    names.append("family_xn_knn_clf_predict_proba")
+    names.append("family_xn_knn_clf_score")
+    names.append("family_xn_knn_dist_params")
+    names.append("family_xn_knn_getstate")
+    names.append("family_xn_knn_nn_fit")
+    names.append("family_xn_knn_refusals")
+    names.append("family_xn_knn_reg_fit")
+    names.append("family_xn_knn_reg_predict")
+    names.append("family_xn_knn_reg_score")
+    names.append("family_xn_knn_release")
+    names.append("family_xn_knn_setstate")
+    names.append("family_xn_loc_imp_fit")
+    names.append("family_xn_loc_imp_fit_transform")
+    names.append("family_xn_loc_imp_transform")
+    names.append("family_xn_loc_lof_decision_function")
+    names.append("family_xn_loc_lof_fit")
+    names.append("family_xn_loc_lof_fit_predict")
+    names.append("family_xn_loc_lof_predict")
+    names.append("family_xn_loc_lof_score_samples")
+    names.append("family_xn_loc_nc_decision_function")
+    names.append("family_xn_loc_nc_fit")
+    names.append("family_xn_loc_nc_predict")
+    names.append("family_xn_loc_nc_predict_log_proba")
+    names.append("family_xn_loc_nc_predict_proba")
+    names.append("family_xn_loc_nc_score")
+    names.append("family_xn_names_achi2")
+    names.append("family_xn_names_imputer")
+    names.append("family_xn_names_kpca")
+    names.append("family_xn_names_schi2")
+    names.append("family_xn_pcs_feature_names")
+    names.append("family_xn_pcs_fit")
+    names.append("family_xn_pcs_fit_transform")
+    names.append("family_xn_pcs_transform")
+    names.append("family_xn_radius_fit")
+    names.append("family_xn_radius_refusals")
+    names.append("family_xn_schi2_set_weights")
+    names.append("family_xn_schi2_weights")
+    names.append("family_xn_semi_achi2_fit")
+    names.append("family_xn_semi_achi2_fit_transform")
+    names.append("family_xn_semi_achi2_transform")
+    names.append("family_xn_semi_lp_fit")
+    names.append("family_xn_semi_lp_predict")
+    names.append("family_xn_semi_lp_predict_proba")
+    names.append("family_xn_semi_lp_score")
+    names.append("family_xn_semi_schi2_fit")
+    names.append("family_xn_semi_schi2_fit_transform")
+    names.append("family_xn_semi_schi2_transform")
+
+# ---- from bindings/operation_names_par.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# The `family_par_*` operation names of the classical owner's code table
+# (bindings/native_operation_codes.mojo reads this file once per process, at
+# table fill; lane bw2-core, 2026-11-20). A leaf: no Python, no imports of an
+# owner.
+#
+# NOT YET CODED: the owner still receives the operation NAME (the table's own
+# String, never built per call) and matches it. The lane that converts this
+# owner gives each name a leaf code here (`comptime <FAMILY>_OPN_<NAME upper> =
+# n`, numbered by sub-owner so a group is one range test) and appends it beside
+# the name (`leaves.append(...)`, the form of
+# bindings/operation_names_gp.mojo); the owner then takes `operation: Int`.
+# Add every name a caller can pass: a name that is missing here still runs,
+# through the door's String path (one failed lookup, then the old route).
+
+
+def operation_names_par(mut names: List[String], mut leaves: List[Int]):
+    """Straight-line appends, once per process."""
+    names.append("family_par_public")
+    names.append("family_par_run")
+
+# ---- from bindings/operation_names_msel.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# The `family_msel_*` operation names of the classical owner's code table
+# (bindings/native_operation_codes.mojo reads this file once per process, at
+# table fill; lane bw2-core, 2026-11-20). A leaf: no Python, no imports of an
+# owner.
+#
+# NOT YET CODED: the owner still receives the operation NAME (the table's own
+# String, never built per call) and matches it. The lane that converts this
+# owner gives each name a leaf code here (`comptime <FAMILY>_OPN_<NAME upper> =
+# n`, numbered by sub-owner so a group is one range test) and appends it beside
+# the name (`leaves.append(...)`, the form of
+# bindings/operation_names_gp.mojo); the owner then takes `operation: Int`.
+# Add every name a caller can pass: a name that is missing here still runs,
+# through the door's String path (one failed lookup, then the old route).
+
+
+def operation_names_msel(mut names: List[String], mut leaves: List[Int]):
+    """Straight-line appends, once per process."""
+    names.append("family_msel_check_cv")
+    names.append("family_msel_cross_val_predict")
+    names.append("family_msel_cross_val_score")
+    names.append("family_msel_cross_validate")
+    names.append("family_msel_default_folds")
+    names.append("family_msel_delegate")
+    names.append("family_msel_estimator_call")
+    names.append("family_msel_estimator_clone")
+    names.append("family_msel_get_scorer")
+    names.append("family_msel_grid_init")
+    names.append("family_msel_grid_item")
+    names.append("family_msel_grid_iter")
+    names.append("family_msel_grid_len")
+    names.append("family_msel_learning_curve")
+    names.append("family_msel_make_scorer")
+    names.append("family_msel_n_splits")
+    names.append("family_msel_parallel_capture")
+    names.append("family_msel_parallel_initialize")
+    names.append("family_msel_parallel_inventory")
+    names.append("family_msel_parallel_last_run")
+    names.append("family_msel_parallel_require_batch")
+    names.append("family_msel_parallel_require_inventory")
+    names.append("family_msel_parallel_score")
+    names.append("family_msel_parallel_wire")
+    names.append("family_msel_parallel_worker")
+    names.append("family_msel_permutation_test_score")
+    names.append("family_msel_sampler_init")
+    names.append("family_msel_sampler_iter")
+    names.append("family_msel_sampler_len")
+    names.append("family_msel_scorer_call")
+    names.append("family_msel_scorer_names")
+    names.append("family_msel_scorer_repr")
+    names.append("family_msel_search_classes")
+    names.append("family_msel_search_estimator_type")
+    names.append("family_msel_search_fit")
+    names.append("family_msel_search_get_params")
+    names.append("family_msel_search_init")
+    names.append("family_msel_search_score")
+    names.append("family_msel_search_set_params")
+    names.append("family_msel_search_vendor_used")
+    names.append("family_msel_split")
+    names.append("family_msel_split_descriptor")
+    names.append("family_msel_split_logo_at")
+    names.append("family_msel_split_loo_at")
+    names.append("family_msel_split_lpgo_at")
+    names.append("family_msel_split_lpo_at")
+    names.append("family_msel_splitter_init")
+    names.append("family_msel_splitter_repr")
+    names.append("family_msel_train_test_split")
+    names.append("family_msel_validation_curve")
+
 # SPDX-License-Identifier: Apache-2.0
 # The one table of integer operation codes for the classical owner's door
 # (lane ne1-h-labels, plan NATIVE_ENTRY_POINTS_AFTER_0866 section H, lesson

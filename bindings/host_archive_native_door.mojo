@@ -24,7 +24,14 @@ from bindings.classical_arrays_door import classical_numpy, classical_i64, class
 from bindings.host_array_native_pack import host_archive_typed
 from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
 from bindings.standard_archive_native_pack import standard_archive_decoded
-from bindings.cholesky_archive_native_pack import cholesky_archive_pack
+from std.python import PythonObject
+from bindings.py_balanced import py_fields, py_setitem
+from bindings.native_buffer_owner_pack import native_storage_allocate
+from bindings.classical_archive_door import _archive_open, _archive_methods, _archive_pack_members, _archive_file_call
+from bindings.classical_archive_output_door import archive_f32_c_pack
+from core.native_archive_read import NativeArchiveDecoded
+from core.native_archive_write import NativeArchiveMember
+from core.native_archive_cholesky import NativeCholeskyArchivePlan, NativeCholeskyArchiveSaved, native_cholesky_archive_members
 from core.native_archive_cholesky import native_cholesky_archive_plan, native_cholesky_archive_error
 from core.host_archive_gbdt import host_archive_gbdt_text
 from core.host_finite_scan import host_finite_status
@@ -33,6 +40,29 @@ from umap.host_archive_native_run import _umap_whole, _umap_real
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
 
+
+# ---- from bindings/cholesky_archive_native_pack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Cholesky archive final-owner PACK and file output ownership."""
+# The PACK half of the former `bindings/cholesky_archive_native.mojo` (fence-flip-2 split, 2026-11-12);
+# the UNPACK half is `bindings/cholesky_archive_native_unpack.mojo`.
+
+
+def cholesky_archive_pack(cls: PythonObject, plan: NativeCholeskyArchivePlan,
+                          members: List[NativeArchiveDecoded], context: PythonObject) raises -> PythonObject:
+    var model = native_storage_allocate(cls)
+    var fields = py_fields(model)
+    py_setitem(fields, "numeric_mode", PythonObject(plan.mode))
+    py_setitem(fields, "jitter", PythonObject(None) if plan.default_jitter else PythonObject(plan.jitter_parameter))
+    py_setitem(fields, "n_", plan.n)
+    var factor = archive_f32_c_pack(members[plan.factor], context)
+    py_setitem(fields, "L_", factor)
+    py_setitem(fields, "info_", plan.info)
+    py_setitem(fields, "nb_", plan.nb)
+    py_setitem(fields, "_logdet", plan.logdet)
+    py_setitem(fields, "jitter_", plan.jitter)
+    _ = members
+    return model
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
     var value = _raw_archive_exact(arrays, name, dtype, context)

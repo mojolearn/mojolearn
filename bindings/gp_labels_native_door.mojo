@@ -46,12 +46,78 @@ from bindings.gp_svm_records_door import gpsvm_side_get, gpsvm_side_put, _label_
 from bindings.gp_class_table_boundary_unpack import GPPreparedClassTable
 from bindings.gp_score_label_storage_unpack import GPDecodedScoreLabels
 from core.gp_native_label_table import GPLabelTable, GP_LABEL_I64, GP_LABEL_F64
-from bindings.gp_labels_boundary_unpack import GPLabelsConnection, gp_labels_prepare, gp_labels_gather
+from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider, neural_descriptor_connect_once
+from core.labels_native_api import LABELS_NATIVE_ABI_NAME, LABELS_NATIVE_FACTORY, LABELS_NATIVE_OPERATION_COUNT, LabelsNativeDriver, LabelsPrepareRequest, LabelsGatherRequest
 from bindings.gp_label_input_boundary_unpack import gp_label_input
-from bindings.gp_label_order_boundary_unpack import gp_integer_classes
+from std.python._cpython import GILReleased
+from bindings.classical_labels_door import _TextCodeStorage, _TextLabels
+from bindings.labels_score_boundary_door import score_keys_unpack, score_keys_index
+from bindings.p3_labels_metrics_native_door import p3_text_classes
+from core.labels_score_keys import score_key_codes
 from bindings.gp_mixed_label_boundary_door import gp_mixed_classes, gp_mixed_index, gp_mixed_codes
 from core.labels_native_api import LabelsPrepareRequest, LabelsGatherRequest
 from bindings.gp_keys_unpack import gp_keys
+
+
+# ---- from bindings/gp_labels_boundary_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""GP label provider image pins around the existing typed label descriptor."""
+
+
+struct GPLabelsConnection(Movable):
+    var provider: PythonObject
+    var driver: LabelsNativeDriver
+
+    def __init__(out self, base: PythonObject) raises:
+        self.provider = neural_descriptor_connect_once(base, LABELS_NATIVE_FACTORY, String(LABELS_NATIVE_ABI_NAME), LABELS_NATIVE_OPERATION_COUNT)
+        self.driver = LabelsNativeDriver(self.provider.downcast_value_ptr[NeuralDescriptorProvider]()[].record[0].entry)
+
+
+def gp_labels_prepare(connection: GPLabelsConnection, request: LabelsPrepareRequest) raises -> Int:
+    try:
+        with GILReleased(Python()):
+            return connection.driver.prepare(request)
+    finally:
+        _ = connection
+
+
+def gp_labels_gather(connection: GPLabelsConnection, kind: Int, request: LabelsGatherRequest) raises:
+    try:
+        with GILReleased(Python()):
+            connection.driver.gather(kind, request)
+    finally:
+        _ = connection
+
+# ---- from bindings/gp_label_order_boundary_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Exact builtin integer class ordering over the shared native key index."""
+
+
+def gp_integer_classes[S: _TextCodeStorage](labels: List[PythonObject],
+                                           context: PythonObject) raises -> _TextLabels[S]:
+    # The caller has completed the original label admission and admits only
+    # exact builtin int/bool here. Their arbitrary-precision mathematical order
+    # is exactly the shared native key order. NumPy numeric promotion is not
+    # interchangeable with this rule and stays with its own admitted boundary.
+    var captured = score_keys_unpack(labels, False, context)
+    var index = score_keys_index(captured.keys)
+    # This PACK selects the original first object at each distinct index;
+    # normalized bool/int key storage never replaces observable class objects.
+    var classes = p3_text_classes(labels, index.sorted_rows)
+    if len(classes) > 2147483648:
+        raise Error("TypeError: mojolearn: cannot build a <i4 Array from these values: signed integer is greater than maximum")
+    var codes = S(len(labels), context)
+    var destination = codes.address()
+    var py = Python()
+    try:
+        with GILReleased(py):
+            score_key_codes(index, captured.keys, destination)
+    finally:
+        _ = captured
+        _ = index
+        _ = codes
+        _ = labels
+    return _TextLabels[S](classes, codes^, len(labels))
 
 comptime _NAN_LABEL = "mojolearn: y contains a NaN label; NaN is not a class"
 

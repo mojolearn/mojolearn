@@ -30,7 +30,17 @@ from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimiz
 from bindings.causal_exception_unpack import causal_set_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.host_logistic_query_boundary_unpack import host_logistic_score_predict
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.classical_exceptions_door import classical_require_fitted
+from bindings.classical_caller_unpack import classical_caller_outside
+from bindings.host_inference_scalars_door import host_inference_scalar
+from bindings.host_inference_state_unpack import host_inference_state
+from bindings.host_logistic_native_door import host_logistic_classes, host_logistic_inference
+from bindings.host_logistic_query_boundary_pack import (
+    host_logistic_operation,
+)
+from bindings.host_rest_keys_unpack import host_rest_keys
 from core.logistic_native_api import (
     QnFitRequest, QnQueryRequest, QnFoldStore, QN_NATIVE_DECISION, QN_NATIVE_BINARY,
     QN_NATIVE_MULTICLASS, QN_NATIVE_PROBA,
@@ -81,6 +91,27 @@ from bindings.logistic_keys_unpack import (
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
+
+
+# ---- from bindings/host_logistic_query_boundary_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""One host Logistic admission shared by public inference and score."""
+
+
+
+
+def host_logistic_score_predict(model: PythonObject, source: PythonObject,
+                                error_context: PythonObject) raises -> PythonObject:
+    var nk = host_rest_keys()
+    var context = py_item(error_context, nk[].k_host_inference_context)
+    # Keep the caller-frame/output-format rule: forwarding between compiled
+    # entries never added a Python frame, so direct reuse has the same depth.
+    var public = classical_caller_outside(error_context)
+    var state = host_inference_state(model, context)
+    if state[1] != "logistic":
+        raise Error("TypeError: LogisticRegression score requires its connected native host class")
+    return host_logistic_operation(model, state[0], "host_infer_predict", source,
+        context, error_context, public)
 
 # linear_model._QN_LOSS_LOGISTIC / _QN_LOSS_SOFTMAX
 comptime QN_LOSS_LOGISTIC = 0

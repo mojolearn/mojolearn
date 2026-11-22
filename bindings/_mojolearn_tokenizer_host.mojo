@@ -100,7 +100,8 @@ from bindings.cross_vendor_native_door import cross_vendor_c, CrossReadyOwner, C
 from bindings.native_codec_door import codec_c
 from bindings.native_process_pool_door import process_c
 from bindings.native_process_pool_type_door import register_process_pool_owner
-from bindings.optimizer_lifecycle_unpack import optimizer_finalize_descriptor_binding
+from std.python import PythonObject
+from bindings.optimizer_owner_boundary_unpack import optimizer_owner_finalize
 from bindings.optimizer_native_router_door import optimizer_native_c, schedule_attribute_c
 from bindings.lr_schedule_block_door import register_lr_schedule_block
 from bindings.optimizer_owner_boundary_unpack import OptimizerOwner
@@ -110,7 +111,8 @@ from bindings.embedding_layer_native_door import embedding_layer_lifetime_c
 from bindings.optimizer_device_native_door import device_finalize_c
 from bindings.sequence_device_native_pack import sequence_tensor_finalize_c
 from bindings.runtime_sequential_forward_pack import runtime_sequential_forward_c
-from bindings.runtime_classical_unavailable_unpack import runtime_classical_unavailable_c
+from std.python._cpython import PyObjectPtr
+from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.classical_attributes_door import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.mode_metadata_native_door import mode_metadata_c
 from bindings.backend_public_native_door import backend_public_c
@@ -223,6 +225,47 @@ from bindings.causal_lm_public_door import (
     causal_lm_parameters_binding, causal_lm_blocks_binding,
 )
 from tokenizer.mojolearn_tokenizer_host_run import _require_loaded
+
+
+# ---- from bindings/runtime_classical_unavailable_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+# The legacy module retains each C entry name before import-time owner
+# connection. A missing owner refuses natively; this executes no model work
+# and never calls a Python fallback. Complete installations replace these
+# entries with the original native function objects from their one owner
+# (since the 2026-11-07 host split, one of several _mojolearn_runtime_*_host
+# bindings; python/mojolearn/host_surface.py HOST_IMPORT_ALIASES).
+
+
+def runtime_classical_unavailable_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    var error = Error("mojolearn: this operation requires its compiled host owner binding (a _mojolearn_runtime_*_host file); build the complete host layout and start a fresh process")
+    return raise_python_exception(error^, ExceptionType("PyExc_ModuleNotFoundError"))
+
+# ---- from bindings/optimizer_lifecycle_pack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Optimizer finalization uses its typed control and retained provider owner."""
+# The PACK half of the former `bindings/optimizer_lifecycle.mojo` (fence-flip-2 split, 2026-11-12);
+# the UNPACK half is `bindings/optimizer_lifecycle_unpack.mojo`.
+
+
+def optimizer_finalize_binding(owner: PythonObject) raises -> PythonObject:
+    try:
+        optimizer_owner_finalize(owner)
+    except:
+        # Keep the live native record/provider for an explicit retry after a
+        # failed release, matching the existing best-effort finalizer contract.
+        pass
+    return PythonObject(None)
+
+# ---- from bindings/optimizer_lifecycle_unpack.mojo (inlined: its one importer is this file) ----
+# SPDX-License-Identifier: Apache-2.0
+"""Optimizer finalization uses its typed control and retained provider owner."""
+
+
+
+
+def optimizer_finalize_descriptor_binding(context: PythonObject, owner: PythonObject) raises -> PythonObject:
+    return optimizer_finalize_binding(owner)
 
 def _index(value: PythonObject) raises -> Int:
     var type_name = String(py=value.__class__.__name__)
