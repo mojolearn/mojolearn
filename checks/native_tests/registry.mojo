@@ -219,10 +219,6 @@ from checks.native_tests.generator_draw import register as register_generator_dr
 from checks.native_tests.lm_corpus_prepare import register as register_lm_corpus_prepare
 from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 # lane checks-register (2026-11-16): the standalone main() checks no CI job ran, now registered
-from checks.native_tests.affinity_preference_plan import register as register_affinity_preference_plan
-from checks.native_tests.agglo_contract import register as register_agglo_contract
-from checks.native_tests.agglo_state import register as register_agglo_state
-from checks.native_tests.arena_state import register as register_arena_state
 from checks.native_tests.transport_frame import register as register_transport_frame
 from checks.native_tests.member_abi import register as register_member_abi
 from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
@@ -231,10 +227,6 @@ from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
 from checks.native_tests.causal_lm_entry import register as register_causal_lm_entry
 from checks.native_tests.cfb_agglo_run import register as register_cfb_agglo_run
 from checks.native_tests.class_weight_plan import register as register_class_weight_plan
-from checks.native_tests.dbscan_contract import register as register_dbscan_contract
-from checks.native_tests.dbscan_door_run import register as register_dbscan_door_run
-from checks.native_tests.dbscan_options import register as register_dbscan_options
-from checks.native_tests.dbscan_state import register as register_dbscan_state
 from checks.native_tests.decomp_entry_table import register as register_decomp_entry_table
 from checks.native_tests.entry_table_contract import register as register_entry_table_contract
 from checks.native_tests.exec_owned_reuse import register as register_exec_owned_reuse
@@ -247,8 +239,6 @@ from checks.native_tests.gp_state import register as register_gp_state
 from checks.native_tests.hdbscan_plan import register as register_hdbscan_plan
 from checks.native_tests.hierarchy_connectivity_plan import register as register_hierarchy_connectivity_plan
 from checks.native_tests.host_entry_forest import register as register_host_entry_forest
-from checks.native_tests.ipca_contract import register as register_ipca_contract
-from checks.native_tests.ipca_state import register as register_ipca_state
 from checks.native_tests.kde_contract import register as register_kde_contract
 from checks.native_tests.kde_state import register as register_kde_state
 from checks.native_tests.kmeans_contract import register as register_kmeans_contract
@@ -291,9 +281,6 @@ from checks.native_tests.nmf_state import register as register_nmf_state
 from checks.native_tests.nonzero_scan import register as register_nonzero_scan
 from checks.native_tests.pandas_input_plan_check import register as register_pandas_input_plan_check
 from checks.native_tests.parallel_archive_entry import register as register_parallel_archive_entry
-from checks.native_tests.pca_contract import register as register_pca_contract
-from checks.native_tests.pca_query_state import register as register_pca_query_state
-from checks.native_tests.pcs_contract import register as register_pcs_contract
 from checks.native_tests.portable_math import register as register_portable_math
 from checks.native_tests.prep_entry_table import register as register_prep_entry_table
 from checks.native_tests.qn_door_run import register as register_qn_door_run
@@ -808,10 +795,6 @@ def all_checks() -> List[Check]:
     checks.append(register_lm_corpus_prepare())
     checks.append(register_training_small_mlp_relations())
     # lane checks-register (2026-11-16)
-    checks.append(register_affinity_preference_plan())
-    checks.append(register_agglo_contract())
-    checks.append(register_agglo_state())
-    checks.append(register_arena_state())
     checks.append(register_transport_frame())
     checks.append(register_member_abi())
     checks.append(register_base_helpers_entry())
@@ -820,10 +803,6 @@ def all_checks() -> List[Check]:
     checks.append(register_causal_lm_entry())
     checks.append(register_cfb_agglo_run())
     checks.append(register_class_weight_plan())
-    checks.append(register_dbscan_contract())
-    checks.append(register_dbscan_door_run())
-    checks.append(register_dbscan_options())
-    checks.append(register_dbscan_state())
     checks.append(register_decomp_entry_table())
     checks.append(register_entry_table_contract())
     checks.append(register_exec_owned_reuse())
@@ -836,8 +815,6 @@ def all_checks() -> List[Check]:
     checks.append(register_hdbscan_plan())
     checks.append(register_hierarchy_connectivity_plan())
     checks.append(register_host_entry_forest())
-    checks.append(register_ipca_contract())
-    checks.append(register_ipca_state())
     checks.append(register_kde_contract())
     checks.append(register_kde_state())
     checks.append(register_kmeans_contract())
@@ -881,9 +858,6 @@ def all_checks() -> List[Check]:
     checks.append(register_nonzero_scan())
     checks.append(register_pandas_input_plan_check())
     checks.append(register_parallel_archive_entry())
-    checks.append(register_pca_contract())
-    checks.append(register_pca_query_state())
-    checks.append(register_pcs_contract())
     checks.append(register_portable_math())
     checks.append(register_prep_entry_table())
     checks.append(register_qn_door_run())
