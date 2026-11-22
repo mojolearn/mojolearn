@@ -23,6 +23,7 @@ A new record gets its row from the tool that retains it
 Usage:
   python3 tools/record_index.py check            # listed files intact? unlisted column JSONs?
   python3 tools/record_index.py add <file>...    # index new records (idempotent)
+  python3 tools/record_index.py add --unlisted-under bench/results/identity_break   # adopt restored records
   python3 tools/record_index.py retire --reason "..." <file>...   # drop rows on purpose
   python3 tools/record_index.py generate [--force]   # ONE-TIME: from what the walk/glob took
 
@@ -108,24 +109,40 @@ def generate(v, root, force):
     return 0
 
 
-def check(v, root):
-    rc, listed = 0, set()
+def unlisted_columns(v, root, listed, inputs, under=""):
+    """Column-shaped files under bench/results (or `under`) no index lists, except a byte copy,
+    outside identity_break, of an indexed identity_break record (not indexed, see generate)."""
+    ib = os.path.dirname(v.RECORD_INDEX) + "/"
+    out = []
+    for path in globbed_columns(root):
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        if rel in listed or not rel.startswith(under):
+            continue
+        row = v.index_row(root, path)
+        if row is not None and (rel.startswith(ib) or row["sha256"] not in inputs):
+            out.append(rel)
+    return out
+
+
+def listed_rows(v, root, verify):
+    listed, inputs, rc = set(), set(), 0
     for index in (v.RECORD_INDEX, v.CELLS_INDEX):
         try:
-            rows = v.read_index(root, index)
+            rows = v.read_index(root, index, verify=verify)
         except v.RecordIndexError as exc:
             print(f"REFUSED: {exc}")
             rc = 1
             rows = v.read_index(root, index, verify=False) if os.path.isfile(os.path.join(root, index)) else []
         listed.update(rel for rel, _ in rows)
+        if index == v.RECORD_INDEX:
+            inputs.update(row["sha256"] for _, row in rows)
         print(f"INDEX {index} rows={len(rows)}")
-    unlisted = []
-    for path in globbed_columns(root):
-        rel = os.path.relpath(path, root).replace(os.sep, "/")
-        if rel in listed:
-            continue
-        if v.index_row(root, path) is not None:
-            unlisted.append(rel)
+    return listed, inputs, rc
+
+
+def check(v, root):
+    listed, inputs, rc = listed_rows(v, root, verify=True)
+    unlisted = unlisted_columns(v, root, listed, inputs)
     for rel in unlisted:
         print("UNLISTED " + rel)
     print(f"CHECK listed_ok={rc == 0} unlisted={len(unlisted)}")
@@ -156,7 +173,10 @@ def main(argv=None):
     g = sub.add_parser("generate")
     g.add_argument("--force", action="store_true")
     a = sub.add_parser("add")
-    a.add_argument("files", nargs="+")
+    a.add_argument("files", nargs="*")
+    a.add_argument("--unlisted-under", metavar="DIR", default=None,
+                   help="also add every column-shaped file under DIR that `check` lists as UNLISTED "
+                        "(an explicit act, e.g. after records are restored from git history)")
     r = sub.add_parser("retire")
     r.add_argument("--reason", required=True)
     r.add_argument("files", nargs="+")
@@ -169,7 +189,12 @@ def main(argv=None):
         if args.command == "check":
             return check(v, root)
         if args.command == "add":
-            added = v.add_to_index(root, args.files)
+            files = list(args.files)
+            if args.unlisted_under:
+                under = os.path.relpath(os.path.abspath(args.unlisted_under), root).replace(os.sep, "/").rstrip("/") + "/"
+                listed, inputs, _ = listed_rows(v, root, verify=False)
+                files += [os.path.join(root, rel) for rel in unlisted_columns(v, root, listed, inputs, under)]
+            added = v.add_to_index(root, files)
             for row in added:
                 print("ADDED " + row["path"])
             print(f"ADD rows={len(added)}")
