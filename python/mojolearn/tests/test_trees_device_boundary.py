@@ -64,7 +64,8 @@ def test_device_is_a_constructor_parameter_with_default_none(cls):
     assert cls().get_params()["device"] is None
     assert cls(device=None).get_params()["device"] is None
     assert cls(device="cpu").get_params()["device"] == "cpu"
-    assert cls(device="gpu").get_params()["device"] == "gpu"
+    if TWO_DEVICES:                                           # 'gpu' is refused at construction on a CPU-only one
+        assert cls(device="gpu").get_params()["device"] == "gpu"
 
 
 @pytest.mark.parametrize("cls", CLASSES)
