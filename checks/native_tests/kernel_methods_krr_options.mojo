@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """KernelRidge exact properties from test_krr_options.py, on the actual entries.
 
 The original 96x5 integer workload (NumPy seed 3, recorded under
@@ -18,6 +19,8 @@ The Gram matrices are Int64 sums rounded once to Float32, the original
 `(a.astype(int64) @ a.astype(int64).T).astype(float32)`. The scikit-learn
 tolerance comparison stays in Python as an external oracle.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -27,7 +30,14 @@ from std.math import sqrt
 from core.identity_trace import IdentityTrace
 from kernel_methods.estimator import kernel_ridge_fit_host, kernel_ridge_predict_host
 from svm.impl.svm_parameter import KernelParams
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime KRR_OPTIONS_FIXTURES = 3
@@ -165,17 +175,6 @@ struct HostKrrOptions(KrrOptionsCalls):
         return (dual^, first^, second^)
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(KRR_OPTIONS_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture[HostKrrOptions](unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, KRR_OPTIONS_FIXTURES)
-
-
 # ---- The device column (was kernel_methods_krr_options_gpu_suite.mojo) ----
 # KernelRidge exact properties on the device estimator entries.
 #
@@ -207,25 +206,42 @@ struct DeviceKrrOptions(KrrOptionsCalls):
         return (dual^, first^, second^)
 
 
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(KRR_OPTIONS_FIXTURES)
-    for unit in range(KRR_OPTIONS_FIXTURES):
-        try:
-            fixture[DeviceKrrOptions](unit)
-        except error:
-            cases.fail(unit, error)
+def _host_fixture(unit: Int) raises:
+    fixture[HostKrrOptions](unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("kernel_methods_krr_options host", KRR_OPTIONS_FIXTURES, _host_fixture)
 
 
-def register() -> Check:
-    return Check("kernel_methods_krr_options", cpu=True, gpu=True, serial="", run=run_cases)
+# The device column: the three fixtures run in order (each submits to the
+# shared family DeviceContext).
+def _device_fixture(unit: Int) raises:
+    fixture[DeviceKrrOptions](unit)
+
+
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var failed = String("")
+        for unit in range(KRR_OPTIONS_FIXTURES):  # driver-loop: fits in order on the shared family device context
+            try:
+                _device_fixture(unit)
+            except problem:
+                failed += "\n      kernel_methods_krr_options device row " + String(unit) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("kernel_methods_krr_options device: cases failed" + failed)
+
+
+def main() raises:
+    # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
+    # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
+    # is not supported"), so a two-column file names its tests.
+    var suite = TestSuite()
+    comptime if CPU_COLUMN_BUILD:
+        suite.test[test_host_fixtures]()
+    else:
+        suite.test[test_device_fixtures]()
+    suite^.run()

@@ -13,6 +13,8 @@ from core.shared_slot import shared_slot_lock, shared_slot_unlock
 
 from core.msel_convert import (
     MSEL_I64,
+    MSEL_ID_SLOT_BITS,
+    MSEL_ID_SLOT_MASK,
     msel_itemsize,
     msel_load_f32,
     msel_load_f64_bits,
@@ -26,6 +28,38 @@ comptime _I64 = MutPointer[Int64, MutAnyOrigin]
 comptime _F32 = MutPointer[Float32, MutAnyOrigin]
 
 
+struct _MselHostTable(Movable):
+    """The host store's shared state, in heap storage of its own (the
+    `MselHostStore` note, THE TABLE IS BEHIND A POINTER)."""
+    var bufs: List[List[UInt8]]
+    #: bytes held by each id; -1 for a freed id
+    var nbytes: List[Int]
+    var released: List[Int]
+    #: generation of each slot, raised on every reuse (MSEL_ID_SLOT_BITS)
+    var gens: List[Int]
+    var live: Int
+
+    def __init__(out self):
+        self.bufs = List[List[UInt8]]()
+        self.nbytes = List[Int]()
+        self.released = List[Int]()
+        self.gens = List[Int]()
+        self.live = 0
+
+    def check_held(self, id: Int, need: Int) raises -> Int:
+        """`MselHostStore.check` with the store's lock held by the caller."""
+        # Returns the id's slot. An id whose slot was freed and handed out
+        # again carries the old generation and is refused, never read as the
+        # new holder's bytes (MSEL_ID_SLOT_BITS).
+        var slot = id & MSEL_ID_SLOT_MASK
+        if (id < 0 or slot >= len(self.nbytes) or self.nbytes[slot] < 0
+                or self.gens[slot] != (id >> MSEL_ID_SLOT_BITS)):
+            raise Error(String("msel store: id ", id, " is not live"))
+        if self.nbytes[slot] < need:
+            raise Error(String("msel store: id ", id, " holds ", self.nbytes[slot], " bytes, ", need, " read"))
+        return slot
+
+
 struct MselHostStore(Defaultable, Movable):
     """The process-wide host fold store. Its operations run with the GIL
     released (cross_val_score workers, two Python threads each running a
@@ -36,109 +70,123 @@ struct MselHostStore(Defaultable, Movable):
     operations); the byte copies run after it, on the id's own buffer, which
     no other thread frees (each id has one owner) and which a list growth
     never moves (the outer list moves the inner list headers, not their
-    storage)."""
-    var bufs: List[List[UInt8]]
-    #: bytes held by each id; -1 for a freed id
-    var nbytes: List[Int]
-    var released: List[Int]
-    var live: Int
-    #: word 0 guards `bufs`, `nbytes`, `released` and `live`
+    storage).
+
+    THE TABLE IS BEHIND A POINTER (lane r2-known, 2026-11-22; the pattern of
+    `core/forest_export_run.mojo`). The id lists live in `_MselHostTable`,
+    the one element of the heap List `cell`, and every method reaches them
+    through `_table()` after `shared_slot_lock`. As fields of the store read
+    through an immutable `self`, the compiler may load them once before the
+    lock and keep the snapshot; memory reached through a pointer the method
+    loads is ordered by the acquire compare-and-swap. A new field of shared
+    state goes into `_MselHostTable`, never into the store struct."""
+    #: word 0 guards everything in the table
     var lock: List[Int64]
+    #: exactly one `_MselHostTable`, never grown, so its address is stable
+    var cell: List[_MselHostTable]
 
     def __init__(out self):
-        self.bufs = List[List[UInt8]]()
-        self.nbytes = List[Int]()
-        self.released = List[Int]()
-        self.live = 0
         self.lock = List[Int64](length=1, fill=Int64(0))
+        self.cell = List[_MselHostTable]()
+        self.cell.append(_MselHostTable())
 
     def _word(self) -> MutPointer[Int64, MutUntrackedOrigin]:
         return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(self.lock.unsafe_ptr()))
 
-    def _check_held(self, id: Int, need: Int) raises:
-        """`check` with the lock held by the caller."""
-        if id < 0 or id >= len(self.nbytes) or self.nbytes[id] < 0:
-            raise Error(String("msel store: id ", id, " is not live"))
-        if self.nbytes[id] < need:
-            raise Error(String("msel store: id ", id, " holds ", self.nbytes[id], " bytes, ", need, " read"))
+    def _table(self) -> MutPointer[_MselHostTable, MutUntrackedOrigin]:
+        return MutPointer[_MselHostTable, MutUntrackedOrigin](unsafe_from_address=Int(self.cell.unsafe_ptr()))
 
-    # `mut self` on every method that takes the lock and then reads a field
-    # (lane pv-race, 2026-11-22; core/forest_export_run.mojo, THE TABLE IS
-    # BEHIND A POINTER): an immutable `self` is a read-only argument the
-    # compiler may read once, before the lock, and keep.
-    def check(mut self, id: Int, need: Int) raises:
+    def live_count(self) -> Int:
+        """Ids held now, read under the lock."""
+        var table = self._table()
+        var word = self._word()
+        shared_slot_lock(word)
+        var n = table[].live
+        shared_slot_unlock(word)
+        return n
+
+    def check(self, id: Int, need: Int) raises:
+        var table = self._table()
         var word = self._word()
         shared_slot_lock(word)
         try:
-            self._check_held(id, need)
+            _ = table[].check_held(id, need)
         finally:
             shared_slot_unlock(word)
 
-    def _insert(mut self, var buf: List[UInt8], n: Int) -> Int:
+    def _insert(self, var buf: List[UInt8], n: Int) -> Int:
+        var table = self._table()
         var word = self._word()
         shared_slot_lock(word)
-        var id: Int
-        if len(self.released) > 0:
-            id = self.released.pop()
-            self.bufs[id] = buf^
-            self.nbytes[id] = n
+        var slot: Int
+        if len(table[].released) > 0:
+            slot = table[].released.pop()
+            table[].bufs[slot] = buf^
+            table[].nbytes[slot] = n
+            table[].gens[slot] += 1
         else:
-            self.bufs.append(buf^)
-            self.nbytes.append(n)
-            id = len(self.nbytes) - 1
-        self.live += 1
+            table[].bufs.append(buf^)
+            table[].nbytes.append(n)
+            table[].gens.append(1)
+            slot = len(table[].nbytes) - 1
+        var id = (table[].gens[slot] << MSEL_ID_SLOT_BITS) | slot
+        table[].live += 1
         shared_slot_unlock(word)
         return id
 
-    def put(mut self, src_addr: Int, n: Int) raises -> Int:
+    def put(self, src_addr: Int, n: Int) raises -> Int:
         if n < 1 or src_addr == 0:
             raise Error("msel store: put needs at least one byte at a non-null address")
         var buf = List[UInt8](unsafe_uninit_length=n)
         unsafe_memcpy(dest=buf.unsafe_ptr(), src=_U8(unsafe_from_address=src_addr), count=n)
         return self._insert(buf^, n)
 
-    def alloc(mut self, n: Int) raises -> Int:
+    def alloc(self, n: Int) raises -> Int:
         if n < 1:
             raise Error("msel store: alloc needs at least one byte")
         return self._insert(List[UInt8](length=n, fill=0), n)
 
-    def ptr(mut self, id: Int, need: Int) raises -> _U8:
+    def ptr(self, id: Int, need: Int) raises -> _U8:
+        var table = self._table()
         var word = self._word()
         shared_slot_lock(word)
         var address = 0
         try:
-            self._check_held(id, need)
-            address = Int(self.bufs[id].unsafe_ptr())
+            var slot = table[].check_held(id, need)
+            address = Int(table[].bufs[slot].unsafe_ptr())
         finally:
             shared_slot_unlock(word)
         return _U8(unsafe_from_address=address)
 
-    def read(mut self, id: Int, dst_addr: Int, n: Int) raises:
-        self.check(id, n)
+    def read(self, id: Int, dst_addr: Int, n: Int) raises:
+        # One lock step: `ptr` checks the id (a separate `check` first was the
+        # same probe twice).
+        var src = self.ptr(id, n)
         if n > 0:
             if dst_addr == 0:
                 raise Error("msel store: read into a null address")
-            unsafe_memcpy(dest=_U8(unsafe_from_address=dst_addr), src=self.ptr(id, n), count=n)
+            unsafe_memcpy(dest=_U8(unsafe_from_address=dst_addr), src=src, count=n)
 
-    def free(mut self, id: Int) raises:
+    def free(self, id: Int) raises:
         # The freed bytes are dropped after the lock (a heap free never runs
         # under the spin word).
         var dropped = List[UInt8]()
+        var table = self._table()
         var word = self._word()
         shared_slot_lock(word)
         try:
-            self._check_held(id, 0)
-            swap(self.bufs[id], dropped)
-            self.nbytes[id] = -1
-            self.released.append(id)
-            self.live -= 1
+            var slot = table[].check_held(id, 0)
+            swap(table[].bufs[slot], dropped)
+            table[].nbytes[slot] = -1
+            table[].released.append(slot)
+            table[].live -= 1
         finally:
             shared_slot_unlock(word)
         _ = dropped^
 
 
 def host_take_rows(
-    mut store: MselHostStore, src_id: Int, n_src: Int, row_bytes: Int,
+    store: MselHostStore, src_id: Int, n_src: Int, row_bytes: Int,
     idx_id: Int, n_idx: Int, dst_addr: Int,
 ) raises -> Bool:
     """`device_take_rows` on the host: every index tested before a byte of
@@ -161,7 +209,7 @@ def host_take_rows(
 
 
 def host_scatter_rows(
-    mut store: MselHostStore, dst_id: Int, n_dst: Int, dst_code: Int,
+    store: MselHostStore, dst_id: Int, n_dst: Int, dst_code: Int,
     src_addr: Int, src_code: Int, n_src: Int, width: Int, idx_id: Int,
 ) raises -> Bool:
     if n_src < 1 or width < 1:

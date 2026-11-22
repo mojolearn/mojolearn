@@ -1,8 +1,11 @@
---- a/core/sequential_inputs_impl.mojo
-+++ b/core/sequential_inputs_impl.mojo
-@@ -17,4 +17,4 @@ def sequence_narrow_halves(src_addr: Int, dst_addr: Int, count: Int):
-     var src = Pointer[Float64, ImmUntrackedOrigin](unsafe_from_address=src_addr)
-     var dst = MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=dst_addr)
-     for k in range(count):
--        dst[k] = bitcast[DType.uint16](Float16(src[k]))
-+        dst[k] = bitcast[DType.uint16](Float16(src[k])) ^ UInt16(1)  # SABOTAGE (coverage arm): every stored half one ulp off
+--- a/core/sequential_input_plan.mojo	2026-11-22 12:36:29
++++ b/core/sequential_input_plan.mojo	2026-11-22 12:36:29
+@@ -205,7 +205,7 @@
+         if width == 4:
+             bits = UInt64(f64_to_f32_bits(bits))
+         elif width == 2:
+-            bits = UInt64(bitcast[DType.uint16](Float16(number)))
++            bits = UInt64(bitcast[DType.uint16](Float16(number)) ^ UInt16(1))  # SABOTAGE (coverage arm): every stored half one ulp off
+     _lin_store(destination, index, width, bits)
+ 
+ 

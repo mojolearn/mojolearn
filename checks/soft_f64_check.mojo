@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Gate for `checks/soft_f64.mojo` (lane hr2-gbdt-host).
 
 HOST: every soft operation against the host's hardware double over random
@@ -9,6 +11,9 @@ for word with the host soft result (`same bits on every column`).
 Prints `SOFT_F64 host_mismatch=<n> device_mismatch=<n> status=PASS|FAIL`.
 `-D SOFT_F64_SABOTAGE=1` flips one rounding so the gate must FAIL.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_whole_into, upload_whole_into
 from std.math import floor, fma
 from std.memory import bitcast
 from std.sys import has_accelerator
@@ -151,7 +156,7 @@ def _soft_kernel(
         dst[i] = _soft(Int(ops[i]), a[i], b[i], c[i])
 
 
-def run_checks() raises:
+def test_soft_f64() raises:
     comptime PER_OP = 200000
     var n = PER_OP * N_OPS
     var r = _Rng(20261002)
@@ -216,20 +221,10 @@ def run_checks() raises:
     )
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_whole_into, upload_whole_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("soft_f64_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # Tests listed by name, not discovered: `__functions_in_module()` instantiates every function of the
+    # module for the host, and this module's GPU kernels refuse the host target (the stdlib's
+    # `_get_intrinsic_name` constraint; cpc1 sm_89 cross-compile, 2026-11-22).
+    var suite = TestSuite()
+    suite.test[test_soft_f64]()
+    suite^.run()

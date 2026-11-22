@@ -662,7 +662,9 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
                 raise Error("predict_proba is defined for Logloss and CrossEntropy")
         var raw = host_gbdt_predict(fields, args[0], context)
         if not probability:
-            return raw
+            # predict: the estimator's type (lane predict-dtype, 2026-11-22):
+            # its float32 scores as a NumPy view when NumPy is loaded.
+            return classical_input(raw, context, "prediction")
         var wide = host_tree_wide(raw, context)
         var rows = Int(py=raw.shape[0])
         var out = host_archive_typed(Python.tuple(rows, 2), "<f8", py_item(context, nk[].k_output_context))
@@ -679,14 +681,12 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         return vote
     if probability:
         return vote if String(py_item(fields, nk[].k_family)) == "rf" else host_tree_wide(vote, context)
+    # predict returns what the saving estimator's predict returns, for every
+    # caller (Andrew, 2026-11-22, lane predict-dtype): the labels, or the
+    # forest's float32 mean vote for both families with no float64 widening
+    # pass, as a NumPy view when NumPy is loaded.
     if Bool(py=py_item(fields, nk[].k_is_classifier)):
-        return host_tree_labels(py_item(fields, nk[].k_classes_), vote, context)
+        var labels = host_tree_labels(py_item(fields, nk[].k_classes_), vote, context)
+        return classical_input(labels, context, "prediction") if classical_is_array(labels, context) else labels
     var flat = classical_wrap_array(vote._store, Python.tuple(vote.shape[0]), "<f4", "C", py_item(context, nk[].k_output_context))
-    # Regression values are float64 for every family, as the estimator's
-    # public predict returns them (trees_public_lifecycle_native_door.mojo
-    # `_public_result` widens a random forest's float32 vote; extra trees
-    # widen in `_predict_staged`). The twin returned a random forest's vote as
-    # float32, so `host_model(path).predict(X)` and the saving model's
-    # `predict(X)` differed in dtype (proving run 2026-11-22). Same values:
-    # the widening is exact.
-    return host_tree_wide(flat, context)
+    return classical_input(flat, context, "prediction")

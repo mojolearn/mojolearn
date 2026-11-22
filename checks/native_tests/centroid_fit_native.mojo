@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual MeanShift/AP entries, checked against independent small arithmetic.
 
 CPU fixture units run concurrently. No repeated-output hashes, timing, Python
 or duplicate numerical implementation. Broad Python workload tests remain.
 """
 from std.math import abs
-from core.host_parallel import host_parallelize
 from core.cluster_centroid_fit_api import (
     CentroidFitDriver,
     CentroidFitResultSlot,
@@ -15,7 +15,18 @@ from core.cluster_centroid_fit_api import (
 from core.kmeans_variants_api import VariantsSpan
 from x_cluster.centroid_fit_host import cluster_centroid_fit_host_v1
 from x_cluster.centroid_fit_device import cluster_centroid_fit_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The host column (was centroid_fit_native_cpu_suite.mojo) ----
@@ -140,40 +151,33 @@ def fixture(driver: CentroidFitDriver, unit: Int) raises:
         affinity_step_case(driver, unit - 10)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CENTROID_FIT_NATIVE_FIXTURES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(CentroidFitDriver(cluster_centroid_fit_host_v1), unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, CENTROID_FIT_NATIVE_FIXTURES)
+def _host_fixture(unit: Int) raises:
+    comptime if CPU_COLUMN_BUILD:
+        fixture(CentroidFitDriver(cluster_centroid_fit_host_v1), unit)
 
 
 # ---- The device column (was centroid_fit_native_gpu_suite.mojo) ----
 # Ordered numerical GPU coverage; shared-context concurrency remains parked.
-def _run_gpu(mut report: Report) raises:
-    var failed = 0
-    for unit in range(CENTROID_FIT_NATIVE_FIXTURES):  # numerical-only shared device context; no concurrency qualification
-        try:
-            fixture(CentroidFitDriver(cluster_centroid_fit_device_v1), unit)
-        except problem:
-            failed += 1
-            print("FAIL centroid_fit_native_gpu fixture", unit, String(problem))
-    if failed:
-        raise Error("centroid fit GPU failed " + String(failed) + " fixtures")
-    print("PASS centroid_fit_native_gpu:", CENTROID_FIT_NATIVE_FIXTURES, "ordered actual provider fixtures")
+def _device_fixtures_in_order() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = 0
+        for unit in range(CENTROID_FIT_NATIVE_FIXTURES):  # numerical-only shared device context; no concurrency qualification
+            try:
+                fixture(CentroidFitDriver(cluster_centroid_fit_device_v1), unit)
+            except problem:
+                failed += 1
+                print("FAIL centroid_fit_native_gpu fixture", unit, String(problem))
+        if failed:
+            raise Error("centroid fit GPU failed " + String(failed) + " fixtures")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    """The host column runs the fixtures across the host cores; the device column runs them in order."""
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", CENTROID_FIT_NATIVE_FIXTURES, _host_fixture)
+    else:
+        _device_fixtures_in_order()
 
 
-def register() -> Check:
-    return Check("centroid_fit_native", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

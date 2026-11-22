@@ -45,9 +45,10 @@ unpacking and results) are in model_checkpoint_pyapi.mojo.
 from std.memory import bitcast, unsafe_memcpy
 from sequence.exec_trait import Exec
 from sequence.ops import FP
+from autograd.model_blocks import block_param_names, block_param_sizes, is_block
 from autograd.model import (
-    FIT_STATE_WORDS, FS_SEED_HI, FS_SEED_LO, FS_STEP, IP64, LAYER_LAYER_NORM, LAYER_LINEAR, ModelSpec,
-    parse_model,
+    FIT_STATE_WORDS, FS_SEED_HI, FS_SEED_LO, FS_STEP, IP64, LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM,
+    LAYER_LINEAR, ModelSpec, SPEC2_ARGS, conv_in_per_group, parse_model,
 )
 from autograd.program import program_from_words, program_words, PROGRAM_PARAM_WEIGHT, PROGRAM_PARAM_STATE_WORDS
 from autograd.ops_api import OpsSession, ops_session
@@ -95,6 +96,26 @@ def model_layout(spec: ModelSpec, mut offsets: List[Int], mut names: List[String
             offsets.append(off + w)
             names.append(tag + ".bias")
             offsets.append(off + 2 * w)
+        elif k == LAYER_CONV2D or k == LAYER_CONV1D:
+            # (seq-blocks 2026-11-22: the conv layers were missing here, so a conv2d model's
+            # checkpoint layout did not cover its parameters)
+            var ks = spec.arg1[i]
+            var taps = ks * ks if k == LAYER_CONV2D else ks
+            var nw = spec.arg0[i] * conv_in_per_group(spec, i) * taps
+            names.append(tag + ".weight")
+            offsets.append(off + nw)
+            if spec.xargs[SPEC2_ARGS * i + 4] == 1:
+                names.append(tag + ".bias")
+                offsets.append(off + nw + spec.arg0[i])
+        elif is_block(k) and off >= 0:
+            # lane neural-blocks: one entry per parameter tensor of a block layer
+            var sizes = block_param_sizes(k, spec.xargs, i, spec.in_shape[i])
+            var suffixes = block_param_names(k)
+            var end = off
+            for j in range(len(sizes)):  # small-loop(at most four parameter tensors of the layer)
+                end += sizes[j]
+                names.append(tag + suffixes[j])
+                offsets.append(end)
 
 
 def _check_layout(ck: Checkpoint, offsets: List[Int], names: List[String], path: String) raises:

@@ -77,8 +77,8 @@ times it as the fit.
 INPUTS AND OUTPUTS ARE NOT NumPy (DEVIATION 2343). `X` is anything the
 buffer protocol exposes -- an ndarray, an `array.array`, a
 `mojolearn.Array` -- or a nested list; `y` for the regressor likewise, and
-for the classifier any sequence of label objects. `predict_proba` and the
-regressor's `predict` return a float64 `mojolearn.Array`
+for the classifier any sequence of label objects. `predict_proba` returns a
+float64 and the regressor's `predict` a float32 `mojolearn.Array`
 (`numpy.asarray(result)` is a zero-copy view for a caller who has NumPy).
 `classes_` is a PYTHON LIST of the caller's label objects in the order
 `_labels.py` defines (DEVIATION 2340: numbers by value, strings by code
@@ -513,7 +513,8 @@ class ExtraTreesRegressor(_ExtraTreesBase):
 
         Returns
         -------
-        Array of shape (n_samples,), float64
+        ndarray of shape (n_samples,), float32
+            A NumPy array when NumPy is installed, else a `mojolearn.Array`.
         """
         return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 

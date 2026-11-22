@@ -5,9 +5,9 @@ coordinate-descent pair ElasticNet and Lasso.
 One entry, `cd_member_v2`, published by each solver image
 (`cd_member_publish`, beside its operations table). It runs the family's
 existing typed RUN (x_linear/door_run.mojo `xl_cd_fit_run`,
-`xl_cd_predict_run`, `xl_r2_run`) over the entries of the `DeviceRoute` the
+`xl_cd_predict_run`, `member_r2_score`) over the entries of the `DeviceRoute` the
 estimators' own doors resolve (`xl_route(..., cd=True)`): `entry` the solver
-operations entry (cd_fit, cd_predict), `fifth` the metrics image's R^2 entry
+operations entry (cd_fit, cd_predict), `fifth` the x_metrics program entry (the estimator's own score program, core/linear_score_run.mojo `member_r2_score`)
 of the route's tier and device (filled by the caller's admission when that
 image is loaded; without it score is refused in words and the caller
 predicts and runs its own metric). No kernel is touched.
@@ -44,7 +44,6 @@ Serial by nature here: the store's bookkeeping.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
-from core.entry_table import entry_ref_unresolved
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.member_abi import (
@@ -61,7 +60,8 @@ from core.member_families import MEMBER_FAMILY_CD
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
-from x_linear.door_run import XlCdFitRequest, XlCdPredictRequest, xl_cd_fit_run, xl_cd_predict_run, xl_r2_run
+from x_linear.door_run import XlCdFitRequest, XlCdPredictRequest, xl_cd_fit_run, xl_cd_predict_run
+from core.linear_score_run import member_r2_score
 
 comptime _CHUNK = 256
 comptime _INDEX_SPAN = 16777216
@@ -294,11 +294,10 @@ def _score(slot: _SlotP, call: _CallP) raises:
         raise Error("NotImplementedError: mojolearn: a weighted score of a " + estimator
             + " member is not published; the caller predicts and runs its own weighted metric")
     if not route.has_fifth:
-        raise Error("ImportError: mojolearn: the " + estimator + " member's score needs the metrics R^2 entry on its route")
+        raise Error("ImportError: mojolearn: the " + estimator + " member's score needs the metrics program entry on its route")
     var prediction = List[Float32](length=call[].x.rows, fill=0.0)
     _predict_into(slot, call, Int(prediction.unsafe_ptr()))
-    call[].value = xl_r2_run(route.fifth.call, entry_ref_unresolved(), call[].y.data, Int(prediction.unsafe_ptr()),
-        0, call[].x.rows, True)
+    call[].value = member_r2_score(route.fifth, call[].y.data, Int(prediction.unsafe_ptr()), call[].x.rows)
     _ = prediction^
 
 

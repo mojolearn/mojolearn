@@ -23,6 +23,6 @@ from core.msel_helpers_host import (
 # as the resident tests' fault injection; the close / release failure order
 # is checked natively (checks/native_tests/arena_state_suite.mojo).
 def msel_live_binding() raises -> PythonObject:
-    return PythonObject(MSEL_HOST_STORE.get_or_create_ptr()[].live)
+    return PythonObject(MSEL_HOST_STORE.get_or_create_ptr()[].live_count())
 
 

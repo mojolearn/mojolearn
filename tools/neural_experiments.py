@@ -27,6 +27,7 @@ report against that toggle (or a stage the toggle legitimately drops from
 the card), and it must not be kept.
 """
 import argparse
+import importlib.util
 import json
 import os
 import subprocess
@@ -144,7 +145,28 @@ def main(argv=None):
     ap.add_argument("--json")
     # not tested: compile-time Apple FAST ideas are metadata plans, separate
     # from the legacy runtime-toggle/digest runner and its MOVED policy.
+    source_only = ap.add_mutually_exclusive_group()
+    source_only.add_argument("--apple-fast-list", action="store_true")
+    source_only.add_argument("--apple-fast-plan", metavar="AFN26-ID")
+    ap.add_argument("--variant", help="variant for --apple-fast-plan")
     args = ap.parse_args(arguments)
+    if args.apple_fast_list or args.apple_fast_plan:
+        path = HERE / "apple_fast_neural_ideas.py"
+        spec = importlib.util.spec_from_file_location("neural_afn26_catalog", path)
+        if spec is None or spec.loader is None:
+            ap.error("Apple FAST neural catalog adapter is unavailable")
+        adapter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adapter)
+        selected = ["plan", args.apple_fast_plan] if args.apple_fast_plan else ["list"]
+        if args.variant:
+            if not args.apple_fast_plan:
+                ap.error("--variant requires --apple-fast-plan")
+            selected.extend(["--variant", args.variant])
+        if args.json:
+            ap.error("Apple FAST plans print JSON; redirect stdout to a new metadata file")
+        return adapter.main(selected)
+    if args.variant:
+        ap.error("--variant requires --apple-fast-plan")
     lanes = args.lane or list(LANES)
     names = SETS[args.set]
     if args.only:

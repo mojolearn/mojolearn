@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """KMeans predict and transform through the actual KMeans provider.
 
 Ported from `python/mojolearn/tests/test_kmeans_predict.py` (arms EQUAL,
@@ -19,14 +20,22 @@ Claims checked in IDENTICAL only in the original (rows alone and split
 batches give the whole batch's bits) are unconditional here: the pixi tasks
 build with `MOJOLEARN_NUMERIC_IDENTICAL=1`.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from core.kmeans_native_api import KMeansNativeDriver, KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest
 from core.kmeans_native_api import KMEANS_CAPABILITIES, KMEANS_CAP_JOINT
 from checks.numerics import identical_sqrt
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from core.host_parallel import host_parallelize
 from core.kmeans_native_host import kmeans_host_native_v1
 from core.kmeans_native_device import kmeans_device_native_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime KMEANS_QUERY_FIXTURES = 11
@@ -347,44 +356,33 @@ def fixture(driver: KMeansNativeDriver, unit: Int) raises:
         case_reference(driver)
 
 
-# ---- The host column (was cluster_kmeans_query_cpu_suite.mojo) ----
-# KMeans predict/transform CPU fixtures; independent fixtures run across host workers.
-def _run_cpu(mut report: Report) raises:
-    comptime assert TARGET_COLUMN == COLUMN_CPU
-    var cases = report.cases(KMEANS_QUERY_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(KMeansNativeDriver(kmeans_host_native_v1), unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, KMEANS_QUERY_FIXTURES)
-
-
-# ---- The device column (was cluster_kmeans_query_gpu_suite.mojo) ----
-# KMeans predict/transform GPU fixtures.
+# Host column: KMeans predict/transform CPU fixtures; independent fixtures run across host workers.
+# Device column: KMeans predict/transform GPU fixtures.
 #
 # The fixtures run in order on the one physical device (the shared device
 # context of the KMeans provider); each fit and query keeps its own kernel
 # parallelism.
-def _run_gpu(mut report: Report) raises:
-    comptime assert TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(KMEANS_QUERY_FIXTURES)
-    for unit in range(KMEANS_QUERY_FIXTURES):
-        try:
-            fixture(KMeansNativeDriver(kmeans_device_native_v1), unit)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(KMeansNativeDriver(kmeans_host_native_v1), unit)
 
 
-def register() -> Check:
-    return Check("cluster_kmeans_query", cpu=True, gpu=True, serial="", run=run_cases)
+def test_cluster_kmeans_query() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert TARGET_COLUMN == COLUMN_CPU
+        check_cases("cluster_kmeans_query", KMEANS_QUERY_FIXTURES, _host_fixture)
+    else:
+        comptime assert TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(KMEANS_QUERY_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture(KMeansNativeDriver(kmeans_device_native_v1), unit)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("cluster_kmeans_query: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

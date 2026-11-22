@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The host GBDT model-text reader behind `mojolearn._gbdt_host.parse_model_text`,
 on the literal texts of test_gbdt_host_modes.py
 `test_ctr_and_tensor_ctr_records_without_tables_refuse` (lane
@@ -18,7 +19,8 @@ trees; cases 0-2 insert one record after `losses 0`.
 The entry is host code on both columns (it reads text, no device).
 """
 from core.host_archive_gbdt import host_archive_gbdt_text
-from checks.native_tests.runner import Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 comptime GBDT_HOST_ARCHIVE_TEXT_CASES = 4
 
@@ -50,15 +52,9 @@ def run_case(index: Int) raises:
         require(parsed.metadata["n_features"] == 1, label + ": n_features is not 1")
 
 
-def run_cases(column: Column, mut report: Report):
-    var cases = report.cases(GBDT_HOST_ARCHIVE_TEXT_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_case(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GBDT_HOST_ARCHIVE_TEXT_CASES)
+def test_cases() raises:
+    check_cases("gbdt_host_archive_text", GBDT_HOST_ARCHIVE_TEXT_CASES, run_case)
 
 
-def register() -> Check:
-    return Check("gbdt_host_archive_text", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

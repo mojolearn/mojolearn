@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The pre-token cut of the three built-in patterns on hand-computed cases
 (lane tests-prune-remaining-models, 2026-11-15; ported from
 `test_models_loader.py::test_pretokenize_cuts_as_the_pattern_says`).
@@ -22,10 +23,16 @@ door keeps one case per pattern in the Python test (boundary).
 Host column only: the tokenizer is a host component. The cases are
 independent and run across host cores.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from tokenizer.encoding import string_bytes
 from tokenizer.impl.pretokenize import PATTERN_GPT2, PATTERN_LLAMA3, PATTERN_QWEN2, pretokenize_pattern
 from tokenizer.impl.unicode_class import builtin_unicode_classes
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 comptime TOKENIZER_PRETOKENIZE_CASES = 19
 
@@ -126,23 +133,13 @@ def run_case(index: Int) raises:
                 + ", want " + String(want[i]))
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(TOKENIZER_PRETOKENIZE_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_case(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, TOKENIZER_PRETOKENIZE_CASES)
+def _host_fixture(unit: Int) raises:
+    run_case(unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
+def test_tokenizer_pretokenize_cuts() raises:
+    check_cases("tokenizer_pretokenize_cuts", TOKENIZER_PRETOKENIZE_CASES, _host_fixture)
 
 
-def register() -> Check:
-    return Check("tokenizer_pretokenize_cuts", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

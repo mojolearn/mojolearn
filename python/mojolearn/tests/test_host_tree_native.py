@@ -34,6 +34,15 @@ def _forest_pair(tmp_path, estimator, engine="sequential", labels=None):
     return forest.HostForest(**options), LegacyHostForest(**options)
 
 
+def _as_user_sees(model, prediction):
+    """The oracle's prediction as the product hands it to every caller: a
+    regressor's predict is the forest's float32 mean vote for both families
+    (lane predict-dtype, 2026-11-22: one type for every caller, no float64
+    widening). The frozen oracle answers extra trees in float64, the exact
+    widening of those float32 words, so narrowing it back is exact."""
+    return prediction if model.is_classifier else np.asarray(prediction).astype("<f4")
+
+
 def _queries(kind, columns=2):
     data = np.arange(6 * columns, dtype="<f8").reshape(6, columns) / 8
     data[0, 0] = -.25
@@ -58,7 +67,7 @@ def _layout(data, kind):
 def test_forest_prediction_matches_existing_bits_without_python(tmp_path, estimator, engine, kind):
     actual, expected = _forest_pair(tmp_path, estimator, engine)
     x = _queries(kind)
-    reference = expected.predict(x)
+    reference = _as_user_sees(expected, expected.predict(x))
     assert _state(audit_native_call(actual.predict, x).assert_native()) == _state(reference)
     assert _state(audit_native_call(actual.predict, x).assert_native()) == _state(reference)
     if actual.is_classifier:
@@ -146,7 +155,7 @@ def test_forest_grove_state_hash_properties_and_actual_native_release(tmp_path):
     assert state["_groves"] is None and "_binding" not in state
     restored = object.__new__(type(actual))
     audit_native_call(restored.__setstate__, state).assert_native()
-    assert _state(audit_native_call(restored.predict, _queries("float32")).assert_native()) == _state(expected.predict(_queries("float32")))
+    assert _state(audit_native_call(restored.predict, _queries("float32")).assert_native()) == _state(_as_user_sees(expected, expected.predict(_queries("float32"))))
     audit_native_call(type(actual).__del__, actual).assert_native()
     assert vars(actual)["_groves"] is None
     native = forest._load()

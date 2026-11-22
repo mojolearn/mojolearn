@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The safetensors reader's half-precision widening, moved from
 `test_models_loader.py::test_safetensors_reader_dtypes_round_trip_and_widen_exactly`
 (lane tests-to-mojo-models, 2026-11-16).
@@ -20,10 +21,10 @@ The file reading, dtype admission, returned Array types, the `bits` path and
 the refusals stay in the Python test.
 """
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.causal_checkpoint_impl import checkpoint_widen_halves
 from checks.native_tests.byte_lm_models_loader_f16 import half_matches
-from checks.native_tests.runner import Check, Column, Report
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 
 
 comptime CKW_HALVES = 65536
@@ -51,38 +52,23 @@ def ckw_first_failure(chunk: Int, hp: Int, wp: Int) -> Int:
     return -1
 
 
-def _run(mut report: Report) raises:
-    # Source: every pattern twice, the F16 half then the BF16 half.
+def test_widen_every_bit_pattern() raises:
     var halves = List[UInt16](length=2 * CKW_HALVES, fill=UInt16(0))
     for h in range(CKW_HALVES):  # driver-loop: over the fixture's 65,536 bit patterns
         halves[h] = UInt16(h)
         halves[CKW_HALVES + h] = UInt16(h)
     var widened = List[Float32](length=2 * CKW_HALVES, fill=Float32(0))
-    var failures = List[Int](length=2 * CKW_CHUNKS, fill=-1)
-    var fp = failures.unsafe_ptr()
     var hp = Int(halves.unsafe_ptr())
     var wp = Int(widened.unsafe_ptr())
-    def task(chunk: Int) {imm fp, imm hp, imm wp}:
-        fp.unsafe_store(chunk, ckw_first_failure(chunk, hp, wp))
-    host_parallelize(task, 2 * CKW_CHUNKS)
-    _ = halves  # read through its address by every task above
+    def chunk_check(chunk: Int) raises {imm hp, imm wp}:
+        var first = ckw_first_failure(chunk, hp, wp)
+        if first >= 0:
+            raise Error((String("BF16") if chunk >= CKW_CHUNKS else String("F16"))
+                        + " chunk " + String(chunk) + " mismatch at bit pattern " + String(first))
+    check_cases("models_checkpoint_widen", 2 * CKW_CHUNKS, chunk_check)
+    _ = halves  # read through its address by every case above
     _ = widened
-    var cases = report.cases(2 * CKW_CHUNKS)
-    for chunk in range(2 * CKW_CHUNKS):  # driver-loop: over the chunk verdicts
-        if failures[chunk] >= 0:
-            cases.fail_message(chunk, (String("BF16") if chunk >= CKW_CHUNKS else String("F16"))
-                               + " chunk " + String(chunk) + " mismatch at bit pattern " + String(failures[chunk]))
-    _ = failures
 
 
-# The widening is host code on a CPU and on a GPU install alike, so both
-# columns run the same host-parallel case set.
-def run_cases(column: Column, mut report: Report):
-    try:
-        _run(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("models_checkpoint_widen", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

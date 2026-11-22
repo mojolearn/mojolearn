@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Shared GPU flat-forest prototype, independent handcrafted oracle.
 
  tools/with_build_lock.sh pixi run mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 checks/forest_inference_gpu.mojo
@@ -10,6 +11,8 @@ Float32, not the production portable_divf. Tests cover local offsets, stumps,
 leaf-only trees, scalar/vector output, equality, +/-0, +/-subnormal thresholds,
 31/32/33 tree tails, cancellation and invalid graphs.
 """
+
+from std.testing import TestSuite
 from std.memory import bitcast
 from std.math import abs
 from std.testing import assert_equal, assert_true
@@ -193,7 +196,7 @@ def invalid_graph(ctx: DeviceContext) raises:
     print("PASS graph/bounds/nonfinite refusals")
 
 
-def run_checks() raises:
+def test_forest_inference_gpu() raises:
     print("numeric_mode",numeric_mode_name())
     var ctx = DeviceContext()
     invalid_graph(ctx)
@@ -208,19 +211,5 @@ def run_checks() raises:
     print("PASS shared GPU forest inference prototype")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("forest_inference_gpu", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

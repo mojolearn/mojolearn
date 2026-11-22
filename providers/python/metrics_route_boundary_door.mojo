@@ -22,7 +22,7 @@ split; it runs at an estimator's first operation, never per row.
 from std.python import PythonObject
 from bindings.py_balanced import py_get, py_type
 from core.entry_table import EntryRef, entry_ref_word
-from core.linear_entry_table import LINEAR_TABLE_METRICS, linear_table_entry
+from core.linear_entry_table import LINEAR_TABLE_METRICS, LinearEntryKey, linear_table_entry
 from core.device_route import DeviceRoute
 from providers.python.device_route_boundary_door import device_cpu_connect_late
 from core.native_descriptor_abi import NativeDescriptorError
@@ -78,3 +78,23 @@ def linear_route_metrics_cpu(mut route: DeviceRoute, entries: PythonObject, b: P
     """Ridge and LinearRegression: the cells of the CPU entry family the
     route was resolved from (the route owner pins `entries`)."""
     device_route_metrics_cells(route, py_get(entries, "metrics"), b)
+
+
+def member_metrics_program_fifth(mut route: DeviceRoute, mode: Int, vendor: Int):
+    """A regressor member's score entry (LinearSVR, QNRegressor, Lasso,
+    ElasticNet): the x_metrics program entry of tier `mode` on `vendor`, the
+    program its estimator's own `score` runs (core/linear_score_run.mojo
+    `member_r2_score`), in the route's `fifth` slot when that image is
+    loaded. Without it the slot stays empty: the member does not offer
+    score and the caller runs the estimator's own. One native table read at
+    a member's admission, never per fold or per row. These members held the
+    metrics image's float32 `r2_score` entry (MR_R2) until lane sr3-smoke
+    (2026-11-22), so their CV scores differed from the estimator's score."""
+    try:
+        var entry = linear_table_entry[LINEAR_TABLE_METRICS](LinearEntryKey(mode, vendor), 0,
+            String(METRICS_PROGRAM_ABI), MP_OPERATION_COUNT)
+        route.fifth = EntryRef(entry, entry_ref_word(mode, vendor, MP_OPERATION_COUNT))
+        route.has_fifth = True
+    except problem:
+        # Not loaded: score is not offered; the caller runs its own metric.
+        _ = String(problem)

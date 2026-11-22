@@ -1,6 +1,6 @@
---- a/gbdt/host/gbdt_host_entries_impl.mojo
-+++ b/gbdt/host/gbdt_host_entries_impl.mojo
-@@ -620,9 +620,12 @@
+--- a/gbdt/host/gbdt_host_entries_impl.mojo	2026-11-22 12:37:13
++++ b/gbdt/host/gbdt_host_entries_impl.mojo	2026-11-22 12:37:13
+@@ -190,12 +190,15 @@
          var margin = rp.unsafe_load(i)
          comptime if probabilities:
              var positive = ftz(identical_sigmoid(ftz(margin)))
@@ -14,3 +14,6 @@
 -            op.unsafe_store(i, Scalar[dtype](Int32(1) if is_positive else Int32(0)))
 +            # SABOTAGE (coverage-gbdt-gbdt_host_entries_impl): the class code flipped (both codes valid)
 +            op.unsafe_store(i, Scalar[dtype](Int32(0) if is_positive else Int32(1)))
+ 
+ 
+ # ===========================================================================

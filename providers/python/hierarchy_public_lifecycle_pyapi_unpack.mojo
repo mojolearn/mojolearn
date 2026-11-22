@@ -246,7 +246,9 @@ def hierarchy_public_begin(model: PythonObject, operation: Int, args: PythonObje
             classical_check_width(x.shape[1], Int(py=width), "AgglomerativeClustering")
             estimator_feature_check(model, fields, source, context)
     var previous = estimator_fit_begin(fields) if fitting else Int(py=depth)
-    return HierarchyPublicCall(fields, settings^, source, x^, x_pin^, fitting, estimator_outside(), previous)
+    # A call that does not fit is predict: one result for every caller
+    # (Andrew, 2026-11-22, lane predict-dtype), the labels as a NumPy view.
+    return HierarchyPublicCall(fields, settings^, source, x^, x_pin^, fitting, not fitting or estimator_outside(), previous)
 
 
 def hierarchy_public_end(model: PythonObject, call: HierarchyPublicCall) raises:

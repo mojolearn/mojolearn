@@ -1,6 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Focused gate for the first executable combination-CTR vertical slice."""
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from gbdt.models.combination_map import TCombinationCtrs
 from gbdt.models.tensor_ctr_value_table import (
@@ -59,7 +63,7 @@ from gbdt.methods.doc_parallel_boosting import (
 from gbdt.train import TrainedModel, predict_floats
 
 
-def run_checks() raises:
+def test_tree_ctr_slice() raises:
     var ctx = DeviceContext()
     # The model format must cover the full UInt64 hash domain. A direct
     # decimal parse through Int64 cannot represent this value.
@@ -787,20 +791,5 @@ def run_checks() raises:
     print("tree CTR slice: deterministic pair FeatureFreq + text round trip PASS")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("tree_ctr_slice_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

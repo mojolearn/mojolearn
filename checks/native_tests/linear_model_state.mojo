@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of Mojolearn.
 """Typed linear fitted-state and parameter contracts, without Python.
 
@@ -6,12 +7,12 @@ The owner stays in each parallel fixture while copied native metadata and
 prediction requests borrow its buffers. Public attribute/protocol admission
 remains covered by the Python boundary suites; these tests invoke no hooks.
 """
-from core.host_parallel import host_parallelize
 from core.linear_model_state import (
     LinearModelState, linear_state_predict_request, linear_state_is_fitted,
     linear_ridge_parameter_status, linear_ridge_parameter_error,
 )
-from checks.native_tests.runner import Check, Column, Report
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 
 
 def _require(ok: Bool, message: String) raises:
@@ -19,8 +20,10 @@ def _require(ok: Bool, message: String) raises:
         raise Error(message)
 
 
-def _request[WIDE: Bool](fault: Int) raises:
-    comptime DT = DType.float64 if WIDE else DType.float32
+def _request[F64: Bool](fault: Int) raises:
+    # F64: the caller's buffers are float64 words (the request only borrows
+    # addresses; predict itself writes float32 words for every caller).
+    comptime DT = DType.float64 if F64 else DType.float32
     var coef: List[Scalar[DT]] = [1.25, -2.5, 3.5]
     var x = List[Scalar[DT]](length=6, fill=1.0)
     var dst = List[Scalar[DT]](length=2, fill=-99.0)
@@ -61,8 +64,8 @@ def _request[WIDE: Bool](fault: Int) raises:
     var refused = False
     try:
         var request = linear_state_predict_request(snapshot, Int(x.unsafe_ptr()), Int(dst.unsafe_ptr()),
-            rows, cols, WIDE, "native fixture")
-        _require(request.rows == 2 and request.cols == 3 and request.wide == WIDE, "prediction dimensions/dtype")
+            rows, cols, "native fixture")
+        _require(request.rows == 2 and request.cols == 3, "prediction dimensions")
         _require(request.x == Int(x.unsafe_ptr()) and request.dst == Int(dst.unsafe_ptr()), "prediction borrows caller IO")
         _require(request.coef == Int(coef.unsafe_ptr()), "prediction borrows coefficients")
         _require(request.intercept == 1.0000000000009095, "native state preserves Float64 intercept")
@@ -128,42 +131,29 @@ def _parameters(unit: Int) raises:
     _require(refused == (status != 0), "parameter refusal must become a native error")
 
 
-def run_checks() raises:
-    comptime FIXTURES = 50
-    var failed = List[Int](length=FIXTURES, fill=0)
-    var failures_ptr = failed.unsafe_ptr()
-    def task(unit: Int) {imm failures_ptr}:
-        try:
-            if unit < 10:
-                _request[False](unit)
-            elif unit < 20:
-                _request[True](unit - 10)
-            elif unit < 36:
-                _fitted(unit - 20)
-            else:
-                _parameters(unit - 36)
-        except problem:
-            print("FAIL linear_model_state fixture", unit, String(problem))
-            failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "linear model state failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
-    print("PASS linear_model_state:", FIXTURES, "native fixtures, parallel")
+def _request_float32(unit: Int) raises:
+    _request[False](unit)
 
 
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def _request_float64(unit: Int) raises:
+    _request[True](unit)
 
 
-def register() -> Check:
-    return Check("linear_model_state", cpu=True, gpu=False, serial="", run=run_cases)
+def test_requests_float32() raises:
+    check_cases("request float32", 10, _request_float32)
+
+
+def test_requests_float64() raises:
+    check_cases("request float64", 10, _request_float64)
+
+
+def test_fitted() raises:
+    check_cases("fitted", 16, _fitted)
+
+
+def test_parameters() raises:
+    check_cases("parameters", 14, _parameters)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

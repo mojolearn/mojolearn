@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """ARIMA on the host fit, forecast and prediction bodies (ported from
 python/mojolearn/tests/test_cpu_training_arima.py
 `test_arima_fits_on_the_host_when_built`).
@@ -33,8 +34,8 @@ from std.memory import bitcast
 from core.hostptr import f32_ptr
 from arima.host.arima_host_entries import _order, _forecast_into, _predict_in_sample_into, arima_host_fit_into
 from checks.native_tests.tsa_metrics_fixture_words import TSA_FIXTURE_DIR, fixture_f32
-from core.host_parallel import host_parallelize
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 
 comptime ARIMA_B = 3
@@ -185,36 +186,17 @@ def check_refits(records: List[Float32]) raises:
                     arima_kind(kind).label() + ": two host fits returned different bytes")
 
 
-# ---- The host column (was tsa_training_arima_cpu_suite.mojo) ----
-# ARIMA host fit repeat, forecast/predict agreement and refusal.
-#
-# The seven units (two fits per order, the refusal) are independent and run
-# across host cores, each into its own record; the refit comparison follows.
-# The original ran on the host route only (`GATE_BACKENDS = ("cpu",)`), so
-# there is no GPU column.
-def _run_cpu(mut report: Report) raises:
+def test_fits_then_refits() raises:
     var y = arima_series()
     var records = List[Float32](length=ARIMA_UNITS * ARIMA_RECORD, fill=Float32(0))
-    var cases = report.cases(ARIMA_UNITS)
     var base = Int(records.unsafe_ptr())
     var y_address = Int(y.unsafe_ptr())
-    def task(unit: Int) {imm cases, imm base, imm y_address}:
-        try:
-            fit_unit(unit, y_address, f32_ptr(base + 4 * unit * ARIMA_RECORD))
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, ARIMA_UNITS)
+    def unit_fit(unit: Int) raises {imm base, imm y_address}:
+        fit_unit(unit, y_address, f32_ptr(base + 4 * unit * ARIMA_RECORD))
+    check_cases("tsa_training_arima", ARIMA_UNITS, unit_fit)
     check_refits(records)
     _ = y^
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("tsa_training_arima", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

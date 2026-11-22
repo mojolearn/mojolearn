@@ -136,3 +136,16 @@ def test_generic_aliases_preserve_identical_and_select_native_fast(monkeypatch, 
         assert namespace["to_bf16"] is native.public_fast_to_bf16
         assert namespace["from_bf16"] is native.public_fast_from_bf16
     assert namespace["matmul_int8"] is impl.matmul_int8
+
+
+def test_portable_full_selector_uses_declared_board_shape_without_allocating(monkeypatch, tmp_path):
+    path = HERE.parent / "experiments/apple_fast_bf16_20261015/local_benchmark.py"
+    spec = importlib.util.spec_from_file_location("bf16_portable_fixture", path)
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    calls = []
+    monkeypatch.setattr(runner, "prepare", lambda root, shapes, preset: calls.append((root, shapes, preset)))
+    monkeypatch.setattr(sys, "argv", [str(path), "prepare", "--preset", "full", "--output", str(tmp_path / "full")])
+    assert runner.main() == 0
+    assert calls == [(tmp_path / "full", [bb.NEURAL.GEMM_SHAPES["full"]], "full")]
+    assert not (tmp_path / "full").exists()

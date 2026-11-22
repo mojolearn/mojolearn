@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original Spectral numerical graphs over the typed production providers.
 
 Expected relations are the original tests' independent column/diagonal and
 partition oracles. No eigenvector sign or repeated-eigenvalue basis is invented.
 Original inputs are saved test data, never fitted outputs or release hashes.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -23,7 +27,15 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.spectral_native_host import SpectralHostKernels
 from core.spectral_native_provider import spectral_native_v1
 from core.spectral_native_device import SpectralDeviceKernels
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime SPECTRAL_NATIVE_COMMON_FIXTURES = 7
@@ -278,20 +290,6 @@ def fixture(driver: SpectralDriver, unit: Int) raises:
         diagonal_relation(driver, True)
 
 
-# ---- The host column (was spectral_native_cpu_suite.mojo) ----
-# Original independent Spectral numerical graphs run across host cores.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SPECTRAL_NATIVE_COMMON_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            var driver = SpectralDriver(spectral_native_v1[SpectralHostKernels])
-            fixture(driver, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, SPECTRAL_NATIVE_COMMON_FIXTURES)
-
-
 # ---- The device column (was spectral_native_gpu_suite.mojo) ----
 # One graph at a time on the physical GPU; existing kernels remain parallel.
 #
@@ -301,26 +299,25 @@ def _run_cpu(mut report: Report) raises:
 comptime SPECTRAL_NATIVE_GPU_FIXTURES = SPECTRAL_NATIVE_COMMON_FIXTURES + SPECTRAL_NATIVE_DENSE_FIXTURES
 
 
-def _run_gpu(mut report: Report) raises:
+def _host_fixture(unit: Int) raises:
+    var driver = SpectralDriver(spectral_native_v1[SpectralHostKernels])
+    fixture(driver, unit)
+
+
+def test_graphs() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var driver = SpectralDriver(spectral_native_v1[SpectralDeviceKernels])
-    var cases = report.cases(SPECTRAL_NATIVE_GPU_FIXTURES)
-    for unit in range(SPECTRAL_NATIVE_GPU_FIXTURES):
-        try:
-            fixture(driver, unit)
-        except error:
-            cases.fail(unit, error)
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("graph", SPECTRAL_NATIVE_COMMON_FIXTURES, _host_fixture)
+    else:
+        # One graph at a time on the physical GPU (the common graphs, then the dense provider routes); existing
+        # kernels remain parallel. The shared-DeviceContext concurrent-submission failure stays separate.
+        var driver = SpectralDriver(spectral_native_v1[SpectralDeviceKernels])
+        for unit in range(SPECTRAL_NATIVE_GPU_FIXTURES):  # driver-loop: one graph at a time on the one device
+            try:
+                fixture(driver, unit)
+            except problem:
+                raise Error("graph row " + String(unit) + ": " + String(problem))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("spectral_native", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

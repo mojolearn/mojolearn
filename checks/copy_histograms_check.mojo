@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Check `copy_histograms_kernel` on its own.
 
@@ -16,6 +17,9 @@ placement and not just totals. It asserts three things:
 - each source leaf is unchanged
 - every leaf that was not named is untouched
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 
@@ -124,7 +128,7 @@ def check_copy_histograms() raises:
     print("  parent histogram lands in the right slot, nothing else moves")
 
 
-def run_checks() raises:
+def test_copy_histograms() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes under
     # "copy_histograms in isolation". The check builds its own
     # `DeviceContext` internally, so there is nothing to set up here.
@@ -132,20 +136,5 @@ def run_checks() raises:
     check_copy_histograms()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("copy_histograms_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

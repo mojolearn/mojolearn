@@ -1,7 +1,9 @@
+diff --git a/core/estimators_impl.mojo b/core/estimators_impl.mojo
+index f2c174a932..3851f5d926 100644
 --- a/core/estimators_impl.mojo
 +++ b/core/estimators_impl.mojo
-@@ -97,6 +97,15 @@
-     _ = d_ic^
+@@ -73,6 +73,15 @@ def ridge_multi_icpt_kernel(
+     )
  
  
 +@always_inline
@@ -16,7 +18,7 @@
  comptime QN_SOFTMAX_TPB = 128
  comptime QN_SOFTMAX_MAX_BLOCKS = 65535
  
-@@ -137,6 +146,8 @@
+@@ -113,6 +122,8 @@ def qn_sigmoid_device(ctx: DeviceContext, sp: _F32P, op: _F64P, nr: Int) raises:
      )
      ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
      ctx.synchronize()
@@ -25,7 +27,7 @@
      _ = d_scores^
      _ = d_out^
  
-@@ -193,5 +204,7 @@
+@@ -209,5 +220,7 @@ def qn_softmax_device(ctx: DeviceContext, sp: _F32P, op: _F64P, nr: Int, nc: Int
      )
      ctx.enqueue_copy(dst_ptr=op.bitcast[UInt64](), src_buf=d_out)
      ctx.synchronize()

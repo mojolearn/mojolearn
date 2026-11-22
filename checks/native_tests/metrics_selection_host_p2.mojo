@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """precision_recall_curve against the counts at every threshold (ported
 from python/mojolearn/tests/test_metrics_selection_host_p2.py
 `test_precision_recall_curve_matches_counts_at_each_threshold`).
@@ -24,7 +25,8 @@ from std.math import max
 from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR, fixture_f32, fixture_i32
 from metrics.mojolearn_metrics_host_run import precision_recall_curve_run
 from metrics.mojolearn_metrics_run import precision_recall_curve_run as precision_recall_curve_run_gpu
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from std.sys.compile import is_defined
 
 
 comptime PRC_N = 40
@@ -82,7 +84,7 @@ struct HostPrc(PrcCalls):
         return precision_recall_curve_run(y, scores, n, precision, recall, thresholds)
 
 
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     check_curve[HostPrc]()
     print("PASS metrics_selection_host_p2_cpu: precision_recall_curve counts at every threshold")
 
@@ -99,20 +101,18 @@ struct DevicePrc(PrcCalls):
         return precision_recall_curve_run_gpu(y, scores, n, precision, recall, thresholds)
 
 
-def _run_gpu(mut report: Report) raises:
-    check_curve[DevicePrc]()
-    print("PASS metrics_selection_host_p2_gpu: precision_recall_curve counts at every threshold")
+def _run_gpu() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        check_curve[DevicePrc]()
+        print("PASS metrics_selection_host_p2_gpu: precision_recall_curve counts at every threshold")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_precision_recall_curve() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("metrics_selection_host_p2", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

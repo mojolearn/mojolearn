@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Every float16 bit pattern widened to float32, ported from
 `test_models_loader.py::test_f16_widening_is_bit_exact_over_every_half`
 (lane tmig-lm-1, 2026-11-14).
@@ -18,7 +19,8 @@ from core.host_parallel import host_parallelize
 from decomposition.linalg_host_impl import from_f16_host_run
 from max.gpu.host import DeviceContext
 from decomposition.linalg_door_impl import from_f16_device
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report
+from std.testing import TestSuite
+from std.sys.compile import is_defined
 
 
 comptime F16_HALVES = 65536
@@ -68,7 +70,18 @@ def check_chunk(widened: MutPointer[Float32, MutUntrackedOrigin], chunk: Int) ->
 # ---- The host column (was byte_lm_models_loader_f16_cpu_suite.mojo) ----
 # The host widening, chunk by chunk across host cores: each task widens
 # its own 1,024 halves through `from_f16_host_run` and checks them.
-def _run_cpu(mut report: Report) raises:
+def _raise_chunks(failures: List[Int]) raises:
+    var failed = String("")
+    var count = 0
+    for chunk in range(F16_CHUNKS):  # driver-loop: over the chunk verdicts, after the parallel run
+        if failures[chunk] >= 0:
+            count += 1
+            failed += "\n      f16 chunk " + String(chunk) + " mismatch at half " + String(failures[chunk])
+    if count > 0:
+        raise Error("byte_lm_models_loader_f16: " + String(count) + " of " + String(F16_CHUNKS) + " chunks failed" + failed)
+
+
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var halves = all_halves()
     var widened = List[Float32](length=F16_HALVES, fill=Float32(0))
@@ -85,45 +98,37 @@ def _run_cpu(mut report: Report) raises:
     host_parallelize(task, F16_CHUNKS)
     _ = halves  # read through its address by every task above
     _ = widened
-    var cases = report.cases(F16_CHUNKS)
-    for chunk in range(F16_CHUNKS):
-        if failures[chunk] >= 0:
-            cases.fail(chunk, "f16 chunk " + String(chunk) + " mismatch at half " + String(failures[chunk]))
+    _raise_chunks(failures)
 
 
 # ---- The device column (was byte_lm_models_loader_f16_gpu_suite.mojo) ----
 # The device widening: one launch over all 65,536 halves (one element per
 # thread), then the comparison chunk by chunk across host cores.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var halves = all_halves()
-    var widened = List[Float32](length=F16_HALVES, fill=Float32(0))
-    var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(widened.unsafe_ptr()))
-    var ctx = DeviceContext()
-    from_f16_device(ctx, wp, MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(halves.unsafe_ptr())),
-                    F16_HALVES)
-    _ = halves  # read through its address by the synchronous call above
-    var failures = List[Int](length=F16_CHUNKS, fill=-1)
-    var fp = failures.unsafe_ptr()
-    def task(chunk: Int) {imm fp, imm wp}:
-        fp.unsafe_store(chunk, check_chunk(wp, chunk))
-    host_parallelize(task, F16_CHUNKS)
-    _ = widened
-    var cases = report.cases(F16_CHUNKS)
-    for chunk in range(F16_CHUNKS):
-        if failures[chunk] >= 0:
-            cases.fail(chunk, "f16 chunk " + String(chunk) + " mismatch at half " + String(failures[chunk]))
+def _run_gpu() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var halves = all_halves()
+        var widened = List[Float32](length=F16_HALVES, fill=Float32(0))
+        var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(widened.unsafe_ptr()))
+        var ctx = DeviceContext()
+        from_f16_device(ctx, wp, MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(halves.unsafe_ptr())),
+                        F16_HALVES)
+        _ = halves  # read through its address by the synchronous call above
+        var failures = List[Int](length=F16_CHUNKS, fill=-1)
+        var fp = failures.unsafe_ptr()
+        def task(chunk: Int) {imm fp, imm wp}:
+            fp.unsafe_store(chunk, check_chunk(wp, chunk))
+        host_parallelize(task, F16_CHUNKS)
+        _ = widened
+        _raise_chunks(failures)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_widen_every_half() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("byte_lm_models_loader_f16", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

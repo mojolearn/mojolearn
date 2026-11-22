@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`best_split_min_entropy` against CatBoost's OWN MinEntropy borders.
 
@@ -27,6 +28,8 @@ WHAT IT IS ACTUALLY GATING, beyond "the optimum is right":
   order-invariant, which is exactly how the `best_split` heap-order bug
   survived for months. These cut at 7, 13, 23, 31, 47 and 100.
 """
+
+from std.testing import TestSuite
 from gbdt.grid_creator.binarization import best_split_min_entropy
 
 comptime ORACLE = "bench/minentropy_oracle.txt"
@@ -116,22 +119,9 @@ def check_min_entropy() raises:
     print("  all", n_cases, "budgets match CatBoost exactly")
 
 
-def run_checks() raises:
+def test_min_entropy() raises:
     check_min_entropy()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("min_entropy_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

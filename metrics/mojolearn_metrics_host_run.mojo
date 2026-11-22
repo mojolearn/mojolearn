@@ -13,18 +13,11 @@ from core.hostptr import f32_ptr
 from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 from metrics.host.metrics_oracle import DISTANCE_L2_SQRT_UNEXPANDED, host_homogeneity_score, host_silhouette
 from metrics.host.metrics_host_entries_impl import (
-    binary_ranking_checked, check_classification_ptr, metrics_check_pair as _check_pair,
+    binary_ranking_checked, check_classification_ptr,
 )
+from metrics.label_pair_admission import metrics_check_pair as _check_pair, metrics_check_range as _check_range
 from metrics.host.classification_oracle import host_confusion_matrix_ptr
 from spectral.host.spectral_predict_host import SpectralPredictionState, host_spectral_predict
-
-
-def _check_range(lower: Int32, upper: Int32) raises:
-    if upper < lower:
-        raise Error(
-            "metrics: upper_class_range (" + String(upper)
-            + ") is below lower_class_range (" + String(lower) + ")"
-        )
 
 
 def homogeneity_completeness_v_measure_run(

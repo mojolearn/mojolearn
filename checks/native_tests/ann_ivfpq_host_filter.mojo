@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The host-column IVF-PQ fit and filtered search: finite distances, valid
 ids, every id kept by the filter, and two fits and searches of the same
 input agree word for word (lane tmig-core-3, 2026-11-15; the numerical claims
@@ -28,7 +29,13 @@ from x_ann.neighbors_ann_query_run import ANN_SEARCH_PQ, AnnSearchRequest, ann_s
 from x_ann.host.ivf_pq_host import ivf_pq_build_host
 from x_ann.ops_entry_host import ann_ops_host_v1
 from checks.native_tests.ann_ivf_surface import normal_rows
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime _N = 256
@@ -105,21 +112,17 @@ def _fixture() -> Tuple[List[Float32], List[Int32]]:
     return (x^, keep^)
 
 
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     var runs = List[_Run]()
     for _ in range(_RUNS):  # small-loop(two result slots)
         runs.append(_Run())
     var rp = runs.unsafe_ptr()
-    var cases = report.cases(_RUNS)
-    def task(unit: Int) {imm cases, imm rp}:
-        try:
-            # each run regenerates the same deterministic input
-            var data = _fixture()
-            _fit_search(data[0], data[1], rp[unit])
-            _ = data^
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, _RUNS)
+    def task(unit: Int) raises {imm rp}:
+        # each run regenerates the same deterministic input
+        var data = _fixture()
+        _fit_search(data[0], data[1], rp[unit])
+        _ = data^
+    check_cases("ivfpq_host_filter", _RUNS, task)
     _same_i32(runs[0].codes, runs[1].codes, "two IVF-PQ fits: codes_")
     _same_i32(runs[0].indices, runs[1].indices, "two IVF-PQ searches: indices")
     for i in range(_M * _K):  # small-loop(80 distances)
@@ -128,13 +131,9 @@ def _run_cpu(mut report: Report) raises:
     _ = runs^
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
+def test_ivfpq_host_filter() raises:
+    _run_cpu()
 
 
-def register() -> Check:
-    return Check("ann_ivfpq_host_filter", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

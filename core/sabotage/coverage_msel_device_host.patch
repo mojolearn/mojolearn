@@ -1,19 +1,19 @@
---- a/core/msel_device.mojo
-+++ b/core/msel_device.mojo
-@@ -236,6 +236,12 @@
-             raise Error("msel take_rows: null destination")
-         ctx.enqueue_copy(dst_ptr=_U8(unsafe_from_address=dst_addr), src_buf=d_out)
-         ctx.synchronize()
-+        if n_idx >= 2:  # SABOTAGE: the first two gathered rows swapped (valid rows, wrong order)
-+            var sab = _U8(unsafe_from_address=dst_addr)
-+            for b in range(row_bytes):
-+                var t = sab[b]
-+                sab[b] = sab[row_bytes + b]
-+                sab[row_bytes + b] = t
+--- a/core/msel_device.mojo	2026-11-22 12:34:48
++++ b/core/msel_device.mojo	2026-11-22 12:37:13
+@@ -513,6 +513,12 @@
+     # copy-out across the host's cores (`_msel_take_download`). It was a wait
+     # for the status word, then one pageable copy of all `total` bytes.
+     var ok = _msel_take_download(ctx, d_out, total, d_status, dst_addr)
++    if ok and n_idx >= 2:  # SABOTAGE: the first two gathered rows swapped (valid rows, wrong order)
++        var sab = _HU8(unsafe_from_address=dst_addr)
++        for b in range(row_bytes):
++            var t = sab[b]
++            sab[b] = sab[row_bytes + b]
++            sab[row_bytes + b] = t
      _ = d_out^
      _ = d_status^
      return ok
-@@ -334,6 +340,8 @@
+@@ -611,6 +617,8 @@
      )
      ctx.enqueue_copy(dst_ptr=_F32(unsafe_from_address=dst_addr), src_buf=d_dst)
      ctx.synchronize()
@@ -22,8 +22,8 @@
      _ = d_src^
      _ = d_dst^
  
-@@ -466,7 +474,8 @@
-     )
+@@ -733,7 +741,8 @@
+     enqueue_fill_n(ctx, d_table, m, Int32(2))
      if n_side > 0:
          ctx.enqueue_function[_split_side_kernel](
 -            d_perm.unsafe_ptr(), Int64(m), Int64(n_test), Int64(n_side), d_counts.unsafe_ptr(),
@@ -32,7 +32,7 @@
              d_table.unsafe_ptr(), d_sums.unsafe_ptr(), d_status.unsafe_ptr(),
              grid_dim=_grid(n_side), block_dim=MSEL_TPB,
          )
-@@ -540,9 +549,12 @@
+@@ -807,9 +816,12 @@
          ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=d_sizes)
          ctx.synchronize()
          # the n_folds fold sizes widened to the caller's int64 (k scalars)
@@ -46,12 +46,12 @@
          _ = h^
      _ = d_perm^
      _ = d_counts^
---- a/core/msel_host.mojo
-+++ b/core/msel_host.mojo
-@@ -107,6 +107,11 @@
+--- a/core/msel_host.mojo	2026-11-22 12:34:48
++++ b/core/msel_host.mojo	2026-11-22 12:37:13
+@@ -157,6 +157,11 @@
      for r in range(n_idx):
          var s = Int(idx.unsafe_load(r))
-         memcpy(dest=dst + r * row_bytes, src=src + s * row_bytes, count=row_bytes)
+         unsafe_memcpy(dest=dst + r * row_bytes, src=src + s * row_bytes, count=row_bytes)
 +    if n_idx >= 2:  # SABOTAGE: the first two gathered rows swapped (valid rows, wrong order)
 +        for b in range(row_bytes):
 +            var t = dst[b]
@@ -60,7 +60,7 @@
      return True
  
  
-@@ -142,6 +147,8 @@
+@@ -192,6 +197,8 @@
      var dst = _F32(unsafe_from_address=dst_addr)
      for i in range(n):
          dst.unsafe_store(i, msel_load_f32(src, code, i * k + col))
@@ -69,7 +69,7 @@
  
  
  def host_rebase_offsets_i32(
-@@ -186,7 +193,7 @@
+@@ -236,7 +243,7 @@
          tp.unsafe_store(g, Int32(2))
      for i in range(n_test + n_train):
          var g = Int(pp.unsafe_load(i))
@@ -78,7 +78,7 @@
              tp.unsafe_store(g, Int32(1))
              c_te += Int32(cp.unsafe_load(g))
          else:
-@@ -214,8 +221,8 @@
+@@ -264,8 +271,8 @@
          var size = m // n_folds + (1 if f < m % n_folds else 0)
          for j in range(start, start + size):
              var g = Int(pp.unsafe_load(j))

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Existing NC numerical graphs, ordered on the one physical GPU.
 
 Only one GPU job runs at a time. Each graph uses the shared DeviceContext, so
@@ -7,34 +8,35 @@ retain their parallel execution. The separate parallel run_checks and device
 concurrency fixtures remain unchanged, with their Metal failures still open.
 This wrapper obtains numerical/refusal evidence, never concurrency clearance.
 """
+from std.testing import TestSuite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from checks.native_tests.nearest_centroid_descriptor_suite import fixture, empty_case
+from checks.native_tests.nearest_centroid_descriptor_cases import fixture, empty_case
 from x_neighbors.native_descriptor_device import xn_native_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The device column (was nearest_centroid_numeric_gpu_suite.mojo) ----
-def _run_gpu(mut report: Report) raises:
+
+
+def test_nearest_centroid_numeric() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(11)
-    for unit in range(11):
+    var failures = String("")
+    for unit in range(11):  # driver-loop: over fixtures, in order
         try:
             if unit < 8:
                 fixture(xn_native_v1, unit)
             else:
                 empty_case(xn_native_v1, unit - 8)
         except error:
-            cases.fail(unit, error)
+            failures += "\n      row " + String(unit) + ": " + String(error)
+    if failures.byte_length() > 0:
+        raise Error("nearest_centroid_numeric: device fixtures failed:" + failures)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("nearest_centroid_numeric", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

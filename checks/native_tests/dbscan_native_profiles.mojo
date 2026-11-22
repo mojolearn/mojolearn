@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Original DBSCAN workload descriptors; independent refs recorded beside inputs."""
+"""Original DBSCAN workload descriptors; independent refs recorded beside inputs. Also the int32 destination
+canary the DBSCAN checks share (moved from dbscan_native.mojo when it became a TestSuite file, lane ts-b5).
+
+No `main()` and no `test_*`: a helper module, not a check.
+"""
+
+comptime DBSCAN_I32_GUARD = Int32(987654)
+
+
+def integer_guards(values: List[Int32]) raises:
+    if not (values[0] == DBSCAN_I32_GUARD and values[len(values) - 1] == DBSCAN_I32_GUARD):
+        raise Error("DBSCAN int32 destination canaries")
+
 
 @fieldwise_init
 struct DBSCANCase(Copyable, Movable):

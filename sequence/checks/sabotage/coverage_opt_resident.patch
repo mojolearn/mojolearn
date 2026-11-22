@@ -1,6 +1,6 @@
---- a/sequence/opt_resident.mojo
-+++ b/sequence/opt_resident.mojo
-@@ -235,6 +235,14 @@
+--- a/sequence/opt_resident.mojo	2026-11-22 12:33:47
++++ b/sequence/opt_resident.mojo	2026-11-22 12:33:59
+@@ -275,6 +275,14 @@
      return h
  
  
@@ -13,9 +13,9 @@
 +
 +
  def _host_fp(a: Int, what: String) raises -> FP:
-     """A caller's host float32 array at address a (`sequence/pyapi.mojo`
+     """A caller's host float32 array at address a (`providers/python/sequence_pyapi.mojo`
      `fptr`'s check)."""
-@@ -327,6 +335,11 @@
+@@ -367,6 +375,11 @@
      _ = lamb_table(offs, tab)
      var n = offs[nt]
      var h = _open(RES_LAMB, n, 3, nt, offs^, tab)
@@ -27,10 +27,10 @@
      return _pair(h, 3)
  
  
-@@ -360,6 +373,10 @@
-     var hp = _host_fp(addr, "state")
-     var ctx = sequence_ctx()
+@@ -402,6 +415,10 @@
      var to_dev = up
+     if to_dev:
+         resident_upload_note(RUC_OPTIMIZER_STATE, pool[].n[h])  # check-only count (compiles to nothing by default)
 +    # SABOTAGE coverage: every state value moved one ulp off (up: in the caller's host copy first)
 +    var nf = len(pool[].s0[h]) if s == 0 else (len(pool[].s1[h]) if s == 1 else len(pool[].s2[h]))
 +    if to_dev:
@@ -38,7 +38,7 @@
      if s == 0:
          if to_dev:
              ctx.enqueue_copy(dst_buf=pool[].s0[h], src_ptr=hp)
-@@ -376,6 +393,8 @@
+@@ -418,6 +435,8 @@
          else:
              ctx.enqueue_copy(dst_ptr=hp, src_buf=pool[].s2[h])
      ctx.synchronize()

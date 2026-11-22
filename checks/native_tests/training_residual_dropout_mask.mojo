@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The residual-dropout layer's forward and backward obey one mask, moved
 from test_public_verifier_gap_methods.py
 `test_residual_dropout_forward_and_backward_obey_same_mask` (2026-11-15).
@@ -24,7 +25,9 @@ from core.neural_context import neural_ctx
 from training.residual_dropout import residual_dropout_device
 from training.residual_dropout_boundary_run import _RD_DEV_CTX
 from training.residual_dropout_host import residual_dropout_host
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime RD_MASK_FIXTURES = 2
@@ -101,57 +104,54 @@ def run_host_fixture(unit: Int) raises:
     _ = ones^
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(RD_MASK_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_host_fixture(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, RD_MASK_FIXTURES)
-
-
 # ---- The device column ----
 # The fixtures share this process's neural training context and run in
 # order; each launch keeps its own parallelism.
 def run_device_fixture(unit: Int) raises:
-    var values = rd_values()
-    var residual = List[Float32](length=RD_N, fill=0.5)
-    var ones = List[Float32](length=RD_N, fill=1.0)
-    var outputs = RdOutputs()
-    var p = rd_probability(unit)
-    var ctx = neural_ctx[_RD_DEV_CTX]()
-    var yp = f32_ptr(Int(outputs.forward.unsafe_ptr()))
-    _ = residual_dropout_device[False](ctx, yp, yp, f32_ptr(Int(values.unsafe_ptr())),
-                                       f32_ptr(Int(residual.unsafe_ptr())),
-                                       RD_N, RD_OFFSET, p, RD_SEED_LO, RD_SEED_HI, RD_STREAM)
-    var gp = f32_ptr(Int(ones.unsafe_ptr()))
-    _ = residual_dropout_device[True](ctx, f32_ptr(Int(outputs.dvalues.unsafe_ptr())),
-                                      f32_ptr(Int(outputs.dresidual.unsafe_ptr())), gp, gp,
-                                      RD_N, RD_OFFSET, p, RD_SEED_LO, RD_SEED_HI, RD_STREAM)
-    check_outputs(unit, outputs, values)
-    _ = residual^
-    _ = ones^
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var values = rd_values()
+        var residual = List[Float32](length=RD_N, fill=0.5)
+        var ones = List[Float32](length=RD_N, fill=1.0)
+        var outputs = RdOutputs()
+        var p = rd_probability(unit)
+        var ctx = neural_ctx[_RD_DEV_CTX]()
+        var yp = f32_ptr(Int(outputs.forward.unsafe_ptr()))
+        _ = residual_dropout_device[False](ctx, yp, yp, f32_ptr(Int(values.unsafe_ptr())),
+                                           f32_ptr(Int(residual.unsafe_ptr())),
+                                           RD_N, RD_OFFSET, p, RD_SEED_LO, RD_SEED_HI, RD_STREAM)
+        var gp = f32_ptr(Int(ones.unsafe_ptr()))
+        _ = residual_dropout_device[True](ctx, f32_ptr(Int(outputs.dvalues.unsafe_ptr())),
+                                          f32_ptr(Int(outputs.dresidual.unsafe_ptr())), gp, gp,
+                                          RD_N, RD_OFFSET, p, RD_SEED_LO, RD_SEED_HI, RD_STREAM)
+        check_outputs(unit, outputs, values)
+        _ = residual^
+        _ = ones^
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(RD_MASK_FIXTURES)
-    for unit in range(RD_MASK_FIXTURES):  # driver-loop: over fixtures on the one device
-        try:
-            run_device_fixture(unit)
-        except error:
-            cases.fail(unit, error)
+def _cpu_cases() raises:
+    check_cases("training_residual_dropout_mask", RD_MASK_FIXTURES, run_host_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _gpu_cases() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var failed = String("")
+        var count = 0
+        for unit in range(RD_MASK_FIXTURES):  # driver-loop: over fixtures on the one device
+            try:
+                run_device_fixture(unit)
+            except error:
+                count += 1
+                failed += "\n      training_residual_dropout_mask row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("training_residual_dropout_mask: " + String(count) + " of " + String(RD_MASK_FIXTURES) + " cases failed" + failed)
 
 
-def register() -> Check:
-    return Check("training_residual_dropout_mask", cpu=True, gpu=True, serial="", run=run_cases)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

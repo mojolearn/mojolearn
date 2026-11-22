@@ -9,24 +9,13 @@ same error sentences.
 """
 from std.math import isfinite
 from core.host_finite_scan import host_all_finite_f32, host_all_finite_list
+from metrics.label_pair_admission import metrics_check_pair
 
 from metrics.host.classification_oracle import (
     MAX_CONFUSION_CLASSES,
     MAX_PRF_CLASSES,
     host_binary_ranking,
 )
-
-
-def metrics_check_pair(y_true: List[Int32], y_pred: List[Int32], n: Int) raises:
-    """`_check_pair`, `metrics/estimator.mojo`, verbatim."""
-    if n <= 0:
-        raise Error("metrics: n must be positive, got " + String(n))
-    if len(y_true) < n or len(y_pred) < n:
-        raise Error(
-            "metrics: labels_true holds " + String(len(y_true))
-            + " and labels_pred holds " + String(len(y_pred))
-            + " entries, both must hold at least n = " + String(n)
-        )
 
 
 def require_finite_f32(values: List[Float32], message: String) raises:

@@ -113,8 +113,10 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   (`docs/plans/SPEED_AND_CLEANUP_2026-11-18.md`; lane `ideas-mode-policy`). An `identical` build is never changed by a
   relaxation: a row switched off in an `identical` build is a compile error. `deterministic` stays retired; keep the
   rejection tests for retired mode values. The paper covers `identical` only, and uses the table to state what
-  identity costs kernel by kernel. Public docs keep saying `fast` is Apple only until `fast` has been built, checked
-  for quality and measured on a vendor; the same change that qualifies it there updates the docs (part 7).
+  identity costs kernel by kernel. Public docs describe `fast` availability from the currently
+  supported implementations and do not carry forward stale mode restrictions (Andrew, 2026-11-22; part 7).
+- **`fast` is active (Andrew, 2026-11-22, restating 2026-11-19).** Mojolearn offers `fast` as well as `identical`; the stop on
+  dedicated `fast` work is lifted. Nothing is removed, archived or classed as dead because it serves `fast`.
 
 ### The GPU path
 
@@ -227,6 +229,26 @@ currently does. "Protected" forbids leaving verify broken, weakened or unable to
 reason to hold the product back. The verify smoke (`tools/ops/wheel_verify_smoke.sh`) is how a change shows verify
 still works.
 
+### One body per operation (Andrew, 2026-11-22)
+
+The math of an operation is written ONCE, as an `@always_inline` function, and every form of that operation calls
+it: the standalone layer's kernel, any fused kernel that contains the operation, the host (CPU) column and the
+device kernel. A fused kernel keeps its own loop, tiling, launch and buffers and calls the bodies in sequence; it
+does not carry its own copy of the math. New code is written this way from the start; a second copy of an
+operation's math, on any column or in any kernel, is a defect.
+
+- Why: two copies drift. On 2026-11-22 the CPU GBDT loop still had a fused multiply-add where the device used a
+  rounded multiply then add; CPU and GPU models differed and no check caught it.
+- Existing duplicates are converted kernel by kernel (`docs/plans/CLEANUP_LATER_2026-11-25.md` section 8), each
+  decided at once: BITS on the CPU box in minutes (outputs and gradients hashed before and after, same seed; one
+  differing bit means revert that kernel and write down why), then SPEED on the measurement box the same day (that
+  kernel before and after, quality = outputs equal; slower means revert).
+- The exception, recorded beside the kernel: a fused kernel that is fast because it does the steps DIFFERENTLY (a
+  reduction shared across steps, another summation order, a scan specialised across operations) keeps its own
+  math, with a comment saying which body it departs from and why, and a check comparing it with the shared body's
+  result to the stated tolerance or bits.
+- A body takes typed values and has no launch, allocation or Python in it, so it inlines into every caller.
+
 ### No refactor adds cost on a hot path (Andrew, 2026-11-11)
 
 A change that removes a Python crossing, a copy, a lookup or a layer is judged on the whole path it touches, never
@@ -239,23 +261,42 @@ change carries this rule and the lane's report lists, per converted site, the lo
 did there. An orchestrator audits every wave against these patterns before the integration compile and fixes what it
 finds in the same round; a wave without that audit does not merge.
 
-### A measured winner is never deleted on reasoning (Andrew, 2026-11-09)
+### When a removal needs a measurement, and when it does not (Andrew, 2026-11-22; replaces "A measured winner is never deleted on reasoning", 2026-11-09)
 
-- Code that won a measurement (a hand-tuned kernel, a fused path, a switch whose
-  A/B it won) is deleted only after a measurement on NVIDIA and AMD shows its
-  replacement is at least as fast with quality equal. "The new path subsumes it"
-  is a claim to measure, never a reason to delete.
-- A refactor that moves a family onto a shared runtime keeps the tuned kernel as
-  an op of that runtime (one runtime path, tuned kernels inside it). It does not
-  replace the kernel with the generic op.
-- Hand-tuned kernels are not touched by a refactor. What a refactor may change
-  is the plumbing around them: per-call weight uploads, per-token doors, host
-  reads per iteration, duplicate forwards for train and predict.
-- Until the measurement exists, the old code stays behind its switch, default
-  unchanged. This narrows "remove what a change made unnecessary": unnecessary
-  means measured, not argued.
+Measure when speed or quality could actually change. Do not measure to remove duplication of form.
+
+- NO measurement is needed to remove or merge: a second public class, trainer, wrapper, session or inference twin
+  that runs the SAME kernels as the one that stays; an older API form of the same computation; plumbing around
+  kernels (per-call uploads, per-token doors, host reads per iteration, duplicate forwards for train and predict);
+  dead code; a switch nobody builds with. The evidence is that the kept path calls the same kernels and the same
+  tests pass with the same outputs; say that in the report.
+- A measurement IS needed only when the change replaces the code that does the work on a hot path with different
+  code: a hand-tuned or fused kernel swapped for a generic one, a different algorithm, a different fold order or
+  precision. Then the replacement is timed against what it replaces on the measurement box, with quality beside the
+  time ("What a win is"), before the old kernel goes. One measurement of the affected rows; not a campaign.
+- A refactor that moves a family onto a shared runtime keeps its tuned kernels as ops of that runtime; it does not
+  replace them with the generic op. Hand-tuned kernels are not edited by a refactor.
+- Removing a whole capability (an architecture, an estimator, a mode users can ask for) is not a measurement
+  question at all: it is a product decision, and Andrew makes it. Bring him what would be lost and what it costs to
+  keep; never decide it by timing and never by cleanup.
+- The release's timing against the paper baseline is where an unexpected slowdown from any refactor is caught; a
+  refactor that could not have changed the kernels does not wait for it.
 
 ## 3. Measurement
+
+### What a win is: speed at the same or similar quality (Andrew, 2026-11-22)
+
+- "Wins", "faster" and "the fastest" always mean faster WITH QUALITY THE SAME OR SIMILAR. Speed bought with a
+  material loss of quality is not a win, in any mode, on any vendor, for any change: a kernel, a default, a dtype, a
+  solver, an iteration count, a tolerance, a precision.
+- Every speed comparison therefore carries its quality beside the time, for both arms: the metric the estimator is
+  judged on (accuracy, R2, loss, residual, recall), and where the change touches numerics, the largest difference in
+  the outputs. A timing reported without its quality is not a result. "Similar" is within the noise of that metric on
+  that row; a drop outside it is a regression, to be fixed or the change dropped.
+- A change that returns the same values in another container or dtype (no value changes) states that as its quality
+  evidence: outputs compared equal, value by value.
+- Never trade a large amount of quality for speed and call it an improvement; never report a speedup whose quality
+  cost has not been measured.
 
 - Our CPU is never raced or timed (Andrew, 2026-10-02). The CPU is for verification digests, CPU-only installs and
   inference. Race and measure tools default to our GPU arm only.
@@ -292,7 +333,7 @@ finds in the same round; a wave without that audit does not merge.
    cell (vendor split) but does not block the average. Apple never votes and `identical` is never tuned for Apple;
    Apple `identical` hashes must still match (2026-10-13).
 3. Measure `identical` on NVIDIA, AMD and Apple and update every board (main board included) as results land,
-   through the board tools only. A full-board run is `identical` on the three; `fast` is not rerun.
+   through the board tools only. A full-board identity-mode run is `identical` on the three; `fast` measurement follows the current campaign scope.
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
 5. Read logs with grep and short tails (see "Logs and context").
 6. OPPONENT CLOCKS (Andrew, 2026-10-07/08; `tools/board_clock_audit.py`): every stored opponent cell carries a
@@ -547,13 +588,10 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   at its sha). The default path stays byte-identical. An arm recorded as promoted but still opt-in in the code becomes the
   default (bits change on every column together) and its switch goes. The 1,300 undecided defines of
   `docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md` go under this rule.
-- **A paused programme's arms are not unmeasured (Andrew, 2026-11-15).** The four-week clock does not run for a
-  programme Andrew has paused: while Apple `fast` investment is stopped, its opt-in arms that are still in the code
-  stay, opt-in and default off, to be run when he reopens it. Deleting on a calendar rule is for arms that could have
-  been run and were not; nothing is classed as waste because its programme is paused.
-  Its experiment CARDS do not stay in the repo (Andrew, 2026-11-22): a card is a record, not code. Each card has its
-  row in `docs/apple-fast/EXPERIMENTS.md` (verdict, or "never run") and its file in the evidence store
-  (`~/mojolearn-evidence/repo-data/`, manifest row, R2 copy), from where it is restored when the programme reopens.
+- **A paused programme's arms are not unmeasured (Andrew, 2026-11-15; updated 2026-11-22).** The four-week clock does not run for a
+  programme Andrew has paused: its opt-in arms and never-run experiment cards stay in the code, opt-in and default
+  off, until reopened. Deleting on a calendar rule is for arms that could have been run and were not; nothing is
+  classed as waste because its programme is paused. `fast` is now active again.
 
 #### Deleting an experiment
 
@@ -666,8 +704,9 @@ them for you.
   short example. No status notes, internal file paths, dates, lane or run names, or all-caps asides. Engineering
   notes belong in `#` comments next to the code.
 - Public docs state the contract in one sentence, verbatim: "In `identical` mode, Mojolearn returns the same bits on Apple,
-  NVIDIA and AMD GPUs." Every `numeric_mode` doc that lists `'fast'` says Apple only. Docs never offer `fast` on
-  NVIDIA, AMD or the CPU.
+  NVIDIA and AMD GPUs." Describe `fast` availability from current supported implementations; do not carry forward
+  stale mode restrictions. Outreach does not need an added "within a release" qualifier (Andrew, 2026-11-22).
+  This wording preference does not change the engineering identity contract or promise cross-version bit compatibility.
 - Omit, never caveat. Something broken, unverified or unfinished is not documented: leave it out of docs-site and
   list it in `docs-site/api_exclude.txt` (name and reason). No "Known defect", "NOT IMPLEMENTED" or status notes;
   write `identical` and `fast` in lower case. Excluded names never appear in public docs, the README or the site.

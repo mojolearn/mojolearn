@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The UMAP operations table (core/neighbors_entry_table_umap.mojo), one case
 per entry UMAP's owner (bindings/mani_umap_native.mojo) calls, with
 expectations known by construction: the returned column count, a written
@@ -25,11 +26,12 @@ from core.neighbors_entry_table_umap import (
     UMAP_TAIL_EXTRAS,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.host_parallel import host_parallelize
 from umap.ops_entry_host import umap_ops_host_v1, UMAP_OPS_HOST_API
 from checks.vendor import COMPILED_VENDOR
 from umap.ops_entry_device import umap_ops_device_v1, UMAP_OPS_DEVICE_API
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime UMAP_SHARED_CASES = 7
@@ -239,51 +241,42 @@ def check_umap_table(key: NeighborsEntryKey, publisher: Int, entry: NativeDescri
     require(other, "umap table: the other tier's unpublished slot did not refuse")
 
 
-# ---- The host column (was umap_ops_cpu_suite.mojo) ----
-# The CPU column of the UMAP operations table: the table round trip first
-# (ordered metadata), then the independent entry cases on the existing host
-# pool.
-def _run_cpu(mut report: Report) raises:
+def _host_case(case_id: Int) raises:
+    run_shared_case(umap_ops_host_v1, case_id)
+
+
+def _cpu_cases() raises:
     var mode = Int(GLOBAL_NUMERIC_MODE)
     var api = UMAP_OPS_HOST_API.get_or_create_ptr()
     check_umap_table(NeighborsEntryKey(mode, 0), Int(api[].entries.unsafe_ptr()), umap_ops_host_v1)
-    var total = UMAP_SHARED_CASES
-    var cases = report.cases(total)
-    def task(case_id: Int) {imm cases}:
-        try:
-            run_shared_case(umap_ops_host_v1, case_id)
-        except error:
-            cases.fail(case_id, error)
-    report.parallel(task, total)
+    check_cases("umap_ops", UMAP_SHARED_CASES, _host_case)
 
 
-# ---- The device column (was umap_ops_gpu_suite.mojo) ----
-# The device column of the UMAP operations table. The entries share the
-# metrics image's device context, so the cases submit in order; the kernels
-# keep their native parallelism (no concurrency claim).
-def _run_gpu(mut report: Report) raises:
-    var mode = Int(GLOBAL_NUMERIC_MODE)
-    var vendor = neighbors_vendor_word(COMPILED_VENDOR)
-    require(vendor > 0, "umap_ops_gpu: this build has no GPU vendor")
-    var api = UMAP_OPS_DEVICE_API.get_or_create_ptr()
-    check_umap_table(NeighborsEntryKey(mode, vendor), Int(api[].entries.unsafe_ptr()), umap_ops_device_v1)
-    var cases = report.cases(UMAP_SHARED_CASES)
-    for case_id in range(UMAP_SHARED_CASES):  # driver-loop: over the ordered device cases
-        try:
-            run_shared_case(umap_ops_device_v1, case_id)
-        except error:
-            cases.fail(case_id, error)
+def _gpu_cases() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var mode = Int(GLOBAL_NUMERIC_MODE)
+        var vendor = neighbors_vendor_word(COMPILED_VENDOR)
+        require(vendor > 0, "umap_ops_gpu: this build has no GPU vendor")
+        var api = UMAP_OPS_DEVICE_API.get_or_create_ptr()
+        check_umap_table(NeighborsEntryKey(mode, vendor), Int(api[].entries.unsafe_ptr()), umap_ops_device_v1)
+        var failed = String("")
+        var count = 0
+        for case_id in range(UMAP_SHARED_CASES):  # driver-loop: over the ordered device cases
+            try:
+                run_shared_case(umap_ops_device_v1, case_id)
+            except error:
+                count += 1
+                failed += "\n      umap_ops row " + String(case_id) + ": " + String(error)
+        if count > 0:
+            raise Error("umap_ops: " + String(count) + " of " + String(UMAP_SHARED_CASES) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("umap_ops", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

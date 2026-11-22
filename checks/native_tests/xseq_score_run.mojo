@@ -1,20 +1,101 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The registered check of the xseq score RUN suite."""
-from checks.native_tests.xseq_score_run_suite import run_checks
-from checks.native_tests.runner import Check, Column, Report
+# native-check: cpu
+"""The sequence-expansion score RUN half (`sequence/xseq_score_run.mojo`),
+reached without Python (lane doorsplit-cnn-xseq, 2026-11-11). One case per
+RUN check: the metrics refusal texts on literal shapes and float32 words.
+`xseq_run_r2` reads the metrics image's published R^2 entry and is covered
+with that table (`core/metrics_entry_table.mojo`), not here.
+
+The cases are independent units and run across the native host worker pool.
+"""
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from sequence.xseq_score_run import (
+    xseq_run_vector_rows, xseq_run_vector_finite, xseq_run_lengths_check, xseq_run_weights_check,
+    xseq_run_metrics_mode,
+)
+
+comptime XSEQ_SCORE_RUN_CASES = 5
 
 
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
+
+def _refuses(problem: Error, text: String) raises:
+    require(String(problem) == text, "refusal text: got '" + String(problem) + "', expected '" + text + "'")
+
+
+def _weights_refusal(shape: List[Int], n: Int, values: List[Float32], text: String) raises:
     try:
-        run_checks()
-    except error:
-        report.abort(error)
+        xseq_run_weights_check(shape, n, Int(values.unsafe_ptr()))
+        require(False, "weights accepted: " + text)
+    except problem:
+        _refuses(problem, text)
+    _ = values
 
 
-def register() -> Check:
-    return Check("xseq_score_run", cpu=True, gpu=False, serial="", run=run_cases)
+def run_case(unit: Int) raises:
+    if unit == 0:
+        require(xseq_run_vector_rows([4], "y_true") == 4 and xseq_run_vector_rows([3, 1], "y_pred") == 3, "vector rows")
+        try:
+            _ = xseq_run_vector_rows([3, 2], "y_true")
+            require(False, "wide target accepted")
+        except problem:
+            _refuses(problem, "ValueError: mojolearn metrics: y_true must be 1-D, got shape (3, 2)")
+        try:
+            _ = xseq_run_vector_rows([0], "y_pred")
+            require(False, "empty target accepted")
+        except problem:
+            _refuses(problem, "ValueError: mojolearn metrics: y_pred is empty")
+    elif unit == 1:
+        var values: List[Float32] = [1.0, 2.0, 3.0]
+        xseq_run_vector_finite(Int(values.unsafe_ptr()), 3, "y_true")
+        values[1] = Float32(1.0) / Float32(0.0)
+        try:
+            xseq_run_vector_finite(Int(values.unsafe_ptr()), 3, "y_true")
+            require(False, "infinite target accepted")
+        except problem:
+            _refuses(problem, "ValueError: mojolearn metrics: y_true contains NaN or infinity; refused here "
+                     + "(metrics/README.md HAND-OFF ask 3) rather than letting it reach a kernel whose answer "
+                     + "for it is a washed sentinel")
+        _ = values
+    elif unit == 2:
+        xseq_run_lengths_check(3, 3)
+        try:
+            xseq_run_lengths_check(3, 2)
+            require(False, "length mismatch accepted")
+        except problem:
+            _refuses(problem, "ValueError: mojolearn metrics: y_true has 3 entries and y_pred has 2; they must be "
+                     + "the same length")
+    elif unit == 3:
+        var good: List[Float32] = [0.0, 1.0, 2.0]
+        xseq_run_weights_check([3], 3, Int(good.unsafe_ptr()))
+        _ = good
+        _weights_refusal([3, 1], 3, [1.0, 1.0, 1.0],
+                         "ValueError: mojolearn r2_score: sample_weight must be 1-D, got shape (3, 1)")
+        _weights_refusal([2], 3, [1.0, 1.0],
+                         "ValueError: mojolearn r2_score: sample_weight has 2 entries for 3 samples")
+        _weights_refusal([2], 2, [1.0, Float32(1.0) / Float32(0.0)],
+                         "ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
+        _weights_refusal([2], 2, [1.0, -1.0],
+                         "ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
+        _weights_refusal([2], 2, [0.0, 0.0],
+                         "ValueError: mojolearn r2_score: sample_weight must have positive total weight")
+    else:
+        xseq_run_metrics_mode("identical", 1)
+        xseq_run_metrics_mode("fast", 0)
+        try:
+            xseq_run_metrics_mode("identical", 0)
+            require(False, "mode mismatch accepted")
+        except problem:
+            _refuses(problem, "RuntimeError: mojolearn metrics: requested identical, binary reports fast; rebuild it")
+
+
+def test_cases() raises:
+    check_cases("run_case", XSEQ_SCORE_RUN_CASES, run_case)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

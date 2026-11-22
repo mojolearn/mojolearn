@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The early-stop ROLLBACK of `run_tree_layout`, reached on purpose.
 
@@ -36,6 +37,9 @@ twice -- so this check builds two datasets whose stops are EXACT:
 Run twice, the mid-stop case must be bit-identical: the rollback path is
 host arithmetic plus one upload, and nothing in it may depend on timing.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import upload_host_into
 
 from max.gpu.host import DeviceContext
 
@@ -198,25 +202,10 @@ def check_early_stop_rollback() raises:
     print("  rerun bit-identical: the rollback is deterministic")
 
 
-def run_checks() raises:
+def test_early_stop_rollback() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes.
     check_early_stop_rollback()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("early_stop_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

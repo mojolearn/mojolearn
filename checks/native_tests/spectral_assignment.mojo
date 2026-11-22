@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original180-row alternative assignment workloads, with independent partition.
 
 The saved input graph has three connected components under both self-inclusive
 and self-exclusive ten-neighbor conventions. The certificate is independent
 NumPy input preparation, not a fitted-output hash or an eigensolver copy.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.host_parallel import host_parallelize
 from core.spectral_native_api import SpectralDriver, SpectralStateView
 from core.spectral_assignment_api import (
@@ -22,7 +26,15 @@ from core.spectral_native_host import SpectralHostKernels
 from core.spectral_assignment_host import SpectralAssignmentHost
 from core.spectral_native_device import SpectralDeviceKernels
 from core.spectral_assignment_device import SpectralAssignmentDevice
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime SPECTRAL_ASSIGNMENT_FIXTURES = 2
@@ -78,54 +90,26 @@ def fixture(fitter: SpectralDriver, assignment: SpectralAssignmentDriver, method
     _ = result^
 
 
-# ---- The host column (was spectral_assignment_cpu_suite.mojo) ----
-# Independent original discretize/cluster-QR graphs run across host cores.
-def _run_cpu(mut report: Report) raises:
+def _host_fixture(unit: Int) raises:
+    var fitter = SpectralDriver(spectral_native_v1[SpectralHostKernels])
+    var assignment = SpectralAssignmentDriver(spectral_assign_native_v1[SpectralAssignmentHost])
+    fixture(fitter, assignment, unit)
+
+
+def test_assignment() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var failures = List[Int](length=SPECTRAL_ASSIGNMENT_FIXTURES,fill=0)
-    var fp = failures.unsafe_ptr()
-    def task(unit: Int) {imm fp}:
-        try:
-            var fitter = SpectralDriver(spectral_native_v1[SpectralHostKernels])
-            var assignment = SpectralAssignmentDriver(spectral_assign_native_v1[SpectralAssignmentHost])
-            fixture(fitter,assignment,unit)
-        except error:
-            fp.unsafe_store(unit,1)
-            print("FAIL spectral_assignment_cpu fixture",unit,String(error))
-    host_parallelize(task,SPECTRAL_ASSIGNMENT_FIXTURES)
-    var failed = 0
-    for value in failures:
-        failed += value
-    require(failed == 0,"spectral_assignment_cpu failed " + String(failed) + " fixtures")
-    print("PASS spectral_assignment_cpu:",SPECTRAL_ASSIGNMENT_FIXTURES,"original alternative-assignment graphs")
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("assignment", SPECTRAL_ASSIGNMENT_FIXTURES, _host_fixture)
+    else:
+        # One complete assignment graph at a time on the physical GPU; the tuned fit/assignment kernels stay parallel.
+        var fitter = SpectralDriver(spectral_native_v1[SpectralDeviceKernels])
+        var assignment = SpectralAssignmentDriver(spectral_assign_native_v1[SpectralAssignmentDevice])
+        for unit in range(SPECTRAL_ASSIGNMENT_FIXTURES):  # driver-loop: one graph at a time on the one device
+            try:
+                fixture(fitter, assignment, unit)
+            except problem:
+                raise Error("assignment row " + String(unit) + ": " + String(problem))
 
 
-# ---- The device column (was spectral_assignment_gpu_suite.mojo) ----
-# One complete assignment graph at a time on the physical GPU.
-#
-# The tuned fit/assignment kernels remain parallel. This schedule does not fix
-# the separately recorded shared-context concurrent-submission failure.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var fitter = SpectralDriver(spectral_native_v1[SpectralDeviceKernels])
-    var assignment = SpectralAssignmentDriver(spectral_assign_native_v1[SpectralAssignmentDevice])
-    var cases = report.cases(SPECTRAL_ASSIGNMENT_FIXTURES)
-    for unit in range(SPECTRAL_ASSIGNMENT_FIXTURES):
-        try:
-            fixture(fitter,assignment,unit)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("spectral_assignment", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

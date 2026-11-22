@@ -79,6 +79,14 @@ comptime OH_TREES = 12
 comptime OH_DEPTH = 4
 comptime OH_BORDERS = 32
 comptime OH_BORDER_SAMPLES = 200_000
+#: The learning rate of both arms: NOT a power of two (lane r2-known,
+#: 2026-11-22). At 0.5 `leaf * rate` is exact, so the fused host update
+#: `fma(leaf, rate, cursor)` and the device's `cursor + round(leaf * rate)`
+#: gave the same bits and this check passed with that CPU != GPU defect live
+#: (`checks/native_tests/gbdt_host_device_cat.mojo`, which runs at 0.1 and
+#: covers neither tree CTR combinations, Ordered boosting nor eval-set
+#: losses, so it does not replace this check).
+comptime OH_RATE = 0.1
 
 
 def _need(ok: Bool, what: String) raises:
@@ -154,7 +162,7 @@ def _device_fit(
         border_build_max_samples=OH_BORDER_SAMPLES,
         n_estimators=OH_TREES,
         max_depth=OH_DEPTH,
-        learning_rate=Float32(0.5),
+        learning_rate=Float32(OH_RATE),
         l2_leaf_reg=Float32(1.0),
         bootstrap_type=String("No"),
         random_seed=UInt64(0),
@@ -190,7 +198,7 @@ def _host_fit(
     )
     var p = GbdtHostParams(
         OH_BORDERS, OH_BORDER_SAMPLES, OH_TREES, OH_DEPTH,
-        Float32(0.5), Float32(1.0), UInt64(0), NAN_MODE_MIN, border,
+        Float32(OH_RATE), Float32(1.0), UInt64(0), NAN_MODE_MIN, border,
         iterations, 0,
     )
     var opts = GbdtOrderedHostOptions(

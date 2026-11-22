@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Row byte gather fixtures moved from test_native_helpers.py
 (`test_gather_rows_bytes_checks_and_copies_exactly`).
 
@@ -10,11 +11,21 @@ unchanged. The host walk (core/host_helpers_impl.mojo) and the device gather
 (core/rows_bytes_device.mojo) take the same fixtures. The binding's empty
 short cut and its refusal wording stay in the Python test (boundary).
 """
-from core.host_parallel import host_parallelize
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.host_helpers_impl import gather_rows_bytes
 from max.gpu.host import DeviceContext
 from core.rows_bytes_device import device_gather_rows_bytes
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime CORE_HELPERS_FIXTURES = 3
@@ -72,18 +83,6 @@ def gather_host(mut f: GatherFixture) -> Bool:
     )
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_HELPERS_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            var f = gather_fixture(unit)
-            var bad = gather_host(f)
-            check_gather(unit, f, bad)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, CORE_HELPERS_FIXTURES)
-
-
 # ---- The device column (was core_helpers_gpu_suite.mojo) ----
 # Row-gather fixtures on the device, in order on one DeviceContext.
 #
@@ -91,34 +90,38 @@ def _run_cpu(mut report: Report) raises:
 # thread per byte, so ordering the three submissions costs nothing.
 def gather_device(ctx: DeviceContext, mut f: GatherFixture) raises -> Bool:
     """The device gather; True when it reports an index out of bounds."""
-    var ok = device_gather_rows_bytes(
-        ctx, Int(f.source.unsafe_ptr()), Int(f.dst.unsafe_ptr()), Int(f.idx.unsafe_ptr()),
-        SOURCE_ROWS, OUT_ROWS, WIDTH,
-    )
-    return not ok
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build must not
+    # reach the device route.
+    comptime if CPU_COLUMN_BUILD:
+        raise Error("gather_device: the device column only")
+    else:
+        var ok = device_gather_rows_bytes(
+            ctx, Int(f.source.unsafe_ptr()), Int(f.dst.unsafe_ptr()), Int(f.idx.unsafe_ptr()),
+            SOURCE_ROWS, OUT_ROWS, WIDTH,
+        )
+        return not ok
 
 
-def _run_gpu(mut report: Report) raises:
-    var ctx = DeviceContext()
-    var cases = report.cases(CORE_HELPERS_FIXTURES)
-    for unit in range(CORE_HELPERS_FIXTURES):
-        try:
-            var f = gather_fixture(unit)
-            var bad = gather_device(ctx, f)
-            check_gather(unit, f, bad)
-        except error:
-            cases.fail(unit, error)
+def _host_fixture(unit: Int) raises:
+    var f = gather_fixture(unit)
+    var bad = gather_host(f)
+    check_gather(unit, f, bad)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_gather() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("gather", CORE_HELPERS_FIXTURES, _host_fixture)
+    else:
+        # The fixtures share one context and its stream; each gather is already one thread per byte.
+        var ctx = DeviceContext()
+        for unit in range(CORE_HELPERS_FIXTURES):  # driver-loop: ordered on one DeviceContext
+            try:
+                var f = gather_fixture(unit)
+                var bad = gather_device(ctx, f)
+                check_gather(unit, f, bad)
+            except problem:
+                raise Error("gather row " + String(unit) + ": " + String(problem))
 
 
-def register() -> Check:
-    return Check("core_helpers", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

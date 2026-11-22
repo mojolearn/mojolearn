@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The CPU columns of the GP entry table (core/gp_entry_table.mojo; lane
 gp-entry-table, 2026-11-12). Publication then lookup returns the published
 pointer for both CPU images, which coexist in one process (separate column
@@ -9,7 +10,6 @@ for fixtures 2 and 3, as gp_native_cpu_suite pairs them), one fixture per
 host core. Run first in a fresh process (the publication fills the process
 slots)."""
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.host_parallel import host_parallelize
 from core.entry_table import entry_table_same_call
 from core.gp_native_api import GPDriver
 from core.gp_native_provider import GPProviderAPI, gp_native_v1
@@ -24,7 +24,13 @@ from core.gp_entry_table import (
     gp_table_resolve,
 )
 from checks.native_tests.gp_native_classifier_cases import GP_CLASSIFIER_CPU_FIXTURES, classifier_fixture
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The host column (was gp_entry_table_cpu_suite.mojo) ----
@@ -36,7 +42,7 @@ def _refuses(key: GPEntryKey) -> Bool:
     return False
 
 
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var mode = Int(GLOBAL_NUMERIC_MODE)
     var host_key = GPEntryKey(mode, 0, GP_COLUMN_HOST)
@@ -61,29 +67,21 @@ def _run_cpu(mut report: Report) raises:
     except:
         conflict = True
     require(conflict, "gp table: a second image in the same slot did not refuse")
-    var cases = report.cases(GP_CLASSIFIER_CPU_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            # Each fixture resolves its own refs (a read-only acquire load).
-            var mode_word = Int(GLOBAL_NUMERIC_MODE)
-            var fit = gp_table_resolve(GPEntryKey(mode_word, 0, GP_COLUMN_HOST))
-            var inference = gp_table_resolve(GPEntryKey(mode_word, 0, GP_COLUMN_HOST_INFER))
-            var query = GPDriver(inference.call) if unit >= 2 else GPDriver(fit.call)
-            classifier_fixture(GPDriver(fit.call), query, unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GP_CLASSIFIER_CPU_FIXTURES)
+    def task(unit: Int) raises:
+        # Each fixture resolves its own refs (a read-only acquire load).
+        var mode_word = Int(GLOBAL_NUMERIC_MODE)
+        var fit = gp_table_resolve(GPEntryKey(mode_word, 0, GP_COLUMN_HOST))
+        var inference = gp_table_resolve(GPEntryKey(mode_word, 0, GP_COLUMN_HOST_INFER))
+        var query = GPDriver(inference.call) if unit >= 2 else GPDriver(fit.call)
+        classifier_fixture(GPDriver(fit.call), query, unit, True)
+    check_cases("gp_entry_table", GP_CLASSIFIER_CPU_FIXTURES, task)
     _ = host_api^
     _ = infer_api^
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
+def test_gp_entry_table() raises:
+    _run_cpu()
 
 
-def register() -> Check:
-    return Check("gp_entry_table", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

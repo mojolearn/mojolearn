@@ -23,7 +23,11 @@ from providers.python.cluster_constructor_pyapi_pack import cluster_initialize_p
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _refusal
 from providers.python.cluster_public_lifecycle_pyapi_unpack import _XC_ADMIT_SLOT, cluster_lifecycle_unpack
 from bindings.native_operation_codes import FR_CFA, FR_XC, OP_LEAF_NONE
-from bindings.operation_names_xc import XC_OPN_FAMILY_XC_INITIALIZE
+from bindings.operation_names_xc import (
+    XC_OPN_FAMILY_XC_INITIALIZE, XC_OPN_FAMILY_XC_PREDICT, XC_OPN_FAMILY_XC_VARIANTS_PREDICT, XC_OPN_FAMILY_XC_BISECT_PREDICT,
+    XC_OPN_FAMILY_XC_AP_PREDICT, XC_OPN_FAMILY_XC_AGGLO_PREDICT, XC_OPN_FAMILY_XC_DBSCAN_PREDICT,
+)
+from bindings.operation_names_mix import MIX_OPN_FAMILY_MIX_GMM_PREDICT, MIX_OPN_FAMILY_MIX_BGMM_PREDICT
 from bindings.cluster_keys_unpack import cluster_keys
 
 
@@ -50,7 +54,14 @@ def cluster_public_operation(model: PythonObject, owner: Int, operation: Int, op
     var call = cluster_lifecycle_unpack(model, owner, operation, args, context)
     var fitting = call.fitting
     var prepared = call.prepared
-    var outside = estimator_outside()
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the labels as a NumPy view, with no caller test. The
+    # other public results keep the caller test.
+    var predicting = (owner == FR_XC and (operation == XC_OPN_FAMILY_XC_PREDICT or operation == XC_OPN_FAMILY_XC_VARIANTS_PREDICT
+                                          or operation == XC_OPN_FAMILY_XC_BISECT_PREDICT or operation == XC_OPN_FAMILY_XC_AP_PREDICT
+                                          or operation == XC_OPN_FAMILY_XC_AGGLO_PREDICT or operation == XC_OPN_FAMILY_XC_DBSCAN_PREDICT)) or (
+        owner != FR_CFA and owner != FR_XC and (operation == MIX_OPN_FAMILY_MIX_GMM_PREDICT or operation == MIX_OPN_FAMILY_MIX_BGMM_PREDICT))
+    var outside = predicting or estimator_outside()
     var depth = estimator_fit_begin(call.fields) if fitting else 0
     var result = PythonObject(None)
     try:

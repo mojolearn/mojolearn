@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """LinearSVC and LinearSVR fit their documented objectives (test_qn_objectives_surface.py).
 
 The original random workload (NumPy seed 0, 400x5 and its 64-row draw,
@@ -44,7 +45,9 @@ from core.qn_single_fit import QnSingleFitPlan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from glm.host.linear_svc_native_host import linear_svc_host_v1
 from glm.linear_svc_native_device import linear_svc_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime QN_OBJECTIVE_FIXTURES = 10
@@ -382,46 +385,36 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
             all_close(cb, ca, "LinearSVR unit weights")
 
 
-# ---- The host column (was solver_qn_objectives_cpu_suite.mojo) ----
-# LinearSVC/LinearSVR documented objectives on the host QN provider; the ten
-# independent fixtures run across host cores.
-def _run_cpu(mut report: Report) raises:
+def _host_fixture(unit: Int) raises:
+    fixture(LinearSvcDriver(linear_svc_host_v1), unit)
+
+
+def _cpu_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(QN_OBJECTIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(LinearSvcDriver(linear_svc_host_v1), unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, QN_OBJECTIVE_FIXTURES)
+    check_cases("solver_qn_objectives", QN_OBJECTIVE_FIXTURES, _host_fixture)
 
 
-# ---- The device column (was solver_qn_objectives_gpu_suite.mojo) ----
-# LinearSVC/LinearSVR documented objectives on the device QN provider.
-#
-# The ten fixtures run in order: they submit to the shared family
-# DeviceContext, and concurrent submission from several host threads to one
-# context is a separately recorded open failure. The QN kernels keep their own
-# parallelism; the Float64 objective cells use host cores.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(QN_OBJECTIVE_FIXTURES)
-    for unit in range(QN_OBJECTIVE_FIXTURES):
-        try:
-            fixture(LinearSvcDriver(linear_svc_device_v1), unit)
-        except error:
-            cases.fail(unit, error)
+def _gpu_cases() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var failed = String("")
+        var count = 0
+        for unit in range(QN_OBJECTIVE_FIXTURES):  # driver-loop: over the fixtures on the one device
+            try:
+                fixture(LinearSvcDriver(linear_svc_device_v1), unit)
+            except error:
+                count += 1
+                failed += "\n      solver_qn_objectives row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("solver_qn_objectives: " + String(count) + " of " + String(QN_OBJECTIVE_FIXTURES) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("solver_qn_objectives", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

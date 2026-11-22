@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pure score storage, snapshot admission and input-range ownership checks."""
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.gp_native_score import GPRScoreValues, GPRScoreProgram, gpr_score_prepare
-from checks.native_tests.gp_state_suite import require
+from checks.native_tests.gp_state import require
 
 comptime GPR_SCORE_CONTRACT_CASES = 7
 
@@ -65,21 +64,3 @@ def fixture(unit: Int) raises:
     require(refused, "nonfinite metric input was accepted")
     _ = values
     _ = truth
-
-
-def run_checks() raises:
-    var failures = List[Int](length=GPR_SCORE_CONTRACT_CASES, fill=0)
-    var flags = failures.unsafe_ptr()
-    def run(unit: Int) {imm flags}:
-        try:
-            fixture(unit)
-        except problem:
-            flags[unit] = 1
-            print("FAIL gpr_score_contract fixture", unit, String(problem))
-    host_parallelize(run, GPR_SCORE_CONTRACT_CASES)
-    var failed = 0
-    for flag in failures:  # metadata: independent fixture statuses
-        failed += flag
-    require(failed == 0, "GPR score contract failures: " + String(failed))
-    print("PASS gpr_score_contract:", GPR_SCORE_CONTRACT_CASES, "fixtures")
-    _ = failures

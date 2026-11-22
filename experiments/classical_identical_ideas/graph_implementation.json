@@ -3,7 +3,7 @@
   "lane": "graph",
   "branch": "ideas/classical-identical-20261006",
   "status": "NOT COMPILED \u2014 NOT TESTED \u2014 IDENTITY NOT VERIFIED \u2014 QUALITY NOT VERIFIED \u2014 NOT MEASURED",
-  "controls": "experiments/classical_identical_ideas/graph_controls.mojo",
+  "controls": "core/classical_identical_controls/graph_controls.mojo",
   "runtime_reach": "NOT DEMONSTRATED: source edits only; execution prohibited by request",
   "experiments": [
     {
@@ -1712,7 +1712,7 @@
   "base_commit": "35b2d4976550a6a9a47c4563ca1c08b6de21670b",
   "commit_status": "No agent commit; source edits handed to root for lane commit/push.",
   "owned_source_files": [
-    "experiments/classical_identical_ideas/graph_controls.mojo",
+    "core/classical_identical_controls/graph_controls.mojo",
     "experiments/classical_identical_ideas/graph_implementation.json",
     "core/classical_distance.mojo",
     "core/classical_centroid.mojo",

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Compare the fused Newton move/evaluation against the separate kernels.
 
@@ -8,6 +9,9 @@ nonuniform weights and repeated moves exercise indexing and accumulation.
 Build separately with and without MOJOLEARN_NUMERIC_IDENTICAL. Timings are
 kernel-pair microbenchmarks, not end-to-end fit speedups.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.memory import bitcast
 from std.time import perf_counter_ns
@@ -117,7 +121,7 @@ def check[estimation: Bool](objective: Int, weighted: Bool,
           "rows", n, "split_ms", timings[0], "fused_ms", timings[1])
 
 
-def run_checks() raises:
+def test_gbdt_fused_move() raises:
     print("numeric_mode", numeric_mode_name())
     var objectives: List[Int] = [OBJECTIVE_LOGLOSS, OBJECTIVE_CROSSENTROPY,
         OBJECTIVE_RMSE, OBJECTIVE_POISSON, OBJECTIVE_TWEEDIE, OBJECTIVE_LQ,
@@ -132,20 +136,5 @@ def run_checks() raises:
     print("ALL FUSED MOVE ARMS GREEN")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gbdt_fused_move_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native session optimizer math, control state and checkpoint continuation.
 
 Exact session/model-fit parity and exact checkpoint continuation preserve the
@@ -28,7 +29,18 @@ from checks.native_tests.ops_optimizer_oracle import (
 )
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime OPS_OPTIMIZER_FIXTURES = 10
@@ -345,58 +357,59 @@ def run_ops_optimizer_fixture[E: Exec & Movable & Deinitable](mut s: OpsSession[
 # Native optimizer fixtures; independent host sessions run in parallel.
 #
 # Rows and parameter cells in the independent oracle use the host pool.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(OPS_OPTIMIZER_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
+def _host_fixture(fixture_id: Int) raises:
+    comptime if CPU_COLUMN_BUILD:
+        var s = OpsSession[HostExec](HostExec(), True)
+        var restored = OpsSession[HostExec](HostExec(), fixture_id != 9)
+        var model_ex = HostExec()
         try:
-            var s = OpsSession[HostExec](HostExec(), True)
-            var restored = OpsSession[HostExec](HostExec(), fixture_id != 9)
-            var model_ex = HostExec()
-            try:
-                run_ops_optimizer_fixture(s, restored, model_ex, fixture_id)
-            except error:
-                restored.close()
-                s.close()
-                raise error
+            run_ops_optimizer_fixture(s, restored, model_ex, fixture_id)
+        except error:
             restored.close()
             s.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, OPS_OPTIMIZER_FIXTURES)
+            raise error
+        restored.close()
+        s.close()
 
 
 # ---- The device column entry (was ops_optimizer_gpu.mojo) ----
 # Native optimizer fixtures; shared-context GPU submission is ordered.
 #
 # DeviceExec shares sequence_ctx() and its pool. GPU tensor work uses the existing parallel kernels; ordered fixtures do not prove concurrent-session safety. Use the smallest existing GPU host.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(OPS_OPTIMIZER_FIXTURES)
-    for fixture_id in range(OPS_OPTIMIZER_FIXTURES):
+def _device_fixture(fixture_id: Int) raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var s = OpsSession[DeviceExec](DeviceExec(), True)
+        var restored = OpsSession[DeviceExec](DeviceExec(), fixture_id != 9)
+        var model_ex = DeviceExec()
         try:
-            var s = OpsSession[DeviceExec](DeviceExec(), True)
-            var restored = OpsSession[DeviceExec](DeviceExec(), fixture_id != 9)
-            var model_ex = DeviceExec()
-            try:
-                run_ops_optimizer_fixture(s, restored, model_ex, fixture_id)
-            except error:
-                restored.close()
-                s.close()
-                raise error
+            run_ops_optimizer_fixture(s, restored, model_ex, fixture_id)
+        except error:
             restored.close()
             s.close()
-        except error:
-            cases.fail(fixture_id, error)
+            raise error
+        restored.close()
+        s.close()
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _device_fixtures_in_order() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = 0
+        for fixture_id in range(OPS_OPTIMIZER_FIXTURES):  # shared device context: the fixtures in order
+            try:
+                _device_fixture(fixture_id)
+            except error:
+                failed += 1
+                print("FAIL ops_optimizer gpu fixture", fixture_id, String(error))
+        if failed:
+            raise Error("ops_optimizer GPU failed " + String(failed) + " of " + String(OPS_OPTIMIZER_FIXTURES) + " fixtures")
 
 
-def register() -> Check:
-    return Check("ops_optimizer", cpu=True, gpu=True, serial="", run=run_cases)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", OPS_OPTIMIZER_FIXTURES, _host_fixture)
+    else:
+        _device_fixtures_in_order()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,11 +1,28 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native Prophet state queries and exact piecewise-linear expectations.
 
 Fixture0 retains the original full default fit (120 days, weekly order3,
 25 changepoints,2000 iterations) and repeat130-day prediction. Five given
 states have independent Float64 trend/holiday equations on dyadic values;
 fit repeat and fused/separate feature parity are not independent oracles.
+
+`test_recovers_structure` (lane py2mojo-A, 2026-11-22; ported from
+python/mojolearn/tests/test_x_sequence_prophet.py `test_recovers_structure`):
+`ProphetForecaster().fit(t, y, holidays)` on 200 daily points (t = 18000 + i,
+a trend break at i = 100, a weekly sine, a holiday every 50 days from day 7,
+NumPy default_rng(0) noise; y stored as float32 words in
+`fixtures/sequence_prophet_structure/` by `tools/py2mojo_native_fixtures_b8.py`)
+through the column's glue entry with the door's typed calls (bindings/
+xseq_prophet_native_door.mojo `prophet_fit`, `prophet_predict`: the default
+settings, the automatic weekly seasonality, one holiday column, prior scales
+10, changepoint prior 0.05, 2000 iterations): the in-sample forecast's mean
+absolute error is below 0.3, the 14 future days are finite, and the first row of
+the batch fit of [y, 2y] has the single fit's parameters word for word.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import sin, isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -15,15 +32,26 @@ from sequence.ops_impl import prophet_predict_impl, prophet_predict_days_impl, p
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from sequence.fit_team_impl import prophet_fit_team_impl
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.entry_table import EntryRef, entry_ref_word
 from core.xseq_entry_table import XS_OP_COUNT
 from sequence.xseq_glue_host import x_sequence_glue_host_v1
+from sequence.xseq_glue_device import x_sequence_glue_device_v1
 from sequence.xseq_prophet_run import (
     PROPHET_AUTO_AUTO, ProphetAuto, ProphetFitInput, ProphetSeason, ProphetTimes, prophet_run_fit_plan,
-    prophet_run_prepare_fit,
+    prophet_run_prepare_fit, ProphetFitPlan, ProphetPredictRequest, prophet_run_days, prophet_run_predict,
+    prophet_run_prior_count, prophet_run_parameter_count,
 )
+from checks.native_tests.tsa_metrics_fixture_words import fixture_f32
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime PROPHET_STATE_FIXTURES = 6
@@ -386,60 +414,159 @@ def typed_entry_fit() raises:
     _ = info
 
 
-def _run_cpu(mut report: Report) raises:
-    # The fixtures, then one case for the typed fit entry (index PROPHET_STATE_FIXTURES).
-    var cases = report.cases(PROPHET_STATE_FIXTURES + 1)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            if fixture_id == PROPHET_STATE_FIXTURES:
-                typed_entry_fit()
-            else:
-                fixture(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, PROPHET_STATE_FIXTURES + 1)
-
-
 # ---- The device column (was prophet_state_gpu_suite.mojo) ----
 # Importable native Prophet GPU fitted-state checks.
 def fixture_gpu(fixture_id: Int) raises:
-    var ex = DeviceExec()
-    var state = ProphetState(fixture_id)
-    if fixture_id == 0:
-        var inputs = ProphetFitInputs()
-        prepare_fit(ex, inputs, state)
-        var addresses = inputs.addresses(state)
-        var ip = state.ints(120)
-        ip.append(2000)
-        var fp: List[Float64] = [0.05]
-        require(prophet_fit_team_impl(ex, addresses, ip, fp) == 1, "Prophet full default fit count")
-        inputs.guards()
-        state.guards()
-        _ = inputs
-    run_queries(ex, state)
-    _ = state
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        var ex = DeviceExec()
+        var state = ProphetState(fixture_id)
+        if fixture_id == 0:
+            var inputs = ProphetFitInputs()
+            prepare_fit(ex, inputs, state)
+            var addresses = inputs.addresses(state)
+            var ip = state.ints(120)
+            ip.append(2000)
+            var fp: List[Float64] = [0.05]
+            require(prophet_fit_team_impl(ex, addresses, ip, fp) == 1, "Prophet full default fit count")
+            inputs.guards()
+            state.guards()
+            _ = inputs
+        run_queries(ex, state)
+        _ = state
 
 
-def _run_gpu(mut report: Report) raises:
-    # Shared sequence DeviceContext: submit independent states in order; every
-    # production fit/prediction uses its existing parallel device kernels.
-    var cases = report.cases(PROPHET_STATE_FIXTURES)
-    for fixture_id in range(PROPHET_STATE_FIXTURES):
-        try:
-            fixture_gpu(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+# ---- Structure recovery (both columns: the column's glue entry) ----
+comptime PROPHET_RS_N = 200
+comptime PROPHET_RS_AHEAD = 14
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _rs_holidays(first: Int, count: Int) -> List[Float32]:
+    """`(np.arange(N + 14) % 50 == 7)` rows first .. first + count, one column."""
+    var h = List[Float32](length=count, fill=0)
+    for i in range(count):  # small-loop(fixture: holiday words)
+        h[i] = Float32(1) if (first + i) % 50 == 7 else Float32(0)
+    return h^
 
 
-def register() -> Check:
-    return Check("prophet_state", cpu=True, gpu=True, serial="", run=run_cases)
+def _rs_fit(entry: EntryRef, plan: ProphetFitPlan, y: List[Float32], batch: Int, holidays: List[Float32],
+            words: Int) raises -> Tuple[List[Float32], List[Float32]]:
+    var params = List[Float32](length=batch * words, fill=0)
+    var info = List[Float32](length=batch * 4, fill=0)
+    prophet_run_fit_plan(entry, plan, Int(y.unsafe_ptr()), batch, Int(holidays.unsafe_ptr()), 1, 10.0,
+                         Int(params.unsafe_ptr()), Int(info.unsafe_ptr()), False, 2000, 0.05)
+    _ = y
+    _ = holidays
+    return (params^, info^)
+
+
+def _rs_predict(entry: EntryRef, plan: ProphetFitPlan, params: List[Float32], info: List[Float32],
+                first_day: Int, m: Int, k: Int) raises -> List[Float32]:
+    """`m.predict(t, holidays=...)` for days 18000 + first_day .. (the fused predict, as the door for a nonempty t)."""
+    var t = List[Float64](length=m, fill=0)
+    for i in range(m):  # small-loop(fixture: day words)
+        t[i] = Float64(18000 + first_day + i)
+    var days = List[Float64](length=m, fill=0)
+    var day_info = List[Float64](length=3, fill=0)
+    prophet_run_days(entry, Int(t.unsafe_ptr()), Int(days.unsafe_ptr()), Int(day_info.unsafe_ptr()), m, False)
+    var ns = len(plan.seasons)
+    var periods = List[Float64](length=max(ns, 1), fill=1.0)
+    var orders = List[Float32](length=max(ns, 1), fill=0.0)
+    for i in range(ns):  # driver-loop: over the seasonalities
+        periods[i] = plan.seasons[i].period
+        orders[i] = Float32(plan.seasons[i].fourier_order)
+    var cpts = List[Float32](length=max(plan.s, 1), fill=0)
+    for i in range(plan.s):  # small-loop(the fitted changepoints)
+        cpts[i] = plan.changepoints[i]
+    var holidays = _rs_holidays(first_day, m)
+    var yhat = List[Float32](length=m, fill=0)
+    var trend = List[Float32](length=m, fill=0)
+    var request = ProphetPredictRequest(True, Int(days.unsafe_ptr()), Int(periods.unsafe_ptr()), 0, 0,
+        Int(params.unsafe_ptr()), Int(info.unsafe_ptr()), Int(orders.unsafe_ptr()), Int(holidays.unsafe_ptr()),
+        Int(cpts.unsafe_ptr()), Int(yhat.unsafe_ptr()), Int(trend.unsafe_ptr()), 1, m, ns, 1, k, plan.s, False,
+        plan.start, plan.t_scale)
+    prophet_run_predict(entry, request)
+    _ = t^
+    _ = days^
+    _ = periods^
+    _ = orders^
+    _ = cpts^
+    _ = holidays^
+    _ = trend^
+    _ = params
+    _ = info
+    return yhat^
+
+
+def recovers_structure(entry: EntryRef) raises:
+    var n = PROPHET_RS_N
+    var y = fixture_f32("checks/native_tests/fixtures/sequence_prophet_structure/prophet-y.f32", n)
+    var t = List[Float64](length=n, fill=0)
+    for i in range(n):  # small-loop(fixture: day words)
+        t[i] = Float64(18000 + i)
+    var fit_input = ProphetFitInput(ProphetTimes(Int(t.unsafe_ptr()), n, False), False, 1, n, True,
+        List[ProphetSeason](), ProphetAuto(PROPHET_AUTO_AUTO, 0), ProphetAuto(PROPHET_AUTO_AUTO, 0),
+        ProphetAuto(PROPHET_AUTO_AUTO, 0), 10.0, False, ProphetTimes(0, 0, False), 0.8, 25)
+    var plan = prophet_run_prepare_fit(entry, fit_input)
+    var k = prophet_run_prior_count(plan, 1)
+    var words = prophet_run_parameter_count(plan.s, k)
+    var holidays = _rs_holidays(0, n)
+    var single = _rs_fit(entry, plan, y, 1, holidays, words)
+    var fit = _rs_predict(entry, plan, single[0], single[1], 0, n, k)
+    var error = Float64(0)
+    for i in range(n):  # small-loop(oracle: mean absolute error)
+        error += abs(Float64(fit[i]) - Float64(y[i]))
+    error /= Float64(n)
+    require(error < 0.3, "Prophet in-sample mean absolute error " + String(error) + " is not below 0.3")
+    var ahead = _rs_predict(entry, plan, single[0], single[1], n, PROPHET_RS_AHEAD, k)
+    for i in range(PROPHET_RS_AHEAD):  # small-loop(oracle: the future days)
+        require(isfinite(ahead[i]), "Prophet future day " + String(i) + " is not finite: " + String(ahead[i]))
+    # The batch [y, 2y] (rank 2: the door's plan is the same t's): row 0 is the single fit, word for word.
+    var batch_input = ProphetFitInput(ProphetTimes(Int(t.unsafe_ptr()), n, False), False, 2, n, True,
+        List[ProphetSeason](), ProphetAuto(PROPHET_AUTO_AUTO, 0), ProphetAuto(PROPHET_AUTO_AUTO, 0),
+        ProphetAuto(PROPHET_AUTO_AUTO, 0), 10.0, False, ProphetTimes(0, 0, False), 0.8, 25)
+    var batch_plan = prophet_run_prepare_fit(entry, batch_input)
+    var both = List[Float32](length=2 * n, fill=0)
+    for i in range(n):  # small-loop(fixture: the two series)
+        both[i] = y[i]
+        both[n + i] = y[i] * Float32(2.0)
+    var batch = _rs_fit(entry, batch_plan, both, 2, holidays, words)
+    for i in range(words):  # small-loop(oracle: one parameter row)
+        require(bitcast[DType.uint32](batch[0][i]) == bitcast[DType.uint32](single[0][i]),
+                "Prophet batch row 0 parameter " + String(i) + " is " + String(batch[0][i]) + ", single fit "
+                + String(single[0][i]))
+    _ = t^
+    _ = y^
+    _ = both^
+    _ = holidays^
+
+
+def test_recovers_structure() raises:
+    comptime if CPU_COLUMN_BUILD:
+        recovers_structure(EntryRef(x_sequence_glue_host_v1, entry_ref_word(Int(GLOBAL_NUMERIC_MODE), 0, XS_OP_COUNT)))
+    else:
+        recovers_structure(EntryRef(x_sequence_glue_device_v1, entry_ref_word(Int(GLOBAL_NUMERIC_MODE), 0,
+                                                                              XS_OP_COUNT)))
+
+
+def test_state() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("state", PROPHET_STATE_FIXTURES, fixture)
+    else:
+        # Shared sequence DeviceContext: independent states submitted in order; every production fit/prediction
+        # uses its existing parallel device kernels.
+        for fixture_id in range(PROPHET_STATE_FIXTURES):  # driver-loop: ordered on the shared sequence context
+            try:
+                fixture_gpu(fixture_id)
+            except problem:
+                raise Error("state row " + String(fixture_id) + ": " + String(problem))
+
+
+def test_typed_entry_fit() raises:
+    comptime if CPU_COLUMN_BUILD:
+        typed_entry_fit()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

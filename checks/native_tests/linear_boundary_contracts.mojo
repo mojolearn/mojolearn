@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of Mojolearn.
 """Native linear request, planning and storage ownership contracts.
 
@@ -7,7 +8,8 @@ task-local buffers and mock allocation records. No Python imports, objects,
 protocols, device kernels, timing or identity checks are involved. The
 Python API/protocol suites remain responsible for public admission.
 """
-from core.host_parallel import host_parallelize
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.linear_boundary_types import linear_predict_request_from_spans
 from core.linear_fit_types import (
     LinearFitRequest,
@@ -20,7 +22,6 @@ from core.linear_ols_run import linear_ols_plan
 from core.linear_tsqr_run import LinearKit
 from core.native_descriptor_abi import NativeDescriptorCall
 from checks.native_tests.linear_boundary_fixtures import plan_descriptor, storage_descriptor
-from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -31,7 +32,7 @@ def _require(ok: Bool, message: String) raises:
 def _prediction_spans(fault: Int) raises:
     var source = List[Float64](length=12, fill=1.0)
     var a: List[Int] = [Int(source.unsafe_ptr()), Int(source.unsafe_ptr() + 6), Int(source.unsafe_ptr() + 9)]
-    var p: List[Int] = [2, 3, 1]
+    var p: List[Int] = [2, 3, 0]
     var f: List[Float64] = [-2.5]
     var result = List[Int](length=1, fill=0)
     var operation = 0
@@ -64,7 +65,7 @@ def _prediction_spans(fault: Int) raises:
     try:
         var request = linear_predict_request_from_spans(operation, aa, na, pp, np, ff, nf, rr)
         _require(request.x == a[0] and request.coef == a[1] and request.dst == a[2], "prediction buffer order")
-        _require(request.rows == 2 and request.cols == 3 and request.wide, "prediction shape/dtype")
+        _require(request.rows == 2 and request.cols == 3 and request.test_x == False, "prediction shape/flags")
         _require(request.intercept == -2.5, "prediction intercept precision")
     except problem:
         _require(String(problem).find("linear prediction ABI:") >= 0, "unexpected prediction refusal")
@@ -370,50 +371,37 @@ def _upload_failure() raises:
         _ = kit
 
 
-def run_checks() raises:
-    comptime FIXTURES = 133
-    var failed = List[Int](length=FIXTURES, fill=0)
-    var failures_ptr = failed.unsafe_ptr()
-    def task(unit: Int) {imm failures_ptr}:
-        try:
-            if unit < 12:
-                _prediction_spans(unit)
-            elif unit < 86:
-                _fit_spans(unit - 12)
-            elif unit < 102:
-                _ridge_spans(unit - 86)
-            elif unit < 118:
-                _plans(unit - 102)
-            elif unit < 122:
-                _host_ownership(unit - 118)
-            elif unit < 125:
-                _device_ownership(unit - 122)
-            elif unit == 125:
-                _upload_failure()
-            else:
-                _ridge_requests(unit - 126)
-        except problem:
-            print("FAIL linear_boundary_contracts fixture", unit, String(problem))
-            failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "linear boundary failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
-    print("PASS linear_boundary_contracts:", FIXTURES, "native fixtures, parallel")
+def test_prediction_spans() raises:
+    check_cases("prediction_spans", 12, _prediction_spans)
 
 
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_fit_spans() raises:
+    check_cases("fit_spans", 74, _fit_spans)
 
 
-def register() -> Check:
-    return Check("linear_boundary_contracts", cpu=True, gpu=False, serial="", run=run_cases)
+def test_ridge_spans() raises:
+    check_cases("ridge_spans", 16, _ridge_spans)
+
+
+def test_plans() raises:
+    check_cases("plans", 16, _plans)
+
+
+def test_host_ownership() raises:
+    check_cases("host_ownership", 4, _host_ownership)
+
+
+def test_device_ownership() raises:
+    check_cases("device_ownership", 3, _device_ownership)
+
+
+def test_upload_failure() raises:
+    _upload_failure()
+
+
+def test_ridge_requests() raises:
+    check_cases("ridge_requests", 7, _ridge_requests)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

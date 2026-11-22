@@ -378,6 +378,9 @@ def _generic_reset(model: PythonObject, params: PythonObject, context: PythonObj
     return model
 
 
+comptime _FULL_RESET_MAX_DEPTH = 256
+
+
 def _set(model: PythonObject, params: PythonObject, context: PythonObject, depth: Int = 0) raises -> PythonObject:
     ref cpy = Python().cpython()
     var label = String(" while setting estimator parameters")
@@ -385,8 +388,15 @@ def _set(model: PythonObject, params: PythonObject, context: PythonObject, depth
     # sys.getrecursionlimit(): a cyclic estimator__estimator__... chain past
     # the limit raised nothing and the outer reset rewrote the parent.
     # Each nested level is one Python set_params call in the scikit-learn
-    # contract, so the interpreter's own limit bounds the nesting depth.
-    if depth >= Int(cpython_table()[].Py_GetRecursionLimit()):
+    # contract, so the interpreter's own limit bounds the nesting depth, and
+    # so does the native stack: one level here is about 8.5 KB of native
+    # frames, so the default limit of 1000 overflowed an 8 MB main-thread
+    # stack at depth ~950 under CPython 3.12.13 (cpc1, segmentation fault;
+    # GitHub's 3.12.16 passed by frame-size margin; lane sr3-smoke,
+    # 2026-11-22). _FULL_RESET_MAX_DEPTH (2.2 MB at that frame size) is a
+    # stack bound, far past any real estimator nesting; the smaller of the
+    # two refuses, in the interpreter's words.
+    if depth >= min(Int(cpython_table()[].Py_GetRecursionLimit()), _FULL_RESET_MAX_DEPTH):
         raise Error("RecursionError: maximum recursion depth exceeded" + label)
     if cpython_table()[].Py_EnterRecursiveCall(Int(label.as_c_string_slice().unsafe_ptr())) != 0:
         var failure = stash_python_error()

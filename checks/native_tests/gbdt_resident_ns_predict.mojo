@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The resident GBDT predict of a Depthwise / Lossguide model, bit for bit.
 
 Lane fix-gbdt-prebinned-infer (2026-11-13). `ResidentGbdtModel` applies a
@@ -27,7 +28,7 @@ from core.host_parallel import host_parallelize
 from gbdt.models.model_text import model_text
 from gbdt.resident_model import RESIDENT_RAW, ResidentGbdtModel
 from gbdt.train import TrainedModel, predict_floats, train
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
 
 
 # ---- The device column (was gbdt_resident_ns_predict_gpu_suite.mojo) ----
@@ -177,23 +178,19 @@ def fixture(unit: Int) raises:
     _ = ctx
 
 
-def _run_gpu(mut report: Report) raises:
+def test_fixtures() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(NS_FIXTURES)
+    var failed = String("")
+    var count = 0
     for unit in range(NS_FIXTURES):  # driver-loop: over fixtures, ordered GPU work on one context
         try:
             fixture(unit)
         except error:
-            cases.fail(unit, error)
+            count += 1
+            failed += "\n      gbdt_resident_ns_predict row " + String(unit) + ": " + String(error)
+    if count > 0:
+        raise Error("gbdt_resident_ns_predict: " + String(count) + " of " + String(NS_FIXTURES) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gbdt_resident_ns_predict", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

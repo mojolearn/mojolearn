@@ -1,11 +1,13 @@
+diff --git a/bindings/optimizer_public_door.mojo b/bindings/optimizer_public_door.mojo
+index 3abc546586..09bf4026ea 100644
 --- a/bindings/optimizer_public_door.mojo
 +++ b/bindings/optimizer_public_door.mojo
-@@ -985,7 +985,7 @@
+@@ -886,7 +886,7 @@ def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
      var addrs = List[Int]()
      var nbytes = List[Int]()
      _addrs_of(views, addrs, nbytes)
 -    zero_tensors(addrs, nbytes)
 +    # Fault: leave caller gradients unchanged.
+     _ = buffer_pins
+     _ = lease
      return PythonObject(None)
- 
- 

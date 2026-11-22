@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """IsolationForest fit then export: one fit, the fitted forest read out.
 
 Lane fix-iforest-double-fit (2026-11-13). The bindings' `fit` sequence
@@ -18,6 +19,7 @@ seventeen-param fit form since this lane. Checked per fixture:
 Fixtures run in order on one GPU (ordered GPU work on one process context);
 the compares inside a fixture run one task per word across the host cores.
 """
+from std.testing import TestSuite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.device_plan import device_plan_current
@@ -36,7 +38,11 @@ from isolation_forest.estimator import (
     iforest_run_resident,
 )
 from isolation_forest.forest_io import IFForestWords, if_held_forest_export, if_held_forest_sizes
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The device column (was iforest_forest_export_gpu_suite.mojo) ----
@@ -164,23 +170,14 @@ def fixture(unit: Int) raises:
         _ = train
 
 
-def _run_gpu(mut report: Report) raises:
+def test_fixtures() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(IF_EXPORT_FIXTURES)
     for unit in range(IF_EXPORT_FIXTURES):  # driver-loop: over fixtures, ordered GPU work on one context
         try:
             fixture(unit)
-        except error:
-            cases.fail(unit, error)
+        except problem:
+            raise Error("fixture row " + String(unit) + ": " + String(problem))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("iforest_forest_export", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

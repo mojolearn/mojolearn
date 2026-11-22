@@ -1,30 +1,41 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The nearest_centroid_native native check."""
-from checks.native_tests.nearest_centroid_descriptor_suite import run_checks
+# native-check: cpu gpu
+"""The nearest_centroid_native native check: the eight fit/query plan fixtures and three empty-query contracts of
+`nearest_centroid_descriptor_cases.mojo` through the column's real native descriptor (host on the host column, the
+device descriptor on the device column), independent rows across the host workers."""
+from std.testing import TestSuite
+from std.sys.compile import is_defined
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.nearest_centroid_descriptor_cases import fixture, empty_case
+from core.native_descriptor_abi import NativeDescriptorCall
 from x_neighbors.native_descriptor_host import xn_native_v1
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
-# ---- The host column entry (was nearest_centroid_native_cpu.mojo) ----
-def _run_cpu(mut report: Report) raises:
-    run_checks(xn_native_v1)
+def _entry() -> NativeDescriptorCall:
+    comptime if CPU_COLUMN_BUILD:
+        return xn_native_v1
+    else:
+        return xn_native_v1_gpu
 
 
-# ---- The device column entry (was nearest_centroid_native_gpu.mojo) ----
-def _run_gpu(mut report: Report) raises:
-    run_checks(xn_native_v1_gpu)
+def _fit_query(unit: Int) raises:
+    fixture(_entry(), unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _empty(unit: Int) raises:
+    empty_case(_entry(), unit)
 
 
-def register() -> Check:
-    return Check("nearest_centroid_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_fit_query() raises:
+    check_cases("fit_query", 8, _fit_query)
+
+
+def test_empty() raises:
+    check_cases("empty", 3, _empty)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

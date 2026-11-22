@@ -147,3 +147,14 @@ def forest_strict_predict_host_walk[RF_INPUT: Bool](handle: Int, x_address: Int,
         et_host_predict(lease[].et, x, rows, features, trees, outputs, out)
     for i in range(rows * outputs):  # small-loop(output copy): the same copy forest_host_vote_into makes
         op[i] = out[i]
+
+
+def forest_host_strict_predict[RF_INPUT: Bool](handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int,
+                                               outputs: Int) raises -> Int:
+    """XF_STRICT_PREDICT with no GIL: the check, then the sequential walk
+    (core/forest_host_strict_run.mojo)."""
+    var trees = forest_strict_predict_host_check[RF_INPUT](handle, rows, cols, outputs)
+    if rows == 0:
+        return 0
+    forest_strict_predict_host_walk[RF_INPUT](handle, x, out_addr, rows, cols, trees, outputs)
+    return rows

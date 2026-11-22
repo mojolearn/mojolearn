@@ -41,7 +41,11 @@ def _output(value: PythonObject, widen: Bool, context: PythonObject) raises -> P
 
 def parallel_public_result(result: PythonObject, method: String, kind: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
-    if py_get(context, "ndarray") is None or not _outside(context, 1):
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the kernel's dtype as a NumPy view, with no caller
+    # test and no float64 widening. The other results keep the caller test.
+    var predicting = method == "predict"
+    if py_get(context, "ndarray") is None or (not predicting and not _outside(context, 1)):
         return result
     return _output(result, parallel_result_widens(String("") if kind is None else String(kind), method), context)
 

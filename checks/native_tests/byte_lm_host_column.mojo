@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The byte LM host column's inference and training entry, ported from
 `test_byte_lm_host.py` and `test_byte_lm_host_trainer.py` (lane tmig-lm-1,
 2026-11-14).
@@ -33,8 +34,8 @@ from std.memory import bitcast
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_dispatch import byte_host_operation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.host_parallel import host_parallelize
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 
 comptime BYTE_LM_HOST_COLUMN_CASES = 9
@@ -246,26 +247,10 @@ def run_case(unit: Int) raises:
         raise Error("unknown byte LM host column case")
 
 
-# ---- The host column (was byte_lm_host_column_cpu_suite.mojo) ----
-# The byte LM host column units, independent, run across host cores.
-def _run_cpu(mut report: Report) raises:
+def test_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(BYTE_LM_HOST_COLUMN_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_case(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, BYTE_LM_HOST_COLUMN_CASES)
+    check_cases("byte_lm_host_column", BYTE_LM_HOST_COLUMN_CASES, run_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("byte_lm_host_column", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

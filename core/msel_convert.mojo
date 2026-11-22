@@ -25,6 +25,15 @@ comptime MSEL_I64 = 3
 comptime MSEL_U32 = 4
 comptime MSEL_U8 = 5
 
+#: A fold-store id (core/msel_device.mojo, core/msel_host.mojo) is
+#: `generation << MSEL_ID_SLOT_BITS | slot` (lane r2-known, 2026-11-22): a
+#: freed slot is handed out again with its generation raised, so an id kept
+#: past its free (or a wrong caller's id) is refused as not live instead of
+#: reading or releasing the slot's next holder. Generations start at 1, so
+#: every id is positive; 2^31 slots and 2^31 reuses per slot fit an Int.
+comptime MSEL_ID_SLOT_BITS = 32
+comptime MSEL_ID_SLOT_MASK = (1 << MSEL_ID_SLOT_BITS) - 1
+
 comptime _FRAC = UInt64(0x000FFFFFFFFFFFFF)
 
 

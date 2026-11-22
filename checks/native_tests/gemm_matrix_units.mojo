@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The matrix-units route of `fast` (its default on NVIDIA and AMD) stays inside its arithmetic bound, and is off
 everywhere else.
 
@@ -32,9 +33,10 @@ there.)
 The reference sums run on the host in Float64, one row of C per unit across the host's cores. One owned GPU
 context submits the cases in order (a device queue is serial by nature). Not an identity run.
 """
+from std.testing import TestSuite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-from checks.native_tests.int8_linalg import make_values
+from checks.native_tests.lowbit_oracles import make_values
 from max.gpu.host import DeviceContext
 from gemm.contract import OP_NN, OP_NT, OP_TN
 from gemm.neural_dispatch import identical_gemm_into, identical_gemm_workspace_max_floats
@@ -48,7 +50,11 @@ from gemm.fast_matrix_units import (
 # route) deleted 2026-11-20 by lane/fx-verdicts6 with its bound and RMS tolerance here; code recoverable at 06d1e8ff34.
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
 from gemm.checks.gemm_lowbit_check import _upload_f32, _download_f32, _poisoned
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime MATRIX_UNITS_FIXTURES = 6
@@ -215,29 +221,19 @@ def check_fixture(ctx: DeviceContext, fixture_id: Int) raises:
     _ = ws_ref
 
 
-def _run_gpu(mut report: Report) raises:
+# GPU column only: the body opens the vendor route (`identical_gemm_into[True]`), which instantiates the MAX
+# library's GPU matmul; the CPU column never builds this file (2026-11-19: in the CPU binary it failed the build).
+def test_fixtures() raises:
     var ctx = DeviceContext()
-    var cases = report.cases(MATRIX_UNITS_FIXTURES)
-    # driver-loop: over the six fixtures, one in-order device context
-    for fixture_id in range(MATRIX_UNITS_FIXTURES):
+    var failed = String("")
+    for fixture_id in range(MATRIX_UNITS_FIXTURES):  # driver-loop: over the six fixtures, one in-order device context
         try:
             check_fixture(ctx, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+        except problem:
+            failed += "\n      gemm_matrix_units row " + String(fixture_id) + ": " + String(problem)
+    if failed.byte_length() > 0:
+        raise Error("gemm_matrix_units: cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    # GPU column only. The body opens the vendor route (`identical_gemm_into[True]`), which instantiates the MAX
-    # library's GPU matmul; in the CPU column's binary that is "target 'unknown' is not supported by this build"
-    # (2026-11-19: it failed the whole CPU check build with no source location). The CPU build compiles none of it.
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            raise Error("gemm_matrix_units runs on the gpu column only")
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gemm_matrix_units", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

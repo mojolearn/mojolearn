@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual IncrementalPCA fit/update/query graphs and independent covariance oracles.
 
 Original public input is 6x3 with rank two and fit batches of three. The
 repeated-batch reference retains rank-two covariance between updates, so it
 checks the incremental approximation rather than substituting full PCA.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.math import sqrt, isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -18,7 +22,7 @@ from core.ipca_native_api import (
     IPCAQueryRequest,
     IPCAFitResult,
 )
-from checks.native_tests.pca_native import close_values, guards, unchanged, write_guarded, PCA_TEST_GUARD
+from checks.native_tests.pca_native_helpers import close_values, guards, unchanged, write_guarded, PCA_TEST_GUARD, require
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.ipca_native_provider import ipca_native_v1
 from x_decomp.host import HostExec
@@ -28,7 +32,8 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from x_decomp.ipca_owner_dev import DevIpcaDev
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime IPCA_NATIVE_FIXTURES = 15
@@ -363,44 +368,33 @@ def fixture(driver: IPCANativeDriver, unit: Int, host: Bool) raises:
         prepare_case(driver, host)
 
 
-# ---- The host column (was ipca_native_cpu_suite.mojo) ----
-# Independent actual host IncrementalPCA graphs execute in parallel.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(IPCA_NATIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(IPCANativeDriver(ipca_native_v1[HostExec, NoRDev, False, NoIpcaDev]), unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, IPCA_NATIVE_FIXTURES)
-
-
-# ---- The device column (was ipca_native_gpu_suite.mojo) ----
-# Same IncrementalPCA graphs plus real resident ownership on one physical GPU.
+# Host column: Independent actual host IncrementalPCA graphs execute in parallel.
+# Device column: Same IncrementalPCA graphs plus real resident ownership on one physical GPU.
 #
 # Graph submissions are ordered over shared DeviceContexts, one GPU job at a
 # time; existing kernels and oracle cells remain parallel. This is numerical
 # and ownership coverage, not clearance of the separate concurrency failure.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(IPCA_NATIVE_FIXTURES + IPCA_RESIDENT_FIXTURES)
-    for unit in range(IPCA_NATIVE_FIXTURES + IPCA_RESIDENT_FIXTURES):
-        try:
-            fixture(IPCANativeDriver(ipca_native_v1[DevExec, DevRDev, True, DevIpcaDev]), unit, False)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(IPCANativeDriver(ipca_native_v1[HostExec, NoRDev, False, NoIpcaDev]), unit, True)
 
 
-def register() -> Check:
-    return Check("ipca_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_ipca_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("ipca_native", IPCA_NATIVE_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(IPCA_NATIVE_FIXTURES + IPCA_RESIDENT_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture(IPCANativeDriver(ipca_native_v1[DevExec, DevRDev, True, DevIpcaDev]), unit, False)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("ipca_native: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

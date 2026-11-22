@@ -729,6 +729,16 @@ def _member_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
         if candidates is not None:
             est = msel_native_clone(base, context)
             _ = msel_native_set_params(est, msel_clone_parameter(candidates[c], context), context)
+        else:
+            # The caller's estimator is admitted as its clone admits it (every
+            # constructor parameter an exact native value, refused in words
+            # before any Python protocol of it runs), then the member reads
+            # it in place. Without this the member's own admission read a
+            # caller's object first: GradientBoosting's `float(learning_rate)`
+            # ran a Python `__float__` before the refusal (verify smoke of
+            # e282d53b19, test_native_cv_gbdt_nb.py; lane sr3-smoke). Once per
+            # call (n_candidates is 1 here), never per fold.
+            _ = msel_native_clone(base, context)
         var fields = py_call(plan["fields_get"], est, py_type(est))
         # THE FALLBACK RULE: a marked class this route cannot serve (no score:
         # a transformer or KMeans; an admission its family refuses) takes the

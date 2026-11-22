@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of Mojolearn.
 """Direct native finiteness checks migrated from the Python position sweep.
 
@@ -25,7 +26,6 @@ odd length above the split's grain floor and at a short odd length that stays
 on the calling thread, both at an offset inside NaN padding.
 """
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.host_finite_scan import (
     host_all_finite_f32,
     host_all_finite_f64,
@@ -41,7 +41,8 @@ from core.host_finite_scan import (
     host_copy_f32_finite,
     host_copy_f32_any_nan,
 )
-from checks.native_tests.runner import Check, Column, Report
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 
 comptime ROWS = 4096
 comptime COLS = 64
@@ -302,55 +303,34 @@ def _scan_predicates(size_index: Int, variant: Int) raises:
     _ = exact
 
 
-def run_checks() raises:
-    var failed = List[Int](length=FIXTURES + GENERAL_FIXTURES + PRED_FIXTURES, fill=0)
-    var failures_ptr = failed.unsafe_ptr()
-    def task(unit: Int) {imm failures_ptr}:
-        if unit >= FIXTURES + GENERAL_FIXTURES:
-            var pred = unit - FIXTURES - GENERAL_FIXTURES
-            try:
-                _scan_predicates(pred // PER_PRED, pred % PER_PRED)
-            except error:
-                print("FAIL finite_scan predicates size", pred // PER_PRED, "variant", pred % PER_PRED, String(error))
-                failures_ptr.unsafe_store(unit, 1)
-            return
-        if unit >= FIXTURES:
-            var general = unit - FIXTURES
-            try:
-                _scan_general(general // PER_GENERAL, general % PER_GENERAL)
-            except error:
-                print("FAIL finite_scan general layout", general // PER_GENERAL, "variant", general % PER_GENERAL, String(error))
-                failures_ptr.unsafe_store(unit, 1)
-            return
-        var layout = unit // PER_LAYOUT
-        var variant = unit % PER_LAYOUT
-        try:
-            if layout == 2:
-                _scan64(variant)
-            else:
-                _scan32(layout, variant)
-        except error:
-            print("FAIL finite_scan layout", layout, "variant", variant, String(error))
-            failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES + GENERAL_FIXTURES + PRED_FIXTURES)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "finite_scan failed " + String(failures) + " of " + String(FIXTURES + GENERAL_FIXTURES + PRED_FIXTURES) + " fixtures")
-    print("PASS finite_scan:", FIXTURES + GENERAL_FIXTURES + PRED_FIXTURES, "native fixtures, 262144 words, 10 layouts, 3 predicates, parallel")
+def _layout_case(unit: Int) raises:
+    var layout = unit // PER_LAYOUT
+    var variant = unit % PER_LAYOUT
+    if layout == 2:
+        _scan64(variant)
+    else:
+        _scan32(layout, variant)
 
 
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def _general_case(unit: Int) raises:
+    _scan_general(unit // PER_GENERAL, unit % PER_GENERAL)
 
 
-def register() -> Check:
-    return Check("finite_scan", cpu=True, gpu=False, serial="", run=run_cases)
+def _predicate_case(unit: Int) raises:
+    _scan_predicates(unit // PER_PRED, unit % PER_PRED)
+
+
+def test_layouts() raises:
+    check_cases("layout", FIXTURES, _layout_case)
+
+
+def test_general_layouts() raises:
+    check_cases("general layout", GENERAL_FIXTURES, _general_case)
+
+
+def test_predicates() raises:
+    check_cases("predicate", PRED_FIXTURES, _predicate_case)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

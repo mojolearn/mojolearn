@@ -1,19 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
+"""The one native check of `metrics/checks/host_rand_score_check.mojo`: its `run_checks()` as one test.
+
+Host column (`# native-check: cpu`): the suite is host work and does not branch on the target.
+"""
+from std.testing import TestSuite
 from metrics.checks.host_rand_score_check import run_checks
-from checks.native_tests.runner import Check, Column, Report
 
 
 # Registered by lane fx-checks-orphans (2026-11-18): `metrics/checks/host_rand_score_check.mojo` was a
 # standalone main() that no pixi task, workflow, development group or tools
 # script ran. Its main() is now `run_checks()` there; this is its one entry
-# (`pixi run check-native-cpu metrics_host_rand_score_check`).
-# Host column: the suite is host work and does not branch on the target.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_run_checks() raises:
+    run_checks()
 
 
-def register() -> Check:
-    return Check("metrics_host_rand_score_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

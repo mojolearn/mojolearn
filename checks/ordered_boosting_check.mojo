@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for ordered boosting's FOLD AXIS, from `CreateFolds` to the histogram.
 
@@ -74,6 +75,9 @@ prefix-only leaf estimation and a separately estimated exported model.
 That bounded numeric RMSE path has its own gate; this file remains the
 fold-axis gate and does not establish full CatBoost Ordered parity.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into, upload_whole_into
 
 from max.gpu.host import DeviceContext, HostBuffer
 
@@ -191,7 +195,7 @@ def drain(
     ctx.synchronize()
 
 
-def run_checks() raises:
+def test_ordered_boosting() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -1057,20 +1061,5 @@ def run_checks() raises:
         raise Error(String(failures) + " ordered-boosting gate(s) failed")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into, upload_whole_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ordered_boosting_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

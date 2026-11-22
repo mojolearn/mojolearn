@@ -10,7 +10,7 @@ from bindings.classical_pandas_door import classical_admit_value, native_pandas_
 from bindings.sequential_admission_door import _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.host_array_native_pack import host_archive_typed
-from bindings.host_tree_native_door import host_tree_input, host_tree_wide
+from bindings.host_tree_native_door import host_tree_input
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from bindings.host_inference_features_unpack import host_inference_feature_names
 from bindings.host_inference_preparation_unpack import host_inference_pandas_finite
@@ -169,5 +169,5 @@ def host_kernel_inference(model: PythonObject, fields: PythonObject, kind: Strin
         _ = params^
     _ = x^
     if public and py_get(context, nk[].k_ndarray) is not None:
-        return classical_input(host_tree_wide(out, context) if kind == "kernel_ridge" else out, context, "prediction")
+        return classical_input(out, context, "prediction")
     return out

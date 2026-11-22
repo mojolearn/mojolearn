@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Prepared-vs-ordinary complete model, prediction and Float64 loss gate."""
+
+from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from std.time import perf_counter_ns
@@ -12,7 +15,7 @@ from checks.numerics import numeric_mode_name
 from gbdt.gpu_util.kernel.bootstrap import BOOTSTRAP_KERNEL_POISSON
 
 
-def run_checks() raises:
+def test_gbdt_prepared() raises:
     var ctx = DeviceContext()
     if getenv("MOJOLEARN_PREPARED_BENCH").byte_length() > 0:
         benchmark(ctx)
@@ -133,19 +136,5 @@ def benchmark(ctx: DeviceContext) raises:
     print("PASS benchmark full-model equivalence")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gbdt_prepared_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

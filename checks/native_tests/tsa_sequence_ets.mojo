@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """DampedETS, ETS(A, Ad, N): the damped forecast flattens and a batch fit
 equals the single-series fits (ported from
 python/mojolearn/tests/test_x_sequence_ets.py
@@ -17,17 +18,23 @@ season, period 1; no fixed alpha, beta, phi or gamma), horizon 60:
 - the batch-of-two forecast equals, value for value, each series fitted
   alone.
 
-The comparison against statsforecast's AutoETS stays in the Python file
-(an external-library oracle). Importable; no `main()`.
+`test_against_statsforecast` (lane py2mojo-A, 2026-11-22; ported from
+`test_against_statsforecast`): the batch-of-two fit with horizon 8 against
+statsforecast AutoETS(model="AAN", damped=True) 8-step means of each series,
+stored as binary64 words in `fixtures/tsa_ets_statsforecast/` by
+`tools/py2mojo_native_fixtures_b8.py` (statsforecast 2.1.1), to rtol 5e-3
+(assert_allclose's default atol 0).
 """
 from std.math import isnan
 from checks.native_tests.tsa_metrics_fixture_words import TSA_FIXTURE_DIR, fixture_f32
-from core.host_parallel import host_parallelize
+from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from core.xseq_entry_table import XS_ETS
 from sequence.exec import HostExec
 from sequence.xseq_glue import xseq_glue_run
 from sequence.xseq_glue_device import xseq_glue_device_run
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime ETS_N = 80
@@ -108,22 +115,6 @@ struct HostEts(EtsRun):
         return xseq_glue_run(ex, XS_ETS, addresses, words, floats)
 
 
-def _run_cpu(mut report: Report) raises:
-    var y = ets_series()
-    var forecasts = List[Float32](length=ETS_FORECAST_WORDS, fill=Float32(0))
-    var cases = report.cases(ETS_UNITS)
-    var y_address = Int(y.unsafe_ptr())
-    var f_address = Int(forecasts.unsafe_ptr())
-    def task(unit: Int) {imm cases, imm y_address, imm f_address}:
-        try:
-            ets_unit[HostEts](unit, y_address, f_address)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, ETS_UNITS)
-    check_forecasts(forecasts)
-    _ = y^
-
-
 # ---- The device column (was tsa_sequence_ets_gpu_suite.mojo) ----
 # DampedETS forecast shape and batch composition on the device column
 # (`sequence/xseq_glue_device.mojo`: the ETS team where it applies, as the
@@ -138,27 +129,70 @@ struct DeviceEts(EtsRun):
         return xseq_glue_device_run(XS_ETS, addresses, words, floats)
 
 
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var y = ets_series()
+        var forecasts = List[Float32](length=ETS_FORECAST_WORDS, fill=Float32(0))
+        var y_address = Int(y.unsafe_ptr())
+        var f_address = Int(forecasts.unsafe_ptr())
+        for unit in range(ETS_UNITS):  # driver-loop: over the three fits on the one device context
+            ets_unit[DeviceEts](unit, y_address, f_address)
+        check_forecasts(forecasts)
+        _ = y^
+        print("PASS tsa_sequence_ets_gpu:", ETS_UNITS, "DampedETS fits")
+
+
+def _run_cpu() raises:
     var y = ets_series()
     var forecasts = List[Float32](length=ETS_FORECAST_WORDS, fill=Float32(0))
     var y_address = Int(y.unsafe_ptr())
     var f_address = Int(forecasts.unsafe_ptr())
-    for unit in range(ETS_UNITS):  # driver-loop: over the three fits on the one device context
-        ets_unit[DeviceEts](unit, y_address, f_address)
+    def unit_fit(unit: Int) raises {imm y_address, imm f_address}:
+        ets_unit[HostEts](unit, y_address, f_address)
+    check_cases("tsa_sequence_ets", ETS_UNITS, unit_fit)
     check_forecasts(forecasts)
     _ = y^
-    print("PASS tsa_sequence_ets_gpu:", ETS_UNITS, "DampedETS fits")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+comptime ETS_SF_H = 8
+comptime ETS_SF_DIR = "checks/native_tests/fixtures/tsa_ets_statsforecast/"
 
 
-def register() -> Check:
-    return Check("tsa_sequence_ets", cpu=True, gpu=True, serial="", run=run_cases)
+def ets_statsforecast[R: EtsRun]() raises:
+    """`DampedETS().fit(Y).predict(8)`: both series in one fit, horizon 8, against the stored AutoETS means."""
+    var y = ets_series()
+    var forecasts = List[Float32](length=ETS_B * ETS_SF_H, fill=Float32(0))
+    var info = List[Float32](length=ETS_B * 10, fill=Float32(0))
+    var states = List[Float32](length=ETS_B, fill=Float32(0))
+    var addresses: List[Int] = [Int(y.unsafe_ptr()), Int(forecasts.unsafe_ptr()), Int(info.unsafe_ptr()),
+                                Int(states.unsafe_ptr())]
+    var words: List[Int] = [ETS_B, ETS_N, ETS_SF_H, 0, 1, 1, 0, 0, 1]
+    var floats: List[Float64] = [0.0, 0.0, 0.0, 0.0]
+    require(R.run(addresses, words, floats) == ETS_B * ETS_SF_H, "ETS forecast count, horizon 8")
+    var want = fixture_f64(ETS_SF_DIR + "ets-sf-mean.f64", ETS_B * ETS_SF_H)
+    for i in range(ETS_B * ETS_SF_H):  # small-loop(oracle: two 8-step forecasts)
+        var got = Float64(forecasts[i])
+        require(abs(got - want[i]) <= 5e-3 * abs(want[i]), "ETS series " + String(i // ETS_SF_H) + " step "
+                + String(i % ETS_SF_H) + ": " + String(forecasts[i]) + ", statsforecast " + String(want[i]))
+    _ = y^
+    _ = forecasts^
+    _ = info^
+    _ = states^
+
+
+def test_against_statsforecast() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        ets_statsforecast[HostEts]()
+    else:
+        ets_statsforecast[DeviceEts]()
+
+
+def test_fits_then_forecasts() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _run_cpu()
+    else:
+        _run_gpu()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

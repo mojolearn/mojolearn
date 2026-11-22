@@ -7,7 +7,6 @@ from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_cpython_table import cpython_table
-from bindings.admitted_family_door import admit_family_f64
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.admitted_call_door import AdmittedCall
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
@@ -451,7 +450,7 @@ def gp_public_operation(model: PythonObject, operation: Int, args: PythonObject,
     if double_binding and prepared[1] is None:
         var base = routed.downcast_value_ptr[DeviceRouteOwner]()[].scope
         prepared.set(1, base)
-    var outside = estimator_outside()
+    var outside = not predicting and estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
     if Bool(admitted_x):
@@ -481,10 +480,11 @@ def gp_public_operation(model: PythonObject, operation: Int, args: PythonObject,
         if input_copied:
             py_setitem(fields, nk[].k_input_copied_, PythonObject(True))
         estimator_fit_complete(model, source, classifier, context)
-    if outside and (predicting or proba) and py_get(context, nk[].k_ndarray) is not None:
-        # Existing semantics widen only a standalone regressor prediction.
-        # A (mean, std/cov) tuple keeps each kernel's float32 output dtype.
-        if not classifier and predicting and py_type(result) is py_item(context, nk[].k_array_class):
-            result = admit_family_f64(result, "prediction", context)
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the kernel's float32 mean (or labels; a (mean, std/cov)
+    # tuple member by member) as NumPy views, with no caller test and no
+    # float64 widening pass into a second buffer. predict_proba keeps the
+    # caller test.
+    if (predicting or (proba and outside)) and py_get(context, nk[].k_ndarray) is not None:
         return _gp_finished(result, context)
     return result

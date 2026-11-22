@@ -169,12 +169,11 @@ def test_svgp_fit_predict_score_match_former_path(params):
     legacy.svgp_fit(old, x, y)
     assert _state(native, SV_ATTRS) == _state(old, SV_ATTRS)
     q = x[::3]
-    # The public predict widens the float32 mean to float64 alongside NumPy
-    # (providers/python/family_public_lifecycle_pyapi_door.mojo
-    # family_lifecycle_finish, as the former `_mode` wrapper did); the frozen
-    # helper is the inner float32 method, and the widening is exact.
+    # The public predict returns the float32 mean to every caller (lane
+    # predict-dtype, 2026-11-22): the frozen helper's words exactly.
     predicted = audit_native_call(native.predict, q).assert_native()
-    assert _bits(predicted) == _bits(np.asarray(legacy.svgp_predict(old, q)).astype(np.float64))
+    assert np.asarray(predicted).dtype == np.float32
+    assert _bits(predicted) == _bits(np.asarray(legacy.svgp_predict(old, q)))
     w = np.linspace(0.5, 1.5, x.shape[0], dtype=np.float32)
     for sw in (None, w):
         got = audit_native_call(native.score, x, y, sample_weight=sw).assert_native()

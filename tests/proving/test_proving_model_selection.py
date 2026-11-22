@@ -144,8 +144,7 @@ def test_failing_candidate_raises_the_estimators_own_words(device):
     assert str(direct.value) in str(through.value)
 
 
-def test_every_family_is_registered_for_the_member_route():
-    # ma-core rounds 5-6: after importing every family the unregistered list is CNNClassifier and DBSCAN only.
+def _import_every_family():
     import mojolearn
 
     for name in dir(mojolearn):
@@ -155,7 +154,69 @@ def test_every_family_is_registered_for_the_member_route():
             pass
     from mojolearn import model_selection
 
-    context = model_selection._NATIVE_CONTEXT     # python/mojolearn/_families.py connects the CV dispatch into it
+    return model_selection._NATIVE_CONTEXT     # python/mojolearn/_families.py connects the CV dispatch into it
+
+
+#: The marked classes whose constructor is not a field-only schema, so no member-only plan can clone them
+#: (python/mojolearn/_native_msel_more.py `_derive_member`): their Python __init__ calls a native constructor
+#: operation (the Theta / ETS forecasters and CNNClassifier through `_XSEQ` / `_XCNN`, GradientBoosting through
+#: `_TREES`). Every other marked class is registered. The ma-core claim (rounds 5-6: "CNNClassifier and DBSCAN
+#: only") was never run; the 2026-11-22 proving read listed 48 classes, because `_derive_member` refused every
+#: native (`_native_full_reset_params` / `_native_declared_constructors`) constructor.
+UNREGISTERED = ["AutoTheta", "CNNClassifier", "DampedETS", "DynamicOptimizedTheta", "DynamicTheta", "ETS",
+                "GradientBoosting", "OptimizedTheta", "Theta"]
+
+
+def test_every_family_is_registered_for_the_member_route():
+    context = _import_every_family()
     if "family_msel_member_unregistered" not in context:
         pytest.fail("the model-selection context exposes no 'family_msel_member_unregistered' entry")
-    assert sorted(c.__name__ for c in context["family_msel_member_unregistered"]) == ["CNNClassifier", "DBSCAN"]
+    assert sorted(c.__name__ for c in context["family_msel_member_unregistered"]) == UNREGISTERED
+
+
+#: Predictors whose member serves the meta-estimators once registered (Voting, one-vs-rest, multi-output fit every
+#: member through bindings/member_set_door.mojo and predict through bindings/trees_public_meta_door.mojo): each
+#: meta-estimator's answer is the member's own fit + predict. Before the registration every one of them was refused
+#: ("Sequential requires native input types"). GaussianNB and LinearDiscriminantAnalysis (hand-written schemas)
+#: ride the same doors.
+MEMBER_PREDICTORS = ["NearestCentroid", "BernoulliNB", "MultinomialNB", "ComplementNB",
+                     "QuadraticDiscriminantAnalysis", "GaussianNB", "LinearDiscriminantAnalysis", "SVGP"]
+
+
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("name", MEMBER_PREDICTORS)
+def test_member_route_serves_the_marked_predictor(device, name):
+    _import_every_family()
+    X, C, Y = _arm_cases.X, _arm_cases.C, _arm_cases.Y
+    classifier = getattr(cls(name), "_estimator_type", None) == "classifier"
+    y = C if classifier else Y
+    own = np.asarray(make(name, device).fit(X, y).predict(X)).astype(np.float64)
+    if classifier:
+        answers = {"voting": cls("VotingClassifier")([("a", make(name, device)), ("b", make(name, device))]).fit(X, C)}
+        both = cls("MultiOutputClassifier")(make(name, device)).fit(X, np.stack([C, C], axis=1))
+    else:
+        answers = {"voting": cls("VotingRegressor")([("a", make(name, device)), ("b", make(name, device))]).fit(X, Y)}
+        both = cls("MultiOutputRegressor")(make(name, device)).fit(X, np.stack([Y, Y], axis=1))
+    got = {key: np.asarray(model.predict(X)).astype(np.float64) for key, model in answers.items()}
+    columns = np.asarray(both.predict(X)).astype(np.float64)
+    got["multioutput_0"], got["multioutput_1"] = columns[:, 0], columns[:, 1]
+    for key, value in got.items():
+        assert np.array_equal(value, own), f"{name} {key} over its member differs from its own predict"
+    if classifier:
+        # One-vs-rest over two classes fits ONE member on the labels (scikit-learn's OneVsRestClassifier); over
+        # more it fits one binary member per class, which is not the member's own multiclass model.
+        two = (C > 0).astype(C.dtype)
+        own_two = np.asarray(make(name, device).fit(X, two).predict(X)).astype(np.float64)
+        ovr = np.asarray(cls("OneVsRestClassifier")(make(name, device)).fit(X, two).predict(X)).astype(np.float64)
+        assert np.array_equal(ovr, own_two), f"{name} one-vs-rest over its member differs from its own predict"
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_member_only_class_is_refused_by_cross_validation_in_its_words(device):
+    # A member-only plan (a registered mark without method recipes) its member cannot serve keeps the words it had
+    # before its mark, also under cross_validate's default error_score=nan (bindings/msel_cv_door.mojo
+    # msel_cv_units): the 2026-11-22 registration first turned the refusal into silent nan scores.
+    _import_every_family()
+    X, Y = _arm_cases.X, _arm_cases.Y
+    with pytest.raises(RuntimeError, match="pending migration"):
+        cls("cross_validate")(make("Binarizer", device), X, Y, cv=3, scoring="r2")

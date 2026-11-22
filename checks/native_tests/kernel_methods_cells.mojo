@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Independent kernel cells and the original Nystroem basis reconstruction.
 
 Recorded sklearn Float64 matrices use the original Float32 inputs. Native
 fixture I/O/preparation/comparisons are parallel. IdentityTrace is disabled
 in the device adapter; no hashes, repeatability run or performance claim.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.family_cast_impl import family_min_f32
@@ -13,8 +16,15 @@ from core.identity_trace import IdentityTrace
 from svm.impl.svm_parameter import KernelParams
 from kernel_methods.estimator import _family_ctx, nystroem_fit_host, nystroem_transform_host
 from kernel_methods.checks.kernel_matrix import km_kernel_matrix, km_kernel_workspace_floats
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
 from checks.native_tests.kit import download_whole_into, upload_whole_into
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime KERNEL_METHODS_CELLS_GPU_FIXTURES = 21
@@ -229,16 +239,6 @@ struct HostKernelCells(KernelMethodsCellCalls):
         return (indices^, embedded^)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(KERNEL_METHODS_CELLS_CPU_FIXTURES)
-    def task(index: Int) {imm cases}:
-        try:
-            fixture[HostKernelCells](index)
-        except error:
-            cases.fail(index, error)
-    report.parallel(task, KERNEL_METHODS_CELLS_CPU_FIXTURES)
-
-
 # ---- The device column (was kernel_methods_cells_gpu_suite.mojo) ----
 # Actual GPU matrix/Nystroem paths, ordered on their existing device context.
 #
@@ -314,24 +314,40 @@ struct DeviceKernelCells(KernelMethodsCellCalls):
         return (indices^, embedded^)
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(KERNEL_METHODS_CELLS_GPU_FIXTURES)
-    for index in range(KERNEL_METHODS_CELLS_GPU_FIXTURES):
-        try:
-            fixture[DeviceKernelCells](index)
-        except error:
-            cases.fail(index, error)
+def _host_fixture(index: Int) raises:
+    fixture[HostKernelCells](index)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("kernel_methods_cells host", KERNEL_METHODS_CELLS_CPU_FIXTURES, _host_fixture)
 
 
-def register() -> Check:
-    return Check("kernel_methods_cells", cpu=True, gpu=True, serial="", run=run_cases)
+# The device column: a device stream is serial by contract; fixture
+# submissions are ordered.
+def _device_fixture(index: Int) raises:
+    fixture[DeviceKernelCells](index)
+
+
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = String("")
+        for index in range(KERNEL_METHODS_CELLS_GPU_FIXTURES):  # driver-loop: ordered submissions on the family device context
+            try:
+                _device_fixture(index)
+            except problem:
+                failed += "\n      kernel_methods_cells device row " + String(index) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("kernel_methods_cells device: cases failed" + failed)
+
+
+def main() raises:
+    # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
+    # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
+    # is not supported"), so a two-column file names its tests.
+    var suite = TestSuite()
+    comptime if CPU_COLUMN_BUILD:
+        suite.test[test_host_fixtures]()
+    else:
+        suite.test[test_device_fixtures]()
+    suite^.run()

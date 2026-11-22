@@ -32,8 +32,11 @@ python3 -c 'import sys' 2> /dev/null || PY="pixi run python3"
 
 case "$cmd" in
 is)
-    head -n 2 "checks/native_tests/${2:?is <name>}.mojo" 2> /dev/null | sed -n 2p | grep -qE '^# native-check:( (cpu|gpu))+[[:space:]]*$'
-    exit $? ;;
+    # checks/native_tests/<name>.mojo, or a standalone check at the top of checks/ (lane ts-b9, 2026-11-22)
+    for f in "checks/native_tests/${2:?is <name>}.mojo" "checks/$2.mojo"; do
+        head -n 2 "$f" 2> /dev/null | sed -n 2p | grep -qE '^# native-check:( (cpu|gpu))+[[:space:]]*$' && exit 0
+    done
+    exit 1 ;;
 build)
     column=${2:?build <column> <bindir> <outdir>}; bindir=${3:?}; out=${4:?}
     mkdir -p "$bindir/ts" "$out/results" "$out/logs"
@@ -41,7 +44,11 @@ build)
     $PY tools/ops/native_checks_report.py testsuite --column "$column" --filter "${IN_FILTER:-*}" > "$list" || exit 2
     n=$(grep -c . "$list")
     [ "$n" -gt 0 ] || { echo "testsuite: no TestSuite file on the $column column"; exit 0; }
-    cores=$(nproc 2> /dev/null || getconf _NPROCESSORS_ONLN)
+    # Cores are the ALLOCATION (cgroup quota), never the host's visible CPUs: on the L40S nproc says 128 on a 14-core
+    # pod, 44 compiles started at once, forks failed ("Resource temporarily unavailable") and every pixi hung
+    # (nvc1-0003, 2026-11-22). Same helper the other box jobs use.
+    . "$(dirname "$0")/box_cores_lib.sh"
+    cores=$(alloc_cores)
     avail_kb=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2> /dev/null)
     [ -n "$avail_kb" ] || avail_kb=$(( 16 * 1048576 ))
     bymem=$(( avail_kb * 8 / 10 / (${NC_TS_PEAK_MB:-1200} * 1024) ))
@@ -85,8 +92,9 @@ run)
         echo "--- crash localisation (rc $rc, no TestSuite summary): each test alone with --only ---" >> "$log"
         pixi run "$bin" --skip-all 2> /dev/null | sed -n 's/^ *SKIP \[[^]]*\] *//p' > "$log.tests"
         # each test alone, every test at once up to the cores (independent processes)
+        . "$(dirname "$0")/box_cores_lib.sh"; export TS_CORES=$(alloc_cores)
         export TS_RUN="$bin" TS_LOG="$log" TS_LIMIT="$limit"
-        xargs -a "$log.tests" -P "$(nproc 2> /dev/null || echo 4)" -I{} bash -c '
+        xargs -a "$log.tests" -P "${TS_CORES:-4}" -I{} bash -c '
             timeout -k 30 "$TS_LIMIT" pixi run "$TS_RUN" --only "$0" > "$TS_LOG.$0" 2>&1
             trc=$?
             if [ "$trc" -ne 0 ] && ! grep -qE "^Summary \[" "$TS_LOG.$0"; then

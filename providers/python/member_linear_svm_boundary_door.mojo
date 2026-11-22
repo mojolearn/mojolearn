@@ -8,7 +8,7 @@ core/linear_svm_member.mojo. Published kinds: 0 LinearSVC, 1 LinearSVR
     `linear_svc_check_fields` / `linear_svr_check_fields`), its own device
     route (bindings/linear_svc_boundary_unpack.mojo `linear_svc_route`: the
     driver of its device; a hit is one record read), for LinearSVR the
-    metrics image's R^2 entry of the route's tier and device in the fifth
+    x_metrics program entry (its estimator's own score program) of the route's tier and device in the fifth
     slot when that image is loaded, and the 11 parameter words
     (core/linear_svm_member.mojo docstring). Not admitted (False; the
     caller keeps the estimator's own doors): any LinearSVC class_weight (its
@@ -46,7 +46,7 @@ from core.member_abi import (
 from core.linear_svm_member import (
     LINEAR_SVM_MEMBER_SVC, LINEAR_SVM_MEMBER_SVR, LINEAR_SVM_BLOCK_INFO, LINEAR_SVM_BLOCK_W,
 )
-from core.metrics_entry_table import MetricsEntryKey, metrics_r2_entry, MR_OP_COUNT
+from providers.python.metrics_route_boundary_door import member_metrics_program_fifth
 from providers.python.device_route_boundary_door import device_route_value
 
 
@@ -71,15 +71,9 @@ def linear_svm_member_admit(model: PythonObject, fields: PythonObject, kind: Int
         return False
     var route = device_route_value(connection.provider)
     if kind == LINEAR_SVM_MEMBER_SVR and not route.has_fifth:
-        # The metrics image's R^2 entry of the route's tier on its device,
-        # when that image is loaded.
-        try:
-            var entry = metrics_r2_entry(MetricsEntryKey(route.mode, route.vendor))
-            route.fifth = EntryRef(entry, entry_ref_word(route.mode, route.vendor, MR_OP_COUNT))
-            route.has_fifth = True
-        except problem:
-            # Not loaded: score is not offered; the caller runs its own metric.
-            _ = String(problem)
+        # The x_metrics program entry of the route's tier on its device (the
+        # program LinearSVR's own score runs), when that image is loaded.
+        member_metrics_program_fifth(route, route.mode, route.vendor)
     var strengths = linear_svm_strengths(fields)
     var loss = Int(py=svc_attr(model, nk[].k__LOSSES)[svc_field(fields, nk[].k_loss, "loss")])
     var words: List[Float64] = [Float64(kind),
