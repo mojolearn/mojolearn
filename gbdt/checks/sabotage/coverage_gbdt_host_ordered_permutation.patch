@@ -1,0 +1,17 @@
+diff --git a/gbdt/host/gbdt_oracle_ordered.mojo b/gbdt/host/gbdt_oracle_ordered.mojo
+index 2b53e56914..d3978d31b6 100644
+--- a/gbdt/host/gbdt_oracle_ordered.mojo
++++ b/gbdt/host/gbdt_oracle_ordered.mojo
+@@ -3202,6 +3202,12 @@ def gbdt_ordered_host_fit(
+     for p in range(perm_count):  # driver-loop: over the permutations, each one's positions across the tasks
+         var one = List[Int](length=n, fill=0)
+         _ord_widen_perm(perms_u32[p], one)
++        # SABOTAGE (coverage-gbdt-host_ordered_permutation): every learn
++        # order's first two positions swapped (a permutation index off)
++        if n > 1:
++            var t = one[0]
++            one[0] = one[1]
++            one[1] = t
+         perms.append(one^)
+     var est_p = perm_count - 1
+     var learn_count = est_p if est_p > 0 else 1
