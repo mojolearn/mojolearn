@@ -343,6 +343,20 @@ def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) 
             _fail(name + ": element " + String(i) + " got " + String(got[i]) + " expected " + String(want[i]))
 
 
+def _pinned(name: String) -> UInt64:
+    """This version's recorded output-and-gradient digest of a case (0: none recorded). The selective scan's
+    words are the Mamba-1 block bodies' (autograd/kernels/mamba1_scan_body.mojo), so its sabotage arms
+    (-D MOJOLEARN_MAMBA_SABOTAGE_S9_UNFUSED, ..._S5_EXP2, ..._BWD_S9B_UNFUSED, ...) change these words on
+    every column and the check FAILS (the arm is caught). Recorded on the CPU column (cpc1, lane
+    neural-blocks-2, 2026-11-22); the device column must give the same words (test_neural_blocks). Bits
+    change between versions: a product change records the new digest here in the same commit."""
+    if name == "selective_scan_n4":
+        return UInt64(12107700610124185639)
+    if name == "selective_scan_n8":
+        return UInt64(3944575162351859353)
+    return UInt64(0)
+
+
 def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> List[Float32]:
     var spec = parse_model(c.model.program(c.features), model_float_words(c.model.table()))
     var params = _params(spec.n_params)
@@ -370,6 +384,11 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
     var digest = UInt64(1469598103934665603)
     _mix(digest, words)
     print("NEURAL_BLOCKS", c.name, "params", spec.n_params, "digest", digest)
+    var pinned = _pinned(c.name)
+    if pinned != 0 and digest != pinned:
+        _fail(c.name + ": digest " + String(digest) + " is not this version's recorded " + String(pinned)
+              + " (a changed fold order or contraction in the layer's body: a sabotage arm, or a product change"
+              + " whose new words must be recorded here)")
     return words^
 
 
