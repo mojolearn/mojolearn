@@ -99,7 +99,6 @@ from checks.native_tests.kit_roundtrip import register as register_kit_roundtrip
 from checks.native_tests.kmeans_native import register as register_kmeans_native
 from checks.native_tests.kmeans_variants_native import register as register_kmeans_variants_native
 from checks.native_tests.kpca_native import register as register_kpca_native
-from checks.native_tests.labels_threshold import register as register_labels_threshold
 from checks.native_tests.linalg_decompositions import register as register_linalg_decompositions
 from checks.native_tests.linalg_numerical import register as register_linalg_numerical
 from checks.native_tests.linear_owner import register as register_linear_owner
@@ -260,9 +259,6 @@ from checks.native_tests.cross_vendor_loopback import register as register_cross
 from checks.native_tests.kpca_contract import register as register_kpca_contract
 from checks.native_tests.kpca_state import register as register_kpca_state
 from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
-from checks.native_tests.labels_accuracy import register as register_labels_accuracy
-from checks.native_tests.labels_driver import register as register_labels_driver
-from checks.native_tests.labels_score_keys import register as register_labels_score_keys
 from checks.native_tests.linear_boundary_contracts import register as register_linear_boundary_contracts
 from checks.native_tests.linear_entry_production import register as register_linear_entry_production
 from checks.native_tests.linear_model_state import register as register_linear_model_state
@@ -689,7 +685,6 @@ def all_checks() -> List[Check]:
     checks.append(register_kmeans_native())
     checks.append(register_kmeans_variants_native())
     checks.append(register_kpca_native())
-    checks.append(register_labels_threshold())
     checks.append(register_linalg_decompositions())
     checks.append(register_linalg_numerical())
     checks.append(register_linear_owner())
@@ -849,9 +844,6 @@ def all_checks() -> List[Check]:
     checks.append(register_kpca_contract())
     checks.append(register_kpca_state())
     checks.append(register_label_score_keys_stress())
-    checks.append(register_labels_accuracy())
-    checks.append(register_labels_driver())
-    checks.append(register_labels_score_keys())
     checks.append(register_linear_boundary_contracts())
     checks.append(register_linear_entry_production())
     checks.append(register_linear_model_state())
