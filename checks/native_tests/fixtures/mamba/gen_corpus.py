@@ -35,12 +35,12 @@ its own clearly fenced section below (mamba2: profile
 section 8g; mamba3: profile `mojolearn.identical.mamba3.siso.fp32.v1`,
 `mamba/IDENTICAL_MAMBA3_CONTRACT.md` section 8g, its case table MIRRORING
 `mamba/checks/mamba3_fixture.mojo`, which landed FIRST and is normative),
-emits into `mamba/corpus/mamba2/<case>/` / `mamba/corpus/mamba3/<case>/`
+emits into `checks/native_tests/fixtures/mamba/mamba2/<case>/` / `checks/native_tests/fixtures/mamba/mamba3/<case>/`
 with its own top-level manifest, and leaves every Mamba-1 byte untouched
 (the Mamba-1 sha256 is computed EXCLUDING `mamba2/` and `mamba3/`).
 
 Run (see README.md for the scratch venv):
-    python mamba/corpus/gen_corpus.py [--out mamba/corpus] [--verify] [--family mamba1|mamba2|mamba3|all]
+    python checks/native_tests/fixtures/mamba/gen_corpus.py [--out checks/native_tests/fixtures/mamba] [--verify] [--family mamba1|mamba2|mamba3|all]
 `--verify` additionally runs the verbatim selective_scan_ref over the HF-shaped
 path with z and D and compares against the composed stages, and regenerates
 every file into a temp dir and byte-compares (determinism). The mamba2 family
@@ -799,7 +799,7 @@ def run_verify(out_root, all_meta):
 # NEW ids, NEW seed base -- torch float64 per-stage references spelled by the
 # references' OWN code (verbatim copies below, cited by line), float32 run
 # informative only, nothing here a bitwise certificate of anything. Cases
-# land in mamba/corpus/mamba2/<case>/ with their own top-level manifest; the
+# land in checks/native_tests/fixtures/mamba/mamba2/<case>/ with their own top-level manifest; the
 # Mamba-1 corpus above is byte-untouched.
 #
 # References (both checkouts in /Users/andrewhendel/CascadeProjects/upstream/):
@@ -1783,7 +1783,7 @@ def m2_generate(out_root, verify=False):
 
 def m2_run_verify(m2_root, all_meta):
     print("\n== m2 verify 0: root input tensors on disk (the mamba2_check corpus gate opens "
-          "mamba/corpus/mamba2/<case>/x.f32 RELATIVE TO THE REPO ROOT) ==")
+          "checks/native_tests/fixtures/mamba/mamba2/<case>/x.f32 RELATIVE TO THE REPO ROOT) ==")
     # 2026-09-01 incident: the check's gate_corpus refused MISSING FIXTURE
     # for a case whose x.f32 was present and committed at exactly that path.
     # Its try/except reports EVERY open/read failure as "missing" -- a wrong
@@ -1945,7 +1945,7 @@ def m2_run_verify(m2_root, all_meta):
 # is a hashed value under mojolearn.mamba.corpus.hash.v1 -- NEW seed base,
 # NEW tensor names and ids (41-54) -- torch float64 per-stage references,
 # float32 run informative only, nothing here a bitwise certificate of
-# anything. Cases land in mamba/corpus/mamba3/<case>/ with their own
+# anything. Cases land in checks/native_tests/fixtures/mamba/mamba3/<case>/ with their own
 # top-level manifest; the Mamba-1 and Mamba-2 corpora are byte-untouched.
 #
 # THE CASE TABLE IS NOT THIS FILE'S TO INVENT. Unlike the two families
@@ -3074,7 +3074,7 @@ def m3_generate(out_root, verify=False):
 
 def m3_run_verify(m3_root, all_meta):
     print("\n== m3 verify 0: root input tensors on disk (mamba3_check.mojo::gate_corpus opens "
-          "mamba/corpus/mamba3/<case>/<tensor>.f32 RELATIVE TO THE REPO ROOT) ==")
+          "checks/native_tests/fixtures/mamba/mamba3/<case>/<tensor>.f32 RELATIVE TO THE REPO ROOT) ==")
     for name, entry in all_meta.items():
         cdir = os.path.join(m3_root, name)
         missing = [tm["file"] for tm in entry["meta"]["tensors"].values()
