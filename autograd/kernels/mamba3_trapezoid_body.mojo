@@ -104,9 +104,9 @@ def m3_trap_readout(s: Float32, qn: Float32, acc: Float32) -> Float32:
 
 
 @always_inline
-def m3_trap_skip(out: Float32, d_val: Float32, vv: Float32) -> Float32:
+def m3_trap_skip(acc: Float32, d_val: Float32, vv: Float32) -> Float32:
     """y = out + D * v, D last."""
-    return ftz(out + ftz(identical_mul(ftz(d_val), vv)))
+    return ftz(acc + ftz(identical_mul(ftz(d_val), vv)))
 
 
 # ---------------------------------------------------------------- the generic op's element bodies
