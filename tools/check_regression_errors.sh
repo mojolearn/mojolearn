@@ -9,7 +9,7 @@ MOJOLEARN_PIPELINE_PYTHON=${MOJOLEARN_PYTHON:-python3}
 export MOJOLEARN_PIPELINE_PYTHON
 MOJOLEARN_PYTHON="$PWD/checks/pipeline_python.sh"
 export MOJOLEARN_PYTHON
-out=${1:-bench/results/regression_errors_local}
+out=${1:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/regression_errors_local}
 mkdir -p "$out" build/regression_errors
 pixi run mojo --version > "$out/toolchain.txt"
 for mode in fast identical; do
