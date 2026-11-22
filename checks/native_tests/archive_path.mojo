@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Independent filesystem byte and POSIX spelling fixtures, task-local storage."""
-from core.host_parallel import host_parallelize
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_path import archive_filesystem_decode, archive_path_join, archive_path_normalize
-from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -172,38 +173,17 @@ def _normalize(unit: Int) raises:
     _equal(archive_path_normalize(_words(raw)), _words(expected))
 
 
-def run_checks() raises:
-    comptime FIXTURES = 42
-    var failed = List[Int](length=FIXTURES, fill=0)
-    var failures_ptr = failed.unsafe_ptr()
-    def task(unit: Int) {imm failures_ptr}:
-        try:
-            if unit < 18:
-                _decode(unit)
-            elif unit < 30:
-                _join(unit - 18)
-            else:
-                _normalize(unit - 30)
-        except problem:
-            print("FAIL archive_path fixture", unit, String(problem))
-            failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "archive path failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
-    print("PASS archive_path:", FIXTURES, "native fixtures, parallel")
+def test_decode() raises:
+    check_cases("decode", 18, _decode)
 
 
-# The one runner (runner.mojo): the fixtures run across host cores inside
-# run_checks, which raises after printing each failed fixture; the check counts
-# as one case. Host column only: archive reading and writing is host work.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_join() raises:
+    check_cases("join", 12, _join)
 
 
-def register() -> Check:
-    return Check("archive_path", cpu=True, gpu=False, serial="", run=run_cases)
+def test_normalize() raises:
+    check_cases("normalize", 12, _normalize)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

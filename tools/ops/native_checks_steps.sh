@@ -25,8 +25,10 @@
 # (--target-triple arm64-apple-macosx11.0): no Apple machine at all; whether the compiler accepts that is what
 # `suite=apple-parse` of native-checks.yml was written to find out. Either way this is parse, type check and
 # elaboration only: no AIR, no metallib, no link, nothing run.
-#   build         IN_COLUMN; writes NC_OUT (default out)/{results,logs} and NC_BIN (default bin)/run_<column>
-#   shard         TASKS (check names), IN_TIMEOUT, IN_COLUMN; runs NC_BIN/run_<column> once per name into NC_OUT
+#   build         IN_COLUMN; writes NC_OUT (default out)/{results,logs} and NC_BIN (default bin)/run_<column>, and
+#                 NC_BIN/ts/<name> for every TestSuite check file of the column (tools/ops/native_testsuite.sh)
+#   shard         TASKS (check names), IN_TIMEOUT, IN_COLUMN; runs NC_BIN/run_<column> once per name into NC_OUT (a
+#                 TestSuite check runs NC_BIN/ts/<name> instead)
 #   summary       SOURCE_SHA; MERGED (default merged) holds results/ and planned.txt -> SUMMARY.md, REPORT.txt
 #   verdict       DEVICE_MATRIX, RETRY_MATRIX; PARSE_DIR (default parse) holds device-parse[-retry]-<KEY>/result-<KEY>.txt;
 #                 prints the device groups' table; exit 1 when a group's last attempt did not pass
@@ -261,9 +263,17 @@ step_build() {
     python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$out/logs/generated-sources.log" 2>&1
     rc=$?
     if [ "$rc" = 0 ]; then
+        # The TestSuite check files (tools/ops/native_testsuite.sh, lane ts-pilot 2026-11-22): one binary per file,
+        # compiled at once on the cores the one compile of run_<column> leaves idle (it holds about 3 of 32), each
+        # file's failure in its own result row. The registry's checks stay in run_<column> until they are converted.
+        NC_DEFINES="$defines" NC_TARGET="$target" bash tools/ops/native_testsuite.sh build "$IN_COLUMN" "$bindir" "$out" \
+            > "$out/logs/build-testsuite-$IN_COLUMN.log" 2>&1 &
+        tspid=$!
         pixi run mojo build $defines $target -I . -o "$bindir/run_$IN_COLUMN" "checks/native_tests/run_$IN_COLUMN.mojo" \
             > "$out/logs/build-$IN_COLUMN.log" 2>&1
         rc=$?
+        wait "$tspid"
+        tail -n 1 "$out/logs/build-testsuite-$IN_COLUMN.log"
     else
         cp "$out/logs/generated-sources.log" "$out/logs/build-$IN_COLUMN.log"
     fi
@@ -283,6 +293,11 @@ step_shard() {
     case "$bin" in /*) ;; *) bin="./$bin" ;; esac
     chmod +x "$bin"
     for name in $TASKS; do
+        # a TestSuite check file runs its own binary (tools/ops/native_testsuite.sh run writes its result)
+        if bash tools/ops/native_testsuite.sh is "$name"; then
+            IN_TIMEOUT="${IN_TIMEOUT:-900}" bash tools/ops/native_testsuite.sh run "$IN_COLUMN" "$bindir" "$out" "$name"
+            continue
+        fi
         start=$(date +%s)
         timeout -k 30 "${IN_TIMEOUT:-900}" pixi run "$bin" "$name" > "$out/logs/$name.log" 2>&1
         rc=$?

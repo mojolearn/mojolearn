@@ -30,6 +30,11 @@ python3 -c 'import sys' 2>/dev/null || PY="pixi run python3"
 if [ "${1:-}" = "--one" ]; then
     # One check (run by xargs): rc, seconds, peak RSS and the first error lines into results/<check>.txt.
     name=$2; RES=$3; BIN=${4:?--one needs the binary path}
+    # a TestSuite check file runs its own binary, built beside run_gpu (tools/ops/native_testsuite.sh)
+    if bash tools/ops/native_testsuite.sh is "$name"; then
+        IN_TIMEOUT="${NC_TIMEOUT:-900}" bash tools/ops/native_testsuite.sh run gpu "$(dirname "$BIN")" "$RES" "$name"
+        exit 0
+    fi
     log="$RES/logs/$name.log"; tm="$RES/time/$name.txt"; start=$(date +%s)
     if [ -x /usr/bin/time ]; then
         /usr/bin/time -v -o "$tm" timeout -k 30 "${NC_TIMEOUT:-900}" pixi run "$BIN" "$name" > "$log" 2>&1
@@ -87,6 +92,10 @@ BIN="$BIN_DIR/run_gpu"
 say "building run_gpu ($n checks planned)"
 bsampler=$(busy_sampler "$RES/busy_cores_build.txt")
 bstart=$(date +%s)
+# the TestSuite check files of the device column, one binary each, beside the one compile (lane ts-pilot)
+NC_DEFINES="-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1" NC_TARGET="" IN_FILTER="$FILTER" \
+    bash tools/ops/native_testsuite.sh build gpu "$BIN_DIR" "$RES" > "$RES/logs/build-testsuite-gpu.log" 2>&1 &
+tspid=$!
 if [ -x /usr/bin/time ]; then
     /usr/bin/time -v -o "$RES/time/build-gpu.txt" pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . \
         -o "$BIN" checks/native_tests/run_gpu.mojo > "$RES/logs/build-gpu.log" 2>&1
@@ -95,6 +104,8 @@ else
         > "$RES/logs/build-gpu.log" 2>&1
 fi
 brc=$?
+wait "$tspid"
+say "$(tail -n 1 "$RES/logs/build-testsuite-gpu.log")"
 kill "$bsampler" 2>/dev/null
 brss=$(awk -F': *' '/Maximum resident set size/ {print $2}' "$RES/time/build-gpu.txt" 2>/dev/null)
 $PY tools/ops/native_checks_report.py result build-gpu --log "$RES/logs/build-gpu.log" --rc "$brc" \
