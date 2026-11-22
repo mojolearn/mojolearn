@@ -1986,7 +1986,6 @@ FAMILIES = (
         exports=(
             "labels_native_api_v3",
             # Native C-entry registrations are part of the exported ABI too.
-            "lr_schedule_at",
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
             "core_host_sabotage", "mojolearn_vendor", "mojolearn_numeric_mode",
             "mojolearn_mode_policy_mask",
@@ -2032,7 +2031,6 @@ FAMILIES = (
             "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
             "ragged_rows_bytes", "row_means_f64",
             "truncnorm_draws", "fsum_f64",
-            "lr_schedule_exact",
             "class_ratio_f64",
             # fold_pair_f32, msel_rebase_offsets_i32, shard_topk_merge_f32: no
             # Python door since lane calltable-parallel-archive (2026-11-11);
