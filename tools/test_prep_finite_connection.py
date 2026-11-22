@@ -37,7 +37,8 @@ class PrepFiniteConnection(unittest.TestCase):
         # Real instance dictionaries keep the connector's descriptor handling
         # exercised; no public product class or native operation is imported.
         class Rows:
-            pass
+            # The real DeviceRows keeps its native owner in one slot too; the bridge connects its getter.
+            __slots__ = ("_owner",)
 
         class Cache:
             pass

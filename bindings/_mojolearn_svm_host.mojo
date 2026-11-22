@@ -596,15 +596,6 @@ def svm_host_iforest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int
 # TOMBSTONE: iforest_run (the Python-argument binding; the IsolationForest doors now call the native iforest entry, core/iforest_entry.mojo) deleted 2026-11-21 by lane/ma-pub-trees; code recoverable at b7d83c52a9.
 
 
-def iforest_resident_binding() raises -> PythonObject:
-    """1 when this binary keeps the fitted host forest resident between
-    calls (`IDN_IF_RESIDENT`) and `iforest_run` takes the 17-value params
-    with a token; 0 otherwise (the refit per call)."""
-    comptime if IDN_IF_RESIDENT:
-        return PythonObject(1)
-    return PythonObject(0)
-
-
 def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
     """Drop the resident host forest `token` names (the estimator was
     refitted or collected). A token nobody holds is a no-op. Returns 0.
@@ -753,7 +744,6 @@ def build__mojolearn_svm_host() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_svm.patch
         module.def_function[svr_fit_binding]("svr_fit")
         module.def_function[svr_predict_binding]("svr_predict")
-        module.def_function[iforest_resident_binding]("iforest_resident")
         module.def_function[iforest_resident_release_binding]("iforest_resident_release")
         module.def_function[scale_gamma_limbs_host_binding]("scale_gamma_limbs")
         module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")

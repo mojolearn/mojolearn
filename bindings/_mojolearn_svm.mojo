@@ -1010,16 +1010,6 @@ def iforest_device_finite_scan_binding() raises -> PythonObject:
     return PythonObject(1 if IF_FAST_ROWMAJOR else 0)
 
 
-def iforest_resident_binding() raises -> PythonObject:
-    """1 when this binary keeps the fitted forest resident between calls
-    (`IDN_IF_RESIDENT`, lane fam2-forests) and `iforest_run` takes the
-    17-value params with a token; 0 otherwise (DEVIATION 874's refit per
-    call)."""
-    comptime if _IF_RESIDENT_ROUTE:
-        return PythonObject(1)
-    return PythonObject(0)
-
-
 def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
     """Drop the resident forest `token` names (the Python estimator was
     refitted or collected). A token nobody holds is a no-op. Returns 0.
@@ -1091,7 +1081,6 @@ def build__mojolearn_svm() -> PythonObject:
         # Restore: git apply experiments/removed/dead_entries_svm.patch
         m.def_function[svr_fit_binding]("svr_fit")
         m.def_function[svr_predict_binding]("svr_predict")
-        m.def_function[iforest_resident_binding]("iforest_resident")
         m.def_function[iforest_resident_release_binding]("iforest_resident_release")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")

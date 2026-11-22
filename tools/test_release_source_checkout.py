@@ -139,6 +139,6 @@ def test_a_tree_without_the_verification_models_is_incomplete(repo):
     r, first = repo
     head = sh(r, "rev-parse", "HEAD")
     assert release.Release._source_problem(r, head) is None
-    sh(r, "rm", "-rq", "bench")
+    sh(r, "rm", "-rq", "verification")
     sh(r, "commit", "-qm", "drop models")
     assert "lacks verification/records/identity" in release.Release._source_problem(r, sh(r, "rev-parse", "HEAD"))

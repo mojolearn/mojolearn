@@ -268,7 +268,6 @@ DEBT = {
     'bindings/logistic_query_boundary_pack.mojo': {'cpython': 1},
     'bindings/logistic_query_boundary_unpack.mojo': {'cpython': 1},
     'bindings/lr_schedule_block_door.mojo': {'cpython': 3},
-    'bindings/lr_table_helpers_door.mojo': {'native_loaded_module': 1},
     'bindings/mamba_public_native_door.mojo': {'cpython': 1},
     'bindings/mani_decomp_native_door.mojo': {'native_loaded_module': 14},  # raised fx-tooltests 2026-11-21
     'bindings/mani_kit_door.mojo': {'native_loaded_module': 3},

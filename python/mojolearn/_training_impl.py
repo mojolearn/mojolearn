@@ -820,11 +820,6 @@ def _lr_status(st):
 
 
 
-def _lr_native(key):
-    """A core-binding entry of the schedules (bindings/lr_table_helpers_door.mojo)."""
-    return _buffers._native(key)
-
-
 # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.
 # Restore: git apply experiments/removed/lr_schedule_fill.patch
 

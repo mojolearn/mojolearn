@@ -132,31 +132,6 @@ from training.byte_lm_door_run import (
 )
 
 
-def byte_lm_attention_arm_binding() raises -> PythonObject:
-    """DEVIATION 2534 read-back, so a result can never confuse `baseline`,
-    `stash_tiled` and the column's default: [arm, default, trial_build,
-    resolved_hd64]. `arm` is the name of the arm this process's launchers
-    run (a trial build reads MOJOLEARN_ATTN_ARM and raises on an unknown
-    name, exactly as the launchers do; every other build returns the
-    default without reading the environment); `default` is the column's
-    kernel-matrix row (`attn_default_arm_for`); `trial_build` is 1 under
-    `-D MOJOLEARN_ATTN_ARM_TRIAL=1`; `resolved_hd64` is the arm with its
-    geometry resolved as the launchers resolve it at head_dim 64 on this
-    build. Reads constants and the environment only; no GPU operation.
-    On a shipped Apple build (lane/neural-apple, 2026-09-28) the default is
-    an estash word gated by memory: `arm` reads the round 3 word until a
-    trainer in this process has been granted the estash word
-    (`attention_estash_memory_grant`), so a read-back taken before the first
-    trainer exists names the fallback."""
-    var arm = fused_attention_arm_from_env()
-    var resolved = fused_attention_arm_forward_resolved(arm) | fused_attention_arm_backward_resolved(arm)
-    var out = Python.list()
-    out.append(PythonObject(fused_attention_arm_name(arm)))
-    out.append(PythonObject(fused_attention_arm_name(ATTN_ARM_DEFAULT)))
-    out.append(PythonObject(1 if ATTN_ARM_TRIAL else 0))
-    out.append(PythonObject(fused_attention_arm_name(resolved)))
-    return out
-
 # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
 # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
 
@@ -713,8 +688,6 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_attn_sticky_fallback_binding]("byte_lm_attn_sticky_fallback")
         module.def_function[byte_lm_attn_kv_corner_guard_binding]("byte_lm_attn_kv_corner_guard")
         module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
-        # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
-        module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
         # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
         # DEVIATION 2648: the step glue arm read-back (arm, trial).
