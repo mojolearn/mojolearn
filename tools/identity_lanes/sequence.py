@@ -612,3 +612,67 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl("n/a:training-step (the lane checks one seeded training step through the tape; its forward "
             "outputs are train parts, digested whole)", "sequence-tape-sequential", "sequence-tape-program")
+
+
+# lane neural-blocks-3 (2026-11-22): one lane per architecture family for "a model composed from the public
+# layers" (Andrew, 2026-11-22: every architecture's pieces are public building blocks). Each builds a small
+# Sequential from the public layers, fits one epoch of one full unshuffled batch (one forward, backward and
+# optimizer step on the tape) on seeded inputs, and digests the loss, the updated parameters and the
+# predictions on the training and seeded held-out rows.
+_COMPOSED_ROWS = 16
+
+
+def _composed(ml, shape, build, stream):
+    B = _sequence_tape_binding(ml)
+    width = int(np.prod(shape))
+    x = _sequence_tape_seeded(B, (_COMPOSED_ROWS, width), 31, stream)
+    xh = _sequence_tape_seeded(B, (_COMPOSED_ROWS, width), 37, stream)
+    y = _sequence_tape_seeded(B, (_COMPOSED_ROWS, 1), 41, stream)
+    m = build(ml.Sequential(numeric_mode="identical", input_shape=shape))
+    m = m.compile(loss="mse", optimizer="sgd", lr=0.01)
+    m = m.fit(x, y, epochs=1, batch_size=_COMPOSED_ROWS, shuffle=False, seed=0)
+    d = lambda a: _sequence_tape_digest(B, a)
+    return _fit(dict(loss=d(np.asarray(m.loss_curve_, dtype=np.float32)), params=d(m.params_),
+                     pred=d(m.predict(x)), held_pred=d(m.predict(xh))))
+
+
+@lane("sequence-composed-transformer")
+def _(ml, X, yc, yr, Xh=None):
+    """A Transformer-style model from the public layers over (8, 4) samples: linear(16), rms_norm, causal
+    grouped-query rotary attention (2 heads, 1 kv head), silu, flatten, linear(1)."""
+    return _composed(ml, (8, 4), lambda m: m.linear(16).rms_norm().attention(2, kv_heads=1).silu()
+                     .flatten().linear(1), 0)
+
+
+@lane("sequence-composed-mamba1")
+def _(ml, X, yc, yr, Xh=None):
+    """A Mamba-1 core from the public layers over (8, 4) samples: linear(16) to [u | delta | B | C] (dim 4,
+    4 states), softplus, selective_scan(4), flatten, linear(1)."""
+    return _composed(ml, (8, 4), lambda m: m.linear(16).softplus().selective_scan(4).flatten().linear(1), 1)
+
+
+@lane("sequence-composed-mamba2")
+def _(ml, X, yc, yr, Xh=None):
+    """A Mamba-2 core from the public layers over (8, 2) samples: linear(321) to [x | B | C | dt] (one head),
+    softplus, ssd_scan(1), flatten, linear(1)."""
+    return _composed(ml, (8, 2), lambda m: m.linear(321).softplus().ssd_scan(1).flatten().linear(1), 2)
+
+
+@lane("sequence-composed-recurrent")
+def _(ml, X, yc, yr, Xh=None):
+    """A recurrent model from the public layers over (8, 4) samples: lstm(8), gru(6), flatten, linear(1)."""
+    return _composed(ml, (8, 4), lambda m: m.lstm(8).gru(6).flatten().linear(1), 3)
+
+
+@lane("sequence-composed-conv1d")
+def _(ml, X, yc, yr, Xh=None):
+    """A 1D convolution model from the public layers over (4, 8) samples: conv1d(8, 3, padding 1), silu,
+    a depthwise causal conv1d(8, 3, padding 2, groups 8) narrowed to the first 8 steps, flatten, linear(1)."""
+    return _composed(ml, (4, 8), lambda m: m.conv1d(8, 3, padding=1).silu().conv1d(8, 3, padding=2, groups=8)
+                     .narrow(1, 0, 8).flatten().linear(1), 4)
+
+
+_COMPOSED_LANES = ("sequence-composed-transformer", "sequence-composed-mamba1", "sequence-composed-mamba2",
+                   "sequence-composed-recurrent", "sequence-composed-conv1d")
+_batch_decl("n/a:training-step (one seeded training step of a composed model through the tape; its forward "
+            "outputs are train parts, digested whole)", *_COMPOSED_LANES)
