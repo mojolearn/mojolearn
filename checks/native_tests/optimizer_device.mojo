@@ -440,7 +440,10 @@ def _host_fixture(fixture_id: Int) raises:
 
 
 def _device_common(fixture_id: Int) raises:
-    common(OptimizerNativeDriver(optimizer_gpu_v1, False), fixture_id)
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        common(OptimizerNativeDriver(optimizer_gpu_v1, False), fixture_id)
 
 
 def test_storage() raises:

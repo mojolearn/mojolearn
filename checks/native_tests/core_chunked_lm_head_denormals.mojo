@@ -1,9 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # native-check: cpu gpu
 """Chunked LM-head folds obey identical's signed-zero denormal policy, moved
-from std.sys.compile import is_defined
-from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
 from test_chunked_lm_head_denormals.py (2026-11-14).
 
 For (rows, vocab, width) in (3, 11, 7), (9, 37, 17), (17, 67, 31): hidden in
@@ -19,6 +16,9 @@ loss-only call equals the training call's loss. The suites supply the two
 product calls (the loss and the training stage of chunked_lm_head_v2) for
 their column.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import isfinite
 from std.memory import bitcast
 from core.mojolearn_training_host_impl import chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into
@@ -220,7 +220,10 @@ def _host_fixture(unit: Int) raises:
 
 
 def _device_fixture(unit: Int) raises:
-    run_chunked_denormal_fixture[DeviceChunkedHead](unit)
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        run_chunked_denormal_fixture[DeviceChunkedHead](unit)
 
 
 def test_fixtures() raises:

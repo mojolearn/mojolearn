@@ -252,7 +252,10 @@ def _host_fixture(unit: Int) raises:
 
 
 def _device_fixture(unit: Int) raises:
-    run_ne2_fixture[DeviceResample](unit)
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        run_ne2_fixture[DeviceResample](unit)
 
 
 def test_fixtures() raises:

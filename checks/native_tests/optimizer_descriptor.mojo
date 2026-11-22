@@ -453,11 +453,14 @@ def _host_fixture(fixture_id: Int) raises:
 
 
 def _device_fixture(fixture_id: Int) raises:
-    var driver = OptimizerNativeDriver(optimizer_gpu_v1, False)
-    if fixture_id == DESCRIPTOR_COMMON_FIXTURES:
-        io_lifetime(driver)
-    else:
-        run_descriptor_fixture(driver, fixture_id)
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        var driver = OptimizerNativeDriver(optimizer_gpu_v1, False)
+        if fixture_id == DESCRIPTOR_COMMON_FIXTURES:
+            io_lifetime(driver)
+        else:
+            run_descriptor_fixture(driver, fixture_id)
 
 
 def test_descriptor() raises:

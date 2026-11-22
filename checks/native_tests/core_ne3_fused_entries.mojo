@@ -41,12 +41,12 @@ requests they call (`core/ocsvm_plan.mojo`, `core/nearest_centroid_plan.mojo`,
 `neighbors/neighbors_semi_run.mojo`), at the constructor defaults. The data are
 the original shapes (`_blobs`: 96 rows, 5 features, class `i % 3` shifted by
 2 * class; 37 queries shifted by 1.5; 200 labels in [0, 4) and [0, 6)) drawn
-from std.sys.compile import is_defined
-from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
 from a SplitMix64 Box-Muller stream regenerated here instead of NumPy's PCG64:
 every assertion is a relation that holds for any such data.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import exp, log, sqrt, cos
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -651,7 +651,10 @@ def _host_fixture(unit: Int) raises:
 
 
 def _device_fixture(unit: Int) raises:
-    fixture[DeviceHcv](xn_native_v1_gpu, unit)
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        fixture[DeviceHcv](xn_native_v1_gpu, unit)
 
 
 def test_fixtures() raises:

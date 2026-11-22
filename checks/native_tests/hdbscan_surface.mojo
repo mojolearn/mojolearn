@@ -6,9 +6,6 @@ typed entries (ported from the arms `arm_fit`, `arm_predict` and `arm_soft` of
 
 Data. The Python file drew two uniform blobs of 60 rows in [0, 0.5)^2 and
 [6, 6.5)^2 and a duplicated grid (40 + 40 rows on a 1/16 grid, each row twice)
-from std.sys.compile import is_defined
-from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
 from NumPy PCG64. Every relation here holds for any data of that shape, so the
 rows are regenerated with a counter-based splitmix64 uniform (`_uniform`).
 
@@ -23,6 +20,9 @@ labels, outlier count and core distances against the oracle and the leaf rule.
 Bit relations (repeat fits, rows alone, batch_size, reversed query order) are
 the `identical` contract; the check columns build `identical`.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -485,7 +485,10 @@ def _host_fixture(unit: Int) raises:
 
 
 def _device_fixture(unit: Int) raises:
-    fixture(HdbscanFitDriver(hdbscan_fit_device_v1), HdbscanQueryDriver(hdbscan_query_device_v1), unit)
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        fixture(HdbscanFitDriver(hdbscan_fit_device_v1), HdbscanQueryDriver(hdbscan_query_device_v1), unit)
 
 
 def test_fixtures() raises:

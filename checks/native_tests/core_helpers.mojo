@@ -90,11 +90,16 @@ def gather_host(mut f: GatherFixture) -> Bool:
 # thread per byte, so ordering the three submissions costs nothing.
 def gather_device(ctx: DeviceContext, mut f: GatherFixture) raises -> Bool:
     """The device gather; True when it reports an index out of bounds."""
-    var ok = device_gather_rows_bytes(
-        ctx, Int(f.source.unsafe_ptr()), Int(f.dst.unsafe_ptr()), Int(f.idx.unsafe_ptr()),
-        SOURCE_ROWS, OUT_ROWS, WIDTH,
-    )
-    return not ok
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build must not
+    # reach the device route.
+    comptime if CPU_COLUMN_BUILD:
+        raise Error("gather_device: the device column only")
+    else:
+        var ok = device_gather_rows_bytes(
+            ctx, Int(f.source.unsafe_ptr()), Int(f.dst.unsafe_ptr()), Int(f.idx.unsafe_ptr()),
+            SOURCE_ROWS, OUT_ROWS, WIDTH,
+        )
+        return not ok
 
 
 def _host_fixture(unit: Int) raises:

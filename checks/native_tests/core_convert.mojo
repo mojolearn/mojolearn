@@ -439,7 +439,10 @@ def _shell_fixture(unit: Int) raises:
 
 
 def _device_fixture(unit: Int) raises:
-    run_convert_fixture[DeviceConvert](unit)
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        run_convert_fixture[DeviceConvert](unit)
 
 
 def test_fixtures() raises:
