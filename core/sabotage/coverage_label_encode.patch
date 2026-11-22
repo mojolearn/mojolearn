@@ -1,6 +1,8 @@
+diff --git a/core/label_encode.mojo b/core/label_encode.mojo
+index 1bed8a690c..0ee9bb2f64 100644
 --- a/core/label_encode.mojo
 +++ b/core/label_encode.mojo
-@@ -44,16 +44,19 @@
+@@ -45,16 +45,19 @@ def label_is_nan(bits: UInt64, kind: Int) -> Bool:
  def label_sort_key(bits: UInt64, kind: Int) -> UInt64:
      """An unsigned key in the value's order. float64: CUB's TwiddleIn after
      folding -0.0 onto +0.0; int64: the sign bit flipped; uint64: unchanged."""
@@ -23,4 +25,4 @@
 +    return (b ^ _SIGN) ^ UInt64(1)
  
  
- def host_unique_inverse(
+ comptime _UI_CHUNK = 65536  # labels per host-pool task: each task keys, counts or scatters tens of thousands of labels, so the pool's dispatch cost is amortized whatever the label count

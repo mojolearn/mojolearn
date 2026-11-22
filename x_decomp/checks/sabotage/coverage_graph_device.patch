@@ -1,16 +1,18 @@
+diff --git a/x_decomp/graph_device.mojo b/x_decomp/graph_device.mojo
+index c245cc8fdf..85445ad116 100644
 --- a/x_decomp/graph_device.mojo
 +++ b/x_decomp/graph_device.mojo
-@@ -18,7 +18,7 @@
+@@ -18,7 +18,7 @@ The scan: per-block Hillis-Steele scans of GS_TPB integers in threadgroup
  memory, the block totals scanned the same way (recursively), then added
  back. Integer sums: the same words in any order."""
- from std.gpu import block_dim, block_idx, thread_idx
+ from max.gpu import block_dim, block_idx, thread_idx
 -from std.memory import stack_allocation
 +from std.memory import bitcast, stack_allocation
  from std.atomic import Atomic
  from max.gpu.memory import AddressSpace
  from max.gpu.sync import barrier
-@@ -63,6 +63,38 @@
-         w.unsafe_store(t, Float32(0))
+@@ -58,6 +58,38 @@ def _ip(p: F32Ptr) -> I32Ptr:
+ # ---- kernels ---------------------------------------------------------------
  
  
 +def xg_cov_sab_flip_kernel(w: F32Ptr, count: Int32, nz_only: Int32):
@@ -48,7 +50,7 @@
  def xg_knn_kernel(
      d: F32Ptr, sv: F32Ptr, si: F32Ptr, idx: F32Ptr, dst: F32Ptr, n: Int32, m: Int32, take: Int32, excl: Int32, nn: Int32
  ):
-@@ -275,6 +307,7 @@
+@@ -269,6 +301,7 @@ def dev_graph_knn_run(i_d: Int, i_idx: Int, i_dst: Int, n: Int, m: Int, nn: Int,
          _ptr(i_d, n * m), _ptr(sid, n * take), _ptr(iid, n * take), _ptr(i_idx, n * nn), _ptr(i_dst, n * nn),
          Int32(n), Int32(m), Int32(take), Int32(1 if excl else 0), Int32(nn), grid_dim=_blocks(n), block_dim=TPB,
      )
@@ -56,7 +58,7 @@
      pool_free(sid)
      pool_free(iid)
      return n
-@@ -291,6 +324,7 @@
+@@ -285,6 +318,7 @@ def dev_graph_knn_dense_run(i_idx: Int, i_w: Int, i_wout: Int, n: Int, nn: Int)
          ctx.enqueue_function[xg_knn_dense_kernel](
              _ptr(i_idx, n * nn), _ptr(i_w, n * nn), po, Int32(n), Int32(nn), grid_dim=_blocks(n), block_dim=TPB
          )
@@ -64,7 +66,7 @@
      return n
  
  
-@@ -303,6 +337,7 @@
+@@ -297,6 +331,7 @@ def dev_graph_radius_run(i_d: Int, i_wout: Int, f_r: Float64, n: Int) raises ->
              _ptr(i_d, n * n), _ptr(i_wout, n * n), Int32(n), Float32(f_r),
              grid_dim=_blocks(n * n), block_dim=TPB,
          )
@@ -72,7 +74,7 @@
      return n
  
  
-@@ -329,6 +364,7 @@
+@@ -323,6 +358,7 @@ def dev_graph_lle_iw_run(i_idx: Int, i_wb: Int, i_wout: Int, n: Int, nn: Int) ra
          ctx.enqueue_function[xg_lle_iw_kernel](
              _ptr(i_idx, n * nn), _ptr(i_wb, n * nn), po, Int32(n), Int32(nn), grid_dim=_blocks(n), block_dim=TPB
          )
@@ -80,7 +82,7 @@
      return n
  
  
-@@ -363,6 +399,8 @@
+@@ -357,6 +393,8 @@ def dev_graph_components_run(i_w: Int, i_comp: Int, n: Int) raises -> Int:
      ctx.enqueue_function[xg_root_flag_kernel](lab, flag, Int32(n), grid_dim=_blocks(n), block_dim=TPB)
      _xscan(ctx, flag, rank, n, n + 1)
      ctx.enqueue_function[xg_comp_kernel](lab, rank, _ptr(i_comp, n), Int32(n), grid_dim=_blocks(n), block_dim=TPB)
@@ -89,7 +91,7 @@
      var c = _read_i32(ctx, rank + n)
      pool_free(lid)
      pool_free(fid)
-@@ -409,6 +447,7 @@
+@@ -403,6 +441,7 @@ def dev_graph_join_run(i_w: Int, i_d: Int, i_comp: Int, n: Int, C: Int) raises -
      ctx.enqueue_function[xg_join_kernel](
          Int32(n), Int32(C), start, mem, rv, rj, pw, grid_dim=_blocks(C * C), block_dim=TPB
      )

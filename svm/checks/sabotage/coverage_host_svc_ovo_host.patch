@@ -1,14 +1,16 @@
+diff --git a/svm/host/svc_ovo_host.mojo b/svm/host/svc_ovo_host.mojo
+index 07786dbe72..fc352885d5 100644
 --- a/svm/host/svc_ovo_host.mojo
 +++ b/svm/host/svc_ovo_host.mojo
-@@ -6,6 +6,7 @@
+@@ -6,6 +6,7 @@ plain loops for the CPU binding, the same words (integer placement, and the
  same ascending binary64 chain per feature for `coef_`). The Python entry points
- are in `svm/host/svc_ovo_host_pyapi.mojo`."""
+ are in `providers/python/svm_host_svc_ovo_host_pyapi.mojo`."""
  
 +from std.memory import bitcast
  from svm.impl.svc_ovo_layout import (
      OvoPairs,
      dual_gemv_column,
-@@ -69,4 +70,5 @@
+@@ -69,4 +70,5 @@ def ovo_dual_gemv_host(dl: Int, sl: Int, n_sv: Int, d: Int, neg: Int, oa: Int):
      var sp = _F32P(unsafe_from_address=sl if n_sv > 0 else oa)
      for j in range(d):
          var v = dual_gemv_column(dp, sp, n_sv, d, j)
