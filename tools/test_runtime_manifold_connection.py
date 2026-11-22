@@ -17,8 +17,9 @@ def connection(monkeypatch, loader, bridge_name):
 
 
 def _assert_routes_once(context):
+    # `_mojolearn_metrics`: UMAP's image, from the estimator's binding route.
     assert context["test_binding_connections"] == [(
-        "_mojolearn_x_decomp", "_mojolearn_x_ann", "_mojolearn_estimators")]
+        "_mojolearn_x_decomp", "_mojolearn_x_ann", "_mojolearn_estimators", "_mojolearn_metrics")]
 
 
 def test_manifold_missing_owner_keeps_shared_metadata_and_refuses_operations(monkeypatch):
