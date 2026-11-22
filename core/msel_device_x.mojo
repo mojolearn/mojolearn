@@ -180,12 +180,14 @@ def msel_device_x_f32[so: MutOrigin, //](
                 raise Error("msel_device_x_f32: ctx is neither the fold store's context nor this build's own")
             store_ctx.synchronize()
     var store = msel_fold_store()
-    store[].check(base_id, base_rows * cols * 4)
-    store[].check(index_id, rows * 8)
-    # the store hands out immutable views; the kernel declares mutable
-    # pointers (core/msel_device.mojo device_take_rows, the same casts)
-    var idx = store[].bufs[index_id].unsafe_ptr().bitcast[Int64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var src = store[].bufs[base_id].unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]().bitcast[UInt32]()
+    # Each id checked and its device address read in one step under the
+    # store's lock (`MselStore.address`, as `device_take_rows`): the id lists
+    # sit behind the store's pointer (core/msel_device.mojo, THE TABLE IS
+    # BEHIND A POINTER; lane r2-known, 2026-11-22). This read `bufs` here
+    # after an unlocked `check`, outside the lock another thread's put or
+    # free takes.
+    var src = _MDX_U32(unsafe_from_address=store[].address(base_id, base_rows * cols * 4))
+    var idx = _MDX_I64(unsafe_from_address=store[].address(index_id, rows * 8))
     var dst = d_x.unsafe_ptr().bitcast[UInt32]()
     ctx.enqueue_function[_mdx_take_finite_kernel](
         src, Int64(base_rows), Int64(cols), idx, Int64(rows), dst, d_status.unsafe_origin_cast[MutAnyOrigin](), Int32(slot),
