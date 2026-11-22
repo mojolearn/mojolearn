@@ -111,22 +111,13 @@ class _DeviceDoor:
         call, context = _DEVICE_DOORS[self._device_door]
         call(self, "device_set", (device,), context)
 
-    def set_params(self, **params):
-        """Set constructor parameters by keyword.
-
-        Raises
-        ------
-        ValueError
-            If a keyword is not a parameter of this estimator, or ``device``
-            is not ``None``, ``"gpu"`` or ``"cpu"``.
-
-        Returns
-        -------
-        self
-        """
-        if "device" in params:
-            self._device_set(params["device"])
-        return super().set_params(**params)
+    # No set_params here (fx-tooltests, 2026-11-21): the shared declared
+    # setter (`_Base.set_params`, one native call) checks a new `device` in the
+    # shared words and drops the estimator's route itself
+    # (bindings/declared_params_native_door.mojo). An override
+    # here ran that check and the route drop twice, in two calls, and took
+    # every class below off the native declared-setter plan
+    # (_native_declared_params.connect pins `_Base.set_params`).
 
     def vendor_used(self):
         """The backend this estimator runs on.
