@@ -18,7 +18,9 @@ X_NEW = data(rows=40, seed=7)[0]
 #: logistic, qn_regressor, linear_svm.
 FAMILIES = [
     ("GradientBoostingRegressor", dict(n_estimators=8, max_depth=3, random_state=0), "r"),
-    ("GradientBoostingClassifier", dict(n_estimators=8, max_depth=3, random_state=0), "c"),
+    # GradientBoostingClassifier is binary only ("Exactly two classes are required", its docstring in
+    # python/mojolearn/_gbdt_adapters.py): the two-class target "b".
+    ("GradientBoostingClassifier", dict(n_estimators=8, max_depth=3, random_state=0), "b"),
     ("RandomForestRegressor", dict(n_estimators=6, random_state=0), "r"),
     ("RandomForestClassifier", dict(n_estimators=6, random_state=0), "c"),
     ("DecisionTreeRegressor", dict(random_state=0), "r"),
@@ -43,7 +45,7 @@ IDS = [f[0] for f in FAMILIES]
 
 
 def _target(target):
-    return Y if target == "r" else C
+    return Y if target == "r" else (binary(C) if target == "b" else C)
 
 
 def _fit_predict(name, params, target, device):
