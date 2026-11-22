@@ -30,17 +30,19 @@ import sys
 from concurrent.futures import ProcessPoolExecutor
 
 ROWS = 3000
-LOW = ["lo", "hi"]                          # 2 values: one-hot (one_hot_max_size 2)
-MANY = ["c%02d" % i for i in range(40)]     # 40 values: CTR columns
+#: category codes as numbers (the string-category forms are another lane's;
+#: the binding sees dense codes either way)
+LOW = 2      # 2 values: one-hot (one_hot_max_size 2)
+MANY = 40    # 40 values: CTR columns
 
 
 def _data(binary):
     import numpy as np
 
     rng = np.random.default_rng(20261122)
-    a = rng.integers(0, len(MANY), ROWS)
-    b = rng.integers(0, len(MANY), ROWS)
-    c = rng.integers(0, len(LOW), ROWS)
+    a = rng.integers(0, MANY, ROWS)
+    b = rng.integers(0, MANY, ROWS)
+    c = rng.integers(0, LOW, ROWS)
     num = rng.normal(size=(ROWS, 2))
     y = (0.05 * a - 0.03 * b + 0.7 * c + num[:, 0] - 0.5 * num[:, 1]
          + 0.1 * rng.normal(size=ROWS))
@@ -48,9 +50,8 @@ def _data(binary):
         y = (y > np.median(y)).astype(np.float32)
     else:
         y = y.astype(np.float32)
-    rows = [[MANY[a[i]], MANY[b[i]], LOW[c[i]], float(num[i, 0]), float(num[i, 1])]
-            for i in range(ROWS)]
-    return rows, y
+    cols = np.stack([a, b, c, num[:, 0], num[:, 1]], axis=1).astype(np.float32)
+    return cols, y
 
 
 #: (name, loss, columns of the five above, cat_features within them, extra)
@@ -89,12 +90,10 @@ def _fit(job):
     try:
         import mojolearn
 
-        rows, y = _data(loss == "Logloss")
-        X = [[r[c] for c in cols] for r in rows]
-        if cats is None:
-            import numpy as np
+        import numpy as np
 
-            X = np.asarray(X, dtype=np.float32)
+        data, y = _data(loss == "Logloss")
+        X = np.ascontiguousarray(data[:, cols])
         kw = dict(BASE)
         kw.update(extra)
         model = mojolearn.GradientBoosting(loss=loss, cat_features=cats, device=device, **kw)
