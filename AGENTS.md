@@ -548,9 +548,12 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   default (bits change on every column together) and its switch goes. The 1,300 undecided defines of
   `docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md` go under this rule.
 - **A paused programme's arms are not unmeasured (Andrew, 2026-11-15).** The four-week clock does not run for a
-  programme Andrew has paused: while Apple `fast` investment is stopped, its opt-in arms and its never-run experiment
-  cards stay in the code, opt-in and default off, to be run when he reopens it. Deleting on a calendar rule is for
-  arms that could have been run and were not; nothing is classed as waste because its programme is paused.
+  programme Andrew has paused: while Apple `fast` investment is stopped, its opt-in arms that are still in the code
+  stay, opt-in and default off, to be run when he reopens it. Deleting on a calendar rule is for arms that could have
+  been run and were not; nothing is classed as waste because its programme is paused.
+  Its experiment CARDS do not stay in the repo (Andrew, 2026-11-22): a card is a record, not code. Each card has its
+  row in `docs/apple-fast/EXPERIMENTS.md` (verdict, or "never run") and its file in the evidence store
+  (`~/mojolearn-evidence/repo-data/`, manifest row, R2 copy), from where it is restored when the programme reopens.
 
 #### Deleting an experiment
 
