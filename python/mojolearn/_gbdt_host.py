@@ -152,6 +152,17 @@ class HostGBDT:
         """
         return _native_host_archive(self, _OP.host_tree_hash, (), _ARCHIVE_CONTEXT)
 
+    # The pickled state is the instance fields without the loaded host binding
+    # (a module); setstate reconnects it. The same native operations as
+    # HostForest's (bindings/host_tree_native_door.mojo host_tree_getstate /
+    # host_tree_setstate). Without them pickle copied the fields with the
+    # module and refused (pv-categories, 2026-11-22).
+    def __getstate__(self):
+        return _native_host_archive(self, _OP.host_tree_getstate, (), _ARCHIVE_CONTEXT)
+
+    def __setstate__(self, state):
+        return _native_host_archive(self, _OP.host_tree_setstate, (state,), _ARCHIVE_CONTEXT)
+
     def predict(self, X):
         """Return raw float32 scores, as ``GradientBoosting.predict`` does.
 
