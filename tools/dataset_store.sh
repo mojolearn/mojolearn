@@ -68,6 +68,12 @@
 #                                                               document: the sample the builder was held to across
 #                                                               the M4 and two rented x86 hosts, ranks 06a8b273...)
 #
+#   repo-data/<repo dir>.tar   (2026-11-25, lane data-out): a repo directory that tools still read but that left
+#                              the checkout, as one deterministic tar; its per-file pins are tracked in
+#                              bench/results/dataset_store/repo-data/<dir with / as @>.tsv and tools/repo_data.py
+#                              is the one resolver (fetch, verify, install, pack, push). The local path below is a
+#                              transport cache; the verified copy lives in $MOJOLEARN_EVIDENCE_ROOT/repo-data/.
+#
 # And one MULTI-SHARD group, whose members are keys in their own right:
 #   corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/   THE GPT-3 SMALL RUN'S TOKEN STREAM
 #       tokens.i32.part00..06 + manifest.json   12,442,225,788 bytes of int32 ids in seven parts (a single
@@ -119,6 +125,7 @@ corpus/enwik8/tokens/mojolearn-bpe-50257-v1/manifest.json	HOME/mojolearn-evidenc
 corpus/fineweb-edu-10BT/vocab-sample/000-rg0-19.txt	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/fineweb-edu-10BT-000-rg0-19.txt
 vocab/mojolearn-bpe-fineweb-edu-50257-v1/ranks.tsv	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.ranks.tsv
 vocab/mojolearn-bpe-fineweb-edu-50257-v1/tokenizer.json	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.tokenizer.json
+repo-data/experiments/six_lane_integration/measurements.tar	HOME/.cache/mojolearn/repo-data/experiments@six_lane_integration@measurements.tar
 EOF
 }
 

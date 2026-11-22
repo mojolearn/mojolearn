@@ -166,6 +166,10 @@ EXPERIMENTS.md
 
 # Canonical planning matrix is tracked as lossless deterministic gzip.
 /experiments/six_lane_integration/matrix.json
+# REPO-DATA BUCKETS (2026-11-25, lane data-out): directories whose bytes left the tree; tools/repo_data.py resolves
+# them from ~/mojolearn-evidence/repo-data/ and R2. Same list as tools/hooks/check_tree_additions.sh.
+/experiments/six_lane_integration/measurements/*
+!/experiments/six_lane_integration/measurements/README.md
 
 
 # box job results (tools/box_persist_run.sh default DIR; persisted to R2 from the box)
@@ -183,6 +187,8 @@ box-out/
 !/bench/results/opponent-archive/**
 !/bench/results/paper_compare/*
 !/bench/results/dataset_store/manifest.tsv
+!/bench/results/dataset_store/groups/*.txt
+!/bench/results/dataset_store/repo-data/*.tsv
 !/bench/results/identity_break/**
 /bench/results/identity_break/**/*.log
 !/bench/results/reference_admissions/**

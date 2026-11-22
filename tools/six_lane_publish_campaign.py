@@ -28,6 +28,16 @@ args=parser.parse_args()
 ROOT=args.campaign_root.resolve()
 REPO=Path(__file__).resolve().parents[1]
 OUT=args.out.resolve()
+# The board this tool published (experiments/six_lane_integration/measurements/20261006) left the checkout on
+# 2026-11-25 (lane data-out); its verified copy is resolved by tools/repo_data.py. A refresh into that repo path
+# would start an empty board in an ignored directory and drop the retained history, so it is refused in words.
+import repo_data
+for _bucket in repo_data.BUCKETS:
+    if OUT==REPO/_bucket or (REPO/_bucket) in OUT.parents:
+        raise SystemExit(f'six_lane_publish_campaign: REFUSED: --out {OUT} is inside {_bucket}, which left the '
+                         f'repository; its retained board is at `python3 tools/repo_data.py path {_bucket}`. '
+                         'That campaign is finished and kept as it is; a new campaign needs a new --out under the '
+                         'repository.')
 SOURCES=[('apple',ROOT/'apple/captured/runs'),
          ('apple',ROOT/'apple/captured/kmeans-repair2/runs'),
          ('apple',ROOT/'apple/captured/resample-full/runs'),
