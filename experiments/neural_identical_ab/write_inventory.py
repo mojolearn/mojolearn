@@ -9,7 +9,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-DOC = ROOT / "docs/plans/NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md"
+# Rendered documents live outside the repo (AGENTS.md: cards, notes and finished plans).
+DOC = Path(__import__("os").environ.get("MOJOLEARN_EVIDENCE_ROOT") or Path.home() / "mojolearn-evidence") / "repo-data/docs/plans" / "NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md"
 
 
 def unique(values):
@@ -187,6 +188,7 @@ def write():
     lines += ["## Retained limits and evidence", "",
               "NN41's inherited recurrent-scan quality failure and NN20's earlier attention-profile nonpromotion remain open evidence; new wiring does not erase either. Explicit dimension-targeted norm scheduling found during this source pass has a general hardware-cost candidate and an explicit historical B; neighboring shapes and a non-board workload remain required before promotion.", "",
               "This index describes experiments found in the inspected registries and named suites; it does not claim every historical branch or every compiler option in the repository was enumerated. The machine-readable companion is [experiment_inventory.json](../../experiments/neural_identical_ab/experiment_inventory.json), with selector source in [write_inventory.py](../../experiments/neural_identical_ab/write_inventory.py). Model scope and outstanding research variants remain in [MODEL_INTEGRATION.md](../../experiments/neural_identical_ab/MODEL_INTEGRATION.md).", ""]
+    DOC.parent.mkdir(parents=True, exist_ok=True)
     DOC.write_text("\n".join(lines))
 
 

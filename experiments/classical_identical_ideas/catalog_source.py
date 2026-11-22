@@ -587,7 +587,10 @@ def write_catalog():
                 "## Implementation handoff", "",
                 "Four disjoint lanes: shared C01–C12; linear/decomposition C13–C28; graph/clustering C29–C44; trees/probabilistic/classical-time-series C45–C60. Implement actual opt-in Mojo candidates or wire existing candidates into attributable recipes. Do not substitute flags, empty wrappers or manifests for an implementation. Record precisely when only a component is drafted and a public caller remains unwired. Unsupported capabilities become explicit Modular asks. No compile, verification or timing is authorized in this worktree.", "",
                 "> Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output.", ""])
-    (ROOT / "docs/plans/CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md").write_text("\n".join(out))
+    # Rendered documents live outside the repo (AGENTS.md: cards, notes and finished plans).
+    rendered = Path(__import__("os").environ.get("MOJOLEARN_EVIDENCE_ROOT") or Path.home() / "mojolearn-evidence") / "repo-data/docs/plans"
+    rendered.mkdir(parents=True, exist_ok=True)
+    (rendered / "CLASSICAL_IDENTICAL_AB_IDEAS_2026-10-06.md").write_text("\n".join(out))
 
 
 if __name__ == "__main__":

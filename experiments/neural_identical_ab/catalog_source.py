@@ -539,7 +539,10 @@ def write_catalog():
                 "## Programming lanes", "",
                 "NN01–NN16 GEMM; NN17–NN32 attention/transformer; NN33–NN48 state-space/recurrent/CNN; NN49–NN64 embeddings/loss/optimizer/runtime. All source stays opt-in in this new worktree. No build, checker, test, execution, benchmark or promotion is authorized. If a full caller/profile cannot be programmed coherently, record concrete remaining code, not a fabricated completion. Unsupported features are parked with Modular asks.", "",
                 "> Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output.", ""])
-    (ROOT / "docs/plans/NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md").write_text("\n".join(out))
+    # Rendered documents live outside the repo (AGENTS.md: cards, notes and finished plans).
+    rendered = Path(__import__("os").environ.get("MOJOLEARN_EVIDENCE_ROOT") or Path.home() / "mojolearn-evidence") / "repo-data/docs/plans"
+    rendered.mkdir(parents=True, exist_ok=True)
+    (rendered / "NEURAL_IDENTICAL_AB_IDEAS_2026-10-06.md").write_text("\n".join(out))
 
 
 if __name__ == "__main__":
