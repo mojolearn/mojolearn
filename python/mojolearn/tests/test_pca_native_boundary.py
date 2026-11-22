@@ -103,8 +103,13 @@ def test_replaced_native_factory_is_refused_before_python_callback(operation, mo
     scores = model.transform(_data())  # populate both connection and query caches
     monkeypatch.setitem(_PCA_CONTEXT["pca_bindings"], "identical", forbidden)
     source = scores if operation == "inverse_transform" else _data()
+    # The model resolved its route once (the dw-decomp device-route lanes, 5c252f1573..9e49098bca):
+    # its operations never read the table again, so the replacement is not consulted and no
+    # Python runs. A model without a route resolves through the replaced entry and is refused.
+    getattr(model, operation)(source)
+    assert calls == []
     with pytest.raises(TypeError, match="compiled extension entry"):
-        getattr(model, operation)(source)
+        _model().fit(_data())
     assert calls == []
 
 

@@ -9,9 +9,10 @@ from mojolearn import _spectral_impl
 
 @pytest.mark.parametrize("clustering", [False, True])
 def test_spectral_refuses_python_metrics_factory_without_calling_it(monkeypatch, clustering):
-    context = _spectral_impl._NATIVE_CONTEXT
-    mode = context["backend_fields"]["_DEFAULT_MODE"]
-    binding = context["family_spectral_umap_bindings"]["metrics"][mode]
+    # The estimator takes this image from its own binding route (10c4af8328), the exact compiled
+    # module connected for its device, not the process context's binding; the replacement goes there.
+    from mojolearn import _backend
+    binding = _backend.exact_host_module(_backend.binding("_mojolearn_metrics", "identical"))
     calls = []
 
     def hook():
@@ -30,14 +31,20 @@ def test_spectral_refuses_python_metrics_factory_without_calling_it(monkeypatch,
 
 @pytest.mark.parametrize("operation", ["coo", "neighbors"])
 def test_spectral_refuses_python_preparation_factory_without_calling_it(monkeypatch, operation):
+    from mojolearn import _backend
     context = _spectral_impl._NATIVE_CONTEXT
-    binding = context["family_spectral_umap_bindings"]["base"]["identical"]
     calls = []
 
     def hook():
         calls.append("factory")
         raise AssertionError("Python preparation factory must not execute")
 
+    # The module-level preparation keeps the process connection; an estimator takes the base
+    # image from its own binding route (10c4af8328), the exact compiled module of its device.
+    if operation == "coo":
+        binding = context["family_spectral_umap_bindings"]["base"]["identical"]
+    else:
+        binding = _backend.exact_host_module(_backend.binding("_mojolearn", "identical"))
     monkeypatch.setattr(binding, "spectral_preparation_native_api_v1", hook)
     with pytest.raises(TypeError, match="spectral_preparation_native_api_v1 must be a compiled entry"):
         if operation == "coo":

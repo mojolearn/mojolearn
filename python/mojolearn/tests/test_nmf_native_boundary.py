@@ -178,8 +178,13 @@ def test_replaced_nmf_descriptor_cannot_call_python(operation, monkeypatch):
     model = _model().fit(_data())
     scores = model.transform(_data())
     monkeypatch.setitem(_DECOMP_CONTEXT["nmf_bindings"], "identical", forbidden)
+    # The model resolved its route once (the dw-decomp device-route lanes, 5c252f1573..9e49098bca):
+    # its operations never read the table again, so the replacement is not consulted and no
+    # Python runs. A model without a route resolves through the replaced entry and is refused.
+    getattr(model, operation)(scores if operation == "inverse_transform" else _data())
+    assert calls == []
     with pytest.raises(TypeError, match="compiled extension entry"):
-        getattr(model, operation)(scores if operation == "inverse_transform" else _data())
+        _model().fit(_data())
     assert calls == []
 
 

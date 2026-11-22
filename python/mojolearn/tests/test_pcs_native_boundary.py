@@ -88,8 +88,12 @@ def test_pcs_replaced_descriptor_refuses_python_factory(operation, monkeypatch):
     # never its `_HostBinding` facade), so the replacement goes there.
     binding = _backend.exact_host_module(_backend.binding("_mojolearn_x_neighbors", "identical"))
     monkeypatch.setattr(binding, "x_neighbors_native_api_v1", forbidden)
+    # The fitted model resolved its route once (21605e9e3c / 59b6a0f5d4): its operations never read
+    # the module again and no Python runs. A model without a route is refused.
+    getattr(model, operation)(_data())
+    assert calls == []
     with pytest.raises(TypeError, match="requires compiled entry x_neighbors_native_api_v1"):
-        getattr(model, operation)(_data())
+        _model().fit(_data())
     assert calls == []
 
 

@@ -120,8 +120,13 @@ def test_kpca_descriptor_replacement_refuses_python_factory(operation, table, mo
 
     model = _model().fit(_data())
     monkeypatch.setitem(_KPCA_CONTEXT[table], "identical", forbidden)
+    # The fitted model resolved its route once (dw-decomp device route, 87d68a7a8e): its operations
+    # never read the table again, so the replacement is not consulted and no Python runs. A model
+    # without a route resolves through the replaced entry and is refused.
+    getattr(model, operation)(_data())
+    assert calls == []
     with pytest.raises(TypeError, match="compiled extension entry"):
-        getattr(model, operation)(_data())
+        _model().fit(_data())
     assert calls == []
 
 
