@@ -6,7 +6,7 @@ UNPACK / PACK of core/dart_member.mojo.
     settings with the door's own checks (`dart_words`), its first one-tree
     member validated once (`dart_first_request`: the member's constructor
     checks, read on a fresh member; the template estimator is not mutated)
-    and its derived configuration (`forest_config`); the route (the run
+    and the members' typed configuration (`dart_member_config`); the route (the run
     context of the estimator's device, `trees_route_context`; its x_trees
     image's DART entry, glue entry and key; the rf image's forest entry);
     the parameter words of core/dart_member.mojo.
@@ -32,13 +32,13 @@ from bindings.trees_side_records_unpack import trees_side_drop
 from bindings.py_trees_resident import trees_resident_forget
 from bindings.py_model_records import model_identity_key
 from bindings.trees_public_boost_door import (
-    dart_words, dart_first_request, dart_pack_rounds, _xt, _xk, _DART_SLOT,
+    dart_words, dart_first_request, dart_pack_rounds, _xt, _xk, _DART_SLOT, dart_member_shape,
 )
-from bindings.trees_public_forest_door import forest_config, forest_key
-from bindings.forest_config_run import FOREST_FEATURES_REFUSED
+from bindings.trees_public_forest_door import forest_key
 from bindings.trees_dart_rounds_run import (
     DartRounds, DART_M_WORDS, DART_M_OFF_START, DART_M_OFF_N, DART_M_NODE_START, DART_M_NODES,
     DART_M_LEAF_START, DART_M_LEAF_N, DART_M_VAL_START, DART_M_VAL_N, DART_M_COLS, DART_M_TREES, DART_M_OUTPUTS,
+    dart_member_config,
 )
 from xtrees.dart_calls import xd_ref
 from xtrees.glue_calls import xt_ref
@@ -97,12 +97,10 @@ def dart_member_admit(model: PythonObject, fields: PythonObject, kind: Int, cont
         # The first member's constructor checks, once (the estimator's fit
         # runs them on its first member the same way).
         var built = dart_first_request(fields, words.seed, run)
-        var tf = py_call(b.dict, built[1])
-        var config = forest_config(tf, py_item(tf, PythonObject("_cfg")), "rf_regressor", False, run)
-        if config.refusal != "":
-            raise Error(config.refusal)
-        if config.features.form == FOREST_FEATURES_REFUSED:
-            raise Error(config.features.refusal)
+        # The members' configuration, typed (lane bm-trees:
+        # bindings/trees_dart_rounds_run.mojo `dart_member_config`), as the
+        # door's fit takes it; the constructor above ran its checks.
+        var config = dart_member_config(dart_member_shape(fields), words.seed)
         route.third = forest_key(built[2])
         route.has_third = True
         _ = py_call(pins.append, built[2])

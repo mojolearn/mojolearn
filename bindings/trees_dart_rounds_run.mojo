@@ -40,8 +40,11 @@ from xtrees.glue_calls import (
     xt_exact_sum, xt_log64, xt_class_counts, xt_class_priors,
 )
 from xtrees.trees_boost_run import boost_dart_cap_check, _sub_seed
-from xtrees.trees_forest_run import forest_export_counts
+from xtrees.trees_forest_run import forest_export_counts, ForestFit
 from bindings.trees_public_inputs_run import TREES_NONFINITE
+from core.entry_table import entry_ref_unresolved
+from core.forest_fit_request import FOREST_ARG_NO_INT
+from bindings.forest_config_run import ForestConfig, forest_request, FOREST_FEATURES_FRACTION
 
 # The x_trees glue entry is resolved once per fit (lane loops-trees-ab, 2026-11-11).
 # TOMBSTONE: MOJOLEARN_DART_ROUND_REF_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at 650388311e.
@@ -443,3 +446,78 @@ def dart_round_plan(words: DartWords, dart: EntryRef, glue_key: TreesEntryKey, f
         uniform=words.uniform, xgb=words.xgb, max_drop=words.max_drop, drop_rate=words.drop_rate, lr=words.lr,
         lam=words.lam, l1=words.l1, mds=words.mds, bag=words.bag, bag_freq=words.bag_freq,
         bag_frac=words.bag_frac, bag_seed=words.bag_seed, col_count=col_count, col_seed=col_seed, seed=words.seed)
+
+
+# ------------------------------------------ the member configuration (lane bm-trees)
+
+comptime _INT32_MAX = 2147483647
+#: ensemble/host/rf_oracle.mojo RF_MSE: the members fit squared_error
+comptime _DART_MEMBER_CRITERION = 2
+
+
+@fieldwise_init
+struct DartMemberShape(Copyable, Movable):
+    """The estimator settings a DART member's fit reads (UNPACK, once per
+    fit, `dart_member_shape` in the door): `max_depth` (-1 for None or a
+    nonpositive depth), `num_leaves`, `min_child_samples`, `max_bin`."""
+    var max_depth: Int
+    var num_leaves: Int
+    var min_child_samples: Int
+    var max_bin: Int
+
+
+def _cfg_int(mut c: ForestConfig, value: Int):
+    c.ints.append(value)
+    c.floats.append(Float64(value))
+    c.bad.append(UInt8(0))
+
+
+def _cfg_float(mut c: ForestConfig, value: Float64):
+    c.ints.append(0)
+    c.floats.append(value)
+    c.bad.append(UInt8(FOREST_ARG_NO_INT))
+
+
+def dart_member_config(shape: DartMemberShape, seed: Int) -> ForestConfig:
+    """The typed configuration of every DART member (lane bm-trees,
+    2026-11-22): what `_dart_first_member`'s one-tree RandomForestRegressor
+    derives (`_rf_derive`, `_rf_base`, `_rf_config` in
+    bindings/trees_public_forest_door.mojo) from its settings, without the
+    Python member: one tree, max_depth (INT32_MAX for None), max_leaves
+    num_leaves (`_max_leaves_slot`: -1 or a positive count), max_features 1.0,
+    n_bins max_bin, min_samples_leaf min_child_samples, the RF defaults
+    min_samples_split 2 and min_impurity_decrease 0.0, no bootstrap,
+    max_samples 1.0, random_state `_sub_seed(seed, 0)`, one stream,
+    max_batch_size 4096, squared_error. `forest_request` reads it; the door
+    and the Dart member's admission both take it from here. The settings'
+    checks are the first member's constructor's, run once at UNPACK
+    (`dart_first_request`)."""
+    var c = ForestConfig(False, List[Int](), List[Float64](), List[UInt8]())
+    _cfg_int(c, 0)
+    _cfg_int(c, 0)
+    _cfg_int(c, 0)
+    _cfg_int(c, 1)
+    _cfg_int(c, _INT32_MAX if shape.max_depth <= 0 else shape.max_depth)
+    _cfg_int(c, shape.num_leaves)
+    _cfg_int(c, 0)
+    _cfg_int(c, shape.max_bin)
+    _cfg_int(c, shape.min_child_samples)
+    _cfg_int(c, 2)
+    _cfg_float(c, 0.0)
+    _cfg_int(c, 0)
+    _cfg_float(c, 1.0)
+    _cfg_int(c, _sub_seed(seed, 0))
+    _cfg_int(c, 1)
+    _cfg_int(c, 4096)
+    c.criterion = _DART_MEMBER_CRITERION
+    c.features.form = FOREST_FEATURES_FRACTION
+    c.features.fraction = 1.0
+    return c^
+
+
+def dart_member_request(shape: DartMemberShape, seed: Int, n: Int, d: Int) raises -> ForestFitArgs:
+    """The first member's fit request (the X, y and trailing words 0; the
+    rows, columns and seed slots are rewritten per member in
+    `dart_rounds_run`)."""
+    return forest_request(dart_member_config(shape, seed), entry_ref_unresolved(), n, d, 0, 0, 0, ForestFit(False),
+                          False)

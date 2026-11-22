@@ -13,11 +13,12 @@ assert, so the weights are NumPy draws stored beside the inputs and handed to th
 Product side: the host image's x_cnn entry through x_cnn/graph_layer_run.mojo's `GraphTableCalls`, with the calls
 and words of the host forms in bindings/xcnn_graph_native_door.mojo: GCN `_gcn_graph` (`gcn_graph_run`: self loops,
 both CSR views, the normalization; the graph route bit XCNN_F_GRAPH is 0 on the host image, which exports no
-`x_cnn_idn_flags`), `xcnn_gcn_forward` (gemm op 1, spmm mode 0 with the normalized values, the bias rows, add) and
+`x_cnn_idn_flags`), `xcnn_gcn_forward`'s typed RUN `gcn_forward_host_run` (gemm op 1, spmm mode 0 with the normalized values, the bias
+rows, add) and
 `_gcn_backward_host` (`gcn_backward_host_run`); SAGE `xcnn_sage_forward` (`graph_views_run`, the projection's linear
 and ReLU, the max graph op 0 or the spmm over ones with mode 1 mean / 0 sum, lin_l's linear, the root gemm and add,
-the normalization graph op 2) and `_sage_backward_host` (`sage_backward_host_run`). The composition repeats the
-door's call order; the arithmetic under test is the entry's.
+the normalization graph op 2) and `_sage_backward_host` (`sage_backward_host_run`). The SAGE forward composition
+repeats the door's call order; the arithmetic under test is the entry's.
 
     test_gcn                  improved False unweighted, improved True weighted: y, dx, grad_weight_, grad_bias_
                               to rtol = atol = 1e-5
@@ -33,7 +34,7 @@ from std.math import isnan
 from x_cnn.host.entry_runs_host import publish_x_cnn_host_entries
 from x_cnn.graph_layer_run import (
     GraphTableCalls, GraphEdges, SageBackwardHost, graph_views_run, gcn_graph_run, gcn_backward_host_run,
-    sage_backward_host_run,
+    sage_backward_host_run, gcn_forward_host_run,
 )
 from x_cnn.graph_run import (
     graph_run_gemm, graph_run_spmm, graph_run_add, graph_run_bias_rows, graph_run_linear_forward,
@@ -103,15 +104,9 @@ def gcn_case(unit: Int) raises:
     var gv = gcn_graph_run(calls, edges, n, addr(ew) if weighted else 0, e if weighted else 0, True, True, improved,
                            False)
     var nnz = gv.views.nnz
-    var h = List[Float32](length=n * f, fill=0)
-    graph_run_gemm(calls.entry, addr(x), addr(w), addr(h), n, f, d, 1)
-    var spread = List[Float32](length=n * f, fill=0)
-    graph_run_spmm(calls.entry, calls.address(gv.vals), addr(h), addr(spread), calls.address(gv.views.csr_f), n, f,
-                   nnz, 0)
-    var rows = List[Float32](length=n * f, fill=0)
-    graph_run_bias_rows(addr(b), addr(rows), n, f)
     var y = List[Float32](length=n * f, fill=0)
-    graph_run_add(calls.entry, addr(spread), addr(rows), addr(y), n * f)
+    gcn_forward_host_run(calls.entry, addr(x), addr(w), addr(b), calls.address(gv.vals), calls.address(gv.views.csr_f),
+                         addr(y), n, f, d, nnz)
     var gw = List[Float32](length=f * d, fill=0)
     var gb = List[Float32](length=f, fill=0)
     var dx = List[Float32](length=n * d, fill=0)
@@ -127,9 +122,6 @@ def gcn_case(unit: Int) raises:
     _ = b^
     _ = g^
     _ = ew^
-    _ = h^
-    _ = spread^
-    _ = rows^
     _ = calls^
 
 

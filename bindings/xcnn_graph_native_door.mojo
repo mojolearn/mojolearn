@@ -49,7 +49,7 @@ from bindings.xcnn_common_door import (
 from core.entry_table import EntryRef
 from x_cnn.graph_layer_run import (
     GraphCalls, GraphEdges, GraphViews, SageBackwardHost, graph_edges_run, graph_views_run, gcn_graph_run,
-    gcn_backward_host_run, sage_backward_host_run,
+    gcn_backward_host_run, sage_backward_host_run, gcn_forward_host_run,
 )
 from x_cnn.graph_run import (
     graph_run_bytes_equal, graph_run_csr_words, graph_run_check_edge_layout, graph_run_check_cache_dims, graph_run_check_index_layout,
@@ -452,14 +452,8 @@ def _add(entries: PythonObject, a: PythonObject, b2: PythonObject, context: Pyth
     return out
 
 
-def _bias_rows(bias: PythonObject, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
-    """`np.ascontiguousarray(np.broadcast_to(bias, (rows, cols)))`."""
-    var fb = xcnn_f32(bias, "b", context)
-    var out = xcnn_host_f32([rows, cols], context)
-    graph_run_bias_rows(Int(py=xcnn_addr(fb)), Int(py=xcnn_addr(out)), rows, cols)
-    _ = out  # keep the Python object alive through the native call above
-    _ = fb  # keep the Python object alive through the native call above
-    return out
+# `_bias_rows` (the bias broadcast to a Python array for the GCN forward's add) removed 2026-11-22 by lane bm-trees:
+# x_cnn/graph_layer_run.mojo `gcn_forward_host_run` writes the rows into its own buffer.
 
 
 def _linear_forward(lin: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -753,10 +747,32 @@ def xcnn_gcn_forward(layer: PythonObject, args: PythonObject, context: PythonObj
     py_setitem(fields, nk[].k__xdev, PythonObject(None))
     var f_out = Int(py=py_item(fields, nk[].k_out_channels))
     var d_in = Int(py=py_item(fields, nk[].k_in_channels))
-    var h = _gemm(entries, x, py_item(fields, nk[].k_weight_), n, f_out, d_in, 1, context)
-    var out = _spmm(entries, g, vals, h, 0, context)
-    if Bool(py=py_item(fields, nk[].k_bias)):
-        out = _add(entries, out, _bias_rows(py_item(fields, nk[].k_bias_), Int(py=out.shape[0]), Int(py=out.shape[1]), context), context)
+    # UNPACK the operands once; RUN the host form (x_cnn/graph_layer_run.mojo
+    # `gcn_forward_host_run`, lane bm-trees) with the GIL released around it.
+    var fx = xcnn_f32(x, "a", context)
+    var fw = xcnn_f32(py_item(fields, nk[].k_weight_), "b", context)
+    graph_run_check_gemm(xcnn_size(xcnn_shape(fx)), xcnn_size(xcnn_shape(fw)), n, f_out, d_in)
+    var fv = xcnn_host_f32([1], context) if vals is None or len(vals) == 0 else xcnn_f32(vals, "values", context)
+    var has_bias = Bool(py=py_item(fields, nk[].k_bias))
+    var fb = xcnn_f32(py_item(fields, nk[].k_bias_), "b", context) if has_bias else PythonObject(None)
+    var a_b = xcnn_ptr(fb) if has_bias else 0
+    var out = xcnn_host_f32([n, f_out], context)
+    var a_x = xcnn_ptr(fx)
+    var a_w = xcnn_ptr(fw)
+    var a_v = xcnn_ptr(fv)
+    var a_csr = xcnn_ptr(py_item(g, nk[].k_csr_f))
+    var a_out = xcnn_ptr(out)
+    var g_n = Int(py=py_item(g, nk[].k_n))
+    var nnz = Int(py=py_item(g, nk[].k_nnz))
+    var gkey = xcnn_ref(entries)
+    var gil = Python()
+    with GILReleased(gil):
+        gcn_forward_host_run(gkey, a_x, a_w, a_b, a_v, a_csr, a_out, g_n, f_out, d_in, nnz)
+    _ = fx  # keep the Python objects alive through the native call above
+    _ = fw
+    _ = fv
+    _ = fb
+    _ = g
     py_setitem(fields, nk[].k__x, x)
     py_setitem(fields, nk[].k__g, g)
     py_setitem(fields, nk[].k__vals, vals)

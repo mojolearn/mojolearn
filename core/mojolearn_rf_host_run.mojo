@@ -58,6 +58,16 @@ from ensemble.host.rf_oracle import (
 from core.shared_slot import SharedSlot
 from core.forest_export_run import ForestExportRegistry
 from core.forest_export_binding_impl import validate_forest_export_destinations
+from core.forest_fit_request import XF_CAP_SESSION
+from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
+from core.forest_entry_table import FOREST_TABLE_RF
+from core.native_descriptor_abi import NativeDescriptorError
+from core.forest_host_strict_run import (
+    forest_host_strict_predict, forest_strict_prepare_host_native, forest_strict_release_host_native,
+)
+from core.forest_host_groves_run import (
+    forest_prepare_host_native, forest_predict_resident_host_native, forest_release_host_native,
+)
 
 
 comptime N_RF_FIT_PARAMS = 16
@@ -492,3 +502,234 @@ def _rf_predict_walk(model: List[Int], x_address: Int, out_addr: Int, n_rows: In
         leaves_p, op, n_rows, n_cols, n_trees, num_outputs, n_nodes,
     )
     return n_rows
+
+
+# ------------------------------------------------- the image (lane bm-trees)
+# The host RF image's forest entry operations moved here from the binding
+# (lane bm-trees, 2026-11-22), so a Mojo check publishes the same image
+# (`publish_rf_host_forest`) and fits a DART member, a plain fit or a strict
+# predict through the forest entry with no binding loaded. ONE BODY, TWO
+# ENTRIES, as core/mojolearn_et_host_run.mojo: every body here runs bare;
+# the binding's entry releases the GIL around the long operations
+# (`forest_host_entry_releases`). The data sessions are the doors' own (their
+# registry is serialized by the GIL and their fits release it): the image
+# takes them as `S`, the binding's GIL-holding session operations, or
+# `RfHostNoSessions` for a caller with no Python.
+
+
+def rf_host_fit_handle[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> Int:
+    """XF_FIT: `_rf_fit_forest`, kept in RF_HOST_EXPORTS; the export handle."""
+    return _retain_rf_handle(_rf_fit_forest[CLASSIFIER, ROWMAJOR](params))
+
+
+def rf_host_fit_dart(params: ForestFitArgs) raises -> Int:
+    """XF_FIT_DART, the host twin of `bindings/_mojolearn_rf.mojo::rf_regressor_fit_dart_binding`
+    (box-run-2-dart-host, 2026-10-05): the DART member fit on the HOST DART
+    session (xtrees/dart_host.mojo `DART_HOST_SESSIONS`): X is the session's
+    row-major n x d array, the target its k x n `target` plane. The gathers
+    are `ensemble/dart_member.mojo`'s, element for element: X column-major
+    `x[j * m + i] = X[rows[i] * d + cols[j]]` (identity rows / columns when
+    the address is 0) and `y[i] = target[c * n + rows[i]]` (the whole class
+    plane when rows is 0). Then `_rf_fit_colmajor[False]`, the body the plain
+    host regressor fit runs, so the member forest's words are the device
+    member's. Same params, checks and export descriptor as the device
+    entry. No GIL (see above)."""
+    comptime entry = "rf_regressor_fit_dart"
+    comptime if DART_HOST:
+        var p = _session_params[False](entry, params)
+        var n_rows = params.i(0)
+        var n_cols = params.i(1)
+        var hid = params.session
+        var c = params.cls
+        var rows_a = params.x
+        var cols_a = params.y
+        # held for this member fit (the registry's lock word covers the
+        # lookup only; lane fx-gil)
+        var dreg = DART_HOST_SESSIONS.get_or_create_ptr()
+        var dsess = dreg[].lease(hid)
+        var n = dsess[].n
+        var d = dsess[].d
+        var k = dsess[].k
+        if c < 0 or c >= k:
+            raise Error(entry + ": class out of range")
+        if n_rows <= 0 or n_cols <= 0:
+            raise Error(entry + ": invalid shape")
+        if (rows_a == 0 and n_rows != n) or (cols_a == 0 and n_cols != d):
+            raise Error(
+                entry + ": params name a shape the DART session does not hold"
+            )
+        if cols_a != 0 and n_cols > d:
+            raise Error(entry + ": more columns than X holds")
+        # the row and column ids, checked against the session (the device
+        # entry trusts its callers; a host read out of range is not a word
+        # the device writes, so refuse it instead)
+        var x = List[Float32]()
+        var y = List[Float32]()
+        rf_host_dart_member_xy(
+            entry, rows_a, cols_a, n_rows, n_cols, n, d, c,
+            dsess[].x_addr, dsess[].target, x, y,
+        )
+        var y_address = Int(y.unsafe_ptr())
+        var forest = _rf_fit_colmajor[False](
+            x^, y_address, n_rows, n_cols, 0, p, List[Float32](), 0
+        )
+        # y is read through its address inside the fit: keep it alive past it
+        _ = y^
+        return _retain_rf_handle(forest^)
+    else:
+        raise Error(
+            entry + ": built without the host DART round"
+            " (MOJOLEARN_IDN_DART_DEVICE_OFF)"
+        )
+
+
+trait RfHostSessionOps:
+    """The host RF image's data session operations (XF_SESSION_OPEN,
+    XF_SESSION_CLOSE, XF_FIT_SESSION), served with the caller's GIL held."""
+
+    @staticmethod
+    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
+        ...
+
+    @staticmethod
+    def session_close(handle: Int) raises:
+        ...
+
+    @staticmethod
+    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        ...
+
+
+struct RfHostNoSessions(RfHostSessionOps):
+    """No data sessions: the image as a caller with no Python publishes it."""
+
+    @staticmethod
+    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
+        raise Error("RuntimeError: the native forest host entry has no forest data session")
+
+    @staticmethod
+    def session_close(handle: Int) raises:
+        raise Error("RuntimeError: the native forest host entry has no forest data session")
+
+    @staticmethod
+    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        raise Error("RuntimeError: the native forest host entry has no forest data session")
+
+
+struct RfHostForestImage[S: RfHostSessionOps](ForestImage):
+    """This image's forest entry operations (core/forest_entry.mojo; lane
+    calltable-forest). The host column scans X itself (no device scan), keeps
+    its trees in the strict snapshot and has no ordered resident word or
+    resident labels."""
+
+    @staticmethod
+    def caps() -> Int:
+        comptime if DART_HOST:
+            return XF_CAP_STRICT | XF_CAP_DART | XF_CAP_SESSION
+        else:
+            return XF_CAP_STRICT | XF_CAP_SESSION
+
+    @staticmethod
+    def dt_default_bins() -> Int:
+        # this image exports no `rf_dt_default_bins`: the door's default
+        return 128
+
+    @staticmethod
+    def fit(classifier: Bool, row_major: Bool, args: ForestFitArgs) raises -> Int:
+        if classifier:
+            if row_major:
+                return rf_host_fit_handle[True, True](args)
+            return rf_host_fit_handle[True, False](args)
+        if row_major:
+            return rf_host_fit_handle[False, True](args)
+        return rf_host_fit_handle[False, False](args)
+
+    @staticmethod
+    def fit_dart(args: ForestFitArgs) raises -> Int:
+        return rf_host_fit_dart(args)
+
+    @staticmethod
+    def export_sizes(handle: Int, out_addr: Int) raises:
+        RF_HOST_EXPORTS.get_or_create_ptr()[].sizes_into(handle, out_addr)
+
+    @staticmethod
+    def export_into(handle: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
+        _rf_export_into_native(handle, dst, trees, nodes, outputs)
+
+    @staticmethod
+    def export_verify(handle: Int, dst: List[Int]) raises -> Int:
+        return _rf_export_verify_native(handle, dst)
+
+    @staticmethod
+    def export_release(handle: Int) raises:
+        RF_HOST_EXPORTS.get_or_create_ptr()[].release(handle)
+
+    @staticmethod
+    def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
+                regression: Bool, free: Bool) raises -> Int:
+        return _rf_predict_walk(model, x, out_addr, rows, cols, trees, outputs, not regression)
+
+    @staticmethod
+    def resident_prepare(model: List[Int], features: Int, trees: Int, outputs: Int, ordered: Int) raises -> Int:
+        return forest_prepare_host_native[True](model, features, trees, outputs, ordered)
+
+    @staticmethod
+    def resident_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        return forest_predict_resident_host_native[True](handle, x, out_addr, rows, cols, outputs)
+
+    @staticmethod
+    def resident_labels(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
+        raise Error("RuntimeError: this forest binding has no resident label prediction")
+
+    @staticmethod
+    def resident_release(handle: Int) raises:
+        forest_release_host_native[True](handle)
+
+    @staticmethod
+    def strict_prepare(model: List[Int], features: Int, trees: Int, outputs: Int) raises -> Int:
+        return forest_strict_prepare_host_native[True](model, features, trees, outputs)
+
+    @staticmethod
+    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
+                       free: Bool) raises -> Int:
+        return forest_host_strict_predict[True](handle, x, out_addr, rows, cols, outputs)
+
+    @staticmethod
+    def strict_release(handle: Int) raises:
+        forest_strict_release_host_native[True](handle)
+
+    @staticmethod
+    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
+        return Self.S.session_open(x, rows, cols, row_major, share_tables)
+
+    @staticmethod
+    def session_close(handle: Int) raises:
+        Self.S.session_close(handle)
+
+    @staticmethod
+    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        return Self.S.fit_session(classifier, args)
+
+    @staticmethod
+    def ada_open(handle: Int, w: Int, y: Int, cw: Int, n: Int, k: Int) raises:
+        raise Error("RuntimeError: the forest host binding has no AdaBoost device rounds")
+
+    @staticmethod
+    def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
+        raise Error("RuntimeError: the forest host binding has no AdaBoost device rounds")
+
+
+def rf_host_forest_entry_native(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
+    ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
+    """The image's forest entry for a caller that holds no GIL and no Python
+    (a Mojo check; the binding publishes `rf_host_forest_entry_v1`, which
+    releases and serves the data sessions)."""
+    return forest_entry_dispatch[RfHostForestImage[RfHostNoSessions]](
+        operation, aa, na, pp, np, ff, nf, result, context, sink
+    )
+
+
+def publish_rf_host_forest() raises:
+    """Publish `rf_host_forest_entry_native` under the RF table's cpu key, for
+    a process with no `_mojolearn_rf_host` loaded (a Mojo check)."""
+    forest_entry_publish["MojolearnForestEntryOwnerRfHostNativeV1"](FOREST_TABLE_RF, "cpu", rf_host_forest_entry_native)

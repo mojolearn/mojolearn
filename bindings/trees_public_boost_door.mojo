@@ -71,6 +71,7 @@ from bindings.trees_dart_rounds_run import (
     DartRoundPlan, DartRounds, DartWords, dart_starts, dart_round_plan,
     dart_round_admit, dart_rounds_run, dart_member_into, DART_M_OFF_N, DART_M_NODES,
     DART_M_LEAF_N, DART_M_VAL_N, DART_M_COLS, DART_M_TREES, DART_M_OUTPUTS,
+    DartMemberShape, dart_member_request, dart_member_config,
 )
 from bindings.native_unit_threads_unpack import native_unit_jobs
 from xtrees.trees_boost_run import (
@@ -2015,6 +2016,17 @@ def dart_words(fields: PythonObject, context: PythonObject) raises -> DartWords:
         drop_seed=_seed(fields["drop_seed"], context))
 
 
+def dart_member_shape(fields: PythonObject) raises -> DartMemberShape:
+    """UNPACK: the settings every DART member's fit reads (`DartMemberShape`,
+    bindings/trees_dart_rounds_run.mojo), as `_dart_first_member` passes
+    them to its one-tree RandomForestRegressor."""
+    var depth_param = fields["max_depth"]
+    var depth = -1 if depth_param is None else Int(py=_int(depth_param))
+    return DartMemberShape(max_depth=depth, num_leaves=Int(py=_int(fields["num_leaves"])),
+                           min_child_samples=Int(py=_int(fields["min_child_samples"])),
+                           max_bin=Int(py=_int(fields["max_bin"])))
+
+
 def dart_max_depth(fields: PythonObject) raises -> PythonObject:
     """The members' `max_depth`: None for a nonpositive or absent depth."""
     var depth_param = fields["max_depth"]
@@ -2121,13 +2133,11 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: AdmittedXView, y32
         var built = dart_first_request(fields, words.seed, context)
         first = built[0]
         first_fields = built[1]
-        var tf = py_fields(first)
         forest = forest_key(built[2])
-        # The typed request filled slot by slot (`forest_fit_request`): no
-        # 16-slot Python list is built and read back. Once per fit; the X, y
-        # and trailing words stay 0, as the list form left them.
-        request = forest_fit_request(tf, tf["_cfg"], "rf_regressor", n, d, 0, 0, 0, ForestFit(False), built[2],
-                                     context)
+        # The typed request (lane bm-trees: `dart_member_request`, from the
+        # estimator's settings, not read back from the Python member's
+        # `_cfg`). Once per fit; the X, y and trailing words stay 0.
+        request = dart_member_request(dart_member_shape(fields), words.seed, n, d)
     var plan = dart_round_plan(words, dart, _xk(xt), forest, x.address, y32.address, starts.copy(), n, d, K, kind)
     var rounds = dart_rounds_run(plan, request^)
     dart_pack_rounds(model, fields, rounds, starts, K, d, first, first_fields, words.seed, context)

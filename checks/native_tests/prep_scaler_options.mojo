@@ -9,9 +9,9 @@ python/mojolearn/tests/test_x_prep_scaler_options.py `test_standard_nan_fit_and_
 Fits and transforms run the scaler member (core/scaler_member.mojo) over the host column's kernels and x_prep
 transport (checks/native_tests/py2mojo_host_members.mojo `HostMember`). StandardScaler.partial_fit runs its typed RUN,
 bindings/scaler_lifecycle_run.mojo `scaler_standard_partial_fit_run` (the batch fit core and the merge program the door
-calls), over the same entries. MinMaxScaler.partial_fit has no typed RUN: `minmax_partial` below repeats the door's
-composition (bindings/minmax_native_door.mojo `minmax_partial_fit`: the batch fit core, stage 268 over the old and new
-extrema, the kernel fit of the 4 x d extrema block, `scaler_minmax_keep_extrema` with the column NaN flags).
+calls), over the same entries. MinMaxScaler.partial_fit runs its typed RUN, core/scaler_core.mojo `scaler_minmax_partial_fit_run` (lane bm-trees:
+the batch fit core, stage 268 over the old and new extrema, the kernel fit of the 4 x d extrema block,
+`scaler_minmax_keep_extrema` with the column NaN flags), the function the door calls.
 
 The inputs are the original's `_data` (257 x 5, seed 3, a constant 2.5 column, NaN every 7th row of feature 0 and
 every 11th from row 1 of feature 2; 600 rows for partial_fit) and the weights it drew, with scikit-learn 1.9.1's
@@ -39,11 +39,9 @@ from std.math import isnan
 from std.memory import bitcast
 from core.member_abi import MEMBER_OP_INVERSE_TRANSFORM
 from core.scaler_core import (
-    ScalerTableCalls, ScalerStandardFit, scaler_standard_fit_core, scaler_minmax_fit_core, scaler_minmax_keep_extrema,
+    ScalerTableCalls, ScalerStandardFit, scaler_standard_fit_core, scaler_minmax_partial_fit_run,
     SCALER_SEEN_INT, SCALER_SEEN_FLOAT, SCALER_SEEN_INT_ROW, SCALER_SEEN_FLOAT_ROW,
 )
-from core.scaler_native_api import MinMaxFitRequest
-from core.preprocessing_program import prep_program_stage
 from bindings.scaler_lifecycle_run import (
     ScalerSeenView, ScalerStandardMerged, scaler_standard_partial_fit_run,
     SCALER_SEEN_SOURCE_SCALAR, SCALER_SEEN_SOURCE_I64, SCALER_SEEN_SOURCE_F32,
@@ -341,26 +339,12 @@ def mm_filled_case() raises:
 
 
 def minmax_partial(rows: List[Float32], x: List[Float32], n: Int, d: Int) raises -> List[Float32]:
-    """bindings/minmax_native_door.mojo `minmax_partial_fit` on typed values (feature_range (-1, 2))."""
-    var c = calls()
-    var fresh = scaler_minmax_fit_core(c, F32P(unsafe_from_address=Int(x.unsafe_ptr())), n, d, -1.0, 2.0)
-    var arena = List[Float32](length=9 * d, fill=0)
-    for j in range(d):  # small-loop(fixture: the old and new extrema rows into the arena)
-        arena[j] = rows[j]
-        arena[d + j] = rows[d + j]
-        arena[2 * d + j] = fresh[j]
-        arena[3 * d + j] = fresh[d + j]
-    var program = List[Int32]()
-    prep_program_stage(program, 268, d, 0, d, 2 * d, 3 * d, d, 4 * d, 8 * d)
-    c.run(Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16)
-    var output = List[Float32](length=5 * d, fill=0)
-    var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    _ = c.minmax_fit(MinMaxFitRequest(Int(ap + 4 * d), Int(output.unsafe_ptr()), 4, d, -1.0, 2.0, False))
-    var merged = scaler_minmax_keep_extrema(c, F32P(unsafe_from_address=Int(output.unsafe_ptr())), Int(ap + 8 * d), d)
-    _ = arena^
-    _ = output^
-    _ = program^
-    _ = fresh^
+    """MinMaxScaler.partial_fit on typed values (feature_range (-1, 2)): core/scaler_core.mojo
+    `scaler_minmax_partial_fit_run`, the RUN bindings/minmax_native_door.mojo `minmax_partial_fit` calls."""
+    var rp = F32P(unsafe_from_address=Int(rows.unsafe_ptr()))
+    var merged = scaler_minmax_partial_fit_run(calls(), rp, rp + d, d, F32P(unsafe_from_address=Int(x.unsafe_ptr())),
+                                               n, d, -1.0, 2.0)
+    _ = rows
     _ = x
     return merged^
 
