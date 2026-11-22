@@ -38,6 +38,13 @@ def _pinned(name: String) -> UInt64:
     """This version's recorded digest of a case (0: none recorded yet; the run prints it). Recorded on the
     CPU column (cpc2, 2026-11-22), equal before and after the Mamba-3 trapezoid bodies (lane
     neural-blocks-3-m3)."""
+    # Mamba-2: equal before (c6be64e144) and after the SSD bodies (lane neural-blocks-3, a89a173b60, 9e745eb1a8)
+    if name == "m2_base_b2_l4_d32":
+        return UInt64(14912188677600475767)
+    if name == "m2_base_b3_l4_d64":
+        return UInt64(10523122758857245856)
+    if name == "m2_base_b1_l257_d64":
+        return UInt64(3193373610580126618)
     if name == "m3_base_b2_l4_d32":
         return UInt64(7573674033153616323)
     if name == "m3_base_b3_l4_d64":

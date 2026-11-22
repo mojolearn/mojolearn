@@ -457,6 +457,12 @@ def _pinned(name: String) -> UInt64:
     # Mamba-3 (lane neural-blocks-3-m3): the trapezoid scan's words are the Mamba-3 trapezoid bodies'
     # (autograd/kernels/mamba3_trapezoid_body.mojo); -D MOJOLEARN_MAMBA3_SABOTAGE_TRAP_LEFT_ONLY moves them.
     # Recorded on the CPU column (cpc2, 2026-11-22).
+    # Mamba-2 (lane neural-blocks-3): the SSD scan's words are the Mamba-2 block bodies'
+    # (autograd/kernels/mamba2_ssd_body.mojo); -D MOJOLEARN_MAMBA2_SABOTAGE_SEGSUM_DESCENDING moves them.
+    if name == "ssd_scan_h1":
+        return UInt64(13223243358280786975)
+    if name == "ssd_scan_h2":
+        return UInt64(11601189536576961029)
     if name == "trapezoid_scan_h2":
         return UInt64(9596372206100812605)
     if name == "trapezoid_scan_h1":
