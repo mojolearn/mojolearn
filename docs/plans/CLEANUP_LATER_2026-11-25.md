@@ -57,16 +57,25 @@ project of its own. None blocks the next release except the last, which happens 
 - The tools check on the CPU box uses about 7 of 32 cores: its test files are not split across the box.
 - Fixture archives (`tools/fixture_packs.py`): after regenerating a case, run `pack`; runners call `unpack`.
 
-## 5. The Mojo test harness (Andrew, 2026-11-22: "add to the plan"; first step of section 1)
+## 5. Mojo tests on the standard library's TestSuite (Andrew, 2026-11-22; first step of section 1)
 
-Do not wait for Modular's test tooling. One small harness in the repo, a few hundred lines:
+Use the official library where it exists; write only what it lacks. Checked on the project compiler (Mojo 1.2.0,
+CPU box, 2026-11-22): `from std.testing import TestSuite, assert_equal` and
+`TestSuite.discover_tests[__functions_in_module()]().run()` find every `test_*` function in a file, print one
+PASS/FAIL line per test with the failing comparison, a summary line, and exit non-zero on a failure. 31 Mojo files
+already import `std.testing` for its assertions; none uses `TestSuite`.
 
-- a case table (name, function, parameters), so one suite covers a family by data, not by file;
-- one registry that launches every suite, which removes the 247 wrapper files under `checks/native_tests`
-  (each only calls its suite's `run_checks()`);
-- one process per check, across all cores (the native runner already does this);
-- one summary format the box tools read.
+- Each native suite becomes a file of `test_*` functions run by `TestSuite` (replaces the hand-written
+  `run_checks()` bodies and the per-case print lines).
+- TestSuite works per file, so the multi-file part stays ours and already exists: the native runner starts one
+  process per file across all cores (a crash stays in its own process) and reads the summaries. It learns the
+  TestSuite summary line; the 247 wrapper files under `checks/native_tests` go, since a TestSuite file is its own
+  launcher. No community runner is added (a third-party dependency for what the runner already does).
+- What TestSuite does not give and we write once, small: a per-family case table (a list of parameter structs looped
+  inside one `test_*`), and the GPU-versus-host column comparison helpers.
+- To check before converting everything: whether discovery works in a file that is also imported by another, and the
+  compile time of `__functions_in_module()` reflection on the largest suites.
 
 When: right after the proving run is green on the integration build, in the same change as the wrapper cut. Proof:
-the same check names as before, full native run green on the CPU box and the L40S. Then the 164 numeric Python
-tests move into tables (section 1), each Python test deleted only after its Mojo suite is green.
+the same test names as before, full native run green on the CPU box and the L40S. Then the 164 numeric Python
+tests move into these suites (section 1), each Python test deleted only after its Mojo suite is green.
