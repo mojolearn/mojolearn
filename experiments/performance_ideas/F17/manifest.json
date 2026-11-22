@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "id": "F17",
+  "title": "Actual panel search A/B for stacked candidates and held evaluation state",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/F17/caller.py",
+    "experiments/performance_ideas/apple_fast/arima_task.py",
+    "arima/impl/batched_arima.mojo",
+    "arima/impl/fast_eval_ws.mojo"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [
+    "MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"
+  ],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F17",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F17",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F17/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "same requested orders/search/initialization/horizon",
+    "actual full AutoARIMA fit/search/forecast",
+    "selected model forecast quality and optimizer diagnostics",
+    "small panels across heterogeneous independent lengths"
+  ],
+  "timing_contract": "Full search+fit+forecast through output read; no private-likelihood timing claim",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "arima",
+  "prerequisite_bindings": [
+    "core",
+    "tsa"
+  ],
+  "build_uses_compile_slot": true,
+  "variants": {
+    "default": []
+  },
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F17",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

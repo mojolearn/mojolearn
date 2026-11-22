@@ -1,0 +1,6099 @@
+{
+ "blocked": [],
+ "jobs": [
+  {
+   "arm": "A",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-arima",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "4a5da17d45294a839cd8",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-arima",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "9fb21ae62d1f76ddd362",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/_mojolearn.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-base",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "93e4525d25d979344697",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/_mojolearn.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-base",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "696c30b9ffb23e5e1262",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/estimators.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-estimators",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "1b07d011448329f721a2",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_estimators.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/estimators.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-estimators",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "1892ef2b7b825892734a",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_estimators.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gp.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-gp",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "368a5109e54f81a9746e",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_gp.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gp.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-gp",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "ee85ed511eb779260a95",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_gp.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/hdbscan.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-hdbscan",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "bfc21955c8c6ab128e66",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_hdbscan.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/hdbscan.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-hdbscan",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "8320704ea2354e831737",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_hdbscan.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/ivf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-ivf",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "767947f723e56e5e06fc",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_ivf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/ivf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-ivf",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "d08d08fcbb007695d14e",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_ivf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/kernel_methods.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-kernel_methods",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "1a229a619f5a7395f23c",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_kernel_methods.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/kernel_methods.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-kernel_methods",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "87b544d83c8b5fc50dc2",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_kernel_methods.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-metrics",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "f783fb4d38ced4dff60f",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-metrics",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "3ace07966a0ca209548b",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/mixture.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-mixture",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "11a26cc14d47b9f9111e",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_mixture.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/mixture.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-mixture",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "ad2996900eb63e36498b",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_mixture.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/resample.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-resample",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "47fcbd40e4b3c7cf402b",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_resample.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/resample.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-resample",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "68c84eb985ce9a2890a1",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_resample.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-rf",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "bfd95379af50819b27b2",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-rf",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "f9a07e69a30823b16073",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/solver.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-solver",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "20504c97d921b283f994",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_solver.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/solver.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-solver",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "50de368243257a66e534",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_solver.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-svm",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "fea3e51b01feeabfe52f",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-svm",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "5cb0fe746db0f67fbabe",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-trees",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "f7bab25aaf97a12a4f5b",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-trees",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "97cd24ecb94cb782b325",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/tsa.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-tsa",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "ab4e1275ecf3a707a205",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_tsa.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/tsa.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-tsa",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "8f08a83565ef07c6ce3c",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_tsa.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_cluster.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_cluster",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "066f496c1e9f1e2cdeaf",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_cluster.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_cluster.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_cluster",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "eda886aecfe81ffb14ac",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_cluster.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_decomp.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_decomp",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "95d1899fc5dbdd58abd3",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_decomp.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_decomp.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_decomp",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "ba98c3d7e5698180e391",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_decomp.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_linear",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "dbecf4f07937c09bf437",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_linear",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "468eb9e5f6db25fabb89",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_prep",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "59159d7330dd2bca5123",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_prep",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "108180d63ea85af87ff5",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_trees",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "dc086ff331a17f7a4543",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-main-x_trees",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "8e8ed566199063557367",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-gbdt",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "9762992efb59dfaf1c36",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-gbdt",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "2962c74a622f38286725",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-rf",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "cfe8f76d4bc4b17eb1b9",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-rf",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "8b2a6d294717fd625d9f",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-svm",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "8626716ec6ae38b41a90",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-svm",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "abfd3e9e03d82b67ceb1",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-trees",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "1a74cb2b0b56b848bf07",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-main-trees",
+   "configurations": [],
+   "defines": [],
+   "environment": {},
+   "key": "19bb2dd423647033f21d",
+   "mode": "fast",
+   "role": "main",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F001",
+   "configurations": [
+    "G.algos:autoarima.AFCL_P12=on",
+    "G.classical2:arima.AFCL_P12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "8ee763ae2c0540b8a7c9",
+   "mode": "fast",
+   "pack": "F001",
+   "role": "pack",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F001",
+   "configurations": [
+    "G.algos:autoarima.AFCL_P12=on",
+    "G.classical2:arima.AFCL_P12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_P12=1"
+   ],
+   "environment": {},
+   "key": "a3d5a45ca1f1b2290bba",
+   "mode": "fast",
+   "pack": "F001",
+   "role": "pack",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F002",
+   "configurations": [
+    "G.algos:autoarima.ARIMA_FAST_ROOT_CHECK=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "d94d169c22cb7ee2c255",
+   "mode": "fast",
+   "pack": "F002",
+   "role": "pack",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F002",
+   "configurations": [
+    "G.algos:autoarima.ARIMA_FAST_ROOT_CHECK=on"
+   ],
+   "defines": [
+    "MOJOLEARN_ARIMA_FAST_ROOT_CHECK=1"
+   ],
+   "environment": {},
+   "key": "fa2522dbf000f53aecd7",
+   "mode": "fast",
+   "pack": "F002",
+   "role": "pack",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F003",
+   "configurations": [
+    "G.algos:autoarima.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "925c53a05863b6e99d90",
+   "mode": "fast",
+   "pack": "F003",
+   "role": "pack",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/arima.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F003",
+   "configurations": [
+    "G.algos:autoarima.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_P12=1",
+    "MOJOLEARN_ARIMA_FAST_ROOT_CHECK=1"
+   ],
+   "environment": {},
+   "key": "6372b5de07674425e96e",
+   "mode": "fast",
+   "pack": "F003",
+   "role": "pack",
+   "script": "bindings/build_arima.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/_mojolearn.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F004",
+   "configurations": [
+    "G.classical2:knn-clf.AFCL_G01=on",
+    "G.classical2:knn-reg.AFCL_G01=on",
+    "G.classical:kmeans.AFCL_G05=on",
+    "G.classical:knn.AFCL_G01=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "f37b890ff3ca14639ab9",
+   "mode": "fast",
+   "pack": "F004",
+   "role": "pack",
+   "script": "bindings/build.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/_mojolearn.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F004",
+   "configurations": [
+    "G.classical2:knn-clf.AFCL_G01=on",
+    "G.classical2:knn-reg.AFCL_G01=on",
+    "G.classical:kmeans.AFCL_G05=on",
+    "G.classical:knn.AFCL_G01=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G01=1",
+    "MOJOLEARN_AFCL_G05=1"
+   ],
+   "environment": {},
+   "key": "b773f2f2903d079cd36c",
+   "mode": "fast",
+   "pack": "F004",
+   "role": "pack",
+   "script": "bindings/build.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/estimators.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F005",
+   "configurations": [
+    "G.classical:dbscan.AFCL_G03=on",
+    "G.classical:kde.AFCL_G13=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "7d66dc685f95884f6207",
+   "mode": "fast",
+   "pack": "F005",
+   "role": "pack",
+   "script": "bindings/build_estimators.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/estimators.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F005",
+   "configurations": [
+    "G.classical:dbscan.AFCL_G03=on",
+    "G.classical:kde.AFCL_G13=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G03=1",
+    "MOJOLEARN_AFCL_G13=1"
+   ],
+   "environment": {},
+   "key": "850a56c596754353525e",
+   "mode": "fast",
+   "pack": "F005",
+   "role": "pack",
+   "script": "bindings/build_estimators.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gp.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F006",
+   "configurations": [
+    "G.classical2:gpc.AFCL_L11=on",
+    "G.classical2:gpr.AFCL_L11=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "63e1b64f502a474a5089",
+   "mode": "fast",
+   "pack": "F006",
+   "role": "pack",
+   "script": "bindings/build_gp.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gp.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F006",
+   "configurations": [
+    "G.classical2:gpc.AFCL_L11=on",
+    "G.classical2:gpr.AFCL_L11=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L11=1"
+   ],
+   "environment": {},
+   "key": "e27cd0335118ffce1485",
+   "mode": "fast",
+   "pack": "F006",
+   "role": "pack",
+   "script": "bindings/build_gp.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/hdbscan.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F007",
+   "configurations": [
+    "G.classical:hdbscan.AFCL_G01=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "8c05a618421158e91391",
+   "mode": "fast",
+   "pack": "F007",
+   "role": "pack",
+   "script": "bindings/build_hdbscan.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/hdbscan.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F007",
+   "configurations": [
+    "G.classical:hdbscan.AFCL_G01=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G01=1"
+   ],
+   "environment": {},
+   "key": "3508560d6de92a1a2801",
+   "mode": "fast",
+   "pack": "F007",
+   "role": "pack",
+   "script": "bindings/build_hdbscan.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/hdbscan.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F008",
+   "configurations": [
+    "G.classical:hdbscan.AFCL_G14=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "3cf3b3963e31bea8765c",
+   "mode": "fast",
+   "pack": "F008",
+   "role": "pack",
+   "script": "bindings/build_hdbscan.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/hdbscan.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F008",
+   "configurations": [
+    "G.classical:hdbscan.AFCL_G14=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G14=1"
+   ],
+   "environment": {},
+   "key": "1ca1c230000ee4d393f1",
+   "mode": "fast",
+   "pack": "F008",
+   "role": "pack",
+   "script": "bindings/build_hdbscan.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/hdbscan.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F009",
+   "configurations": [
+    "G.classical:hdbscan.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "f40edb53f6bfe8982488",
+   "mode": "fast",
+   "pack": "F009",
+   "role": "pack",
+   "script": "bindings/build_hdbscan.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/hdbscan.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F009",
+   "configurations": [
+    "G.classical:hdbscan.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G01=1",
+    "MOJOLEARN_AFCL_G14=1"
+   ],
+   "environment": {},
+   "key": "c309dd1594123e113675",
+   "mode": "fast",
+   "pack": "F009",
+   "role": "pack",
+   "script": "bindings/build_hdbscan.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/ivf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F010",
+   "configurations": [
+    "G.algos:ivf.AFCL_G05=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "00b970823bf91e5a09bf",
+   "mode": "fast",
+   "pack": "F010",
+   "role": "pack",
+   "script": "bindings/build_ivf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/ivf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F010",
+   "configurations": [
+    "G.algos:ivf.AFCL_G05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G05=1"
+   ],
+   "environment": {},
+   "key": "39e6060a1993d7ba4008",
+   "mode": "fast",
+   "pack": "F010",
+   "role": "pack",
+   "script": "bindings/build_ivf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/ivf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F011",
+   "configurations": [
+    "G.algos:ivf.AFCL_G09=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "774bdb660c63a644229c",
+   "mode": "fast",
+   "pack": "F011",
+   "role": "pack",
+   "script": "bindings/build_ivf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/ivf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F011",
+   "configurations": [
+    "G.algos:ivf.AFCL_G09=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G09=1"
+   ],
+   "environment": {},
+   "key": "c72ebecb09bab64997f1",
+   "mode": "fast",
+   "pack": "F011",
+   "role": "pack",
+   "script": "bindings/build_ivf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/ivf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F012",
+   "configurations": [
+    "G.algos:ivf.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "845aaac8016c154772c8",
+   "mode": "fast",
+   "pack": "F012",
+   "role": "pack",
+   "script": "bindings/build_ivf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/ivf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F012",
+   "configurations": [
+    "G.algos:ivf.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G05=1",
+    "MOJOLEARN_AFCL_G09=1"
+   ],
+   "environment": {},
+   "key": "7235193a71b490e61b15",
+   "mode": "fast",
+   "pack": "F012",
+   "role": "pack",
+   "script": "bindings/build_ivf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/kernel_methods.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F013",
+   "configurations": [
+    "G.algos:rbf-sampler.AFCL_L12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "b9ced780f6ccec85dd56",
+   "mode": "fast",
+   "pack": "F013",
+   "role": "pack",
+   "script": "bindings/build_kernel_methods.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/kernel_methods.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F013",
+   "configurations": [
+    "G.algos:rbf-sampler.AFCL_L12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L12=1"
+   ],
+   "environment": {},
+   "key": "ca37e570786b5a572c0d",
+   "mode": "fast",
+   "pack": "F013",
+   "role": "pack",
+   "script": "bindings/build_kernel_methods.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F014",
+   "configurations": [
+    "G.classical2:spectral.AFCL_G01=on",
+    "G.classical2:spectral-embedding.AFCL_G01=on",
+    "G.classical2:umap.AFCL_G01=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "bf4857d6f572888ab205",
+   "mode": "fast",
+   "pack": "F014",
+   "role": "pack",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F014",
+   "configurations": [
+    "G.classical2:spectral.AFCL_G01=on",
+    "G.classical2:spectral-embedding.AFCL_G01=on",
+    "G.classical2:umap.AFCL_G01=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G01=1"
+   ],
+   "environment": {},
+   "key": "80e5cd0c752c7be48c6d",
+   "mode": "fast",
+   "pack": "F014",
+   "role": "pack",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F015",
+   "configurations": [
+    "G.classical2:spectral.AFCL_G05=on",
+    "G.classical2:umap.AFCL_G10=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "2d8ed540051331c2fb8d",
+   "mode": "fast",
+   "pack": "F015",
+   "role": "pack",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F015",
+   "configurations": [
+    "G.classical2:spectral.AFCL_G05=on",
+    "G.classical2:umap.AFCL_G10=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G05=1",
+    "MOJOLEARN_AFCL_G10=1"
+   ],
+   "environment": {},
+   "key": "f3f11a87316743ec6647",
+   "mode": "fast",
+   "pack": "F015",
+   "role": "pack",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F016",
+   "configurations": [
+    "G.classical2:spectral.AFCL_G11=on",
+    "G.classical2:spectral-embedding.AFCL_G11=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "e1a497eac2140087693d",
+   "mode": "fast",
+   "pack": "F016",
+   "role": "pack",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F016",
+   "configurations": [
+    "G.classical2:spectral.AFCL_G11=on",
+    "G.classical2:spectral-embedding.AFCL_G11=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G11=1"
+   ],
+   "environment": {},
+   "key": "bb23acd41e385bcee0dc",
+   "mode": "fast",
+   "pack": "F016",
+   "role": "pack",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F017",
+   "configurations": [
+    "G.classical2:spectral.all_on",
+    "G.classical2:spectral-embedding.all_on",
+    "G.classical2:umap.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "2c22d53d284057ec85c1",
+   "mode": "fast",
+   "pack": "F017",
+   "role": "pack",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/metrics.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F017",
+   "configurations": [
+    "G.classical2:spectral.all_on",
+    "G.classical2:spectral-embedding.all_on",
+    "G.classical2:umap.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G01=1",
+    "MOJOLEARN_AFCL_G05=1",
+    "MOJOLEARN_AFCL_G10=1",
+    "MOJOLEARN_AFCL_G11=1"
+   ],
+   "environment": {},
+   "key": "0c111086aef6d9f3e216",
+   "mode": "fast",
+   "pack": "F017",
+   "role": "pack",
+   "script": "bindings/build_metrics.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/mixture.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F018",
+   "configurations": [
+    "G.classical2:gmm.AFCL_G05=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "032c9246d605cfbd6e31",
+   "mode": "fast",
+   "pack": "F018",
+   "role": "pack",
+   "script": "bindings/build_mixture.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/mixture.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F018",
+   "configurations": [
+    "G.classical2:gmm.AFCL_G05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G05=1"
+   ],
+   "environment": {},
+   "key": "1afc51568daa5b0fdac7",
+   "mode": "fast",
+   "pack": "F018",
+   "role": "pack",
+   "script": "bindings/build_mixture.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/mixture.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F019",
+   "configurations": [
+    "G.classical2:gmm.AFCL_G08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "14a85d762013464114f8",
+   "mode": "fast",
+   "pack": "F019",
+   "role": "pack",
+   "script": "bindings/build_mixture.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/mixture.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F019",
+   "configurations": [
+    "G.classical2:gmm.AFCL_G08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G08=1"
+   ],
+   "environment": {},
+   "key": "fdd5271b5c8ff9be85df",
+   "mode": "fast",
+   "pack": "F019",
+   "role": "pack",
+   "script": "bindings/build_mixture.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/mixture.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F020",
+   "configurations": [
+    "G.classical2:gmm.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "92669fb806c06112014c",
+   "mode": "fast",
+   "pack": "F020",
+   "role": "pack",
+   "script": "bindings/build_mixture.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/mixture.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F020",
+   "configurations": [
+    "G.classical2:gmm.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G05=1",
+    "MOJOLEARN_AFCL_G08=1"
+   ],
+   "environment": {},
+   "key": "538ecc3922fd2c429be1",
+   "mode": "fast",
+   "pack": "F020",
+   "role": "pack",
+   "script": "bindings/build_mixture.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/resample.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F021",
+   "configurations": [
+    "G.algos:resample.AFCL_P10=on"
+   ],
+   "defines": [
+    "MOJOLEARN_RESAMPLE_FAST_GATHER=1",
+    "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER=1",
+    "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR=1"
+   ],
+   "environment": {},
+   "key": "008d851f1ef7f4cba005",
+   "mode": "fast",
+   "pack": "F021",
+   "role": "pack",
+   "script": "bindings/build_resample.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/resample.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F021",
+   "configurations": [
+    "G.algos:resample.AFCL_P10=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_P10=1",
+    "MOJOLEARN_RESAMPLE_FAST_GATHER=1",
+    "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER=1",
+    "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR=1"
+   ],
+   "environment": {},
+   "key": "4b30c9ca20dbe9483a93",
+   "mode": "fast",
+   "pack": "F021",
+   "role": "pack",
+   "script": "bindings/build_resample.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F022",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F01=on",
+    "G.algos:adaboost-reg.AFT_F01=on",
+    "G.algos:bagging-clf.AFT_F01=on",
+    "G.algos:bagging-reg.AFT_F01=on",
+    "G.algos:dart.AFT_F01=on",
+    "G.algos:dart-reg.AFT_F01=on",
+    "G.algos:decision-tree-clf.AFT_F01=on",
+    "G.algos:decision-tree-reg.AFT_F01=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "42e9e7013df70282b8fc",
+   "mode": "fast",
+   "pack": "F022",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F022",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F01=on",
+    "G.algos:adaboost-reg.AFT_F01=on",
+    "G.algos:bagging-clf.AFT_F01=on",
+    "G.algos:bagging-reg.AFT_F01=on",
+    "G.algos:dart.AFT_F01=on",
+    "G.algos:dart-reg.AFT_F01=on",
+    "G.algos:decision-tree-clf.AFT_F01=on",
+    "G.algos:decision-tree-reg.AFT_F01=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F01=1"
+   ],
+   "environment": {},
+   "key": "256e3cfd28c15f3621c2",
+   "mode": "fast",
+   "pack": "F022",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F023",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F02=on",
+    "G.algos:adaboost-reg.AFT_F02=on",
+    "G.algos:bagging-clf.AFT_F02=on",
+    "G.algos:bagging-reg.AFT_F02=on",
+    "G.algos:dart.AFT_F02=on",
+    "G.algos:dart-reg.AFT_F02=on",
+    "G.algos:decision-tree-clf.AFT_F02=on",
+    "G.algos:decision-tree-reg.AFT_F02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "adadbe2d0c7b73968b7a",
+   "mode": "fast",
+   "pack": "F023",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F023",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F02=on",
+    "G.algos:adaboost-reg.AFT_F02=on",
+    "G.algos:bagging-clf.AFT_F02=on",
+    "G.algos:bagging-reg.AFT_F02=on",
+    "G.algos:dart.AFT_F02=on",
+    "G.algos:dart-reg.AFT_F02=on",
+    "G.algos:decision-tree-clf.AFT_F02=on",
+    "G.algos:decision-tree-reg.AFT_F02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F02=1"
+   ],
+   "environment": {},
+   "key": "82342eace54ea2158c70",
+   "mode": "fast",
+   "pack": "F023",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F024",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F03=on",
+    "G.algos:adaboost-reg.AFT_F03=on",
+    "G.algos:bagging-clf.AFT_F03=on",
+    "G.algos:bagging-reg.AFT_F03=on",
+    "G.algos:dart.AFT_F03=on",
+    "G.algos:dart-reg.AFT_F03=on",
+    "G.algos:decision-tree-clf.AFT_F03=on",
+    "G.algos:decision-tree-reg.AFT_F03=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "373b616512e57410db8b",
+   "mode": "fast",
+   "pack": "F024",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F024",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F03=on",
+    "G.algos:adaboost-reg.AFT_F03=on",
+    "G.algos:bagging-clf.AFT_F03=on",
+    "G.algos:bagging-reg.AFT_F03=on",
+    "G.algos:dart.AFT_F03=on",
+    "G.algos:dart-reg.AFT_F03=on",
+    "G.algos:decision-tree-clf.AFT_F03=on",
+    "G.algos:decision-tree-reg.AFT_F03=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F03=1"
+   ],
+   "environment": {},
+   "key": "9d59736d92398afb71b3",
+   "mode": "fast",
+   "pack": "F024",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F025",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F04=on",
+    "G.algos:adaboost-reg.AFT_F04=on",
+    "G.algos:bagging-clf.AFT_F04=on",
+    "G.algos:bagging-reg.AFT_F04=on",
+    "G.algos:dart.AFT_F04=on",
+    "G.algos:dart-reg.AFT_F04=on",
+    "G.algos:decision-tree-clf.AFT_F04=on",
+    "G.algos:decision-tree-reg.AFT_F04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "cf461db8bf8248376560",
+   "mode": "fast",
+   "pack": "F025",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F025",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F04=on",
+    "G.algos:adaboost-reg.AFT_F04=on",
+    "G.algos:bagging-clf.AFT_F04=on",
+    "G.algos:bagging-reg.AFT_F04=on",
+    "G.algos:dart.AFT_F04=on",
+    "G.algos:dart-reg.AFT_F04=on",
+    "G.algos:decision-tree-clf.AFT_F04=on",
+    "G.algos:decision-tree-reg.AFT_F04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F04=1"
+   ],
+   "environment": {},
+   "key": "95ccedad750236ba7218",
+   "mode": "fast",
+   "pack": "F025",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F026",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F05=on",
+    "G.algos:adaboost-reg.AFT_F05=on",
+    "G.algos:bagging-clf.AFT_F05=on",
+    "G.algos:bagging-reg.AFT_F05=on",
+    "G.algos:dart.AFT_F05=on",
+    "G.algos:dart-reg.AFT_F05=on",
+    "G.algos:decision-tree-clf.AFT_F05=on",
+    "G.algos:decision-tree-reg.AFT_F05=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "ad87b86d91d815be7237",
+   "mode": "fast",
+   "pack": "F026",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F026",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F05=on",
+    "G.algos:adaboost-reg.AFT_F05=on",
+    "G.algos:bagging-clf.AFT_F05=on",
+    "G.algos:bagging-reg.AFT_F05=on",
+    "G.algos:dart.AFT_F05=on",
+    "G.algos:dart-reg.AFT_F05=on",
+    "G.algos:decision-tree-clf.AFT_F05=on",
+    "G.algos:decision-tree-reg.AFT_F05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F05=1"
+   ],
+   "environment": {},
+   "key": "a457ca48e9f32fb2d02d",
+   "mode": "fast",
+   "pack": "F026",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F027",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_P02=on",
+    "G.algos:adaboost-reg.AFT_P02=on",
+    "G.algos:bagging-clf.AFT_P02=on",
+    "G.algos:bagging-reg.AFT_P02=on",
+    "G.algos:decision-tree-clf.AFT_P02=on",
+    "G.algos:decision-tree-reg.AFT_P02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "0a892600cd175548de25",
+   "mode": "fast",
+   "pack": "F027",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F027",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_P02=on",
+    "G.algos:adaboost-reg.AFT_P02=on",
+    "G.algos:bagging-clf.AFT_P02=on",
+    "G.algos:bagging-reg.AFT_P02=on",
+    "G.algos:decision-tree-clf.AFT_P02=on",
+    "G.algos:decision-tree-reg.AFT_P02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P02=1"
+   ],
+   "environment": {},
+   "key": "c181e5191dc8ea2dbe9b",
+   "mode": "fast",
+   "pack": "F027",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F028",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_P04=on",
+    "G.algos:adaboost-reg.AFT_P04=on",
+    "G.algos:bagging-clf.AFT_P04=on",
+    "G.algos:bagging-reg.AFT_P04=on",
+    "G.algos:decision-tree-clf.AFT_P04=on",
+    "G.algos:decision-tree-reg.AFT_P04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "67d166be4a8c635ed45a",
+   "mode": "fast",
+   "pack": "F028",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F028",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_P04=on",
+    "G.algos:adaboost-reg.AFT_P04=on",
+    "G.algos:bagging-clf.AFT_P04=on",
+    "G.algos:bagging-reg.AFT_P04=on",
+    "G.algos:decision-tree-clf.AFT_P04=on",
+    "G.algos:decision-tree-reg.AFT_P04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "d02a1c31c3f25968ef37",
+   "mode": "fast",
+   "pack": "F028",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F029",
+   "configurations": [
+    "G.algos:adaboost-clf.all_on",
+    "G.algos:adaboost-reg.all_on",
+    "G.algos:bagging-clf.all_on",
+    "G.algos:bagging-reg.all_on",
+    "G.algos:dart.all_on",
+    "G.algos:dart-reg.all_on",
+    "G.algos:decision-tree-clf.all_on",
+    "G.algos:decision-tree-reg.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "eda6abc861331654c8d4",
+   "mode": "fast",
+   "pack": "F029",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F029",
+   "configurations": [
+    "G.algos:adaboost-clf.all_on",
+    "G.algos:adaboost-reg.all_on",
+    "G.algos:bagging-clf.all_on",
+    "G.algos:bagging-reg.all_on",
+    "G.algos:dart.all_on",
+    "G.algos:dart-reg.all_on",
+    "G.algos:decision-tree-clf.all_on",
+    "G.algos:decision-tree-reg.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F01=1",
+    "MOJOLEARN_AFT_F02=1",
+    "MOJOLEARN_AFT_F03=1",
+    "MOJOLEARN_AFT_F04=1",
+    "MOJOLEARN_AFT_F05=1",
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "0959d8b73a8fb4fc7b51",
+   "mode": "fast",
+   "pack": "F029",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F030",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F01=on+AFT_F02=on",
+    "G.algos:adaboost-reg.AFT_F01=on+AFT_F02=on",
+    "G.algos:bagging-clf.AFT_F01=on+AFT_F02=on",
+    "G.algos:bagging-reg.AFT_F01=on+AFT_F02=on",
+    "G.algos:dart.AFT_F01=on+AFT_F02=on",
+    "G.algos:dart-reg.AFT_F01=on+AFT_F02=on",
+    "G.algos:decision-tree-clf.AFT_F01=on+AFT_F02=on",
+    "G.algos:decision-tree-reg.AFT_F01=on+AFT_F02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "11a522fbef8ecb95bee5",
+   "mode": "fast",
+   "pack": "F030",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F030",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_F01=on+AFT_F02=on",
+    "G.algos:adaboost-reg.AFT_F01=on+AFT_F02=on",
+    "G.algos:bagging-clf.AFT_F01=on+AFT_F02=on",
+    "G.algos:bagging-reg.AFT_F01=on+AFT_F02=on",
+    "G.algos:dart.AFT_F01=on+AFT_F02=on",
+    "G.algos:dart-reg.AFT_F01=on+AFT_F02=on",
+    "G.algos:decision-tree-clf.AFT_F01=on+AFT_F02=on",
+    "G.algos:decision-tree-reg.AFT_F01=on+AFT_F02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F01=1",
+    "MOJOLEARN_AFT_F02=1"
+   ],
+   "environment": {},
+   "key": "61ec661f3fb8921a661b",
+   "mode": "fast",
+   "pack": "F030",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F031",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_P02=on+AFT_P04=on",
+    "G.algos:adaboost-reg.AFT_P02=on+AFT_P04=on",
+    "G.algos:bagging-clf.AFT_P02=on+AFT_P04=on",
+    "G.algos:bagging-reg.AFT_P02=on+AFT_P04=on",
+    "G.algos:decision-tree-clf.AFT_P02=on+AFT_P04=on",
+    "G.algos:decision-tree-reg.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "dcc1abc4125637b5f0c0",
+   "mode": "fast",
+   "pack": "F031",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F031",
+   "configurations": [
+    "G.algos:adaboost-clf.AFT_P02=on+AFT_P04=on",
+    "G.algos:adaboost-reg.AFT_P02=on+AFT_P04=on",
+    "G.algos:bagging-clf.AFT_P02=on+AFT_P04=on",
+    "G.algos:bagging-reg.AFT_P02=on+AFT_P04=on",
+    "G.algos:decision-tree-clf.AFT_P02=on+AFT_P04=on",
+    "G.algos:decision-tree-reg.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "c36f29a4f8bd816f316a",
+   "mode": "fast",
+   "pack": "F031",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/solver.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F032",
+   "configurations": [
+    "G.classical2:agglomerative.AFCL_G14=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "581d63f8bcf0f9905a22",
+   "mode": "fast",
+   "pack": "F032",
+   "role": "pack",
+   "script": "bindings/build_solver.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/solver.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F032",
+   "configurations": [
+    "G.classical2:agglomerative.AFCL_G14=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G14=1"
+   ],
+   "environment": {},
+   "key": "1105fe8acb39142aed96",
+   "mode": "fast",
+   "pack": "F032",
+   "role": "pack",
+   "script": "bindings/build_solver.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F033",
+   "configurations": [
+    "G.algos:ocsvm.AFCL_L06=on",
+    "G.classical2:svr.AFCL_L06=on",
+    "G.classical:svc.AFCL_L06=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "84462a24ac9bf7b8a67e",
+   "mode": "fast",
+   "pack": "F033",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F033",
+   "configurations": [
+    "G.algos:ocsvm.AFCL_L06=on",
+    "G.classical2:svr.AFCL_L06=on",
+    "G.classical:svc.AFCL_L06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L06=1"
+   ],
+   "environment": {},
+   "key": "2101e06b952c4ad2a689",
+   "mode": "fast",
+   "pack": "F033",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F034",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F06=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "efb7c6c4a04c0c577073",
+   "mode": "fast",
+   "pack": "F034",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F034",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1"
+   ],
+   "environment": {},
+   "key": "2f26ed9b51ab3ca9a4b6",
+   "mode": "fast",
+   "pack": "F034",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F035",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "2e684d1a7715cfa6334a",
+   "mode": "fast",
+   "pack": "F035",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F035",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F07=1"
+   ],
+   "environment": {},
+   "key": "d314f0e0418991ccb320",
+   "mode": "fast",
+   "pack": "F035",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F036",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "7b083a02287d90872bdc",
+   "mode": "fast",
+   "pack": "F036",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F036",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "b91ebddf2ce5ad46f202",
+   "mode": "fast",
+   "pack": "F036",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F037",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F09=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "074c063502d4395f77cf",
+   "mode": "fast",
+   "pack": "F037",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F037",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F09=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F09=1"
+   ],
+   "environment": {},
+   "key": "978128b25b6562c77a4e",
+   "mode": "fast",
+   "pack": "F037",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F038",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFCL_T09=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "513b114571e5fe8e7239",
+   "mode": "fast",
+   "pack": "F038",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F038",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFCL_T09=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T09=1"
+   ],
+   "environment": {},
+   "key": "71e5856530b5658f50f3",
+   "mode": "fast",
+   "pack": "F038",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F039",
+   "configurations": [
+    "G.algos:random-trees-embedding.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "3e165f15462bad51b08d",
+   "mode": "fast",
+   "pack": "F039",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F039",
+   "configurations": [
+    "G.algos:random-trees-embedding.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T09=1",
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F07=1",
+    "MOJOLEARN_AFT_F08=1",
+    "MOJOLEARN_AFT_F09=1"
+   ],
+   "environment": {},
+   "key": "0ebf476aa57fcba04f57",
+   "mode": "fast",
+   "pack": "F039",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F040",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "8a903a988bc395af2b98",
+   "mode": "fast",
+   "pack": "F040",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F040",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F07=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "de6e71c4693a28579149",
+   "mode": "fast",
+   "pack": "F040",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F041",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F06=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "7a2e07f499d7715c5573",
+   "mode": "fast",
+   "pack": "F041",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F041",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F06=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "de1a3b8bfaf433213c8d",
+   "mode": "fast",
+   "pack": "F041",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F042",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F06=on+AFT_F07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "fb4293ad8738d58f63cb",
+   "mode": "fast",
+   "pack": "F042",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F042",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F06=on+AFT_F07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F07=1"
+   ],
+   "environment": {},
+   "key": "3fb32f37a4212b2b5c9f",
+   "mode": "fast",
+   "pack": "F042",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F043",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F06=on+AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "8bffe8e60f36d728a3cb",
+   "mode": "fast",
+   "pack": "F043",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F043",
+   "configurations": [
+    "G.algos:random-trees-embedding.AFT_F06=on+AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F07=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "bcf8c77aa7e9eaf9a50d",
+   "mode": "fast",
+   "pack": "F043",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/tsa.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F044",
+   "configurations": [
+    "G.algos:autoarima.AFCL_P11=on",
+    "G.algos:kpss.AFCL_P11=on",
+    "G.algos:select-d.AFCL_P11=on",
+    "G.classical2:ets.AFCL_P14=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "dba5355193c1945ceb22",
+   "mode": "fast",
+   "pack": "F044",
+   "role": "pack",
+   "script": "bindings/build_tsa.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/tsa.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F044",
+   "configurations": [
+    "G.algos:autoarima.AFCL_P11=on",
+    "G.algos:kpss.AFCL_P11=on",
+    "G.algos:select-d.AFCL_P11=on",
+    "G.classical2:ets.AFCL_P14=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_P11=1",
+    "MOJOLEARN_AFCL_P14=1"
+   ],
+   "environment": {},
+   "key": "e4378a862ec2eb17e2f9",
+   "mode": "fast",
+   "pack": "F044",
+   "role": "pack",
+   "script": "bindings/build_tsa.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_cluster.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F045",
+   "configurations": [
+    "G.algos:meanshift.AFCL_G12=on",
+    "G.algos:minibatch-kmeans.AFCL_G07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "1832807bc05a71a57849",
+   "mode": "fast",
+   "pack": "F045",
+   "role": "pack",
+   "script": "bindings/build_x_cluster.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_cluster.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F045",
+   "configurations": [
+    "G.algos:meanshift.AFCL_G12=on",
+    "G.algos:minibatch-kmeans.AFCL_G07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_G07=1",
+    "MOJOLEARN_AFCL_G12=1"
+   ],
+   "environment": {},
+   "key": "7ca196aa1aad8ace02ff",
+   "mode": "fast",
+   "pack": "F045",
+   "role": "pack",
+   "script": "bindings/build_x_cluster.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_decomp.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F046",
+   "configurations": [
+    "G.algos:elliptic-envelope.AFCL_L13=on",
+    "G.algos:min-cov-det.AFCL_L13=on",
+    "G.algos:nmf.AFCL_L10=on",
+    "G.algos:sparse-coder.DECOMP_FAST_OMP_BLOCK=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "cb3802089f6396a4e01a",
+   "mode": "fast",
+   "pack": "F046",
+   "role": "pack",
+   "script": "bindings/build_x_decomp.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_decomp.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F046",
+   "configurations": [
+    "G.algos:elliptic-envelope.AFCL_L13=on",
+    "G.algos:min-cov-det.AFCL_L13=on",
+    "G.algos:nmf.AFCL_L10=on",
+    "G.algos:sparse-coder.DECOMP_FAST_OMP_BLOCK=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L10=1",
+    "MOJOLEARN_AFCL_L13=1",
+    "MOJOLEARN_DECOMP_FAST_OMP_BLOCK=1"
+   ],
+   "environment": {},
+   "key": "5bdea4714ec283dd5bbf",
+   "mode": "fast",
+   "pack": "F046",
+   "role": "pack",
+   "script": "bindings/build_x_decomp.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F047",
+   "configurations": [
+    "G.algos:ard.AFCL_L01=on",
+    "G.algos:bayesian-ridge.AFCL_L01=on",
+    "G.algos:huber.AFCL_L04=on",
+    "G.algos:lars.AFCL_L01=on",
+    "G.algos:lasso-lars.AFCL_L01=on",
+    "G.algos:pa-clf.AFCL_L14=on",
+    "G.algos:pa-reg.AFCL_L14=on",
+    "G.algos:perceptron.AFCL_L14=on",
+    "G.algos:ridge-clf.AFCL_L01=on",
+    "G.algos:ridge-cv.AFCL_L01=on",
+    "G.algos:sgd-clf.AFCL_L14=on",
+    "G.algos:sgd-ocsvm.AFCL_L14=on",
+    "G.algos:sgd-reg.AFCL_L14=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "ae16207491b43b569928",
+   "mode": "fast",
+   "pack": "F047",
+   "role": "pack",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F047",
+   "configurations": [
+    "G.algos:ard.AFCL_L01=on",
+    "G.algos:bayesian-ridge.AFCL_L01=on",
+    "G.algos:huber.AFCL_L04=on",
+    "G.algos:lars.AFCL_L01=on",
+    "G.algos:lasso-lars.AFCL_L01=on",
+    "G.algos:pa-clf.AFCL_L14=on",
+    "G.algos:pa-reg.AFCL_L14=on",
+    "G.algos:perceptron.AFCL_L14=on",
+    "G.algos:ridge-clf.AFCL_L01=on",
+    "G.algos:ridge-cv.AFCL_L01=on",
+    "G.algos:sgd-clf.AFCL_L14=on",
+    "G.algos:sgd-ocsvm.AFCL_L14=on",
+    "G.algos:sgd-reg.AFCL_L14=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L01=1",
+    "MOJOLEARN_AFCL_L04=1",
+    "MOJOLEARN_AFCL_L14=1"
+   ],
+   "environment": {},
+   "key": "988dfe29aa9494550999",
+   "mode": "fast",
+   "pack": "F047",
+   "role": "pack",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F048",
+   "configurations": [
+    "G.algos:ard.AFCL_L02=on",
+    "G.algos:bayesian-ridge.AFCL_L02=on",
+    "G.algos:lars.AFCL_L02=on",
+    "G.algos:lasso-lars.AFCL_L02=on",
+    "G.algos:ridge-clf.AFCL_L02=on",
+    "G.algos:ridge-cv.AFCL_L02=on",
+    "G.algos:sgd-clf.SGD_FAST_EPOCH_RESIDENT=on",
+    "G.algos:sgd-reg.SGD_FAST_EPOCH_RESIDENT=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "b8473f1305967181e508",
+   "mode": "fast",
+   "pack": "F048",
+   "role": "pack",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F048",
+   "configurations": [
+    "G.algos:ard.AFCL_L02=on",
+    "G.algos:bayesian-ridge.AFCL_L02=on",
+    "G.algos:lars.AFCL_L02=on",
+    "G.algos:lasso-lars.AFCL_L02=on",
+    "G.algos:ridge-clf.AFCL_L02=on",
+    "G.algos:ridge-cv.AFCL_L02=on",
+    "G.algos:sgd-clf.SGD_FAST_EPOCH_RESIDENT=on",
+    "G.algos:sgd-reg.SGD_FAST_EPOCH_RESIDENT=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L02=1",
+    "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT=1"
+   ],
+   "environment": {},
+   "key": "cd504601d71d81e1bc1f",
+   "mode": "fast",
+   "pack": "F048",
+   "role": "pack",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F049",
+   "configurations": [
+    "G.algos:ard.all_on",
+    "G.algos:bayesian-ridge.all_on",
+    "G.algos:lars.all_on",
+    "G.algos:lasso-lars.all_on",
+    "G.algos:ridge-clf.all_on",
+    "G.algos:ridge-cv.all_on",
+    "G.algos:sgd-clf.all_on",
+    "G.algos:sgd-reg.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a614d452751cd5aa4516",
+   "mode": "fast",
+   "pack": "F049",
+   "role": "pack",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F049",
+   "configurations": [
+    "G.algos:ard.all_on",
+    "G.algos:bayesian-ridge.all_on",
+    "G.algos:lars.all_on",
+    "G.algos:lasso-lars.all_on",
+    "G.algos:ridge-clf.all_on",
+    "G.algos:ridge-cv.all_on",
+    "G.algos:sgd-clf.all_on",
+    "G.algos:sgd-reg.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L01=1",
+    "MOJOLEARN_AFCL_L02=1",
+    "MOJOLEARN_AFCL_L14=1",
+    "MOJOLEARN_SGD_FAST_EPOCH_RESIDENT=1"
+   ],
+   "environment": {},
+   "key": "c020a0aa683251e0a0a3",
+   "mode": "fast",
+   "pack": "F049",
+   "role": "pack",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F050",
+   "configurations": [
+    "G.algos:enet-cv.AFCL_L03=on",
+    "G.algos:lasso-cv.AFCL_L03=on"
+   ],
+   "defines": [],
+   "environment": {
+    "MOJOLEARN_X_LINEAR_ENETCV_FAST": "1"
+   },
+   "key": "83e536b371478bed1147",
+   "mode": "fast",
+   "pack": "F050",
+   "role": "pack",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_linear.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F050",
+   "configurations": [
+    "G.algos:enet-cv.AFCL_L03=on",
+    "G.algos:lasso-cv.AFCL_L03=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L03=1"
+   ],
+   "environment": {
+    "MOJOLEARN_X_LINEAR_ENETCV_FAST": "1"
+   },
+   "key": "330cf8b1d6e39661ca6f",
+   "mode": "fast",
+   "pack": "F050",
+   "role": "pack",
+   "script": "bindings/build_x_linear.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F051",
+   "configurations": [
+    "G.algos:categorical-nb.NB_CAT_ATOMIC=on",
+    "G.algos:complement-nb.AFCL_P04=on",
+    "G.algos:gaussian-nb.AFCL_P13=on",
+    "G.algos:lda-clf.AFCL_L01=on",
+    "G.algos:maxabs-scaler.AFCL_P02=on",
+    "G.algos:minmax-scaler.AFCL_P01=on",
+    "G.algos:multinomial-nb.AFCL_P04=on",
+    "G.algos:power-transformer.AFCL_P01=on",
+    "G.algos:qda.AFCL_L01=on",
+    "G.algos:select-f-classif.AFCL_P07=on",
+    "G.algos:select-f-regression.AFCL_P07=on",
+    "G.algos:select-mutual-info-reg.MI_REG_SORTCOUNT=on",
+    "G.algos:select-r-regression.AFCL_P07=on",
+    "G.algos:simple-imputer.AFCL_P01=on",
+    "G.algos:standard-scaler.AFCL_P01=on",
+    "G.algos:target-encoder.AFCL_P05=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "bd9f38094c2ce1337b25",
+   "mode": "fast",
+   "pack": "F051",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F051",
+   "configurations": [
+    "G.algos:categorical-nb.NB_CAT_ATOMIC=on",
+    "G.algos:complement-nb.AFCL_P04=on",
+    "G.algos:gaussian-nb.AFCL_P13=on",
+    "G.algos:lda-clf.AFCL_L01=on",
+    "G.algos:maxabs-scaler.AFCL_P02=on",
+    "G.algos:minmax-scaler.AFCL_P01=on",
+    "G.algos:multinomial-nb.AFCL_P04=on",
+    "G.algos:power-transformer.AFCL_P01=on",
+    "G.algos:qda.AFCL_L01=on",
+    "G.algos:select-f-classif.AFCL_P07=on",
+    "G.algos:select-f-regression.AFCL_P07=on",
+    "G.algos:select-mutual-info-reg.MI_REG_SORTCOUNT=on",
+    "G.algos:select-r-regression.AFCL_P07=on",
+    "G.algos:simple-imputer.AFCL_P01=on",
+    "G.algos:standard-scaler.AFCL_P01=on",
+    "G.algos:target-encoder.AFCL_P05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L01=1",
+    "MOJOLEARN_AFCL_P01=1",
+    "MOJOLEARN_AFCL_P02=1",
+    "MOJOLEARN_AFCL_P04=1",
+    "MOJOLEARN_AFCL_P05=1",
+    "MOJOLEARN_AFCL_P07=1",
+    "MOJOLEARN_AFCL_P13=1",
+    "MOJOLEARN_MI_REG_SORTCOUNT=1",
+    "MOJOLEARN_NB_CAT_ATOMIC=1"
+   ],
+   "environment": {},
+   "key": "eaf42f203d5ee6f9e1e6",
+   "mode": "fast",
+   "pack": "F051",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F052",
+   "configurations": [
+    "G.algos:categorical-nb.all_on",
+    "G.algos:lda-clf.AFCL_L02=on",
+    "G.algos:qda.AFCL_L02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a736b5a36f42495709bc",
+   "mode": "fast",
+   "pack": "F052",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F052",
+   "configurations": [
+    "G.algos:categorical-nb.all_on",
+    "G.algos:lda-clf.AFCL_L02=on",
+    "G.algos:qda.AFCL_L02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L02=1",
+    "MOJOLEARN_AFCL_P03=1",
+    "MOJOLEARN_NB_CAT_ATOMIC=1"
+   ],
+   "environment": {},
+   "key": "3dd1d21e9fb90068eb0f",
+   "mode": "fast",
+   "pack": "F052",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F053",
+   "configurations": [
+    "G.algos:lda-clf.all_on",
+    "G.algos:qda.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a5725957c2e31a70c325",
+   "mode": "fast",
+   "pack": "F053",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F053",
+   "configurations": [
+    "G.algos:lda-clf.all_on",
+    "G.algos:qda.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_L01=1",
+    "MOJOLEARN_AFCL_L02=1"
+   ],
+   "environment": {},
+   "key": "e1d6e07a7eb7d4bb854b",
+   "mode": "fast",
+   "pack": "F053",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F054",
+   "configurations": [
+    "G.algos:iterative-imputer.AFCL_P06=on"
+   ],
+   "defines": [],
+   "environment": {
+    "MOJOLEARN_X_PREP_FAST_II_CONV": "1"
+   },
+   "key": "e120d62308be078527d1",
+   "mode": "fast",
+   "pack": "F054",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F054",
+   "configurations": [
+    "G.algos:iterative-imputer.AFCL_P06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_P06=1"
+   ],
+   "environment": {
+    "MOJOLEARN_X_PREP_FAST_II_CONV": "1"
+   },
+   "key": "8ff89e43f771f97b8942",
+   "mode": "fast",
+   "pack": "F054",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F055",
+   "configurations": [
+    "G.algos:categorical-nb.AFCL_P03=on"
+   ],
+   "defines": [
+    "MOJOLEARN_NB_CAT_ATOMIC=1"
+   ],
+   "environment": {},
+   "key": "1ed375cc6d1b262046b7",
+   "mode": "fast",
+   "pack": "F055",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_prep.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F055",
+   "configurations": [
+    "G.algos:categorical-nb.AFCL_P03=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_P03=1",
+    "MOJOLEARN_NB_CAT_ATOMIC=1"
+   ],
+   "environment": {},
+   "key": "36a6e7daae499c0b4ee4",
+   "mode": "fast",
+   "pack": "F055",
+   "role": "pack",
+   "script": "bindings/build_x_prep.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F056",
+   "configurations": [
+    "G.algos:dart.AFT_P11=on",
+    "G.algos:dart-reg.AFT_P11=on",
+    "G.algos:tree-shap.AFT_P07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "bb2b3da477a28dc17565",
+   "mode": "fast",
+   "pack": "F056",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F056",
+   "configurations": [
+    "G.algos:dart.AFT_P11=on",
+    "G.algos:dart-reg.AFT_P11=on",
+    "G.algos:tree-shap.AFT_P07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P07=1",
+    "MOJOLEARN_AFT_P11=1"
+   ],
+   "environment": {},
+   "key": "71e3ac7a658883245ac6",
+   "mode": "fast",
+   "pack": "F056",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F057",
+   "configurations": [
+    "G.algos:dart.AFT_P12=on",
+    "G.algos:dart-reg.AFT_P12=on",
+    "G.algos:tree-shap.AFT_P08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "2e1a42327687b50bebaf",
+   "mode": "fast",
+   "pack": "F057",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F057",
+   "configurations": [
+    "G.algos:dart.AFT_P12=on",
+    "G.algos:dart-reg.AFT_P12=on",
+    "G.algos:tree-shap.AFT_P08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P08=1",
+    "MOJOLEARN_AFT_P12=1"
+   ],
+   "environment": {},
+   "key": "c470f18e94c43e1e6cf3",
+   "mode": "fast",
+   "pack": "F057",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F058",
+   "configurations": [
+    "G.algos:dart.AFT_P11=on+AFT_P12=on",
+    "G.algos:dart-reg.AFT_P11=on+AFT_P12=on",
+    "G.algos:tree-shap.AFT_P09=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "4d3108bfc50e2115cf97",
+   "mode": "fast",
+   "pack": "F058",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F058",
+   "configurations": [
+    "G.algos:dart.AFT_P11=on+AFT_P12=on",
+    "G.algos:dart-reg.AFT_P11=on+AFT_P12=on",
+    "G.algos:tree-shap.AFT_P09=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P09=1",
+    "MOJOLEARN_AFT_P11=1",
+    "MOJOLEARN_AFT_P12=1"
+   ],
+   "environment": {},
+   "key": "301496555cb27e6f054d",
+   "mode": "fast",
+   "pack": "F058",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F059",
+   "configurations": [
+    "G.algos:tree-shap.AFT_P10=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "72cc80f15e69d0d3bf79",
+   "mode": "fast",
+   "pack": "F059",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F059",
+   "configurations": [
+    "G.algos:tree-shap.AFT_P10=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P10=1"
+   ],
+   "environment": {},
+   "key": "df1d58c0d48efad57dcf",
+   "mode": "fast",
+   "pack": "F059",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F060",
+   "configurations": [
+    "G.algos:tree-shap.AFCL_T11=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "307837c195c0e3954457",
+   "mode": "fast",
+   "pack": "F060",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F060",
+   "configurations": [
+    "G.algos:tree-shap.AFCL_T11=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T11=1"
+   ],
+   "environment": {},
+   "key": "0147d05a22796fad6b94",
+   "mode": "fast",
+   "pack": "F060",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F061",
+   "configurations": [
+    "G.algos:tree-shap.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "6cb7b6bb3ca86df96676",
+   "mode": "fast",
+   "pack": "F061",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/x_trees.mojo",
+   "build_dir": "$HOME/afc-def/gf7b7a62-F061",
+   "configurations": [
+    "G.algos:tree-shap.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T11=1",
+    "MOJOLEARN_AFT_P07=1",
+    "MOJOLEARN_AFT_P08=1",
+    "MOJOLEARN_AFT_P09=1",
+    "MOJOLEARN_AFT_P10=1"
+   ],
+   "environment": {},
+   "key": "835f24b0557df9d77a24",
+   "mode": "fast",
+   "pack": "F061",
+   "role": "pack",
+   "script": "bindings/build_x_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "afc_def",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F062",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G05=on",
+    "G.trees:gbdt-depthwise.AFT_G05=on",
+    "G.trees:gbdt-lossguide.AFT_G05=on",
+    "G.trees:gbdt-multiclass.AFT_G05=on",
+    "G.trees:gbdt-ordered.AFT_G05=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_G05=on",
+    "G.trees:gbdt-rank-yetirank.AFT_G05=on",
+    "G.trees:gbdt-symmetric.AFT_G05=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G05=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "78d22ab60d1d6bc63d15",
+   "mode": "fast",
+   "pack": "F062",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F062",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G05=on",
+    "G.trees:gbdt-depthwise.AFT_G05=on",
+    "G.trees:gbdt-lossguide.AFT_G05=on",
+    "G.trees:gbdt-multiclass.AFT_G05=on",
+    "G.trees:gbdt-ordered.AFT_G05=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_G05=on",
+    "G.trees:gbdt-rank-yetirank.AFT_G05=on",
+    "G.trees:gbdt-symmetric.AFT_G05=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G05=1"
+   ],
+   "environment": {},
+   "key": "20d21370c828022c579a",
+   "mode": "fast",
+   "pack": "F062",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F063",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G08=on",
+    "G.trees:gbdt-depthwise.AFT_G08=on",
+    "G.trees:gbdt-lossguide.AFT_G08=on",
+    "G.trees:gbdt-multiclass.AFT_G08=on",
+    "G.trees:gbdt-ordered.AFT_G01=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_G08=on",
+    "G.trees:gbdt-rank-yetirank.AFT_G08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "515596a0e03577194ce8",
+   "mode": "fast",
+   "pack": "F063",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F063",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G08=on",
+    "G.trees:gbdt-depthwise.AFT_G08=on",
+    "G.trees:gbdt-lossguide.AFT_G08=on",
+    "G.trees:gbdt-multiclass.AFT_G08=on",
+    "G.trees:gbdt-ordered.AFT_G01=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_G08=on",
+    "G.trees:gbdt-rank-yetirank.AFT_G08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G01=1",
+    "MOJOLEARN_AFT_G08=1"
+   ],
+   "environment": {},
+   "key": "254671d3153ed1698091",
+   "mode": "fast",
+   "pack": "F063",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F064",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G09=on",
+    "G.trees:gbdt-depthwise.AFT_G07=on",
+    "G.trees:gbdt-lossguide.AFT_G07=on",
+    "G.trees:gbdt-ordered.AFT_G02=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_N07=on",
+    "G.trees:gbdt-rank-yetirank.AFT_N09=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "1ec7f594389de4875beb",
+   "mode": "fast",
+   "pack": "F064",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F064",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G09=on",
+    "G.trees:gbdt-depthwise.AFT_G07=on",
+    "G.trees:gbdt-lossguide.AFT_G07=on",
+    "G.trees:gbdt-ordered.AFT_G02=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_N07=on",
+    "G.trees:gbdt-rank-yetirank.AFT_N09=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G02=1",
+    "MOJOLEARN_AFT_G07=1",
+    "MOJOLEARN_AFT_G09=1",
+    "MOJOLEARN_AFT_N07=1",
+    "MOJOLEARN_AFT_N09=1"
+   ],
+   "environment": {},
+   "key": "9ec6b2c1097559b4a639",
+   "mode": "fast",
+   "pack": "F064",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F065",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G10=on",
+    "G.trees:gbdt-depthwise.AFT_N03=on",
+    "G.trees:gbdt-ordered.AFT_G03=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_N08=on",
+    "G.trees:gbdt-rank-yetirank.AFT_N10=on",
+    "G.trees:gbdt-symmetric.AFT_G03=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G03=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "3650bc3f8bf1b47c1a11",
+   "mode": "fast",
+   "pack": "F065",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F065",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G10=on",
+    "G.trees:gbdt-depthwise.AFT_N03=on",
+    "G.trees:gbdt-ordered.AFT_G03=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_N08=on",
+    "G.trees:gbdt-rank-yetirank.AFT_N10=on",
+    "G.trees:gbdt-symmetric.AFT_G03=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G03=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G03=1",
+    "MOJOLEARN_AFT_G10=1",
+    "MOJOLEARN_AFT_N03=1",
+    "MOJOLEARN_AFT_N08=1",
+    "MOJOLEARN_AFT_N10=1"
+   ],
+   "environment": {},
+   "key": "f1f12d9bcd4cfc612f90",
+   "mode": "fast",
+   "pack": "F065",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F066",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_N01=on",
+    "G.trees:gbdt-depthwise.AFT_N06=on",
+    "G.trees:gbdt-lossguide.AFT_N01=on",
+    "G.trees:gbdt-ordered.AFT_G04=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_N07=on+AFT_N08=on",
+    "G.trees:gbdt-rank-yetirank.AFT_N11=on",
+    "G.trees:gbdt-symmetric.AFT_G04=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "e7e3b6d4674b13d933b8",
+   "mode": "fast",
+   "pack": "F066",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F066",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_N01=on",
+    "G.trees:gbdt-depthwise.AFT_N06=on",
+    "G.trees:gbdt-lossguide.AFT_N01=on",
+    "G.trees:gbdt-ordered.AFT_G04=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_N07=on+AFT_N08=on",
+    "G.trees:gbdt-rank-yetirank.AFT_N11=on",
+    "G.trees:gbdt-symmetric.AFT_G04=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G04=1",
+    "MOJOLEARN_AFT_N01=1",
+    "MOJOLEARN_AFT_N06=1",
+    "MOJOLEARN_AFT_N07=1",
+    "MOJOLEARN_AFT_N08=1",
+    "MOJOLEARN_AFT_N11=1"
+   ],
+   "environment": {},
+   "key": "21de6d7ba0f7c0bf950d",
+   "mode": "fast",
+   "pack": "F066",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F067",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_N02=on",
+    "G.trees:gbdt-depthwise.AFT_N02=on",
+    "G.trees:gbdt-lossguide.AFT_N02=on",
+    "G.trees:gbdt-ordered.AFT_G11=on",
+    "G.trees:gbdt-rank-yetirank.AFT_N12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "e435fe22334d6ccf1f36",
+   "mode": "fast",
+   "pack": "F067",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F067",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_N02=on",
+    "G.trees:gbdt-depthwise.AFT_N02=on",
+    "G.trees:gbdt-lossguide.AFT_N02=on",
+    "G.trees:gbdt-ordered.AFT_G11=on",
+    "G.trees:gbdt-rank-yetirank.AFT_N12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G11=1",
+    "MOJOLEARN_AFT_N02=1",
+    "MOJOLEARN_AFT_N12=1"
+   ],
+   "environment": {},
+   "key": "03634c749e8246479637",
+   "mode": "fast",
+   "pack": "F067",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F068",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_N04=on",
+    "G.trees:gbdt-depthwise.AFT_N04=on",
+    "G.trees:gbdt-lossguide.AFT_N04=on",
+    "G.trees:gbdt-ordered.AFT_G12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "1106ce2f9b07d5c0c7d7",
+   "mode": "fast",
+   "pack": "F068",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F068",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_N04=on",
+    "G.trees:gbdt-depthwise.AFT_N04=on",
+    "G.trees:gbdt-lossguide.AFT_N04=on",
+    "G.trees:gbdt-ordered.AFT_G12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G12=1",
+    "MOJOLEARN_AFT_N04=1"
+   ],
+   "environment": {},
+   "key": "c7bfc74fd6ac5c84080a",
+   "mode": "fast",
+   "pack": "F068",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F069",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_P06=on",
+    "G.trees:gbdt-depthwise.AFT_P06=on",
+    "G.trees:gbdt-lossguide.AFT_P06=on",
+    "G.trees:gbdt-multiclass.AFT_P06=on",
+    "G.trees:gbdt-ordered.AFT_P06=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_P06=on",
+    "G.trees:gbdt-rank-yetirank.AFT_P06=on",
+    "G.trees:gbdt-symmetric.AFT_P06=on",
+    "G.trees:gbdt-symmetric-1000.AFT_P06=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "b3cee5113bc0528c5e6b",
+   "mode": "fast",
+   "pack": "F069",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F069",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_P06=on",
+    "G.trees:gbdt-depthwise.AFT_P06=on",
+    "G.trees:gbdt-lossguide.AFT_P06=on",
+    "G.trees:gbdt-multiclass.AFT_P06=on",
+    "G.trees:gbdt-ordered.AFT_P06=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_P06=on",
+    "G.trees:gbdt-rank-yetirank.AFT_P06=on",
+    "G.trees:gbdt-symmetric.AFT_P06=on",
+    "G.trees:gbdt-symmetric-1000.AFT_P06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P06=1"
+   ],
+   "environment": {},
+   "key": "102c2921dc4a0232fff7",
+   "mode": "fast",
+   "pack": "F069",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F070",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFCL_T03=on",
+    "G.trees:gbdt-depthwise.AFCL_T03=on",
+    "G.trees:gbdt-lossguide.AFCL_T03=on",
+    "G.trees:gbdt-ordered.AFCL_T03=on",
+    "G.trees:gbdt-symmetric.AFCL_T03=on",
+    "G.trees:gbdt-symmetric-1000.AFCL_T03=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "f3ec427ca624a9e94b3b",
+   "mode": "fast",
+   "pack": "F070",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F070",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFCL_T03=on",
+    "G.trees:gbdt-depthwise.AFCL_T03=on",
+    "G.trees:gbdt-lossguide.AFCL_T03=on",
+    "G.trees:gbdt-ordered.AFCL_T03=on",
+    "G.trees:gbdt-symmetric.AFCL_T03=on",
+    "G.trees:gbdt-symmetric-1000.AFCL_T03=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T03=1"
+   ],
+   "environment": {},
+   "key": "5718019b216a83ec7a21",
+   "mode": "fast",
+   "pack": "F070",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F071",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFCL_T07=on",
+    "G.trees:gbdt-depthwise.AFCL_T07=on",
+    "G.trees:gbdt-lossguide.AFCL_T07=on",
+    "G.trees:gbdt-ordered.AFCL_T07=on",
+    "G.trees:gbdt-symmetric.AFCL_T07=on",
+    "G.trees:gbdt-symmetric-1000.AFCL_T07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "f9fede16e48193b738a0",
+   "mode": "fast",
+   "pack": "F071",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F071",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFCL_T07=on",
+    "G.trees:gbdt-depthwise.AFCL_T07=on",
+    "G.trees:gbdt-lossguide.AFCL_T07=on",
+    "G.trees:gbdt-ordered.AFCL_T07=on",
+    "G.trees:gbdt-symmetric.AFCL_T07=on",
+    "G.trees:gbdt-symmetric-1000.AFCL_T07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T07=1"
+   ],
+   "environment": {},
+   "key": "7d8075fa490ff3bd9ae5",
+   "mode": "fast",
+   "pack": "F071",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F072",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFCL_T12=on",
+    "G.trees:gbdt-depthwise.AFCL_T01=on",
+    "G.trees:gbdt-lossguide.AFCL_T01=on",
+    "G.trees:gbdt-ordered.AFCL_T04=on",
+    "G.trees:gbdt-symmetric.AFCL_T04=on",
+    "G.trees:gbdt-symmetric-1000.AFCL_T04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "bdf66c3b74c4a119de94",
+   "mode": "fast",
+   "pack": "F072",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F072",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFCL_T12=on",
+    "G.trees:gbdt-depthwise.AFCL_T01=on",
+    "G.trees:gbdt-lossguide.AFCL_T01=on",
+    "G.trees:gbdt-ordered.AFCL_T04=on",
+    "G.trees:gbdt-symmetric.AFCL_T04=on",
+    "G.trees:gbdt-symmetric-1000.AFCL_T04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T01=1",
+    "MOJOLEARN_AFCL_T04=1",
+    "MOJOLEARN_AFCL_T12=1"
+   ],
+   "environment": {},
+   "key": "6a76a23ac647d86c2ef1",
+   "mode": "fast",
+   "pack": "F072",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F073",
+   "configurations": [
+    "G.trees:gbdt-depthwise.AFCL_T02=on",
+    "G.trees:gbdt-lossguide.AFCL_T02=on",
+    "G.trees:gbdt-ordered.AFT_G11=on+AFT_G12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "3cdecb84853de0da0661",
+   "mode": "fast",
+   "pack": "F073",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F073",
+   "configurations": [
+    "G.trees:gbdt-depthwise.AFCL_T02=on",
+    "G.trees:gbdt-lossguide.AFCL_T02=on",
+    "G.trees:gbdt-ordered.AFT_G11=on+AFT_G12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T02=1",
+    "MOJOLEARN_AFT_G11=1",
+    "MOJOLEARN_AFT_G12=1"
+   ],
+   "environment": {},
+   "key": "f0587da73e7e4c92f261",
+   "mode": "fast",
+   "pack": "F073",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F074",
+   "configurations": [
+    "G.trees:gbdt-depthwise.AFCL_T06=on",
+    "G.trees:gbdt-lossguide.AFCL_T06=on",
+    "G.trees:gbdt-symmetric.AFCL_T06=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "1c23f8735dafc16003a3",
+   "mode": "fast",
+   "pack": "F074",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F074",
+   "configurations": [
+    "G.trees:gbdt-depthwise.AFCL_T06=on",
+    "G.trees:gbdt-lossguide.AFCL_T06=on",
+    "G.trees:gbdt-symmetric.AFCL_T06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T06=1"
+   ],
+   "environment": {},
+   "key": "d4b5ca0379ce2eea0a0f",
+   "mode": "fast",
+   "pack": "F074",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F075",
+   "configurations": [
+    "G.trees:gbdt-lossguide.AFT_G07=on+AFT_G08=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G07=on+AFT_G08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a45a51b02452e69f3629",
+   "mode": "fast",
+   "pack": "F075",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F075",
+   "configurations": [
+    "G.trees:gbdt-lossguide.AFT_G07=on+AFT_G08=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G07=on+AFT_G08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G07=1",
+    "MOJOLEARN_AFT_G08=1"
+   ],
+   "environment": {},
+   "key": "3a39be7b7460001cf4bf",
+   "mode": "fast",
+   "pack": "F075",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F076",
+   "configurations": [
+    "G.trees:gbdt-symmetric.AFT_G01=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G01=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "fbf4c7878ab276c8748e",
+   "mode": "fast",
+   "pack": "F076",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F076",
+   "configurations": [
+    "G.trees:gbdt-symmetric.AFT_G01=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G01=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G01=1"
+   ],
+   "environment": {},
+   "key": "87e8a531c2f9f846d059",
+   "mode": "fast",
+   "pack": "F076",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F077",
+   "configurations": [
+    "G.trees:gbdt-symmetric.AFT_G02=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "d29356fb4603e561f41c",
+   "mode": "fast",
+   "pack": "F077",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F077",
+   "configurations": [
+    "G.trees:gbdt-symmetric.AFT_G02=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G02=1"
+   ],
+   "environment": {},
+   "key": "f5d17b1508408bfa2553",
+   "mode": "fast",
+   "pack": "F077",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F078",
+   "configurations": [
+    "G.trees:gbdt-symmetric.AFT_G07=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "13fd6ab05bddebc7b983",
+   "mode": "fast",
+   "pack": "F078",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F078",
+   "configurations": [
+    "G.trees:gbdt-symmetric.AFT_G07=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G07=1"
+   ],
+   "environment": {},
+   "key": "6c3c07939bcf2f188589",
+   "mode": "fast",
+   "pack": "F078",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F079",
+   "configurations": [
+    "G.trees:gbdt-symmetric.AFT_G08=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "34c48f86c018e37d2f06",
+   "mode": "fast",
+   "pack": "F079",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F079",
+   "configurations": [
+    "G.trees:gbdt-symmetric.AFT_G08=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G08=1"
+   ],
+   "environment": {},
+   "key": "b3d00fc34c15d805a7be",
+   "mode": "fast",
+   "pack": "F079",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F080",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G06=on",
+    "G.trees:gbdt-depthwise.AFT_G06=on",
+    "G.trees:gbdt-lossguide.AFT_G06=on",
+    "G.trees:gbdt-multiclass.AFT_G06=on",
+    "G.trees:gbdt-ordered.AFT_G06=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_G06=on",
+    "G.trees:gbdt-rank-yetirank.AFT_G06=on",
+    "G.trees:gbdt-symmetric.AFT_G06=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_GBDT_INDEX_PACK_DEVICE=1"
+   ],
+   "environment": {},
+   "key": "8f069fc3869fe95565e1",
+   "mode": "fast",
+   "pack": "F080",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F080",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_G06=on",
+    "G.trees:gbdt-depthwise.AFT_G06=on",
+    "G.trees:gbdt-lossguide.AFT_G06=on",
+    "G.trees:gbdt-multiclass.AFT_G06=on",
+    "G.trees:gbdt-ordered.AFT_G06=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_G06=on",
+    "G.trees:gbdt-rank-yetirank.AFT_G06=on",
+    "G.trees:gbdt-symmetric.AFT_G06=on",
+    "G.trees:gbdt-symmetric-1000.AFT_G06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_G06=1",
+    "MOJOLEARN_GBDT_INDEX_PACK_DEVICE=1"
+   ],
+   "environment": {},
+   "key": "8d1fc62668ad035790d3",
+   "mode": "fast",
+   "pack": "F080",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F081",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_P05=on",
+    "G.trees:gbdt-depthwise.AFT_P05=on",
+    "G.trees:gbdt-lossguide.AFT_P05=on",
+    "G.trees:gbdt-multiclass.AFT_P05=on",
+    "G.trees:gbdt-ordered.AFT_P05=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_P05=on",
+    "G.trees:gbdt-rank-yetirank.AFT_P05=on",
+    "G.trees:gbdt-symmetric.AFT_P05=on",
+    "G.trees:gbdt-symmetric-1000.AFT_P05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_GBDT_PREDICT_PACKED=1"
+   ],
+   "environment": {},
+   "key": "53af39e4716b550be920",
+   "mode": "fast",
+   "pack": "F081",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F081",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_P05=on",
+    "G.trees:gbdt-depthwise.AFT_P05=on",
+    "G.trees:gbdt-lossguide.AFT_P05=on",
+    "G.trees:gbdt-multiclass.AFT_P05=on",
+    "G.trees:gbdt-ordered.AFT_P05=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_P05=on",
+    "G.trees:gbdt-rank-yetirank.AFT_P05=on",
+    "G.trees:gbdt-symmetric.AFT_P05=on",
+    "G.trees:gbdt-symmetric-1000.AFT_P05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P05=1",
+    "MOJOLEARN_GBDT_PREDICT_PACKED=1"
+   ],
+   "environment": {},
+   "key": "ddf43eb9698434787386",
+   "mode": "fast",
+   "pack": "F081",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F082",
+   "configurations": [
+    "G.trees:gbdt-categorical.all_on",
+    "G.trees:gbdt-depthwise.all_on",
+    "G.trees:gbdt-lossguide.all_on",
+    "G.trees:gbdt-multiclass.all_on",
+    "G.trees:gbdt-ordered.all_on",
+    "G.trees:gbdt-rank-pairlogit.all_on",
+    "G.trees:gbdt-rank-yetirank.all_on",
+    "G.trees:gbdt-symmetric.all_on",
+    "G.trees:gbdt-symmetric-1000.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_GBDT_PREDICT_PACKED=1"
+   ],
+   "environment": {},
+   "key": "93d67351f79743d3a19f",
+   "mode": "fast",
+   "pack": "F082",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F082",
+   "configurations": [
+    "G.trees:gbdt-categorical.all_on",
+    "G.trees:gbdt-depthwise.all_on",
+    "G.trees:gbdt-lossguide.all_on",
+    "G.trees:gbdt-multiclass.all_on",
+    "G.trees:gbdt-ordered.all_on",
+    "G.trees:gbdt-rank-pairlogit.all_on",
+    "G.trees:gbdt-rank-yetirank.all_on",
+    "G.trees:gbdt-symmetric.all_on",
+    "G.trees:gbdt-symmetric-1000.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T01=1",
+    "MOJOLEARN_AFCL_T02=1",
+    "MOJOLEARN_AFCL_T03=1",
+    "MOJOLEARN_AFCL_T04=1",
+    "MOJOLEARN_AFCL_T06=1",
+    "MOJOLEARN_AFCL_T07=1",
+    "MOJOLEARN_AFCL_T12=1",
+    "MOJOLEARN_AFT_G01=1",
+    "MOJOLEARN_AFT_G02=1",
+    "MOJOLEARN_AFT_G03=1",
+    "MOJOLEARN_AFT_G04=1",
+    "MOJOLEARN_AFT_G05=1",
+    "MOJOLEARN_AFT_G07=1",
+    "MOJOLEARN_AFT_G08=1",
+    "MOJOLEARN_AFT_G09=1",
+    "MOJOLEARN_AFT_G10=1",
+    "MOJOLEARN_AFT_G11=1",
+    "MOJOLEARN_AFT_G12=1",
+    "MOJOLEARN_AFT_N01=1",
+    "MOJOLEARN_AFT_N02=1",
+    "MOJOLEARN_AFT_N03=1",
+    "MOJOLEARN_AFT_N04=1",
+    "MOJOLEARN_AFT_N06=1",
+    "MOJOLEARN_AFT_N07=1",
+    "MOJOLEARN_AFT_N08=1",
+    "MOJOLEARN_AFT_N09=1",
+    "MOJOLEARN_AFT_N10=1",
+    "MOJOLEARN_AFT_N11=1",
+    "MOJOLEARN_AFT_N12=1",
+    "MOJOLEARN_AFT_P05=1",
+    "MOJOLEARN_AFT_P06=1",
+    "MOJOLEARN_GBDT_PREDICT_PACKED=1"
+   ],
+   "environment": {},
+   "key": "d3ced9e2032f9b3fdb3f",
+   "mode": "fast",
+   "pack": "F082",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F083",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_P05=on+AFT_P06=on",
+    "G.trees:gbdt-multiclass.AFT_P05=on+AFT_P06=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_P05=on+AFT_P06=on",
+    "G.trees:gbdt-rank-yetirank.AFT_P05=on+AFT_P06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_GBDT_PREDICT_PACKED=1"
+   ],
+   "environment": {},
+   "key": "ca48b1f9f04143ac0c44",
+   "mode": "fast",
+   "pack": "F083",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F083",
+   "configurations": [
+    "G.trees:gbdt-categorical.AFT_P05=on+AFT_P06=on",
+    "G.trees:gbdt-multiclass.AFT_P05=on+AFT_P06=on",
+    "G.trees:gbdt-rank-pairlogit.AFT_P05=on+AFT_P06=on",
+    "G.trees:gbdt-rank-yetirank.AFT_P05=on+AFT_P06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P05=1",
+    "MOJOLEARN_AFT_P06=1",
+    "MOJOLEARN_GBDT_PREDICT_PACKED=1"
+   ],
+   "environment": {},
+   "key": "b2283adedf5336711807",
+   "mode": "fast",
+   "pack": "F083",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F084",
+   "configurations": [
+    "G.trees:gbdt-ordered.AFCL_T05=on",
+    "G.trees:gbdt-symmetric.AFCL_T05=on",
+    "G.trees:gbdt-symmetric-1000.AFCL_T05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_SYM_RESOLVE_BLOCK=1"
+   ],
+   "environment": {},
+   "key": "4f27ece776ae4cb135e7",
+   "mode": "fast",
+   "pack": "F084",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/gbdt.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F084",
+   "configurations": [
+    "G.trees:gbdt-ordered.AFCL_T05=on",
+    "G.trees:gbdt-symmetric.AFCL_T05=on",
+    "G.trees:gbdt-symmetric-1000.AFCL_T05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T05=1",
+    "MOJOLEARN_SYM_RESOLVE_BLOCK=1"
+   ],
+   "environment": {},
+   "key": "c3bdb64f0c036c76a2d6",
+   "mode": "fast",
+   "pack": "F084",
+   "role": "pack",
+   "script": "bindings/build_gbdt.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F085",
+   "configurations": [
+    "G.trees:rf.AFT_F01=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "cc1e37101847bf4191e2",
+   "mode": "fast",
+   "pack": "F085",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F085",
+   "configurations": [
+    "G.trees:rf.AFT_F01=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F01=1"
+   ],
+   "environment": {},
+   "key": "7aaa5e57b51e649ae1b3",
+   "mode": "fast",
+   "pack": "F085",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F086",
+   "configurations": [
+    "G.trees:rf.AFT_F02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "e45a1c2e0f1b00ac07bf",
+   "mode": "fast",
+   "pack": "F086",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F086",
+   "configurations": [
+    "G.trees:rf.AFT_F02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F02=1"
+   ],
+   "environment": {},
+   "key": "0cfabc1e83facbedf944",
+   "mode": "fast",
+   "pack": "F086",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F087",
+   "configurations": [
+    "G.trees:rf.AFT_F03=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "03c0e3f1c27760cb60ba",
+   "mode": "fast",
+   "pack": "F087",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F087",
+   "configurations": [
+    "G.trees:rf.AFT_F03=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F03=1"
+   ],
+   "environment": {},
+   "key": "a1783f1f37932da2af9e",
+   "mode": "fast",
+   "pack": "F087",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F088",
+   "configurations": [
+    "G.trees:rf.AFT_F04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "827cd3ae19358cc139a1",
+   "mode": "fast",
+   "pack": "F088",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F088",
+   "configurations": [
+    "G.trees:rf.AFT_F04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F04=1"
+   ],
+   "environment": {},
+   "key": "71f27bc135e5c091e950",
+   "mode": "fast",
+   "pack": "F088",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F089",
+   "configurations": [
+    "G.trees:rf.AFT_F05=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a8d10388337dcac9dd3b",
+   "mode": "fast",
+   "pack": "F089",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F089",
+   "configurations": [
+    "G.trees:rf.AFT_F05=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F05=1"
+   ],
+   "environment": {},
+   "key": "0898890e035650bdbbdf",
+   "mode": "fast",
+   "pack": "F089",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F090",
+   "configurations": [
+    "G.trees:rf.AFT_P02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "045cf04f8c760350865a",
+   "mode": "fast",
+   "pack": "F090",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F090",
+   "configurations": [
+    "G.trees:rf.AFT_P02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P02=1"
+   ],
+   "environment": {},
+   "key": "a6c19a125aeecda615df",
+   "mode": "fast",
+   "pack": "F090",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F091",
+   "configurations": [
+    "G.trees:rf.AFT_P04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "900e588414a9efc53f1d",
+   "mode": "fast",
+   "pack": "F091",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F091",
+   "configurations": [
+    "G.trees:rf.AFT_P04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "2e6c7eef8fff5c4b75e5",
+   "mode": "fast",
+   "pack": "F091",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F092",
+   "configurations": [
+    "G.trees:rf.AFCL_T08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "6dbeb870e44330d1865a",
+   "mode": "fast",
+   "pack": "F092",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F092",
+   "configurations": [
+    "G.trees:rf.AFCL_T08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T08=1"
+   ],
+   "environment": {},
+   "key": "3a0ebdae14611f5dc1ff",
+   "mode": "fast",
+   "pack": "F092",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F093",
+   "configurations": [
+    "G.trees:rf.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "3e9e3b96a5084a0d5102",
+   "mode": "fast",
+   "pack": "F093",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F093",
+   "configurations": [
+    "G.trees:rf.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T08=1",
+    "MOJOLEARN_AFT_F01=1",
+    "MOJOLEARN_AFT_F02=1",
+    "MOJOLEARN_AFT_F03=1",
+    "MOJOLEARN_AFT_F04=1",
+    "MOJOLEARN_AFT_F05=1",
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "9c1487401b2c5e0cec57",
+   "mode": "fast",
+   "pack": "F093",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F094",
+   "configurations": [
+    "G.trees:rf.AFT_F01=on+AFT_F02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a38162799eb7a23ee6ac",
+   "mode": "fast",
+   "pack": "F094",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F094",
+   "configurations": [
+    "G.trees:rf.AFT_F01=on+AFT_F02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F01=1",
+    "MOJOLEARN_AFT_F02=1"
+   ],
+   "environment": {},
+   "key": "e7d27ff0ec105ab331d8",
+   "mode": "fast",
+   "pack": "F094",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F095",
+   "configurations": [
+    "G.trees:rf.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "1d4708ae15d9fc0b01eb",
+   "mode": "fast",
+   "pack": "F095",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/rf.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F095",
+   "configurations": [
+    "G.trees:rf.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "f9c070aa04476a4e3253",
+   "mode": "fast",
+   "pack": "F095",
+   "role": "pack",
+   "script": "bindings/build_rf.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F096",
+   "configurations": [
+    "G.trees:iforest.AFT_F10=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "3ff9cd610ea394b25956",
+   "mode": "fast",
+   "pack": "F096",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F096",
+   "configurations": [
+    "G.trees:iforest.AFT_F10=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F10=1"
+   ],
+   "environment": {},
+   "key": "0ece50c5cfebb3b986b2",
+   "mode": "fast",
+   "pack": "F096",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F097",
+   "configurations": [
+    "G.trees:iforest.AFT_F11=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "8d4393e56fbbac0ded12",
+   "mode": "fast",
+   "pack": "F097",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F097",
+   "configurations": [
+    "G.trees:iforest.AFT_F11=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F11=1"
+   ],
+   "environment": {},
+   "key": "fb3ae65de767fd4f33a9",
+   "mode": "fast",
+   "pack": "F097",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F098",
+   "configurations": [
+    "G.trees:iforest.AFT_F12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "d06a120f07830edca040",
+   "mode": "fast",
+   "pack": "F098",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F098",
+   "configurations": [
+    "G.trees:iforest.AFT_F12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F12=1"
+   ],
+   "environment": {},
+   "key": "828dc7cf2d0479d48f88",
+   "mode": "fast",
+   "pack": "F098",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F099",
+   "configurations": [
+    "G.trees:iforest.AFCL_T10=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "81701a414e044bbfa7d4",
+   "mode": "fast",
+   "pack": "F099",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F099",
+   "configurations": [
+    "G.trees:iforest.AFCL_T10=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T10=1"
+   ],
+   "environment": {},
+   "key": "2d7950ef232ce1bef21c",
+   "mode": "fast",
+   "pack": "F099",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F100",
+   "configurations": [
+    "G.trees:iforest.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "1c80ab30fbc63741aa32",
+   "mode": "fast",
+   "pack": "F100",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F100",
+   "configurations": [
+    "G.trees:iforest.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T10=1",
+    "MOJOLEARN_AFT_F10=1",
+    "MOJOLEARN_AFT_F11=1",
+    "MOJOLEARN_AFT_F12=1"
+   ],
+   "environment": {},
+   "key": "f4e520158d3b3a58b003",
+   "mode": "fast",
+   "pack": "F100",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F101",
+   "configurations": [
+    "G.trees:iforest.AFT_F11=on+AFT_F12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "2896cfcc064686537964",
+   "mode": "fast",
+   "pack": "F101",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F101",
+   "configurations": [
+    "G.trees:iforest.AFT_F11=on+AFT_F12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F11=1",
+    "MOJOLEARN_AFT_F12=1"
+   ],
+   "environment": {},
+   "key": "a4ba0a849633631d86d6",
+   "mode": "fast",
+   "pack": "F101",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F102",
+   "configurations": [
+    "G.trees:iforest.AFT_F10=on+AFT_F11=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "073ef49fc056b03e6680",
+   "mode": "fast",
+   "pack": "F102",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F102",
+   "configurations": [
+    "G.trees:iforest.AFT_F10=on+AFT_F11=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F10=1",
+    "MOJOLEARN_AFT_F11=1"
+   ],
+   "environment": {},
+   "key": "c49c74fff9b51dd8ac87",
+   "mode": "fast",
+   "pack": "F102",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F103",
+   "configurations": [
+    "G.trees:iforest.AFT_F10=on+AFT_F12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "072e1310b629db09780b",
+   "mode": "fast",
+   "pack": "F103",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F103",
+   "configurations": [
+    "G.trees:iforest.AFT_F10=on+AFT_F12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F10=1",
+    "MOJOLEARN_AFT_F12=1"
+   ],
+   "environment": {},
+   "key": "571a80afd885adc9fa28",
+   "mode": "fast",
+   "pack": "F103",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F104",
+   "configurations": [
+    "G.trees:iforest.AFT_F10=on+AFT_F11=on+AFT_F12=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "a228569e641c83ee2c6f",
+   "mode": "fast",
+   "pack": "F104",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/svm.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F104",
+   "configurations": [
+    "G.trees:iforest.AFT_F10=on+AFT_F11=on+AFT_F12=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F10=1",
+    "MOJOLEARN_AFT_F11=1",
+    "MOJOLEARN_AFT_F12=1"
+   ],
+   "environment": {},
+   "key": "edffe5194d658381e5a7",
+   "mode": "fast",
+   "pack": "F104",
+   "role": "pack",
+   "script": "bindings/build_svm.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F105",
+   "configurations": [
+    "G.trees:et.AFT_F06=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "de85c73f03b72f404129",
+   "mode": "fast",
+   "pack": "F105",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F105",
+   "configurations": [
+    "G.trees:et.AFT_F06=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1"
+   ],
+   "environment": {},
+   "key": "ead89eaafc4fef3a64f9",
+   "mode": "fast",
+   "pack": "F105",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F106",
+   "configurations": [
+    "G.trees:et.AFT_F07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "d5de7eb59e7a8707625f",
+   "mode": "fast",
+   "pack": "F106",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F106",
+   "configurations": [
+    "G.trees:et.AFT_F07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F07=1"
+   ],
+   "environment": {},
+   "key": "28590bcf65d7e11966dd",
+   "mode": "fast",
+   "pack": "F106",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F107",
+   "configurations": [
+    "G.trees:et.AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "6aadc64ff43af5eb724a",
+   "mode": "fast",
+   "pack": "F107",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F107",
+   "configurations": [
+    "G.trees:et.AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "92baaa1f3028d890c5d4",
+   "mode": "fast",
+   "pack": "F107",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F108",
+   "configurations": [
+    "G.trees:et.AFT_F09=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "5fa12cb1b97677f3345b",
+   "mode": "fast",
+   "pack": "F108",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F108",
+   "configurations": [
+    "G.trees:et.AFT_F09=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F09=1"
+   ],
+   "environment": {},
+   "key": "e88384dd040e55494b2d",
+   "mode": "fast",
+   "pack": "F108",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F109",
+   "configurations": [
+    "G.trees:et.AFT_P02=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "68de53e3e7cdcbf99053",
+   "mode": "fast",
+   "pack": "F109",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F109",
+   "configurations": [
+    "G.trees:et.AFT_P02=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P02=1"
+   ],
+   "environment": {},
+   "key": "4638a368882fd4121c19",
+   "mode": "fast",
+   "pack": "F109",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F110",
+   "configurations": [
+    "G.trees:et.AFT_P04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "4eff5e63630a4ccc303f",
+   "mode": "fast",
+   "pack": "F110",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F110",
+   "configurations": [
+    "G.trees:et.AFT_P04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "7bf55ad227b3455409c9",
+   "mode": "fast",
+   "pack": "F110",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F111",
+   "configurations": [
+    "G.trees:et.AFCL_T09=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "0b9030bdb48a292cc73c",
+   "mode": "fast",
+   "pack": "F111",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F111",
+   "configurations": [
+    "G.trees:et.AFCL_T09=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T09=1"
+   ],
+   "environment": {},
+   "key": "32501b9eb0704466c00c",
+   "mode": "fast",
+   "pack": "F111",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F112",
+   "configurations": [
+    "G.trees:et.all_on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "aae2e1955e00143975a5",
+   "mode": "fast",
+   "pack": "F112",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F112",
+   "configurations": [
+    "G.trees:et.all_on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFCL_T09=1",
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F07=1",
+    "MOJOLEARN_AFT_F08=1",
+    "MOJOLEARN_AFT_F09=1",
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "d2de00647bbbdc6f00e0",
+   "mode": "fast",
+   "pack": "F112",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F113",
+   "configurations": [
+    "G.trees:et.AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "cab66363f3a9223f38ab",
+   "mode": "fast",
+   "pack": "F113",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F113",
+   "configurations": [
+    "G.trees:et.AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F07=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "e00ed660cbbe913b0727",
+   "mode": "fast",
+   "pack": "F113",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F114",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "32a7d9361a332e98b758",
+   "mode": "fast",
+   "pack": "F114",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F114",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "f6a69f52c8b0382cea51",
+   "mode": "fast",
+   "pack": "F114",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F115",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F07=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "c5826b29472ba4475ae6",
+   "mode": "fast",
+   "pack": "F115",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F115",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F07=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F07=1"
+   ],
+   "environment": {},
+   "key": "9ff5b40333b7b8210a4a",
+   "mode": "fast",
+   "pack": "F115",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F116",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "be6e7f3b662d01f8a43d",
+   "mode": "fast",
+   "pack": "F116",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F116",
+   "configurations": [
+    "G.trees:et.AFT_F06=on+AFT_F07=on+AFT_F08=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_F06=1",
+    "MOJOLEARN_AFT_F07=1",
+    "MOJOLEARN_AFT_F08=1"
+   ],
+   "environment": {},
+   "key": "9eed5928764bd5ce2661",
+   "mode": "fast",
+   "pack": "F116",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "A",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F117",
+   "configurations": [
+    "G.trees:et.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [],
+   "environment": {},
+   "key": "0a6ac87a3c5b60ee6b19",
+   "mode": "fast",
+   "pack": "F117",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  },
+  {
+   "arm": "B",
+   "binding": "bindings/trees.mojo",
+   "build_dir": "$HOME/aft-ab/gf7b7a62-F117",
+   "configurations": [
+    "G.trees:et.AFT_P02=on+AFT_P04=on"
+   ],
+   "defines": [
+    "MOJOLEARN_AFT_P02=1",
+    "MOJOLEARN_AFT_P04=1"
+   ],
+   "environment": {},
+   "key": "a171ff16cee003078dfd",
+   "mode": "fast",
+   "pack": "F117",
+   "role": "pack",
+   "script": "bindings/build_trees.sh",
+   "status": "NOT_COMPILED",
+   "target": "metal (M3 Ultra), FAST",
+   "tool": "aft",
+   "vendor": "apple"
+  }
+ ],
+ "policy": "FAST grid builds, as the Apple A/B scripts perform them on the M3: tools/aft_ab.sh and tools/afc_ab_def.sh build arm A (FAST main + both-arm prerequisites) and arm B (the packed candidate) of one binding per build directory, MOJOLEARN_NUMERIC_MODE=fast, no MOJOLEARN_NUMERIC_IDENTICAL. Lanes never compile; nothing here was built.",
+ "schema": "mojolearn.six-lane-build-plan/1",
+ "unsupported": []
+}

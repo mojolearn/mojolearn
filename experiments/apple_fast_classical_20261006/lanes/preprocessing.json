@@ -1,0 +1,486 @@
+{
+  "schema": 1,
+  "lane": "preprocessing_metrics_resampling_classical_forecasting",
+  "entries": [
+    {
+      "id": "AFCL-P01",
+      "title": "Scaler reduction independent accumulators",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P01"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_prep/fastred.mojo",
+        "x_prep/fastpt.mojo"
+      ],
+      "mechanism": "Two independent per-lane FP32 sums in the two-pass col_stats path; two independent Welford chains followed by existing Chan merge in the current SI_ONEPASS/fused-transform cs_tile path.",
+      "affected_callers": "SimpleImputer and PowerTransformer column-statistic consumers; any OP_COL_STATS caller including scaler programs.",
+      "quality_gates": "Large offsets, NaNs, zero variance, transformed outputs and downstream model quality",
+      "limitations": "Only column-statistic kernels change; pt_fold_fast_kernel and class_stats_fast_kernel are unchanged. Current SI_ONEPASS is covered; an additional rollback-path comparison may use MOJOLEARN_SI_ONEPASS_OFF in both arms. No claim of coverage for separate core scaler kernels.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P02",
+      "title": "MaxAbs row tiling",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P02"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_prep/fastmaxabs.mojo"
+      ],
+      "mechanism": "MaxAbs direct-fit row chunks 1024/128 become 512/64; feature-width policy is untouched.",
+      "affected_callers": "MaxAbsScaler direct FAST fit.",
+      "quality_gates": "Exact finite maxima, NaN/zero handling and transformed output",
+      "limitations": "Requires existing PREP3_MAXABS entrance, enabled by default. Doubles partial buffer size; no change to input pool ownership.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P03",
+      "title": "Categorical Naive Bayes count grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [
+        "MOJOLEARN_NB_CAT_ATOMIC"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_NB_CAT_ATOMIC",
+        "MOJOLEARN_AFCL_P03"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_prep/fastnb.mojo",
+        "x_prep/device.mojo"
+      ],
+      "mechanism": "Categorical count launch uses 64 threads instead of 128; final integer-count conversion launch is unchanged.",
+      "affected_callers": "CategoricalNB unweighted categorical atomic count path.",
+      "quality_gates": "Class/feature counts, smoothing, unseen categories and heldout logloss",
+      "limitations": "The existing atomic path is opt-in and must be enabled in both arms. Weighted data stays on its existing fallback; this is not a new atomic algorithm.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P04",
+      "title": "Sparse Naive Bayes row grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P04"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_prep/fastnb_csr.mojo"
+      ],
+      "mechanism": "CSR histogram groups contain 32 rows instead of 64; the 256-thread block and all nonzero processing remain.",
+      "affected_callers": "MultinomialNB and ComplementNB CSR count fitting.",
+      "quality_gates": "Counts, class priors, negative-input refusal, posterior quality and empty rows",
+      "limitations": "No BernoulliNB coverage claim; dense fitting and CSR prediction traversal are unchanged. Existing NB_TEXT_CSR export must remain enabled.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P05",
+      "title": "Target-encoding work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P05"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_prep/fastprep2.mojo"
+      ],
+      "mechanism": "TargetEncoder global/category folds use independent TE_TGR=128 rather than shared TGR=256, including scratch, strides, tree fold and launch size.",
+      "affected_callers": "TargetEncoder global and gathered-category fold stages.",
+      "quality_gates": "Fold isolation, category smoothing, unseen-category behavior and downstream task quality",
+      "limitations": "Existing TE_GLOBAL and TE_ENC paths stay enabled in both arms. Non-gathered category fallback is unchanged; all cross-fitting and smoothing are retained.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P06",
+      "title": "Iterative-imputer convergence fold",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P06"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast",
+        "MOJOLEARN_X_PREP_FAST_II_CONV": "1"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast",
+        "MOJOLEARN_X_PREP_FAST_II_CONV": "1"
+      },
+      "implementation_paths": [
+        "x_prep/fastprep2.mojo"
+      ],
+      "mechanism": "Existing imputer row-max convergence reduction uses 512 rather than 256 lanes, with matching shared array, stride and launch.",
+      "affected_callers": "IterativeImputer II_CONV when precomputed row sums exist.",
+      "quality_gates": "Imputed values, observed entries unchanged, stopping semantics and downstream quality",
+      "limitations": "Runtime II_CONV prerequisite is identical in both arms. Does not enable row sums or change tolerance, iteration count, flag observation or the Gram path.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P07",
+      "title": "Feature-selection row tile",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P07"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_prep/select_fast.mojo"
+      ],
+      "mechanism": "Feature statistic row tiles use RPT=32 rather than 64, RT=256 rather than 512, retaining the 32-column by 8-row-lane block.",
+      "affected_callers": "f_regression, r_regression, f_classif and applicable selectors.",
+      "quality_gates": "Scores, p-values, selected features, class imbalance and force_finite behavior",
+      "limitations": "Both scratch sizing and kernels consume existing shared constants. Existing SELECT_FREG/FCLS defaults must remain enabled; large-class fallback remains as before.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P08",
+      "title": "Regression metric independent accumulators",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P08"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_metrics/reg_epi.mojo"
+      ],
+      "mechanism": "Two independent software-binary64 accumulation chains in uniform and weighted multioutput regression score averaging.",
+      "affected_callers": "Regression metric KIND_AVG epilogues for multiple outputs.",
+      "quality_gates": "Independent FP64 metric agreement, sample weights, multioutput and finite policy",
+      "limitations": "Per-observation metric folds do not change. Scalar-output callers are not a speed hypothesis; all zero-weight/NaN rules and binary64 arithmetic remain. The host-run FAST unit on an Apple build shares the guarded epilogue; no host fallback is added.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P09",
+      "title": "Ranking metric prefix work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P09"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_metrics/plan.mojo"
+      ],
+      "mechanism": "Weighted/unweighted curve-prefix chunk size 1024 becomes 512 in the planner and emitted stage parameters.",
+      "affected_callers": "ROC/PR/AUC curve callers and weighted-percentile consumers of CURVE_CHUNK.",
+      "quality_gates": "Exact threshold membership, tie groups, weighted areas and degenerate labels",
+      "limitations": "Sort order, equal-score groups and curve-fold chunks remain unchanged. Extra prefix scratch can trigger the existing bounded-plan fallback; all affected callers need future full-workload coverage. Host planned FAST programs on Apple use matching chunk parameters.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P10",
+      "title": "Resampling gather tile geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+        "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_RESAMPLE_FAST_GATHER",
+        "MOJOLEARN_RESAMPLE_FAST_WAIT_PAIR",
+        "MOJOLEARN_RESAMPLE_FAST_TILED_GATHER",
+        "MOJOLEARN_AFCL_P10"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "resample/gather_fast.mojo",
+        "resample/estimator.mojo"
+      ],
+      "mechanism": "Grouped resample gather tile 32 features by 8 rows becomes 16 features by 16 rows, retaining 256 threads.",
+      "affected_callers": "Public float32 resample GPU grouped-gather path.",
+      "quality_gates": "Exact paired-array row draws, old-output lifetime and statistical interval/p-value quality",
+      "limitations": "Three existing opt-in prerequisites in both arms. Nonreplacement additionally needs MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE in both. Does not change bootstrap/permutation_test independent statistical kernels or promise all dtypes enter the gather path.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P11",
+      "title": "Stationarity series reduction schedule",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P11"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "tsa/impl/timeSeries/stationarity.mojo"
+      ],
+      "mechanism": "Two independent per-thread chains for series sums/squared sums followed by the existing STATS_TPB block reduction.",
+      "affected_callers": "KPSS and AutoARIMA differencing selection using series_sum_kernel.",
+      "quality_gates": "KPSS statistics, differencing decisions, finite-input refusals and forecast quality",
+      "limitations": "Narrowed from proposed launch-width change to local accumulation scheduling to avoid changing shared core STATS_TPB. Decisions near significance thresholds require future quality qualification; no scan/order/search settings change.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P12",
+      "title": "Batched ARIMA likelihood work grouping",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P12"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "arima/impl/batched_kalman.mojo",
+        "arima/impl/batched_arima.mojo",
+        "arima/impl/fast_eval_ws.mojo",
+        "arima/estimator.mojo"
+      ],
+      "mechanism": "Kalman series block default 32 becomes 64; propagated through public likelihood/forecast helpers, packed likelihood, optimizer and retained-evaluation workspace entrances.",
+      "affected_callers": "ARIMA and AutoARIMA scalar-lane Kalman evaluation/forecast routes.",
+      "quality_gates": "Likelihood/gradient quality, selected orders, optimizer status and heldout forecast error",
+      "limitations": "Every lane retains its complete recurrence. Explicit user/caller kalman_tpb overrides are respected. Separate time-scan kernels, if selected by an existing opt-in, are not changed. No reduced precision or fewer optimizer evaluations.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P13",
+      "title": "Gaussian Naive Bayes class-statistic chains",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P13"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "x_prep/fastred.mojo"
+      ],
+      "mechanism": "Two independent per-lane chains for unweighted class-filtered sums and centered squared deviations; existing count and reduction tree remain.",
+      "affected_callers": "GaussianNB and unweighted OP_CLASS_STATS consumers.",
+      "quality_gates": "Class counts/means/variances, variance smoothing, rare classes and heldout logloss",
+      "limitations": "Existing MOJOLEARN_XPREP_FAST_FOLDS must remain enabled; weighted class-statistic and feature-selector specialized routes are unchanged. This does not claim the separate naive_bayes/ native fit kernel was modified.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    },
+    {
+      "id": "AFCL-P14",
+      "title": "Holt-Winters series launch geometry",
+      "mode": "fast",
+      "vendors": [
+        "apple"
+      ],
+      "default": "off",
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_P14"
+      ],
+      "baseline_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "candidate_env": {
+        "MOJOLEARN_NUMERIC_MODE": "fast"
+      },
+      "implementation_paths": [
+        "holtwinters/impl/internal/hw_utils.mojo"
+      ],
+      "mechanism": "Default optimizer group width HW_OPTIM_TPB changes 128 to 64; existing callers continue using the shared default.",
+      "affected_callers": "HoltWinters fitting and applicable optimizer/evaluation helpers that use HW_OPTIM_TPB.",
+      "quality_gates": "Heldout forecast error, smoothing parameters, initial states, seasonal tails and refusal handling",
+      "limitations": "Separate HW_PREDICT_TPB output geometry is unchanged. Explicit tpb_optim overrides still win; unrelated ETS implementations are not changed. Every seasonal recurrence, parameter search and stopping setting remains.",
+      "compile_status": "not_run_by_request",
+      "verification_status": "not_run_by_request",
+      "measurement_status": "not_run_by_request",
+      "sample_count": 0,
+      "full_workload_mapping": "pending: resolve actual caller recipe, dataset/version/hash/split/dimensions/settings and intrinsic caps before any later run",
+      "timed_boundary": "future complete operation including preparation, required synchronization and consumed outputs; fit/inference/cold/repeated reported separately"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "id": "F11",
+  "title": "Apple FAST opt-in TSQR norm and grid scheduling",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "x_decomp/tsqr_device.mojo",
+    "experiments/performance_ideas/F11/caller.py",
+    "decomposition/impl/linalg/detail/pca.mojo",
+    "bindings/_mojolearn_estimators.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_DECOMP_FAST_TSQR_NORM"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F11",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F11",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F11/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "actual TSQR least-squares fit on ill-conditioned neighbors",
+    "residual and coefficient error no material loss",
+    "rank/singular values retained",
+    "Selective compensated covariance: independent PCA reconstruction/singular/noise errors; fit and transform times separate",
+    "Downstream LLE neighbor overlap at unchanged dimensions/settings; failures stop qualification"
+  ],
+  "timing_contract": "Actual least-squares through read of coefficients/rank/singular values",
+  "blocker": null,
+  "output_kind": "directory",
+  "variants": {
+    "default": [
+      "MOJOLEARN_DECOMP_FAST_TSQR_NORM"
+    ],
+    "grid": [
+      "MOJOLEARN_DECOMP_FAST_TSQR_GRID"
+    ],
+    "compensated-pca": [
+      "MOJOLEARN_PCA_FAST_COMPENSATED_COV"
+    ]
+  },
+  "binding": "x_decomp",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true,
+  "variant_bindings": {
+    "compensated-pca": "estimators"
+  },
+  "paired_build": true,
+  "variant_prerequisite_bindings": {
+    "compensated-pca": [
+      "core",
+      "x_decomp"
+    ]
+  },
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F11",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

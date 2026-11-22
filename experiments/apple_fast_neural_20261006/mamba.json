@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "family": "mamba",
+  "status": "not_tested",
+  "scope": "Apple GPU FAST only; existing defaults preserved; no compilation, verification, tests, or measurements in this campaign",
+  "cards": [
+    {
+      "id": "M01",
+      "title": "Mamba1 serial recurrence versus existing chunk scan",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/ops/afn_selective_scan.mojo", "mamba/impl/ops/selective_scan_interface.mojo"],
+      "workloads": ["Mamba1Block.forward full workload, cold and repeated", "Mamba1 continuation and returned state", "Samba full forward and training configurations that contain Mamba1"],
+      "variants": [
+        {"name": "chunkscan32", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"]}
+      ],
+      "notes": ["Historical component evidence stays in the source; this campaign has no new qualification.", "Keep input fusion, arena and refusal geometry fixed. Compare all outputs, incoming/final state, recurrence stability and full consumer quality."]
+    },
+    {
+      "id": "M02",
+      "title": "Mamba1 existing convolution and projection-input fusion",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/modeling/afn_mamba1_fused.mojo"],
+      "workloads": ["Mamba1Block.forward full workload, cold and repeated", "Mamba1 stateful continuation", "Samba full forward and training configurations that contain Mamba1"],
+      "variants": [
+        {"name": "input_fusion", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN_MAMBA1_FUSE_IN"]}
+      ],
+      "notes": ["Keep recurrence algorithm fixed to isolate input fusion.", "Quality includes causal convolution window state, dt/A transforms, outputs and training consumers; no current result is claimed."]
+    },
+    {
+      "id": "M03",
+      "title": "Mamba2 existing f32 SSD matrix-unit products",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/modules/afn_ssd_mma.mojo", "mamba/impl/modules/ssd_minimal.mojo"],
+      "workloads": ["Mamba2Block.forward full workload, cold and repeated", "Mamba2 warm-state continuation and every returned state", "Samba full forward and training configurations that contain Mamba2"],
+      "variants": [
+        {"name": "ssd_mma_k32", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN_MAMBA2_SSD_MMA"]}
+      ],
+      "notes": ["Includes C.B, causal diagonal output and carried-state products with their normal dispatch/fallback behavior.", "Full workload must exercise the intended route; component timings and the generic GEMM lane are not qualification."]
+    },
+    {
+      "id": "M04",
+      "title": "Mamba3 existing fused SISO elementwise stages",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/ops/afn_mamba3_fused.mojo"],
+      "workloads": ["Mamba3Block.forward full workload, cold and repeated", "Mamba3 continuation and h/k/v/theta reports", "Samba full forward and full training with Mamba3 blocks"],
+      "variants": [
+        {"name": "siso_fused128", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"]}
+      ],
+      "notes": ["Keep all four fused launches at incumbent 128 threads for this card.", "Compare every state/report and downstream training quality; angle chain and optimizer settings stay fixed."]
+    },
+    {
+      "id": "M05",
+      "title": "Mamba block per-buffer allocation versus existing arena",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/modules/afn_arena.mojo"],
+      "workloads": ["Mamba1Block.forward full workload", "Mamba2Block.forward full workload", "Mamba3Block.forward full workload", "Samba full forward and training where arena-backed block callers are reached"],
+      "variants": [
+        {"name": "arena", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN_MAMBA_ARENA"]}
+      ],
+      "notes": ["Separate cold allocation from repeated use; include upload, completion and consumed outputs.", "Exercise shape changes, output alias lifetimes, state initialization and failure cleanup. Existing IDENTICAL arena policy is unchanged."]
+    },
+    {
+      "id": "M06",
+      "title": "Mandatory device refusal: scalar versus contiguous vector4 loads",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/modules/afn_refusal.mojo"],
+      "workloads": ["Mamba1Block.forward full workload including named-input refusal", "Mamba2Block.forward full workload including named-input refusal", "Mamba3Block.forward full workload including named-input refusal", "Samba full forward and training where AfnRefusalBatch is reached"],
+      "variants": [
+        {"name": "refusal_vec4", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"]}
+      ],
+      "notes": ["The initial host-versus-device idea is superseded: device refusal is already mandatory; its legacy enable define does not produce distinct A/B arms.", "New vector4 scan retains scalar tails, integer first-index selection, name order, messages and the same single finish readback. It introduces no host-data path.", "Future correctness coverage includes non-finite entries in every vector lane, multiple errors, nonmultiple-of-four extents, empty names and refusal before state publication."]
+    },
+    {
+      "id": "M07",
+      "title": "Mamba1 chunk-scan parallelism: 16 or 64 chunks versus 32",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/ops/afn_selective_scan.mojo"],
+      "workloads": ["Mamba1Block.forward full workload", "Mamba1 continuation and returned state", "Samba full forward and training configurations that contain Mamba1"],
+      "variants": [
+        {"name": "chunks16", "baseline_defines": ["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"], "candidate_defines": ["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN", "MOJOLEARN_AFN26_MAMBA1_CHUNKS16"]},
+        {"name": "chunks64", "baseline_defines": ["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"], "candidate_defines": ["MOJOLEARN_AFN_MAMBA1_CHUNKSCAN", "MOJOLEARN_AFN26_MAMBA1_CHUNKS64"]}
+      ],
+      "notes": ["Both arms enable the same chunk-scan parent. Do not select both chunk flags.", "Logical chunks own separate summaries; the 16-chunk arm launches 32 lanes and the 64-chunk arm launches 64. Empty/surplus lanes do not write final state.", "Trade shared storage and serial carry length against time-axis parallelism; retain every token and the walked final state. Quality must cover long recurrence and ragged/short sequences."]
+    },
+    {
+      "id": "M08",
+      "title": "Mamba2 SSD staged K window: 16 versus 32",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/modules/afn_ssd_mma.mojo"],
+      "workloads": ["Mamba2Block.forward full workload", "Mamba2 warm-state continuation and returned state", "Samba full forward and training configurations that contain Mamba2"],
+      "variants": [
+        {"name": "ssd_k16", "baseline_defines": ["MOJOLEARN_AFN_MAMBA2_SSD_MMA"], "candidate_defines": ["MOJOLEARN_AFN_MAMBA2_SSD_MMA", "MOJOLEARN_AFN26_MAMBA2_SSD_K16"]}
+      ],
+      "notes": ["Both arms enable SSD MMA; K16 does not enable it on its own.", "Shared extents, operand stride, staging loops and fragment loops derive from the K tile; causal clipping and the full K extent remain unchanged.", "Reduced shared storage may lose to extra barriers. Existing fallback applies outside the legal MMA tile plan."]
+    },
+    {
+      "id": "M09",
+      "title": "Mamba3 fused elementwise blocks: 64 or 256 threads versus 128",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/ops/afn_mamba3_fused.mojo"],
+      "workloads": ["Mamba3Block.forward full workload", "Mamba3 continuation and all state reports", "Samba full forward and full training with Mamba3 blocks"],
+      "variants": [
+        {"name": "threads64", "baseline_defines": ["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"], "candidate_defines": ["MOJOLEARN_AFN_MAMBA3_SISO_FUSED", "MOJOLEARN_AFN26_MAMBA3_THREADS64"]},
+        {"name": "threads256", "baseline_defines": ["MOJOLEARN_AFN_MAMBA3_SISO_FUSED"], "candidate_defines": ["MOJOLEARN_AFN_MAMBA3_SISO_FUSED", "MOJOLEARN_AFN26_MAMBA3_THREADS256"]}
+      ],
+      "notes": ["Both arms enable the same SISO fusion; choose one thread-count flag.", "All four launch grids use the selected block size and cell indexing uses block_dim.x. Quality covers every stage/report and consumer training behavior."]
+    },
+    {
+      "id": "M10",
+      "title": "Device refusal: smaller reductions and four-element work target",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": ["mamba/impl/modules/afn_defines.mojo", "mamba/impl/modules/afn_refusal.mojo"],
+      "workloads": ["Mamba1Block.forward full workload including refusal", "Mamba2Block.forward full workload including refusal", "Mamba3Block.forward full workload including refusal", "Samba full forward and training where AfnRefusalBatch is reached"],
+      "variants": [
+        {"name": "threads128", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128"]},
+        {"name": "grid_work4", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"]},
+        {"name": "threads128_grid_work4", "baseline_defines": [], "candidate_defines": ["MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128", "MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"]},
+        {"name": "vec4_grid_work4", "baseline_defines": ["MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"], "candidate_defines": ["MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4", "MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"]},
+        {"name": "vec4_threads128_grid_work4", "baseline_defines": ["MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4"], "candidate_defines": ["MOJOLEARN_AFN26_MAMBA_REFUSAL_VEC4", "MOJOLEARN_AFN26_MAMBA_REFUSAL_THREADS128", "MOJOLEARN_AFN26_MAMBA_REFUSAL_GRID4"]}
+      ],
+      "notes": ["Incumbent already launches min(ceil(n/256),32) partial blocks; GRID4 changes the work target, not the existence of work-sized dispatch.", "Candidate grid is min(ceil(n/(threads*4)),32); grid-stride scalar/vector loops cover the entire extent. Scratch stays bounded to 32 partials/name, with unused columns initialized to NONE.", "Name order and minimum error code preserve refusal precedence; include sparse and multiple invalid entries beyond the first grid pass."]
+    }
+  ]
+}

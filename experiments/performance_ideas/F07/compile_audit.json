@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "id": "F07",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "transformer/impl/llama/afn_apple_fast.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "default",
+      "binding": "transformer",
+      "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_AUDIT"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_FLASH",
+        "MOJOLEARN_AFN_ATTN_AUDIT"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    },
+    {
+      "name": "gqa",
+      "binding": "transformer",
+      "baseline_defines": [
+        "MOJOLEARN_AFN_ATTN_AUDIT"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_AFN_ATTN_GQA_TILE",
+        "MOJOLEARN_AFN_ATTN_AUDIT"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [
+    "The fixture covers the public causal full-block contract; arbitrary attention masks/backward require separately supported APIs and oracles."
+  ],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

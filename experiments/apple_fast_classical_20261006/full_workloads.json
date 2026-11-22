@@ -1,0 +1,3036 @@
+{
+  "schema": 1,
+  "status": "source_written_uncompiled_unverified_unmeasured",
+  "scope": "Apple FAST classical ML only; all listed coverage remains pending",
+  "source_only_delivery": "This catalog was authored without executing a harness or checker.",
+  "harness_sources": [
+    "tools/classical_two_datasets.py",
+    "tools/bench_board_more.py",
+    "tools/bench_board_algos.py",
+    "tools/bench_board.py",
+    "bench/speed/forest_speed_arm.py",
+    "tools/speed_gbdt_arm.py",
+    "tools/knn_datasets.py"
+  ],
+  "recipes": {
+    "classical/kmeans": {
+      "id": "classical/kmeans",
+      "adapter": "classical",
+      "lane": "kmeans",
+      "source_path": "tools/classical_two_datasets.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "BIG_ROWS=4,000,000; Istella prepared train ends at 2,043,304; prepared eval split must be audited against the intended full real population.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/classical_two_datasets.py::BUILDERS / CONFIG",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical/pca": {
+      "id": "classical/pca",
+      "adapter": "classical",
+      "lane": "pca",
+      "source_path": "tools/classical_two_datasets.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "BIG_ROWS=4,000,000; Istella prepared train ends at 2,043,304; prepared eval split must be audited against the intended full real population.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/classical_two_datasets.py::BUILDERS / CONFIG",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical/ols": {
+      "id": "classical/ols",
+      "adapter": "classical",
+      "lane": "ols",
+      "source_path": "tools/classical_two_datasets.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "BIG_ROWS=4,000,000; Istella prepared train ends at 2,043,304; prepared eval split must be audited against the intended full real population.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/classical_two_datasets.py::BUILDERS / CONFIG",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical/knn": {
+      "id": "classical/knn",
+      "adapter": "classical",
+      "lane": "knn",
+      "source_path": "tools/classical_two_datasets.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "tools/knn_datasets.py real_block keeps 400,000 index rows plus 4,000 queries from a 404,000-row prefix; KNN_K=64.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/classical_two_datasets.py::BUILDERS / CONFIG",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "G02 scalar route accepts k<=16, so this saved k=64 recipe does not exercise G02."
+      ]
+    },
+    "classical/kde": {
+      "id": "classical/kde",
+      "adapter": "classical",
+      "lane": "kde",
+      "source_path": "tools/classical_two_datasets.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "100,000 fit rows and 2,000 queries by stride; gaussian bandwidth=1.0 is only one supported KDE configuration.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/classical_two_datasets.py::BUILDERS / CONFIG",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical/svc": {
+      "id": "classical/svc",
+      "adapter": "classical",
+      "lane": "svc",
+      "source_path": "tools/classical_two_datasets.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "10,000 fit and 10,000 evaluation stride rows; RBF preset only.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/classical_two_datasets.py::BUILDERS / CONFIG",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical/dbscan": {
+      "id": "classical/dbscan",
+      "adapter": "classical",
+      "lane": "dbscan",
+      "source_path": "tools/classical_two_datasets.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "DBSCAN_ROWS=1,000,000; HDBSCAN_ROWS=100,000. Audit constructor-internal HDBSCAN slicing as well as prepared block.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/classical_two_datasets.py::BUILDERS / CONFIG",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical/hdbscan": {
+      "id": "classical/hdbscan",
+      "adapter": "classical",
+      "lane": "hdbscan",
+      "source_path": "tools/classical_two_datasets.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "DBSCAN_ROWS=1,000,000; HDBSCAN_ROWS=100,000. Audit constructor-internal HDBSCAN slicing as well as prepared block.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/classical_two_datasets.py::BUILDERS / CONFIG",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/ridge": {
+      "id": "classical2/ridge",
+      "adapter": "classical2",
+      "lane": "ridge",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared linear/classification blocks cap fit at 1,000,000 and eval at 100,000.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/logreg": {
+      "id": "classical2/logreg",
+      "adapter": "classical2",
+      "lane": "logreg",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared linear/classification blocks cap fit at 1,000,000 and eval at 100,000.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/linearsvc": {
+      "id": "classical2/linearsvc",
+      "adapter": "classical2",
+      "lane": "linearsvc",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared linear/classification blocks cap fit at 1,000,000 and eval at 100,000.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/linearsvr": {
+      "id": "classical2/linearsvr",
+      "adapter": "classical2",
+      "lane": "linearsvr",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared linear/classification blocks cap fit at 1,000,000 and eval at 100,000.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/knn-clf": {
+      "id": "classical2/knn-clf",
+      "adapter": "classical2",
+      "lane": "knn-clf",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit at 200,000 and queries at 4,000; KNN_K=10.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/knn-reg": {
+      "id": "classical2/knn-reg",
+      "adapter": "classical2",
+      "lane": "knn-reg",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit at 200,000 and queries at 4,000; KNN_K=10.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/gmm": {
+      "id": "classical2/gmm",
+      "adapter": "classical2",
+      "lane": "gmm",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit 100,000 and eval 20,000 and drops constant columns; full covariance, 8 components.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/spectral": {
+      "id": "classical2/spectral",
+      "adapter": "classical2",
+      "lane": "spectral",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit at 10,000 rows; supported single-linkage must be retained for G14.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/agglomerative": {
+      "id": "classical2/agglomerative",
+      "adapter": "classical2",
+      "lane": "agglomerative",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit at 10,000 rows; supported single-linkage must be retained for G14.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/umap": {
+      "id": "classical2/umap",
+      "adapter": "classical2",
+      "lane": "umap",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared manifold block caps fit at 20,000 stride rows.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/spectral-embedding": {
+      "id": "classical2/spectral-embedding",
+      "adapter": "classical2",
+      "lane": "spectral-embedding",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared manifold block caps fit at 20,000 stride rows.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/gpr": {
+      "id": "classical2/gpr",
+      "adapter": "classical2",
+      "lane": "gpr",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit and eval at 3,000 rows.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "GPR mean-only outputs do not establish L11 variance-route coverage; saved recipe must consume variance/std or retain route coverage as pending."
+      ]
+    },
+    "classical2/gpc": {
+      "id": "classical2/gpc",
+      "adapter": "classical2",
+      "lane": "gpc",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit and eval at 3,000 rows.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "GPR mean-only outputs do not establish L11 variance-route coverage; saved recipe must consume variance/std or retain route coverage as pending."
+      ]
+    },
+    "classical2/svr": {
+      "id": "classical2/svr",
+      "adapter": "classical2",
+      "lane": "svr",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit and eval at 10,000 rows.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/kernel-ridge": {
+      "id": "classical2/kernel-ridge",
+      "adapter": "classical2",
+      "lane": "kernel-ridge",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit and eval at 10,000 rows.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/rbf-sampler": {
+      "id": "classical2/rbf-sampler",
+      "adapter": "classical2",
+      "lane": "rbf-sampler",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit 100,000 and kernel check 1,000 rows; task-quality coverage is narrower than full downstream task coverage.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/nystroem": {
+      "id": "classical2/nystroem",
+      "adapter": "classical2",
+      "lane": "nystroem",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Intrinsic lane_arrays caps fit 100,000 and kernel check 1,000 rows; task-quality coverage is narrower than full downstream task coverage.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/ivf": {
+      "id": "classical2/ivf",
+      "adapter": "classical2",
+      "lane": "ivf",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "400,000 index rows and 4,000 query prefix rows from tools/knn_datasets.py; probes=32, lists=1024.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "classical2/arima": {
+      "id": "classical2/arima",
+      "adapter": "classical2",
+      "lane": "arima",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "synthetic"
+      ],
+      "intrinsic_caps": "Established synthetic task declares 64 series; freeze the generator source/version/seed and complete declared series/time/holdout dimensions. Do not reinterpret it as coverage for a real dataset.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Audited complete declared synthetic task or an explicitly mapped real full-series task using the unchanged saved builder.",
+      "notes": [
+        "Established synthetic workloads are legitimate tasks. Generator/source hash, full dimensions, settings, quality floors and route witnesses remain pending."
+      ],
+      "established_synthetic": true,
+      "dataset_kinds": [
+        "synthetic",
+        "real"
+      ]
+    },
+    "classical2/ets": {
+      "id": "classical2/ets",
+      "adapter": "classical2",
+      "lane": "ets",
+      "source_path": "tools/bench_board_more.py",
+      "saved_datasets": [
+        "synthetic"
+      ],
+      "intrinsic_caps": "Established synthetic task declares 64 series; freeze the generator source/version/seed and complete declared series/time/holdout dimensions. Do not reinterpret it as coverage for a real dataset.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_more.py::LANES / build",
+      "execution_input": "Audited complete declared synthetic task or an explicitly mapped real full-series task using the unchanged saved builder.",
+      "notes": [
+        "Established synthetic workloads are legitimate tasks. Generator/source hash, full dimensions, settings, quality floors and route witnesses remain pending."
+      ],
+      "established_synthetic": true,
+      "dataset_kinds": [
+        "synthetic",
+        "real"
+      ]
+    },
+    "algos/ridge-clf": {
+      "id": "algos/ridge-clf",
+      "adapter": "algos",
+      "lane": "ridge-clf",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/ridge-cv": {
+      "id": "algos/ridge-cv",
+      "adapter": "algos",
+      "lane": "ridge-cv",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/bayesian-ridge": {
+      "id": "algos/bayesian-ridge",
+      "adapter": "algos",
+      "lane": "bayesian-ridge",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/lars": {
+      "id": "algos/lars",
+      "adapter": "algos",
+      "lane": "lars",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/lasso-lars": {
+      "id": "algos/lasso-lars",
+      "adapter": "algos",
+      "lane": "lasso-lars",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/lasso-cv": {
+      "id": "algos/lasso-cv",
+      "adapter": "algos",
+      "lane": "lasso-cv",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/enet-cv": {
+      "id": "algos/enet-cv",
+      "adapter": "algos",
+      "lane": "enet-cv",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/huber": {
+      "id": "algos/huber",
+      "adapter": "algos",
+      "lane": "huber",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/sgd-clf": {
+      "id": "algos/sgd-clf",
+      "adapter": "algos",
+      "lane": "sgd-clf",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/sgd-reg": {
+      "id": "algos/sgd-reg",
+      "adapter": "algos",
+      "lane": "sgd-reg",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/perceptron": {
+      "id": "algos/perceptron",
+      "adapter": "algos",
+      "lane": "perceptron",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/pa-clf": {
+      "id": "algos/pa-clf",
+      "adapter": "algos",
+      "lane": "pa-clf",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/pa-reg": {
+      "id": "algos/pa-reg",
+      "adapter": "algos",
+      "lane": "pa-reg",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/sgd-ocsvm": {
+      "id": "algos/sgd-ocsvm",
+      "adapter": "algos",
+      "lane": "sgd-ocsvm",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/qn-reg": {
+      "id": "algos/qn-reg",
+      "adapter": "algos",
+      "lane": "qn-reg",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/lda-clf": {
+      "id": "algos/lda-clf",
+      "adapter": "algos",
+      "lane": "lda-clf",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/qda": {
+      "id": "algos/qda",
+      "adapter": "algos",
+      "lane": "qda",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg blocks cap fit 1,000,000 and eval 100,000. Inspect LANES sub and builder shape restrictions before admission.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/ard": {
+      "id": "algos/ard",
+      "adapter": "algos",
+      "lane": "ard",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "LANES sub caps fit 100,000; underlying cls/reg prep caps eval 100,000.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/min-cov-det": {
+      "id": "algos/min-cov-det",
+      "adapter": "algos",
+      "lane": "min-cov-det",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "LANES sub caps fit 100,000; underlying cls/reg prep caps eval 100,000.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/elliptic-envelope": {
+      "id": "algos/elliptic-envelope",
+      "adapter": "algos",
+      "lane": "elliptic-envelope",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "LANES sub caps fit 100,000; underlying cls/reg prep caps eval 100,000.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/ocsvm": {
+      "id": "algos/ocsvm",
+      "adapter": "algos",
+      "lane": "ocsvm",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "LANES sub caps fit and eval 10,000.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/nmf": {
+      "id": "algos/nmf",
+      "adapter": "algos",
+      "lane": "nmf",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Underlying real cls/reg/nonnegative prepared blocks cap fit 1,000,000/eval 100,000; paired-column transforms and randomized/QR route selection need explicit audit.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/factor-analysis": {
+      "id": "algos/factor-analysis",
+      "adapter": "algos",
+      "lane": "factor-analysis",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Underlying real cls/reg/nonnegative prepared blocks cap fit 1,000,000/eval 100,000; paired-column transforms and randomized/QR route selection need explicit audit.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/pls": {
+      "id": "algos/pls",
+      "adapter": "algos",
+      "lane": "pls",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Underlying real cls/reg/nonnegative prepared blocks cap fit 1,000,000/eval 100,000; paired-column transforms and randomized/QR route selection need explicit audit.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/pls-canonical": {
+      "id": "algos/pls-canonical",
+      "adapter": "algos",
+      "lane": "pls-canonical",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Underlying real cls/reg/nonnegative prepared blocks cap fit 1,000,000/eval 100,000; paired-column transforms and randomized/QR route selection need explicit audit.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/cca": {
+      "id": "algos/cca",
+      "adapter": "algos",
+      "lane": "cca",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Underlying real cls/reg/nonnegative prepared blocks cap fit 1,000,000/eval 100,000; paired-column transforms and randomized/QR route selection need explicit audit.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/randomized-svd": {
+      "id": "algos/randomized-svd",
+      "adapter": "algos",
+      "lane": "randomized-svd",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Underlying real cls/reg/nonnegative prepared blocks cap fit 1,000,000/eval 100,000; paired-column transforms and randomized/QR route selection need explicit audit.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/qr": {
+      "id": "algos/qr",
+      "adapter": "algos",
+      "lane": "qr",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Underlying real cls/reg/nonnegative prepared blocks cap fit 1,000,000/eval 100,000; paired-column transforms and randomized/QR route selection need explicit audit.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/svd": {
+      "id": "algos/svd",
+      "adapter": "algos",
+      "lane": "svd",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Underlying real cls/reg/nonnegative prepared blocks cap fit 1,000,000/eval 100,000; paired-column transforms and randomized/QR route selection need explicit audit.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/als": {
+      "id": "algos/als",
+      "adapter": "algos",
+      "lane": "als",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi-zones",
+        "text"
+      ],
+      "intrinsic_caps": "Taxizones/text count blocks have derived user/item populations and one heldout interaction per row. Full source corpus/zone/time coverage must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/minibatch-kmeans": {
+      "id": "algos/minibatch-kmeans",
+      "adapter": "algos",
+      "lane": "minibatch-kmeans",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared classification block caps fit 1,000,000; batches are algorithm settings, not permission to omit source rows.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/bisecting-kmeans": {
+      "id": "algos/bisecting-kmeans",
+      "adapter": "algos",
+      "lane": "bisecting-kmeans",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared classification block caps fit 1,000,000; batches are algorithm settings, not permission to omit source rows.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/meanshift": {
+      "id": "algos/meanshift",
+      "adapter": "algos",
+      "lane": "meanshift",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "LANES sub caps fit 10,000; bandwidth derived from first 1,000 fit rows; inherited bandwidth estimation is an explicit setting.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/simple-imputer": {
+      "id": "algos/simple-imputer",
+      "adapter": "algos",
+      "lane": "simple-imputer",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/power-transformer": {
+      "id": "algos/power-transformer",
+      "adapter": "algos",
+      "lane": "power-transformer",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/standard-scaler": {
+      "id": "algos/standard-scaler",
+      "adapter": "algos",
+      "lane": "standard-scaler",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/minmax-scaler": {
+      "id": "algos/minmax-scaler",
+      "adapter": "algos",
+      "lane": "minmax-scaler",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/maxabs-scaler": {
+      "id": "algos/maxabs-scaler",
+      "adapter": "algos",
+      "lane": "maxabs-scaler",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/categorical-nb": {
+      "id": "algos/categorical-nb",
+      "adapter": "algos",
+      "lane": "categorical-nb",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/target-encoder": {
+      "id": "algos/target-encoder",
+      "adapter": "algos",
+      "lane": "target-encoder",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/gaussian-nb": {
+      "id": "algos/gaussian-nb",
+      "adapter": "algos",
+      "lane": "gaussian-nb",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/select-f-classif": {
+      "id": "algos/select-f-classif",
+      "adapter": "algos",
+      "lane": "select-f-classif",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/select-f-regression": {
+      "id": "algos/select-f-regression",
+      "adapter": "algos",
+      "lane": "select-f-regression",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/select-r-regression": {
+      "id": "algos/select-r-regression",
+      "adapter": "algos",
+      "lane": "select-r-regression",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/resample": {
+      "id": "algos/resample",
+      "adapter": "algos",
+      "lane": "resample",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Prepared cls/reg/raw/categorical blocks cap fit 1,000,000 and eval 100,000; category selection and preprocessing must be recorded.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": [
+        "SimpleImputer saved strategy=median may bypass P01 column-statistic kernel; route remains pending.",
+        "P08 metric epilogues are not covered merely because a benchmark computes independent regression metrics."
+      ]
+    },
+    "algos/iterative-imputer": {
+      "id": "algos/iterative-imputer",
+      "adapter": "algos",
+      "lane": "iterative-imputer",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "LANES raw32 block limits features to 32 and sub caps fit 100,000/eval 20,000; cannot claim the original full feature population.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/multinomial-nb": {
+      "id": "algos/multinomial-nb",
+      "adapter": "algos",
+      "lane": "multinomial-nb",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "text",
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Text document bytes/bins and underlying prepared real counts determine population; taxi/Istella blocks are capped. CSR route must actually be selected.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/complement-nb": {
+      "id": "algos/complement-nb",
+      "adapter": "algos",
+      "lane": "complement-nb",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "text",
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Text document bytes/bins and underlying prepared real counts determine population; taxi/Istella blocks are capped. CSR route must actually be selected.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/kpss": {
+      "id": "algos/kpss",
+      "adapter": "algos",
+      "lane": "kpss",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi-hourly",
+        "synthetic"
+      ],
+      "intrinsic_caps": "taxi-hourly uses 64 busiest zones of Jan/Feb 2024, 1,440 hours with 48 held out; audit intended series population, time coverage and preprocessing.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/select-d": {
+      "id": "algos/select-d",
+      "adapter": "algos",
+      "lane": "select-d",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi-hourly",
+        "synthetic"
+      ],
+      "intrinsic_caps": "taxi-hourly uses 64 busiest zones of Jan/Feb 2024, 1,440 hours with 48 held out; audit intended series population, time coverage and preprocessing.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/autoarima": {
+      "id": "algos/autoarima",
+      "adapter": "algos",
+      "lane": "autoarima",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi-hourly",
+        "synthetic"
+      ],
+      "intrinsic_caps": "taxi-hourly uses 64 busiest zones of Jan/Feb 2024, 1,440 hours with 48 held out; audit intended series population, time coverage and preprocessing.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/tree-shap": {
+      "id": "algos/tree-shap",
+      "adapter": "algos",
+      "lane": "tree-shap",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Saved SHAP recipe fits its own model and caps explanation/background rows. Must map an admitted GPU tree model plus full intended explanation population; route pending.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "algos/random-trees-embedding": {
+      "id": "algos/random-trees-embedding",
+      "adapter": "algos",
+      "lane": "random-trees-embedding",
+      "source_path": "tools/bench_board_algos.py",
+      "saved_datasets": [
+        "taxi",
+        "istella"
+      ],
+      "intrinsic_caps": "Saved real prepared cls block and any LANES sub cap need audit; ExtraTrees tiled-range route must execute.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "tools/bench_board_algos.py::LANES / build",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-symmetric": {
+      "id": "trees/gbdt-symmetric",
+      "adapter": "trees",
+      "lane": "gbdt-symmetric",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "taxi",
+        "taxireg",
+        "istella",
+        "istellareg",
+        "year",
+        "covtype",
+        "covtype2"
+      ],
+      "intrinsic_caps": "tools/speed_gbdt_arm.py shipped loader may cap train/test and tree inference-large defaults to 1,000,000. Audit full data and supported task/route, not just --rows full.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-symmetric-1000": {
+      "id": "trees/gbdt-symmetric-1000",
+      "adapter": "trees",
+      "lane": "gbdt-symmetric-1000",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "taxi",
+        "taxireg",
+        "istella",
+        "istellareg",
+        "year",
+        "covtype",
+        "covtype2"
+      ],
+      "intrinsic_caps": "tools/speed_gbdt_arm.py shipped loader may cap train/test and tree inference-large defaults to 1,000,000. Audit full data and supported task/route, not just --rows full.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-depthwise": {
+      "id": "trees/gbdt-depthwise",
+      "adapter": "trees",
+      "lane": "gbdt-depthwise",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "taxi",
+        "taxireg",
+        "istella",
+        "istellareg",
+        "year",
+        "covtype",
+        "covtype2"
+      ],
+      "intrinsic_caps": "tools/speed_gbdt_arm.py shipped loader may cap train/test and tree inference-large defaults to 1,000,000. Audit full data and supported task/route, not just --rows full.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-lossguide": {
+      "id": "trees/gbdt-lossguide",
+      "adapter": "trees",
+      "lane": "gbdt-lossguide",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "taxi",
+        "taxireg",
+        "istella",
+        "istellareg",
+        "year",
+        "covtype",
+        "covtype2"
+      ],
+      "intrinsic_caps": "tools/speed_gbdt_arm.py shipped loader may cap train/test and tree inference-large defaults to 1,000,000. Audit full data and supported task/route, not just --rows full.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-ordered": {
+      "id": "trees/gbdt-ordered",
+      "adapter": "trees",
+      "lane": "gbdt-ordered",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "taxi",
+        "taxireg",
+        "istella",
+        "istellareg",
+        "year",
+        "covtype",
+        "covtype2"
+      ],
+      "intrinsic_caps": "tools/speed_gbdt_arm.py shipped loader may cap train/test and tree inference-large defaults to 1,000,000. Audit full data and supported task/route, not just --rows full.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/rf": {
+      "id": "trees/rf",
+      "adapter": "trees",
+      "lane": "rf",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "taxi",
+        "taxireg",
+        "istella",
+        "istellareg",
+        "year",
+        "covtype",
+        "covtype2"
+      ],
+      "intrinsic_caps": "tools/speed_gbdt_arm.py shipped loader may cap train/test and tree inference-large defaults to 1,000,000. Audit full data and supported task/route, not just --rows full.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/et": {
+      "id": "trees/et",
+      "adapter": "trees",
+      "lane": "et",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "taxi",
+        "taxireg",
+        "istella",
+        "istellareg",
+        "year",
+        "covtype",
+        "covtype2"
+      ],
+      "intrinsic_caps": "tools/speed_gbdt_arm.py shipped loader may cap train/test and tree inference-large defaults to 1,000,000. Audit full data and supported task/route, not just --rows full.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/iforest": {
+      "id": "trees/iforest",
+      "adapter": "trees",
+      "lane": "iforest",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "taxi",
+        "taxireg",
+        "istella",
+        "istellareg",
+        "year",
+        "covtype",
+        "covtype2"
+      ],
+      "intrinsic_caps": "tools/speed_gbdt_arm.py shipped loader may cap train/test and tree inference-large defaults to 1,000,000. Audit full data and supported task/route, not just --rows full.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-categorical": {
+      "id": "trees/gbdt-categorical",
+      "adapter": "trees",
+      "lane": "gbdt-categorical",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "criteo"
+      ],
+      "intrinsic_caps": "Criteo real categorical source/cache row limits must be audited; no numeric-only replacement exercises CTR.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-rank-yetirank": {
+      "id": "trees/gbdt-rank-yetirank",
+      "adapter": "trees",
+      "lane": "gbdt-rank-yetirank",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "istella",
+        "covtype"
+      ],
+      "intrinsic_caps": "Supported complete ranking groups or multiclass population; shipped dataset and loader caps remain pending.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-rank-pairlogit": {
+      "id": "trees/gbdt-rank-pairlogit",
+      "adapter": "trees",
+      "lane": "gbdt-rank-pairlogit",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "istella",
+        "covtype"
+      ],
+      "intrinsic_caps": "Supported complete ranking groups or multiclass population; shipped dataset and loader caps remain pending.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "trees/gbdt-multiclass": {
+      "id": "trees/gbdt-multiclass",
+      "adapter": "trees",
+      "lane": "gbdt-multiclass",
+      "source_path": "bench/speed/forest_speed_arm.py",
+      "saved_datasets": [
+        "istella",
+        "covtype"
+      ],
+      "intrinsic_caps": "Supported complete ranking groups or multiclass population; shipped dataset and loader caps remain pending.",
+      "status": "pending_full_dataset_and_route_audit",
+      "settings_source": "bench/speed/forest_speed_arm.py::lane_config(shipped)",
+      "execution_input": "Explicitly audited real full lane arrays; existing builder settings and quality function are reused. No smoke or synthetic substitution.",
+      "notes": []
+    },
+    "public/full-classical-operation": {
+      "id": "public/full-classical-operation",
+      "adapter": "public",
+      "lane": "full-classical-operation",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Declared complete classical public operation for an otherwise unmapped transitive caller.",
+      "example_callables": [],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    },
+    "public/regression-metrics": {
+      "id": "public/regression-metrics",
+      "adapter": "public",
+      "lane": "regression-metrics",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Full multioutput regression-metric calls with uniform and weighted output aggregation.",
+      "example_callables": [
+        "mojolearn.metrics.mean_squared_error",
+        "mojolearn.metrics.mean_absolute_error",
+        "mojolearn.metrics.r2_score"
+      ],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    },
+    "public/ranking-metrics": {
+      "id": "public/ranking-metrics",
+      "adapter": "public",
+      "lane": "ranking-metrics",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Full ROC/PR/AUC and weighted-percentile public calls with all score ties and weights preserved.",
+      "example_callables": [
+        "mojolearn.metrics.roc_curve",
+        "mojolearn.metrics.precision_recall_curve",
+        "mojolearn.metrics.roc_auc_score"
+      ],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    },
+    "public/gpr-variance": {
+      "id": "public/gpr-variance",
+      "adapter": "public",
+      "lane": "gpr-variance",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Complete fit plus predict(return_std=True) or predict(return_cov=True), consuming both mean and uncertainty.",
+      "example_callables": [
+        "mojolearn.GaussianProcessRegressor"
+      ],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    },
+    "public/resample-full": {
+      "id": "public/resample-full",
+      "adapter": "public",
+      "lane": "resample-full",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Complete resample call over every declared source row, all returned arrays consumed.",
+      "example_callables": [
+        "mojolearn.resample.resample"
+      ],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    },
+    "public/column-statistics": {
+      "id": "public/column-statistics",
+      "adapter": "public",
+      "lane": "column-statistics",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Complete public fit/transform for a setting such as SimpleImputer(strategy=\"mean\") that actually reaches column statistics.",
+      "example_callables": [
+        "mojolearn.SimpleImputer",
+        "mojolearn.StandardScaler"
+      ],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    },
+    "public/selector-scores": {
+      "id": "public/selector-scores",
+      "adapter": "public",
+      "lane": "selector-scores",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Complete direct public feature score calculation or fit/transform with all declared labels/features.",
+      "example_callables": [
+        "mojolearn.f_classif",
+        "mojolearn.f_regression",
+        "mojolearn.r_regression"
+      ],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    },
+    "public/gmm-outputs": {
+      "id": "public/gmm-outputs",
+      "adapter": "public",
+      "lane": "gmm-outputs",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Complete GMM fit and separately declared score_samples/predict_proba/score programs.",
+      "example_callables": [
+        "mojolearn.GaussianMixture"
+      ],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    },
+    "public/tree-shap-full": {
+      "id": "public/tree-shap-full",
+      "adapter": "public",
+      "lane": "tree-shap-full",
+      "source_path": "experiments/apple_fast_classical_20261006/run_pair.py::PublicProgram",
+      "status": "source_adapter_written_dataset_settings_quality_route_evidence_pending",
+      "saved_datasets": [],
+      "recipe_origin": "New declarative full-data adapter; no saved dataset or measured fixture is claimed.",
+      "description": "Complete supported model fit and explanation over full audited background and explanation populations.",
+      "example_callables": [
+        "mojolearn.RandomForestRegressor",
+        "mojolearn.TreeExplainer"
+      ],
+      "established_synthetic": false,
+      "intrinsic_caps": "No adapter row cap or sampling. Caller-internal settings/route must still be audited.",
+      "execution_input": "Audited full NPZ arrays or CSR components plus exact public_program and independent reference program/output receipts.",
+      "quality_scope": "Existing independent task floors plus explicit full output error metrics; an A/B comparison alone never establishes quality."
+    }
+  },
+  "entries": [
+    {
+      "id": "AFCL-G01",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "fast_mma_knn -> fast_mma_partial_kernel / fast_mma_bigd_kernel",
+        "NearestNeighbors / KNeighborsClassifier / KNeighborsRegressor and classical exact-neighbor consumers"
+      ],
+      "recipes": [
+        "classical/knn",
+        "classical2/knn-clf",
+        "classical2/knn-reg",
+        "classical/hdbscan",
+        "classical2/umap",
+        "classical2/spectral-embedding",
+        "classical2/spectral"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Other classical exact-neighbor graph/consumer routes require explicit reach and full datasets."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Existing eligible feature and k register limits remain unchanged.",
+        "Smaller query blocks can increase staged operand traffic; no gain claimed.",
+        "Downstream consumer quality is pending, including nonfinite/duplicate/tied inputs."
+      ],
+      "quality_scope": [
+        "Tie-aware exact recall and distance error",
+        "No duplicate or missing neighbor IDs",
+        "Classifier/regressor task quality",
+        "Affected graph/clustering/manifold consumer quality"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G02",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "fast_topk_knn -> fast_topk_partial_kernel -> fast_topk_merge_kernel",
+        "NearestNeighbors / KNeighborsClassifier / KNeighborsRegressor on the scalar fused route"
+      ],
+      "recipes": [
+        "classical2/knn-clf",
+        "classical2/knn-reg"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "The existing MMA path must be disabled in BOTH arms or preempts this route.",
+        "This changes staged candidate chunking, not merge fan-in or slice count.",
+        "The route retains existing feature/k limits and is not the default MMA-route comparison."
+      ],
+      "quality_scope": [
+        "Exhaustive candidate coverage",
+        "Tie ordering and k tails",
+        "No duplicate IDs",
+        "Exact recall and downstream classification/regression quality"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G03",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "fast_mma_eps_neighborhood -> _launch_eps -> fast_mma_eps_kernel",
+        "DBSCAN"
+      ],
+      "recipes": [
+        "classical/dbscan"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Only the existing MMA epsilon route is affected; its feature eligibility remains.",
+        "This alters scheduling and operand reuse, not epsilon or min_samples."
+      ],
+      "quality_scope": [
+        "Core/noise membership",
+        "Cluster-pair agreement",
+        "Epsilon-boundary points and dense connected components",
+        "All eligible epsilon edges retained"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G04",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "core_tile_applies -> core_tile_kernel",
+        "HDBSCAN core-distance construction with MOJOLEARN_HDB_CORE_TILE"
+      ],
+      "recipes": [
+        "classical/hdbscan"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "The older core-tile experiment is a prerequisite in BOTH arms; this does not promote it.",
+        "Existing CT_DMAX and CT_KMAX eligibility remains.",
+        "More barriers may outweigh occupancy savings."
+      ],
+      "quality_scope": [
+        "Core distances and ties",
+        "MST/linkage validity",
+        "Cluster/noise quality and membership probabilities",
+        "Nonfinite refusal behavior"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G05",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "cluster/impl/detail/min_cluster_distance_compute.mojo::_launch_fused and gated counterpart",
+        "KMeans",
+        "KMeans initialization/quantizer consumers including GaussianMixture, IVF and spectral clustering where that caller is used"
+      ],
+      "recipes": [
+        "classical/kmeans",
+        "classical2/gmm",
+        "classical2/ivf",
+        "classical2/spectral"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "All KMeans transitive initialization/quantizer consumers need full-operation coverage."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Existing normal/skinny feature policies remain, with smaller row ownership in both.",
+        "New scheduling has no qualification evidence on any device.",
+        "A full caller inventory is required before later measurement; do not limit admission to standalone assignment timing."
+      ],
+      "quality_scope": [
+        "Full-data inertia and heldout assignment",
+        "Empty-cluster behavior and finite centers",
+        "Fixed starts, seeds and iteration/convergence policy",
+        "Initialization/quantizer downstream task quality"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G06",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "launch_accumulate_centroid_sums_blocked / launch_accumulate_weight_per_cluster_blocked and gated twins",
+        "KMeans and consumers using its blocked accumulation route"
+      ],
+      "recipes": [
+        "classical/kmeans",
+        "classical2/gmm",
+        "classical2/ivf",
+        "classical2/spectral"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "All blocked-KMeans transitive initialization/quantizer consumers need full-operation coverage."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Requires the existing blocked accumulator opt-in in BOTH arms on Apple.",
+        "This is a new 128-row schedule, not a relabeled earlier 256/1024/4096 experiment.",
+        "Scratch-table memory grows and must remain part of later whole-operation evaluation."
+      ],
+      "quality_scope": [
+        "Center sums/counts and weighted inputs",
+        "Finite centers and inertia",
+        "High cluster imbalance and empty clusters",
+        "Quantization overflow policy and downstream consumers"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G07",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "MiniBatchKMeans resident mini-batch path",
+        "_mbf_assign_kernel / row-group assignment, compacted center sum, finish and reassignment kernels"
+      ],
+      "recipes": [
+        "algos/minibatch-kmeans"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Only the existing eligible resident path is affected.",
+        "Partial sum association can move FAST bits and stopping trajectory; full task quality remains pending.",
+        "MBF_GROUP, batch size, iteration budget, tolerances and random streams are unchanged."
+      ],
+      "quality_scope": [
+        "Inertia, labels, centers and counts",
+        "Reassignment and fixed random draws",
+        "Stopping observations and completed-iteration semantics",
+        "Batch/chunk tails, weighted/general route and cluster imbalance"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G08",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "gmm_e_step / fast_estep_kernel",
+        "mixture/estimator.mojo fit, predict, predict_proba, score and score_samples callers through GMM_ROW_TPB defaults"
+      ],
+      "recipes": [
+        "classical2/gmm",
+        "public/gmm-outputs"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Separate score_samples/predict_proba/score and cold/repeated GMM operations need workload witnesses."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Fused eligibility and workspace limits are unchanged.",
+        "An explicit row_tpb argument overrides the ordinary default and must be recorded in future workload mapping.",
+        "This does not change M-step or shared GEMM implementations."
+      ],
+      "quality_scope": [
+        "Heldout likelihood and responsibility normalization",
+        "Covariance positivity and collapse/refusal behavior",
+        "Converged status and iteration policy",
+        "Extreme log probabilities and ill-conditioned components"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G09",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo -> fast_ivf_scan_kernel",
+        "IVFIndex and ANN callers using batched IVF-Flat scan"
+      ],
+      "recipes": [
+        "classical2/ivf"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Additional ANN consumers of IVF scan beyond the saved IVFIndex lane need a closed inventory."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Existing batched FAST eligibility and candidate k limits remain.",
+        "The balanced-task experiment is a separate route; keep it off for this A/B.",
+        "This reduces query grouping rather than splitting individual lists into new tasks."
+      ],
+      "quality_scope": [
+        "Recall at fixed nprobe and full-probe control",
+        "Filtered candidate coverage",
+        "No duplicate IDs and total-order ties",
+        "Fixed trained index identity and query outputs"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G10",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "optimize_layout_fast",
+        "umap/sparse_optimizer.mojo FAST epoch launcher including umap_jacobi_epoch_fused_kernel",
+        "UMAP"
+      ],
+      "recipes": [
+        "classical2/umap"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "This groups CSR heads, not individual edges, preserving current seeded edge traversal.",
+        "No graph construction, learning rate, epoch or optimizer-objective change.",
+        "Smaller blocks may lose where degree skew is small."
+      ],
+      "quality_scope": [
+        "Trustworthiness and downstream task quality",
+        "Seed reproducibility",
+        "Fixed epochs and negative-sample count",
+        "Finite embeddings and disconnected/degree-skewed graphs"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G11",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "_spmv_fast -> fl_spmv_warp_kernel",
+        "SpectralEmbedding / SpectralClustering Lanczos and restart callers"
+      ],
+      "recipes": [
+        "classical2/spectral-embedding",
+        "classical2/spectral"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Implemented scope is spectral long-row Lanczos SpMV; LLE separate dense solves are outside this candidate.",
+        "Existing SpMV long-row route eligibility remains; short rows keep their existing schedule.",
+        "No change to graph, eigensolver tolerance, restart or iteration budget."
+      ],
+      "quality_scope": [
+        "Embedding neighborhood quality",
+        "Eigensystem residual and orthogonality",
+        "Clustering quality",
+        "Disconnected graphs and fixed solver convergence settings"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G12",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "_msg_part_kernel -> _msg_finish_kernel",
+        "x_cluster/device_ops.mojo::DeviceOps.meanshift grid route / MeanShift"
+      ],
+      "recipes": [
+        "algos/meanshift"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Existing grid-route eligibility remains.",
+        "The larger chunk can increase serial feature-fold work and change partial-sum association.",
+        "No seed subsampling, bandwidth approximation, tolerance or iteration reduction."
+      ],
+      "quality_scope": [
+        "Cluster centers and cluster-pair agreement",
+        "Bandwidth-boundary membership",
+        "Convergence status and unchanged iteration budget",
+        "Finite results, tails and high neighborhood density"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G13",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "kde2_dimtile_kernel -> kde2_score_samples_fast_apple / kde2_score_samples_fast_apple_to_host",
+        "KernelDensity score_samples and score, including resident scoring callers"
+      ],
+      "recipes": [
+        "classical/kde"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Saved Gaussian/L2 KDE case does not cover every affected supported kernel/metric/weighted route."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Only the existing Apple FAST dimension-tiled scoring route is affected; legacy/fallback paths remain.",
+        "Fewer queries reuse each training tile, so lower resource pressure can be outweighed by additional training reads.",
+        "The chunk planner can change reduction association; FAST bits may move and task quality remains pending.",
+        "Keep optional KDE2 sibling flags equal in both arms; the new define does not enable any sibling mechanism."
+      ],
+      "quality_scope": [
+        "Independent density/log-likelihood error",
+        "Heldout likelihood",
+        "All supported kernels and metrics",
+        "Sample weights, support boundaries, extreme bandwidths and far queries",
+        "Constant/duplicate inputs and ragged query/train/feature tails"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-G14",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
+      "actual_callers": [
+        "MmaBoruvka.enqueue -> fb_mma_nearest_kernel",
+        "hierarchy/impl/cluster/detail/fast_boruvka.mojo::fast_euclidean_mst",
+        "AgglomerativeClustering supported single-linkage Euclidean pairwise route",
+        "HDBSCAN mutual-reachability callers using MmaBoruvka, including optional device-round route when enabled equally in both arms"
+      ],
+      "recipes": [
+        "classical2/agglomerative",
+        "classical/hdbscan"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "All supported hierarchy metric/linkage and shared HDBSCAN route settings need explicit witnesses."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Only the existing eligible MMA Boruvka path changes; wider features, unsafe centered norms and other existing fallbacks retain their current schedule.",
+        "No new linkage or metric support is implemented.",
+        "Tile barriers increase and slice rounding follows MB_T; full operation time may regress.",
+        "The same production kernel serves hierarchy and HDBSCAN, so both full-workload families are required for future qualification.",
+        "Do not enable HDBSCAN optional device rounds in only one arm; their qualification is separate from this tile change."
+      ],
+      "quality_scope": [
+        "Linkage/MST validity and connected-component behavior",
+        "Cluster-pair task quality",
+        "Ties, duplicate/degenerate points and disconnected inputs",
+        "HDBSCAN membership/noise/probabilities and core-distance interactions",
+        "Existing nonfinite/refusal and metric/linkage semantics"
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L01",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "Ridge",
+        "RidgeClassifier",
+        "RidgeCV",
+        "Lars",
+        "LassoLars",
+        "BayesianRidge",
+        "ARDRegression",
+        "LinearDiscriminantAnalysis",
+        "QuadraticDiscriminantAnalysis",
+        "other classical x_prep Gram stages using fast_sym_gram_into"
+      ],
+      "recipes": [
+        "classical2/ridge",
+        "algos/ridge-clf",
+        "algos/ridge-cv",
+        "algos/lars",
+        "algos/lasso-lars",
+        "algos/bayesian-ridge",
+        "algos/ard",
+        "algos/lda-clf",
+        "algos/qda"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Other transitive x_prep Gram callers have no closed workload inventory."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Only existing grid-Gram routes are affected; weighted Ridge/Bayesian routes that bypass this file do not change.",
+        "Keep existing Ridge/LARS/class covariance/Bayesian/ARD grid routes enabled in both arms; their *_OFF rollback defines must be absent.",
+        "All affected callers, including transitive consumers beyond the initial idea card, require future full-workload evidence.",
+        "No dimension dispatch rule was added or removed."
+      ],
+      "quality_scope": "Centered sufficient statistics, coefficients, heldout regression/classification quality, selected regularization, Bayesian/ARD objectives, class covariance and ill-conditioned/large-offset inputs.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L02",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "Ridge",
+        "RidgeClassifier",
+        "RidgeCV",
+        "Lars",
+        "LassoLars",
+        "BayesianRidge",
+        "ARDRegression",
+        "LinearDiscriminantAnalysis",
+        "QuadraticDiscriminantAnalysis",
+        "other classical x_prep Gram stages using fast_sym_gram_into"
+      ],
+      "recipes": [
+        "classical2/ridge",
+        "algos/ridge-clf",
+        "algos/ridge-cv",
+        "algos/lars",
+        "algos/lasso-lars",
+        "algos/bayesian-ridge",
+        "algos/ard",
+        "algos/lda-clf",
+        "algos/qda"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Other transitive x_prep Gram callers have no closed workload inventory."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "This changes FAST reduction order; no error or speed bound is claimed.",
+        "Inherited grid-Gram prerequisites are identical to L01 in both arms.",
+        "L01 plus L02 requires its own future combined A/B; independent decisions cannot establish the combined result."
+      ],
+      "quality_scope": "All L01 estimator quality gates plus cancellation, large offsets, near-constant columns, multi-output fits and class-masked covariances.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L03",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "LassoCV",
+        "ElasticNetCV"
+      ],
+      "recipes": [
+        "algos/lasso-cv",
+        "algos/enet-cv"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Only the fast CV route is affected; its existing fold-layout eligibility and fallback remain unchanged.",
+        "The environment prerequisite is 1 in both arms, avoiding comparison with the separate team route.",
+        "This changes held-out prediction work grouping only, not residual updates during coordinate descent."
+      ],
+      "quality_scope": "Selected alpha/l1 ratio, coefficients, dual gaps, heldout RMSE, fold isolation, path ties and final single-row tails.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L04",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "HuberRegressor"
+      ],
+      "recipes": [
+        "algos/huber"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Existing HUBER_DEVICE_LBFGS and default block512 routes must remain enabled in both arms.",
+        "This is a new 256-row schedule, not relabeling the already-default 512-row candidate.",
+        "No optimizer batching or stopping policy is changed."
+      ],
+      "quality_scope": "Robust objective, coefficients, scale, convergence status, outlier behavior, sample weights and heldout RMSE; tolerance and line-search budget unchanged.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L05",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "LogisticRegression binary and multinomial QN paths",
+        "LinearSVC QN paths",
+        "LinearSVR QN paths",
+        "QN squared/absolute regression callers using the same gradient product"
+      ],
+      "recipes": [
+        "classical2/logreg",
+        "classical2/linearsvc",
+        "classical2/linearsvr",
+        "algos/qn-reg"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Single-output QN loss variants need distinct workload settings, not only saved squared-loss qn-reg."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "MOJOLEARN_QN_FAST_COALESCED_OFF is essential in BOTH arms because the default coalesced route otherwise bypasses this product.",
+        "Keep QN_FAST_XTDZ enabled in both arms; distributed gradient routes still bypass it.",
+        "Existing register-cell and class staging capacity limits remain unchanged.",
+        "The actual reach includes eligible single-output QN losses as well as the originally proposed multinomial case."
+      ],
+      "quality_scope": "Logloss/accuracy or regression task metrics as appropriate, fitted coefficients, objective and optimizer status, class imbalance and extreme logits.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L06",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "SVC",
+        "SVR",
+        "OneClassSVM through the same SMO fused update when applicable"
+      ],
+      "recipes": [
+        "classical/svc",
+        "classical2/svr",
+        "algos/ocsvm"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Limited to the inherited fused RBF/linear kernel update and its feature-register capacity; polynomial/sigmoid and wider feature routes do not change.",
+        "Keep MOJOLEARN_SVM_FUSED_UPDATE_F_OFF absent in both arms.",
+        "Narrowed from a possible new per-thread row microtile to a deeper supported moved-row staging schedule; working set and iteration budget are unchanged."
+      ],
+      "quality_scope": "Margins, support vectors, solver convergence, regression residuals, anomaly ranking, SVR second-half updates and ragged moved-row tiles.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L07",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "PCA covariance-eigendecomposition route",
+        "direct compute_covariance consumers"
+      ],
+      "recipes": [
+        "classical/pca"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Direct covariance consumers beyond PCA require named full operations."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "MOJOLEARN_PCA_FAST_COMPENSATED_COV must be enabled in BOTH arms; that older opt-in remains unpromoted.",
+        "This experiments on the compensated covariance route, not the default Apple matrix-unit covariance route.",
+        "Compensation is retained in both stages but a different association still needs downstream quality evidence.",
+        "Other PCA solvers and unrelated covariance consumers are not claimed to be covered."
+      ],
+      "quality_scope": "Explained variance, reconstruction, principal-subspace/orthogonality metrics, small singular directions, large offsets, rank deficiency and input immutability.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L08",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "NMF",
+        "FactorAnalysis",
+        "PLSRegression",
+        "PLSCanonical",
+        "CCA",
+        "ALS",
+        "randomized SVD",
+        "least squares",
+        "other classical callers of x_decomp launch_gemm / DKit.mm"
+      ],
+      "recipes": [
+        "algos/nmf",
+        "algos/factor-analysis",
+        "algos/pls",
+        "algos/pls-canonical",
+        "algos/cca",
+        "algos/als",
+        "algos/randomized-svd",
+        "algos/qr",
+        "algos/svd",
+        "classical/ols"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Transitive DevExec.gemm / DKit.mm classical caller inventory remains open; least-squares route needs proof."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "MOJOLEARN_DECOMP_FAST_GEMM_TILED must be enabled in BOTH arms; comparison is against the older tiled schedule, not the default MMA route.",
+        "Only the classical x_decomp product entry changes; no global or neural GEMM dispatch was edited.",
+        "launch_gemm_ordered precision-sensitive callers bypass this candidate.",
+        "All transitive classical DKit.mm/DevExec.gemm callers need workload mapping before a default decision; the initial card's named estimators are not an exhaustive admission list."
+      ],
+      "quality_scope": "Every affected estimator's full-operation task metrics plus product/solve/factor residuals, rank-deficient and ragged/transposed cases; no standalone GEMM admission.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L09",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "QR through DevExec.geqrf/orgqr",
+        "randomized SVD when this QR route is selected",
+        "least squares when this QR route is selected",
+        "classical decomposition callers selecting the grid Householder route"
+      ],
+      "recipes": [
+        "algos/qr",
+        "algos/randomized-svd",
+        "classical/ols"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "QR/least-squares production route and further decomposition consumers must be mapped."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "MOJOLEARN_QR_FAST_DEV must be enabled in BOTH arms.",
+        "Implementation is explicitly the existing opt-in grid Householder QR route, not a change to blocked TSQR.",
+        "Callers that keep another QR route are unaffected and cannot be counted as measured coverage."
+      ],
+      "quality_scope": "Q orthogonality, QR/SVD reconstruction, least-squares residual, rank-deficient inputs and near-overflow/underflow scales.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L10",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "NMF solver=mu, beta_loss=frobenius; fit and transform"
+      ],
+      "recipes": [
+        "algos/nmf"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "OP_MUZ was already a fused multiply/divide update; this is a new specialized work schedule and does not claim an additional eliminated intermediate.",
+        "Coordinate-descent NMF and non-Frobenius update formulas do not use OP_MUZ and are unaffected.",
+        "Four-cell grouping can reduce occupancy on small updates; no speed win is claimed.",
+        "L08 plus L10 requires separate whole-NMF combined evidence."
+      ],
+      "quality_scope": "Full reconstruction objective, nonnegative factors, stopping iteration, zero denominators, regularization, fixed-H transform and seeded initialization.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L11",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "GaussianProcessRegressor variance/std prediction",
+        "GaussianProcessClassifier binary/OVR latent variance and predictive probability"
+      ],
+      "recipes": [
+        "classical2/gpr",
+        "classical2/gpc",
+        "public/gpr-variance"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Public GPR variance adapter is written; complete fit/uncertainty task dataset/settings, independent output reference and variance-route witness remain pending."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Only predictive-variance kernels change; GP fitting, cross-kernel formation, triangular solves and mean-only prediction are unaffected.",
+        "GPR's existing positive elem_tpb argument check remains, while the candidate intentionally chooses 128 for its production variance launch.",
+        "IDENTICAL segmented variance and sabotage launches retain their existing selection.",
+        "The source narrows batching to variance query tiles; it does not implement a new whole-prediction streaming workspace."
+      ],
+      "quality_scope": "Predictive variance/std, clamp placement, uncertainty calibration, probability logloss, ill-conditioned fits and query-batch invariance.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L12",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "RBFSampler transform with a separate projection epilogue",
+        "RBFSampler resident fit_transform including its staged pipeline"
+      ],
+      "recipes": [
+        "classical2/rbf-sampler"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Only km_feature_map_epilogue callers are affected; already-fused projection/epilogue paths bypass the candidate.",
+        "Keep MOJOLEARN_RBF_FUSED absent in both arms when evaluating the nonresident separate-epilogue path.",
+        "Nystroem and KernelRidge were ideas in the broad card but are not reached by this cosine epilogue and are not claimed as implemented coverage.",
+        "The production code resides under checks/random_features.mojo; no test or check was executed."
+      ],
+      "quality_scope": "Feature-map error, seeded draws/offsets, downstream estimator quality, ragged row/component counts and resident/nonresident equivalence.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L13",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "MinCovDet",
+        "EllipticEnvelope"
+      ],
+      "recipes": [
+        "algos/min-cov-det",
+        "algos/elliptic-envelope"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Use the accepted default MCD_BATCH_MMA/BMMA route in both arms; no legacy rejected covariance route is enabled by this card.",
+        "The candidate only changes support selection grouping, not covariance arithmetic, eigensolves, random starts, C-step limits, support size or reweighting.",
+        "Existing route capacity limits and fallbacks remain unchanged; callers bypassing mcd_fast do not establish coverage.",
+        "Earlier active-compaction and covariance-reuse experiments stay separate and off during isolated A/B."
+      ],
+      "quality_scope": "Robust covariance, location, precision, support/tie membership, anomaly ranking, contamination behavior, singular trials and convergence.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-L14",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/linear.json",
+      "actual_callers": [
+        "SGDClassifier",
+        "SGDRegressor",
+        "Perceptron/PassiveAggressiveClassifier/PassiveAggressiveRegressor when using the separate minibatch row kernel",
+        "SGDOneClassSVM when using the separate minibatch row kernel"
+      ],
+      "recipes": [
+        "algos/sgd-clf",
+        "algos/sgd-reg",
+        "algos/perceptron",
+        "algos/pa-clf",
+        "algos/pa-reg",
+        "algos/sgd-ocsvm"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "The supported implementation lives in x_linear rather than glm; it is the actual classical SGD minibatch route.",
+        "Single-block chunked minibatches and per-sample SGD bypass this row kernel; do not claim those settings as affected coverage.",
+        "No batch size, epoch count, ordering, learning-rate policy or gradient-fold order is changed.",
+        "Dense device row kernels are covered; sparse input routes are not newly implemented.",
+        "The IDENTICAL-only fused step/row schedule retains the original geometry because this control requires NUMERIC_FAST."
+      ],
+      "quality_scope": "Heldout loss/accuracy/RMSE, seeded shuffle and class/sample weights, learning-rate progression, convergence, objective, one-class intercept and final partial batches.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P01",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "SimpleImputer and PowerTransformer column-statistic consumers; any OP_COL_STATS caller including scaler programs."
+      ],
+      "recipes": [
+        "algos/simple-imputer",
+        "algos/power-transformer",
+        "algos/standard-scaler",
+        "algos/minmax-scaler",
+        "public/column-statistics"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Median SimpleImputer recipe may bypass OP_COL_STATS; every additional column-statistic consumer remains pending."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Only column-statistic kernels change; pt_fold_fast_kernel and class_stats_fast_kernel are unchanged. Current SI_ONEPASS is covered; an additional rollback-path comparison may use MOJOLEARN_SI_ONEPASS_OFF in both arms. No claim of coverage for separate core scaler kernels.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P02",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "MaxAbsScaler direct FAST fit."
+      ],
+      "recipes": [
+        "algos/maxabs-scaler"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Requires existing PREP3_MAXABS entrance, enabled by default. Doubles partial buffer size; no change to input pool ownership.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P03",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "CategoricalNB unweighted categorical atomic count path."
+      ],
+      "recipes": [
+        "algos/categorical-nb"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "The existing atomic path is opt-in and must be enabled in both arms. Weighted data stays on its existing fallback; this is not a new atomic algorithm.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P04",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "MultinomialNB and ComplementNB CSR count fitting."
+      ],
+      "recipes": [
+        "algos/multinomial-nb",
+        "algos/complement-nb"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "No BernoulliNB coverage claim; dense fitting and CSR prediction traversal are unchanged. Existing NB_TEXT_CSR export must remain enabled.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P05",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "TargetEncoder global and gathered-category fold stages."
+      ],
+      "recipes": [
+        "algos/target-encoder"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Existing TE_GLOBAL and TE_ENC paths stay enabled in both arms. Non-gathered category fallback is unchanged; all cross-fitting and smoothing are retained.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P06",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "IterativeImputer II_CONV when precomputed row sums exist."
+      ],
+      "recipes": [
+        "algos/iterative-imputer"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Runtime II_CONV prerequisite is identical in both arms. Does not enable row sums or change tolerance, iteration count, flag observation or the Gram path.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P07",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "f_regression, r_regression, f_classif and applicable selectors."
+      ],
+      "recipes": [
+        "algos/select-f-classif",
+        "algos/select-f-regression",
+        "algos/select-r-regression",
+        "public/selector-scores"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Direct score functions and other applicable selector consumers need workload-specific outputs."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Both scratch sizing and kernels consume existing shared constants. Existing SELECT_FREG/FCLS defaults must remain enabled; large-class fallback remains as before.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P08",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "Regression metric KIND_AVG epilogues for multiple outputs."
+      ],
+      "recipes": [
+        "public/regression-metrics"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Declarative regression-metric adapter is written; named complete real multioutput task, all affected averaging settings, independent FP64 floors and actual epilogue-route evidence remain pending."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Per-observation metric folds do not change. Scalar-output callers are not a speed hypothesis; all zero-weight/NaN rules and binary64 arithmetic remain. The host-run FAST unit on an Apple build shares the guarded epilogue; no host fallback is added.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P09",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "ROC/PR/AUC curve callers and weighted-percentile consumers of CURVE_CHUNK."
+      ],
+      "recipes": [
+        "public/ranking-metrics"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Declarative ranking-metric adapter is written; named complete real score/label/weight task, curve and weighted-percentile settings, independent reference and actual prefix-route evidence remain pending."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Sort order, equal-score groups and curve-fold chunks remain unchanged. Extra prefix scratch can trigger the existing bounded-plan fallback; all affected callers need future full-workload coverage. Host planned FAST programs on Apple use matching chunk parameters.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P10",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "Public float32 resample GPU grouped-gather path."
+      ],
+      "recipes": [
+        "algos/resample",
+        "public/resample-full"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Three existing opt-in prerequisites in both arms. Nonreplacement additionally needs MOJOLEARN_RESAMPLE_FAST_DEVICE_PERMUTE in both. Does not change bootstrap/permutation_test independent statistical kernels or promise all dtypes enter the gather path.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P11",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "KPSS and AutoARIMA differencing selection using series_sum_kernel."
+      ],
+      "recipes": [
+        "algos/kpss",
+        "algos/select-d",
+        "algos/autoarima"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Narrowed from proposed launch-width change to local accumulation scheduling to avoid changing shared core STATS_TPB. Decisions near significance thresholds require future quality qualification; no scan/order/search settings change.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P12",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "ARIMA and AutoARIMA scalar-lane Kalman evaluation/forecast routes."
+      ],
+      "recipes": [
+        "classical2/arima",
+        "algos/autoarima"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Established synthetic ARIMA and real AutoARIMA recipes need frozen complete generator/dataset populations, settings, quality floors and optimizer-route witnesses."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Every lane retains its complete recurrence. Explicit user/caller kalman_tpb overrides are respected. Separate time-scan kernels, if selected by an existing opt-in, are not changed. No reduced precision or fewer optimizer evaluations.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P13",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "GaussianNB and unweighted OP_CLASS_STATS consumers."
+      ],
+      "recipes": [
+        "algos/gaussian-nb"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Unweighted OP_CLASS_STATS consumers beyond GaussianNB need a closed operation inventory."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Existing MOJOLEARN_XPREP_FAST_FOLDS must remain enabled; weighted class-statistic and feature-selector specialized routes are unchanged. This does not claim the separate naive_bayes/ native fit kernel was modified.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-P14",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
+      "actual_callers": [
+        "HoltWinters fitting and applicable optimizer/evaluation helpers that use HW_OPTIM_TPB."
+      ],
+      "recipes": [
+        "classical2/ets"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Established full declared synthetic ETS/HoltWinters task needs generator/version/seed/dimensions, exact settings, independent quality floors and optimizer-route witness."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": "Separate HW_PREDICT_TPB output geometry is unchanged. Explicit tpb_optim overrides still win; unrelated ETS implementations are not changed. Every seasonal recurrence, parameter search and stopping setting remains.",
+      "quality_scope": "Existing task quality and admitted opponent floor required.",
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T01",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "GradientBoosting/CatBoost-style Depthwise fit",
+        "GradientBoosting/CatBoost-style Lossguide fit"
+      ],
+      "recipes": [
+        "trees/gbdt-depthwise",
+        "trees/gbdt-lossguide"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Original broad symmetric idea adapted to the supported nonsymmetric shared family; symmetric histogram kernels unchanged.",
+        "Occupancy/grid floors can make the replica count equal across arms for some shapes; this is not a promise of a change for every input.",
+        "Binary/half-byte and multistat fallbacks unchanged."
+      ],
+      "quality_scope": [
+        "Same quantized addends and overflow bounds; later compare complete histogram cells and resulting splits.",
+        "Full fit quality: heldout RMSE/logloss/AUC/ranking metrics as applicable to each actually admitted objective; full settings and all rows retained."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T02",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "GradientBoosting/CatBoost-style Depthwise fit",
+        "GradientBoosting/CatBoost-style Lossguide fit"
+      ],
+      "recipes": [
+        "trees/gbdt-depthwise",
+        "trees/gbdt-lossguide"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Original symmetric feature-group idea adapted to the supported nonsymmetric family; symmetric packed-feature kernels unchanged.",
+        "Sub-byte/multistat fallbacks unchanged.",
+        "Extra groups may cost more launches/flushes; no performance result exists."
+      ],
+      "quality_scope": [
+        "Histogram totals, best-split tie behavior, tail groups, categorical one-byte encodings and missing bins.",
+        "Heldout full-workload quality for both growth policies; T01+T02 must later be evaluated together."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T03",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "Boosted-tree fit quantization",
+        "Boosted-tree resident prediction quantization"
+      ],
+      "recipes": [
+        "trees/gbdt-symmetric",
+        "trees/gbdt-symmetric-1000",
+        "trees/gbdt-depthwise",
+        "trees/gbdt-lossguide",
+        "trees/gbdt-ordered",
+        "trees/gbdt-categorical"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Ranking/multiclass and categorical inference quantization routes need applicable workload variants."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "The existing packed-word binarizer is unchanged. A workload routed entirely through GBDT_INDEX_PACK_DEVICE/GBDT_PREDICT_PACKED does not establish T03 coverage.",
+        "Borders, border count, NaN substitution and feature packing policy unchanged."
+      ],
+      "quality_scope": [
+        "Exact bins at border ties, signed zero, subnormals and NaNs; same feature word packing.",
+        "Full fitted-model and prediction quality with numerical and categorical inputs."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T04",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "Symmetric boosted-tree structure search",
+        "Ordered symmetric structure-search callers of pointwise optimization subsets"
+      ],
+      "recipes": [
+        "trees/gbdt-symmetric",
+        "trees/gbdt-symmetric-1000",
+        "trees/gbdt-ordered"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "This is partition metadata/bin scheduling, not a replacement of the physical radix partition.",
+        "Depthwise/lossguide partition kernels outside this module unchanged.",
+        "T05 shares the fused winner/bin launch and needs a later joint A/B."
+      ],
+      "quality_scope": [
+        "Every row assigned exactly once; child counts, missing routing and ordered membership.",
+        "Full symmetric/ordered heldout quality, including categorical and weighted inputs."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T05",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "Symmetric/ordered boosted-tree fused split search"
+      ],
+      "recipes": [
+        "trees/gbdt-symmetric",
+        "trees/gbdt-symmetric-1000",
+        "trees/gbdt-ordered"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "The new switch does not activate SYM_RESOLVE_BLOCK by itself.",
+        "The unfused/serial resolver is unchanged.",
+        "No claim that the prerequisite cooperative implementation is qualified; its status is inherited."
+      ],
+      "quality_scope": [
+        "Best score, feature/bin tie ordering, sentinel/empty helpers and tails.",
+        "Constrained/categorical split outcomes and full fitted heldout quality; T04 interaction."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T06",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "Apple fast pointwise boosted-tree leaf estimation",
+        "Weighted/unweighted regression and binary-classification objectives admitted by apple_est_handles"
+      ],
+      "recipes": [
+        "trees/gbdt-symmetric",
+        "trees/gbdt-depthwise",
+        "trees/gbdt-lossguide"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "All admitted weighted/unweighted regression/binary objectives and leaf-estimation settings require workload variants."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Multiclass, multi-RMSE, pair/group/ranking objectives and has_group cases are refused by the existing path and unchanged.",
+        "No standalone change to generic partition reducers; unrelated callers unaffected.",
+        "Small hardware budgets can collapse to the same integer count."
+      ],
+      "quality_scope": [
+        "Leaf statistics with sample weights, cancellation, skewed leaves, small Hessians and tail rows.",
+        "Leaf values, solver acceptance/stopping behavior and independent heldout objective quality, allowing changed bits."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T07",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "Resident GradientBoosting/CatBoost-style predict",
+        "Resident boosted-tree predict_proba/link callers"
+      ],
+      "recipes": [
+        "trees/gbdt-symmetric",
+        "trees/gbdt-symmetric-1000",
+        "trees/gbdt-depthwise",
+        "trees/gbdt-lossguide",
+        "trees/gbdt-ordered",
+        "trees/gbdt-categorical"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Prediction link/probability, ranking and supported multiclass output variants need explicit consumption."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Nonresident prediction and nonsymmetric resident delegation unchanged.",
+        "Existing packed prediction remains its own prerequisite when that route is selected; T07 does not activate it.",
+        "Quantization and output-link launch widths are unchanged by T07."
+      ],
+      "quality_scope": [
+        "Final raw scores/probabilities across all approximation dimensions, zero-tree/depth cases and categorical routes.",
+        "Heldout accuracy/logloss/RMSE, repeated outputs and concurrent-live-model lifetime."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T08",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "RandomForestClassifier GPU inference",
+        "RandomForestRegressor GPU inference"
+      ],
+      "recipes": [
+        "trees/rf"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Legacy/host inference engines and OOB training kernels are unchanged.",
+        "No source change was needed in core/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference.",
+        "Shared-row/packed-node/vector flags must match across arms; their existing eligibility rules are unchanged."
+      ],
+      "quality_scope": [
+        "Scalar/vector probability or regression outputs, label argmax, uneven depths, output capacity tails and leaf comparisons.",
+        "Heldout quality, same complete forest and every output; repeated calls and model lifetime."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T09",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "ExtraTreesClassifier fit",
+        "ExtraTreesRegressor fit",
+        "RandomTreesEmbedding or other ExtraTrees-builder callers reaching tiled range search"
+      ],
+      "recipes": [
+        "trees/et",
+        "algos/random-trees-embedding"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "ExtraTrees transitive builder users beyond RandomTreesEmbedding require named operations."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Does not force row-major layout or enable a previously disabled tiled route.",
+        "Classification score kernels outside the tiled regression path unchanged.",
+        "Existing row-major/cost routing and all thresholds/features/tree counts unchanged."
+      ],
+      "quality_scope": [
+        "Ranges, sampled-feature RNG mapping, threshold assignment, impurity/split ties and completed tree count.",
+        "Full classifier/regressor heldout quality; embedding output quality for affected callers."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T10",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "IsolationForest score_samples",
+        "IsolationForest decision_function/predict",
+        "IsolationForest path_lengths and fit-time contamination scoring using default launch knobs"
+      ],
+      "recipes": [
+        "trees/iforest"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Default score-sample, decision/predict, path_lengths and fit contamination routes need separate reach evidence."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "A caller supplying a fixed explicit path_tpb can override the candidate and must not be counted as reached.",
+        "Tree count, max_samples, max_depth, contamination and seed unchanged."
+      ],
+      "quality_scope": [
+        "Path lengths and correction for degenerate leaves, anomaly score/ranking, contamination threshold and decisions.",
+        "Full scoring and fit/contamination boundary, repeated output lifetime."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T11",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "GPU TreeExplainer/TreeSHAP values for classical tree models"
+      ],
+      "recipes": [
+        "algos/tree-shap",
+        "public/tree-shap-full"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [
+        "Saved SHAP model construction may not select the GPU TreeSHAP path; full supported model-family coverage remains pending."
+      ],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Does not enable MOJOLEARN_SHAP_FAST_ROW_PAIR, a recorded loser.",
+        "Background preparation, table construction, chunk memory budget and unsupported interaction APIs unchanged."
+      ],
+      "quality_scope": [
+        "Every feature/output contribution and additivity versus independent references, shallow/deep/zero-cover cases.",
+        "No dropped rows/features; old-output and concurrent-model lifetime."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    },
+    {
+      "id": "AFCL-T12",
+      "lane_manifest": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+      "actual_callers": [
+        "Categorical boosted-tree CTR preparation",
+        "Categorical boosted-tree inference/preparation callers actually using ctr_calcers launchers"
+      ],
+      "recipes": [
+        "trees/gbdt-categorical"
+      ],
+      "coverage_status": "pending_full_dataset_route_and_quality_audits",
+      "pending_callers_or_settings": [],
+      "intrinsic_cap_policy": "No saved prepared-row cap is evidence of a full intended dataset. Supply audited uncapped lane inputs and source-population identities before execution.",
+      "route_scope_source": [
+        "Inference paths using saved CTR table lookups directly are unchanged.",
+        "Unimplemented groupwise-CTR kernels remain unsupported; no new ranking-group claim.",
+        "Category order, smoothing priors and leakage prevention unchanged."
+      ],
+      "quality_scope": [
+        "Ordered statistics, unseen categories, category counts, fold isolation, tied values and scatter tails.",
+        "Full categorical heldout quality; T03+T07+T12 complete-configuration A/B remains pending."
+      ],
+      "supplemental_recipe": "public/full-classical-operation"
+    }
+  ],
+  "unsupported_execution": "Tiny/component/opponent-only substitutes do not qualify a card. Established synthetic-only tasks are allowed with frozen generator/version/seed and full declared dimensions; synthetic data never substitutes for a saved real task. All evidence is currently pending.",
+  "required_audit_fields": [
+    "dataset version and hash",
+    "full source split/series populations",
+    "exact lane-input shapes/dtypes/hashes",
+    "estimator settings readback",
+    "candidate route evidence",
+    "independent quality floor evidence",
+    "complete operation and output consumption",
+    "preparation and numeric/vendor/source provenance"
+  ],
+  "coverage_resolution": "Accepted external same-freeze full_dataset_coverage receipts can resolve exact pending-note strings or substitute a mapped complete recipe with covered callers/settings and completed workload ids; unresolved notes remain visible."
+}

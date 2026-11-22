@@ -1486,6 +1486,10 @@ def main(argv=None):
     p.add_argument('--out', type=Path, default=OUT_DIR)
     p.add_argument('--cap', type=int, default=CAP)
     p.add_argument('--check', action='store_true', help='fail if committed outputs differ from a fresh generation')
+    p.add_argument('--mode', choices=('identical', 'fast'), default='identical',
+                   help='identical (default): NVIDIA + AMD IDENTICAL grid; fast: Apple FAST trees + classical grid (tools/six_lane_grid_fast.py)')
+    p.add_argument('--vendor', choices=('apple',), help='FAST vendor (fast mode only; apple = M3 Ultra, Metal)')
+    p.add_argument('--queue-branch', help='fast mode: the lane/apple-fast* branch the M3 queue lines name')
     p.add_argument('--crosses', choices=('full', 'pairwise', 'pairwise+triples', 'auto'),
                    help='full (default; the committed grid): group products admitted group-atomically; pairwise: every pair of '
                         'group members x arm combinations, admitted per config; pairwise+triples: pairs then triples; auto: the '
@@ -1495,6 +1499,18 @@ def main(argv=None):
                                                    'the FASTER/NEUTRAL phase-1 singles (default --out ' + str(PHASE2_DIR.relative_to(ROOT)) + ')')
     p.add_argument('--pair-seconds', help='median scored-pair seconds per vendor for the projected box-hours, e.g. nvidia=38,amd=24')
     args = p.parse_args(argv)
+    if args.mode == 'fast':
+        if args.crosses or args.survivors or args.pair_seconds or args.full_budget != FULL_BUDGET:
+            p.error('--crosses / --survivors / --pair-seconds / --full-budget apply to the IDENTICAL grid only')
+        import six_lane_grid_fast as F
+        if args.vendor not in (None, 'apple'):
+            p.error('--mode fast supports --vendor apple only')
+        branch = args.queue_branch or F.QUEUE_BRANCH
+        if not branch.startswith('lane/apple-fast'):
+            p.error('only lane/apple-fast* branches may target m3')
+        return F.main_fast(out=args.out if args.out != OUT_DIR else F.OUT_DIR, cap=args.cap, check=args.check, branch=branch)
+    if args.vendor or args.queue_branch:
+        p.error('--vendor / --queue-branch apply to --mode fast only')
     if args.cap < 0:
         p.error('--cap must be >= 0 (0 = no cap)')
     crosses = args.crosses or ('pairwise' if args.survivors else 'full')

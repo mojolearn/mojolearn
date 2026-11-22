@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "id": "F10",
+  "title": "Independent SSD MMA and Mamba fusion caller arms",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/F10/caller.py",
+    "mamba/impl/modules/afn_ssd_mma.mojo",
+    "mamba/impl/modeling/afn_mamba1_fused.mojo"
+  ],
+  "candidate_defines": [
+    "MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+  ],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F10",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F10",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F10/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "actual FAST Metal full Mamba forward",
+    "multiple corpus lengths and independent FP64 reference",
+    "each candidate isolated before combinations",
+    "Carried-state prefix/decode drift, actual supported zero-state VJP directional oracle and compiled SGD task loss"
+  ],
+  "timing_contract": "Full caller through first read; missing corpus coverage fails explicitly",
+  "blocker": null,
+  "output_kind": "directory",
+  "variants": {
+    "default": [
+      "MOJOLEARN_AFN_MAMBA2_SSD_MMA"
+    ],
+    "mamba1-input": [
+      "MOJOLEARN_AFN_MAMBA1_FUSE_IN"
+    ],
+    "chunk-scan": [
+      "MOJOLEARN_AFN_MAMBA1_CHUNKSCAN"
+    ],
+    "mamba3-elementwise": [
+      "MOJOLEARN_AFN_MAMBA3_SISO_FUSED"
+    ],
+    "arena": [
+      "MOJOLEARN_AFN_MAMBA_ARENA"
+    ]
+  },
+  "binding": "mamba",
+  "prerequisite_bindings": [
+    "core",
+    "training"
+  ],
+  "build_uses_compile_slot": true,
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F10",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

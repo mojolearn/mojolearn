@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "id": "AFCL-T11",
+  "title": "TreeSHAP query scheduling",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "source_status": "source_written_uncompiled_unverified_unmeasured",
+  "afcl_registration": "experiments/apple_fast_classical_20261006/lanes/trees.json",
+  "validation_paths": [
+    "experiments/apple_fast_classical_20261006/run_pair.py"
+  ],
+  "build_argv": [
+    "{python}",
+    "experiments/apple_fast_classical_20261006/build_pair.py",
+    "--idea",
+    "AFCL-T11",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "validation_argv": [
+    "{python}",
+    "experiments/apple_fast_classical_20261006/run_pair.py",
+    "--idea",
+    "AFCL-T11",
+    "--arms",
+    "{artifacts}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}",
+    "--workloads",
+    "{workloads}",
+    "--stage",
+    "validate"
+  ],
+  "timing_argv": [
+    "{python}",
+    "experiments/apple_fast_classical_20261006/run_pair.py",
+    "--idea",
+    "AFCL-T11",
+    "--arms",
+    "{artifacts}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}",
+    "--workloads",
+    "{workloads}",
+    "--stage",
+    "time"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/apple_fast_classical_20261006/run_pair.py",
+    "--idea",
+    "AFCL-T11",
+    "--arms",
+    "{artifacts}",
+    "--output",
+    "{output}",
+    "--source-sha",
+    "{source_sha}",
+    "--workloads",
+    "{workloads}",
+    "--stage",
+    "run"
+  ],
+  "paired_build": true,
+  "paired_run": true,
+  "build_uses_compile_slot": true,
+  "output_kind": "directory",
+  "depends_on": [],
+  "related_ideas": [
+    "F13"
+  ],
+  "quality_gates": [
+    "full_dataset_coverage",
+    "actual_candidate_route",
+    "task_quality_no_regression",
+    "api_contract",
+    "matched_full_operation"
+  ],
+  "timing_contract": "Audited full-workload operations through preparation, required synchronization and consumed outputs; preserve full dataset and task settings, and report fit/inference/cold/repeated scopes separately. One excluded warmup and one scored sample per arm; actual reach, quality and API evidence are required before admission.",
+  "blocker": null,
+  "default_enabled": false,
+  "execution_status": "not_run_by_owner_instruction",
+  "recipe_sources": [
+    "experiments/apple_fast_classical_20261006/lanes/trees.json",
+    "experiments/apple_fast_classical_20261006/ideas.json",
+    "experiments/apple_fast_classical_20261006/select.py",
+    "experiments/apple_fast_classical_20261006/build_pair.py",
+    "experiments/apple_fast_classical_20261006/build_bindings.json",
+    "experiments/apple_fast_classical_20261006/run_pair.py",
+    "experiments/apple_fast_classical_20261006/full_workloads.json",
+    "tools/performance_ideas.py"
+  ],
+  "workload_catalog": "experiments/apple_fast_classical_20261006/full_workloads.json",
+  "binding_catalog": "experiments/apple_fast_classical_20261006/build_bindings.json",
+  "integration_note": "Arm defines/env/implementation paths resolve from afcl_registration at read time; source_ready means source written, never compiled, quality passed or measured.",
+  "output_created_by_recipe": true,
+  "measurement_inventory": "experiments/apple_fast_classical_20261006/measurement_inventory.json",
+  "measurement_index_template": "experiments/apple_fast_classical_20261006/measurement_index.json",
+  "measurement_export_path": "experiments/apple_fast_classical_20261006/export_measurements.py"
+}

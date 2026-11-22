@@ -1,0 +1,310 @@
+{
+  "schema": 1,
+  "family": "cnn_embedding",
+  "status": "not_tested",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "execution": "prohibited_in_this_assignment",
+  "future_build_targets": [
+    "bindings/build_x_cnn.sh",
+    "bindings/build_embedding.sh"
+  ],
+  "full_workload_mapping": "pending; existing small quality fixtures alone are insufficient",
+  "cards": [
+    {
+      "id": "E01",
+      "title": "Implicit convolution with bias/ReLU epilogue",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "x_cnn/afn_direct.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "workloads": [
+        "Conv2d.forward/backward",
+        "CNNClassifier.fit/predict_proba"
+      ],
+      "variants": [
+        {
+          "name": "direct",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT"
+          ]
+        }
+      ],
+      "notes": "Retains the incumbent direct-kernel admission; compare full CNN fit and inference, not an isolated convolution."
+    },
+    {
+      "id": "E02",
+      "title": "Convolution spatial tile 32",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "x_cnn/afn_direct.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "workloads": [
+        "Conv2d.forward/backward",
+        "CNNClassifier.fit/predict_proba"
+      ],
+      "variants": [
+        {
+          "name": "rows32",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT",
+            "MOJOLEARN_AFN26_CNN_ROWS32"
+          ]
+        }
+      ],
+      "notes": "All row tails retain predicates; tile size trades staged storage against input reloads and block count."
+    },
+    {
+      "id": "E03",
+      "title": "Convolution channel tile 16",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "x_cnn/afn_direct.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "workloads": [
+        "Conv2d.forward/backward",
+        "CNNClassifier.fit/predict_proba"
+      ],
+      "variants": [
+        {
+          "name": "channels16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT",
+            "MOJOLEARN_AFN26_CNN_CHANNELS16"
+          ]
+        }
+      ],
+      "notes": "All channel tails retain predicates; fewer accumulators per thread can reduce register pressure."
+    },
+    {
+      "id": "E04",
+      "title": "Convolution reduction tile 16",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "x_cnn/afn_direct.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "workloads": [
+        "Conv2d.forward/backward",
+        "CNNClassifier.fit/predict_proba"
+      ],
+      "variants": [
+        {
+          "name": "k16",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT",
+            "MOJOLEARN_AFN26_CNN_K16"
+          ]
+        }
+      ],
+      "notes": "Complete reduction remains f32; smaller staged windows add barriers."
+    },
+    {
+      "id": "E05",
+      "title": "Single owner for saved convolution columns",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "x_cnn/afn_direct.mojo",
+        "x_cnn/device.mojo"
+      ],
+      "workloads": [
+        "Conv2d.forward/backward",
+        "CNNClassifier.fit/predict_proba"
+      ],
+      "variants": [
+        {
+          "name": "columns_once",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_CNN_DIRECT",
+            "MOJOLEARN_AFN26_CNN_COLS_ONCE"
+          ]
+        }
+      ],
+      "notes": "Output-channel tile zero writes saved columns; this ownership condition is structural, not dimension targeting. Only backward-saving callers benefit."
+    },
+    {
+      "id": "E06",
+      "title": "Atomic embedding backward and float4 forward",
+      "kind": "existing_arm",
+      "status": "not_tested",
+      "source_paths": [
+        "embedding/checks/embedding_fast_apple.mojo",
+        "bindings/_mojolearn_embedding.mojo"
+      ],
+      "workloads": [
+        "Embedding.forward/backward",
+        "full neural consumers of the public Embedding binding"
+      ],
+      "variants": [
+        {
+          "name": "atomic",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+          ]
+        }
+      ],
+      "notes": "Existing relaxed f32 atomics change gradient fold order; preserve padding, accumulation, ID refusal and repeated-ID task quality."
+    },
+    {
+      "id": "E07",
+      "title": "Embedding float8 gather",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "embedding/checks/embedding_fast_apple.mojo",
+        "bindings/_mojolearn_embedding.mojo"
+      ],
+      "workloads": [
+        "Embedding.forward/backward",
+        "full neural consumers of the public Embedding binding"
+      ],
+      "variants": [
+        {
+          "name": "gather8",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+            "MOJOLEARN_AFN26_EMB_GATHER8"
+          ]
+        }
+      ],
+      "notes": "Width divisible by eight is vector-load legality; otherwise the existing float4 or scalar route handles the entire row."
+    },
+    {
+      "id": "E08",
+      "title": "Embedding launch width",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "embedding/checks/embedding_fast_apple.mojo",
+        "bindings/_mojolearn_embedding.mojo"
+      ],
+      "workloads": [
+        "Embedding.forward/backward",
+        "full neural consumers of the public Embedding binding"
+      ],
+      "variants": [
+        {
+          "name": "threads64",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+            "MOJOLEARN_AFN26_EMB_THREADS64"
+          ]
+        },
+        {
+          "name": "threads128",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+            "MOJOLEARN_AFN26_EMB_THREADS128"
+          ]
+        }
+      ],
+      "notes": "Same selected block width derives gather/scatter/seed/pad grids. Select one width; thread variants are mutually exclusive."
+    },
+    {
+      "id": "E09",
+      "title": "Resident embedding table on FAST Apple",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "embedding/checks/embedding_fast_apple.mojo",
+        "bindings/_mojolearn_embedding.mojo"
+      ],
+      "workloads": [
+        "Embedding.forward/backward",
+        "full neural consumers of the public Embedding binding"
+      ],
+      "variants": [
+        {
+          "name": "resident",
+          "baseline_defines": [],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_EMB_RESIDENT"
+          ]
+        },
+        {
+          "name": "resident_atomic",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+            "MOJOLEARN_AFN26_EMB_RESIDENT"
+          ]
+        }
+      ],
+      "notes": "The public immutable-weight token/address/extent contract owns the cached table. Context residency was already implemented; this changes table upload/scan reuse. Include table reassignment and zero-token callers."
+    },
+    {
+      "id": "E10",
+      "title": "Pooled embedding scratch on FAST Apple",
+      "kind": "new_variant",
+      "status": "not_tested",
+      "source_paths": [
+        "embedding/checks/embedding_fast_apple.mojo",
+        "bindings/_mojolearn_embedding.mojo"
+      ],
+      "workloads": [
+        "Embedding.forward/backward",
+        "full neural consumers of the public Embedding binding"
+      ],
+      "variants": [
+        {
+          "name": "scratch",
+          "baseline_defines": [
+            "MOJOLEARN_AFN26_EMB_RESIDENT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN26_EMB_RESIDENT",
+            "MOJOLEARN_AFN26_EMB_SCRATCH"
+          ]
+        },
+        {
+          "name": "scratch_atomic",
+          "baseline_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+            "MOJOLEARN_AFN26_EMB_RESIDENT"
+          ],
+          "candidate_defines": [
+            "MOJOLEARN_AFN_EMB_ATOMIC_BWD",
+            "MOJOLEARN_AFN26_EMB_RESIDENT",
+            "MOJOLEARN_AFN26_EMB_SCRATCH"
+          ]
+        }
+      ],
+      "notes": "Scratch requires resident flag; pools exact sizes and returns buffers only after consumed-output synchronization. Fresh gradients seed all cells, accumulation uploads all cells, and empty dY uses an unread dummy cell."
+    }
+  ]
+}
