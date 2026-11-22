@@ -65,8 +65,8 @@ from gbdt.host.gbdt_host_entries_impl import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gbdt.host.gbdt_oracle import GBDT_ORACLE_HOST_SABOTAGE
 from gbdt.mojolearn_gbdt_run import gbdt_fit_native_run as gbdt_fit_native_run_gpu
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

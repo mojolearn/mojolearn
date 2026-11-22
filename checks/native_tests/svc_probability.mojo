@@ -7,7 +7,7 @@ three-class coupling matrix. Expectations are independent permutation, monotone
 orientation and probability-distribution properties, not copied algorithms.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from core.host_parallel import host_parallelize
 from svm.host.svc_proba import host_splitmix_perm, host_platt_train
 from svm.impl.svc_rows import U64P, sp_sigmoid_predict, multiclass_probability, I32P
@@ -18,12 +18,6 @@ from svm.impl.svc_epilogue import device_splitmix_perm, device_platt_train
 from checks.native_tests.kit import upload_address, upload_whole_into
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime SVC_PROBABILITY_FIXTURES = 3

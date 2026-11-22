@@ -17,7 +17,7 @@ The cases are independent units and run across the native host worker pool.
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.byte_lm_entry_table import ByteLmEntryKey, byte_lm_table_entry, byte_lm_table_published, BYTE_LM_TABLE_TRAINER
@@ -42,11 +42,6 @@ from core.byte_lm_entry_table_sessions import (
 # 11 + BS_RUN, 11 + BS_CLOSE.
 comptime BYTE_LM_SESSION_CASE_FIRST = 11
 comptime BYTE_LM_ENTRY_CASES = 14
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> ByteLmEntryKey:

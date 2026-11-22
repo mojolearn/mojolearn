@@ -12,12 +12,7 @@ from core.linear_model_state import (
     linear_ridge_parameter_status, linear_ridge_parameter_error,
 )
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 
 
 def _request[F64: Bool](fault: Int) raises:

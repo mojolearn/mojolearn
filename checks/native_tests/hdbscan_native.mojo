@@ -11,7 +11,7 @@ exemplars have one-hot membership. Existing random-blob Python oracles stay.
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from core.host_parallel import host_parallelize
 from core.kmeans_variants_api import VariantsSpan
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
@@ -41,12 +41,6 @@ from hdbscan.native_query_device import hdbscan_query_device_v1
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime HDBSCAN_NATIVE_CASES = 8

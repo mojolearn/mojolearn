@@ -10,7 +10,7 @@ expected values and the refusal texts the doors raised before the split.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.forest_calls import ForestExport
 from gbdt.trees_gbdt_fit_run import (
@@ -31,11 +31,6 @@ from xtrees.trees_score_run import score_shape_text
 from core.labels_score_keys import ScoreLabelKey, ScoreKeyIndex, score_key_codes, SCORE_INT
 
 comptime TREES_DOOR_RUN_CASES = 8
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def refuses(problem: Error, text: String) raises:

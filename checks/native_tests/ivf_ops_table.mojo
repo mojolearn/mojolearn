@@ -14,7 +14,7 @@ the handle registry is locked. The build and the GPU column are covered by
 the installed-wheel IVF tests and the plan suites.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.ivf_entry_table import (
     IVF_IMAGE_FULL, IVF_IMAGE_SEARCH, IVF_OPERATION_COUNT, IVF_OP_BUILD, IVF_OP_BUILD_RESIDENT, IVF_OP_EXTEND,
@@ -28,11 +28,6 @@ from ivf.ivf_query_run import (
 from ivf.ops_entry_host import publish_ivf_ops_search_host
 
 comptime IVF_OPS_TABLE_FIXTURES = 5
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> IvfEntryKey:

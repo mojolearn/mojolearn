@@ -18,7 +18,7 @@ The cases are independent units and run across the native host worker
 pool. Run in a fresh process (the first check needs unpublished tables).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.entry_table import entry_ref_call, entry_ref_same
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -36,11 +36,6 @@ from sequence.xseq_glue_host import publish_x_sequence_host
 from metrics.host.r2_entry_host import publish_metrics_r2_host, _r2_value, _r2_weighted_value
 
 comptime XSEQ_GLUE_CASES = 18
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> XseqEntryKey:

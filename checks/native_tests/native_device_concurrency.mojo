@@ -24,14 +24,10 @@ from x_decomp.device import xd_ctx, DevExec, XD_STAGE_MIN
 from x_decomp.resident import pool_alloc, pool_free, pool_live_count, _ptr, dev_upload_run, dev_download_run, dev_ew_run
 from x_neighbors.device_ops import xn_ctx, op_unary
 from x_neighbors.items import U_IDENTITY
+from checks.native_tests.testsuite_cases import require
 
 comptime CONCURRENCY_POOL = "MojolearnNativeConcurrencyDevicePool20261110V2"
 comptime CONCURRENCY_GUARD = Float32(-77777)
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def worker_count() raises -> Int:

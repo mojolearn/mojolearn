@@ -17,7 +17,7 @@ The cases are independent units and run across the native host worker
 pool. Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.native_descriptor_abi import NativeDescriptorError
@@ -28,11 +28,6 @@ from core.gbdt_entry_table import gbdt_table_entry
 from gbdt.fit_calls import xg_ref, xg_row_major, xg_numeric_mode, xg_model_dim, xg_fit
 
 comptime TREES_GBDT_CASES = 5
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct _ProbeImage(GbdtImage):

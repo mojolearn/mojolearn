@@ -25,7 +25,7 @@ test never share a row. The per-fold row lists themselves stay the door's.
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import fma, sqrt
 from std.memory import bitcast
 from core.hotpath_impl_rows import bincount2_i32, strat_group_plan_i32
@@ -34,12 +34,6 @@ from core.hotpath_device import device_bincount2_i32
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime STRATIFIED_GROUP_FIXTURES = 6

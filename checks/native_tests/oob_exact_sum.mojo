@@ -11,13 +11,7 @@ from std.memory import bitcast
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from xtrees.oob import oob_r2_host, oob_r2_device
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime OOB_EXACT_FIXTURES = 10

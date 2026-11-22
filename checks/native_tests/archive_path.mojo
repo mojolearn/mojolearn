@@ -2,14 +2,9 @@
 # native-check: cpu
 """Independent filesystem byte and POSIX spelling fixtures, task-local storage."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_path import archive_filesystem_decode, archive_path_join, archive_path_normalize
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _equal(actual: List[UInt32], expected: List[UInt32]) raises:

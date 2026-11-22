@@ -7,7 +7,7 @@ callback; taking a handle transfers the value to its actual boundary owner.
 Independent metadata fixtures run in parallel.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -15,11 +15,6 @@ from core.kde_native_api import KDENativeDriver, KDE_MODE
 from core.kde_native_state import KDEFitKey, KDEResidentState, KDEAdmissionWords
 
 comptime KDE_STATE_FIXTURES = 30
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def state_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

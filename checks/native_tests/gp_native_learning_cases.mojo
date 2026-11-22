@@ -9,8 +9,8 @@ from std.math import isfinite, log
 from core.host_parallel import host_parallelize
 from core.gp_native_api import GPDriver, GPRFitRequest, GPRGradientRequest, GPROptimizeRequest, GPThetaRequest
 from core.gp_native_storage import GPKernelStorage
-from checks.native_tests.gp_state import require
 from checks.native_tests.gp_native_data import input_values, reference_values, kernel_storage, guards, guards64, failures_clear, GP_GUARD, GP_GUARD64
+from checks.native_tests.testsuite_cases import require
 
 comptime GP_LEARNING_FIXTURES = 6
 

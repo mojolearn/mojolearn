@@ -21,7 +21,7 @@ batches give the whole batch's bits) are unconditional here: the pixi tasks
 build with `MOJOLEARN_NUMERIC_IDENTICAL=1`.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from core.kmeans_native_api import KMeansNativeDriver, KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest
 from core.kmeans_native_api import KMEANS_CAPABILITIES, KMEANS_CAP_JOINT
@@ -31,11 +31,6 @@ from core.kmeans_native_host import kmeans_host_native_v1
 from core.kmeans_native_device import kmeans_device_native_v1
 
 
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime KMEANS_QUERY_FIXTURES = 11

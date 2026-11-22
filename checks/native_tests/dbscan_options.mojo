@@ -7,17 +7,12 @@ RBC/precomputed before fit selects brute. Independent fixtures and output
 word checks run in parallel. No fit kernel or Python object is involved.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from core.dbscan_native_api import dbscan_empty_labels
 from core.dbscan_native_state import dbscan_metric_code, dbscan_method_code, dbscan_method_accepts
 
 comptime DBSCAN_OPTIONS_FIXTURES = 41
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def fixture(unit: Int) raises:

@@ -7,7 +7,7 @@ Test-only handles never reach a real resident pool. ABI output spans and error
 owners use stable heap storage held through success and refusal paths.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.native_call_output import NativeCallOutput
@@ -21,11 +21,6 @@ from core.ipca_native_api import (
 )
 
 comptime IPCA_CONTRACT_FIXTURES = 34
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def outputs() -> IPCAOutputs:

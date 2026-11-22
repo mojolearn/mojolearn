@@ -24,7 +24,7 @@ path. Host column; three independent fixtures across the host's cores. No
 device is touched.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.ffi import c_int, external_call
 from core.sha256 import sha256_hex_addr
 from core.transport_header import TransportHeader
@@ -52,11 +52,6 @@ comptime NT = 12
 comptime BATCH = 2
 comptime WIDTH = 3
 comptime WAIT = 20.0
-
-
-def require(condition: Bool, message: String) raises:
-    if not condition:
-        raise Error(message)
 
 
 def same(a: Int, b: Int, count: Int) -> Bool:

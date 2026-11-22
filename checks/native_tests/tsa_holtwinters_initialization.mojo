@@ -34,8 +34,8 @@ from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from holtwinters.host.hw_predict import hw_forecast_from_state_ptr
 from holtwinters.impl.internal.hw_estimate import HW_INIT_ESTIMATED, HW_INIT_HEURISTIC
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 #: REFIT: 2 seasonal types x (estimated, estimated again, heuristic)

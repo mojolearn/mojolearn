@@ -2,7 +2,7 @@
 # native-check: cpu
 """Native KMeans wire and owner contracts, independently checking every slot."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorError
 from core.kmeans_native_api import (
@@ -12,11 +12,6 @@ from core.kmeans_native_api import (
 from core.kmeans_owner_state import KMeansResidentState
 
 comptime KMEANS_CONTRACT_FIXTURES = 26
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct WireOracle(KMeansNativeKernels):

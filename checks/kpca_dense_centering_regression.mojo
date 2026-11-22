@@ -12,11 +12,7 @@ from core.neighbors_native_driver import XnDriver
 from x_neighbors.native_descriptor_host import xn_native_v1
 from x_decomp.descriptor_host import x_decomp_host_v1
 from core.kpca_native_plan import KPCANeighborDriver, kpca_fit_global_mean
-
-
-def require(condition: Bool, message: String) raises:
-    if not condition:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def test_kpca_dense_centering_regression() raises:

@@ -7,7 +7,7 @@ sets differ, so independently encoding without union/remap would be wrong.
 Three range settings exercise the existing device ranges/out/full routes.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from core.host_parallel import host_parallelize
 from core.labels_native_api import LabelsNativeDriver, LabelsPrepareRequest, LabelsGatherRequest
 from core.labels_score_keys import score_integer_keys, score_key_join, ScoreKeyIndex, score_key_codes
@@ -20,12 +20,6 @@ from core.labels_native_device import labels_device_native_v2
 from x_metrics.descriptor_device import metrics_program_device_v1
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime SVC_ACCURACY_NATIVE_CASES = 7

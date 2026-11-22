@@ -17,9 +17,8 @@ our fitted bits. The DART arm stays in Python: the host DART fit needs the fores
 module bindings/_mojolearn_rf_host.mojo. The 40 explained rows are independent oracle rows across the host cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32, fixture_i32
-from checks.native_tests.py2mojo_forest_fits import RfSpec, Forest, rf_fit, predict, require
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
+from checks.native_tests.py2mojo_forest_fits import RfSpec, Forest, rf_fit, predict
 from xtrees.shap import shap_path_width
 from xtrees.shap_host import shap_prepare, tree_shap_values
 

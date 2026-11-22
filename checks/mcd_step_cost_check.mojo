@@ -20,11 +20,7 @@ from checks.fixture_rng import splitmix64_next
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.kit import Mat
 from x_decomp.kit_device import fast_mcd_dev
-
-
-def require(condition: Bool, message: String) raises:
-    if not condition:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def test_mcd_step_cost() raises:

@@ -9,7 +9,7 @@ a native deterministic generator rather than importing NumPy's RNG.
 Every raw BF16 word is widened too, including NaNs and subnormals.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, u16_ptr
@@ -20,12 +20,6 @@ from std.sys.compile import is_defined
 from checks.native_tests.kit import download_host_into, upload_host_into
 from checks.native_tests.lowbit_oracles import expected_narrow, expected_widen
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime BF16_NARROW_EXHAUSTIVE = 65536 * 4

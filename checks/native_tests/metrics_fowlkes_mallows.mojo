@@ -27,19 +27,13 @@ words. The refusals, the sparse= keyword and the manifest stay in the Python fil
 from std.memory import bitcast
 from metrics.host.metrics_oracle import host_fowlkes_mallows
 from metrics.estimator import fowlkes_mallows_score_host
-from checks.native_tests.tsa_metrics_fixture_words import fixture_i32
 from checks.native_tests.py2mojo_fixture_words import METRICS_FM_DIR, fixture_f64
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_i32
 from std.sys.compile import is_defined
 
 comptime FM_UNITS = 9
 comptime FM_RAND_N = 5000
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def small_pair(index: Int) -> Tuple[List[Int32], List[Int32]]:

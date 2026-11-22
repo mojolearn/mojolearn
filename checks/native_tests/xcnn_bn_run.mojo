@@ -9,7 +9,7 @@ covered by `xcnn_entry_table_suite.mojo`.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.entry_table import entry_ref_unresolved
 from x_cnn.door_run import (
     XcnnRoute, XCNN_F_RESIDENT, XCNN_F2_ALL_OFF, xcnn_size, xcnn_shape_text, xcnn_run_reshape_check,
@@ -21,11 +21,6 @@ from x_cnn.bn_run import (
 )
 
 comptime XCNN_BN_RUN_CASES = 12
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

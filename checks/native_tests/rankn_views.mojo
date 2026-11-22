@@ -16,12 +16,10 @@ from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.rankn_cases import require
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 
 
 comptime RANKN_VIEW_FIXTURES = 17
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 def _upload[E: Exec & Movable & Deinitable](mut s: OpsSession[E], values: List[Float32], dims: List[Int], grad: Bool = False) raises -> Int:

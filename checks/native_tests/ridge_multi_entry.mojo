@@ -24,13 +24,9 @@ from core.linear_multi_calls import (
 )
 from core.linear_multi_device import publish_ridge_multi
 from glm.impl.ridge_multi import MULTIOUT_RIDGE
+from checks.native_tests.testsuite_cases import require
 
 comptime RIDGE_MULTI_CASES = 5
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> LinearEntryKey:

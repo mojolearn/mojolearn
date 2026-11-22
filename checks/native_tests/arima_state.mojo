@@ -9,7 +9,7 @@ closed forms. Fitted-case resident/per-call equality is ownership parity, not
 an independent numerical oracle. No Python runtime or old hashes are used.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -23,12 +23,6 @@ from arima.resident_state import (
     arima_predict_resident,
 )
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime ARIMA_STATE_FIXTURES = 8

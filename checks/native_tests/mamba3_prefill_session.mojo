@@ -37,12 +37,7 @@ from core.neural_entry_table import (
 from core.mamba3_prefill_session import Mamba3PrefillHandle, mamba3_prefill_session_of
 from mamba.host.neural_entry_host import publish_neural_mamba_host
 from std.testing import TestSuite
-from checks.native_tests.testsuite_serial import check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require, check_cases_serial
 
 
 # ---- The host column (was mamba3_prefill_session_cpu_suite.mojo) ----

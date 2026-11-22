@@ -14,13 +14,7 @@ from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from x_cluster.optics_fit_host import optics_fit_host_v1
 from x_cluster.optics_fit_device import optics_fit_device_v1
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD
 
 
 # ---- The host column (was optics_native_cpu_suite.mojo) ----

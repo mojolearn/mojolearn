@@ -2,18 +2,13 @@
 # native-check: cpu
 """Independent prior/offset oracles for typed NearestCentroid preparation."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.nearest_centroid_plan import NcLabelCodes, nc_uniform, nc_narrow_priors, nc_normalize_priors, nc_class_offsets, nc_power_steps
 
 comptime NC_PLAN_FIXTURES = 22
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def offsets_case(unit: Int) raises:

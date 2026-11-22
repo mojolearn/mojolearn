@@ -2,7 +2,7 @@
 # native-check: cpu
 """Independent native label wire, kernel and ownership fixtures; no Python."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -14,11 +14,6 @@ from core.labels_native_api import (
     LabelsGatherRequest, LabelsRatioRequest, labels_native_dispatch, labels_stat_store, labels_stat_load,
 )
 from core.labels_native_host import LabelsHostKernels, labels_host_fsum
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _entry(op: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

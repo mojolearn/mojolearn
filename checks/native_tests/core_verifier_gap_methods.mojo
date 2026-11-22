@@ -18,7 +18,7 @@ in the Python test.
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from x_decomp.dictl import ENC_LASSO_CD, ENC_LASSO_LARS, ENC_OMP, ENC_THRESHOLD, sparse_encode
 from x_decomp.kit import Mat, Kit
 from x_decomp.host import HostExec
@@ -27,12 +27,6 @@ from x_decomp.kit_device import DKit, DMat
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime VERIFIER_GAP_FIXTURES = 4

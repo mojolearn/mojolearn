@@ -6,7 +6,7 @@ Route boundaries preserve existing choices. The wire oracle validates fields
 only and performs no numerical kernel work; actual numerical suites follow.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -18,11 +18,6 @@ from core.kpca_native_plan import (
 from x_neighbors.descriptor_schema import xn_operation_id
 
 comptime KPCA_STATE_FIXTURES = 38
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def plan_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

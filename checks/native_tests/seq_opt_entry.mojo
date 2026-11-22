@@ -17,7 +17,7 @@ The cases are independent units and run across the native host worker pool.
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.entry_table import entry_ref_same
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -36,11 +36,6 @@ from sequence.opt_public import (
 
 comptime SEQ_OPT_ENTRY_CASES = 8
 comptime N = 4
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> ByteLmEntryKey:

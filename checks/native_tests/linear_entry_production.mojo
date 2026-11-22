@@ -13,7 +13,7 @@ independent lifetime graphs (one per worker) use the full native host worker poo
 No Python module, synthetic dispatcher or production call counter participates.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.linear_boundary_types import LINEAR_PREDICT_ABI
 from core.linear_entry_table import LinearEntryKey, LINEAR_TABLE_ESTIMATORS, linear_table_publish
@@ -29,11 +29,6 @@ from glm.host.linear_fit_native import LINEAR_FIT_HOST_API, linear_fit_host_v1
 from glm.host.linear_predict_native import linear_predict_host_v1
 
 comptime LINEAR_ENTRY_PRODUCTION_CASES = 2
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def model_state(address: Int) -> LinearModelState:

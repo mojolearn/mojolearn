@@ -9,7 +9,7 @@ never calls a product numerical helper. Matrix row/column and update-cell
 units use the host pool; whole-tensor sums and optimizer steps are ordered.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import pow, sqrt
 from core.host_parallel import host_parallelize
 from sequence.exec_trait import Exec
@@ -24,12 +24,6 @@ from sequence.opt_resident import (
 )
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime ADAFACTOR_FIXTURES = 2

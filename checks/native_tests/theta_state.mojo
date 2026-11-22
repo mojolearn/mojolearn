@@ -14,13 +14,7 @@ from sequence.exec import Exec, HostExec
 from sequence.ops_impl import theta_impl, theta_forecast_impl
 from sequence.exec_device import DeviceExec
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime THETA_STATE_FIXTURES = 8

@@ -18,15 +18,10 @@ from training.host.optimizer_public_host import host_close
 from core.neural_context import neural_ctx
 from training.optimizer_kernels_gpu import GpuOptKernels, _NEURAL_CTX
 from training.optimizer_public import resident_close
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, require
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime MAXIMIZE_FIXTURES = 16

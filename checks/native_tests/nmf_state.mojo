@@ -2,17 +2,12 @@
 # native-check: cpu
 """Typed NMF options, rank-two metadata and owned scratch storage contracts."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from core.nmf_native_api import NMFOptions
 from core.nmf_native_state import NMFScratch, nmf_output_shape
 
 comptime NMF_STATE_FIXTURES = 20
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def filled_scratch(rows: Int, cols: Int) raises -> NMFScratch:

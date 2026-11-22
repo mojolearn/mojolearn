@@ -2,7 +2,7 @@
 # native-check: cpu
 """Native Logistic fitted-state PACK contracts, independent of QN arithmetic."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from core.logistic_model_state import (
     LogisticFitLayout, logistic_target_count, logistic_fit_target_count,
@@ -11,11 +11,6 @@ from core.logistic_model_state import (
 
 comptime LOGISTIC_LAYOUT_FIXTURES = 22
 comptime LAYOUT_GUARD = UInt32(0xCB123456)
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def coefficient_word(index: Int) -> UInt32:

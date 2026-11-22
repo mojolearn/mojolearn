@@ -7,7 +7,7 @@ host cores.
 """
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-from checks.native_tests.tsa_metrics_fixture_words import fixture_words
+from checks.native_tests.testsuite_cases import fixture_words
 
 comptime PREP_SANITY_DIR = "checks/native_tests/fixtures/prep_sanity/"
 comptime METRICS_FM_DIR = "checks/native_tests/fixtures/metrics_fm/"

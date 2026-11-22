@@ -6,7 +6,7 @@ Distinct literal slot values expose address/option swaps. The wire oracle
 implements no decomposition algorithm. Independent fixtures run in parallel.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_call_output import NativeCallOutput
 from core.native_descriptor_abi import NativeDescriptorError
@@ -19,11 +19,6 @@ from core.tsvd_native_api import (
 )
 
 comptime TSVD_CONTRACT_FIXTURES = 32
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct TSVDWireOracle(TSVDNativeKernels):

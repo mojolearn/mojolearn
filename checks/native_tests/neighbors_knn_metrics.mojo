@@ -25,15 +25,10 @@ from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.impl.distance.detail.distance_ops import DIST_INNER_PRODUCT
 from std.sys.compile import is_defined
 from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, require
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 # ---- The device column (was neighbors_knn_metrics_gpu_suite.mojo) ----

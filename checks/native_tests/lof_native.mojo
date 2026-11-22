@@ -7,19 +7,18 @@ references use the mathematical density/LOF definitions. Three 4x2 cases also
 use hand-derived rational distances/densities/scores across all routes.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.neighbors_native_driver import XnDriver
 from core.lof_plan import LofPlan, LofLabelsPlan, lof_offset, lof_f32_address
-from checks.native_tests.pca_native_helpers import unchanged, require
+from checks.native_tests.pca_native_helpers import unchanged
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_neighbors.native_descriptor_host import xn_native_v1
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime LOF_NATIVE_FIXTURES = 20

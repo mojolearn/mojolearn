@@ -6,11 +6,10 @@ No fake lease reaches a provider. Scratch fields are never captured by a
 parallel closure; each task owns its complete state until its final check.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.gp_native_state import GPLeaseState
 from core.gp_native_storage import GPCQueryScratch
-from checks.native_tests.gp_state import require
 
 comptime GP_OWNER_FIXTURES = 32
 

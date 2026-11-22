@@ -13,13 +13,7 @@ from core.label_weights_native_api import (
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from xtrees.label_weights_native import label_weights_native_v1
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime LABEL_WEIGHT_FIXTURES = 8

@@ -30,11 +30,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndexParams, IvfFl
 from ivf.impl.neighbors.ivf_flat.ivf_flat_search import IVF_EXPAND_TPB, ivf_flat_search_traced
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 from std.testing import TestSuite
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was ann_ivf_surface_gpu_suite.mojo) ----

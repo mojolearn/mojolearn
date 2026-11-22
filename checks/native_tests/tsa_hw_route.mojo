@@ -16,7 +16,7 @@ that the independent fixtures (additive, multiplicative) run across the
 native host worker pool. No Python module participates.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.hostptr import f32_ptr, i32_ptr
 from core.device_route import (
@@ -43,11 +43,6 @@ comptime _B = 2
 comptime _FREQ = 4
 comptime _START = 2
 comptime _H = 5
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def span_rules() raises:

@@ -35,7 +35,8 @@ from gbdt.gbdt_entry import GbdtImage
 from gbdt.mojolearn_gbdt_run import gbdt_fit_native_run as gbdt_fit_native_run_gpu
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.native_tests.gbdt_public_fits import GbdtOpts, GbdtInputs, fit, predict, predict_proba, model_dim, same_f32
-from std.testing import TestSuite, assert_true as require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import require
 
 
 comptime OVA_ROWS = 30

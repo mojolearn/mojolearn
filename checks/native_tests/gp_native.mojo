@@ -47,13 +47,7 @@ from checks.native_tests.gp_native_classifier_cases import (
 )
 from core.gp_native_device import GPDeviceKernels
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime GP_NATIVE_BASE_FIXTURES = 6

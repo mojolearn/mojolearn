@@ -8,12 +8,11 @@ tensor addresses are never dereferenced. Numerical providers have separate
 actual execution fixtures; this suite proves no numerical behavior.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.gp_native_api import GPDriver, GPKernelView, GPRFitRequest, GPRQueryRequest, GPRCovarianceRequest, GPRSampleRequest, GPRGradientRequest, GPROptimizeRequest, GPCFitRequest, GPCFitAllRequest, GPCQueryRequest, GPCQueryAllRequest, GPCCombineRequest, GPThetaRequest
-from checks.native_tests.gp_state import require
 
 comptime GP_CONTRACT_FIXTURES = 57
 comptime GP_WIRE_RESULT = 9007199254740993

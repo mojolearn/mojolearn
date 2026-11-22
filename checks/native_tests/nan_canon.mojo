@@ -38,7 +38,7 @@ and both again from a build with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF
 (the arm-off clauses; `pixi run check-nan-canon-off-cpu` / `-gpu`).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
@@ -52,12 +52,6 @@ from gemm.checks.gemm_lowbit_check import _upload_f32
 from max.gpu.host import DeviceContext
 from checks.fixture_rng import splitmix64_of_sum
 from std.sys.compile import is_defined
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime NAN_CANON_UNIT_CASES = 3

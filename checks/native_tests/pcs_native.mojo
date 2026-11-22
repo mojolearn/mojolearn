@@ -8,20 +8,19 @@ sketches nor circular convolutions. Its independent output cells run in
 parallel. Product kernels and their existing routes are unchanged.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.math import sqrt
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.pcs_native_api import PCSNativeDriver, PCSFitPlan, pcs_options
-from checks.native_tests.pca_native_helpers import guards, unchanged, close_values, PCA_TEST_GUARD, require
+from checks.native_tests.pca_native_helpers import guards, unchanged, close_values, PCA_TEST_GUARD
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neighbors_native_driver import XnDriver
 from x_neighbors.native_descriptor_host import xn_native_v1
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime PCS_NATIVE_FIXTURES = 12

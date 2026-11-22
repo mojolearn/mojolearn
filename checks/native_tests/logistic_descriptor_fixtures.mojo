@@ -13,11 +13,7 @@ from core.logistic_native_api import (
 )
 from core.device_route import DEVICE_CPU, DEVICE_GPU
 from core.logistic_route import LogisticRoute, logistic_route_admit, logistic_fit_run, logistic_query_run
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require as _require
 
 
 def _ready(result: Int, context: Int) raises:

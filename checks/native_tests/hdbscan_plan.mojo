@@ -6,7 +6,7 @@ Independent cases run in parallel. Fixed-size metadata assertions do not add
 another numerical implementation or execute a GPU provider.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.kmeans_variants_api import VariantsSpan
 from core.hdbscan_fit_api import (
     HdbscanFitOptions, HdbscanFitRequest, HdbscanFitPlan,
@@ -19,11 +19,6 @@ from core.hdbscan_query_api import (
 )
 
 comptime HDBSCAN_PLAN_CASES = 15
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct Inputs(Movable):

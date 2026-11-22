@@ -8,7 +8,7 @@ unchanged. Native owners remain live through every borrowed pointer use.
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.spectral_preparation_api import (
@@ -24,12 +24,6 @@ from core.spectral_preparation_device import SpectralPreparationDevice
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime SPECTRAL_COO_FIXTURES = 6

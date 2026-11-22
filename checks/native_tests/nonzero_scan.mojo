@@ -13,15 +13,10 @@ The old 8 shapes x 3 seeds remain, with a portable integer fixture generator
 replacing Python's Random. All planted bit patterns and midpoint cases remain.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from std.memory import bitcast
 from core.core_host_impl import nonzero_f64_count, nonzero_f64_fill
 from core.mojolearn_shell_impl import nonzero_f64_count_host, nonzero_f64_fill_host
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _rounded_shift(word: UInt64, shift: Int) -> UInt64:

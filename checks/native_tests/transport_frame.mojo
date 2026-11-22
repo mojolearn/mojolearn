@@ -9,7 +9,7 @@ on the calling thread, because the write splits its own array digests across
 host tasks and a host split is not entered from inside another.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.ffi import c_int, external_call
 from std.sys.info import CompilationTarget
 from core.sha256 import Sha256
@@ -30,11 +30,6 @@ from core.parallel_worker_frame import (
 )
 
 comptime TRANSPORT_FRAME_FIXTURES = 4
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _same(bytes: List[UInt8], expected: String) -> Bool:

@@ -2,7 +2,7 @@
 # native-check: cpu
 """Native classification keys: exact ordering, duplicates and parallel mapping."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.labels_score_keys import (
@@ -12,11 +12,6 @@ from core.labels_score_keys import (
 )
 
 comptime SCORE_KEY_FIXTURES = 28
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def integer_index(unit: Int) raises:

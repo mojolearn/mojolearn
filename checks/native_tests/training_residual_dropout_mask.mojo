@@ -25,8 +25,8 @@ from core.neural_context import neural_ctx
 from training.residual_dropout import residual_dropout_device
 from training.residual_dropout_boundary_run import _RD_DEV_CTX
 from training.residual_dropout_host import residual_dropout_host
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

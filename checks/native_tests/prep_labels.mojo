@@ -29,11 +29,10 @@ from bindings.prep_labels_prog_run import (
 )
 from x_prep.label_fast import IDN_LABEL
 from checks.native_tests.prep_enc_host import enc_host_run
-from checks.native_tests.prep_cls_host import require, arena_words, arena_codes
-from checks.native_tests.tsa_metrics_fixture_words import fixture_words, fixture_f32, fixture_i32
+from checks.native_tests.prep_cls_host import arena_words, arena_codes
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_words, fixture_f32, fixture_i32
 
 comptime LAB_DIR = "checks/native_tests/fixtures/prep_lab/"
 comptime KIND_F32 = 0   # `_lab_spec`: <f4

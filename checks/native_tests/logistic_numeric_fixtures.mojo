@@ -8,13 +8,9 @@ in fixtures/logistic-inputs.json. No Python is used by the native checks.
 from std.math import exp
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
+from checks.native_tests.testsuite_cases import require
 
 comptime LOGISTIC_GUARD = Float32(27182.5)
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def original_inputs(rows: Int) raises -> Tuple[List[Float32], List[Float32]]:

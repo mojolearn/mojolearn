@@ -2,7 +2,7 @@
 """Pure score storage, snapshot admission and input-range ownership checks."""
 from std.memory import bitcast
 from core.gp_native_score import GPRScoreValues, GPRScoreProgram, gpr_score_prepare
-from checks.native_tests.gp_state import require
+from checks.native_tests.testsuite_cases import require
 
 comptime GPR_SCORE_CONTRACT_CASES = 7
 

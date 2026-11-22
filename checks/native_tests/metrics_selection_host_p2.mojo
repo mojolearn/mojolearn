@@ -22,11 +22,12 @@ against a Float64 reference, metrics/checks/classification_metrics_check.mojo
 against per-class integer counts, every average). Importable; no `main()`.
 """
 from std.math import max
-from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR, fixture_f32, fixture_i32
+from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR
 from metrics.mojolearn_metrics_host_run import precision_recall_curve_run
 from metrics.mojolearn_metrics_run import precision_recall_curve_run as precision_recall_curve_run_gpu
-from std.testing import TestSuite, assert_true as require
+from std.testing import TestSuite
 from std.sys.compile import is_defined
+from checks.native_tests.testsuite_cases import fixture_f32, fixture_i32, require
 
 
 comptime PRC_N = 40

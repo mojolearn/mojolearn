@@ -14,11 +14,7 @@ from core.dbscan_native_api import DBSCANNativeDriver, DBSCANReferenceRequest, D
 from core.dbscan_native_device import DBSCANDeviceKernels
 from core.labeled_reference_resident import LabeledReferenceLease, labeled_reference_lease
 from checks.native_tests.dbscan_native_profiles import integer_guards, DBSCAN_I32_GUARD
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was dbscan_ownership_gpu_suite.mojo) ----

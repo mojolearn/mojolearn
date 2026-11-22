@@ -3,13 +3,9 @@
 from std.memory import bitcast
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.sequential_input_plan import SequenceInputPlan, SequenceBufferFormat, sequence_buffer_shape, sequence_array_typestr, sequence_write
+from checks.native_tests.testsuite_cases import require
 
 comptime SEQUENCE_METADATA_FIXTURES = 78
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _format(fixture_id: Int) raises:

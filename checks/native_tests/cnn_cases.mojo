@@ -25,16 +25,12 @@ from x_cnn.conv_run import (
     conv_run_pad_params, conv_run_pad_code, conv_run_take_channels, conv_run_put_channels, conv_run_copy_words,
     conv_run_pad_forward, conv_run_pad_backward, conv_run_forward, conv_run_backward,
 )
+from checks.native_tests.testsuite_cases import require
 
 comptime PAD_ZEROS = 0
 comptime PAD_REFLECT = 1
 comptime PAD_REPLICATE = 2
 comptime PAD_CIRCULAR = 3
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def cnn_entry() raises -> EntryRef:

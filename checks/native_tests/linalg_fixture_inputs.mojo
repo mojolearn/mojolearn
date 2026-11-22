@@ -3,11 +3,7 @@
 linalg_numerical and linalg_decompositions. A helper module: no `main()`, no `test_*`."""
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def input_values(name: String, count: Int) raises -> List[Float32]:

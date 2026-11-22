@@ -12,11 +12,7 @@ from std.testing import TestSuite
 from bindings.msel_search_stats_run import (
     msel_pvalue, msel_rank_best, msel_rank_scores, msel_row_means, msel_row_stds, msel_score_column,
 )
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def _table() -> List[List[Float64]]:

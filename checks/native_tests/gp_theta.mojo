@@ -16,13 +16,7 @@ from core.gp_native_provider import gp_native_v1
 from core.gp_native_host import GPHostKernels
 from core.gp_native_device import GPDeviceKernels
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime GP_THETA_FIXTURES = 2

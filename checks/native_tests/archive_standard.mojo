@@ -2,7 +2,7 @@
 # native-check: cpu
 """Independent StandardScaler schema, count storage and borrowed-view fixtures."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from std.memory import bitcast
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_read import NativeArchiveDecoded, NativeArchiveText
@@ -11,11 +11,6 @@ from core.native_archive_standard import (
     NativeStandardArchiveSaved, native_standard_archive_plan, native_standard_vector_view,
     native_standard_scalar_count, native_standard_archive_members,
 )
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _text(name: String, value: String) -> NativeArchiveDecoded:

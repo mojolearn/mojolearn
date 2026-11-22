@@ -74,11 +74,7 @@ from transformer.impl.llama.modeling_llama import (
 )
 
 from checks.native_tests.kit import download, upload
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 comptime LRS_CASES = 6

@@ -41,8 +41,8 @@ from checks.vendor import COMPILED_VENDOR
 from solver.ops_entry_device import solver_ops_device_v1, SOLVER_OPS_DEVICE_API
 from glm.logistic_native_device import qn_device_native_v1, LOGISTIC_DEVICE_API
 from glm.logistic_fold_native import logistic_fold_v1, LOGISTIC_FOLD_API
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

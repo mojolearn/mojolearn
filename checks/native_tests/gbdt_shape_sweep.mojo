@@ -70,8 +70,8 @@ from checks.native_tests.gbdt_public_fits import (
     predict,
     same_f32,
 )
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

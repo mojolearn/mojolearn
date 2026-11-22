@@ -18,8 +18,7 @@ The units are independent and run across the native host worker pool.
 from x_cnn.host.entry_runs_host import publish_x_cnn_host_entries
 from checks.native_tests.cnn_cases import BnLayer, ref_bn, normals, widen, check_close
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.cnn_cases import require
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 # ---- The host column (was cnn_batchnorm_cpu_suite.mojo) ----

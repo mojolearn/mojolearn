@@ -25,11 +25,7 @@ from core.device_units import device_multiprocessor_count
 from checks.hardware_matrix import gpu_cores_for
 from checks.kernel_matrix import TARGET_COLUMN
 from transformer.impl.llama.fused_attention import attn_device_units
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 comptime DEVICE_UNITS_CASES = 3

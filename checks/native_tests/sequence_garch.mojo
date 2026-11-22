@@ -22,7 +22,7 @@ words in `checks/native_tests/fixtures/sequence_garch_arch/` by
 `tools/py2mojo_native_fixtures_b8.py`.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from sequence.exec import Exec, HostExec
 from sequence.ops_impl import garch_impl
 from sequence.exec_device import DeviceExec
@@ -31,12 +31,6 @@ from std.sys.compile import is_defined
 from checks.native_tests.runner import read_f32_file
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime GARCH_FIXTURES = 1

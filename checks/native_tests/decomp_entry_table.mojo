@@ -19,7 +19,7 @@ native host worker pool; on a device column they run one after another.
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.entry_table import entry_ref_same
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -36,11 +36,6 @@ from x_decomp.descriptor_schema import (
 )
 
 comptime DECOMP_TABLE_CASES = 35
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> LinearEntryKey:

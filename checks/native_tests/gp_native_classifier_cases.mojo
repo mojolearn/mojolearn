@@ -10,9 +10,9 @@ from std.math import isfinite
 from core.host_parallel import host_parallelize
 from core.gp_native_api import GPDriver, GPCFitRequest, GPCFitAllRequest, GPCQueryRequest, GPCQueryAllRequest, GPCCombineRequest, GP_CAPABILITIES, GP_CAP_OVR, GP_CAP_RESIDENT
 from core.gp_native_storage import GPKernelStorage, GPCMemberTables
-from checks.native_tests.gp_state import require
 from checks.native_tests.gp_native_data import input_values, input_labels, failures_clear, GP_GUARD, GP_GUARD64
 from checks.native_tests.gp_native_data import unchanged
+from checks.native_tests.testsuite_cases import require
 
 comptime GP_CLASSIFIER_CPU_FIXTURES = 4
 comptime GP_CLASSIFIER_GPU_FIXTURES = 6

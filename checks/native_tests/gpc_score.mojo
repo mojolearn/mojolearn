@@ -21,13 +21,7 @@ from x_metrics.descriptor_host import metrics_program_host_v1
 from core.gp_native_device import GPDeviceKernels
 from x_metrics.descriptor_device import metrics_program_device_v1
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime GPC_SCORE_NATIVE_CASES = 14

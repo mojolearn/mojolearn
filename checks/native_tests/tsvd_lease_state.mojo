@@ -2,17 +2,12 @@
 # native-check: cpu
 """Native TSVD cache matching, move ownership and single-release token state."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.tsvd_native_api import TSVDNativeDriver
 from core.tsvd_owner_state import TSVDLeaseState
 from checks.native_tests.tsvd_contract import tsvd_wire_entry
 
 comptime TSVD_LEASE_STATE_FIXTURES = 12
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def owner(lease: Int = 7331) -> TSVDLeaseState:

@@ -7,7 +7,7 @@ refused values, the refusal wording, and the copy and scan answers.
 Independent fixtures run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from neighbors.neighbors_knn_run import (
     KNN_DIST_LP, KNN_DIST_JS, KNN_DIST_COSINE, KNN_MINKOWSKI_OK, KNN_MINKOWSKI_NOT_POSITIVE,
     KNN_MINKOWSKI_SUBNORMAL, knn_refuse_rbc_vote, knn_refuse_distance_inner_product, knn_refuse_algorithm,
@@ -21,11 +21,6 @@ from neighbors.neighbors_knn_run import (
 )
 
 comptime NEIGHBORS_KNN_RUN_FIXTURES = 23
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def refused(message: String, prefix: String) -> Bool:

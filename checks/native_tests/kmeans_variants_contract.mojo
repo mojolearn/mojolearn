@@ -7,7 +7,7 @@ markers. It is not a replacement algorithm. Every fixture owns its result
 slot; independent fixtures execute concurrently with no shared mutable state.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from core.kmeans_variants_api import (
@@ -22,11 +22,6 @@ from x_cluster.out import ClusterOut
 from core.kmeans_variants_plan import VariantsAuxiliary
 
 comptime KMEANS_VARIANTS_CONTRACT_FIXTURES = 23
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def words(actual: List[Int], expected: List[Int]) raises:

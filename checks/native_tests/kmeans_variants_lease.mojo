@@ -6,7 +6,7 @@ The descriptor records releases only; these are CPU ownership contracts,
 not GPU concurrent-submit tests or a substitute numerical provider.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import ArcPointer
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -14,11 +14,6 @@ from core.kmeans_variants_api import KMeansVariantsDriver, VARIANTS_RELEASE
 from core.kmeans_variants_resident_state import VariantsResidentState
 
 comptime KMEANS_VARIANTS_LEASE_FIXTURES = 4
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

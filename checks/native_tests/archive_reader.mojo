@@ -2,17 +2,12 @@
 # native-check: cpu
 """End-to-end native member execution, without Python files or output objects."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_read import native_archive_read
 from core.native_archive_npy import native_npy_layout_collect, ArchiveLiteralWarning
 from core.native_archive_codec import archive_codec_library
 from checks.native_tests.archive_reader_vectors import archive_reader_fixture
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _fixture(unit: Int) raises:

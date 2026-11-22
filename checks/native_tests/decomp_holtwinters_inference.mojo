@@ -25,18 +25,13 @@ holtwinters_state_cpu. The series is the original closed form, evaluated
 in Float64 and rounded to Float32 here.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.math import isfinite, isnan, sin, cos, pi
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from holtwinters.host.hw_predict import hw_predict_in_sample_ptr
 from holtwinters.impl.internal.hw_estimate import HW_INIT_ESTIMATED
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime HW_INFERENCE_FIXTURES = 2

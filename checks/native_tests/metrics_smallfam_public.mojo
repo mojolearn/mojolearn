@@ -31,9 +31,9 @@ from std.memory import bitcast
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.host import HostExec as XdHost
 from x_decomp.api import lu_solve_run
-from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR, fixture_f32
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, require
 
 
 comptime LU_N = 8

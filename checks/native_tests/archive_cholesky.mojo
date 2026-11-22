@@ -2,7 +2,7 @@
 # native-check: cpu
 """Independent Cholesky schema, saved words and parallel byte-copy fixtures."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -14,11 +14,6 @@ from core.native_archive_cholesky import (
     NativeCholeskyArchiveSaved, native_cholesky_archive_plan, native_cholesky_archive_error,
     native_cholesky_save_factor, native_cholesky_archive_members,
 )
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _word(raw: ArchiveSpan, at: Int, width: Int) raises -> UInt64:

@@ -46,13 +46,12 @@ from bindings.scaler_lifecycle_run import (
     ScalerSeenView, ScalerStandardMerged, scaler_standard_partial_fit_run,
     SCALER_SEEN_SOURCE_SCALAR, SCALER_SEEN_SOURCE_I64, SCALER_SEEN_SOURCE_F32,
 )
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from checks.native_tests.py2mojo_host_members import (
     HostMember, MEMBER_SCALER, PREP_SCALERS_DIR, host_route, all_close, rows_close, same_bits, require, take, take32,
 )
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32
 
 comptime N = 257
 comptime D = 5

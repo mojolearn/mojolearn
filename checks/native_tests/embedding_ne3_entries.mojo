@@ -49,14 +49,10 @@ from training.residual_dropout_boundary_run import (
     residual_dropout_dev_run,
 )
 from training.residual_dropout_common_run import ResidualDropoutArgs
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was embedding_ne3_entries_gpu_suite.mojo) ----
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-
 comptime EMBEDDING_NE3_FIXTURES = 6
 
 

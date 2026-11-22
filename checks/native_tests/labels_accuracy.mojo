@@ -2,15 +2,10 @@
 # native-check: cpu
 """Known score results through the real native COUNT planner and host kernels."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from std.memory import bitcast
 from core.labels_accuracy_plan import label_accuracy_plan
 from x_metrics.host.program import run_program_host
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _score(unit: Int) raises:

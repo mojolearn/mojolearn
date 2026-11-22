@@ -9,11 +9,7 @@ output extents that the real boundary allocates.
 """
 from core.neighbors_native_driver import XnDriver
 from x_neighbors.native_descriptor_host import xn_native_v1
-
-
-def require(condition: Bool, message: String) raises:
-    if not condition:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def main() raises:

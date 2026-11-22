@@ -10,7 +10,7 @@ not called here.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.native_call_output import NativeCallWorkspace
@@ -30,11 +30,6 @@ from sequence.xseq_neural_run import (
 )
 
 comptime XSEQ_NEURAL_RUN_CASES = 17
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

@@ -7,7 +7,7 @@ distinct, borders must attach to an allowed core component, and core/noise
 membership is exact. Float32 source bytes and original settings are retained.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -29,12 +29,11 @@ from core.dbscan_native_api import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.native_tests.dbscan_native_profiles import DBSCAN_I32_GUARD, integer_guards, DBSCANCase, profile, query_count, query_name, query_rows
-from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD, require
+from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD
 from core.dbscan_native_host import DBSCANHostKernels
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.dbscan_native_device import DBSCANDeviceKernels
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime DBSCAN_NATIVE_FIXTURES = 17

@@ -25,14 +25,10 @@ from embedding.checks.embedding_oracle import EmbConfig, EMB_NO_PADDING_IDX
 from embedding.checks.embedding_identical import PLAN_AUTO, emb_resolve_plan
 from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from embedding.embedding_words_run import embedding_forward_released, embedding_backward_released
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was embedding_surface_gpu_suite.mojo) ----
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-
 comptime V = 37
 comptime D = 5
 comptime T = 211

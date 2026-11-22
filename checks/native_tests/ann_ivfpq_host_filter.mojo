@@ -30,12 +30,7 @@ from x_ann.host.ivf_pq_host import ivf_pq_build_host
 from x_ann.ops_entry_host import ann_ops_host_v1
 from checks.native_tests.ann_ivf_surface import normal_rows
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 comptime _N = 256

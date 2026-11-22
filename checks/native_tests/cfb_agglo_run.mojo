@@ -8,7 +8,7 @@ values, the refusal wording and the request fields. Independent fixtures run
 across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.agglo_native_state import (
     AggloOptions, AggloTreePlan, AGGLO_PAIRWISE_MAX_ROWS, AGGLO_FULL_AUTO, AGGLO_FULL_TRUE, AGGLO_FULL_FALSE,
 )
@@ -23,11 +23,6 @@ from cluster.cfb_agglo_run import (
 )
 
 comptime CFB_AGGLO_RUN_FIXTURES = 14
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def refused(message: String, prefix: String) -> Bool:

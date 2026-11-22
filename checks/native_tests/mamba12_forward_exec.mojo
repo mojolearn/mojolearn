@@ -60,6 +60,7 @@ from mamba.impl.mamba_block_program import (
 from mamba.checks.mamba_fixture import corpus_case, corpus_case_weights, corpus_case_x
 from mamba.checks.mamba2_fixture import m2_corpus_case, m2_case_weights, m2_case_x
 from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was mamba12_forward_exec_gpu_suite.mojo) ----
@@ -68,11 +69,6 @@ comptime M12_M1_CASE = 1
 comptime M12_M2_CASE = 1
 comptime M12_POISON: UInt32 = 0xFFFFFFFF
 comptime M12_ZERO: UInt32 = 0
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _filled(n: Int, word: UInt32) -> List[Float32]:

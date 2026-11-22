@@ -41,11 +41,7 @@ from std.memory import unsafe_memcpy
 from std.sys.info import size_of
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 # --- host words to the device, drained before the return -------------------

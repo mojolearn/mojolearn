@@ -14,13 +14,7 @@ from core.svr_native_api import SvrNativeDriver, SvrFitPlan, SvrFitRequest, SvrQ
 from svm.host.svr_native_host import svr_host_native_v1
 from svm.svr_native_device import svr_device_native_v1
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime SVR_NATIVE_CASES = 12

@@ -6,7 +6,7 @@ The test-only entry validates distinct request slots and implements no NMF
 solver. Independent fixtures run in parallel, with heap-owned ABI outputs.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.native_call_output import NativeCallOutput
@@ -20,11 +20,6 @@ from core.nmf_native_api import (
 )
 
 comptime NMF_CONTRACT_FIXTURES = 28
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct NMFWireOracle(NMFNativeKernels):

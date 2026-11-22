@@ -6,17 +6,12 @@ These check metadata/refusal contracts, not kernel arithmetic or speed.
 Payload span sizes remain the admitted caller's responsibility.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.logistic_native_api import qn_fold_f32_ptr, qn_native_spans
 from checks.native_tests.logistic_descriptor_fixtures import (
     logistic_driver_fixture, logistic_fold_fixture, logistic_fixed_fixture, logistic_concurrent_fixture,
     logistic_route_fixture, LOGISTIC_ROUTE_FIXTURES,
 )
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _fold_pointer(unit: Int) raises:

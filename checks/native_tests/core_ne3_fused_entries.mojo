@@ -46,7 +46,7 @@ every assertion is a relation that holds for any such data.
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import exp, log, sqrt, cos
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -79,12 +79,6 @@ from metrics.estimator import (
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime NE3_UNITS = 12

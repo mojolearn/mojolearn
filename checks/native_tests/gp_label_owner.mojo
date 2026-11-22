@@ -7,14 +7,13 @@ contracts; class ordering and decoding numerical tests remain in their existing
 native suites and public Python interoperability tests.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from std.memory import bitcast
 from core.native_label_codes import NativeLabelCodes
 from core.gp_native_label_table import GPLabelTable, GP_LABEL_OBJECT, GP_LABEL_I64, GP_LABEL_F64
 from core.labels_native_api import LabelsNativeDriver, LabelsGatherRequest
 from core.labels_native_host_provider import labels_host_native_v2
-from checks.native_tests.gp_state import require
 
 comptime GP_LABEL_OWNER_FIXTURES = 28
 

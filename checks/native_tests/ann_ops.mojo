@@ -33,13 +33,7 @@ from x_ann.ops_entry_host import ann_ops_host_v1, ANN_OPS_HOST_API
 from checks.vendor import COMPILED_VENDOR
 from x_ann.ops_entry_device import ann_ops_device_v1, ANN_OPS_DEVICE_API
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD
 
 
 comptime ANN_SHARED_CASES = 7

@@ -22,11 +22,7 @@ from bindings.forest_predict_run import (
     ForestState, FOREST_ROUTE_SEQUENTIAL, FOREST_ROUTE_STRICT, FOREST_ROUTE_RESIDENT, forest_route,
     forest_labels_route, forest_shape_check,
 )
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def _refuses_fraction(features: ForestFeatures, n_features: Int, text: String) raises:

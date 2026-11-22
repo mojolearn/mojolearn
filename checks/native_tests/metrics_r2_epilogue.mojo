@@ -36,16 +36,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_metrics.descriptor_host import metrics_program_host_v1
 from x_metrics.descriptor_device import metrics_program_device_v1
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 comptime R2_UNITS = 7
 comptime _RE_DIV = 1  # bindings/metrics_reg_run.mojo
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def r2_values(entry: NativeDescriptorCall, y: List[Float32], p: List[Float32], mo: String, var custom: List[Float64],

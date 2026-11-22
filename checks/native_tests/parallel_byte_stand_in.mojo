@@ -24,6 +24,7 @@ from bindings.parallel_byte_native_run import (
     parallel_session_fold, parallel_session_fold_export, parallel_session_ownership_width,
     parallel_session_ownership_capacity, parallel_session_ownership,
 )
+from checks.native_tests.testsuite_cases import require
 
 
 
@@ -41,11 +42,6 @@ comptime W_COUNT = 8
 comptime STEP_AT_OPEN = 7
 comptime SHARDS = 3
 comptime DIMS = 10
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def refused(message: String, expected: String) -> Bool:

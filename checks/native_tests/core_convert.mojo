@@ -28,7 +28,7 @@ addresses) and the through-`_buffer` arms stay in the Python test (boundary).
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import cos, log, sqrt
 from std.memory import bitcast
 from core.core_host_impl import transpose_to_f32
@@ -39,12 +39,6 @@ from core.hotpath_device_run import hpdev_try_cast_f64_to_f32, hpdev_try_transpo
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime CONVERT_SHAPES = 13

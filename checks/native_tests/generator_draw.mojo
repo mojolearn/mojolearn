@@ -36,7 +36,7 @@ The public shapes, the Generator's counter and state_dict, the input
 layouts and the refusals stay in the Python test.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from checks.numerics import identical_mul
@@ -44,11 +44,6 @@ from core.mojolearn_training_host_impl import neural_rng_host_into
 from training.native_primitive_dispatch import native_primitive_operation
 
 
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime GEN_DRAW_FIXTURES = 4

@@ -13,7 +13,7 @@ the resolved image must report the planned vendor and the selected tier.
 A fit on a loaded estimators image is exercised by the installed-wheel QN
 cases (python/mojolearn/tests/test_family_device_boundary.py)."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.logistic_native_api import QnFitRequest, QnQueryRequest
 from core.entry_table import entry_ref_unresolved
 from core.device_route import (
@@ -25,11 +25,6 @@ from glm.qn_door_run import (
 )
 
 comptime QN_DOOR_FIXTURES = 22
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def refusal(index: Int) raises -> String:

@@ -17,7 +17,7 @@ from x_cnn.host.entry_runs_host import publish_x_cnn_host_entries
 from x_cnn.graph_run import graph_run_linear_forward, graph_run_linear_backward
 from checks.native_tests.cnn_cases import cnn_entry, addr, zeros32, normals, check_close
 from std.testing import TestSuite
-from checks.native_tests.cnn_cases import require
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The host column (was cnn_trainer_cpu_suite.mojo) ----

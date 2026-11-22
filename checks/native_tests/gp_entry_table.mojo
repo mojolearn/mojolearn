@@ -25,12 +25,7 @@ from core.gp_entry_table import (
 )
 from checks.native_tests.gp_native_classifier_cases import GP_CLASSIFIER_CPU_FIXTURES, classifier_fixture
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 # ---- The host column (was gp_entry_table_cpu_suite.mojo) ----

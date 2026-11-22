@@ -28,11 +28,7 @@ from core.mixture_native_api import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from mixture.gmm_native_device import gmm_native_device_v1
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 comptime NE2G_FIXTURES = 1

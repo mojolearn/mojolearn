@@ -9,7 +9,7 @@ info-word decoding, plus the host CSR merge and dense-to-CSR passes.
 Independent fixtures run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.math import isinf
 from neighbors.svgp_run import (
     SVGP_VARIANCE_NONE, SVGP_VARIANCE_LATENT, SVGP_VARIANCE_NOISY, SvgpFitRequest, SvgpQueryRequest,
@@ -32,11 +32,6 @@ from neighbors.neighbors_graph_run import (
 )
 
 comptime NEIGHBORS_GRAPH_RUN_FIXTURES = 19
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def ints_equal(got: List[Int], expected: List[Int]) -> Bool:

@@ -48,13 +48,7 @@ from x_ann.cagra_device import cagra_build_device
 from x_ann.ops_entry_device import ann_ops_device_v1
 from checks.native_tests.ann_ivf_surface import normal_rows
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime CAGRA_FILTERED_FIXTURES = 2

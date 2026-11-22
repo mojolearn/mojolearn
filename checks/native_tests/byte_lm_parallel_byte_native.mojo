@@ -29,7 +29,8 @@ from training.byte_lm_config import ByteConfig
 from training.byte_lm_parallel import ByteParallelTrainer
 from training.byte_lm_door_run import byte_parallel_export_run
 from training.checks.optimizer_contract import OptimizerConfig, OPT_ADAMW
-from std.testing import TestSuite, assert_true as require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was byte_lm_parallel_byte_native_gpu_suite.mojo) ----

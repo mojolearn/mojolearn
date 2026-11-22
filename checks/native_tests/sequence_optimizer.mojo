@@ -14,8 +14,8 @@ from sequence.recurrent import OptConfig, OptState, opt_step
 from sequence.ops import OPT_RMSPROP, OPT_ADAGRAD, OPT_LION, OPT_ADAMAX, OPT_NADAM
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

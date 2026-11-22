@@ -31,13 +31,7 @@ from core.label_rows_device import device_argmax_rows
 from core.neural_context import process_ctx
 from glm.logistic_native_device import qn_device_native_v1, QnDeviceKernels, _CONTEXT
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime LOGISTIC_NUMERIC_FIXTURES = 4

@@ -5,7 +5,7 @@ from core.borrowed_buffer import BorrowedBufferLayout
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work
 from core.sequential_input_plan import SequenceInputPlan, sequence_write
-from checks.native_tests.sequence_plan_metadata import require
+from checks.native_tests.testsuite_cases import require
 
 comptime SEQUENCE_BUFFER_FIXTURES = 8
 

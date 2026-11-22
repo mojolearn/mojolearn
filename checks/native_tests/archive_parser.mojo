@@ -6,17 +6,12 @@ Independent fixtures use separate owners and the existing host pool. No file,
 Python runtime, GPU, performance measurement, or release identity is involved.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_npy import native_npy_layout, native_npy_text_source
 from core.native_archive_unicode import archive_decode_utf8, archive_decode_utf32, archive_decode_literal, archive_text_equal
 from core.native_archive_zip import native_zip_directory, native_zip_payload
 from checks.native_tests.archive_parser_vectors import archive_zip_fixture
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _npy(header: String, version: Int, payload: Int) -> List[UInt8]:

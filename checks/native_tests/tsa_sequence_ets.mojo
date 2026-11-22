@@ -26,14 +26,14 @@ stored as binary64 words in `fixtures/tsa_ets_statsforecast/` by
 (assert_allclose's default atol 0).
 """
 from std.math import isnan
-from checks.native_tests.tsa_metrics_fixture_words import TSA_FIXTURE_DIR, fixture_f32
+from checks.native_tests.tsa_metrics_fixture_words import TSA_FIXTURE_DIR
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from core.xseq_entry_table import XS_ETS
 from sequence.exec import HostExec
 from sequence.xseq_glue import xseq_glue_run
 from sequence.xseq_glue_device import xseq_glue_device_run
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, require
 from std.sys.compile import is_defined
 
 

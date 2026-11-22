@@ -38,11 +38,10 @@ from bindings.prep_encode_select_run import (
     ScoreClassif, ScorePearson, ScorePlan, score_classif_stage, score_pearson_stage, score_topk_stage,
 )
 from checks.native_tests.prep_enc_host import enc_host_run
-from checks.native_tests.prep_cls_host import require, all_close, check_close, arena_words, codes_words
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32, fixture_i32
+from checks.native_tests.prep_cls_host import all_close, check_close, arena_words, codes_words
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, fixture_i32
 
 comptime SEL_DIR = "checks/native_tests/fixtures/prep_sel/"
 

@@ -45,8 +45,8 @@ from core.qn_single_fit import QnSingleFitPlan
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from glm.host.linear_svc_native_host import linear_svc_host_v1
 from glm.linear_svc_native_device import linear_svc_device_v1
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

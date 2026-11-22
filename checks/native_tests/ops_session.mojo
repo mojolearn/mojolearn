@@ -7,7 +7,7 @@ same fixtures. Float64 formulas below are independent test oracles; they do
 not call product math helpers. Tolerances match the former NumPy tests.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import exp, log, log1p
 from autograd.ops_api import (
     OpsSession,
@@ -43,12 +43,6 @@ from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime OPS_SESSION_FIXTURES = 28

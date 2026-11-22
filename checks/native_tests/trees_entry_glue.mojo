@@ -19,9 +19,8 @@ test_x_trees_sanity.py): the 103-row stratified and plain folds and the
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.tsa_metrics_fixture_words import fixture_i32
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_i32
 from core.entry_table import entry_ref_same
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -41,11 +40,6 @@ from xtrees.glue_calls import (
 )
 
 comptime TREES_GLUE_CASES = 53
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> TreesEntryKey:

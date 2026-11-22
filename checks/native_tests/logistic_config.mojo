@@ -6,7 +6,7 @@ The source reference data evaluates original NumPy expressions, never the Mojo
 helper. No product kernels, Python calls or hardware identity checks occur here.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from std.math import isnan
 from core.logistic_config import (
@@ -20,11 +20,6 @@ from checks.native_tests.logistic_config_reference import (
 )
 
 comptime LOGISTIC_CONFIG_FIXTURES = 54
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def real(word: UInt64) -> Float64:

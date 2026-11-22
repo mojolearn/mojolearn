@@ -22,13 +22,13 @@ The refusals, the normalize=False counts and the source checks stay in the
 Python file. Importable; no `main()`.
 """
 from std.memory import bitcast
-from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR, fixture_f32, fixture_i32
+from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR
 from metrics.host.metrics_oracle import host_weighted_accuracy_ptr
 from metrics.host.r2_entry_host import _r2_weighted_value
 from metrics.estimator import accuracy_score_weighted_host
 from metrics.r2_entry_device import _r2_weighted_value as _r2_weighted_value_gpu
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
 from std.sys.compile import is_defined
 
 

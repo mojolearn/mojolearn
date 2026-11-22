@@ -25,15 +25,10 @@ from training.host.optimizer_native import optimizer_host_v1
 from training.optimizer_native_gpu import optimizer_gpu_v1
 from std.sys.compile import is_defined
 from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, require
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime _GUARD = Float32(913.25)

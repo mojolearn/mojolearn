@@ -6,7 +6,7 @@ Independent contracts run in parallel. Fake addresses are compared as integer
 fields only; they never reach kernels or pointer dereferences.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.neighbors_native_driver import XnDriver
@@ -14,11 +14,6 @@ from core.pcs_native_api import PCSOptions, PCSFitPlan, PCSNativeDriver, pcs_opt
 from x_neighbors.descriptor_schema import xn_operation_id
 
 comptime PCS_CONTRACT_FIXTURES = 34
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def wire_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

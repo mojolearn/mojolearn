@@ -42,7 +42,7 @@ from core.host_finite_scan import (
     host_copy_f32_any_nan,
 )
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 
 comptime ROWS = 4096
 comptime COLS = 64
@@ -61,11 +61,6 @@ comptime GENERAL_LEAD = 9
 comptime PRED_KINDS = 5
 comptime PER_PRED = 6 * PRED_KINDS + 1
 comptime PRED_FIXTURES = 2 * PER_PRED
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _position(index: Int) -> Int:

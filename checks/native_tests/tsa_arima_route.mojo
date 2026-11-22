@@ -24,7 +24,7 @@ that the independent fixtures (two orders) run across the native host worker
 pool. No Python module participates.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from arima.arima_ops_forecast_host import publish_arima_ops_forecast_host
 from arima.arima_ops_host import publish_arima_ops_host
 from arima.host.arima_host_entries import arima_host_fit_into
@@ -48,11 +48,6 @@ comptime _N = 64
 comptime _B = 2
 comptime _H = 5
 comptime _ITER = 25
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def span_rules() raises:

@@ -20,13 +20,9 @@ from std.sys.compile import is_defined
 from std.testing import TestSuite
 from gbdt.host.gbdt_host_entries_impl import gbdt_host_binary_margins_check, gbdt_host_binary_prediction_into
 from gbdt.binary_prediction import binary_prediction_device
+from checks.native_tests.testsuite_cases import require
 
 comptime N = 265
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def margins() -> List[Float32]:

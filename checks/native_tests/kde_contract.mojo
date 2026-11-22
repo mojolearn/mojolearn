@@ -6,7 +6,7 @@ The mock checks prescribed metadata only; fake tensor addresses are never
 dereferenced. All requests and error/name storage stay owned through calls.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.native_call_output import NativeCallOutput
@@ -14,11 +14,6 @@ from core.native_descriptor_call import native_descriptor_call, native_descripto
 from core.kde_native_api import KDENativeKernels, KDENativeDriver, KDEPrepareRequest, KDEQueryRequest, KDEResidentQuery, kde_native_v1, KDE_NATIVE_COUNT, KDE_MODE, KDE_VENDOR, KDE_CAPABILITIES, KDE_PREPARE, KDE_RELEASE, KDE_QUERY, KDE_RESIDENT_QUERY
 
 comptime KDE_CONTRACT_FIXTURES = 32
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct KDEWireOracle(KDENativeKernels):

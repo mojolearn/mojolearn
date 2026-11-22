@@ -13,11 +13,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from checks.native_tests.nearest_centroid_descriptor_cases import fixture, empty_case
 from x_neighbors.native_descriptor_device import xn_native_v1
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was nearest_centroid_numeric_gpu_suite.mojo) ----

@@ -10,11 +10,7 @@ Closed-form symmetric-data oracles do not derive expected values from kernels.
 from std.math import sqrt
 from core.nearest_centroid_plan import NcDriver, NcFitPlan, NcQueryPlan, NcLabelCodes, nc_binary_decision, nc_scratch_address
 from core.native_descriptor_abi import NativeDescriptorCall
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def fixture(entry: NativeDescriptorCall, unit: Int) raises:

@@ -17,8 +17,7 @@ one case table across the host cores.
 """
 from std.memory import bitcast
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32, fixture_i32
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32
 from checks.native_tests.py2mojo_forest_fits import (
     RfSpec, Forest, rf_fit, predict, require, RF_ENTROPY, RF_POISSON, RF_GAMMA, RF_INVERSE_GAUSSIAN,
 )

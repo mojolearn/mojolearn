@@ -6,18 +6,13 @@ Each fixture owns its scalar metadata. Independent fixtures run through the
 shared host worker pool. No Python objects, product kernels or identity runs.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_scalar_decode import NativeRealBits
 from core.logistic_query_state import (
     LogisticQueryWidth, logistic_width_integer, logistic_query_integer_width,
 )
 
 comptime LOGISTIC_WIDTH_FIXTURES = 80
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def check(width: LogisticQueryWidth, features: Int, expected: Bool) raises:

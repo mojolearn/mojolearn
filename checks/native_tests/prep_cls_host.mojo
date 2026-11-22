@@ -25,16 +25,11 @@ from x_prep.host.program import run_program_host
 from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS, IDN_NB_ONEPASS
 from x_prep.fam2 import IDN_WDRAW, IDN_PERM_DRAW, IDN_WPICK, IDN_PARTIAL_CODES, IDN_LABEL_INV
 from x_prep.gram_blocked import IDN_GRAM_BLOCKED, IDN_GRAM_ROWS
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32, fixture_i32
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
+from checks.native_tests.testsuite_cases import require, fixture_f32, fixture_i32
 
 comptime PREP_NB_DIR = "checks/native_tests/fixtures/prep_nb/"
 comptime PREP_DA_DIR = "checks/native_tests/fixtures/prep_da/"
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def all_close(actual: Float32, expected: Float64, rtol: Float64, atol: Float64, label: String) raises:

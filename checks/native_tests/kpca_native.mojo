@@ -8,7 +8,7 @@ Explicit Lanczos/resident cases exercise existing backend options; they do not
 claim that the original 80-row public auto route selects those options.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -34,7 +34,7 @@ from core.kpca_native_plan import (
     KPCADenseFit,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD, require
+from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD
 from core.neighbors_native_driver import XnDriver
 from core.kpca_native_provider import KPCAEigenKernels
 from x_neighbors.native_descriptor_host import xn_native_v1
@@ -49,7 +49,6 @@ from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from x_decomp.decomp_owner_dev import DevDecomp
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime KPCA_NATIVE_FIXTURES = 15

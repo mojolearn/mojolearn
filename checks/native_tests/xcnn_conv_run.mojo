@@ -9,7 +9,7 @@ refusal texts. The native entries the RUN calls are covered by
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from x_cnn.conv_run import (
     ConvGeom, conv_run_check_config, conv_run_pad_code, conv_run_check_padding_mode, conv_run_text_pads,
     conv_run_size_pads, conv_run_explicit, conv_run_conv_pad, conv_run_fan, conv_run_bound, conv_run_same_shape,
@@ -21,11 +21,6 @@ from x_cnn.conv_run import (
 )
 
 comptime XCNN_CONV_RUN_CASES = 16
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

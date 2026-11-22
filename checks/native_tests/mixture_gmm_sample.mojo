@@ -26,8 +26,8 @@ from core.mixture_native_api import GmmDriver, GmmFitRequest
 from mixture.host.gmm_native_host import gmm_native_host_v1
 from mixture.host.gmm_host_entries import gmm_sample_into
 from mixture.estimator import GmmParams, gaussian_mixture_fit, gaussian_mixture_sample
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

@@ -21,11 +21,7 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from max.gpu.host import DeviceContext
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require as _require
 
 
 def _words(n: Int, seed: Int) -> List[Float32]:

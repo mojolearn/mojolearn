@@ -6,11 +6,7 @@ from autograd.rankn import ShapeN
 from core.cast_in import CastIn, CAST_KIND_FLOAT
 from core.hostptr import f32_ptr
 from sequence.exec_trait import Exec
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def _upload[E: Exec & Movable & Deinitable](mut s: OpsSession[E], values: List[Float32], dims: List[Int], grad: Bool = False) raises -> Int:

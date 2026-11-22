@@ -7,7 +7,7 @@ the refusal wording, the automatic learning rate and the start modes.
 Independent fixtures run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from x_ann.mani_tsne_run import (
     TSNE_EXPLORATION_MAX_ITER, TSNE_INIT_ARRAY, TSNE_INIT_RANDOM, TSNE_INIT_PCA, tsne_check_samples,
     tsne_perplexity_positive, tsne_perplexity_refusal, tsne_perplexity_below_samples,
@@ -17,11 +17,6 @@ from x_ann.mani_tsne_run import (
 )
 
 comptime MANI_TSNE_RUN_FIXTURES = 10
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def fixture(unit: Int) raises:

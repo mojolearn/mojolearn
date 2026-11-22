@@ -9,18 +9,13 @@ Borrowed data stays owned by named Mojo Lists until the last pointer access.
 """
 from std.memory import bitcast
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.pandas_input_plan import (
     PandasBlock, PandasInputPlan, PandasObjectWriter, pandas_block_count,
     pandas_nullable_check, pandas_positions_slice, pandas_positions_array,
 )
 
 comptime PANDAS_PLAN_FIXTURES = 111
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _typecode(kind: String, width: Int) -> Int:

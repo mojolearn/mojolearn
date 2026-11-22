@@ -27,11 +27,7 @@ from bindings.msel_split_plan_run import (
     msel_plan_default_folds, msel_plan_group_kfold, msel_plan_group_set, msel_plan_indexed, msel_plan_select,
     msel_plan_time_series, msel_seed_refusal, msel_split_fill,
 )
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def _route() raises -> MselSplitRoute:

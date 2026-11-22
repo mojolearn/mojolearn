@@ -7,7 +7,7 @@ refused values, the refusal wording, buffer contents and request fields.
 Independent fixtures run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.kde_native_api import KDE_CAP_RESIDENT, KDE_CAP_IMMUTABLE
 from neighbors.neighbors_kde_run import (
     KDE_DEFAULT_LEAF_SIZE, kde_refuse_bandwidth_name, kde_bandwidth_positive, kde_refuse_bandwidth,
@@ -18,11 +18,6 @@ from neighbors.neighbors_kde_run import (
 )
 
 comptime NEIGHBORS_KDE_RUN_FIXTURES = 16
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def refused(message: String, prefix: String) -> Bool:

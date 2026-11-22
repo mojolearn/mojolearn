@@ -11,7 +11,7 @@ or a prediction that ignored the degree fails. Cases 0 to 3 are the four
 independent fits; case 4 compares their predictions.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr, f64_ptr
@@ -21,12 +21,6 @@ from kernel_methods.estimator import kernel_ridge_fit_host, kernel_ridge_predict
 from svm.impl.svm_parameter import KernelParams, KERNEL_POLYNOMIAL
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime POLY_DEGREES = 4

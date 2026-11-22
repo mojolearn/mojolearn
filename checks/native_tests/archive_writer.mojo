@@ -9,17 +9,12 @@ vector. Fixtures run in the host pool with separate owners. No files, Python,
 GPU, performance measurements or release identity records are involved.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.native_archive_write import (
     NativeArchiveMember, NativeZipRecord, archive_zlib, archive_crc32,
     archive_owned, archive_contiguous_strides, archive_prepare_member,
     archive_prepare, archive_local, archive_central, archive_footer,
 )
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _word(bytes: List[UInt8], offset: Int, width: Int) -> UInt64:

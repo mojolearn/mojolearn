@@ -8,7 +8,7 @@ Float64 matrix multiplication and the defining beta-divergence equations
 check the resulting factors; no fitted native output supplies a reference.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.math import isfinite, log, sqrt
 from std.memory import bitcast
@@ -16,7 +16,7 @@ from core.host_parallel import host_parallelize
 from core.nmf_native_api import NMFNativeDriver, NMFFitRequest, NMFInverseRequest
 from core.nmf_native_state import NMFScratch
 from x_decomp.nmf import NmfArgs
-from checks.native_tests.pca_native_helpers import guards, unchanged, close_values, PCA_TEST_GUARD, require
+from checks.native_tests.pca_native_helpers import guards, unchanged, close_values, PCA_TEST_GUARD
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.nmf_native_provider import nmf_native_v1
 from x_decomp.host import HostExec
@@ -27,7 +27,6 @@ from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from x_decomp.decomp_owner_dev import DevDecomp
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime NMF_NATIVE_FIXTURES = 20

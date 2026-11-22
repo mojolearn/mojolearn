@@ -7,7 +7,7 @@ independent axes; unit sample variance and inverse values are checked directly.
 No SVD implementation, old output reference or Python arithmetic is imported.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -18,11 +18,6 @@ from core.neural_context import process_ctx
 from decomposition.estimator import pca_fit_host, pca_whiten_transform_host, pca_whiten_inverse_transform_host
 
 
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime PCA_WHITENING_FIXTURES = 3

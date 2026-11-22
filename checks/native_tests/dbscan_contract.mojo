@@ -6,7 +6,7 @@ Independent contracts run in parallel. Mock tensor addresses are never
 dereferenced or passed to real kernels; heap-owned error storage stays live.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.native_call_output import NativeCallOutput
@@ -15,11 +15,6 @@ from core.dbscan_native_api import DBSCANNativeKernels, DBSCANNativeDriver, DBSC
 
 comptime DBSCAN_CONTRACT_FIXTURES = 45
 comptime EXACT_RESULT = 9007199254740993
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct DBSCANWireOracle(DBSCANNativeKernels):

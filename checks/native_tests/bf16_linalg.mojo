@@ -8,7 +8,7 @@ normative fp32 GEMM remains the arithmetic reference, as in the Python test.
 No digest, Python binding or changed kernel is involved.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
@@ -22,12 +22,6 @@ from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_works
 from gemm.checks.gemm_lowbit_check import _upload_f32, _upload_u16, _download_f32, _poisoned
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime BF16_LINALG_FIXTURES = 9

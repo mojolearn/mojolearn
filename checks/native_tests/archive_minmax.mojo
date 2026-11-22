@@ -2,7 +2,7 @@
 # native-check: cpu
 """Native MinMax checkpoint plans, malformed schemas and owned metadata."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from std.memory import bitcast
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_read import NativeArchiveDecoded, NativeArchiveText
@@ -11,11 +11,6 @@ from core.native_archive_minmax import (
     NativeMinMaxArchiveClass, native_minmax_archive_plan, native_minmax_archive_members,
     native_minmax_saved_statistic, native_minmax_statistic_view,
 )
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _text(name: String, value: String) -> NativeArchiveDecoded:

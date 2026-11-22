@@ -33,9 +33,9 @@ from std.math import isnan
 from std.memory import bitcast
 from core.hostptr import f32_ptr
 from arima.host.arima_host_entries import _order, _forecast_into, _predict_in_sample_into, arima_host_fit_into
-from checks.native_tests.tsa_metrics_fixture_words import TSA_FIXTURE_DIR, fixture_f32
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.tsa_metrics_fixture_words import TSA_FIXTURE_DIR
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, require
 
 
 comptime ARIMA_B = 3

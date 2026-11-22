@@ -16,12 +16,11 @@ from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.rankn_cases import _upload, _binary, _gradient, _close, require
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
+from checks.native_tests.rankn_cases import _upload, _binary, _gradient, _close
 
 
 comptime RANKN_MATH_FIXTURES = 4
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 def _broadcast[E: Exec & Movable & Deinitable](mut s: OpsSession[E]) raises:

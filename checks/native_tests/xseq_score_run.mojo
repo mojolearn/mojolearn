@@ -9,18 +9,13 @@ with that table (`core/metrics_entry_table.mojo`), not here.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from sequence.xseq_score_run import (
     xseq_run_vector_rows, xseq_run_vector_finite, xseq_run_lengths_check, xseq_run_weights_check,
     xseq_run_metrics_mode,
 )
 
 comptime XSEQ_SCORE_RUN_CASES = 5
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

@@ -48,14 +48,10 @@ from core.causal_session_handles import CausalSessionHandles
 from core.entry_table import entry_ref_same
 from transformer.causal_entry_device import publish_causal_transformer_device
 from mamba.causal_entry_device import publish_causal_mamba_device
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was causal_lm_session_gpu_suite.mojo) ----
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-
 comptime CAUSAL_SESSION_CASES = 16
 
 

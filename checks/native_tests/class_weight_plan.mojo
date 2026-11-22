@@ -13,7 +13,7 @@ codes stored by `tools/py2mojo_native_fixtures_b4.py`). The public tests compare
 the class weights but these row words, so the words are what is asserted here, bit for bit.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_i32
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -25,18 +25,12 @@ from core.labels_native_api import LabelsRatioRequest
 from core.labels_native_host import LabelsHostKernels
 from core.admitted_cast_elements import admitted_cast_elements
 from bindings.class_weight_rows_run import class_weight_rows_plan
-from checks.native_tests.tsa_metrics_fixture_words import fixture_i32
 from core.class_weight_plan import (
     ClassWeightInputs, class_weight_kind, class_weight_value,
     class_weight_all_one, class_weight_plan,
 )
 
 comptime CLASS_WEIGHT_PLAN_FIXTURES = 24
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def publication(unit: Int) raises:

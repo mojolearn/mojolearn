@@ -8,7 +8,7 @@ refused values, the refusal wording, plan fields and buffer contents.
 Independent fixtures run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from neighbors.knn_imputer_run import (
     ImpFitRequest, ImpTransformRequest, imp_selects, imp_selected_columns, imp_result_columns, imp_i32_words,
     imp_scratch_f32,
@@ -25,11 +25,6 @@ from neighbors.neighbors_local_run import (
 )
 
 comptime NEIGHBORS_LOCAL_RUN_FIXTURES = 23
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def fixture(unit: Int) raises:

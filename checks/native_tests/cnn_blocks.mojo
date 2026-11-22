@@ -60,8 +60,7 @@ from checks.native_tests.cnn_cases import (
     ref_bn,
 )
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.cnn_cases import require
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 # ---- The host column (was cnn_blocks_cpu_suite.mojo) ----

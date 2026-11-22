@@ -2,13 +2,8 @@
 # native-check: cpu
 """Typed archive error-name graphs: display, aliases, cycles and first failure."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.native_archive_repr import NativeArchiveReprNode, archive_repr_format
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _display(nodes: List[NativeArchiveReprNode], expected: String) raises:

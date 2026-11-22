@@ -8,7 +8,7 @@ Actual neighbor/sort/density numerical oracles belong to lof_native_cpu.
 Independent fixtures run concurrently without shared mutable test state.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorCall, NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_words, native_descriptor_report
@@ -19,11 +19,6 @@ comptime LOF_PLAN_CONTRACT_FIXTURES = 28
 comptime _F32 = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32 = MutPointer[Int32, MutUntrackedOrigin]
 comptime _F64 = Pointer[Float64, ImmUntrackedOrigin]
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def witness(operation: Int, a: List[Int], p: List[Int], ff: Int, nf: Int) raises:

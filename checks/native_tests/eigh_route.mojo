@@ -20,14 +20,10 @@ from x_decomp.cells import F32Ptr
 from x_decomp.device import DevExec
 from x_decomp.eigh_ops_host import eigh_op_sym_host
 from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import require as _require
 
 
 # ---- The device column (was eigh_route_gpu_suite.mojo) ----
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-
 def _full_rank(n: Int) -> List[Float32]:
     # a symmetric matrix with a spread spectrum: a dominant diagonal plus a
     # bounded, deterministic off-diagonal pattern

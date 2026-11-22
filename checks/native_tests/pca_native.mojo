@@ -7,7 +7,7 @@ recorded spectra come from independent NumPy Float64 SVD. Query equations
 consume the actual fitted state, so eigenvector signs need no convention.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD
 from std.sys.compile import is_defined
 from std.math import isfinite
 from std.memory import bitcast
@@ -24,7 +24,6 @@ from checks.native_tests.pca_native_helpers import (
     write_guarded,
 )
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime PCA_NATIVE_FIXTURES = 10

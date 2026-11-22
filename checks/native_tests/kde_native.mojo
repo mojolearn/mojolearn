@@ -7,7 +7,7 @@ are unchanged. Mathematical references use the existing KDE correctness bound;
 they are not outputs of either the legacy controller or the product oracle.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.math import isfinite
 from std.memory import bitcast
@@ -24,12 +24,11 @@ from core.kde_native_api import (
     kde_native_v1,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD, require
+from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD
 from core.kde_native_host import KDEHostKernels
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.kde_native_device import KDEDeviceKernels
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime KDE_NATIVE_FIXTURES = 48

@@ -19,8 +19,8 @@ trees; cases 0-2 insert one record after `losses 0`.
 The entry is host code on both columns (it reads text, no device).
 """
 from core.host_archive_gbdt import host_archive_gbdt_text
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 
 comptime GBDT_HOST_ARCHIVE_TEXT_CASES = 4
 

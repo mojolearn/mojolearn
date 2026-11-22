@@ -11,11 +11,7 @@ are independent tests.
 from std.testing import TestSuite
 from std.memory import bitcast
 from bindings.normal_dist_helpers_run import erfc64, normal_cdf64, normal_inv_cdf64
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def _ulps(a: Float64, b: Float64) -> Int:

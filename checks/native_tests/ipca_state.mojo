@@ -6,7 +6,7 @@ Mock handles are plain values here and never reach a real resident pool. The
 state itself has no cleanup callback; only take_handle transfers ownership.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -14,11 +14,6 @@ from core.ipca_native_api import IPCANativeDriver
 from core.ipca_native_state import IPCAOutputRoom, IPCAResidentState, ipca_output_shape
 
 comptime IPCA_STATE_FIXTURES = 26
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def ipca_state_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

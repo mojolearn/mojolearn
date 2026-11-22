@@ -9,7 +9,7 @@ here.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from sequence.xseq_prophet_run import (
     prophet_run_check_days, prophet_run_auto_period, prophet_run_scale, prophet_run_check_y_rank,
     prophet_run_check_lengths, prophet_run_check_finite, prophet_run_changepoint_plan, prophet_run_changepoint_count,
@@ -19,11 +19,6 @@ from sequence.xseq_prophet_run import (
 )
 
 comptime XSEQ_PROPHET_RUN_CASES = 9
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

@@ -19,12 +19,7 @@ from std.memory import bitcast
 from core.preprocessing_program import prep_program_stage
 from x_prep.host.program import run_program_host
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 # ---- The host column (was prep_label_binarizer_inverse_window_suite.mojo) ----

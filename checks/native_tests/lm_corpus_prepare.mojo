@@ -41,8 +41,8 @@ from core.sha256 import sha256_hex, sha256_hex_text
 from tokenizer.encoding import string_bytes
 from tokenizer.impl.tokenizer_host_shell_impl import BpeHandle, bpe_decode_seq_bytes, bpe_handle_load
 from tokenizer.impl.vocab_build import ranks_text
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 
 comptime LM_PREPARE_FIXTURES = 3
 

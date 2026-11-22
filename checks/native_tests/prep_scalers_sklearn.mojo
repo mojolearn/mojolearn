@@ -29,20 +29,14 @@ from core.preprocessing_program import prep_program_stage
 from x_prep.host.program import run_program_host
 from x_prep.robust_native_run import _robust_fit_program
 from x_prep.maxabs_native_run import _maxabs_fit_program
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32
 from checks.native_tests.py2mojo_fixture_words import PREP_SANITY_DIR, fixture_f64
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32
 
 comptime SCALER_N = 301
 comptime SCALER_D = 6
 comptime OP_BINARIZE = 12  # x_prep/prep_stateless_native_run.mojo
 comptime OP_NORMALIZE = 47
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def all_close(actual: Float32, expected: Float64, rtol: Float64, atol: Float64, label: String) raises:

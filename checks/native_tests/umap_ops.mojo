@@ -29,8 +29,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from umap.ops_entry_host import umap_ops_host_v1, UMAP_OPS_HOST_API
 from checks.vendor import COMPILED_VENDOR
 from umap.ops_entry_device import umap_ops_device_v1, UMAP_OPS_DEVICE_API
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

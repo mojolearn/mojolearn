@@ -11,7 +11,7 @@ trainer session and no device. Four independent fixtures, run across the
 host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.sha256 import sha256_hex_addr
 from core.transport_header import TransportHeader, transport_header_int
 from bindings.cross_vendor_native_run import (
@@ -22,11 +22,6 @@ from bindings.cross_vendor_native_run import (
 )
 
 comptime CROSS_VENDOR_RUN_FIXTURES = 4
-
-
-def require(condition: Bool, message: String) raises:
-    if not condition:
-        raise Error(message)
 
 
 def refused(text: String, wanted: String) raises:

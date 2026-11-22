@@ -28,7 +28,8 @@ from core.host_parallel import host_parallelize
 from gbdt.models.model_text import model_text
 from gbdt.resident_model import RESIDENT_RAW, ResidentGbdtModel
 from gbdt.train import TrainedModel, predict_floats, train
-from std.testing import TestSuite, assert_true as require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was gbdt_resident_ns_predict_gpu_suite.mojo) ----

@@ -8,7 +8,7 @@ distances. Trees are checked by leaf-pair cophenetic relations and partitions,
 allowing valid tied merge orientation/order and label-number permutations.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.math import isfinite
 from std.memory import bitcast
@@ -29,7 +29,7 @@ from core.agglo_native_api import (
     agglo_resident_query,
 )
 from checks.native_tests.agglo_native_profiles import AggloCase, profile, query_count, query_name, query_rows
-from checks.native_tests.pca_native_helpers import unchanged, require
+from checks.native_tests.pca_native_helpers import unchanged
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neighbors_native_driver import XnDriver
 from core.dbscan_native_host import DBSCANHostKernels
@@ -42,7 +42,6 @@ from hierarchy.cluster_descriptor_device import hierarchy_cluster_device_v1
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime AGGLO_NATIVE_FIXTURES = 9

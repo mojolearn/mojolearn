@@ -9,7 +9,7 @@ texts. The native entries the RUN calls are covered by
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.math import sqrt
 from core.cast_in import CAST_KIND_SIGNED
 from x_cnn.graph_run import (
@@ -23,11 +23,6 @@ from x_cnn.graph_run import (
 )
 
 comptime XCNN_GRAPH_RUN_CASES = 12
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

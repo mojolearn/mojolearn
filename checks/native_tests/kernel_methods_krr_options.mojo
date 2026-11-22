@@ -20,7 +20,7 @@ The Gram matrices are Int64 sums rounded once to Float32, the original
 tolerance comparison stays in Python as an external oracle.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -32,12 +32,6 @@ from kernel_methods.estimator import kernel_ridge_fit_host, kernel_ridge_predict
 from svm.impl.svm_parameter import KernelParams
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime KRR_OPTIONS_FIXTURES = 3

@@ -22,7 +22,7 @@ the batch fit of [y, 2y] has the single fit's parameters word for word.
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require, fixture_f32
 from std.math import sin, isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -42,16 +42,9 @@ from sequence.xseq_prophet_run import (
     prophet_run_prepare_fit, ProphetFitPlan, ProphetPredictRequest, prophet_run_days, prophet_run_predict,
     prophet_run_prior_count, prophet_run_parameter_count,
 )
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime PROPHET_STATE_FIXTURES = 6

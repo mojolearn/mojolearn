@@ -7,15 +7,10 @@ allocate short shape/stride lists; these tests never allocate their data span.
 No Python objects, callbacks, dtype objects or product allocation are needed.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_array_layout import NativeArrayLayout, native_array_itemsize, native_array_code, native_matrix_shape
 
 comptime _MAX = 9223372036854775807
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _layout(fixture_id: Int) raises:

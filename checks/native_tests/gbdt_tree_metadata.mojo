@@ -24,8 +24,8 @@ in the Python test (boundary).
 from std.memory import bitcast
 
 from core.trees_gbdt_metadata import gbdt_tree_metadata
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 
 comptime GBDT_TREE_METADATA_CASES = 6
 

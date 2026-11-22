@@ -26,7 +26,7 @@ The frame, sequence and dtype arms and the refusal wording stay in Python
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import isfinite
 from std.memory import bitcast
 from resample.host.resample_host import (
@@ -46,12 +46,6 @@ from resample.estimator import (
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime NE2_FIXTURES = 6

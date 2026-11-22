@@ -17,7 +17,8 @@ from kde.resident_fit import KdeFitLease, _kde_fit_lease, _kde_fit_return
 # TOMBSTONE: MOJOLEARN_IDN_KDE_PARTIAL_POOL (unmeasured opt-in arm (I20 mixed, no promotion)) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 3af082d6f4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch; record in docs/TOMBSTONES.md.
 from kde.checks.kde_fixture import train_fixture, query_fixture, weight_fixture
-from checks.native_tests.pca_native_helpers import guards, PCA_TEST_GUARD, require
+from checks.native_tests.pca_native_helpers import guards, PCA_TEST_GUARD
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was kde_ownership_gpu_suite.mojo) ----

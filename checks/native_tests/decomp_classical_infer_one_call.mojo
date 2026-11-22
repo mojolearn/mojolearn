@@ -14,19 +14,18 @@ The data are a deterministic Mojo-generated matrix: the property does not
 depend on NumPy's stream. Guard words around each output stay untouched.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.math import isfinite, sin
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.pca_native_api import PCANativeDriver, PCAFoldStore
-from checks.native_tests.pca_native_helpers import PCATestState, PCA_TEST_GUARD, guards, unchanged, require
+from checks.native_tests.pca_native_helpers import PCATestState, PCA_TEST_GUARD, guards, unchanged
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.pca_native_host import pca_host_native_v1
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.pca_native_device import pca_device_native_v1
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime INFER_ONE_CALL_FIXTURES = 1

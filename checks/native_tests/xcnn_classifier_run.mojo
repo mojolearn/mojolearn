@@ -8,7 +8,7 @@ the descriptor words feed is covered by the sequence program suites.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from x_cnn.classifier_run import (
     CnnClfPlan, CnnClfFitSettings, CNNCLF_PREDICT_ROWS, cnnclf_run_check_input_rank, cnnclf_run_check_input_dim,
     cnnclf_run_check_channels, cnnclf_run_check_setting, cnnclf_run_check_optimizer, cnnclf_run_optimizer_word,
@@ -20,11 +20,6 @@ from x_cnn.classifier_run import (
 )
 
 comptime XCNN_CLASSIFIER_RUN_CASES = 22
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

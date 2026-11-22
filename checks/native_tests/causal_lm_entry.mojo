@@ -19,7 +19,7 @@ native host worker pool; on a device column one after another.
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.math import sqrt
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -41,11 +41,6 @@ from core.causal_lm_entry_table_sessions import (
 )
 
 comptime CAUSAL_ENTRY_CASES = 9
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> CausalEntryKey:

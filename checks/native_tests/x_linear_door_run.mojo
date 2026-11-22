@@ -12,7 +12,7 @@ a published x_linear table and are covered by checks/native_tests/x_linear_ops_*
 the cv split RUNs (xl_cv_fold_ids_run / xl_cv_roles_run) need the base helper
 table and are covered with the installed wheel's linear CV cases."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from x_linear.door_run import (
     xl_run_fit_ints, xl_run_word, xl_run_copy, xl_run_join, xl_run_parts, xl_parts_total, xl_block_dims,
     xl_run_block, xl_seed_halves, xl_lbfgs_work, xl_sgd_class_floats, xl_run_status_refuse, xl_cv_roles_limit,
@@ -20,11 +20,6 @@ from x_linear.door_run import (
 )
 
 comptime XL_DOOR_FIXTURES = 13
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def fit_ints_fixture() raises:

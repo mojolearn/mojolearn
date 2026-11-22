@@ -9,7 +9,7 @@ protocols, device kernels, timing or identity checks are involved. The
 Python API/protocol suites remain responsible for public admission.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.linear_boundary_types import linear_predict_request_from_spans
 from core.linear_fit_types import (
     LinearFitRequest,
@@ -22,11 +22,6 @@ from core.linear_ols_run import linear_ols_plan
 from core.linear_tsqr_run import LinearKit
 from core.native_descriptor_abi import NativeDescriptorCall
 from checks.native_tests.linear_boundary_fixtures import plan_descriptor, storage_descriptor
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _prediction_spans(fault: Int) raises:

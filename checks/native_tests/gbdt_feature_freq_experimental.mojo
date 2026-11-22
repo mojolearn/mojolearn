@@ -29,8 +29,8 @@ family's device plan, as `bindings/_mojolearn_gbdt.mojo` calls it.
 from gbdt.mojolearn_gbdt_host_run import gbdt_fit_two_level_feature_freq_run as ff_fit_host
 from gbdt.mojolearn_gbdt_run import _gbdt_device_plan, gbdt_fit_two_level_feature_freq_run as ff_fit_device
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 comptime FF_CPU_UNITS = 1

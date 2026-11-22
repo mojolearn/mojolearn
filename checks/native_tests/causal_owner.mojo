@@ -30,11 +30,7 @@ from core.causal_owner import (
 )
 from core.host_parallel import host_parallelize
 from std.atomic import Atomic, Ordering
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def _refusal(words: CausalModelWords, has_state: Bool, have: Int, capacity: Int, length: Int) -> String:

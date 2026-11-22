@@ -30,8 +30,7 @@ from x_cnn.graph_layer_run import GraphTableCalls, SageBackwardHost, graph_views
 from x_cnn.graph_run import graph_run_graph_op, graph_run_aggr_kind
 from checks.native_tests.cnn_cases import cnn_entry
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.cnn_cases import require
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 comptime SAGE_MAX_UNITS = 4

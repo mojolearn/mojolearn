@@ -7,7 +7,7 @@ for an exporter. No Python participates. Fixtures are independent units and
 run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.boundary_layout import (
     BufferLayout, buffer_layout_from_words, layout_is_c_contiguous, format_kind, format_matches,
     gather_f32, gather_f64, gather_i64, c_strides, PY_BUFFER_WORDS,
@@ -19,11 +19,6 @@ from core.boundary_layout import (
 # splits across the pool) runs after them on the calling thread, never as a
 # nested pool task.
 comptime BOUNDARY_LAYOUT_FIXTURES = 8
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _words(buf: Int, nbytes: Int, itemsize: Int, ndim: Int, shape: Int, strides: Int,

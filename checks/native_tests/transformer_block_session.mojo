@@ -34,7 +34,8 @@ from core.neural_entry_table import (
 )
 from core.transformer_block_session import TransformerBlockSession, transformer_block_session_of
 from transformer.neural_entry_device import publish_neural_transformer_device
-from std.testing import TestSuite, assert_true as require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was transformer_block_session_gpu_suite.mojo) ----

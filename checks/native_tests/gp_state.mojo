@@ -7,17 +7,12 @@ kernels. Raw spans are borrowed only while their named List owners remain live.
 No pointer to a borrowed struct field is captured by a parallel closure.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.gp_native_api import GPKernelView, GPQueryResult
 from core.gp_native_storage import gp_native_ints, gp_native_f64, GPKernelStorage, GPRFitScratch, GPRGradientScratch, GPOptimizerScratch, GPCMemberTables
 
 comptime GP_STATE_FIXTURES = 32
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def kernel_storage() -> GPKernelStorage:

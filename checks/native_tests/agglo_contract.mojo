@@ -7,7 +7,7 @@ markers. Fake tensor addresses are never dereferenced; no numerical provider
 or device registry is called by these transport contracts.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -18,11 +18,6 @@ from hierarchy.cluster_descriptor_schema import HIERARCHY_CLUSTER_FIT
 from x_neighbors.descriptor_schema import xn_operation_id
 
 comptime AGGLO_CONTRACT_FIXTURES = 28
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def solver_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

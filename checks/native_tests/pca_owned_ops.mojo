@@ -7,7 +7,7 @@ non-finite X), not by another call into the implementation. No Python
 objects.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.entry_table import entry_table_same_call
@@ -20,11 +20,6 @@ from checks.vendor import COMPILED_VENDOR
 from decomposition.pca_ops_entry_device import pca_ops_device_v1, PCA_OPS_DEVICE_API
 
 
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime PCA_OWNED_CASES = 3

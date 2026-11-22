@@ -9,18 +9,13 @@ covered by `xcnn_entry_table_suite.mojo`.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from x_cnn.tensor_run import (
     xcnn_tensor_run_check_dim, xcnn_tensor_run_check_handle, xcnn_tensor_run_handle_live,
     xcnn_tensor_run_reshape_dims,
 )
 
 comptime XCNN_TENSOR_RUN_CASES = 4
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

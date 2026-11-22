@@ -7,7 +7,7 @@ accepted and refused values, the refusal wording and the plan fields.
 Independent fixtures run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from x_ann.neighbors_ann_run import (
     ann_check_dimension, ann_shape_size, ann_c_strides, ivf_metric_known, ivf_metric_refusal, ivf_check_n_lists, ivf_fit_plan,
     pq_fit_plan, ann_check_n_lists, sq_check_train_per_list, rabitq_padded_dim, rabitq_code_words,
@@ -16,11 +16,6 @@ from x_ann.neighbors_ann_run import (
 )
 
 comptime NEIGHBORS_ANN_RUN_FIXTURES = 16
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def refused(message: String, prefix: String) -> Bool:

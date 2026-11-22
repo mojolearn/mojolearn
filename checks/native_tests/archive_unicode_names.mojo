@@ -7,14 +7,9 @@ the pinned official UCD files and tagged CPython sources in the provenance doc.
 Independent fixtures run in the native host pool; this is not model identity.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_unicode_names import archive_unicode_name, archive_unicode_digit
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _name(word: String, minor: Int, expected: Int, micro: Int = 0) raises:

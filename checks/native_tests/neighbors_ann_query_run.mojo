@@ -8,7 +8,7 @@ values, the refusal wording and the request fields. Independent fixtures run
 across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from x_ann.neighbors_ann_query_run import (
     ANN_SEARCH_PQ, ANN_SEARCH_SQ, ANN_SEARCH_RABITQ, ANN_SEARCH_CAGRA, AnnSearchRequest, ann_search_owner,
     ann_search_entry, ann_check_search_dims, ann_check_query_features, cagra_check_search, ivf_check_search,
@@ -18,11 +18,6 @@ from x_ann.neighbors_ann_query_run import (
 )
 
 comptime NEIGHBORS_ANN_QUERY_RUN_FIXTURES = 16
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def same(values: List[Int], expected: List[Int]) -> Bool:

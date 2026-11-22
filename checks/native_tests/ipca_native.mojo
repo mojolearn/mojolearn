@@ -7,7 +7,7 @@ repeated-batch reference retains rank-two covariance between updates, so it
 checks the incremental approximation rather than substituting full PCA.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.math import sqrt, isfinite
 from std.memory import bitcast
@@ -22,7 +22,7 @@ from core.ipca_native_api import (
     IPCAQueryRequest,
     IPCAFitResult,
 )
-from checks.native_tests.pca_native_helpers import close_values, guards, unchanged, write_guarded, PCA_TEST_GUARD, require
+from checks.native_tests.pca_native_helpers import close_values, guards, unchanged, write_guarded, PCA_TEST_GUARD
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.ipca_native_provider import ipca_native_v1
 from x_decomp.host import HostExec
@@ -33,7 +33,6 @@ from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from x_decomp.ipca_owner_dev import DevIpcaDev
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime IPCA_NATIVE_FIXTURES = 15

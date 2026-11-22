@@ -21,8 +21,8 @@ from std.memory import bitcast
 from sequence.exec import Exec, HostExec
 from sequence.ops_impl import theta_impl
 from sequence.exec_device import DeviceExec
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

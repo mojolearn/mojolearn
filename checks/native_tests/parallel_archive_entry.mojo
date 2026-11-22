@@ -17,7 +17,7 @@ The cases are independent units and run across the native host worker pool.
 Run in a fresh process (the first check needs unpublished tables).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.archive_entry_table import (
@@ -37,11 +37,6 @@ from bindings.parallel_ivf_entry_host import publish_parallel_ivf_host
 from ivf.index_arrays_impl import ivf_finalize_distances_host
 
 comptime PARALLEL_ARCHIVE_CASES = 8
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> ParallelEntryKey:

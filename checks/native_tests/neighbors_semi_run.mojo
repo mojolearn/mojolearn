@@ -9,7 +9,7 @@ info-word decoding and the host dense-to-CSR pass. Independent fixtures run
 across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from neighbors.neighbors_graph_run import XnOpRequest
 from neighbors.label_propagation_run import LpFitRequest, LpFitOutcome, LpQueryRequest, lp_query_fused
 from neighbors.xn_request_run import xn_scratch_f32, xn_scratch_i32
@@ -28,11 +28,6 @@ from neighbors.neighbors_semi_run import (
 )
 
 comptime NEIGHBORS_SEMI_RUN_FIXTURES = 11
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def ints_equal(got: List[Int], expected: List[Int]) -> Bool:

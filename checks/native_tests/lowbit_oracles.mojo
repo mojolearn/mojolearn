@@ -5,11 +5,7 @@ expected codes and exponents, and the quantizer/dequantizer comparisons. A helpe
 `test_*` (docs/plans/TESTSUITE_CONVERSION.md)."""
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 def expected_narrow(word: UInt32) -> UInt16:

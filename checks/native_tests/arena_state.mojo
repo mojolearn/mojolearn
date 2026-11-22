@@ -8,7 +8,7 @@ Independent fixtures run across host cores; each inserts and releases its own
 registry states. No device store is reached: store ids are plain integers.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.state_registry import StateHandle
 from core.arena_state import (
     ARENA_ROWS, ARENA_CACHES, ARENA_SCOPES, ARENA_RESIDENTS, ARENA_HANDLE_NONE,
@@ -17,11 +17,6 @@ from core.arena_state import (
 )
 
 comptime ARENA_STATE_FIXTURES = 8
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def handle_words() raises:

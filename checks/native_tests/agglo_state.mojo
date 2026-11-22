@@ -6,7 +6,7 @@ Independent fixtures run across host cores. Fake handles only exercise pure
 matching/take-once state; they never reach a device registry or destructor.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.dbscan_native_api import DBSCANNativeDriver, DBSCAN_MODE
@@ -14,11 +14,6 @@ from core.agglo_native_api import AggloSolverScratch, AggloClusterScratch, Agglo
 from core.agglo_native_state import AggloOptions, AggloReferenceKey, AggloReferenceState, agglo_linkage_code, agglo_metric_code, agglo_connectivity_code, agglo_predicts, agglo_tree_plan, AGGLO_PAIRWISE_MAX_ROWS, AGGLO_FULL_AUTO, AGGLO_FULL_FALSE, AGGLO_FULL_TRUE
 
 comptime AGGLO_STATE_FIXTURES = 103
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def state_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

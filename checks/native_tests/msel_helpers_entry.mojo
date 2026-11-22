@@ -20,7 +20,7 @@ needs an unpublished table).
 from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.msel_convert import MSEL_F32, MSEL_F64
 from core.msel_entry_table import MselEntryKey, msel_table_entry, MSEL_HELPERS_ABI, MH_OP_COUNT, MH_ARANGE_I64
 from core.msel_helpers_host import publish_msel_helpers_host
@@ -33,11 +33,6 @@ from core.msel_helpers_calls import (
 )
 
 comptime MSEL_HELPER_CASES = 18
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> MselEntryKey:

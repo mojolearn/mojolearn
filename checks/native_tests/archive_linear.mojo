@@ -2,17 +2,12 @@
 # native-check: cpu
 """Typed archive schema/refusal and scalar-spelling fixtures, all native."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from std.memory import bitcast
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_read import NativeArchiveDecoded, NativeArchiveText
 from core.native_archive_linear import native_linear_archive_plan
 from core.native_archive_scalar_text import archive_float_text, archive_bytes_repr
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _text(name: String, value: String) -> NativeArchiveDecoded:

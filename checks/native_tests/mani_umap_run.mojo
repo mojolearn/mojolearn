@@ -7,7 +7,7 @@ values, the refusal wording, the legacy-ABI choice and the transform's reuse
 of the fitted embedding. Independent fixtures run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_BOOL, CAST_KIND_FLOAT, CAST_KIND_BFLOAT
 from x_ann.mani_umap_run import (
     UMAP_MODE_FAST, UMAP_MODE_IDENTICAL, umap_finite, umap_mode_code, umap_check_input, umap_check_neighbors,
@@ -19,11 +19,6 @@ from x_ann.mani_umap_run import (
 )
 
 comptime MANI_UMAP_RUN_FIXTURES = 18
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def infinite() -> Float32:

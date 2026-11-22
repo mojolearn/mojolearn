@@ -2,7 +2,7 @@
 # native-check: cpu
 """Native table/handle contracts; independent fixtures use the host pool."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.entry_table import (
     entry_table_publish, entry_table_read, entry_table_resolve, entry_ref_call, entry_ref_same, entry_ref_unresolved,
     entry_ref_vendor, entry_ref_mode, EntryRef,
@@ -16,11 +16,6 @@ from core.linear_boundary_run import linear_predict_run
 from glm.host.linear_predict_native import linear_predict_host_v1
 
 comptime ENTRY_TABLE_CONTRACT_CASES = 21
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def table_probe(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

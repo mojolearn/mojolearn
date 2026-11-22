@@ -3,7 +3,7 @@
 """Native optimizer control transitions and actual descriptor-owned resources."""
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from training.optimizer_owner_control import OptimizerOwnerControl, optimizer_restored_pristine
 from training.optimizer_native_api import OptimizerNativeDriver
 from checks.native_tests.optimizer_descriptor import FourCells
@@ -12,12 +12,6 @@ from training.optimizer_native_gpu import optimizer_gpu_v1
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime OWNER_PURE = 18

@@ -27,15 +27,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from std.sys.compile import is_defined
 from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, require
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime LINALG_DECOMPOSITIONS_FIXTURES = 5

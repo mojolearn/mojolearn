@@ -6,7 +6,7 @@ The prescribed wire oracle performs no kernel centering or eigendecomposition.
 Its fake addresses never reach numerical code. Error outputs are heap-owned.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_call_output import NativeCallOutput
 from core.native_descriptor_abi import NativeDescriptorError
@@ -18,11 +18,6 @@ from core.kpca_native_api import (
 from core.kpca_native_info import KPCANeighborInfo
 
 comptime KPCA_CONTRACT_FIXTURES = 20
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct KPCAWireOracle(KPCANativeKernels):

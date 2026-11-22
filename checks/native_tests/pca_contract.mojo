@@ -6,7 +6,7 @@ Fixed distinct field values expose slot swaps. Numerical kernels are not
 reimplemented here; their execution lives in the PCA CPU/GPU suites.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.native_string import unsafe_string_from_utf8_cstr
 from std.memory import bitcast
 from core.native_call_output import NativeCallOutput
@@ -20,11 +20,6 @@ from core.pca_native_api import (
 )
 
 comptime PCA_CONTRACT_FIXTURES = 32
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct PCAWireOracle(PCANativeKernels):

@@ -7,7 +7,7 @@ fixture I/O/preparation/comparisons are parallel. IdentityTrace is disabled
 in the device adapter; no hashes, repeatability run or performance claim.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.family_cast_impl import family_min_f32
@@ -19,12 +19,6 @@ from kernel_methods.checks.kernel_matrix import km_kernel_matrix, km_kernel_work
 from std.sys.compile import is_defined
 from checks.native_tests.kit import download_whole_into, upload_whole_into
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime KERNEL_METHODS_CELLS_GPU_FIXTURES = 21

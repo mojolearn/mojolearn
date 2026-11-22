@@ -7,7 +7,7 @@ in the Python controller; neither becomes a native correctness gate here.
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.spectral_native_api import SpectralDriver, SpectralStateView, SpectralQueryShape, SpectralQueryRequest
@@ -20,12 +20,6 @@ from core.spectral_native_device import SpectralDeviceKernels
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime SPECTRAL_PREDICTION_FIXTURES = 6

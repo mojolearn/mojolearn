@@ -28,24 +28,17 @@ The public estimators, their seeded init stream, labels and shapes stay in the P
 from std.math import isnan
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32, fixture_i32
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require, fixture_f32, fixture_i32
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from sequence.exec import Exec, HostExec
 from sequence.exec_device import DeviceExec
 from sequence.ops_impl import mlp_fit_impl
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 comptime MLP_DIR = "checks/native_tests/fixtures/xseq_mlp_sklearn/"
 comptime MLP_N = 200
 comptime MLP_D = 5
 comptime MLP_MAX_ITER = 15
 comptime MLP_UNITS = 2
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def run_mlp[E: Exec](mut ex: E, unit: Int) raises:

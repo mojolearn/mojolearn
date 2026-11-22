@@ -24,15 +24,11 @@ Host column only: the tokenizer is a host component. The cases are
 independent and run across host cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from tokenizer.encoding import string_bytes
 from tokenizer.impl.pretokenize import PATTERN_GPT2, PATTERN_LLAMA3, PATTERN_QWEN2, pretokenize_pattern
 from tokenizer.impl.unicode_class import builtin_unicode_classes
 
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 comptime TOKENIZER_PRETOKENIZE_CASES = 19
 

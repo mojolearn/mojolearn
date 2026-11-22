@@ -43,13 +43,7 @@ from bindings.parallel_base_entry_host import publish_parallel_base_host
 from checks.vendor import COMPILED_VENDOR
 from bindings.parallel_base_entry_device import publish_parallel_base_device
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime CROSS_VENDOR_FOLD_FIXTURES = 5

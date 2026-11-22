@@ -6,7 +6,7 @@ from std.memory import bitcast
 from std.sys.compile import is_defined
 from std.testing import TestSuite
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from core.kmeans_native_api import (
     KMeansNativeDriver, KMeansFoldStore, KMeansFitRequest, KMeansQueryRequest,
 )
@@ -15,15 +15,9 @@ from core.kmeans_native_device import kmeans_device_native_v1
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 # ---- The cases (was kmeans_kernel_cases.mojo) ----
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
-
-
 def _near(value: Float64, expected: Float64) raises:
     var delta = value - expected
     require(delta > -1e-5 and delta < 1e-5, "geometric KMeans oracle mismatch")

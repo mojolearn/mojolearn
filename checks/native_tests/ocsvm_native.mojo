@@ -10,7 +10,7 @@ additional native contracts. No timing or cross-device identity is asserted.
 """
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.math import exp, tanh
 from core.host_parallel import host_parallelize
 from core.labels_native_host import labels_host_fsum
@@ -40,12 +40,6 @@ from x_neighbors.ocsvm_resident_native_device import OcDeviceResident
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime OCSVM_NATIVE_CASES = 12

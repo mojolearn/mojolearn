@@ -38,11 +38,7 @@ from isolation_forest.estimator import (
     iforest_run_resident,
 )
 from isolation_forest.forest_io import IFForestWords, if_held_forest_export, if_held_forest_sizes
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was iforest_forest_export_gpu_suite.mojo) ----

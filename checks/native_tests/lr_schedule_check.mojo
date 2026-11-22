@@ -9,7 +9,7 @@ fixtures and scalar steps use the host pool; product table calls keep their
 existing bounded run implementation.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.math import cos, pow
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -19,11 +19,6 @@ from sequence.lr_table import LrSpec, lr_spec_fill, lr_spec_value, LR_ONE_BASED,
 
 comptime LR_FIXTURES = 25
 comptime SENTINEL = Float32(31415.5)
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def schedule_spec(family: Int, exact: Bool = False) -> LrSpec:

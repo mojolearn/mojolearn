@@ -22,11 +22,7 @@ from core.spectral_native_device import SpectralDeviceKernels
 from core.spectral_native_provider import spectral_native_v1
 from checks.native_tests.spectral_native import source, source_unchanged, guarded, finite, fit
 from checks.native_tests.spectral_prediction import query, labels_equal, labels_valid
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was spectral_resident_gpu_suite.mojo) ----

@@ -7,7 +7,7 @@ results copied from the implementation. Fixtures and row preparation/checks
 use the shared host worker pool. No Python objects or numerical GPU kernels.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from core.labels_score_keys import (
     ScoreLabelKey, ScoreKeyIndex, SCORE_INT, SCORE_UTF8, SCORE_UCS4,
@@ -16,11 +16,6 @@ from core.labels_score_keys import (
 
 comptime LABEL_SCORE_STRESS_FIXTURES = 16
 comptime CODE_GUARD = Int32(0x3A4B5C6D)
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def unicode_codes(count: Int, variant: Int, check_index: Bool) raises -> List[Int32]:

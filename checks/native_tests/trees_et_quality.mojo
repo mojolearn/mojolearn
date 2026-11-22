@@ -15,10 +15,9 @@ negative values refused (the door's ValueError words). The six units are one cas
 running its own parallel builder.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32, fixture_i32
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
-from checks.native_tests.py2mojo_forest_fits import argmax_rows, tree_depth_leaves, accuracy, r2, require
+from checks.native_tests.py2mojo_forest_fits import argmax_rows, tree_depth_leaves, accuracy, r2
 from checks.native_tests.bm_trees_et_fits import (
     EtSpec, et_fit, et_predict, ET_POISSON, ET_GAMMA, ET_INVERSE_GAUSSIAN,
 )

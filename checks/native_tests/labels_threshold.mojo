@@ -7,11 +7,10 @@ from core.labels_native_host_provider import labels_host_native_v2
 from core.labels_native_device import labels_device_native_v2
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD
 
 
 comptime LABELS_THRESHOLD_CASES = 7
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 def fixture(driver: LabelsNativeDriver, unit: Int) raises:

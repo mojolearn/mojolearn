@@ -22,7 +22,7 @@ The independent cases run across the native host worker pool.
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.entry_table import entry_ref_same
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.host_entry_table import (
@@ -36,11 +36,6 @@ from core.host_entry_table_calls import (
 )
 
 comptime HOST_FOREST_CASES = 7
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> HostEntryKey:

@@ -41,13 +41,7 @@ from mamba.impl.mamba_block_program import MambaBlockProgram
 from checks.native_tests.mamba_decode_sessions import _Case, _same_words
 from checks.native_tests.mamba3_output_coverage import m3_cov_addresses, m3_cov_token
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime MAMBA_DECODE_N_KINDS = 3

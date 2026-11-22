@@ -7,7 +7,7 @@ spans use the same established host task policy; no backend is simulated.
 These exercise the actual storage plans, not hierarchy numerical kernels.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
@@ -17,11 +17,6 @@ from core.hierarchy_connectivity_plan import (
 )
 
 comptime HIERARCHY_CONNECTIVITY_FIXTURES = 21
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def vector(address: Int, count: Int, width: Int, kind: Int) -> ConnectivityStorage:

@@ -77,11 +77,7 @@ from autograd.kernels.transformer import LlamaBackwardStages
 from autograd.rules_transformer import llama_decoder_layer_backward
 
 from checks.native_tests.kit import download, same_words, upload
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 comptime TBP_CASES = 2

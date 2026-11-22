@@ -3,7 +3,7 @@
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.gp_native_storage import GPKernelStorage
-from checks.native_tests.gp_state import require
+from checks.native_tests.testsuite_cases import require
 
 comptime GP_GUARD = Float32(123456.75)
 comptime GP_GUARD64 = Float64(987654.125)

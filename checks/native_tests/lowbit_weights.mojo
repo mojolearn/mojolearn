@@ -8,7 +8,7 @@ fixture. BF16 expectations use quotient/remainder rounding; INT8 expectations
 use the independent Float64 ties-even oracle in int8_linalg_cases.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from checks.native_tests.lowbit_oracles import expected_narrow, expected_widen
@@ -32,12 +32,6 @@ from gemm.checks.gemm_lowbit_check import (
 )
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime LOWBIT_WEIGHT_FIXTURES = 3

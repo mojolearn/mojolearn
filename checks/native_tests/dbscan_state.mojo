@@ -7,7 +7,7 @@ handles never enter real device prepare/query/release; pure state has no
 destructor callback. Storage is flat native List ownership.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -15,11 +15,6 @@ from core.dbscan_native_api import DBSCANNativeDriver, DBSCANFitWorkspace, DBSCA
 from core.dbscan_native_state import DBSCANReferenceKey, DBSCANReferenceState
 
 comptime DBSCAN_STATE_FIXTURES = 28
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def state_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

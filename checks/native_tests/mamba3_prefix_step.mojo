@@ -31,11 +31,7 @@ from checks.native_tests.mamba3_output_coverage import (
     M3_COV_ZERO,
 )
 from std.testing import TestSuite
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The host column (was mamba3_prefix_step_cpu_suite.mojo) ----

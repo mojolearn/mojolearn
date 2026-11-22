@@ -45,11 +45,7 @@ from core.causal_lm_entry_table_sessions import (
     CAUSAL_DECODE_PINNED_RUN,
 )
 from transformer.causal_entry_device import publish_causal_transformer_device
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The device column (was transformer_decode_door_gpu_suite.mojo) ----

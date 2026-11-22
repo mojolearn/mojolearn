@@ -6,7 +6,7 @@ Shared PCA test helpers provide only buffer guards/comparison/ownership;
 no PCA kernel or fitted output supplies a TSVD reference.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -21,7 +21,7 @@ from core.tsvd_native_api import (
     TSVD_RANDOMIZED,
     TSVD_TSQR,
 )
-from checks.native_tests.pca_native_helpers import close_values, unchanged, guards, PCA_TEST_GUARD, require
+from checks.native_tests.pca_native_helpers import close_values, unchanged, guards, PCA_TEST_GUARD
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.tsvd_native_host import tsvd_host_native_v1
 from core.tsvd_native_decomp import tsvd_decomp_native_v1
@@ -35,7 +35,6 @@ from core.msel_device_x import msel_fold_store, msel_device_x_context
 from core.tsvd_native_api import TSVD_FOLD
 from core.tsvd_native_fold import tsvd_fold_native_v1
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime TSVD_FIT_FIXTURES = 10

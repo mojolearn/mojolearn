@@ -32,6 +32,7 @@ from core.forest_host_groves_run import (
     forest_prepare_host_native, forest_predict_resident_host_native, forest_release_host_native,
 )
 from xtrees.ops import tree_shape
+from checks.native_tests.testsuite_cases import require
 
 comptime INT32_MAX = 2147483647
 #: the RF criterion codes (python/mojolearn/randomforest.py, ensemble/host/rf_oracle.mojo RF_*)
@@ -41,11 +42,6 @@ comptime RF_SQUARED = 2
 comptime RF_POISSON = 4
 comptime RF_GAMMA = 5
 comptime RF_INVERSE_GAUSSIAN = 6
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 struct RfSpec(Copyable, Movable):

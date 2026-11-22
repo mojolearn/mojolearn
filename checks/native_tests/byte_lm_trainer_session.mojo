@@ -46,8 +46,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_glue_entry import publish_byte_lm_entries
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 

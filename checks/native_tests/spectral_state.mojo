@@ -6,7 +6,7 @@ Counters are real owned native storage retained beyond every release callback.
 This suite makes no GPU concurrency or public Python lifetime claim.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import ArcPointer
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
@@ -14,11 +14,6 @@ from core.spectral_native_api import SpectralDriver, SPECTRAL_RELEASE
 from core.spectral_native_state import SpectralResidentState
 
 comptime SPECTRAL_STATE_FIXTURES = 6
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def release_entry(operation: Int, aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

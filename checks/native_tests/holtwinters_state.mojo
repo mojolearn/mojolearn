@@ -9,7 +9,7 @@ additive/multiplicative modes cover inside, crossing, future-only, forecast
 and warmup spans. No identity hashes or fit-as-its-own-oracle comparison.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
@@ -23,12 +23,6 @@ from holtwinters.resident_state import (
 )
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime HW_STATE_OWNERS = 4

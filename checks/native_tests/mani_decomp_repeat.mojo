@@ -52,8 +52,8 @@ from bindings.mani_decomp_run import (
     MANI_METRIC_EUCLIDEAN, IsoPlan, IsoState, LlePlan,
     cmds_core, iso_fit_run, iso_transform_run, lle_fit_run, lle_transform_run,
 )
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.sys.compile import is_defined
 
 # The fitted owner, as bindings/manifold_storage_native_unpack.mojo

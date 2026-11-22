@@ -50,11 +50,7 @@ from gemm.fast_matrix_units import (
 # route) deleted 2026-11-20 by lane/fx-verdicts6 with its bound and RMS tolerance here; code recoverable at 06d1e8ff34.
 # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_BF16_UNITS.patch
 from gemm.checks.gemm_lowbit_check import _upload_f32, _download_f32, _poisoned
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 comptime MATRIX_UNITS_FIXTURES = 6

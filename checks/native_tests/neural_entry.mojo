@@ -20,7 +20,7 @@ native host worker pool; on a device column one after another.
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.entry_table import entry_ref_same
@@ -46,11 +46,6 @@ from bindings._mojolearn_embedding_host import publish_neural_embedding_host
 from bindings._mojolearn_embedding_infer_host import publish_neural_embedding_infer_host
 
 comptime NEURAL_ENTRY_CASES = 12
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _key() -> NeuralEntryKey:

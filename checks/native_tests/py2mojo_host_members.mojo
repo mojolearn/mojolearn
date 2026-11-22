@@ -39,6 +39,7 @@ from x_prep.blocked import IDN_STATS_BLOCKED, IDN_CLASS_ONEPASS
 from x_prep.select_blocked import IDN_SELECT_BLOCKED
 from x_prep.pt_blocked import IDN_PT_BLOCKED
 from x_prep.host.rr_eigh_host import IDN_RR_EIGH
+from checks.native_tests.testsuite_cases import require
 
 comptime PREP_SCALERS_DIR = "checks/native_tests/fixtures/prep_scalers/"
 comptime PREP_MEMBERS_DIR = "checks/native_tests/fixtures/prep_members/"
@@ -160,11 +161,6 @@ struct HostMember:
         for i in range(count):  # small-loop(fixture: copy of the scalar block)
             words[i] = source[i]
         return words^
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def all_close(actual: Float32, expected: Float64, rtol: Float64, atol: Float64, label: String) raises:

@@ -2,15 +2,10 @@
 # native-check: cpu
 """Temporary TSQR owners overlap without replacing a retained factorization."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.host_parallel import host_parallelize
 from x_decomp.cells import F32Ptr
 from x_decomp.tsqr_host import ts_factor_host, ts_apply_host, TS_HOST_STATE
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def values(rows: Int, cols: Int, seed: Int) -> List[Float32]:

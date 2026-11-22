@@ -5,13 +5,12 @@
 device descriptor on the device column), independent rows across the host workers."""
 from std.testing import TestSuite
 from std.sys.compile import is_defined
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD
 from checks.native_tests.nearest_centroid_descriptor_cases import fixture, empty_case
 from core.native_descriptor_abi import NativeDescriptorCall
 from x_neighbors.native_descriptor_host import xn_native_v1
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
 
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 def _entry() -> NativeDescriptorCall:

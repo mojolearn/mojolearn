@@ -6,16 +6,11 @@ This exercises public system codec libraries, including optional Zstandard;
 the orchestrator must provision/qualify those dependencies before running it.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require as _require
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_codec import archive_inflate, archive_codec_library
 from core.native_archive_write import archive_zlib
 from checks.native_tests.archive_codec_vectors import archive_codec_fixture
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _codec(unit: Int) raises:

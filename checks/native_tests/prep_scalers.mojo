@@ -25,13 +25,12 @@ files (public boundary). Every unit is independent and the case table runs acros
 """
 from std.memory import bitcast
 from core.member_abi import MEMBER_OP_INVERSE_TRANSFORM
-from checks.native_tests.tsa_metrics_fixture_words import fixture_f32
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from checks.native_tests.py2mojo_host_members import (
     HostMember, MEMBER_SCALER, PREP_SCALERS_DIR, all_close, rows_close, same_bits, require, take, take32,
 )
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32
 
 
 def minmax_params(lower: Float64, upper: Float64, clip: Bool) -> List[Float64]:

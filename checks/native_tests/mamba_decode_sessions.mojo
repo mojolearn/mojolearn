@@ -45,12 +45,7 @@ from checks.native_tests.mamba3_output_coverage import (
     m3_cov_weights, m3_cov_shape, m3_cov_x, m3_cov_token, m3_cov_zero_state,
 )
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 comptime MAMBA_DECODE_SESSION_KINDS = 3

@@ -2,18 +2,13 @@
 # native-check: cpu
 """Native preference promotion, rounding, shape/refusal and storage contracts."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.sequential_input_plan import SequenceInputPlan
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.affinity_preference_plan import AffinityPreferencePlan
 
 comptime AFFINITY_PREFERENCE_PLAN_FIXTURES = 11
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def fixture(unit: Int) raises:

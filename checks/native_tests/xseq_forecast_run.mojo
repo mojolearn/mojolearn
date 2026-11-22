@@ -9,7 +9,7 @@ need a published sequence table and are not called here.
 The cases are independent units and run across the native host worker pool.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from sequence.xseq_forecast_run import (
     forecast_run_letter, forecast_run_index, forecast_run_copy_f32_words, forecast_run_theta_check_n,
     forecast_run_theta_mask, forecast_run_theta_codes, forecast_run_croston_check_n, forecast_run_croston_check_h,
@@ -20,11 +20,6 @@ from sequence.xseq_forecast_run import (
 )
 
 comptime XSEQ_FORECAST_RUN_CASES = 13
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _refuses(problem: Error, text: String) raises:

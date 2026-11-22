@@ -14,11 +14,7 @@ from std.testing import TestSuite
 from core.sha256 import Sha256
 from core.fitted_digest import fitted_digest_hex, fitted_digest_text, FITTED_DIGEST_FORMAT, FITTED_DIGEST_CHUNK
 from core.native_archive_write import NativeArchiveMember, archive_owned, archive_uint, archive_prepare
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require as _require
 
 
 def _f4(name: String, var shape: List[Int], words: List[UInt32]) -> NativeArchiveMember:

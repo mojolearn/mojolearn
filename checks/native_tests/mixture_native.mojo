@@ -28,8 +28,8 @@ from core.mixture_native_api import (
 from core.bgmm_native_api import BgmmDriver, BgmmFitRequest, BgmmResultSlot, BGMM_NATIVE_FIT
 from mixture.host.gmm_native_host import gmm_native_host_v1
 from x_cluster.bgmm_native_host import bgmm_native_host_v1
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 # ---- The host column (was mixture_native_cpu_suite.mojo) ----

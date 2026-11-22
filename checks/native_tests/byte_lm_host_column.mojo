@@ -34,8 +34,8 @@ from std.memory import bitcast
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_dispatch import byte_host_operation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from std.testing import TestSuite, assert_true as require
-from checks.native_tests.testsuite_cases import check_cases
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
 
 
 comptime BYTE_LM_HOST_COLUMN_CASES = 9

@@ -7,7 +7,7 @@ values, the refusal wording, and the precomputed brute-arm override.
 Independent fixtures run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.math import inf
 from cluster.dbscan_door_run import (
     DBSCAN_METRIC_PRECOMPUTED, DBSCAN_EPS_NN_BRUTE_FORCE, dbscan_check_method, dbscan_check_prediction,
@@ -16,11 +16,6 @@ from cluster.dbscan_door_run import (
 )
 
 comptime DBSCAN_DOOR_RUN_FIXTURES = 14
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def refused(message: String, prefix: String) -> Bool:

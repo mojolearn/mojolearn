@@ -35,15 +35,11 @@ from core.fitted_resident_store import (
     fitted_resident_stats,
 )
 from core.shared_slot import SharedSlot
+from checks.native_tests.testsuite_cases import require as _require
 
 
 # ---- The device column (was query_x_held_gpu_suite.mojo) ----
 comptime _TEST_STORE = SharedSlot[FittedResidentStore, "MojolearnQueryXHeldTestStoreV1"]
-
-
-def _require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _words(n: Int, seed: Int) -> List[Float32]:

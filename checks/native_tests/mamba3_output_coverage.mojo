@@ -30,12 +30,7 @@ from mamba.host.mamba_host_shell_impl import _mamba3_run
 from autograd.block_step_ops import OPS_M3_STEP
 from mamba.impl.mamba_block_program import mamba_block_call, MambaBlockProgram
 from std.testing import TestSuite
-from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require, CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime M3_COV_CASE = 1

@@ -16,14 +16,10 @@ from std.testing import TestSuite
 from core.host_parallel import host_parallelize
 from core.pca_native_api import PCANativeDriver, PCAFoldStore, PCAFitRequest
 from core.pca_native_host import pca_host_native_v1
+from checks.native_tests.testsuite_cases import require
 
 comptime PCA_CONCURRENT_FITS = 100
 comptime _SHAPES = 3
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _matrix(rows: Int, cols: Int, salt: Int) -> List[Float32]:

@@ -15,7 +15,7 @@ the installed-wheel tests.
 A family joins by one row in `_published` and `_published_masks` when its
 publication merges (MEMBER-ABI-V2.md)."""
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.device_route import DeviceRoute
 from core.entry_table import EntryRef
 from core.decomposition_member import decomposition_member_v2
@@ -86,11 +86,6 @@ comptime _SWEEP_A = 12
 #: (`member_own`).
 comptime _BORROW = 2
 comptime MEMBER_ABI_FIXTURES = _LINEAR_FIXTURES + _PUBLISHED + _SWEEP_B + _SWEEP_A + _BORROW
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _member() -> MemberRef:

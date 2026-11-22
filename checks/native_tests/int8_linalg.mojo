@@ -8,7 +8,7 @@ RNG. Float64 quotient/remainder rounding and Int64 dots form the oracle;
 no product rounding, GEMM or quantization helper computes expectations.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, i8_ptr, i32_ptr
@@ -19,12 +19,6 @@ from gemm.checks.gemm_lowbit_check import _upload_f32, _download_f32, _download_
 from checks.native_tests.lowbit_oracles import _power2, make_values, expected_quantized, check_quantized, check_dequantized
 from std.sys.compile import is_defined
 
-
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime INT8_LINALG_FIXTURES = 5

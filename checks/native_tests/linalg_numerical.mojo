@@ -19,17 +19,11 @@ from decomposition.linalg_door_impl import qr_r_device_into, svdvals_device_into
 from x_decomp.device import DevExec
 from std.sys.compile import is_defined
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
 from checks.native_tests.linalg_fixture_inputs import input_values
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
-comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 comptime LINALG_NUMERICAL_FIXTURES = 5

@@ -8,11 +8,7 @@ No `main()` and no `test_*`: a helper module, not a check (docs/plans/TESTSUITE_
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.pca_native_api import PCAFoldStore, PCAFitRequest, PCAQueryRequest
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
+from checks.native_tests.testsuite_cases import require
 
 
 comptime PCA_TEST_GUARD = Float32(27182.5)

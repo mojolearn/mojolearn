@@ -12,7 +12,7 @@ host's cores. The kernels behind the requests are covered by the plan suites
 and by the installed-wheel tests.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from core.neighbors_entry_table import (
     NB_OP_RADIUS_COUNT, NB_OP_RADIUS_FILL, NB_OPERATION_COUNT, nb_ops_check_spans,
     NB_OP_SEARCH, NB_OP_SEARCH_RESIDENT, NB_OP_RBC_SEARCH, NB_OP_CLASSIFY_NEIGHBORS, NB_OP_REGRESS_NEIGHBORS,
@@ -35,11 +35,6 @@ from bindings.parallel_neighbor_worker_run import (
 )
 
 comptime NEIGHBORS_SPLIT_RUN_FIXTURES = 9
-
-
-def require(ok: Bool, message: String) raises:
-    if not ok:
-        raise Error(message)
 
 
 def _near(a: Float64, b: Float64) -> Bool:
