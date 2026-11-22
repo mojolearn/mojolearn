@@ -7,10 +7,12 @@ every array the original test built (same seed, draw order and dtype), every ref
 
     checks/native_tests/fixtures/linalg_numpy/  linalg_numerical.mojo `test_numpy_contract`
                                                 (python/mojolearn/tests/test_linalg_decompositions.py)
-    checks/native_tests/fixtures/pca_random/    pca_native.mojo `test_randomized_options`
+    checks/native_tests/fixtures/pca_random/    pca_native.mojo `test_pca_randomized_options`
                                                 (python/mojolearn/tests/test_pca_exact_native_owner.py)
+    checks/native_tests/fixtures/xn_louvain/    x_neighbors_graph_check.mojo `test_louvain`
+                                                (python/mojolearn/tests/test_x_neighbors_sanity.py)
 
-Generated with numpy 2.5.5 (2026-11-22). Regenerate and repack:
+Generated with numpy 2.5.5 and networkx 3.7 (2026-11-22). Regenerate and repack:
 
     python tools/py2mojo_native_fixtures_b6.py && python3 tools/fixture_packs.py pack checks/native_tests/fixtures
 
@@ -109,7 +111,22 @@ def pca_random():
     return out
 
 
-SETS = (linalg_inputs, linalg_eigh, linalg_qr, linalg_svd, pca_random)
+def louvain():
+    # test_x_neighbors_sanity.py::test_louvain: `_graph(80)` and networkx's best modularity over seeds 0..4
+    import networkx as nx
+    rng = np.random.default_rng(0)
+    n = 80
+    A = (rng.random((n, n)) < 0.08).astype(np.float32) * rng.integers(1, 4, (n, n)).astype(np.float32)
+    np.fill_diagonal(A, 0)
+    A = np.triu(A)
+    A = A + A.T
+    G = nx.from_numpy_array(A)
+    q_ref = max(nx.community.modularity(G, nx.community.louvain_communities(G, seed=s)) for s in range(5))
+    return [_put("xn_louvain", "adjacency-80.f32", A, np.float32),
+            _put("xn_louvain", "q-ref.f64", [q_ref], np.float64)]
+
+
+SETS = (linalg_inputs, linalg_eigh, linalg_qr, linalg_svd, pca_random, louvain)
 
 
 def _run(index):
