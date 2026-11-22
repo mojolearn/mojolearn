@@ -341,7 +341,7 @@ comptime RFExportTrees = List[TreeMetaDataNode[DT]]
 
 
 # V2 (lane fx-gil, 2026-11-25): the registry gained its lock word.
-comptime RF_EXPORTS = SharedSlot[ForestExportRegistry[RFExportTrees], ("MojolearnRFFitExportIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFFitExportFastV3"), 2]
+comptime RF_EXPORTS = SharedSlot[ForestExportRegistry[RFExportTrees], ("MojolearnRFFitExportIdenticalV4" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnRFFitExportFastV4"), 3]
 
 
 def _retain_rf_handle(var trees: RFExportTrees, notices: Int) raises -> Int:

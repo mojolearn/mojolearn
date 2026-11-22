@@ -854,12 +854,10 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     # kept so, the four images run their fits and walks bare under the bit,
     # and the member store, the export, resident, grove and strict
     # registries and the workspace pool each have their own lock word.
-    # WITHDRAWN 2026-11-22 (lane sr-other finding): with the bit, meta fits of two or more
-    # DecisionTree members crashed at random on parallel member-set lanes (SIGSEGV / SIGILL, a
-    # corrupted Dict in ForestExportRegistry.put_back while another lane is in _hold; 6 of 6
-    # loops of 100 fits; 0 of 12 on 5c252f1573; n_jobs=1 never). The race is not found yet
-    # (~/mojolearn-evidence/briefs-20261121/sr-other-work/meta-crash/). The six kinds run serial
-    # under the GIL, as at 5c252f1573, until the race is found and the bit is earned again.
+    # Withdrawn at 45e90deaa7 and restored by lane pv-race (2026-11-22): the
+    # random crash of parallel meta fits was the export registry's
+    # pre-lock snapshot read (core/forest_export_run.mojo, THE TABLE IS
+    # BEHIND A POINTER), now fixed.
     var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_GIL_FREE
     if notices:
         mask |= MEMBER_CAN_NOTICES
