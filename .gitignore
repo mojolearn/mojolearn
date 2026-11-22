@@ -197,6 +197,9 @@ box-out/
 !/bench/results/ARCHIVE_INDEX.md
 !/bench/results/r2-index.tsv
 !/bench/results/CELLS_INDEX.tsv
+# verification/ (verification/README.md): records and reference data are tracked; a new log is not
+# (tools/hooks/check_tree_additions.sh refuses one; a record moved in with git mv keeps its tracked log)
+/verification/**/*.log
 # handoffs live in ~/mojolearn-evidence/ (docs/handoffs/README.md says so)
 !/docs/handoffs/
 /docs/handoffs/*

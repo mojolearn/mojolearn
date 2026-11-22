@@ -123,7 +123,7 @@ def repository_record_paths(records, repo_root):
 
 
 # --------------------------------------------------------------------------
-# the record indexes (what the readers of bench/results read, by name)
+# the record indexes (what the readers of the record trees read, by name)
 # --------------------------------------------------------------------------
 
 #: The verify table's inputs (and the identity_break part of the matrix's).
@@ -131,6 +131,9 @@ RECORD_INDEX = "bench/results/identity_break/INDEX.tsv"
 #: The column-shaped JSONs OUTSIDE identity_break that tools/verification_matrix.py
 #: and tools/part_set_census.py read (they never feed the verify table).
 CELLS_INDEX = "bench/results/CELLS_INDEX.tsv"
+#: The trees whose column-shaped JSONs an index lists (2026-11-25, lane verify-home: the
+#: verification records move from bench/results to verification/records; verification/README.md).
+RECORD_ROOTS = ("verification/records/", "bench/results/")
 INDEX_FIELDS = ("path", "sha256", "class", "vendor", "commit")
 
 
@@ -149,7 +152,7 @@ def index_for(rel):
     base = os.path.dirname(RECORD_INDEX) + "/"
     if rel.startswith(base):
         return RECORD_INDEX
-    if rel.startswith("bench/results/"):
+    if rel.startswith(RECORD_ROOTS):
         return CELLS_INDEX
     return None
 
@@ -159,7 +162,7 @@ def read_index(repo_root, index=RECORD_INDEX, verify=True):
     every listed file must exist with its listed sha256, or this refuses."""
     index_path = os.path.join(repo_root, index)
     if not os.path.isfile(index_path):
-        raise RecordIndexError(f"no record index {index}: the readers of bench/results read only "
+        raise RecordIndexError(f"no record index {index}: the readers of the record trees read only "
                           "the files an index lists (python3 tools/record_index.py)")
     rows, problems = [], []
     with open(index_path, "r", encoding="utf-8") as fh:
@@ -290,7 +293,7 @@ INDEX_NOTES = {
 def add_to_index(repo_root, paths, create=False):
     """Append the rows for newly recorded files (the recording tools call this).
     Idempotent for a listed file with the same bytes; refuses a listed path
-    whose bytes differ, and a path outside bench/results. A missing index is
+    whose bytes differ, and a path outside the RECORD_ROOTS. A missing index is
     refused (it would silently become a table with only the new rows) unless
     `create`: the caller proved the tree holds no other record. Returns the
     rows added."""
@@ -303,7 +306,7 @@ def add_to_index(repo_root, paths, create=False):
             continue
         index = index_for(row["path"])
         if index is None:
-            raise RecordIndexError(f"{row['path']} is not under bench/results; no index lists it")
+            raise RecordIndexError(f"{row['path']} is not under {' or '.join(RECORD_ROOTS)}; no index lists it")
         by_index.setdefault(index, []).append(row)
     for index, new in by_index.items():
         missing = not os.path.isfile(os.path.join(repo_root, index))

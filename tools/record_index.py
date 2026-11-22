@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The record indexes: which files under bench/results the readers read.
+"""The record indexes: which files under the record trees (verification/records, bench/results) the readers read.
 
 Andrew, 2026-11-25: "what is reading all of this stuff and why? maybe the
 reader needs to be fixed." Three readers used to take whatever was on disk:
@@ -60,8 +60,11 @@ def walked_records(root):
 
 
 def globbed_columns(root):
-    """What the matrix and the census globbed before the index."""
-    return sorted(glob.glob(os.path.join(root, "bench/results/**/*.json"), recursive=True))
+    """What the matrix and the census globbed before the index, over every record tree
+    (bench/results and, since lane verify-home, verification/records)."""
+    v = vref(root)
+    return sorted(p for base in v.RECORD_ROOTS
+                  for p in glob.glob(os.path.join(root, base + "**/*.json"), recursive=True))
 
 
 def rows_of(v, root, paths):
@@ -110,7 +113,7 @@ def generate(v, root, force):
 
 
 def unlisted_columns(v, root, listed, inputs, under=""):
-    """Column-shaped files under bench/results (or `under`) no index lists, except a byte copy,
+    """Column-shaped files under the record trees (or `under`) no index lists, except a byte copy,
     outside identity_break, of an indexed identity_break record (not indexed, see generate)."""
     ib = os.path.dirname(v.RECORD_INDEX) + "/"
     out = []

@@ -1048,7 +1048,7 @@ def render(data):
         w("note that it had no lane ON PURPOSE, because `tools/forest_host_gate.py`")
         w("and `tools/classical_host_gate.py` measure it against committed")
         w(f"recordings instead: {data['forest_recordings']} under")
-        w(f"`bench/results/forest_host/` and {data['classical_recordings']} classical")
+        w(f"`verification/records/forest_host/` and {data['classical_recordings']} classical")
         w("recording directories named in `host_surface.py`. Those gates are real")
         w("and they pass. What they did not reach (lane/laneless-public-classes,")
         w("2026-09-19) is `host_predict` and `host_predict_proba`, which no gate")

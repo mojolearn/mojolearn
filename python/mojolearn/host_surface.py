@@ -435,7 +435,7 @@ def saved_model_recorded():
 
 #: The forest inference recordings: every directory under this root whose
 #: expected.json says RECORDED (the workflows sort them at run time).
-FOREST_RECORDED_ROOT = "bench/results/forest_host"
+FOREST_RECORDED_ROOT = "verification/records/forest_host"
 
 #: The identity_break lanes with a CPU TRAINING path, in the gate's order,
 #: with the name the docs use for each.

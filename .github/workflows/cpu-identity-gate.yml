@@ -451,7 +451,8 @@ jobs:
           sparse-checkout: |
             /*
             !/bench/results/*
-            /bench/results/forest_host/
+            !/verification/records/*
+            /verification/records/forest_host/
             /bench/results/classical_host/
             /bench/results/identity_break/
             !/bench/results/identity_break/*
@@ -508,7 +509,7 @@ jobs:
           echo "GATE_SHARDS=$shards" >> "$GITHUB_ENV"
           echo "identity_break shards on this runner: $shards"
           python3 -m pip install --quiet numpy
-          ls bench/results/forest_host/ bench/results/identity_break/2026-09-13_three-columns/
+          ls verification/records/forest_host/ bench/results/identity_break/2026-09-13_three-columns/
 
       # ONE STEP reads every list from the manifest. It runs the file by path
       # because the package cannot import yet (no binding is built on this
@@ -675,7 +676,7 @@ jobs:
       - name: Sort forest fixtures into recorded and owed
         run: |
           recorded=""; owed=""
-          for d in bench/results/forest_host/*/; do
+          for d in verification/records/forest_host/*/; do
             d="${d%/}"
             [ -f "$d/fixture.json" ] || continue
             status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status",""))' "$d/expected.json" 2>/dev/null || echo MISSING)"

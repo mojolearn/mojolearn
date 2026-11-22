@@ -30,7 +30,7 @@ compare against recordings committed in the tree.
 | workflow | what a green run proves |
 |---|---|
 | `byte-lm-cpu-gate.yml` | the byte language model's CPU forward pass and one CPU training step reproduce the bytes recorded on the three GPUs for all 128 recorded steps, on that runner's CPU |
-| `forest-host-gate.yml` | a CPU-only binding reproduces every prediction digest of the random forest, Extra Trees and gradient boosting models trained on the three GPUs (`bench/results/forest_host/`) |
+| `forest-host-gate.yml` | a CPU-only binding reproduces every prediction digest of the random forest, Extra Trees and gradient boosting models trained on the three GPUs (`verification/records/forest_host/`) |
 | `cpu-identity-gate.yml` | the CPU training lanes (`COVERED_LANES` in the workflow) fit on the runner's CPU with every cell equal to the three committed GPU columns, and the classical CPU inference lanes reproduce the three-vendor recordings |
 
 Each workflow also builds a sabotage arm, a binding with one arithmetic step

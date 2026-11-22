@@ -80,6 +80,7 @@ jobs:
           sparse-checkout: |
             /*
             !/bench/results/*
+            !/verification/records/*
             /bench/results/resume/
             !/bench/results/resume/*
             /bench/results/resume/2026-09-07-root-byte-lm-three-vendor/

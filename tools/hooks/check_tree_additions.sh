@@ -34,6 +34,9 @@
 #   bench/results/ARCHIVE_INDEX.md          record of removed evidence
 #   bench/results/r2-index.tsv              [tools/box_evidence_r2.sh]
 #   bench/results/CELLS_INDEX.tsv           record index the matrix and census read [tools/record_index.py]
+# verification/ (lane verify-home, 2026-11-25; verification/README.md) holds the verification records and
+# reference data: any file may be added there except a NEW *.log (.gitignore says the same). A record moved
+# in with `git mv` (an exact rename, its log included) is not an addition.
 set -u
 local_sha=${1:?local sha}
 remote_sha=${2:-0000000000000000000000000000000000000000}
@@ -42,7 +45,7 @@ zero=0000000000000000000000000000000000000000
 
 allowed() {
     case "$1" in
-        bench/results/*.log|bench/results/*/*.log) return 1 ;;
+        bench/results/*.log|bench/results/*/*.log|verification/*.log) return 1 ;;
     esac
     case "$1" in
         bench/results/bench_board/*|bench/results/board-archive/*|bench/results/opponent-archive/*) return 0 ;;
@@ -73,9 +76,13 @@ buckets=(experiments/six_lane_integration/measurements)
 # paths added by the new commits, restricted to the guarded trees
 added=$(git log --format= --name-only --diff-filter=A --no-renames "$local_sha" "${exclude[@]}" \
             -- bench/results docs/handoffs "${buckets[@]}" 2>/dev/null | sort -u) || exit 2
+# verification/: additions only; rename detection over the trees records move from, so a `git mv` is not one
+moved_in=$(git log --format= --name-only --diff-filter=A -M "$local_sha" "${exclude[@]}" \
+            -- verification bench/results mamba/corpus 2>/dev/null | grep '^verification/' | sort -u) || true
+added=$(printf '%s\n%s\n' "$added" "$moved_in" | sed '/^$/d' | sort -u)
 [ -n "$added" ] || exit 0
 # only paths the pushed tree still holds (added then removed inside the push is fine)
-present=$(git ls-tree -r --name-only "$local_sha" -- bench/results docs/handoffs "${buckets[@]}" | sort -u)
+present=$(git ls-tree -r --name-only "$local_sha" -- bench/results docs/handoffs verification "${buckets[@]}" | sort -u)
 offending=$(comm -12 <(printf '%s\n' "$added") <(printf '%s\n' "$present") | while IFS= read -r p; do
     [ -n "$p" ] && ! allowed "$p" && printf '%s\n' "$p"
 done)

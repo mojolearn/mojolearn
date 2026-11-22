@@ -83,6 +83,7 @@ jobs:
           sparse-checkout: |
             /*
             !/bench/results/*
+            !/verification/records/*
 
       # NOT setup-pixi: on the self-hosted Mac pixi is already installed and
       # the action would fetch its own (release-provenance.yml:171).

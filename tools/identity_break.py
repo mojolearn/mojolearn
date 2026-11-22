@@ -3905,7 +3905,7 @@ def _(ml, X, yc, yr, Xh=None):
     WHAT WAS ALREADY TRUE, AND WHAT WAS NOT. `tools/forest_host_gate.py`
     compares `host_model(<file>).predict` and `.predict_proba` against a
     SHA-256 a GPU box recorded, over 24 committed fixtures (three vendors x
-    eight kinds under `bench/results/forest_host/`); that gate is real and it
+    eight kinds under `verification/records/forest_host/`); that gate is real and it
     passes -- re-run on the M4 at this commit, 8 Apple fixtures IDENTICAL.
     The 2026-09-18 coverage audit is right that HostForest and HostGBDT
     are not two unimplemented algorithms. TWO THINGS IT DOES NOT COVER.
