@@ -1,3 +1,0 @@
-prod	0
-sab	1
-diff	1
