@@ -20,6 +20,22 @@ prediction) is NumPy PCG64 output, stored as raw words in
 
 The refusals, the normalize=False counts and the source checks stay in the
 Python file. Importable; no `main()`.
+
+`test_weighted_count_and_errors` (lane py2mojo-D, batch 5, 2026-11-22):
+
+    units 0-1  test_weighted_score.py `test_normalize_false_sums_correct_sample_weights`: the
+               accuracy_count program the door builds for normalize=False with weights
+               (bindings/mcls_classify_door.mojo `_accuracy` / `mc_sums`, then `mc_count_tail` of
+               bindings/mcls_classify_run.mojo): y_true [0, 1, 1], weights [0.5, 2.0, 4.0] (dyadic),
+               y_pred [0, 1, 0] counts exactly 2.5 and y_pred = y_true exactly 6.5
+    units 2-10 test_regression_metrics.py `test_supported_options_reach_expansion`: the `_mean_error`
+               program (bindings/metrics_reg_door.mojo, typed `_Reg` of bindings/metrics_reg_run.mojo)
+               of mean_squared_error, mean_absolute_error and root_mean_squared_error x
+               {sample_weight ones, multioutput raw_values, multioutput None} over y [1, 2],
+               p [1.5, 1]: the weighted binary64 definition to rel 1e-6, raw_values one value
+
+Both compositions repeat the door's stage order line for line and run on the column's metrics program
+entry. The not-called plain binding and the returned shape stay in the Python files.
 """
 from std.memory import bitcast
 from checks.native_tests.tsa_metrics_fixture_words import METRICS_FIXTURE_DIR, fixture_f32, fixture_i32
@@ -30,6 +46,16 @@ from metrics.r2_entry_device import _r2_weighted_value as _r2_weighted_value_gpu
 from std.testing import TestSuite, assert_true as require
 from checks.native_tests.testsuite_cases import check_cases
 from std.sys.compile import is_defined
+from std.math import sqrt
+from bindings.arena_prog_run import MetricArenaOwner, MetricProgramInput, metrics_plan_execute
+from bindings.mcls_classify_run import McSums, mc_count_tail
+from bindings.mcls_common_run import MC_NONE
+from bindings.metrics_reg_run import _Reg, reg_raw_values
+from core.metrics_program_plan import MetricProgramPlan, metric_term
+from core.native_descriptor_abi import NativeDescriptorCall
+from x_metrics.descriptor_host import metrics_program_host_v1
+from x_metrics.descriptor_device import metrics_program_device_v1
+from checks.native_tests.testsuite_serial import check_cases_serial
 
 
 comptime WEIGHTED_N = 4099
@@ -157,6 +183,151 @@ def test_cases() raises:
         _cpu_cases()
     else:
         _gpu_cases()
+
+
+# ---- test_weighted_count_and_errors ----
+
+comptime OPTION_UNITS = 11
+comptime _RE_DIV = 1  # bindings/metrics_reg_run.mojo
+comptime _RE_ROOT = 2
+comptime _NONE = -1
+
+
+def run_with_pins(entry: NativeDescriptorCall, plan: MetricProgramPlan, pins: List[Int], sizes: List[Int]) raises -> MetricArenaOwner:
+    """The program's records: the constant words, and the caller buffers `pins` (addresses) in input order."""
+    var records = List[MetricProgramInput]()
+    var pin = 0
+    for r in range(len(plan.input_offsets)):  # driver-loop: over the program's input records
+        if plan.input_consts[r] >= 0:
+            records.append(MetricProgramInput(plan.input_offsets[r], plan.const_address(r),
+                                              len(plan.consts[plan.input_consts[r]])))
+        else:
+            require(pin < len(pins), "program: more caller inputs than the " + String(len(pins)) + " given")
+            records.append(MetricProgramInput(plan.input_offsets[r], pins[pin], sizes[pin]))
+            pin += 1
+    require(pin == len(pins), "program: " + String(pin) + " caller inputs, " + String(len(pins)) + " given")
+    var arena = metrics_plan_execute(entry, plan, records, False, False)
+    _ = records^
+    return arena^
+
+
+def weighted_count(entry: NativeDescriptorCall, yt: List[Int32], yp: List[Int32], w: List[Float32],
+                   labels: Int) raises -> Float64:
+    """accuracy_score(normalize=False, sample_weight=w): `mc_sums` (weighted) then `mc_count_tail`."""
+    var n = len(yt)
+    var plan = MetricProgramPlan()
+    var s = McSums()
+    s.n = n
+    s.labels = labels
+    s.weighted = True
+    # bindings/mcls_classify_door.mojo `mc_sums`, in its order
+    var a = plan.input(n)
+    var b = plan.input(n)
+    var match_off = plan.scratch(n)
+    plan.stage_op("pair_key", n, [a, b, match_off, labels, 1])
+    var w_off = plan.input(n)
+    s.match_off = match_off
+    s.w_off = w_off
+    var keys: List[Int] = [match_off, a, b]
+    for g in range(3):  # driver-loop: over the three count groupings
+        var got = plan.group(keys[g], n, labels, MC_NONE, 1, w_off, 1)
+        s.groups.append(got[0])
+        s.groups.append(got[1])
+    var zero = plan.scratch(n)
+    plan.stage_op("pair_key", n, [a, a, zero, 1, 2])
+    var tot = plan.group(zero, n, 1, MC_NONE, 1, w_off, 1)
+    s.groups.append(tot[0])
+    s.groups.append(tot[1])
+    var out = mc_count_tail(plan, s, labels)
+    var pins: List[Int] = [Int(yt.unsafe_ptr()), Int(yp.unsafe_ptr()), Int(w.unsafe_ptr())]
+    var sizes: List[Int] = [n, n, n]
+    var arena = run_with_pins(entry, plan, pins, sizes)
+    require(arena.i32(out) == 0, "weighted count: the weight total flag is set")
+    var value = arena.f64(out + 2)
+    _ = arena^
+    return value
+
+
+def mean_error(entry: NativeDescriptorCall, kind: String, root: Bool, weighted: Bool, mo: String,
+               y: List[Float32], p: List[Float32], w: List[Float32]) raises -> Float64:
+    """`_mean_error` over (n, 1) targets: one value (raw_values: its one output)."""
+    var n = len(y)
+    var r = _Reg(n, 1, weighted, mo, List[Float64]())
+    r.program(0.0)
+    var mode = _RE_DIV | (_RE_ROOT if root else 0)
+    var y_off = r.y_off
+    var p_off = r.p_off
+    var mean = r.stage_mean(metric_term(kind), mode, y_off, p_off, False)
+    var out = r.average(mean, False, _NONE)
+    var pins: List[Int] = [Int(y.unsafe_ptr()), Int(p.unsafe_ptr())]
+    var sizes: List[Int] = [n, n]
+    if weighted:
+        pins.append(Int(w.unsafe_ptr()))
+        sizes.append(n)
+    var arena = run_with_pins(entry, r.plan, pins, sizes)
+    var value: Float64
+    if mo == "raw_values":
+        var raw = reg_raw_values(r, out, arena)
+        require(len(raw) == 1, "raw_values: " + String(len(raw)) + " outputs, expected 1")
+        value = raw[0]
+    else:
+        value = arena.f64(out)
+    _ = arena^
+    return value
+
+
+def option_unit(entry: NativeDescriptorCall, unit: Int) raises:
+    if unit < 2:
+        var yt: List[Int32] = [0, 1, 1]
+        var yp: List[Int32] = [0, 1, 0]
+        if unit == 1:
+            yp = yt.copy()
+        var w: List[Float32] = [0.5, 2.0, 4.0]
+        var got = weighted_count(entry, yt, yp, w, 2)
+        var want = 2.5 if unit == 0 else 6.5
+        require(got == want, "accuracy_score(normalize=False, sample_weight) " + String(got) + " != " + String(want))
+        return
+    var name = (unit - 2) // 3
+    var option = (unit - 2) % 3
+    var y: List[Float32] = [1.0, 2.0]
+    var p: List[Float32] = [1.5, 1.0]
+    var w: List[Float32] = [1.0, 1.0]
+    var sw = Float64(0)
+    var sq = Float64(0)
+    var ab = Float64(0)
+    for i in range(2):  # small-loop(the two-row binary64 definition)
+        var e = Float64(p[i] - y[i])
+        sw += Float64(w[i])
+        sq += Float64(w[i]) * e * e
+        ab += Float64(w[i]) * abs(e)
+    var want = sq / sw
+    var kind = String("sq")
+    var label = String("mean_squared_error")
+    if name == 1:
+        want = ab / sw
+        kind = "abs"
+        label = "mean_absolute_error"
+    elif name == 2:
+        want = sqrt(sq / sw)
+        label = "root_mean_squared_error"
+    var mo = String("raw_values") if option == 1 else String("uniform_average")
+    var got = mean_error(entry, kind, name == 2, option == 0, mo, y, p, w)
+    require(abs(got - want) <= max(1e-6 * abs(want), 1e-12),
+            label + " option " + String(option) + ": " + String(got) + " expected " + String(want))
+
+
+def _host_option_unit(unit: Int) raises:
+    option_unit(metrics_program_host_v1, unit)
+
+
+def test_weighted_count_and_errors() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        check_cases("weighted_count_and_errors", OPTION_UNITS, _host_option_unit)
+    else:
+        # ordered programs on the one shared device context
+        def ordered(unit: Int) raises:
+            option_unit(metrics_program_device_v1, unit)
+        check_cases_serial("weighted_count_and_errors", OPTION_UNITS, ordered)
 
 
 def main() raises:
