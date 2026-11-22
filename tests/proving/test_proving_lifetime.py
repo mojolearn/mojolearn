@@ -5,12 +5,11 @@ A fitted state kept by model selection or an ensemble must own what it reads: af
 buffers made from it) are gone and the memory is reused, the kept estimators predict exactly as before, and as an
 estimator fitted by hand on the same rows.
 """
-import gc
 
 import numpy as np
 import pytest
 
-from _proving import DEVICES, assert_same, binary, churn, cls, data, make
+from _proving import DEVICES, NOT_BAGGING_MEMBERS, assert_same, binary, churn, cls, data, make, member
 
 X, Y, C = data()
 X_NEW = data(rows=40, seed=7)[0]
@@ -47,11 +46,13 @@ def test_cross_validate_kept_estimators_outlive_the_fold_buffers(device, name, t
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_bagging_over_knn_predicts_the_same_after_the_input_is_freed(device):
-    # fx-borrow: BaggingClassifier(KNeighborsClassifier()) holds member states that reference no freed fold.
+def test_bagging_predicts_the_same_after_the_input_is_freed(device):
+    # fx-borrow: a fitted BaggingClassifier holds member states that reference no freed fold. Its members are tree
+    # estimators (k-NN is refused by name: test_bagging_refuses_a_member_that_is_not_a_tree_in_words).
     def fit():
         source = X.copy()
-        model = cls("BaggingClassifier")(make("KNeighborsClassifier", device), n_estimators=4, random_state=0)
+        model = make("BaggingClassifier", device, estimator=member("DecisionTreeClassifier", random_state=0),
+                     n_estimators=4, random_state=0)
         model.fit(source, C.copy())
         return model, source
 
@@ -67,7 +68,9 @@ def test_bagging_over_knn_predicts_the_same_after_the_input_is_freed(device):
 def test_gaussian_process_search_refit_predicts_after_del_x(device):
     # fx-borrow: a GP search refit, then predict after the training X is deleted.
     source = X.copy()
-    search = cls("GridSearchCV")(make("GaussianProcessRegressor", device), {"alpha": [1e-2, 1e-1]}, cv=3)
+    # identical mode pins the ridge: alpha is 0 or 2**-20 (the profile's jitter); any other alpha is refused at fit
+    # ("NUMERIC_IDENTICAL refuses the unpinned alpha", python/mojolearn/_gp_impl.py's fit, DEVIATION 1751).
+    search = cls("GridSearchCV")(make("GaussianProcessRegressor", device), {"alpha": [0.0, 2.0 ** -20]}, cv=3)
     search.fit(source, Y.copy())
     first = search.predict(X_NEW)
     del source
@@ -106,11 +109,13 @@ def test_search_refit_of_a_forest_classifier_has_classes(device):
 
 
 @pytest.mark.parametrize("device", DEVICES)
-def test_bagging_gaussian_nb_member_route_is_repeatable(device):
-    # fx-audit session 2: bagging GaussianNB (int32 draws) on the member route.
-    def fit():
-        return cls("BaggingClassifier")(make("GaussianNB", device), n_estimators=5, random_state=0).fit(X, binary(C))
-
-    first = fit()
-    gc.collect()
-    assert_same(fit().predict_proba(X_NEW), first.predict_proba(X_NEW), "bagging GaussianNB")
+@pytest.mark.parametrize("name", NOT_BAGGING_MEMBERS)
+def test_bagging_refuses_a_member_that_is_not_a_tree_in_words(device, name):
+    # BaggingClassifier / BaggingRegressor `estimator`: "Must be a mojolearn DecisionTree*, RandomForest* or
+    # ExtraTrees* estimator; any other estimator raises NotImplementedError" (python/mojolearn/_expansion_trees.py).
+    # Bagging over other families (GaussianNB's int32 draws among them) through the member ABI is held work
+    # (docs/plans/FUTURE_WORK_2026-11-21.md section 2); this test changes when that lands.
+    target = Y if name.endswith("Regressor") or name == "Ridge" else binary(C)
+    owner = "BaggingRegressor" if target is Y else "BaggingClassifier"
+    with pytest.raises(NotImplementedError, match=f"estimator={name}\\(\\) is not a mojolearn DecisionTree"):
+        make(owner, device, estimator=member(name), n_estimators=3, random_state=0).fit(X, target)

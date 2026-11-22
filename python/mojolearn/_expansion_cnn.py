@@ -540,6 +540,17 @@ class CNNClassifier(_Layer, _CheckMixin):
         """Every trained array, in layer order: [w0, b0, w1, b1, ...]."""
         return _XCNN(self, "cnnclf_weights", (), _XCNN_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this classifier runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary its next operation uses.
+        """
+        return _XCNN(self, "cnnclf_vendor_used", (), _XCNN_CONTEXT)
+
 
 class BatchNorm2d(_Layer):
     """PyTorch `nn.BatchNorm2d` (affine, track_running_stats): training mode

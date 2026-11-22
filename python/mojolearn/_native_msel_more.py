@@ -12,7 +12,13 @@ def connect(context, register, registry):
 
     def owner_for(cls, source, names, consumed, reset):
         # glue: private context copy leaves other families' owner metadata intact
-        owner = dict(source)
+        # The trees connection context's copy follows its later CPU table
+        # load (`_native_trees_bridge.derive`): a copy taken before the first
+        # device="cpu" admission held no CPU table set, and a device="cpu"
+        # GradientBoostingRegressor in cross_val_score was refused ("device='cpu'
+        # is not connected", proving suite 2026-11-22).
+        from . import _native_trees_bridge
+        owner = _native_trees_bridge.derive(source) if source is _native_trees_bridge.connect()[1] else dict(source)
         layout = _layout(cls, None)
         owner['cv_fixed_owner'] = dict(
             **{'class': cls}, name=cls.__name__, parameters=tuple(names), consumed=tuple(consumed),

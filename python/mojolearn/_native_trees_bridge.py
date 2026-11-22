@@ -277,6 +277,35 @@ def _load_cpu_device(context):
     cpu_scope(context)
 
 
+#: The keys `_load_cpu_device` adds to or replaces in the connection context
+#: (the CPU table set, the retained tables and releases that include the CPU
+#: images', and the CPU label scope `cpu_scope` builds).
+_CPU_KEYS = ("trees_cpu_bindings", "trees_state_retained", "trees_state_releases",
+             "labels_cpu_entries", "labels_cpu_scope")
+
+
+def derive(context):
+    """A private copy of the connection context (a family's fixed CV owner,
+    `_native_msel_more.owner_for`) that follows the CPU table set's load: the
+    copy is taken at the family's import, the CPU table set loads at the
+    first device="cpu" admission, after it (`cpu_load_later`, which runs the
+    connection context's own load first, in registration order)."""
+    # glue: once per derived owner, at its family's import
+    copy = dict(context)
+    if "trees_unavailable" in context or context.get("vendor") == "cpu":
+        return copy
+    from ._native_family_bridge import cpu_load_later
+    cpu_load_later(copy, lambda: _follow_cpu(context, copy))
+    return copy
+
+
+def _follow_cpu(context, copy):
+    # glue: once, at the CPU load: the copy takes the CPU keys of its source
+    for key in _CPU_KEYS:  # glue: the fixed CPU connection keys
+        if key in context:
+            copy[key] = context[key]
+
+
 def device_vendor_used(self):
     """The vendor of the compiled binaries this estimator's operations run
     on: ``'cpu'`` for ``device='cpu'``, otherwise this installation's GPU

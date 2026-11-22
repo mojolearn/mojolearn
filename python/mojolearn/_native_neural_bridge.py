@@ -28,13 +28,20 @@ def __getattr__(name):
     return slots[name]
 
 
-def connect_training(backend, vendor, inference_bindings):
+def connect_training(backend, vendor, inference_bindings, host=False):
     # Import-time ABI connection only. Native owners receive plain containers
-    # of checked C functions, never a lazy Python binding proxy.
+    # of checked C functions, never a lazy Python binding proxy. `host=True`:
+    # the CPU table set of a GPU installation (`connect_training_cpu`), the
+    # host images a CPU-only installation connects, loaded by their host
+    # names beside the GPU set.
     from types import BuiltinFunctionType, SimpleNamespace
     from . import _buffer
-    selected_mode = backend.default_mode()
-    route = "cpu" if vendor in (None, "cpu") else "gpu"
+    selected_mode = "identical" if host else backend.default_mode()
+    route = "cpu" if host or vendor in (None, "cpu") else "gpu"
+    routed = None
+    if host:
+        from . import host_surface
+        routed = host_surface.routed_modules()
     families = {
         "transformer": ("_mojolearn_transformer", (
             "transformer_vendor", "transformer_numeric_mode", "transformer_backward",
@@ -56,7 +63,7 @@ def connect_training(backend, vendor, inference_bindings):
     if not isinstance(validator, BuiltinFunctionType):
         raise TypeError("neural training input validation must be a compiled native entry")
     modes = [selected_mode]
-    if route == "gpu":
+    if route == "gpu" and not host:
         modes = []
         for key in inference_bindings:  # glue: enumerate modules already connected at import
             if key.startswith("gpu:"):
@@ -69,8 +76,14 @@ def connect_training(backend, vendor, inference_bindings):
                 # `canonical` is compared by identity with a native provider's
                 # owning module (neural_descriptor_matches), so the CPU route
                 # keeps the exact host module, never the `_HostBinding` facade.
-                selected = (backend.exact_host_module(backend.binding(target, mode)) if route == "cpu" else
-                            inference_bindings["gpu:" + mode]["mamba1" if family == "mamba" else family])
+                if host:
+                    basename = routed.get(target)
+                    if basename is None:
+                        raise ImportError(f"mojolearn: {target} has no CPU build, so device='cpu' cannot train it")
+                    selected = backend.load_host_module(basename)
+                else:
+                    selected = (backend.exact_host_module(backend.binding(target, mode)) if route == "cpu" else
+                                inference_bindings["gpu:" + mode]["mamba1" if family == "mamba" else family])
                 if isinstance(selected, str):
                     connected[family] = selected
                     continue
@@ -88,3 +101,20 @@ def connect_training(backend, vendor, inference_bindings):
         connected["all_finite_f32"] = validator
         result[route + ":" + mode] = connected
     return result
+
+
+def connect_training_cpu(backend, context):
+    """Connect the CPU training table set of `device="cpu"` blocks beside a
+    GPU set: `context["training_bindings"]["cpu:identical"]`, the host
+    transformer and mamba images a CPU-only installation connects. Loaded at
+    the first device="cpu" admission (`_native_family_bridge.cpu_load_later`),
+    never at import; a block restored without construction connects it at its
+    first CPU backward (bindings/neural_block_public_door.mojo
+    `neural_training_selection`). `device="cpu"` is identical only, so there
+    is no fast CPU table. The table dictionary is updated in place, so every
+    copy of the context sees it."""
+    # glue: lazy connection of the CPU route's training images, once
+    tables = context["training_bindings"]
+    if "cpu:identical" in tables:
+        return
+    tables.update(connect_training(backend, None, None, host=True))

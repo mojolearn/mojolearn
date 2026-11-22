@@ -107,6 +107,8 @@ comptime XCNN_OPN_GRAPH_LOAD_STATE_DICT = 91
 # lane fx-leftovers item 2: GCNConv / SAGEConv torch-form parameters() / named_parameters()
 comptime XCNN_OPN_GRAPH_PARAMETERS = 92
 comptime XCNN_OPN_GRAPH_NAMED_PARAMETERS = 93
+# CNNClassifier.vendor_used (proving suite 2026-11-22: the device="cpu" classifier had none)
+comptime XCNN_OPN_CNNCLF_VENDOR_USED = 94
 
 
 struct XcnnKeys(Defaultable, Movable):
@@ -686,6 +688,7 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "pool_forward", XCNN_OPN_POOL_FORWARD)
     py_op_add(ops, "pool_transform", XCNN_OPN_POOL_TRANSFORM)
     py_op_add(ops, "cnnclf_adopt", XCNN_OPN_CNNCLF_ADOPT)
+    py_op_add(ops, "cnnclf_vendor_used", XCNN_OPN_CNNCLF_VENDOR_USED)
     py_op_add(ops, "layer_state_dict", XCNN_OPN_LAYER_STATE_DICT)
     py_op_add(ops, "layer_load_state_dict", XCNN_OPN_LAYER_LOAD_STATE_DICT)
     py_op_add(ops, "layer_parameters", XCNN_OPN_LAYER_PARAMETERS)

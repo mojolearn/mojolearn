@@ -140,6 +140,18 @@ def boost_tree_admit(model: PythonObject, context: PythonObject, cloning: Bool =
         classical_admit_value(classifier_label_list(py_item(fields, nk[].k_classes_), context), context)
 
 
+def trees_member_kind(kind: PythonObject) raises -> Bool:
+    """Whether a connected tree schema (`context["trees_classes"]` value) is
+    one a Bagging or AdaBoost member may be: a DecisionTree*, RandomForest*
+    or ExtraTrees* schema ("dt_", "rf_", "et_"), as the `estimator`
+    docstrings say. The other connected schemas ("gbdt", "gbdt_adapter",
+    "iforest") are refused by name; GradientBoostingRegressor was admitted
+    and then failed in the member clone with an unrelated TypeError
+    (proving suite, 2026-11-22). Once per ensemble fit."""
+    var word = String(kind)
+    return word.startswith("dt_") or word.startswith("rf_") or word.startswith("et_")
+
+
 def _require_connected_member(model: PythonObject, estimator: PythonObject, context: PythonObject) raises:
     """The documented refusal of a member that is not a mojolearn tree
     estimator (trees_public_boost.mojo `_require_tree`), before the member's
@@ -152,8 +164,11 @@ def _require_connected_member(model: PythonObject, estimator: PythonObject, cont
     var b = native_loaded_module("builtins")
     var mro = py_call(py_item(b.type.__dict__, nk[].k___mro__).__get__, py_type(estimator))
     for i in range(len(mro)):  # driver-loop: over the member class ancestry metadata
-        if py_contains(classes, mro[i]):
+        var kind = py_get(classes, mro[i])
+        if kind is not None and trees_member_kind(kind):
             return
+        if kind is not None:
+            break
     raise Error("NotImplementedError: " + String(py_type(model).__name__) + ": estimator="
                 + String(py_type(estimator).__name__) + "() is not a mojolearn DecisionTree*, RandomForest* "
                 + "or ExtraTrees* estimator; the native ensemble fits only those members. Refused by name "

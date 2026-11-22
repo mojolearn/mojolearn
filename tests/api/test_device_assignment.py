@@ -231,8 +231,13 @@ def test_a_block_assignment_reaches_backward(tmp_path, family):
     block.device = "cpu"
     got = block.backward(x, grad)
     assert block._native_route == "cpu"
+    # backward returns the parameter gradients by name (a dict of arrays); compare each array's bytes. The former
+    # `np.asarray(dict).tobytes()` compared the bytes of a 0-d object array (an object pointer), never equal.
     first = lambda value: value[0] if isinstance(value, tuple) else value
-    assert np.asarray(first(got)).tobytes() == np.asarray(first(expected)).tobytes()
+    got, expected = first(got), first(expected)
+    assert sorted(got) == sorted(expected)
+    for name in expected:
+        assert np.asarray(got[name]).tobytes() == np.asarray(expected[name]).tobytes(), name
 
 
 def test_a_pickled_block_carries_the_assigned_route(tmp_path):
