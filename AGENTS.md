@@ -229,6 +229,26 @@ currently does. "Protected" forbids leaving verify broken, weakened or unable to
 reason to hold the product back. The verify smoke (`tools/ops/wheel_verify_smoke.sh`) is how a change shows verify
 still works.
 
+### One body per operation (Andrew, 2026-11-22)
+
+The math of an operation is written ONCE, as an `@always_inline` function, and every form of that operation calls
+it: the standalone layer's kernel, any fused kernel that contains the operation, the host (CPU) column and the
+device kernel. A fused kernel keeps its own loop, tiling, launch and buffers and calls the bodies in sequence; it
+does not carry its own copy of the math. New code is written this way from the start; a second copy of an
+operation's math, on any column or in any kernel, is a defect.
+
+- Why: two copies drift. On 2026-11-22 the CPU GBDT loop still had a fused multiply-add where the device used a
+  rounded multiply then add; CPU and GPU models differed and no check caught it.
+- Existing duplicates are converted kernel by kernel (`docs/plans/CLEANUP_LATER_2026-11-25.md` section 8), each
+  decided at once: BITS on the CPU box in minutes (outputs and gradients hashed before and after, same seed; one
+  differing bit means revert that kernel and write down why), then SPEED on the measurement box the same day (that
+  kernel before and after, quality = outputs equal; slower means revert).
+- The exception, recorded beside the kernel: a fused kernel that is fast because it does the steps DIFFERENTLY (a
+  reduction shared across steps, another summation order, a scan specialised across operations) keeps its own
+  math, with a comment saying which body it departs from and why, and a check comparing it with the shared body's
+  result to the stated tolerance or bits.
+- A body takes typed values and has no launch, allocation or Python in it, so it inlines into every caller.
+
 ### No refactor adds cost on a hot path (Andrew, 2026-11-11)
 
 A change that removes a Python crossing, a copy, a lookup or a layer is judged on the whole path it touches, never
