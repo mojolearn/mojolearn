@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The non-symmetric grower's step cost: host drains per tree and pool size.
 
@@ -33,6 +34,8 @@ it was so in the measured winner too; the device-resident Lossguide frontier
 (I17/T16) was measured and lost on NVIDIA and AMD on 2026-10-07 and is
 deleted. S2 bounds the drains by the rounds, which is the structure that runs.
 """
+
+from std.testing import TestSuite
 
 
 from max.gpu.host import DeviceContext
@@ -132,7 +135,7 @@ def run_policy(
     return failures
 
 
-def run_checks() raises:
+def test_gbdt_step_cost() raises:
     var ctx = DeviceContext()
     var fx = Fixture(ctx.copy())
     var failures = 0
@@ -147,19 +150,5 @@ def run_checks() raises:
     print("gbdt_step_cost_check: PASS")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gbdt_step_cost_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

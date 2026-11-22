@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The FeatureFreq tree-CTR Median grid ON THE DEVICE against the host
 statement, word for word.
@@ -18,6 +19,8 @@ Checked:
   * the constant column takes the single 0.5;
   * the columns are not modified by the sort.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -88,22 +91,9 @@ def check_tree_ctr_median_device() raises:
     print("  tree CTR Median grid on the device equals the host statement")
 
 
-def run_checks() raises:
+def test_tree_ctr_median_device() raises:
     check_tree_ctr_median_device()
 
 
-# Device column only: the suite needs a GPU, so the CPU build never
-# instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("tree_ctr_median_device_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

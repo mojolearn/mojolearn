@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate `TFeatureTensor`'s identity -- canonical form, equality, order,
 subset, complexity and HASH -- and the loop that mints one tensor per
@@ -152,6 +153,8 @@ moved -- the canonical form, the comparator, `IsSubset` and every scalar
 were green, because they compare two values mangled identically. See the
 HAZARD block in the library's module docstring.
 """
+
+from std.testing import TestSuite
 
 from gbdt.ctrs.ctr_bins_builder import TCtrBinBuilder
 from gbdt.ctrs.index_wrapper import index_of, is_segment_start, with_mask
@@ -699,7 +702,7 @@ def _run_batch(width: Int) raises -> RecordingVisitor:
     return visitor^
 
 
-def run_checks() raises:
+def test_feature_tensor() raises:
     var txt = String(ORACLE)
     var raw = txt.split()
     var toks = List[String]()
@@ -1114,18 +1117,5 @@ def run_checks() raises:
     print("feature tensor check OK")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("feature_tensor_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

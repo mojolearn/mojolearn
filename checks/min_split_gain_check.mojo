@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Non-symmetric minimum selected-score improvement, full train path.
 
@@ -8,6 +9,8 @@ each child's split by exactly 2. Threshold equality must reject a split.
 These exactly representable values test sign, units, child gating and the
 boundary; a huge threshold alone would miss all of those.
 """
+
+from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from checks.numerics import numeric_mode_name
 from gbdt.models.model_text import model_text, load_model_text
@@ -60,7 +63,7 @@ def check(ctx: DeviceContext, policy: String, threshold: Float64,
             raise Error("disabled threshold changes default model bytes")
 
 
-def run_checks() raises:
+def test_min_split_gain() raises:
     print("numeric_mode", numeric_mode_name())
     var ctx = DeviceContext()
     for policy in [String("Depthwise"), String("Lossguide")]:
@@ -73,19 +76,5 @@ def run_checks() raises:
     print("MIN SPLIT GAIN GREEN")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("min_split_gain_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

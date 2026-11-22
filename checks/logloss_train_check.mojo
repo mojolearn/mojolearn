@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Logloss end to end through `train(X, y)`: learn, agree, generalize.
 
@@ -32,6 +33,8 @@ Proven to have teeth, measured 2026-08-20: flipping the check's own
 probability convention (logloss computed against 1-p) fails claims 1-3
 in both losses; restored green before this landed.
 """
+
+from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from std.math import exp, log
 
@@ -65,7 +68,7 @@ def mean_logloss(y: List[Float32], scores: List[Float32]) -> Float64:
     return total / Float64(len(y))
 
 
-def run_checks() raises:
+def test_logloss_train() raises:
     var ctx = DeviceContext()
     var failures = 0
     var n = 4096
@@ -209,19 +212,5 @@ def run_checks() raises:
           "soft-target arm -- all pass")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("logloss_train_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

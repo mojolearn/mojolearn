@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The differential check: the implementation against CatBoost's own output.
 
@@ -14,6 +15,8 @@ The DEPTH and FEATURE-COUNT sweep is a second driver,
 fifteen fixtures rather than six and its fixtures vary a different axis.
 """
 
+from std.testing import TestSuite
+
 from checks.oracle_check import (
     check_border_parity,
     check_oracle_is_not_degenerate,
@@ -23,7 +26,7 @@ from checks.oracle_check import (
 )
 
 
-def run_checks() raises:
+def test_oracle_main() raises:
     # SIX FIXTURES, and between them every grid policy and every one-byte
     # accumulator. 15 borders is the HALF-BYTE policy; everything above 15
     # is ONE-BYTE (`SplitByPolicy`, `compressed_index_builder.h:66-70`,
@@ -85,19 +88,5 @@ def run_checks() raises:
         print()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("oracle_main", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

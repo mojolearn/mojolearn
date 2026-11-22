@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`portable_log64` against the host libm, and its own hash.
 
@@ -15,6 +16,8 @@ not `std.math.log`: on this host that is an approximation (ln 3 off by
 every host should print if the function is one arithmetic; the libm it is
 compared against is not expected to print it.
 """
+
+from std.testing import TestSuite
 from std.ffi import external_call
 
 from checks.numerics import portable_log64
@@ -49,7 +52,7 @@ def _ulps(a: Float64, b: Float64) -> Int:
     return d if d >= 0 else -d
 
 
-def run_checks() raises:
+def test_portable_log64() raises:
     from std.memory import bitcast
 
     var n = 1 << 18
@@ -106,18 +109,5 @@ def run_checks() raises:
     print("portable log64 check OK")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("portable_log64_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Analytic child Hessian bounds, candidate runner-up, and full GPU fits."""
+
+from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from max.gpu import thread_idx
 from std.memory import bitcast
@@ -116,7 +119,7 @@ def rejected_sibling(ctx: DeviceContext, policy: String) raises:
         raise Error("rejected sibling was revisited or eligible sibling was lost")
     print("PREPARED SIBLING GREEN", policy)
 
-def run_checks() raises:
+def test_min_child_hessian() raises:
     print("numeric_mode", numeric_mode_name())
     var ctx = DeviceContext()
     tiny_bounds(ctx)
@@ -139,19 +142,10 @@ def run_checks() raises:
     print("MIN CHILD HESSIAN GREEN")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("min_child_hessian_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # Tests listed by name, not discovered: `__functions_in_module()` instantiates every function of the
+    # module for the host, and this module's GPU kernels refuse the host target (the stdlib's
+    # `_get_intrinsic_name` constraint; cpc1 sm_89 cross-compile, 2026-11-22).
+    var suite = TestSuite()
+    suite.test[test_min_child_hessian]()
+    suite^.run()

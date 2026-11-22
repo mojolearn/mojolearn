@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RUNG 2's GATE: the two POINTWISE searchers, one fixture, one tree, to the bit.
 
@@ -150,6 +151,9 @@ rung 1's row count**, so the second size is not thoroughness, it is the
 only reason those two rows are not in the "moved nothing" paragraph.
 """
 
+from std.testing import TestSuite
+from checks.native_tests.kit import download_buffer_into, download_host_into, upload_host_into
+
 from max.gpu.host import DeviceContext
 
 from gbdt.gpu_data.compressed_index_builder import build_layout
@@ -174,7 +178,7 @@ from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 comptime MAX_DEPTH = 4
 
 
-def run_checks() raises:
+def test_feature_parallel_identity() raises:
     var ctx = DeviceContext()
     var failures = 0
     # ONE compression block, then THREE with a 50-key tail. See the module
@@ -514,20 +518,5 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
     return failures
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_buffer_into, download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("feature_parallel_identity_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

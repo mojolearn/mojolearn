@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Do the two flat-bin walks agree when INPUT ORDER IS NOT BLOCK ORDER?
 
@@ -26,6 +27,8 @@ belonging to some other feature.
 
 Host arithmetic only. No device, no kernels. The bug was in the arithmetic.
 """
+
+from std.testing import TestSuite
 
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -267,29 +270,18 @@ def check_bin_order_has_teeth() raises:
     print("  the check has teeth: the old numbering fails, the new one holds")
 
 
-def run_checks() raises:
+def test_bin_order() raises:
     # STANDALONE DRIVER. Nothing else in the tree calls this file: it has
     # never had a caller, in `probe_main` or anywhere else, so registering
     # `check-bin-order` without one meant the module could not run at all.
     # Host arithmetic only, so there is no `DeviceContext` to build.
     print("flat-bin numbering, input order NOT block order (host):")
     check_bin_order()
+
+
+def test_bin_order_has_teeth() raises:
     check_bin_order_has_teeth()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("bin_order_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

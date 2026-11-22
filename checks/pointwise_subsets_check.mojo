@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One gate over both halves of the pointwise implementation:
 `gbdt/methods/pointwise_optimization_subsets.mojo` and
@@ -138,6 +139,9 @@ recorded rather than dropped. "Reached but inert" is the failure mode this
 repository keeps re-learning, and 16 is its nastier cousin: a gate that reads
 the layout through the library's own names cannot see the layout move.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext, HostBuffer
 
@@ -1434,35 +1438,37 @@ def check_subsets() raises:
     )
 
 
-def run_checks() raises:
+def test_take_best() raises:
     print("pointwise optimization subsets + methods/helpers")
     print(" A. helpers.mojo (host)")
     check_take_best()
+
+
+def test_bit_helpers() raises:
     check_bit_helpers()
+
+
+def test_to_split() raises:
     check_to_split()
+
+
+def test_split_condition_strings() raises:
     check_split_condition_strings()
+
+
+def test_has_permutation_dependent_split() raises:
     check_has_permutation_dependent_split()
+
+
+def test_layout_contract() raises:
     check_layout_contract()
+
+
+def test_subsets() raises:
     print(" B. pointwise_optimization_subsets.mojo (device),",
           N_DOCS, "documents, max depth", MAX_DEPTH)
     check_subsets()
-    print("both halves agree with the host oracle")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("pointwise_subsets_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

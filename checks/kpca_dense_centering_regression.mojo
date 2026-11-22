@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Regression for the product's shared dense KernelPCA global-mean helper.
 
 One dependent native chain, with the same independent 2x2 oracle and guarded
 storage as the frozen failing reproducer. Existing Xn and x_decomp operations
 retain their normal parallel dispatch; no timing or identity is performed.
 """
+
+from std.testing import TestSuite
 from core.neighbors_native_driver import XnDriver
 from x_neighbors.native_descriptor_host import xn_native_v1
 from x_decomp.descriptor_host import x_decomp_host_v1
@@ -16,7 +19,7 @@ def require(condition: Bool, message: String) raises:
         raise Error(message)
 
 
-def run_checks() raises:
+def test_kpca_dense_centering_regression() raises:
     var driver = XnDriver(xn_native_v1)
     var matrix: List[Float32] = [1.0, 2.0, 2.0, 4.0]
     var sums: List[Float32] = [-9999.0, 0.0, 0.0, -9999.0]
@@ -52,18 +55,5 @@ def run_checks() raises:
     print("KPCA_REGRESSION independent_mean_and_centering=pass")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("kpca_dense_centering_regression", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

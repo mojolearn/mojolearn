@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`ComputePartitionStats`, both kernels, against a host tally.
 
@@ -78,6 +79,9 @@ chunk count phase 2 re-derived from the partition size -- this arm returns a
 truncated sum on the first leaf and walks out of its own row of `partials` on
 the second. It is a reach test that fails loudly on the old code.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext, HostBuffer
 from core.device_units import device_multiprocessor_count
@@ -748,30 +752,21 @@ def check_partitions_reduce_sabotage() raises:
     )
 
 
-def run_checks() raises:
+def test_partitions_reduce() raises:
     # STANDALONE DRIVER. All three arms `checks/probe_main.mojo` runs under
     # "ComputePartitionStats vs an exact host tally (GPU)", in its order:
     # the size sweep, then the two reach arms.
     print("ComputePartitionStats vs an exact host tally (GPU):")
     check_partitions_reduce()
+
+
+def test_partitions_reduce_sabotage() raises:
     check_partitions_reduce_sabotage()
+
+
+def test_partitions_reduce_narrow_grid() raises:
     check_partitions_reduce_narrow_grid()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("partitions_reduce_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

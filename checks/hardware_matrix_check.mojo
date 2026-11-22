@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The hardware matrix: columns exist, Apple is bit-for-bit the old
 constants, and every reader agrees with the table.
@@ -27,6 +28,8 @@ Three duties, in the order the refactor could have broken them:
    (the summation split), `gram_splitk_applies` (the dispatch), and
    `fused_l2_knn_grid` (the number the k-NN AUTO default flips on).
 """
+
+from std.testing import TestSuite
 
 from gbdt.methods.greedy_subsets_searcher.kernel.sub_byte_layout_gate import check_sub_byte_layout
 from core.gram_splitk import (
@@ -634,29 +637,19 @@ def check_hardware_matrix() raises:
     )
 
 
-def run_checks() raises:
+def test_hardware_matrix() raises:
     # STANDALONE DRIVER. `decomposition/pca_main.mojo` and
     # `neighbors/knn_main.mojo` both call this first; neither is a
     # registered task, so until now the only way to run it was to run a
     # whole other section's suite.
     check_hardware_matrix()
+
+
+def test_sub_byte_layout() raises:
     # Standalone matrix task also checks live GBDT layout arithmetic.
     # This includes three modeled negative controls and launches no GPU work.
     check_sub_byte_layout()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("hardware_matrix_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

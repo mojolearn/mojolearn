@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for the one-byte pointwise accumulators, 5, 6 and 7 bit.
 
@@ -51,6 +52,9 @@ difference is not academic: the divergent peel loop
 passed every gate in that file, at every block size, in both
 its broken and its fixed form, and failed here on the first run.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_whole_into
 
 from max.gpu import thread_idx
 from std.memory import stack_allocation
@@ -201,7 +205,7 @@ def hist_kernel_7[variant: Int](
             out_buf.unsafe_store(at, smem.unsafe_load(at))
 
 
-def run_checks() raises:
+def test_pointwise_hist2() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -469,20 +473,5 @@ def run_checks() raises:
     print("pointwise one-byte accumulators 5/6/7: A1-A5 pass")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_whole_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("pointwise_hist2_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
