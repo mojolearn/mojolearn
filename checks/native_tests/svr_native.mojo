@@ -230,9 +230,56 @@ def test_svr_native() raises:
         _run_gpu()
 
 
+# ---- refit (lane py2mojo-D6, 2026-11-22) ----
+# Ported from python/mojolearn/tests/test_svr_native_transport_boundary.py
+# `test_svr_refit_drops_previous_prepared_generation`: SVR(kernel='linear', C=2, epsilon=0.1, tol=1e-6,
+# max_iter=10000) fitted on [[-1, 0], [1, 0]] with y [-1, 1], then refitted in the SAME fit plan (the estimator's
+# storage) with y [-2, 2]: the second predictions are the second fit's, [-1.9, 1.9], never the first's [-0.9, 0.9]
+# (the symmetric two-point dual alpha = min(C, (|y| - epsilon) / 2)), each to 2e-4 as the original. The two fits run
+# in order (one plan); the query is the non-resident one on both columns. The estimator attributes stay in Python.
+def refit_fixture(driver: SvrNativeDriver) raises:
+    var n = 2
+    var d = 2
+    var source: List[Float32] = [-1.0, 0.0, 1.0, 0.0]
+    var plan = SvrFitPlan(n, d)
+    var device = driver.device()
+    for generation in range(2):  # driver-loop: the fit and the refit, in order, on the one plan
+        var scale = Float32(generation + 1)
+        var target: List[Float32] = [-scale, scale]
+        var request = SvrFitRequest(Int(source.unsafe_ptr()), Int(target.unsafe_ptr()), Int(plan.dual.unsafe_ptr()),
+            Int(plan.support.unsafe_ptr()), Int(plan.vectors.unsafe_ptr()), Int(plan.info.unsafe_ptr()), 0, n, d,
+            0, 10000, 1000, 2, -1, 0, -1, device, False, False, 0.5, 2.0, 0.1, 0.000001, 0.0)
+        plan.count = driver.fit(request)
+        require(plan.count == 2, "SVR refit " + String(generation) + ": support count " + String(plan.count))
+        var prediction = List[Float32](length=n, fill=-999)
+        var status = List[Int32](length=2, fill=-1)
+        var query = SvrQueryRequest(Int(source.unsafe_ptr()), Int(plan.dual.unsafe_ptr()),
+            Int(plan.vectors.unsafe_ptr()), Int(prediction.unsafe_ptr()), Int(status.unsafe_ptr()), n, d,
+            plan.count, 0, 2, 0, 0, -1, 0, -1, plan.info[0], 0.5, 256, 0.0)
+        _ = driver.query(query, False)
+        var expected = Float64(0.9) if generation == 0 else Float64(1.9)
+        for row in range(n):  # small-loop: the two predictions
+            var want = -expected if row == 0 else expected
+            require(abs(Float64(prediction[row]) - want) < 0.0002, "SVR fit " + String(generation) + " row "
+                + String(row) + ": predicted " + String(prediction[row]) + " expected " + String(want))
+        _ = target
+        _ = prediction
+        _ = status
+    _ = source
+    _ = plan
+
+
+def test_svr_refit() raises:
+    comptime if CPU_COLUMN_BUILD:
+        refit_fixture(SvrNativeDriver(svr_host_native_v1))
+    else:
+        refit_fixture(SvrNativeDriver(svr_device_native_v1))
+
+
 def main() raises:
     # The tests by name, not discover_tests: discovery instantiates every function of the module, and the
     # device column's functions do not compile in the host column build.
     var suite = TestSuite()
     suite.test[test_svr_native]()
+    suite.test[test_svr_refit]()
     suite^.run()

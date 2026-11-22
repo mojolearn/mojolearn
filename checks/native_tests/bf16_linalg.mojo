@@ -21,6 +21,11 @@ from gemm.checks.gemm_lowbit import LowbitWorkspace, bf16_widen, identical_gemm_
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_lowbit_check import _upload_f32, _upload_u16, _download_f32, _poisoned
 from std.sys.compile import is_defined
+# Apple fast BF16 (lane py2mojo-D, batch P): the RUN entries of bindings/apple_fast_bf16_public_door.mojo
+from gemm.afn_apple_fast import AFN_GEMM_BF16_MMA, afn_gemm_bf16_bits_into, afn_gemm_bf16_into
+from gemm.checks.gemm_lowbit import bf16_narrow
+from checks.native_tests.tsa_metrics_fixture_words import fixture_f32
+from checks.native_tests.py2mojo_fixture_words import fixture_f64
 
 
 comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
@@ -204,11 +209,144 @@ def test_device_fixtures() raises:
             raise Error("bf16_linalg device: cases failed" + failed)
 
 
+# ---- Apple fast BF16 (lane py2mojo-D, batch P, 2026-11-22) ----
+# Ported from python/mojolearn/tests/test_linalg_fast_bf16.py `test_cold_matmul_entry_keeps_packed_uploads_alive`
+# and `test_products_tail_shapes_transposes_and_float32_a`. The calls are the ones `linalg_fast.matmul_bf16` and
+# `linalg_fast.to_bf16` make after their admission (bindings/apple_fast_bf16_public_door.mojo): `bf16_narrow` for
+# the bits and `afn_gemm_bf16_into` (float32 a) or `afn_gemm_bf16_bits_into` (bf16 a), on one device context.
+# They exist only in an Apple FAST build (AFN_GEMM_BF16_MMA); every other build lists the two tests as skipped,
+# as the original skips when the loaded binaries are not Metal. The fresh-process subprocess, the no-Python-frame
+# trace, ownership, aliases and refusals stay in the Python file.
+#
+#   fast_cold_one_hot  (m, n, k) in (1,9,7), (4,5,3), (1,9,8), (1,9,9), (4,5,8), every p < k: a = e_p columns
+#                      (float32), b = rows p of bf16 1.0 (0x3f80): the product is exactly ones (35 products, the
+#                      test's first matmul on a fresh context, before any conversion)
+#   fast_products      18 rows: (m, n, k) in (1,9,7), (31,33,17), (65,63,129) x NN / NT / TN x float32 or bf16 a,
+#                      operands drawn by NumPy (fixtures/bf16_fast/, tools/py2mojo_native_fixtures_bP.py): every
+#                      cell within 4 k eps32 * (|A| . |B|) + 1e-6 of the float64 product of the RNE operands
+comptime BF16_FAST_DIR = "checks/native_tests/fixtures/bf16_fast/"
+comptime FLOAT32_EPS = 1.1920928955078125e-07
+
+
+def fast_products_shape(s: Int) -> Tuple[Int, Int, Int]:
+    if s == 0:
+        return (1, 9, 7)
+    if s == 1:
+        return (31, 33, 17)
+    return (65, 63, 129)
+
+
+def fast_cold_one_hot(ctx: DeviceContext) raises:
+    var shapes: List[Int] = [1, 9, 7, 4, 5, 3, 1, 9, 8, 1, 9, 9, 4, 5, 8]
+    var count = 0
+    for which in range(5):  # driver-loop: over the original's shapes, in order on the one context
+        var m = shapes[3 * which]
+        var n = shapes[3 * which + 1]
+        var k = shapes[3 * which + 2]
+        for p in range(k):  # driver-loop: over the one-hot position
+            var a = List[Float32](length=m * k, fill=0)
+            for r in range(m):  # driver-loop: building the host operand
+                a[r * k + p] = 1.0
+            var b = List[UInt16](length=k * n, fill=0)
+            for c in range(n):  # driver-loop: building the host operand
+                b[p * n + c] = 0x3F80
+            var da = _upload_f32(ctx, a)
+            var db = _upload_u16(ctx, b)
+            var dc = _poisoned(ctx, m * n)
+            var served = afn_gemm_bf16_into(ctx, dc, da, db, m, n, k, OP_NN)
+            ctx.synchronize()
+            require(served, "fast matmul_bf16 refused (" + String(m) + ", " + String(n) + ", " + String(k) + ")")
+            var got = _download_f32(ctx, dc, m * n, "one-hot product")
+            for i in range(m * n):  # driver-loop: over the downloaded product (test oracle, host)
+                require(got[i] == 1.0, "one-hot (m, n, k, p) = (" + String(m) + ", " + String(n) + ", " + String(k)
+                    + ", " + String(p) + ") cell " + String(i) + " is " + String(got[i]) + ", expected 1")
+            _ = a^
+            _ = b^
+            _ = da^
+            _ = db^
+            _ = dc^
+            count += 1
+    require(count == 35, "one-hot products: " + String(count) + " of 35")
+
+
+def fast_product_row(ctx: DeviceContext, row: Int) raises:
+    var s = row // 6
+    var t = (row // 2) % 3
+    var a_bits = row % 2
+    var shape = fast_products_shape(s)
+    var m = shape[0]
+    var n = shape[1]
+    var k = shape[2]
+    var op = OP_NN if t == 0 else (OP_NT if t == 1 else OP_TN)
+    var tag = BF16_FAST_DIR + "mm-" + String(s) + "-" + String(t) + "-"
+    var a = fixture_f32(tag + "a.f32", m * k)
+    var b = fixture_f32(tag + "b.f32", k * n)
+    var want = fixture_f64(tag + String(a_bits) + "-want.f64", m * n)
+    var scale = fixture_f64(tag + String(a_bits) + "-scale.f64", m * n)
+    var da = _upload_f32(ctx, a)
+    var db32 = _upload_f32(ctx, b)
+    var db = ctx.enqueue_create_buffer[DType.uint16](k * n)
+    bf16_narrow(ctx, db, db32, k * n)
+    var dc = _poisoned(ctx, m * n)
+    var served: Bool
+    if a_bits == 1:
+        var da_bits = ctx.enqueue_create_buffer[DType.uint16](m * k)
+        bf16_narrow(ctx, da_bits, da, m * k)
+        served = afn_gemm_bf16_bits_into(ctx, dc, da_bits, db, m, n, k, op)
+        ctx.synchronize()
+        _ = da_bits^
+    else:
+        served = afn_gemm_bf16_into(ctx, dc, da, db, m, n, k, op)
+        ctx.synchronize()
+    var label = "(m, n, k) = (" + String(m) + ", " + String(n) + ", " + String(k) + ") op " + String(t) + " a_bits " + String(a_bits)
+    require(served, "fast matmul_bf16 refused " + label)
+    var got = _download_f32(ctx, dc, m * n, "fast BF16 product")
+    for i in range(m * n):  # driver-loop: over the downloaded product (test oracle, host)
+        var bound = 4.0 * Float64(k) * FLOAT32_EPS * scale[i] + 1e-6
+        var error = abs(Float64(got[i]) - want[i])
+        require(error <= bound, label + " cell " + String(i) + ": " + String(got[i]) + " expected " + String(want[i])
+            + " (error " + String(error) + " > bound " + String(bound) + ")")
+    _ = a^
+    _ = b^
+    _ = da^
+    _ = db32^
+    _ = db^
+    _ = dc^
+
+
+def test_fast_cold_one_hot() raises:
+    comptime if AFN_GEMM_BF16_MMA:
+        var ctx = DeviceContext()
+        fast_cold_one_hot(ctx)
+
+
+def test_fast_products() raises:
+    comptime if AFN_GEMM_BF16_MMA:
+        var ctx = DeviceContext()
+        var failed = String("")
+        for row in range(18):  # driver-loop: one in-order device context
+            try:
+                fast_product_row(ctx, row)
+            except problem:
+                failed += "\n      fast_products row " + String(row) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("bf16_linalg fast_products: cases failed" + failed)
+
+
 def main() raises:
     # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
     # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
     # is not supported"), so a two-column file names its tests.
     var suite = TestSuite()
+    # The Apple fast BF16 entries first: the cold one-hot runs before any other test has touched a context.
+    comptime if AFN_GEMM_BF16_MMA:
+        suite.test[test_fast_cold_one_hot]()
+        suite.test[test_fast_products]()
+    else:
+        suite.test[test_fast_cold_one_hot]()
+        suite.skip[test_fast_cold_one_hot]()
+        suite.test[test_fast_products]()
+        suite.skip[test_fast_products]()
     comptime if CPU_COLUMN_BUILD:
         suite.test[test_host_fixtures]()
     else:
