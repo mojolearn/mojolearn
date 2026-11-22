@@ -36,6 +36,10 @@ def sequential_targets(mut mods: NativeModules, model: PythonObject, source: Pyt
     if nd < 1 or nd > 2 or Int(py=y.shape[0]) != n or (classification and nd != 1):
         raise Error("y must hold one target row per input sample")
     var descriptor = sequential_descriptor(y, "y")
+    # lm_head (lane neural-blocks-3-lm): the (n_samples, length) int32 token ids as they are (target code 0,
+    # no labels sort); the native fit checks their count and dtype against the head
+    if loss == "token_cross_entropy":
+        return Python.tuple(y, descriptor, 0, PythonObject(None))
     if classification:
         # the labels as they are and a classes buffer of their dtype: the
         # fit entry sorts them and keeps the codes on the device

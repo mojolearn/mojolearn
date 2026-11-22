@@ -246,6 +246,13 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
             raise Error("d_state must be 4, 8 or 16")
         a0 = PythonObject(states)
         args = Python.list(states, 0, 0, 0, 0, 0)
+    # lm_head (lane neural-blocks-3-lm)
+    elif kind == "lm_head":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("vocab"), Python.tuple(None), 1)
+        var vocab = _positive(options[0], "vocab", 2, context)
+        a0 = PythonObject(vocab)
+        args = Python.list(vocab, 0, 0, 0, 0, 0)
+    # end lm_head
     elif kind == "rnn" or kind == "lstm" or kind == "gru":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("hidden_size"), Python.tuple(None), 1)
         var hidden = _positive(options[0], "hidden_size", 1, context)

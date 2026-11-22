@@ -5,7 +5,8 @@
 Each block layer of autograd/model_blocks.mojo (silu, gelu erf and tanh, softplus, rms_norm, rotary,
 multiply / the gated container, narrow after a padded depthwise conv1d (Mamba's causal conv), embedding,
 attention: multi-head, grouped-query, rotary, causal, sliding window and non-causal; rnn, lstm, gru;
-selective_scan, Mamba-1's core as a generic op, lane neural-blocks-2, at state sizes 4 and 8) is
+selective_scan, Mamba-1's core as a generic op, lane neural-blocks-2, at state sizes 4 and 8; lm_head, the
+LM head's logits, lane neural-blocks-3-lm) is
 checked through the model interpreter (autograd/model.mojo model_forward, the version-2 backward with
 ModelRules), inside a small model `linear -> block -> flatten -> linear`:
   - every parameter gradient against central finite differences of the interpreter's own forward loss
@@ -13,6 +14,12 @@ ModelRules), inside a small model `linear -> block -> flatten -> linear`:
   - the attention forward against a float64 oracle written here (projections, rotary, mask, softmax);
   - the rms_norm forward against a float64 oracle;
   - the selective_scan forward against a float64 oracle of the reference recurrence;
+  - the lm_head logits against a float64 oracle; and (test_lm_head_token_loss) the token cross-entropy as
+    the fit records it (model_token_loss: the forward stops before the head, the fused head and loss
+    autograd/lm_head_v2_graph.mojo run on its input): the loss against a float64 oracle AND against the
+    cross-entropy of the model's own predicted logits, the gradients of the head weight, of the earlier
+    layers and of the head's input against central finite differences of the recorded loss, the digest
+    pinned (`-D MOJOLEARN_LMHEAD_SABOTAGE_LEAF_DESCENDING` must make it FAIL);
   - one `NEURAL_BLOCKS <case> digest` line over the output and gradient words.
 Columns: the CPU column runs on HostExec. The device column runs each case on DeviceExec AND HostExec and
 requires the same words (forward values and every gradient): the host-column-versus-device bytes check.
@@ -26,6 +33,9 @@ from autograd.model_blocks import (
     ModelRules, LAYER_SILU, LAYER_GELU, LAYER_SOFTPLUS, LAYER_RMS_NORM, LAYER_ROTARY, LAYER_MULTIPLY,
     LAYER_NARROW, LAYER_EMBEDDING, LAYER_ATTENTION, LAYER_RECURRENT, LAYER_SELECTIVE_SCAN,
 )
+# lm_head (lane neural-blocks-3-lm)
+from autograd.model_blocks import LAYER_LM_HEAD
+from autograd.model import model_token_loss
 from autograd.model_execution import model_float_words
 from sequence.exec_trait import Exec
 from sequence.exec import HostExec
@@ -171,6 +181,12 @@ def _cases() -> List[_Case]:
         ss.layer(LAYER_SELECTIVE_SCAN, states[k])
         _head(ss)
         out.append(_Case("selective_scan_n" + String(states[k]), ss^, 2, 24, _vals(48, 7, 31, 16)))
+    # lm_head (lane neural-blocks-3-lm): (L 5, 4) -> linear(6) -> lm_head(11) logits (5, 11) -> flatten -> linear
+    var lh = _model([5, 4])
+    lh.layer(L_LINEAR, 6, 1)
+    lh.layer(LAYER_LM_HEAD, 11)
+    _head(lh)
+    out.append(_Case("lm_head_logits", lh^, 2, 20, _vals(40, 7, 31, 16)))
     return out^
 
 
@@ -334,6 +350,39 @@ def _scan_oracle(c: _Case, spec: ModelSpec, p: List[Float32]) -> List[Float64]:
     return _linear64(y, c.rows, L * dim, p, spec.param_off[3], 2, True)
 
 
+# lm_head (lane neural-blocks-3-lm)
+def _lmhead_oracle(c: _Case, spec: ModelSpec, p: List[Float32]) -> List[Float64]:
+    """`linear(6) -> lm_head(11) -> flatten -> linear(2)` in float64; the head weight is (vocab, features)."""
+    var x = List[Float64]()
+    for i in range(len(c.x)):  # small-loop(oracle)
+        x.append(Float64(c.x[i]))
+    var h = _linear64(x, c.rows * 5, 4, p, 0, 6, True)
+    var off = spec.param_off[1]
+    var z = List[Float64](length=c.rows * 5 * 11, fill=0)
+    for r in range(c.rows * 5):  # small-loop(oracle)
+        for v in range(11):  # small-loop(oracle)
+            var acc = Float64(0)
+            for k in range(6):  # small-loop(oracle)
+                acc += h[r * 6 + k] * Float64(p[off + v * 6 + k])
+            z[r * 11 + v] = acc
+    return _linear64(z, c.rows, 55, p, spec.param_off[3], 2, True)
+
+
+def _ce64(z: List[Float64], codes: List[Float32], rows: Int, vocab: Int) -> Float64:
+    """The mean token cross-entropy of float64 logits (rows, vocab)."""
+    var total = Float64(0)
+    for r in range(rows):  # small-loop(oracle)
+        var mx = z[r * vocab]
+        for v in range(vocab):  # small-loop(oracle)
+            mx = max(mx, z[r * vocab + v])
+        var den = Float64(0)
+        for v in range(vocab):  # small-loop(oracle)
+            den += exp(z[r * vocab + v] - mx)
+        total += log(den) + mx - z[r * vocab + Int(codes[r])]
+    return total / Float64(rows)
+# end lm_head
+
+
 def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) raises:
     if len(got) != len(want):
         _fail(name + ": length " + String(len(got)) + " expected " + String(len(want)))
@@ -354,6 +403,7 @@ def _pinned(name: String) -> UInt64:
         return UInt64(12107700610124185639)
     if name == "selective_scan_n8":
         return UInt64(3944575162351859353)
+    # lm_head (lane neural-blocks-3-lm): recorded on the CPU column (cpc2, 2026-11-22)
     return UInt64(0)
 
 
@@ -369,6 +419,8 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
         _close(c.name + " forward", yv, _rms_oracle(c, spec, params), 1e-4)
     elif c.name.startswith("selective_scan"):
         _close(c.name + " forward", yv, _scan_oracle(c, spec, params), 1e-4)
+    elif c.name == "lm_head_logits":
+        _close(c.name + " forward", yv, _lmhead_oracle(c, spec, params), 1e-4)
     if finite_differences:
         var fd = List[Float64](length=len(params), fill=0)
         for i in range(len(params)):  # small-loop(every parameter probed)
@@ -402,6 +454,159 @@ def test_neural_blocks() raises:
             var dw = run_case(dev, cases[k], False)
             _same_words(cases[k].name, hw, dw)
     print("PASS NEURAL_BLOCKS blocks", len(cases))
+
+
+# ---------------------------------------------------------------- lm_head token loss (lane neural-blocks-3-lm)
+comptime _TOK_L = 5
+comptime _TOK_F = 4
+comptime _TOK_V = 11
+comptime _TOK_B = 3
+
+
+def _token_model(k: Int) -> SeqModel:
+    """0: lm_head(11) alone on (5, 4) samples (its input is the model input); 1: linear(6) -> silu -> lm_head(11)."""
+    var m = _model([_TOK_L, _TOK_F])
+    if k == 1:
+        m.layer(L_LINEAR, 6, 1)
+        m.layer(LAYER_SILU)
+    m.layer(LAYER_LM_HEAD, _TOK_V)
+    return m^
+
+
+def _token_codes() -> List[Float32]:
+    var codes = List[Float32]()
+    for i in range(_TOK_B * _TOK_L):  # small-loop(15 tokens)
+        codes.append(Float32((i * 4 + 1) % _TOK_V))
+    return codes^
+
+
+def _token_run[E: Exec](mut ex: E, spec: ModelSpec, params: List[Float32], xv: List[Float32], grad: Bool,
+                        mut gw: List[Float32], mut gx: List[Float32]) raises -> Float32:
+    """The recorded token loss; with grad, its gradients of the parameters (gw) and of the input (gx)."""
+    var tape = Tape()
+    var holder = Tape()
+    var pt = holder.tensor(ex, params, 1, len(params))
+    var zeros = List[Float32](length=len(params), fill=0)
+    var gt = holder.tensor(ex, zeros, 1, len(params))
+    var x = tape.tensor(ex, xv, _TOK_B, _TOK_L * _TOK_F, grad)
+    var codes = tape.tensor(ex, _token_codes(), _TOK_B, _TOK_L)
+    var loss = model_token_loss(tape, ex, spec, holder.value(pt), holder.value(gt), x, codes, grad, UInt64(0), 0)
+    var lv = tape.values(ex, loss)
+    if grad:
+        tape.backward_scalar_with_rules(ex, loss, ModelRules())
+        gw = holder.values(ex, gt)
+        gx = tape.gradients(ex, x)
+    return lv[0]
+
+
+def _token_logits[E: Exec](mut ex: E, spec: ModelSpec, params: List[Float32], xv: List[Float32]) raises -> List[Float32]:
+    """The model's predicted logits (the whole forward, the head's projection op)."""
+    var tape = Tape()
+    var holder = Tape()
+    var pt = holder.tensor(ex, params, 1, len(params))
+    var x = tape.tensor(ex, xv, _TOK_B, _TOK_L * _TOK_F)
+    var y = model_forward(tape, ex, spec, holder.value(pt), holder.value(pt), x, False, UInt64(0), 0)
+    return tape.values(ex, y)
+
+
+def _token_oracle(k: Int, spec: ModelSpec, p: List[Float32], xv: List[Float32]) -> Float64:
+    var rows = _TOK_B * _TOK_L
+    var h = List[Float64]()
+    for i in range(len(xv)):  # small-loop(oracle)
+        h.append(Float64(xv[i]))
+    var width = _TOK_F
+    if k == 1:
+        h = _linear64(h, rows, _TOK_F, p, 0, 6, True)
+        for i in range(len(h)):  # small-loop(oracle)
+            h[i] = h[i] / (1.0 + exp(-h[i]))
+        width = 6
+    var off = spec.param_off[spec.n_layers() - 1]
+    var z = List[Float64](length=rows * _TOK_V, fill=0)
+    for r in range(rows):  # small-loop(oracle)
+        for v in range(_TOK_V):  # small-loop(oracle)
+            var acc = Float64(0)
+            for j in range(width):  # small-loop(oracle)
+                acc += h[r * width + j] * Float64(p[off + v * width + j])
+            z[r * _TOK_V + v] = acc
+    return _ce64(z, _token_codes(), rows, _TOK_V)
+
+
+def _token_pinned(k: Int) -> UInt64:
+    """This version's recorded token-loss digest (loss, parameter and input gradients) of model k (0: none
+    recorded). The denominators fold in the lm_head op's leaf body (training/chunked_lm_head_panel_math.mojo),
+    so its sabotage arm changes these words on every column. Bits change between versions: a product change
+    records the new digest here in the same commit."""
+    return UInt64(0)
+
+
+def run_token_case[E: Exec](mut ex: E, k: Int, finite_differences: Bool) raises -> List[Float32]:
+    var name = "lm_head_token_loss_" + String(k)
+    var m = _token_model(k)
+    var spec = parse_model(m.program(_TOK_L * _TOK_F), model_float_words(m.table()))
+    var params = _params(spec.n_params)
+    var xv = _vals(_TOK_B * _TOK_L * _TOK_F, 7, 31, 16)
+    var gw = List[Float32]()
+    var gx = List[Float32]()
+    var lv = _token_run(ex, spec, params, xv, True, gw, gx)
+    var want = _token_oracle(k, spec, params, xv)
+    if not (abs(Float64(lv) - want) <= 1e-5 * (1.0 + abs(want))):
+        _fail(name + ": loss " + String(lv) + " expected " + String(want))
+    # the fused loss against the cross-entropy of the model's own predicted logits (one GEMM cell, two paths)
+    var zl = _token_logits(ex, spec, params, xv)
+    var z = List[Float64]()
+    for i in range(len(zl)):  # small-loop(check words)
+        z.append(Float64(zl[i]))
+    var from_logits = _ce64(z, _token_codes(), _TOK_B * _TOK_L, _TOK_V)
+    if not (abs(Float64(lv) - from_logits) <= 1e-5 * (1.0 + abs(from_logits))):
+        _fail(name + ": fused loss " + String(lv) + " differs from the predicted logits' " + String(from_logits))
+    if finite_differences:
+        var none_w = List[Float32]()
+        var none_x = List[Float32]()
+        var fdw = List[Float64](length=len(params), fill=0)
+        for i in range(len(params)):  # small-loop(every parameter probed)
+            var up = params.copy()
+            up[i] = Float32(Float64(params[i]) + _H)
+            var down = params.copy()
+            down[i] = Float32(Float64(params[i]) - _H)
+            fdw[i] = (Float64(_token_run(ex, spec, up, xv, False, none_w, none_x))
+                      - Float64(_token_run(ex, spec, down, xv, False, none_w, none_x))) / (2.0 * _H)
+        _close(name + " parameter gradient", gw, fdw, 3e-3)
+        var fdx = List[Float64](length=len(xv), fill=0)
+        for i in range(len(xv)):  # small-loop(every input probed)
+            var up = xv.copy()
+            up[i] = Float32(Float64(xv[i]) + _H)
+            var down = xv.copy()
+            down[i] = Float32(Float64(xv[i]) - _H)
+            fdx[i] = (Float64(_token_run(ex, spec, params, up, False, none_w, none_x))
+                      - Float64(_token_run(ex, spec, params, down, False, none_w, none_x))) / (2.0 * _H)
+        _close(name + " input gradient", gx, fdx, 3e-3)
+    var words = List[Float32]()
+    words.append(lv)
+    for i in range(len(gw)):  # small-loop(check words)
+        words.append(gw[i])
+    for i in range(len(gx)):  # small-loop(check words)
+        words.append(gx[i])
+    var digest = UInt64(1469598103934665603)
+    _mix(digest, words)
+    print("NEURAL_BLOCKS", name, "params", spec.n_params, "loss", lv, "digest", digest)
+    var pinned = _token_pinned(k)
+    if pinned != 0 and digest != pinned:
+        _fail(name + ": digest " + String(digest) + " is not this version's recorded " + String(pinned)
+              + " (a changed fold order in the lm_head op's bodies: a sabotage arm, or a product change whose new"
+              + " words must be recorded here)")
+    return words^
+
+
+def test_lm_head_token_loss() raises:
+    for k in range(2):  # driver-loop: over the two token models
+        var host = HostExec()
+        var hw = run_token_case(host, k, True)
+        comptime if not CPU_COLUMN_BUILD:
+            var dev = DeviceExec()
+            var dw = run_token_case(dev, k, False)
+            _same_words("lm_head_token_loss_" + String(k), hw, dw)
+    print("PASS NEURAL_BLOCKS lm_head token loss 2")
+# end lm_head
 
 
 def main() raises:

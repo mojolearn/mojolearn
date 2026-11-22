@@ -43,6 +43,8 @@ from autograd.model_blocks import (
     LAYER_MULTIPLY, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads, block_shape,
     is_block, BLOCK_INIT_S4D,
 )
+# lm_head (lane neural-blocks-3-lm): the token cross-entropy's head layer and its fused loss
+from autograd.model_blocks import LAYER_LM_HEAD, block_lm_head_loss
 from autograd.ssm_ops import OP_SSM_S4D_INIT
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
@@ -143,6 +145,10 @@ comptime LOSS_MSE = 0
 comptime LOSS_CROSS_ENTROPY = 1
 comptime LOSS_BCE_WITH_LOGITS = 2
 comptime LOSS_HUBER = 3
+# lm_head (lane neural-blocks-3-lm): the mean next-token cross-entropy of a model ending in lm_head(vocab);
+# y is the (N, tokens) int32 token ids (target code 0: the ids are the classes, no labels sort); the fit
+# stops before the head and runs the fused head and loss (autograd/lm_head_v2_graph.mojo), no logits
+comptime LOSS_TOKEN_CROSS_ENTROPY = 4
 
 comptime TARGET_DENSE = 0        # Y is (N, out) float32
 comptime TARGET_CODES = 1        # Y is N int32 class codes; one-hot built on the executor
@@ -622,8 +628,15 @@ def check_fit(spec: ModelSpec, cfg: FitConfig, N: Int) raises:
     var last = spec.kinds[spec.n_layers() - 1]
     if N < 1 or N >= MODEL_MAX_ROWS:
         raise Error("model fit: the number of samples must be between 1 and 2^24 - 1")
-    if cfg.loss < LOSS_MSE or cfg.loss > LOSS_HUBER:
+    if cfg.loss < LOSS_MSE or cfg.loss > LOSS_TOKEN_CROSS_ENTROPY:
         raise Error("model fit: unknown loss code " + String(cfg.loss))
+    # lm_head (lane neural-blocks-3-lm)
+    if cfg.loss == LOSS_TOKEN_CROSS_ENTROPY:
+        if spec.version != SPEC2_VERSION or last != LAYER_LM_HEAD:
+            raise Error("model fit: token_cross_entropy needs a model ending in an lm_head layer")
+        if cfg.target != TARGET_DENSE:
+            raise Error("model fit: token_cross_entropy takes the token ids as they are (no class labels)")
+    # end lm_head
     if cfg.target < TARGET_DENSE or cfg.target > TARGET_CODE_VALUES:
         raise Error("model fit: unknown target code " + String(cfg.target))
     if cfg.target == TARGET_CODES and cfg.loss != LOSS_CROSS_ENTROPY:
@@ -771,8 +784,12 @@ struct _ModelForwardTopology(Movable):
     Keep this owner private to the call that owns the matching ModelSpec.
     """
     var activations: List[Int]
+    # lm_head (lane neural-blocks-3-lm): the layers the forward runs (all; the token cross-entropy's fit
+    # stops before its final lm_head layer)
+    var stop: Int
 
     def __init__(out self, spec: ModelSpec):
+        self.stop = spec.n_layers()
         self.activations = List[Int]()
         self.activations = List[Int](length=spec.n_layers(), fill=0)
         for i in range(spec.n_layers()):  # driver-loop: operation setup over model topology
@@ -853,7 +870,7 @@ def _model_forward_v2[E: Exec](
     var outs = List[Tensor]()
     var h = x0
     var i = 0
-    while i < spec.n_layers():  # driver-loop: over layers
+    while i < topology.stop:  # driver-loop: over layers
         var k = spec.kinds[i]
         var xa = SPEC2_ARGS * i
         if k == LAYER_LINEAR:
@@ -1021,6 +1038,52 @@ def _fused_codes(cfg: FitConfig) -> Bool:
     one softmax_cross_entropy node (the default build, cross_entropy on
     class codes)."""
     return cfg.loss == LOSS_CROSS_ENTROPY and cfg.target == TARGET_CODES
+
+
+# lm_head (lane neural-blocks-3-lm)
+def _token_ids[E: Exec](mut ex: E, Y: CastIn, N: Int, T: Int, dst: FP, what: String) raises:
+    """dst (N * T float values) = the int32 token ids of Y (N, T), exactly (OP_ONE_HOT's code-value form)."""
+    if Y.count() != N * T or Y.kind != CAST_KIND_SIGNED or Y.itemsize != 4 or not Y.is_c_order():
+        raise Error(what + " must be the (n_samples, " + String(T) + ") C-contiguous int32 token ids")
+    var ids = ex.alloc(N * T)
+    ex.upload(ids, FP(unsafe_from_address=Y.addr), N * T)
+    var oh = Args()
+    oh.p0 = ids
+    oh.p1 = dst
+    oh.i0 = 1
+    oh.i1 = 1
+    ex.launch[OP_ONE_HOT](oh, N * T)
+    ex.free(ids)
+
+
+def _fit_loss[E: Exec](
+    mut tape: Tape, mut ex: E, cfg: FitConfig, spec: ModelSpec, P: FP, Gr: FP, out: Tensor, target: Tensor,
+    train: Bool,
+) raises -> Tensor:
+    """The batch loss of the fit and validation loops: model_loss, or the token cross-entropy, where `out` is
+    the final lm_head layer's input (the forward stopped before it) and the fused op is the head."""
+    if cfg.loss == LOSS_TOKEN_CROSS_ENTROPY:
+        var i = spec.n_layers() - 1
+        return block_lm_head_loss(tape, ex, spec.xargs, i, spec.in_shape[i], P, Gr, spec.param_off[i], out,
+                                  target, train)
+    return model_loss(tape, ex, cfg, out, target)
+
+
+def model_token_loss[E: Exec](
+    mut tape: Tape, mut ex: E, spec: ModelSpec, P: FP, Gr: FP, x: Tensor, codes: Tensor, train: Bool,
+    seed: UInt64, step: Int,
+) raises -> Tensor:
+    """The token cross-entropy of a model ending in lm_head as the fit records it: the forward stops before
+    the head (`_ModelForwardTopology.stop`) and the fused head and loss run on its input. codes holds one
+    class value per token, B * (the head input's rows per sample)."""
+    var i = spec.n_layers() - 1
+    if spec.version != SPEC2_VERSION or spec.kinds[i] != LAYER_LM_HEAD:
+        raise Error("model: token_cross_entropy needs a model ending in an lm_head layer")
+    var topology = _ModelForwardTopology(spec)
+    topology.stop = i
+    var h = _model_forward_prepared(tape, ex, spec, P, Gr, x, train, seed, step, topology)
+    return block_lm_head_loss(tape, ex, spec.xargs, i, spec.in_shape[i], P, Gr, spec.param_off[i], h, codes, train)
+# end lm_head
 
 
 def model_loss[E: Exec](
@@ -1203,8 +1266,14 @@ def model_fit_state[E: Exec](
     # the batch target's width: the outputs, or 1 for the class codes of the
     # fused cross-entropy (no one-hot target)
     var TW = 1 if _fused_codes(cfg) else O
+    # lm_head (lane neural-blocks-3-lm): one token id per row of the head's input sample
+    var token = cfg.loss == LOSS_TOKEN_CROSS_ENTROPY
+    if token:
+        TW = spec.in_shape[spec.n_layers() - 1].rows()
     var dY = ex.alloc(N * TW)
-    if cfg.target == TARGET_CODES or cfg.target == TARGET_CODE_VALUES:
+    if token:
+        _token_ids(ex, Y, N, TW, dY, "model fit: y")
+    elif cfg.target == TARGET_CODES or cfg.target == TARGET_CODE_VALUES:
         # the codes' int32 bits travel in float32 words (op_one_hot reads them)
         var dC: FP
         if codes_dev != 0:
@@ -1275,7 +1344,9 @@ def model_fit_state[E: Exec](
         vx = ex.alloc(nv * D)
         vy = ex.alloc(nv * TW)
         upload_cast(ex, vx, v.x)
-        if cfg.target == TARGET_DENSE:
+        if token:
+            _token_ids(ex, v.y, nv, TW, vy, "validation y")
+        elif cfg.target == TARGET_DENSE:
             if v.y.cols != O:
                 raise Error("validation targets must have the model's output width")
             upload_cast(ex, vy, v.y)
@@ -1302,6 +1373,8 @@ def model_fit_state[E: Exec](
         stall = 0
     var tape = Tape()
     var topology = _ModelForwardTopology(spec)
+    if token:
+        topology.stop = spec.n_layers() - 1
     var epoch_tape = Tape()
     var word = List[Float32](length=1, fill=Float32(0))
     var inv_n = ftz(identical_div(Float32(1), Float32(N)))
@@ -1349,9 +1422,9 @@ def model_fit_state[E: Exec](
             # launch stores the batch's curve word mul(loss, B), the word
             # tape.scale stores; cross-entropy's loss is not a fold
             # output (a scale of one), so it keeps the two launches below
-            if cfg.loss != LOSS_CROSS_ENTROPY:
+            if cfg.loss != LOSS_CROSS_ENTROPY and not token:
                 tape.arm_fold_word(dloss + bi, Float32(B))
-            var loss = model_loss(tape, ex, cfg, out, target)
+            var loss = _fit_loss(tape, ex, cfg, spec, P, Gr, out, target, True)
             var word_done = tape.disarm_fold_word(loss)
             if spec.version == SPEC2_VERSION:
                 # the rank-N lanes' custom tags (conv2d, pools) beside NeuralRules; lane neural-blocks:
@@ -1381,7 +1454,7 @@ def model_fit_state[E: Exec](
                 var x = tape.variable(ex, vx + off * D, B, D, False)
                 var target = tape.variable(ex, vy + off * TW, B, TW, False)
                 var pred = _model_forward_prepared(tape, ex, spec, P, Gr, x, False, cfg.seed, step, topology)
-                var loss = model_loss(tape, ex, cfg, pred, target)
+                var loss = _fit_loss(tape, ex, cfg, spec, P, Gr, pred, target, False)
                 var weighted = tape.scale(ex, loss, Float32(B))
                 _copy(ex, vloss + vi, tape.value(weighted), 1)
             epoch_tape.reset()

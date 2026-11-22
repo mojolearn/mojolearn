@@ -17,8 +17,9 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "concat": 20, "residual_block": 0, "parallel": 0,
           "silu": 32, "gelu": 33, "softplus": 34, "rms_norm": 35, "rotary": 36, "multiply": 37,
           "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
-          "selective_scan": 42}
-_LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
+          "selective_scan": 42,
+          "lm_head": 45}  # lm_head (lane neural-blocks-3-lm)
+_LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3, "token_cross_entropy": 4}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
 _OUT_RAW, _OUT_SOFTMAX, _OUT_SIGMOID, _OUT_PROBA2, _OUT_ARGMAX, _OUT_THRESHOLD = 0, 1, 2, 3, 4, 5
@@ -448,6 +449,29 @@ class Sequential(_CheckMixin):
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("selective_scan", (d_state,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
+    def lm_head(self, vocab):
+        """Append a language-model head: the ``vocab`` logits of every
+        position, ``h @ weight.T`` with a learned ``weight`` of shape
+        ``(vocab, features)`` (no bias), so a ``(length, features)`` sample
+        becomes ``(length, vocab)``. Train it with
+        ``compile(loss="token_cross_entropy")`` and ``y`` the
+        ``(n_samples, length)`` int32 next-token ids: the loss is the mean
+        cross-entropy over every token, computed without forming the
+        logits. ``predict`` returns the logits.
+
+        Parameters
+        ----------
+        vocab : int
+            Vocabulary size (at least 2).
+
+        Example: a small causal language model over token ids::
+
+            model = (mojolearn.Sequential().embedding(256, 64)
+                     .attention(4).lm_head(256)
+                     .compile(loss="token_cross_entropy", optimizer="adamw"))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("lm_head", (vocab,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
     def gated(self, gate, up):
         """Append a gated block: ``gate(h) * up(h)``, where ``h`` is the
         current output (a gated MLP: SwiGLU is ``gate`` a linear layer and
@@ -484,9 +508,11 @@ class Sequential(_CheckMixin):
 
         Parameters
         ----------
-        loss : {'mse', 'cross_entropy', 'bce_with_logits', 'huber'}, default 'mse'
+        loss : {'mse', 'cross_entropy', 'bce_with_logits', 'huber', 'token_cross_entropy'}, default 'mse'
             ``cross_entropy`` takes logits and integer class labels;
-            ``bce_with_logits`` takes one logit per row and binary labels.
+            ``bce_with_logits`` takes one logit per row and binary labels;
+            ``token_cross_entropy`` trains a model ending in
+            :meth:`lm_head` on ``(n_samples, length)`` int32 token ids.
         optimizer : {'sgd', 'momentum', 'adam', 'adamw'}, default 'adam'
             ``'momentum'`` is SGD with ``momentum``.
         lr : float, default 1e-3
@@ -921,7 +947,8 @@ _SEQUENTIAL_CONTEXT = {
                     "flatten", "conv2d", "max_pool2d", "avg_pool2d", "conv1d", "max_pool1d",
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
                     "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
-                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent"),
+                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent",
+                    "selective_scan", "", "", "lm_head"),
 }
 
 
@@ -987,7 +1014,7 @@ def _connect_sequential_bindings():
         "model_fields": ("numeric_mode", "device", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "optimizer_m_", "optimizer_v_", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,
-        "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber"),
+        "loss_names": ("mse", "cross_entropy", "bce_with_logits", "huber", "token_cross_entropy"),
         "bindings": entries, "sequential_cpu_bindings": cpu_entries,
         "backend_fields": vars(_backend), "vendor": _backend.vendor(),
         "ndarray": np.ndarray, "array_type": array, "array_class": Array,
