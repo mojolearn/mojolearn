@@ -326,16 +326,21 @@ def _gbdt_model_y(y: PythonObject, rows: Int, model: PythonObject, fields: Pytho
     if loss is not None and _gbdt_in(loss, py_item(_gbdt_tables(native), nk[].k_multi_regression_losses)):
         return y
     var column = False
+    var y_rows = rows
     try:
         var yv = classical_view(y, native, "y")
         column = Int(py=yv.ndim) == 2 and Int(py=yv.shape[1]) == 1
+        if y_rows < 0:
+            # X has categorical columns and was not viewed as numbers: the
+            # column's own length here; gbdt_fit compares y with X's rows.
+            y_rows = Int(py=yv.shape[0])
         _ = yv^
     except:
         # not a numeric array: the inner fit reports it in its own words
         return y
     if not column:
         return y
-    return classical_check_y(y, rows, name, native)
+    return classical_check_y(y, y_rows, name, native)
 
 
 def gbdt_model_public_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -363,12 +368,31 @@ def gbdt_model_public_operation(model: PythonObject, operation: String, args: Py
                 return gbdt_predict_proba(model, args[0], context)
             return gbdt_predict(model, args[0], context)
     classical_refuse_sparse(args[0], name)
-    var view = classical_view(args[0], native, "X")
-    if Int(py=view.ndim) != 2:
-        raise Error("X must be 2-D")
-    var rows = Int(py=view.shape[0])
-    var cols = Int(py=view.shape[1])
-    _ = view^
+    # Categorical X (pv-categories, 2026-11-22): a fit with cat_features, or
+    # a predict of a model that carries a category map, may hold text, None,
+    # bytes, NumPy scalars, pandas object / string / Categorical / Arrow
+    # columns in its categorical columns. Those forms are admitted by
+    # gbdt_category_admit inside gbdt_fit / gbdt_predict
+    # (bindings/gbdt_category_unpack.mojo), which also checks the rank, the
+    # rows of y and the fitted width. A numeric view here refused every one
+    # of them ("inputs must contain numeric scalars") before the category
+    # admission ran. One dict read per call with the held key.
+    var categorical = False
+    if fitting:
+        if operation == "trees_public_gbdt_model_fit":
+            var cat = py_get(fields, nk[].k_cat_features)
+            categorical = cat is not None and Bool(py=py_call(b.bool, cat))
+    else:
+        categorical = py_get(fields, nk[].k_category_map_) is not None
+    var rows = -1
+    var cols = -1
+    if not categorical:
+        var view = classical_view(args[0], native, "X")
+        if Int(py=view.ndim) != 2:
+            raise Error("X must be 2-D")
+        rows = Int(py=view.shape[0])
+        cols = Int(py=view.shape[1])
+        _ = view^
     if fitting:
         var inputs = args
         if len(args) >= 2:
@@ -408,7 +432,7 @@ def gbdt_model_public_operation(model: PythonObject, operation: String, args: Py
             py_setitem(state, nk[].k_feature_names_in_, names)
         return result
     var fitted = py_get(fields, nk[].k_n_features_in_)
-    if fitted is not None and py_type(fitted) is b.int:
+    if not categorical and fitted is not None and py_type(fitted) is b.int:
         classical_check_width(cols, Int(py=fitted), name)
     estimator_feature_check(model, fields, args[0], native)
     var result = PythonObject(None)
