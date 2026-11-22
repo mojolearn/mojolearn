@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for the BINARY and HALF-BYTE drivers.
 
@@ -39,6 +40,8 @@
 
   E5  `M > 1` for both, against their `M == 1` results.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
@@ -171,7 +174,7 @@ def _m_fold(
         ctx.enqueue_copy(dst_buf=dst, src_buf=slots)
 
 
-def run_checks() raises:
+def test_pointwise_small_bin_driver() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -453,20 +456,5 @@ def run_checks() raises:
     print("pointwise small-bin drivers: E1-E5 pass")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_whole_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("pointwise_small_bin_driver_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

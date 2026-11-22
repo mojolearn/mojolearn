@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device estimation stage against a float64 host simulation.
 
@@ -30,6 +31,8 @@ off by default -- so ten converged iterations end at the same zero-
 gradient point under either value. All probes restored, green before
 this landed.
 """
+
+from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from std.math import exp, log
 
@@ -192,7 +195,7 @@ def sim_estimate(
     return cur_point^
 
 
-def run_checks() raises:
+def test_logloss_estimator() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -302,20 +305,5 @@ def run_checks() raises:
           "float64 simulation in both weight modes; empty leaf pinned at 0")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("logloss_estimator_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

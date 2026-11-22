@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The split-K Gram path, per cell against a Float64 host oracle.
 
@@ -91,6 +92,8 @@ closed tensor-core kernel promises nothing about it, and the next NVIDIA
 leg is what says whether cuBLAS's TF32 product is symmetric. On an exact
 column it stays an assertion, which is the measured Apple M4 behaviour.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
@@ -856,30 +859,27 @@ def check_gram_dispatch() raises:
     )
 
 
-def run_checks() raises:
+def test_gram_splitk_oracle() raises:
     # STANDALONE DRIVER. The four calls `decomposition/pca_main.mojo`
     # makes, in its order. Each builds its own `DeviceContext`.
     check_gram_splitk_oracle()
+
+
+def test_gram_vendor_arm() raises:
     check_gram_vendor_arm()
+
+
+def test_gram_tf32_bound_separates() raises:
     check_gram_tf32_bound_separates()
+
+
+def test_gram_dispatch() raises:
     check_gram_dispatch()
+
+
+def test_gram_centered_fused() raises:
     check_gram_centered_fused()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gram_splitk_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

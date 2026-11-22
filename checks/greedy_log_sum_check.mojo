@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`best_split` (GreedyLogSum) against CatBoost, on columns built to tie.
 
@@ -26,9 +27,11 @@ bin sizes by ~1e-10). They guard the penalty's log: with `std.math.log` in
 place of `portable_log64`, cases 26, 32, 94 and 121 fail (measured
 2026-09-22), and all 126 pass with `portable_log64`.
 """
+
+from std.testing import TestSuite
 from gbdt.grid_creator.binarization import best_split
 
-def run_checks() raises:
+def test_greedy_log_sum() raises:
     var f = open("bench/greedylogsum_oracle.txt", "r")
     var text = f.read()
     f.close()
@@ -87,18 +90,5 @@ def run_checks() raises:
     print("  all", ncase, "cases match CatBoost exactly")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("greedy_log_sum_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTITY_PATHS rows 9 and 10, measured on this backend: div, sqrt, FMA.
 
@@ -83,6 +84,8 @@ A nonzero in arms 1-4 prints the first offending bit patterns, because a
 fast-math substitution is diagnosed from WHICH inputs break (reciprocals
 break denormals first).
 """
+
+from std.testing import TestSuite
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
 from std.math import fma, sqrt
@@ -227,7 +230,7 @@ def _splitmix(x: UInt64) -> UInt64:
     return z ^ (z >> 31)
 
 
-def run_checks() raises:
+def test_ieee_arith() raises:
     var ctx = DeviceContext()
 
     var ha = ctx.enqueue_create_host_buffer[DType.float32](N)
@@ -856,20 +859,5 @@ def _bits(x: Float32) -> UInt32:
     return tmp.unsafe_ptr().unsafe_bitcast[UInt32]().unsafe_load(0)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ieee_arith_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

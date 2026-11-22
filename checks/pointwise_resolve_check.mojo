@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device winner fold against the host fold, record for record.
 
@@ -33,6 +34,8 @@ R3  all-sentinel level: the fold returns the default record and the pack
 R4  the pack's plumbing: `score_before` holds the winner's Score and the
     descriptor holds the winner's feature row + bin, per planted cell.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -272,7 +275,7 @@ def _check_case(
         failures += 1
 
 
-def run_checks() raises:
+def test_pointwise_resolve() raises:
     var ctx = DeviceContext()
     var failures = 0
 
@@ -381,20 +384,5 @@ def run_checks() raises:
     print("pointwise winner resolve: R1-R3 pass")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_buffer_into, download_host_into, upload_whole_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("pointwise_resolve_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

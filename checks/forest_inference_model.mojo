@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Small resident lifecycle/identity check, no performance claim."""
+
+from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -144,7 +147,7 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
     print("LAYOUT_PASS RF_INPUT", RF_INPUT, "outputs", outputs)
 
 
-def run_checks() raises:
+def test_forest_inference_model() raises:
     print("RESIDENT_LAYOUT_PACKED", True)
     print("RESIDENT_ORDERED", FOREST_ORDERED_RESIDENT)
     var output_counts: List[Int] = [1, 2, 3, 5, 8, 9]
@@ -294,19 +297,5 @@ def run_checks() raises:
     print("RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("forest_inference_model", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

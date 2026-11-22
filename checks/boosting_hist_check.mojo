@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The half-byte histogram at TWO FEATURE GROUPS, per cell, with sabotage.
 
@@ -82,6 +83,8 @@ The one-block store (`hist_half_byte.cu:49`) is what this file exercises;
 `checks/replicated_half_byte_check.mojo` is the standing cover for the
 `blockCount > 1` flush at `:46-47`.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -589,7 +592,7 @@ def compare_cells(
     return wrong
 
 
-def run_checks() raises:
+def test_boosting_histogram() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes under
     # "half-byte histogram at TWO FEATURE GROUPS vs a host tally (GPU)".
     # Defaults only: 8192 rows x 16 half-byte features at 15 folds is the
@@ -600,20 +603,5 @@ def run_checks() raises:
     check_boosting_histogram()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("boosting_hist_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

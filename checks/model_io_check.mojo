@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Save a model, load it back, and require the SAME BITS out of it.
 
@@ -45,6 +46,8 @@ depths can differ, and leaf values that are not all equal.
 THE ONE-HOT FEATURE IS THREE CATEGORIES ON PURPOSE. See the note on
 `check_trained_roundtrip` for the measured reason.
 """
+
+from std.testing import TestSuite
 
 from std.memory import bitcast
 
@@ -1262,7 +1265,7 @@ def check_ctr_column_count_travels(ctx: DeviceContext) raises:
     print("    the loaded model still REFUSES predict_floats")
 
 
-def run_checks() raises:
+def test_model_io() raises:
     print("model save/load, exact round trip:")
     check_float_tokens()
     var ctx = DeviceContext()
@@ -1275,20 +1278,5 @@ def run_checks() raises:
     print("model save/load: all parts green, all five sabotages red")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("model_io_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

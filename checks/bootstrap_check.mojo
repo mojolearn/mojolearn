@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Bayesian bootstrap, gated the way a stochastic feature CAN be gated.
 
@@ -31,6 +32,8 @@ bootstrap, so there is no fixture to match. What IS checkable, and is:
    ancestor of this very check is what exposed them). A different seed
    must change the model.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -521,7 +524,7 @@ def check_bootstrap_multiclass(ctx: DeviceContext) raises:
     print("  multiclass bootstrap: every plane takes the draw")
 
 
-def run_checks() raises:
+def test_bootstrap() raises:
     # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes.
     # `check_bootstrap` builds the `DeviceContext` and hands it to
     # `check_bernoulli_and_poisson` itself, so this must NOT build one.
@@ -531,20 +534,5 @@ def run_checks() raises:
     check_bootstrap_multiclass(ctx)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("bootstrap_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

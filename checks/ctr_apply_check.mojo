@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A trained CATEGORICAL model, saved, loaded, and applied to RAW rows --
 through the host apply and through the device evaluator, per row.
@@ -57,6 +58,8 @@ formula, written out rather than called. Every comparison is PER ROW: a
 leaf-order permutation leaves the leaf-value sum bit-identical, so a check
 that summed could not see one.
 """
+
+from std.testing import TestSuite
 
 from std.memory import bitcast
 
@@ -2532,7 +2535,7 @@ def check_borders_sabotages(ctx: DeviceContext) raises:
           " predictions", _spread(held_out))
 
 
-def run_checks() raises:
+def test_ctr_apply() raises:
     print("CTR apply: a categorical model scores raw rows:")
     check_table_arithmetic()
     check_borders_table_arithmetic()
@@ -2548,20 +2551,5 @@ def run_checks() raises:
     print("CTR apply: all parts green, every sabotage red")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ctr_apply_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

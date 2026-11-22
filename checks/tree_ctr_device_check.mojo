@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Tree CTR (feature combination) columns ON THE DEVICE against the host
 statement, word for word.
@@ -19,6 +20,8 @@ features; Borders at two priors and FeatureFreq; two permutations. Checked:
   * `launch_tree_slot_write` installs a column's bins in the spare slot and
     leaves the other two columns of the index untouched.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -220,22 +223,9 @@ def check_tree_ctr_device() raises:
     print("  tree CTR device columns equal the host statement")
 
 
-def run_checks() raises:
+def test_tree_ctr_device() raises:
     check_tree_ctr_device()
 
 
-# Device column only: the suite needs a GPU, so the CPU build never
-# instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("tree_ctr_device_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

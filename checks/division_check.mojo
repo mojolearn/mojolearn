@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTITY_PATHS row 49 (DEVIATION 740): DIVISION, characterized per
 class on this backend, and the `portable_divf`/`identical_div` seam's
@@ -72,6 +73,8 @@ only be seen on a denormal-honoring leg (where arm A's class 1-3 counts
 are the evidence); this file prints the device raw-vs-portable mismatch
 count so that leg can read it off.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
@@ -223,7 +226,7 @@ def _mode_name() -> String:
     return numeric_mode_name()
 
 
-def run_checks() raises:
+def test_division() raises:
     var sabotage = False
     for a in argv():
         if a == "sabotage":
@@ -533,20 +536,5 @@ def run_checks() raises:
     _ = r_rdv.unsafe_ptr()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("division_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

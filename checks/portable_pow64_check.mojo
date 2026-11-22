@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """HOST ONLY. Portable pow64 semantics, 2^18 hashed pairs, and libm admission.
 
 Normal finite outputs: relative error <=2e-12; the absolute allowance is
@@ -7,6 +8,8 @@ bound, not a tight-ULP or correct-rounding claim. Observed ULP/relative maxima
 are reported separately. Input and portable-output FNV hashes are independent
 of host libm; matching hashes require separately executed host captures.
 """
+
+from std.testing import TestSuite
 from std.ffi import external_call
 from std.memory import bitcast
 from checks.numerics import portable_pow64, identical_pow64, identical_log2_64, portable_log2_64, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -101,7 +104,7 @@ def exact(x: UInt64, p: UInt64, want: UInt64) raises:
         raise Error("pow64 special-case mismatch x=" + String(x) + " p=" + String(p) + " got=" + String(got) + " want=" + String(want))
 
 
-def run_checks() raises:
+def test_portable_pow64() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("pow64 gate requires IDENTICAL build")
     # NaNs, signed zero, negative parity, infinities and retained subnormals.
@@ -161,18 +164,5 @@ def run_checks() raises:
     print("portable_pow64 special cases and approximation admission PASS")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("portable_pow64_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

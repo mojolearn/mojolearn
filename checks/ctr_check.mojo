@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The CTR option surface and the two calcers, against answers written down
 in advance.
@@ -57,6 +58,8 @@ Uniform-15 borders from the observed column. Verified by inspection of a
 1.2.10 CPU fit's JSON. The CPU arm is therefore a quality comparison, not a
 value oracle, and the values are gated analytically here instead.
 """
+
+from std.testing import TestSuite
 
 from gbdt.ctrs.ctr import (
     CTR_BORDERS,
@@ -760,22 +763,9 @@ def check_ctrs() raises:
     print("  all five sections green")
 
 
-def run_checks() raises:
+def test_ctrs() raises:
     check_ctrs()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ctr_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

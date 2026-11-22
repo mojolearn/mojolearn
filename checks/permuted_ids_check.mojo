@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Build histograms for a NON-CONTIGUOUS list of leaves and check every cell.
 
@@ -29,6 +30,8 @@ order `[2, 0, 3]`, and requires
 The second requirement is the one the subtraction depends on: a level that
 rebuilds a subset must leave the rest of the histogram alone.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 
@@ -288,7 +291,7 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
     print("  non-contiguous leaf ids land in the right slots")
 
 
-def run_checks() raises:
+def test_permuted_ids() raises:
     # STANDALONE DRIVER. The bare call `checks/probe_main.mojo` makes under
     # "non-contiguous leaf ids (GPU)", then the FOUR-ARM leaf-id /
     # replication matrix it runs afterwards. Both are needed: the
@@ -305,20 +308,5 @@ def run_checks() raises:
     check_permuted_leaf_ids(1, 16, True)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("permuted_ids_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

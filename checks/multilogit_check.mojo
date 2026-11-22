@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`multilogit` against libm, against algebra, and against an already-gated kernel.
 
@@ -81,6 +82,8 @@ are hashed over the full class range INCLUDING the pinned last class, which
 is the branch `targetClass[j] < effectiveClassCount` (`:46`) selects and
 which a fixture that never labels the last class would leave unreached.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 from std.ffi import external_call
@@ -831,25 +834,10 @@ def check_multilogit(ctx: DeviceContext) raises:
     print("multilogit check: PASS")
 
 
-def run_checks() raises:
+def test_multilogit() raises:
     var ctx = DeviceContext()
     check_multilogit(ctx)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("multilogit_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

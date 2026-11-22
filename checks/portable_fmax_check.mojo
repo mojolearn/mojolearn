@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """IDENTITY_PATHS: softmax's row maximum. DEVIATION 825's `portable_fmaxf`,
 plus the one assertion DEVIATION 826's `identical_mul` was owed. The sixth
@@ -73,6 +74,8 @@ and the same for the other two names. A misspelled define is silently
 ignored, so the run PRINTS the arm it was built with (`fmax sabotage
 <name>`, `tools/gemm_ladder.sh:71`'s scar); read that line first.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 from max.gpu import block_dim, block_idx, thread_idx
@@ -972,7 +975,7 @@ def check_sabotage_arms(
               moved_with_neg_nan, "of them carrying a negative-payload NaN")
 
 
-def run_checks() raises:
+def test_portable_fmax() raises:
     for a in argv():
         if a == "sabotage":
             print("NOTE: this gate takes its reach arms as `-D` defines, not")
@@ -1204,20 +1207,5 @@ def run_checks() raises:
     _ = r_ftr.unsafe_ptr()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("portable_fmax_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATIONS 2580 and 2581, BOTH SIDES OF EACH SWITCH (CONTRIBUTING.md (Non-default paths)).
 
@@ -28,6 +29,8 @@ half-byte cells come from float atomics and are not run-to-run exact.
     pixi run check-sym-arms                       (FAST column)
     pixi run check-native-gpu sym_arms_check             (IDENTICAL)
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
@@ -465,7 +468,7 @@ def check_depth(depth: Int) raises -> Int:
     return failed
 
 
-def run_checks() raises:
+def test_sym_arms() raises:
     print("sym_arms_check: DEVIATIONS 2580 and 2581, both sides")
     var failed = check_depth(0) + check_depth(1)
     if failed != 0:
@@ -473,20 +476,5 @@ def run_checks() raises:
     print("sym_arms_check: every side PASSED")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("sym_arms_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

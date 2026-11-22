@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The stage-hash instrument, gated as an instrument rather than as code.
 
@@ -53,6 +54,8 @@ trace can be self-consistent, localizing, content-only and honest about
 denormals while checkpointing the wrong buffers entirely. That judgement
 lives with each call site and with `archive/research/LOSSGUIDE.md`'s stage list.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
@@ -431,25 +434,10 @@ def check_identity_trace(ctx: DeviceContext) raises:
     print("identity trace check: PASS")
 
 
-def run_checks() raises:
+def test_identity_trace() raises:
     var ctx = DeviceContext()
     check_identity_trace(ctx)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("identity_trace_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

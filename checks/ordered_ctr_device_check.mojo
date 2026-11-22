@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`train(boosting_type='Ordered')` with categorical columns that build CTRs.
 
@@ -28,6 +29,8 @@ Checked:
   * what is refused by name: an estimation permutation that is not the
     last.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 
@@ -204,22 +207,9 @@ def check_ordered_ctr_device() raises:
     print("  Ordered CTRs fit (combinations too), predict, eval, round-trip and refuse by name")
 
 
-def run_checks() raises:
+def test_ordered_ctr_device() raises:
     check_ordered_ctr_device()
 
 
-# Device column only: the suite needs a GPU, so the CPU build never
-# instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ordered_ctr_device_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

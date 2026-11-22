@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """OUR apply against CATBOOST'S OWN MODEL and CATBOOST'S OWN PREDICTIONS.
 
@@ -48,6 +49,8 @@ therefore at float32 resolution scaled by the tree count, not bitwise, and
 the check prints the worst observed gap so a drift shows up as a number
 rather than as a pass.
 """
+
+from std.testing import TestSuite
 from std.math import sqrt
 
 from max.gpu.host import DeviceContext
@@ -252,24 +255,10 @@ def check_catboost_apply(ctx: DeviceContext) raises:
     print("     all", rows, "rows agree with CatBoost's own predictions")
 
 
-def run_checks() raises:
+def test_catboost_apply() raises:
     var ctx = DeviceContext()
     check_catboost_apply(ctx)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("catboost_apply_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
