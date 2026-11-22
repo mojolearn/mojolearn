@@ -10,7 +10,7 @@ MOJOLEARN_HESSIAN_PYTHON=${MOJOLEARN_PYTHON:-python3}
 export MOJOLEARN_HESSIAN_PYTHON
 MOJOLEARN_PYTHON="$PWD/checks/min_child_hessian_python.sh"
 export MOJOLEARN_PYTHON
-out=${1:-bench/results/min_child_hessian_2026-09-10}
+out=${1:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/min_child_hessian_local}
 mkdir -p "$out" build/min_child_hessian
 pixi run mojo --version > "$out/toolchain.txt"
 for mode in fast identical; do

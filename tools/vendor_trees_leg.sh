@@ -36,7 +36,7 @@
 #   MOJOLEARN_VT_SKIP_BUILD  1 -> reuse what is already built
 set -u
 
-OUT="${MOJOLEARN_VT_OUT:-bench/results/vendor_trees/$(date +%Y-%m-%d_%H%M%S)}"
+OUT="${MOJOLEARN_VT_OUT:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/vendor_trees/$(date +%Y-%m-%d_%H%M%S)}"
 LANE="${MOJOLEARN_VT_LANE:-gbdt-symmetric}"
 ROWS="${MOJOLEARN_VT_ROWS:-1000000}"
 PY="${MOJOLEARN_VT_PYTHON:-pixi run -e gbmbench python}"

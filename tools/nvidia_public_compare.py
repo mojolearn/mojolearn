@@ -652,7 +652,10 @@ if __name__ == '__main__':
     parser.add_argument('--probe-external', action='store_true',
                         help='UMAP only: check external runtime readiness with no fit or timing')
     parser.add_argument('--lane', choices=['knn', 'gemv', 'nt', 'gram', 'umap', 'gbdt'], required=True)
-    parser.add_argument('--out', default='bench/results/nvidia-public-comparison')
+    # Run output never defaults into the checkout: the evidence folder (tools/nvidia_campaign.sh passes --out).
+    parser.add_argument('--out', default=os.path.join(
+        os.environ.get('MOJOLEARN_EVIDENCE_ROOT') or os.path.expanduser('~/mojolearn-evidence'),
+        'nvidia-public-comparison'))
     parser.add_argument('--rounds', type=int, default=7)
     parser.add_argument('--index', type=int, default=10000)
     parser.add_argument('--queries', type=int, default=128)
