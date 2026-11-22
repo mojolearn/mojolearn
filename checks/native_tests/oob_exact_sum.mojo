@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Five OOB targets x covered/uncovered, with independent closed-form words.
 
 This replaces Python math.fsum tests with exact expected binary64 encodings.
@@ -9,8 +10,14 @@ No product exact-sum or soft-float helper supplies the expectations.
 from std.memory import bitcast
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr
 from xtrees.oob import oob_r2_host, oob_r2_device
-from core.host_parallel import host_parallelize
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime OOB_EXACT_FIXTURES = 10
@@ -84,14 +91,10 @@ def run_oob_fixture[device: Bool](fixture_id: Int) raises:
 
 # ---- The host column entry (was oob_exact_sum_cpu.mojo) ----
 # Ten independent typed host OOB fixtures run on the existing host pool.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(OOB_EXACT_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            run_oob_fixture[False](fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, OOB_EXACT_FIXTURES)
+def _run_cpu() raises:
+    def task(fixture_id: Int) raises:
+        run_oob_fixture[False](fixture_id)
+    check_cases("oob_exact_sum", OOB_EXACT_FIXTURES, task)
 
 
 # ---- The device column entry (was oob_exact_sum_gpu.mojo) ----
@@ -101,24 +104,18 @@ def _run_cpu(mut report: Report) raises:
 # fixtures in order to respect its stream/allocation ownership; the existing
 # row/limb kernels provide parallel work inside each operation. This is not
 # concurrent-session or cross-vendor identity coverage.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(OOB_EXACT_FIXTURES)
-    for fixture_id in range(OOB_EXACT_FIXTURES):
-        try:
-            run_oob_fixture[True](fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _run_gpu() raises:
+    def ordered_case(fixture_id: Int) raises:
+        run_oob_fixture[True](fixture_id)
+    check_cases_serial("oob_exact_sum", OOB_EXACT_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_oob_exact_sum() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("oob_exact_sum", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original LogisticRegression numerical workloads through typed native requests.
 
 Fit inputs are recorded source fixtures, not fitted reference outputs. The two
@@ -29,7 +30,14 @@ from glm.host.logistic_native_host import qn_host_native_v1
 from core.label_rows_device import device_argmax_rows
 from core.neural_context import process_ctx
 from glm.logistic_native_device import qn_device_native_v1, QnDeviceKernels, _CONTEXT
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime LOGISTIC_NUMERIC_FIXTURES = 4
@@ -176,14 +184,10 @@ struct HostPrediction(LogisticPrediction):
             MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=request.dst))
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(LOGISTIC_NUMERIC_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            fixture[HostPrediction](QnNativeDriver(qn_host_native_v1), fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, LOGISTIC_NUMERIC_FIXTURES)
+def _run_cpu() raises:
+    def task(fixture_id: Int) raises:
+        fixture[HostPrediction](QnNativeDriver(qn_host_native_v1), fixture_id)
+    check_cases("logistic_numeric", LOGISTIC_NUMERIC_FIXTURES, task)
 
 
 # ---- The device column (was logistic_numeric_gpu_suite.mojo) ----
@@ -205,24 +209,18 @@ struct DevicePrediction(LogisticPrediction):
             _ = ctx
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(LOGISTIC_NUMERIC_FIXTURES)
-    for fixture_id in range(LOGISTIC_NUMERIC_FIXTURES):
-        try:
-            fixture[DevicePrediction](QnNativeDriver(qn_device_native_v1), fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _run_gpu() raises:
+    def ordered_case(fixture_id: Int) raises:
+        fixture[DevicePrediction](QnNativeDriver(qn_device_native_v1), fixture_id)
+    check_cases_serial("logistic_numeric", LOGISTIC_NUMERIC_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_logistic_numeric() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("logistic_numeric", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

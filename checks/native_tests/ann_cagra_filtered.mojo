@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """A filtered CAGRA search is the compaction of the unfiltered itopk
 candidates, and a query alone equals its row of the batch (lane tmig-core-3,
 2026-11-15; ported from
@@ -46,7 +47,14 @@ from x_ann.ops_entry_host import ann_ops_host_v1
 from x_ann.cagra_device import cagra_build_device
 from x_ann.ops_entry_device import ann_ops_device_v1
 from checks.native_tests.ann_ivf_surface import normal_rows
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime CAGRA_FILTERED_FIXTURES = 2
@@ -182,37 +190,28 @@ def fixture[Device: Bool](entry: NativeDescriptorCall, unit: Int) raises:
 
 
 # ---- The host column ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CAGRA_FILTERED_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture[False](ann_ops_host_v1, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, CAGRA_FILTERED_FIXTURES)
+def _run_cpu() raises:
+    def task(unit: Int) raises:
+        fixture[False](ann_ops_host_v1, unit)
+    check_cases("cagra_filtered", CAGRA_FILTERED_FIXTURES, task)
 
 
 # ---- The device column ----
 # In order: the build and the table's device entries share the x_ann device
 # context; each launch keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CAGRA_FILTERED_FIXTURES)
-    for unit in range(CAGRA_FILTERED_FIXTURES):  # driver-loop: over the ordered device fixtures
-        try:
-            fixture[True](ann_ops_device_v1, unit)
-        except error:
-            cases.fail(unit, error)
+def _run_gpu() raises:
+    # check_cases_serial runs the cases in order: over the ordered device fixtures
+    def ordered_case(unit: Int) raises:
+        fixture[True](ann_ops_device_v1, unit)
+    check_cases_serial("cagra_filtered", CAGRA_FILTERED_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cagra_filtered() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("ann_cagra_filtered", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

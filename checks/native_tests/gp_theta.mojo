@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original GP theta precision/FTZ domain through the typed provider.
 
 The adjacent binary64 inputs deliberately differ. Their agreement checks
@@ -14,7 +15,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.gp_native_provider import gp_native_v1
 from core.gp_native_host import GPHostKernels
 from core.gp_native_device import GPDeviceKernels
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime GP_THETA_FIXTURES = 2
@@ -131,40 +139,30 @@ def theta_fixture(driver: GPDriver, unit: Int) raises:
 # Independent theta policy fixtures execute across host cores.
 #
 # No product operation is executed by the reference generator.
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GP_THETA_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            theta_fixture(GPDriver(gp_native_v1[GPHostKernels]), unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GP_THETA_FIXTURES)
+    def task(unit: Int) raises:
+        theta_fixture(GPDriver(gp_native_v1[GPHostKernels]), unit)
+    check_cases("gp_theta", GP_THETA_FIXTURES, task)
 
 
 # ---- The device column (was gp_theta_gpu_suite.mojo) ----
 # Theta graphs run one at a time on the physical GPU; kernels stay parallel.
 #
 # Shared-DeviceContext concurrent submission remains a separate recorded failure.
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GP_THETA_FIXTURES)
-    for unit in range(GP_THETA_FIXTURES):
-        try:
-            theta_fixture(GPDriver(gp_native_v1[GPDeviceKernels]), unit)
-        except error:
-            cases.fail(unit, error)
+    def ordered_case(unit: Int) raises:
+        theta_fixture(GPDriver(gp_native_v1[GPDeviceKernels]), unit)
+    check_cases_serial("gp_theta", GP_THETA_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_gp_theta() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("gp_theta", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

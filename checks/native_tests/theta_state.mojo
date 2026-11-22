@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native Theta fit-state/horizon contracts with independent closed forms.
 
 Six exact fixtures use constant series (all four models) and a linear trend
@@ -12,7 +13,14 @@ from core.host_parallel import host_parallelize
 from sequence.exec import Exec, HostExec
 from sequence.ops_impl import theta_impl, theta_forecast_impl
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime THETA_STATE_FIXTURES = 8
@@ -142,38 +150,28 @@ def run_theta_state_fixture[E: Exec](mut ex: E, fixture_id: Int) raises:
 
 # ---- The host column (was theta_state_cpu_suite.mojo) ----
 # Parallel native Theta fitted-state fixtures, private HostExec per fixture.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(THETA_STATE_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var ex = HostExec()
-            run_theta_state_fixture(ex, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, THETA_STATE_FIXTURES)
+def _run_cpu() raises:
+    def task(fixture_id: Int) raises:
+        var ex = HostExec()
+        run_theta_state_fixture(ex, fixture_id)
+    check_cases("theta_state", THETA_STATE_FIXTURES, task)
 
 
 # ---- The device column (was theta_state_gpu_suite.mojo) ----
 # Theta state GPU fixtures; ordered shared sequence context, parallel kernels.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(THETA_STATE_FIXTURES)
-    for fixture_id in range(THETA_STATE_FIXTURES):
-        try:
-            var ex = DeviceExec()
-            run_theta_state_fixture(ex, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _run_gpu() raises:
+    def ordered_case(fixture_id: Int) raises:
+        var ex = DeviceExec()
+        run_theta_state_fixture(ex, fixture_id)
+    check_cases_serial("theta_state", THETA_STATE_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_theta_state() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("theta_state", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The cross-vendor ordered fold, moved from test_cross_vendor.py and
 test_cross_vendor_native.py (lane tmig-msel-metrics-tsa-1, 2026-11-14).
 
@@ -38,11 +39,17 @@ from core.parallel_entry_table import (
     parallel_entry_vendor,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.host_parallel import host_parallelize
 from bindings.parallel_base_entry_host import publish_parallel_base_host
 from checks.vendor import COMPILED_VENDOR
 from bindings.parallel_base_entry_device import publish_parallel_base_device
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime CROSS_VENDOR_FOLD_FIXTURES = 5
@@ -201,17 +208,13 @@ def run_fold_fixture(entry: EntryRef, unit: Int) raises:
 # The cross-vendor ordered fold on the host column's parallel base entry
 # (the `_mojolearn_core_host` publication), its independent fixtures across
 # host cores, each with a private failure slot.
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     publish_parallel_base_host()
     var entry = parallel_ref(PARALLEL_TABLE_BASE, ParallelEntryKey(Int(GLOBAL_NUMERIC_MODE), 0))
-    var cases = report.cases(CROSS_VENDOR_FOLD_FIXTURES)
-    def task(unit: Int) {imm cases, imm entry}:
-        try:
-            run_fold_fixture(entry, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, CROSS_VENDOR_FOLD_FIXTURES)
+    def task(unit: Int) raises {imm entry}:
+        run_fold_fixture(entry, unit)
+    check_cases("cross_vendor_fold", CROSS_VENDOR_FOLD_FIXTURES, task)
 
 
 # ---- The device column (was resample_cross_vendor_fold_gpu_suite.mojo) ----
@@ -219,29 +222,24 @@ def _run_cpu(mut report: Report) raises:
 # (`publish_parallel_base_device`, the compiled vendor's key). Fixtures run in
 # order: every fold is one launch on the one shared process device context,
 # and the kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var vendor = parallel_entry_vendor(COMPILED_VENDOR)
     require(vendor >= 1, "resample_cross_vendor_fold_gpu: this build has no GPU vendor")
     publish_parallel_base_device()
     var entry = parallel_ref(PARALLEL_TABLE_BASE, ParallelEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor))
-    var cases = report.cases(CROSS_VENDOR_FOLD_FIXTURES)
-    for unit in range(CROSS_VENDOR_FOLD_FIXTURES):  # ordered launches on the one shared device context
-        try:
-            run_fold_fixture(entry, unit)
-        except error:
-            cases.fail(unit, error)
+    # ordered launches on the one shared device context
+    def ordered_case(unit: Int) raises {mut entry}:
+        run_fold_fixture(entry, unit)
+    check_cases_serial("cross_vendor_fold", CROSS_VENDOR_FOLD_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cross_vendor_fold() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("resample_cross_vendor_fold", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

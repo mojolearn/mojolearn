@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Independent OPTICS graph/extraction fixtures over the actual native entry.
 
 Fixtures run independently on CPU. The 180x3 case has three disconnected
@@ -12,7 +13,14 @@ from core.kmeans_variants_api import VariantsSpan
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from x_cluster.optics_fit_host import optics_fit_host_v1
 from x_cluster.optics_fit_device import optics_fit_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The host column (was optics_native_cpu_suite.mojo) ----
@@ -99,19 +107,15 @@ def fixture(driver: OpticsFitDriver, unit: Int) raises:
     _ = result
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(OPTICS_NATIVE_CASES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(OpticsFitDriver(optics_fit_host_v1), unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, OPTICS_NATIVE_CASES)
+def _run_cpu() raises:
+    def run(unit: Int) raises:
+        fixture(OpticsFitDriver(optics_fit_host_v1), unit)
+    check_cases("optics_native", OPTICS_NATIVE_CASES, run)
 
 
 # ---- The device column (was optics_native_gpu_suite.mojo) ----
 # Ordered numerical OPTICS cases; shared-DeviceContext concurrency is parked.
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     var failed = 0
     for unit in range(OPTICS_NATIVE_CASES):  # shared context numerical coverage; no concurrency qualification
         try:
@@ -124,15 +128,12 @@ def _run_gpu(mut report: Report) raises:
     print("PASS optics_native_gpu:", OPTICS_NATIVE_CASES, "ordered actual provider fixtures")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_optics_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("optics_native", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The Mamba-3 prefill session as a registry handle, reached natively on the
 CPU column (lane mamba3-prefill-handle, 2026-11-12).
 
@@ -35,7 +36,13 @@ from core.neural_entry_table import (
 )
 from core.mamba3_prefill_session import Mamba3PrefillHandle, mamba3_prefill_session_of
 from mamba.host.neural_entry_host import publish_neural_mamba_host
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_serial import check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The host column (was mamba3_prefill_session_cpu_suite.mojo) ----
@@ -136,24 +143,18 @@ def run_case(unit: Int) raises:
         _expect(NEURAL_MAMBA_RESERVE, none, [g], "state is not fitted or was released")
 
 
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     publish_neural_mamba_host()
     publish_neural_mamba_host()
-    var cases = report.cases(MAMBA3_SESSION_CASES)
-    for unit in range(MAMBA3_SESSION_CASES):  # driver-loop: cases share the image's registry, one after another
-        try:
-            run_case(unit)
-        except problem:
-            cases.fail(unit, problem)
+    # check_cases_serial runs the cases in order: cases share the image's registry, one after another
+    def ordered_case(unit: Int) raises:
+        run_case(unit)
+    check_cases_serial("prefill_session", MAMBA3_SESSION_CASES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
+def test_prefill_session() raises:
+    _run_cpu()
 
 
-def register() -> Check:
-    return Check("mamba3_prefill_session", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

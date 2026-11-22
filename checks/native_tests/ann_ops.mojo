@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The ANN operations table (core/neighbors_entry_table_ann.mojo), one case
 per entry the ANN search, fit and TSNE owners call (bindings/neighbors_ann_query_native.mojo,
 bindings/ann_fit_ops_native_door.mojo, bindings/mani_tsne_native.mojo), with expectations known by construction
@@ -28,11 +29,17 @@ from core.neighbors_entry_table_ann import (
     ann_tsne_fit_call,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.host_parallel import host_parallelize
 from x_ann.ops_entry_host import ann_ops_host_v1, ANN_OPS_HOST_API
 from checks.vendor import COMPILED_VENDOR
 from x_ann.ops_entry_device import ann_ops_device_v1, ANN_OPS_DEVICE_API
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime ANN_SHARED_CASES = 7
@@ -372,21 +379,17 @@ def check_ann_table(key: NeighborsEntryKey, publisher: Int, entry: NativeDescrip
 # The CPU column of the ANN operations table: the table round trip
 # first (ordered metadata), then the independent entry cases on the existing
 # host pool.
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     var mode = Int(GLOBAL_NUMERIC_MODE)
     var api = ANN_OPS_HOST_API.get_or_create_ptr()
     check_ann_table(NeighborsEntryKey(mode, 0), Int(api[].entries.unsafe_ptr()), ann_ops_host_v1)
     var total = ANN_SHARED_CASES + 1
-    var cases = report.cases(total)
-    def task(case_id: Int) {imm cases}:
-        try:
-            if case_id < ANN_SHARED_CASES:
-                run_shared_case(ann_ops_host_v1, case_id)
-            else:
-                case_host_refuses_resident(ann_ops_host_v1)
-        except error:
-            cases.fail(case_id, error)
-    report.parallel(task, total)
+    def task(case_id: Int) raises:
+        if case_id < ANN_SHARED_CASES:
+            run_shared_case(ann_ops_host_v1, case_id)
+        else:
+            case_host_refuses_resident(ann_ops_host_v1)
+    check_cases("ann_ops", total, task)
 
 
 # ---- The device column (was ann_ops_gpu_suite.mojo) ----
@@ -394,7 +397,7 @@ def _run_cpu(mut report: Report) raises:
 # the x_ann device context and resident registry, so the cases
 # submit in order; the kernels keep their native parallelism (no concurrency
 # claim).
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     var mode = Int(GLOBAL_NUMERIC_MODE)
     var vendor = neighbors_vendor_word(COMPILED_VENDOR)
     require(vendor > 0, "ann_ops_gpu: this build has no GPU vendor")
@@ -417,15 +420,12 @@ def _run_gpu(mut report: Report) raises:
     print("PASS ann_ops_gpu:", ANN_SHARED_CASES + ANN_DEVICE_CASES, "native ANN table cases")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_ann_ops() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("ann_ops", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

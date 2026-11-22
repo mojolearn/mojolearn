@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Shared buffers for the Mamba-3 output-coverage suites (lane
 fix-mamba3-unfilled-rest, 2026-11-13).
 
@@ -28,7 +29,13 @@ from mamba.checks.mamba3_fixture import (
 from mamba.host.mamba_host_shell_impl import _mamba3_run
 from autograd.block_step_ops import OPS_M3_STEP
 from mamba.impl.mamba_block_program import mamba_block_call, MambaBlockProgram
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime M3_COV_CASE = 1
@@ -221,13 +228,11 @@ def run_case(unit: Int) raises:
                          "Mamba-3 host fresh prefill")
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(MAMBA3_COVERAGE_CPU_CASES)
-    for unit in range(MAMBA3_COVERAGE_CPU_CASES):  # driver-loop: two millisecond cases, serial by design (module docstring)
-        try:
-            run_case(unit)
-        except problem:
-            cases.fail(unit, problem)
+def _run_cpu() raises:
+    # check_cases_serial runs the cases in order: two millisecond cases, serial by design (module docstring)
+    def ordered_case(unit: Int) raises:
+        run_case(unit)
+    check_cases_serial("output_coverage", MAMBA3_COVERAGE_CPU_CASES, ordered_case)
 
 
 # ---- The device column (was mamba3_output_coverage_gpu_suite.mojo) ----
@@ -374,24 +379,19 @@ def case_gpu(unit: Int) raises:
                          "Mamba-3 resident session step + decode")
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(MAMBA3_COVERAGE_GPU_CASES)
-    for unit in range(MAMBA3_COVERAGE_GPU_CASES):  # driver-loop: cases share one device and the program cache (module docstring)
-        try:
-            case_gpu(unit)
-        except problem:
-            cases.fail(unit, problem)
+def _run_gpu() raises:
+    # check_cases_serial runs the cases in order: cases share one device and the program cache (module docstring)
+    def ordered_case(unit: Int) raises:
+        case_gpu(unit)
+    check_cases_serial("output_coverage", MAMBA3_COVERAGE_GPU_CASES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_output_coverage() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("mamba3_output_coverage", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

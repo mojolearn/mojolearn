@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual GP graphs over original workloads and independent references.
 
 This first tranche covers posterior/covariance/sampling and singular fits.
@@ -45,7 +46,14 @@ from checks.native_tests.gp_native_classifier_cases import (
     GP_CLASSIFIER_GPU_FIXTURES,
 )
 from core.gp_native_device import GPDeviceKernels
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime GP_NATIVE_BASE_FIXTURES = 6
@@ -315,23 +323,19 @@ def fixture(driver: GPDriver, query_driver: GPDriver, unit: Int, host: Bool) rai
 comptime GP_NATIVE_CPU_TOTAL = GP_NATIVE_CPU_FIXTURES + GP_LEARNING_FIXTURES + GP_CLASSIFIER_CPU_FIXTURES
 
 
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GP_NATIVE_CPU_TOTAL)
-    def task(unit: Int) {imm cases}:
-        try:
-            if unit < GP_NATIVE_CPU_FIXTURES:
-                var query = GPDriver(gp_native_v1[GPHostInferenceKernels]) if unit == 6 else GPDriver(gp_native_v1[GPHostKernels])
-                fixture(GPDriver(gp_native_v1[GPHostKernels]), query, unit, True)
-            elif unit < GP_NATIVE_CPU_FIXTURES + GP_LEARNING_FIXTURES:
-                learning_fixture(GPDriver(gp_native_v1[GPHostKernels]), unit - GP_NATIVE_CPU_FIXTURES, True)
-            else:
-                var at = unit - GP_NATIVE_CPU_FIXTURES - GP_LEARNING_FIXTURES
-                var query = GPDriver(gp_native_v1[GPHostInferenceKernels]) if at >= 2 else GPDriver(gp_native_v1[GPHostKernels])
-                classifier_fixture(GPDriver(gp_native_v1[GPHostKernels]), query, at, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GP_NATIVE_CPU_TOTAL)
+    def task(unit: Int) raises:
+        if unit < GP_NATIVE_CPU_FIXTURES:
+            var query = GPDriver(gp_native_v1[GPHostInferenceKernels]) if unit == 6 else GPDriver(gp_native_v1[GPHostKernels])
+            fixture(GPDriver(gp_native_v1[GPHostKernels]), query, unit, True)
+        elif unit < GP_NATIVE_CPU_FIXTURES + GP_LEARNING_FIXTURES:
+            learning_fixture(GPDriver(gp_native_v1[GPHostKernels]), unit - GP_NATIVE_CPU_FIXTURES, True)
+        else:
+            var at = unit - GP_NATIVE_CPU_FIXTURES - GP_LEARNING_FIXTURES
+            var query = GPDriver(gp_native_v1[GPHostInferenceKernels]) if at >= 2 else GPDriver(gp_native_v1[GPHostKernels])
+            classifier_fixture(GPDriver(gp_native_v1[GPHostKernels]), query, at, True)
+    check_cases("gp_native", GP_NATIVE_CPU_TOTAL, task)
 
 
 # ---- The device column (was gp_native_gpu_suite.mojo) ----
@@ -342,31 +346,25 @@ def _run_cpu(mut report: Report) raises:
 comptime GP_NATIVE_GPU_TOTAL = GP_NATIVE_GPU_FIXTURES + GP_LEARNING_FIXTURES + GP_CLASSIFIER_GPU_FIXTURES
 
 
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GP_NATIVE_GPU_TOTAL)
-    for unit in range(GP_NATIVE_GPU_TOTAL):
-        try:
-            if unit < GP_NATIVE_GPU_FIXTURES:
-                fixture(GPDriver(gp_native_v1[GPDeviceKernels]), GPDriver(gp_native_v1[GPDeviceKernels]), unit, False)
-            elif unit < GP_NATIVE_GPU_FIXTURES + GP_LEARNING_FIXTURES:
-                learning_fixture(GPDriver(gp_native_v1[GPDeviceKernels]), unit - GP_NATIVE_GPU_FIXTURES, False)
-            else:
-                classifier_fixture(GPDriver(gp_native_v1[GPDeviceKernels]), GPDriver(gp_native_v1[GPDeviceKernels]),
-                    unit - GP_NATIVE_GPU_FIXTURES - GP_LEARNING_FIXTURES, False)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
+    def ordered_case(unit: Int) raises:
+        if unit < GP_NATIVE_GPU_FIXTURES:
+            fixture(GPDriver(gp_native_v1[GPDeviceKernels]), GPDriver(gp_native_v1[GPDeviceKernels]), unit, False)
+        elif unit < GP_NATIVE_GPU_FIXTURES + GP_LEARNING_FIXTURES:
+            learning_fixture(GPDriver(gp_native_v1[GPDeviceKernels]), unit - GP_NATIVE_GPU_FIXTURES, False)
         else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+            classifier_fixture(GPDriver(gp_native_v1[GPDeviceKernels]), GPDriver(gp_native_v1[GPDeviceKernels]),
+                unit - GP_NATIVE_GPU_FIXTURES - GP_LEARNING_FIXTURES, False)
+    check_cases_serial("gp_native", GP_NATIVE_GPU_TOTAL, ordered_case)
 
 
-def register() -> Check:
-    return Check("gp_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_gp_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual scaler/preparation/GP graphs with independent target statistics.
 
 The three full graphs retain the original 60x3/96x3 input bytes, kernel,
@@ -31,7 +32,14 @@ from core.prep_program_native_host import PrepProgramHostKernels
 from core.gp_native_device import GPDeviceKernels
 from core.scaler_native_device import ScalerDeviceKernels
 from core.prep_program_native_device import PrepProgramDeviceKernels
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime GP_NORMALIZATION_FIXTURES = 13
@@ -225,18 +233,14 @@ def normalization_fixture(gp: GPDriver, scaler: ScalerDriver, program: PrepProgr
 comptime GP_NORMALIZATION_CPU_FIXTURES = GP_NORMALIZATION_FIXTURES
 
 
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GP_NORMALIZATION_CPU_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            normalization_fixture(GPDriver(gp_native_v1[GPHostKernels]),
-                ScalerDriver(scaler_native_v1[ScalerHostKernels]),
-                PrepProgramDriver(prep_program_v1[PrepProgramHostKernels]),
-                unit, False)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GP_NORMALIZATION_CPU_FIXTURES)
+    def task(unit: Int) raises:
+        normalization_fixture(GPDriver(gp_native_v1[GPHostKernels]),
+            ScalerDriver(scaler_native_v1[ScalerHostKernels]),
+            PrepProgramDriver(prep_program_v1[PrepProgramHostKernels]),
+            unit, False)
+    check_cases("gp_normalization", GP_NORMALIZATION_CPU_FIXTURES, task)
 
 
 # ---- The device column (was gp_normalization_gpu_suite.mojo) ----
@@ -247,28 +251,22 @@ def _run_cpu(mut report: Report) raises:
 comptime GP_NORMALIZATION_GPU_FIXTURES = GP_NORMALIZATION_FIXTURES * 2
 
 
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(GP_NORMALIZATION_GPU_FIXTURES)
-    for unit in range(GP_NORMALIZATION_GPU_FIXTURES):
-        try:
-            normalization_fixture(GPDriver(gp_native_v1[GPDeviceKernels]),
-                ScalerDriver(scaler_native_v1[ScalerDeviceKernels]),
-                PrepProgramDriver(prep_program_v1[PrepProgramDeviceKernels]),
-                unit % GP_NORMALIZATION_FIXTURES, unit >= GP_NORMALIZATION_FIXTURES)
-        except error:
-            cases.fail(unit, error)
+    def ordered_case(unit: Int) raises:
+        normalization_fixture(GPDriver(gp_native_v1[GPDeviceKernels]),
+            ScalerDriver(scaler_native_v1[ScalerDeviceKernels]),
+            PrepProgramDriver(prep_program_v1[PrepProgramDeviceKernels]),
+            unit % GP_NORMALIZATION_FIXTURES, unit >= GP_NORMALIZATION_FIXTURES)
+    check_cases_serial("gp_normalization", GP_NORMALIZATION_GPU_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_gp_normalization() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("gp_normalization", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
