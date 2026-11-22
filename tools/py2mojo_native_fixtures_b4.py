@@ -8,11 +8,7 @@ and dtype) and every reference is the oracle call it made. The originating test 
 
     checks/native_tests/fixtures/gbdt_ff/   gbdt_public_fits.mojo  (checks/gbdt_feature_fraction_binding.py)
     checks/native_tests/fixtures/gbdt_qw/   gbdt_public_fits.mojo  (checks/gbdt_querywise_pointwise_check.py)
-    checks/native_tests/fixtures/trees_b4/  class_weight_rows.mojo, trees_forest_variants.mojo,
-                                            metrics_roc_auc_ovr.mojo, gbdt_binary_probabilities.mojo
-                                            (test_class_weight_shared_families.py, test_rf_class_weight.py,
-                                            test_cpu_training_forest_variants.py, test_meta_members_native.py,
-                                            checks/gbdt_binary_prediction_smoke.py)
+    checks/native_tests/fixtures/trees_b4/  class_weight_plan.mojo  (test_rf_class_weight.py)
 
 Generated with numpy 2.5.5 and scikit-learn 1.9.1 (2026-11-22). Regenerate and repack:
 
@@ -68,7 +64,16 @@ def gbdt_qw():
             _put("gbdt_qw", "qw-pair-weights.f32", weights, np.float32)]
 
 
-SETS = [gbdt_ff, gbdt_qw]
+def class_weights():
+    # test_rf_class_weight.py::_data(balanced=False): the label codes of y = where(x[:, 0] > 0.3, 'a', 'b')
+    # ('a' is code 0, 'b' code 1, the sorted classes)
+    rng = np.random.default_rng(0)
+    x = rng.random((40, 4), dtype=np.float32)
+    codes = np.where(x[:, 0] > 0.3, 0, 1)
+    return [_put("trees_b4", "cw-codes.i32", codes, np.int32)]
+
+
+SETS = [gbdt_ff, gbdt_qw, class_weights]
 
 
 def _run(index):

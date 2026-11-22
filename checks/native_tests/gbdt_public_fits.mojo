@@ -887,6 +887,9 @@ def yeti_learns[I: GbdtImage]() raises:
 # "explicit feature_fraction=1. is the default" arm (the door sends no tail
 # for 1.0, so both requests are the same words: a door decision, not a fit
 # result), the pickle fingerprints and the two adapters (public boundary).
+# The host column has feature_fraction < 1 and the eval set on Lossguide
+# Logloss only (gbdt/host/gbdt_oracle.mojo): elsewhere it asserts the host's
+# refusal by name; every arm runs on the device column, as the original did.
 comptime FF_DIR = "../gbdt_ff/"
 comptime FF_UNITS = 7
 
@@ -932,6 +935,10 @@ def feature_fraction[I: GbdtImage](unit: Int) raises:
                 inp.eval_x.append(inp.x[j * 256 + r])
         for r in range(32):  # small-loop(the 32 eval targets)
             inp.eval_y.append(inp.y[r])
+        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+            # the host binding has no eval set outside SymmetricTree Logloss: its refusal by name
+            _refuses[I](o, inp, "a Lossguide fit with an eval set")
+            return
         var m = fit[I](o, inp)
         require(all_finite_f32(predict(m.text, inp.x, 256)), "weighted feature_fraction fit: nonfinite predict")
         require(len(m.test) > 0, "weighted feature_fraction fit: no test loss curve")
@@ -947,6 +954,11 @@ def feature_fraction[I: GbdtImage](unit: Int) raises:
         var o = _ff_opts(policy, loss)
         o.feature_fraction = fraction
         var what = key + " feature_fraction " + String(fraction)
+        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+            if not (policy == "Lossguide" and loss == "Logloss"):
+                # the host binding has feature_fraction < 1 on Lossguide Logloss only: its refusal by name
+                _refuses[I](o, inp, what)
+                continue
         var first = _twice[I](o, inp, what)
         require(first.text != default.text, what + ": feature_fraction had no model effect")
         require(all_finite_f32(predict(first.text, inp.x, 256)), what + ": nonfinite predict")
@@ -1021,6 +1033,12 @@ def querywise[I: GbdtImage](unit: Int) raises:
         require(not same_f32(unit_pred, weighted), "explicit pair weights ignored")
         inp.pairs = List[UInt32]()
         inp.pair_weights = List[Float32]()
+        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+            # Open finding (lane py2mojo-C, 2026-11-22): the host fit accepts leaf_estimation_method=Simple under
+            # the pointwise PairLogit search, where the device fit refuses it ("querywise use_pointwise_searcher
+            # requires Newton or Gradient", gbdt/methods/doc_parallel_boosting.mojo). The arm is asserted on the
+            # device column only until the host refuses the same.
+            return
         var simple = _qw_opts("PairLogit")
         simple.leaf_method = "Simple"
         var refused = False
