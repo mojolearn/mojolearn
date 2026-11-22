@@ -401,21 +401,24 @@ def typed_entry_fit() raises:
 # ---- The device column (was prophet_state_gpu_suite.mojo) ----
 # Importable native Prophet GPU fitted-state checks.
 def fixture_gpu(fixture_id: Int) raises:
-    var ex = DeviceExec()
-    var state = ProphetState(fixture_id)
-    if fixture_id == 0:
-        var inputs = ProphetFitInputs()
-        prepare_fit(ex, inputs, state)
-        var addresses = inputs.addresses(state)
-        var ip = state.ints(120)
-        ip.append(2000)
-        var fp: List[Float64] = [0.05]
-        require(prophet_fit_team_impl(ex, addresses, ip, fp) == 1, "Prophet full default fit count")
-        inputs.guards()
-        state.guards()
-        _ = inputs
-    run_queries(ex, state)
-    _ = state
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        var ex = DeviceExec()
+        var state = ProphetState(fixture_id)
+        if fixture_id == 0:
+            var inputs = ProphetFitInputs()
+            prepare_fit(ex, inputs, state)
+            var addresses = inputs.addresses(state)
+            var ip = state.ints(120)
+            ip.append(2000)
+            var fp: List[Float64] = [0.05]
+            require(prophet_fit_team_impl(ex, addresses, ip, fp) == 1, "Prophet full default fit count")
+            inputs.guards()
+            state.guards()
+            _ = inputs
+        run_queries(ex, state)
+        _ = state
 
 
 def test_state() raises:
