@@ -50,10 +50,16 @@ SABOTAGE:
 
 from max.gpu.host import DeviceContext
 
+from gbdt.data.permutation import TRandom
 from gbdt.train import predict_floats, train
 
 comptime PC_CATEGORIES = 50
 comptime PC_ROWS = 4000
+#: the trees of every gate but 5
+comptime PC_TREES = 6
+#: gate 5's trees: enough that trees AFTER the first are searched on
+#: permutation 1 (see gate 5)
+comptime PC_STRUCT_TREES = 40
 
 
 def _hashed(x: Int, salt: Int) -> Int:
@@ -98,10 +104,11 @@ def _predict(
     cat: List[Bool],
     perm_count: Int,
     est: Int,
+    n_trees: Int,
 ) raises -> List[Float32]:
     var tm = train(
         ctx, x, y, PC_ROWS, n_features,
-        border_count=32, n_estimators=6, max_depth=4,
+        border_count=32, n_estimators=n_trees, max_depth=4,
         loss="RMSE", learning_rate=Float32(0.3),
         cat_features=cat,
         permutation_count=perm_count,
@@ -139,8 +146,8 @@ def check_permutation_count() raises:
     var cat: List[Bool] = [True, False]
 
     print("-- gate 1: one permutation == four, read at permutation 0 --")
-    var one = _predict(ctx, x, y, 2, cat, 1, -1)
-    var four_at_0 = _predict(ctx, x, y, 2, cat, 4, 0)
+    var one = _predict(ctx, x, y, 2, cat, 1, -1, PC_TREES)
+    var four_at_0 = _predict(ctx, x, y, 2, cat, 4, 0, PC_TREES)
     var d10 = _differing_rows(one, four_at_0)
     if d10 != 0:
         print(
@@ -158,7 +165,7 @@ def check_permutation_count() raises:
 
     print()
     print("-- gate 2: the estimation permutation is really read --")
-    var four_at_3 = _predict(ctx, x, y, 2, cat, 4, -1)
+    var four_at_3 = _predict(ctx, x, y, 2, cat, 4, -1, PC_TREES)
     var d13 = _differing_rows(one, four_at_3)
     if d13 == 0:
         print(
@@ -175,8 +182,8 @@ def check_permutation_count() raises:
     print()
     print("-- gate 3: no CTRs means permutation_count is OVERRIDDEN --")
     var numeric: List[Bool] = [False, False]
-    var num_one = _predict(ctx, x, y, 2, numeric, 1, -1)
-    var num_four = _predict(ctx, x, y, 2, numeric, 4, -1)
+    var num_one = _predict(ctx, x, y, 2, numeric, 1, -1, PC_TREES)
+    var num_four = _predict(ctx, x, y, 2, numeric, 4, -1, PC_TREES)
     var dnum = _differing_rows(num_one, num_four)
     if dnum != 0:
         print(
@@ -206,8 +213,37 @@ def check_permutation_count() raises:
     # only differ through the structure. A loop that searched on the
     # estimation permutation -- which is what this implementation did before the
     # permutation loop existed -- gives the SAME model for both.
-    var three_at_2 = _predict(ctx, x, y, 2, cat, 3, 2)
-    var four_at_2 = _predict(ctx, x, y, 2, cat, 4, 2)
+    #
+    # THE GATE NEEDS TREES AFTER THE FIRST ON PERMUTATION 1 (lane
+    # pv-gbdt-perm, 2026-11-22). At `random_seed` 0 the draw
+    # `TRandom(tree).Advance(10).NextUniformL() % 2` is 1 for tree 0 only
+    # among the first six (then trees 14, 20, 21, 29, 30, 31, 33, 35, 37,
+    # 39 of forty). Tree 0 starts every permutation's cursor at the same
+    # point, so its gradients are identical and only the CTR column
+    # differs; on this fixture (the target is the category's mean plus
+    # noise) permutations 0 and 1 pick the same tree-0 splits, and six
+    # trees then measure nothing. The gate passed at 5c252f1573 (4000 rows
+    # moved) and stopped at 04b89b3dd5, which re-keyed every CTR order by
+    # (random_seed, permutation, position), bits change on every column:
+    # tree 0's coincidence flipped, the loop did not. Forty trees put
+    # later trees on permutation 1, whose cursor has carried its own
+    # estimates since tree 0, so the search sees different gradients.
+    # `perm1_trees` below recomputes the draw (`doc_parallel_boosting.mojo`
+    # learn_perm_count) so a fixture that cannot test is refused by name.
+    var perm1_trees = 0
+    for t in range(1, PC_STRUCT_TREES):
+        var rnd = TRandom(UInt64(t))
+        rnd.advance(10)
+        if rnd.next_uniform_l() % UInt64(2) == UInt64(1):
+            perm1_trees += 1
+    if perm1_trees == 0:
+        print(
+            "  FAIL fixture: no tree after the first draws permutation 1,"
+            " so gate 5 cannot see the structure permutation",
+        )
+        failures += 1
+    var three_at_2 = _predict(ctx, x, y, 2, cat, 3, 2, PC_STRUCT_TREES)
+    var four_at_2 = _predict(ctx, x, y, 2, cat, 4, 2, PC_STRUCT_TREES)
     var dstruct = _differing_rows(three_at_2, four_at_2)
     if dstruct == 0:
         print(
@@ -226,7 +262,7 @@ def check_permutation_count() raises:
     print("-- gate 4: permutation_count must be positive --")
     var refused = False
     try:
-        var _z = _predict(ctx, x, y, 2, cat, 0, -1)
+        var _z = _predict(ctx, x, y, 2, cat, 0, -1, PC_TREES)
     except e:
         refused = True
     if not refused:
@@ -240,7 +276,7 @@ def check_permutation_count() raises:
     # P1: gate 1 asserts an EQUALITY, and an equality gate is worthless
     # unless the same comparison can come out unequal. Permutation 1 is
     # the control: same fit, same borders, one index apart.
-    var four_at_1 = _predict(ctx, x, y, 2, cat, 4, 1)
+    var four_at_1 = _predict(ctx, x, y, 2, cat, 4, 1, PC_TREES)
     var d01 = _differing_rows(four_at_0, four_at_1)
     if d01 == 0:
         print(
