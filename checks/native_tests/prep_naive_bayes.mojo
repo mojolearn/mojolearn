@@ -76,7 +76,7 @@ def gaussian_case(tag: String, data: String, held: String, weighted: Bool, block
 
 def discrete_case(tag: String, kind: Int, data: String, held: String, weighted: Bool, alpha: Float64, prior: Int,
                   has_threshold: Bool, threshold: Float64, norm: Bool, blocked: Bool, attrs: List[String],
-                  rtol: Float64, atol: Float64) raises:
+                  rtol: Float64, atol: Float64, absolute: Bool) raises:
     var n = NB_N
     var d = NB_D
     var K = NB_K
@@ -84,7 +84,7 @@ def discrete_case(tag: String, kind: Int, data: String, held: String, weighted: 
     var x = fixture_f32(PREP_NB_DIR + "x" + data + ".f32", n * d)
     var y = fixture_i32(PREP_NB_DIR + "y" + data + ".i32", n)
     var xh = fixture_f32(PREP_NB_DIR + "xh" + held + ".f32", n * d)
-    if kind != CLS_KIND_BNB:
+    if absolute:
         x = abs_words(x)
         xh = abs_words(xh)
     var w = fixture_f32(PREP_NB_DIR + "w7.f32", n) if weighted else List[Float32]()
@@ -129,7 +129,7 @@ def multinomial_unit(unit: Int) raises:
     var alphas: List[Float64] = [1.0, 0.3]
     discrete_case("mnb" + String(k), CLS_KIND_MNB, "0", "1", False, alphas[k],
         CLS_PRIOR_FIT if k == 0 else CLS_PRIOR_UNIFORM, False, 0.0, False, unit % 2 == 0, discrete_attrs(),
-        2e-4, 2e-5)
+        2e-4, 2e-5, True)
 
 
 def test_multinomial() raises:
@@ -142,7 +142,7 @@ def bernoulli_unit(unit: Int) raises:
     var alphas: List[Float64] = [1.0, 2.0]
     var thresholds: List[Float64] = [0.0, 0.5]
     discrete_case("bnb" + String(k), CLS_KIND_BNB, "0", "1", False, alphas[k], CLS_PRIOR_FIT, True, thresholds[k],
-        False, unit % 2 == 0, discrete_attrs(), 2e-4, 2e-5)
+        False, unit % 2 == 0, discrete_attrs(), 2e-4, 2e-5, False)
 
 
 def test_bernoulli() raises:
@@ -154,7 +154,7 @@ def complement_unit(unit: Int) raises:
     var k = unit // 2
     var alphas: List[Float64] = [1.0, 0.4]
     discrete_case("cnb" + String(k), CLS_KIND_CNB, "0", "1", False, alphas[k], CLS_PRIOR_FIT, False, 0.0, k == 1,
-        unit % 2 == 0, discrete_attrs(), 2e-4, 2e-5)
+        unit % 2 == 0, discrete_attrs(), 2e-4, 2e-5, True)
 
 
 def test_complement() raises:
@@ -174,7 +174,7 @@ def weighted_unit(unit: Int) raises:
     var tags: List[String] = ["wmnb", "wcnb", "wbnb"]
     var kind = kinds[k - 1]
     discrete_case(tags[k - 1], kind, "5", "6", True, 1.0, CLS_PRIOR_FIT, kind == CLS_KIND_BNB, 0.0, False, blocked,
-        attrs, 1e-3, 1e-3)
+        attrs, 1e-3, 1e-3, True)
 
 
 def test_sample_weight() raises:

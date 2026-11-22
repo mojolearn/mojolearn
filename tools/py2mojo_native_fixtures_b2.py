@@ -12,6 +12,7 @@ hands the programs).
 
     checks/native_tests/fixtures/prep_nb/   prep_naive_bayes.mojo   (test_x_prep_naive_bayes.py)
     checks/native_tests/fixtures/prep_da/   prep_discriminant.mojo  (test_x_prep_discriminant.py)
+    checks/native_tests/fixtures/prep_kb/   prep_kbins.mojo         (test_x_prep_kbins.py)
 
 Generated with numpy 2.5.3 and scikit-learn 1.9.1 (the repository's pixi `test` environment, 2026-11-22). Regenerate
 and repack:
@@ -218,7 +219,50 @@ def da_solvers():
     return out
 
 
-SETS = (nb_plain, nb_weighted, da_lda, da_qda, da_priors, da_solvers)
+# ---------------------------------------------------------------- KBinsDiscretizer (test_x_prep_kbins.py)
+def _kb_data(seed=0, n=500, d=4):
+    # test_x_prep_kbins.py::_data
+    rng = np.random.default_rng(seed)
+    X = rng.standard_normal((n, d)).astype(np.float32)
+    X[:, 1] = np.round(X[:, 1])          # ties: some quantile bins collapse
+    X[:, 2] = np.float32(1.5)            # constant
+    return X
+
+
+# test_strategies, the keyword sets in order (scikit-learn 1.9's quantile default is averaged_inverted_cdf)
+KB_KW = (dict(strategy="uniform"), dict(strategy="quantile"), dict(strategy="quantile", quantile_method="linear"),
+         dict(strategy="kmeans"))
+
+
+def _kb_edges(out, tag, r):
+    out.append(_put("prep_kb", f"{tag}-nbins.i32", r.n_bins_, np.int32))
+    out.append(_put("prep_kb", f"{tag}-edges.f64", np.concatenate([np.asarray(e) for e in r.bin_edges_]),
+                    np.float64))
+
+
+def kbins():
+    from sklearn.preprocessing import KBinsDiscretizer as SkKB
+    X = _kb_data()
+    out = [_put("prep_kb", "x0.f32", X, np.float32)]
+    for k, kw in enumerate(KB_KW):
+        r = SkKB(n_bins=5, encode="ordinal", **kw).fit(X.astype(np.float64))
+        _kb_edges(out, f"s{k}", r)
+        Z = r.transform(X.astype(np.float64))
+        out.append(_put("prep_kb", f"s{k}-transform.f64", Z, np.float64))
+        out.append(_put("prep_kb", f"s{k}-inverse.f64", r.inverse_transform(Z), np.float64))
+    # test_onehot
+    X1 = _kb_data(1)
+    out.append(_put("prep_kb", "x1.f32", X1, np.float32))
+    r = SkKB(n_bins=4, encode="onehot-dense", strategy="uniform").fit(X1.astype(np.float64))
+    _kb_edges(out, "oh", r)
+    want = r.transform(X1.astype(np.float64))
+    out.append(_put("prep_kb", "oh-shape.i32", want.shape, np.int32))
+    out.append(_put("prep_kb", "oh-transform.f64", want, np.float64))
+    out.append(_put("prep_kb", "oh-inverse.f64", r.inverse_transform(want), np.float64))
+    return out
+
+
+SETS = (nb_plain, nb_weighted, da_lda, da_qda, da_priors, da_solvers, kbins)
 
 
 def _run(index):
