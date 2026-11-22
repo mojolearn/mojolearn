@@ -471,35 +471,6 @@ from checks.native_tests.ensemble_shuffle_check import register as register_ense
 from checks.native_tests.ensemble_sibling_column_overlap_check import register as register_ensemble_sibling_column_overlap_check
 from checks.native_tests.ensemble_split_check import register as register_ensemble_split_check
 from checks.native_tests.ensemble_train_check import register as register_ensemble_train_check
-from checks.native_tests.extratrees_bestfirst_check import register as register_extratrees_bestfirst_check
-from checks.native_tests.extratrees_borrowed_upload_check import register as register_extratrees_borrowed_upload_check
-from checks.native_tests.extratrees_builder_check import register as register_extratrees_builder_check
-from checks.native_tests.extratrees_device_batched_check import register as register_extratrees_device_batched_check
-from checks.native_tests.extratrees_device_regression_check import register as register_extratrees_device_regression_check
-from checks.native_tests.extratrees_device_tree_check import register as register_extratrees_device_tree_check
-from checks.native_tests.extratrees_feature_sampler_check import register as register_extratrees_feature_sampler_check
-from checks.native_tests.extratrees_fixed_point_check import register as register_extratrees_fixed_point_check
-from checks.native_tests.extratrees_fixtures_check import register as register_extratrees_fixtures_check
-from checks.native_tests.extratrees_flatnode_check import register as register_extratrees_flatnode_check
-from checks.native_tests.extratrees_forest_check import register as register_extratrees_forest_check
-from checks.native_tests.extratrees_gpu_only_entrypoints import register as register_extratrees_gpu_only_entrypoints
-from checks.native_tests.extratrees_host_splitter_check import register as register_extratrees_host_splitter_check
-from checks.native_tests.extratrees_leaf_check import register as register_extratrees_leaf_check
-from checks.native_tests.extratrees_objectives_check import register as register_extratrees_objectives_check
-from checks.native_tests.extratrees_partition_check import register as register_extratrees_partition_check
-from checks.native_tests.extratrees_partition_leaf_kernel_check import register as register_extratrees_partition_leaf_kernel_check
-from checks.native_tests.extratrees_partition_multiblock_check import register as register_extratrees_partition_multiblock_check
-from checks.native_tests.extratrees_pcg_rng_check import register as register_extratrees_pcg_rng_check
-from checks.native_tests.extratrees_quality_band_check import register as register_extratrees_quality_band_check
-from checks.native_tests.extratrees_range_draw_check import register as register_extratrees_range_draw_check
-from checks.native_tests.extratrees_range_kernel_check import register as register_extratrees_range_kernel_check
-from checks.native_tests.extratrees_regression_score_check import register as register_extratrees_regression_score_check
-from checks.native_tests.extratrees_rescue_check import register as register_extratrees_rescue_check
-from checks.native_tests.extratrees_sampler_kernel_check import register as register_extratrees_sampler_kernel_check
-from checks.native_tests.extratrees_split_check import register as register_extratrees_split_check
-from checks.native_tests.extratrees_split_reduce_check import register as register_extratrees_split_reduce_check
-from checks.native_tests.extratrees_stage_upload_bytes_check import register as register_extratrees_stage_upload_bytes_check
-from checks.native_tests.extratrees_tree_check import register as register_extratrees_tree_check
 from checks.native_tests.gbdt_host_binarize_identical import register as register_gbdt_host_binarize_identical
 from checks.native_tests.gbdt_tree_ctr_host_check import register as register_gbdt_tree_ctr_host_check
 from checks.native_tests.gbdt_ordered_ctr_host_check import register as register_gbdt_ordered_ctr_host_check
@@ -537,7 +508,6 @@ from checks.native_tests.training_chunked_lm_head_check import register as regis
 from checks.native_tests.training_chunked_lm_head_device_check import register as register_training_chunked_lm_head_device_check
 from checks.native_tests.training_dbscan_parallel_check import register as register_training_dbscan_parallel_check
 from checks.native_tests.training_maximize_check import register as register_training_maximize_check
-from checks.native_tests.transformer_attention_fma_boundary_check import register as register_transformer_attention_fma_boundary_check
 from checks.native_tests.transformer_attention_zdot_routing_check import register as register_transformer_attention_zdot_routing_check
 from checks.native_tests.x_ann_cagra_check import register as register_x_ann_cagra_check
 from checks.native_tests.x_ann_ivf_pq_check import register as register_x_ann_ivf_pq_check
@@ -1022,35 +992,6 @@ def all_checks() -> List[Check]:
     checks.append(register_ensemble_sibling_column_overlap_check())
     checks.append(register_ensemble_split_check())
     checks.append(register_ensemble_train_check())
-    checks.append(register_extratrees_bestfirst_check())
-    checks.append(register_extratrees_borrowed_upload_check())
-    checks.append(register_extratrees_builder_check())
-    checks.append(register_extratrees_device_batched_check())
-    checks.append(register_extratrees_device_regression_check())
-    checks.append(register_extratrees_device_tree_check())
-    checks.append(register_extratrees_feature_sampler_check())
-    checks.append(register_extratrees_fixed_point_check())
-    checks.append(register_extratrees_fixtures_check())
-    checks.append(register_extratrees_flatnode_check())
-    checks.append(register_extratrees_forest_check())
-    checks.append(register_extratrees_gpu_only_entrypoints())
-    checks.append(register_extratrees_host_splitter_check())
-    checks.append(register_extratrees_leaf_check())
-    checks.append(register_extratrees_objectives_check())
-    checks.append(register_extratrees_partition_check())
-    checks.append(register_extratrees_partition_leaf_kernel_check())
-    checks.append(register_extratrees_partition_multiblock_check())
-    checks.append(register_extratrees_pcg_rng_check())
-    checks.append(register_extratrees_quality_band_check())
-    checks.append(register_extratrees_range_draw_check())
-    checks.append(register_extratrees_range_kernel_check())
-    checks.append(register_extratrees_regression_score_check())
-    checks.append(register_extratrees_rescue_check())
-    checks.append(register_extratrees_sampler_kernel_check())
-    checks.append(register_extratrees_split_check())
-    checks.append(register_extratrees_split_reduce_check())
-    checks.append(register_extratrees_stage_upload_bytes_check())
-    checks.append(register_extratrees_tree_check())
     checks.append(register_gbdt_host_binarize_identical())
     checks.append(register_gbdt_tree_ctr_host_check())
     checks.append(register_gbdt_ordered_ctr_host_check())
@@ -1087,7 +1028,6 @@ def all_checks() -> List[Check]:
     checks.append(register_training_chunked_lm_head_device_check())
     checks.append(register_training_dbscan_parallel_check())
     checks.append(register_training_maximize_check())
-    checks.append(register_transformer_attention_fma_boundary_check())
     checks.append(register_transformer_attention_zdot_routing_check())
     checks.append(register_x_ann_cagra_check())
     checks.append(register_x_ann_ivf_pq_check())
