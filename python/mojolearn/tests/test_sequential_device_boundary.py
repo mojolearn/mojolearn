@@ -64,7 +64,7 @@ def test_a_refused_constructor_leaves_an_existing_model_unchanged():
     model = Sequential("identical", device="cpu").linear(3)
     with pytest.raises(ValueError, match="device must be"):
         model.__init__(device="tpu")
-    assert model.device == "cpu" and model.numeric_mode == "identical" and len(model.layers()) == 1
+    assert model.device == "cpu" and model.numeric_mode == "identical" and len(model.layers) == 1   # `layers` is a property
 
 
 def test_default_device_is_this_installations_device(tmp_path):
