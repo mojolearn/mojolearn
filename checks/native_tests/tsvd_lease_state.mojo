@@ -1,19 +1,71 @@
 # SPDX-License-Identifier: Apache-2.0
-from checks.native_tests.tsvd_lease_state_suite import run_checks
-from checks.native_tests.runner import Check, Column, Report
+# native-check: cpu
+"""Native TSVD cache matching, move ownership and single-release token state."""
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from core.tsvd_native_api import TSVDNativeDriver
+from core.tsvd_owner_state import TSVDLeaseState
+from checks.native_tests.tsvd_contract import tsvd_wire_entry
+
+comptime TSVD_LEASE_STATE_FIXTURES = 12
 
 
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
-def register() -> Check:
-    return Check("tsvd_lease_state", cpu=True, gpu=False, serial="", run=run_cases)
+def owner(lease: Int = 7331) -> TSVDLeaseState:
+    return TSVDLeaseState(101, 211, 307, lease, TSVDNativeDriver(tsvd_wire_entry))
+
+
+def transfer(var state: TSVDLeaseState) -> TSVDLeaseState:
+    return state^
+
+
+def fixture(unit: Int) raises:
+    var state = owner(0 if unit == 8 else 7331)
+    if unit < 8:
+        var connection = 103 if (unit & 1) != 0 else 101
+        var generation = 223 if (unit & 2) != 0 else 211
+        var components = 311 if (unit & 4) != 0 else 307
+        require(state.matches(connection, generation, components) == (unit == 0),
+                "TSVD live owner requires exact connection/generation/component identity")
+        require(state.lease == 7331, "TSVD identity lookup must not consume the lease")
+    elif unit == 8:
+        require(not state.matches(101, 211, 307), "TSVD zero lease cannot admit cached state")
+        require(state.take_lease() == 0 and state.take_lease() == 0,
+                "TSVD empty owner stays empty across cleanup attempts")
+    elif unit == 9:
+        var taken = state.take_lease()
+        require(taken == 7331 and state.lease == 0, "TSVD cleanup receives exact token and clears owner")
+        require(not state.matches(101, 211, 307) and state.take_lease() == 0,
+                "TSVD consumed owner cannot match or release a second token")
+        state.driver.close(taken)
+    elif unit == 10:
+        var moved = transfer(state^)
+        require(moved.matches(101, 211, 307) and moved.lease == 7331,
+                "TSVD moved owner retains its admitted identities")
+        require(moved.driver.metadata(1) == 4 and moved.driver.metadata(2) == 63,
+                "TSVD moved owner retains its native descriptor driver")
+        var taken = moved.take_lease()
+        require(taken == 7331 and moved.take_lease() == 0, "TSVD moved owner releases once")
+        moved.driver.close(taken)
+    else:
+        _ = state.take_lease()
+        require(state.connection == 101 and state.generation == 211 and state.components == 307,
+                "TSVD token transfer changes no admission identity field")
+        require(state.driver.metadata(3) == 2, "TSVD token transfer preserves the owning driver")
+        var replacement = TSVDLeaseState(101, 223, 311, 8123, TSVDNativeDriver(tsvd_wire_entry))
+        require(replacement.matches(101, 223, 311) and not replacement.matches(101, 211, 307),
+                "TSVD replacement generation admits only its current components")
+        require(state.take_lease() == 0 and replacement.take_lease() == 8123,
+                "TSVD previous cleanup cannot consume a replacement owner's token")
+
+
+def test_fixture() raises:
+    check_cases("fixture", TSVD_LEASE_STATE_FIXTURES, fixture)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

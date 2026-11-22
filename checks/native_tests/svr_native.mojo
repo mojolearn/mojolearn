@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual SVR providers, independent two-point optima and the 150x5 surface workload.
 
 The planted workload, salts, noise and quality bounds come from
@@ -12,7 +13,14 @@ from core.labels_native_host import labels_host_fsum
 from core.svr_native_api import SvrNativeDriver, SvrFitPlan, SvrFitRequest, SvrQueryRequest
 from svm.host.svr_native_host import svr_host_native_v1
 from svm.svr_native_device import svr_device_native_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime SVR_NATIVE_CASES = 12
@@ -200,36 +208,31 @@ def fixture(driver: SvrNativeDriver, unit: Int, resident: Bool = False) raises:
 
 
 # ---- The host column (was svr_native_cpu_suite.mojo) ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(SVR_NATIVE_CASES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(SvrNativeDriver(svr_host_native_v1), unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, SVR_NATIVE_CASES)
+def _run_cpu() raises:
+    def run(unit: Int) raises:
+        fixture(SvrNativeDriver(svr_host_native_v1), unit)
+    check_cases("svr_native", SVR_NATIVE_CASES, run)
 
 
 # ---- The device column (was svr_native_gpu_suite.mojo) ----
 # Ordered numerical cases; shared-DeviceContext concurrent submission stays parked.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(SVR_NATIVE_CASES + SVR_RESIDENT_CASES)
-    for unit in range(SVR_NATIVE_CASES + SVR_RESIDENT_CASES):  # ordered shared-context numerical fixtures
-        try:
-            fixture(SvrNativeDriver(svr_device_native_v1), unit % SVR_NATIVE_CASES, unit >= SVR_NATIVE_CASES)
-        except problem:
-            cases.fail(unit, problem)
+def _run_gpu() raises:
+    # ordered shared-context numerical fixtures
+    def ordered_case(unit: Int) raises:
+        fixture(SvrNativeDriver(svr_device_native_v1), unit % SVR_NATIVE_CASES, unit >= SVR_NATIVE_CASES)
+    check_cases_serial("svr_native", SVR_NATIVE_CASES + SVR_RESIDENT_CASES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_svr_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("svr_native", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # The tests by name, not discover_tests: discovery instantiates every function of the module, and the
+    # device column's functions do not compile in the host column build.
+    var suite = TestSuite()
+    suite.test[test_svr_native]()
+    suite^.run()

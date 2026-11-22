@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual class-count/gather/multiply descriptors with independent expectations."""
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -11,7 +12,14 @@ from core.label_weights_native_api import (
 )
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from xtrees.label_weights_native import label_weights_native_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime LABEL_WEIGHT_FIXTURES = 8
@@ -154,38 +162,32 @@ def fixture(driver: LabelWeightsDriver, fixture_id: Int) raises:
 
 # ---- The host column (was logistic_label_weights_cpu_suite.mojo) ----
 # Actual CPU class-weight descriptor; target define is mandatory.
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     comptime assert TARGET_COLUMN == COLUMN_CPU
-    var cases = report.cases(LABEL_WEIGHT_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            fixture(LabelWeightsDriver(label_weights_native_v1), fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, LABEL_WEIGHT_FIXTURES)
+    def task(fixture_id: Int) raises:
+        fixture(LabelWeightsDriver(label_weights_native_v1), fixture_id)
+    check_cases("label_weights", LABEL_WEIGHT_FIXTURES, task)
 
 
 # ---- The device column (was logistic_label_weights_gpu_suite.mojo) ----
 # Actual GPU class-weight descriptor; shared context submissions are ordered.
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     comptime assert TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(LABEL_WEIGHT_FIXTURES)
-    for fixture_id in range(LABEL_WEIGHT_FIXTURES):
-        try:
-            fixture(LabelWeightsDriver(label_weights_native_v1), fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+    def ordered_case(fixture_id: Int) raises:
+        fixture(LabelWeightsDriver(label_weights_native_v1), fixture_id)
+    check_cases_serial("label_weights", LABEL_WEIGHT_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_label_weights() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("logistic_label_weights", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # The tests by name, not discover_tests: discovery instantiates every function of the module, and the
+    # device column's functions do not compile in the host column build.
+    var suite = TestSuite()
+    suite.test[test_label_weights]()
+    suite^.run()
