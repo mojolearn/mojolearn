@@ -25,6 +25,10 @@ from checks.native_tests.pca_native_helpers import (
 )
 
 comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+# test_pca_randomized_options (lane py2mojo-D6, 2026-11-22)
+from std.math import sqrt
+from checks.native_tests.tsa_metrics_fixture_words import fixture_f32
+from checks.native_tests.testsuite_serial import check_cases_serial
 
 
 comptime PCA_NATIVE_FIXTURES = 10
@@ -386,6 +390,133 @@ def test_pca_native() raises:
                 failures += "\n      row " + String(unit) + ": " + String(error)
         if failures.byte_length() > 0:
             raise Error("pca_native: device fixtures failed:" + failures)
+
+
+# ---- randomized solver options (lane py2mojo-D6, 2026-11-22) ----
+# Ported from python/mojolearn/tests/test_pca_exact_native_owner.py
+# `test_randomized_complete_owner_preserves_seed_power_and_consumed_outputs`, its six parameter rows
+# (rows, cols, n_components, n_oversamples, iterated_power, power_iteration_normalizer, random_state):
+#     0 (24, 5, 2, 3, 'auto', 'auto', None)   1 (24, 5, 2, 0, 1, 'QR', 37)   2 (5, 24, 2, 2, 2, 'LU', -1)
+#     3 (24, 5, 2, 2, 0, 'none', 2**70 + 3)   4 (24, 5, 2, 3, -1, 'auto', 37)  5 (72, 65, 3, 14, 1, 'QR', 7)
+# with whiten=True, as the door builds the request (bindings/pca_fit_native_door.mojo: random_state None -> seed 0,
+# an int -> its low 32 bits, 'auto' -> auto_iterations; the normalizer is admitted there and the native solver takes
+# no word for it). Inputs: the original `fixture(rows, cols)` draws (seed 9021) in fixtures/pca_random/. Checks: the
+# fit's projection (fit_transform) equals the transform query of the fitted state word for word (the original's
+# fit_transform == transform of an equal fit); then the original's equations on the consumed state, in float64: the
+# whitened projection (x - mean) C^T sqrt(rows - 1) / s to rtol 5e-3, atol 5e-4; the inverse (x - mean) C^T C + mean
+# to rtol 5e-3, atol 8e-4; C C^T = I to rtol 5e-3, atol 5e-4. The Python owner, the audit of Python orchestration and
+# the published attributes stay in Python. Independent rows run across the host cores.
+comptime PCA_RANDOM_CASES = 6
+comptime PCA_RANDOM_DIR = "checks/native_tests/fixtures/pca_random/"
+
+
+def randomized_fixture(driver: PCANativeDriver, unit: Int) raises:
+    var rows_of: Array[Int, 6] = [24, 24, 5, 24, 24, 72]
+    var cols_of: Array[Int, 6] = [5, 5, 24, 5, 5, 65]
+    var rank_of: Array[Int, 6] = [2, 2, 2, 2, 2, 3]
+    var over_of: Array[Int, 6] = [3, 0, 2, 2, 3, 14]
+    var power_of: Array[Int, 6] = [0, 1, 2, 0, -1, 1]
+    var seed_of: Array[Int, 6] = [0, 37, 0xFFFFFFFF, 3, 37, 7]
+    var rows = rows_of[unit]
+    var features = cols_of[unit]
+    var count = rank_of[unit]
+    var label = "PCA randomized row " + String(unit)
+    var source = fixture_f32(PCA_RANDOM_DIR + "x-" + String(rows) + "x" + String(features) + ".f32", rows * features)
+    var original = source.copy()
+    var state = PCATestState(rows, features, count)
+    var request = PCAFitRequest(Int(source.unsafe_ptr()), Int(state.components.unsafe_ptr()) + 4,
+        Int(state.mean.unsafe_ptr()) + 4, Int(state.variance.unsafe_ptr()) + 4, Int(state.ratio.unsafe_ptr()) + 4,
+        Int(state.singular.unsafe_ptr()) + 4, Int(state.projected.unsafe_ptr()) + 4, rows, features, count,
+        False, 0, True, True, over_of[unit], power_of[unit], unit == 0, seed_of[unit], True, 0.0, PCAFoldStore())
+    var answer = driver.fit(request)
+    require(answer.finite == 0 and answer.in_range == 0 and answer.keep == count,
+            label + ": fit status / kept count " + String(answer.keep))
+    var transformed = List[Float32](length=rows * count + 2, fill=PCA_TEST_GUARD)
+    var status = driver.query(PCAQueryRequest(Int(source.unsafe_ptr()), Int(state.mean.unsafe_ptr()) + 4,
+        Int(state.components.unsafe_ptr()) + 4, Int(state.singular.unsafe_ptr()) + 4,
+        Int(transformed.unsafe_ptr()) + 4, rows, features, count, rows, False, True, PCAFoldStore()))
+    require(status.finite == 0 and status.in_range == 0, label + ": transform status")
+    guards(transformed, label + " transform")
+    unchanged(transformed, state.projected, label + ": transform of the fitted state vs fit_transform")
+    var restored = List[Float32](length=rows * features + 2, fill=PCA_TEST_GUARD)
+    status = driver.query(PCAQueryRequest(Int(state.projected.unsafe_ptr()) + 4, Int(state.mean.unsafe_ptr()) + 4,
+        Int(state.components.unsafe_ptr()) + 4, Int(state.singular.unsafe_ptr()) + 4,
+        Int(restored.unsafe_ptr()) + 4, rows, features, count, rows, True, True, PCAFoldStore()))
+    require(status.finite == 0 and status.in_range == 0, label + ": inverse status")
+    guards(restored, label + " inverse")
+    # the original's equations, float64, over the consumed fitted state
+    var mean = List[Float64](length=features, fill=0)
+    var xp = source.unsafe_ptr()
+    var mp = mean.unsafe_ptr()
+    def column_mean(feature: Int) {imm xp, imm mp, imm rows, imm features}:
+        var total = Float64(0)
+        for row in range(rows):  # the one column's mean
+            total += Float64(xp[row * features + feature])
+        mp[feature] = total / Float64(rows)
+    host_parallelize(column_mean, features)
+    var raw = List[Float64](length=rows * count, fill=0)
+    var whitened = List[Float64](length=rows * count, fill=0)
+    var rp = raw.unsafe_ptr()
+    var wp = whitened.unsafe_ptr()
+    var cp = state.components.unsafe_ptr() + 1
+    var sp = state.singular.unsafe_ptr() + 1
+    def projection(index: Int) {imm xp, imm mp, imm cp, imm sp, imm rp, imm wp, imm rows, imm features, imm count}:
+        var row = index // count
+        var component = index % count
+        var total = Float64(0)
+        for feature in range(features):  # the one cell's projection
+            total += (Float64(xp[row * features + feature]) - mp[feature]) * Float64(cp[component * features + feature])
+        rp[index] = total
+        wp[index] = total * sqrt(Float64(rows - 1)) / Float64(sp[component])
+    host_parallelize(projection, rows * count)
+    close_values(state.projected, whitened, rows * count, 5e-3, 5e-4, label + ": whitened projection")
+    var inverse = List[Float64](length=rows * features, fill=0)
+    var ip = inverse.unsafe_ptr()
+    def back(index: Int) {imm rp, imm mp, imm cp, imm ip, imm features, imm count}:
+        var row = index // features
+        var feature = index % features
+        var total = mp[feature]
+        for component in range(count):  # the one cell's reconstruction
+            total += rp[row * count + component] * Float64(cp[component * features + feature])
+        ip[index] = total
+    host_parallelize(back, rows * features)
+    close_values(restored, inverse, rows * features, 5e-3, 8e-4, label + ": inverse")
+    for i in range(count):  # small-loop: the count x count Gram of the components
+        for j in range(count):
+            var total = Float64(0)
+            for feature in range(features):
+                total += Float64(cp[i * features + feature]) * Float64(cp[j * features + feature])
+            var want = Float64(1.0) if i == j else Float64(0.0)
+            require(abs(total - want) <= 5e-4 + 5e-3 * abs(want),
+                    label + ": components @ components.T [" + String(i) + ", " + String(j) + "] = " + String(total))
+    state.check_guards()
+    unchanged(source, original, label + " input")
+    _ = mean^
+    _ = raw^
+    _ = whitened^
+    _ = inverse^
+    _ = transformed^
+    _ = restored^
+    _ = state^
+
+
+def _host_randomized(unit: Int) raises:
+    comptime if CPU_COLUMN_BUILD:
+        randomized_fixture(PCANativeDriver(pca_host_native_v1), unit)
+
+
+def _device_randomized(unit: Int) raises:
+    comptime if not CPU_COLUMN_BUILD:
+        randomized_fixture(PCANativeDriver(pca_device_native_v1), unit)
+
+
+def test_pca_randomized_options() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("pca_randomized_options", PCA_RANDOM_CASES, _host_randomized)
+    else:
+        # the production device context is shared: the fits submit in order
+        check_cases_serial("pca_randomized_options", PCA_RANDOM_CASES, _device_randomized)
 
 
 def main() raises:

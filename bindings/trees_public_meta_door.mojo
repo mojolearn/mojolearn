@@ -75,7 +75,7 @@ from xtrees.trees_forest_run import (
     _classifier,
 )
 from bindings.trees_public_boost_door import (
-    _mode, _xt, _xr, _x_f32, _as_array, _fsum, _arange, _class_major, _gather, _gather_codes,
+    _mode, _xt, _xr, _x_f32, _as_array, _arange, _class_major, _gather, _gather_codes,
     _gather_vec, _argmax, _scale, _member_codes,
 )
 from bindings.trees_public_score_door import trees_r2, trees_class_codes
@@ -89,7 +89,10 @@ from core.member_abi import (
     MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION,
 )
 from bindings.member_set_door import (
-    MEMBER_SET_NATIVE, member_set_tests, member_held_open, member_held_run, member_held_close,
+    MEMBER_SET_NATIVE, member_set_tests, member_held_open, member_held_run, member_held_close, MemberHeldCall,
+)
+from xtrees.trees_meta_vote_run import (
+    VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
 )
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
@@ -119,14 +122,15 @@ from bindings.base_helpers_released_unpack import (
     base_check_indices_i64, base_bincount_i64, base_reduce_stat_int, base_equal_elements,
 )
 from core.linear_entry_table import LinearEntryKey
+from core.entry_table import EntryRef
 from core.linear_multi_calls import ridge_multi_ref, ridge_multi_available, rm_predict
 from bindings.trees_meta_ridge_run import RidgeMultiFit, ridge_multi_fit_run
 from bindings.py_optional import py_or_none
 from xtrees.glue_calls import (
-    xt_accumulate, xt_accumulate_cols, xt_accumulate_onehot, xt_scatter, xt_device_folds, xt_transpose_f64,
+    xt_accumulate, xt_accumulate_cols, xt_scatter, xt_device_folds, xt_transpose_f64,
     xt_stack_w64, xt_rows_any_unset, xt_indicator_codes, xt_binary_proba, xt_normalize_rows, xt_platt_fit,
     xt_isotonic_fit, xt_platt_apply_strided, xt_isotonic_predict_strided, xt_complement_pairs,
-    xt_accumulate_cols_many, xt_ovr_assemble, xt_calibrated_proba,
+    xt_ovr_assemble, xt_calibrated_proba,
 )
 from bindings.trees_keys_unpack import trees_keys
 from bindings.py_balanced import py_item
@@ -477,13 +481,6 @@ def _acc_w(xt: PythonObject, acc: PythonObject, x: PythonObject, n: Int, weight:
     _ = xa^
 
 
-def _acc_votes(xt: PythonObject, acc: PythonObject, codes: PythonObject, n: Int, k: Int, on: Float64) raises:
-    var glue = _xr(xt)
-    _ = xt_accumulate_onehot(glue, trees_address(acc), trees_address(codes), n, k, on, 0.0)
-    _ = acc
-    _ = codes
-
-
 def _place(xt: PythonObject, dst: PythonObject, n_rows: Int, n_cols: Int, blk: AdmittedXView, rows: PythonObject,
            col0: Int) raises -> Int:
     """`_TreesWrapperBase._place`: the block's columns into dst (an Array)
@@ -721,6 +718,58 @@ def _x_finite(Xa: PythonObject, d: Int) raises -> Bool:
     return finite
 
 
+def _member_open(member: PythonObject, X: PythonObject, operation: Int, classifier: Bool,
+                 context: PythonObject, regressor_width: Int = 0) -> MemberHeldCall:
+    """UNPACK of one fitted member's `operation` over X (`_member_native`):
+    the opened held state, `served` only when its family serves the call
+    and X is proven for it (a member that tests its rows: nothing scanned;
+    any other: `_x_finite`). An unserved answer is closed already. Never
+    raises. `regressor_width`: the columns a regressor must write (0: any).
+    The caller runs it (`member_held_run`, or a typed RUN with its plan and
+    state) and closes it with `member_held_close`."""
+    comptime if not MEMBER_SET_NATIVE:
+        return MemberHeldCall()
+    try:
+        var plan = prep_estimator_plan(member, context)
+        if plan is None or py_get(plan, "member") is None:
+            return MemberHeldCall()
+        # Only an exact mojolearn Array is served (its shape, dtype and order
+        # are native reads). A resident DeviceRows fold side goes to the
+        # member's door, which resolves it natively; reading its Python
+        # properties here ran Python inside CalibratedClassifierCV.fit
+        # (9b369cd34f made them properties; test_native_meta_public_boundary).
+        var nk = trees_keys()
+        if py_type(X) is not py_item(context, nk[].k_array_class):
+            return MemberHeldCall()
+        var n = _rows(X)
+        var d = _cols(X)
+        if n <= 0 or d <= 0 or String(py=X.dtype) != "<f4" or String(py=X.order) != "C":
+            return MemberHeldCall()
+        var width = regressor_width
+        if classifier:
+            width = 0
+            var record = _member_class_codes(member, context)
+            if operation == MEMBER_OP_PREDICT:
+                if not Bool(py=record[4]):
+                    return MemberHeldCall()
+                width = 1
+            elif operation == MEMBER_OP_PREDICT_PROBA:
+                width = len(record[1])
+        var opened = member_held_open(member, operation, classifier, width, True, context,
+                                      trees_builtins())
+        var proven = False
+        if opened.served:
+            try:
+                proven = opened.tests or _x_finite(X, d)
+            except:
+                proven = False
+        if not proven:
+            member_held_close(opened)
+        return opened^
+    except:
+        return MemberHeldCall()
+
+
 def _member_native(member: PythonObject, X: PythonObject, operation: Int, classifier: Bool,
                    context: PythonObject) -> PythonObject:
     """A fitted member's `operation` (MEMBER_OP_PREDICT, _PREDICT_PROBA,
@@ -753,46 +802,16 @@ def _member_native(member: PythonObject, X: PythonObject, operation: Int, classi
     a member call would upload X once per member, and its route is not known
     before the hold's import; its fitted state is not kept at the native
     fit either). Once per member per public operation."""
-    comptime if not MEMBER_SET_NATIVE:
-        return PythonObject(None)
-    try:
-        var plan = prep_estimator_plan(member, context)
-        if plan is None or py_get(plan, "member") is None:
-            return PythonObject(None)
-        # Only an exact mojolearn Array is served (its shape, dtype and order
-        # are native reads). A resident DeviceRows fold side goes to the
-        # member's door, which resolves it natively; reading its Python
-        # properties here ran Python inside CalibratedClassifierCV.fit
-        # (9b369cd34f made them properties; test_native_meta_public_boundary).
-        var nk = trees_keys()
-        if py_type(X) is not py_item(context, nk[].k_array_class):
-            return PythonObject(None)
-        var n = _rows(X)
-        var d = _cols(X)
-        if n <= 0 or d <= 0 or String(py=X.dtype) != "<f4" or String(py=X.order) != "C":
-            return PythonObject(None)
-        var width = 0
-        if classifier:
-            var record = _member_class_codes(member, context)
-            if operation == MEMBER_OP_PREDICT:
-                if not Bool(py=record[4]):
-                    return PythonObject(None)
-                width = 1
-            elif operation == MEMBER_OP_PREDICT_PROBA:
-                width = len(record[1])
-        var opened = member_held_open(member, operation, classifier, width, True, context,
-                                      trees_builtins())
-        var result = PythonObject(None)
+    var opened = _member_open(member, X, operation, classifier, context)
+    var result = PythonObject(None)
+    if opened.served:
         try:
-            if opened.served and (opened.tests or _x_finite(X, d)):
-                result = member_held_run(opened, trees_address(X), n, d, context)
+            result = member_held_run(opened, trees_address(X), _rows(X), _cols(X), context)
         except:
             result = PythonObject(None)
-        member_held_close(opened)
-        _ = X  # the rows are read through the whole member call
-        return result
-    except:
-        return PythonObject(None)
+    member_held_close(opened)
+    _ = X  # the rows are read through the whole member call
+    return result
 
 
 def _member_scores(member: PythonObject, method: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1153,45 +1172,195 @@ def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_we
     return model
 
 
-def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`VotingClassifier._soft`: the weighted average of the members'
-    probabilities, class-major (n * k)."""
-    var n = _rows(Xa)
-    var nk = trees_keys()
-    var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0)))
-    var acc = _class_zero(xt, n * k, context)
-    var w = _voting_weights(model)
-    var members = _attr(model, nk[].k_estimators_, Python.list())
-    # Every member's probabilities into the vote in one call (lane
-    # ne2-b-members, N083): the accumulator stays on the device across the
-    # members. The same adds in member order: the same bits. The per-member
-    # fallback (a binary without the fused entry) is gone: every published
-    # glue table has it (lane calltable-trees).
-    var keep = List[PythonObject]()
-    var addrs: List[Int] = [trees_address(acc)]
-    var ints: List[Int] = [n, k]
-    var floats: List[Float64] = [Float64(n), Float64(k)]
-    for i in range(len(members)):  # driver-loop: over members
-        var e = members[i]
-        var xa = admit_f32(_member_scores(e, "predict_proba", Xa, context), 2,
-                           "sub-estimator output", context, finite=False)
-        var cols = _sub_cols(e, context)
-        keep.append(xa.array)
-        keep.append(cols)
-        addrs.append(xa.address)
-        addrs.append(trees_address(cols))
-        var ks = Int(py=cols.shape[0])
-        ints.append(ks)
-        floats.append(Float64(ks))
-        ints.append(0)
-        floats.append(Float64(py=w[i]))
+# THE VOTE SPLIT (lane bm-meta, 2026-11-22). predict, predict_proba and
+# transform of Voting* are UNPACK (`_vote_unpack`: the weights, the class
+# count and one typed `VoteMember` per member, read once), RUN
+# (xtrees/trees_meta_vote_run.mojo: the native members' calls and the fold,
+# no Python) and PACK (the Arrays the caller returns, allocated before RUN so
+# that RUN writes into them). Before the split the fold ran here over the
+# members' Python outputs: one Array per native member's answer, the same
+# glue ops in the same order. A member its family does not serve (a tree,
+# forest or extra-trees member, a class without a member mark) answers
+# through its door in UNPACK, as before.
+
+comptime _VOTE_SOFT = 0       # predict_proba columns, placed at the member's classes
+comptime _VOTE_HARD = 1       # int32 class codes
+comptime _VOTE_REGRESS = 2    # one float32 prediction per row
+comptime _VOTE_BLOCK = 3      # a transform block: float32 (n, c) predictions
+
+
+struct _VoteUnpack(Movable):
+    """What `_vote_unpack` read: the typed members, the held native states
+    they point into (closed by `_vote_close`; every one may run with no
+    GIL), and the Python owners of the door blocks."""
+    var members: List[VoteMember]
+    var opened: List[MemberHeldCall]
+    var keep: PythonObject
+    var native: Int
+
+    def __init__(out self) raises:
+        self.members = List[VoteMember]()
+        self.opened = List[MemberHeldCall]()
+        self.keep = Python.list()
+        self.native = 0
+
+
+def _vote_door(member: PythonObject, kind: Int, Xa: PythonObject, n: Int, weight: Float64, keep: PythonObject,
+               context: PythonObject, answer: PythonObject) raises -> VoteMember:
+    """One member's block from its own door (the old per-member path, which
+    raises the estimator's own words), its owners kept in `keep`. `answer`:
+    the Array its held native state already wrote (`member_held_run`), else
+    None and the door is called."""
+    if kind == _VOTE_SOFT:
+        var scores = answer if answer is not None else meta_member_call(member, "predict_proba", Python.tuple(Xa),
+                                                                         context)
+        var xa = admit_f32(scores, 2, "sub-estimator output", context, finite=False)
+        var cols = _sub_cols(member, context)
+        _ = py_call(keep.append, xa.array)
+        _ = py_call(keep.append, cols)
+        var out = VoteMember(xa.address, Int(py=cols.shape[0]), trees_address(cols), weight)
         _ = xa^
-    var glue = _xr(xt)
-    _ = xt_accumulate_cols_many(glue, addrs, ints, floats)
-    _ = keep  # keep the members' blocks alive through the native call above
-    _ = acc  # keep the Python object alive through the native call above
-    _scale(xt, acc, _fsum(w, context))
-    return acc
+        return out^
+    if kind == _VOTE_HARD:
+        var codes: PythonObject
+        if answer is not None:
+            codes = answer if String(answer.dtype) == "<i4" else _i32_vec(answer, "codes", context)
+        elif _forest_classifier_member(member, context):
+            codes = _member_codes(member, Xa, context)
+        else:
+            codes = _i32_vec(meta_member_call(member, "predict", Python.tuple(Xa), context), "codes", context)
+        _ = py_call(keep.append, codes)
+        return VoteMember(trees_address(codes), 1, 0, weight)
+    if kind == _VOTE_REGRESS:
+        var xa = admit_f32(answer if answer is not None else meta_member_call(member, Python.tuple(Xa), context), 1,
+                           "sub-estimator output", context, finite=False)
+        _ = py_call(keep.append, xa.array)
+        var out = VoteMember(xa.address, 1, 0, weight)
+        _ = xa^
+        return out^
+    var blk = _out2d(answer if answer is not None else meta_member_call(member, Python.tuple(Xa), context), n,
+                     context)
+    _ = py_call(keep.append, blk.array)
+    var out = VoteMember(blk.address, blk.cols, 0, weight)
+    _ = blk^
+    return out^
+
+
+def _vote_unpack(model: PythonObject, Xa: PythonObject, kind: Int, classifier: Bool, weights: PythonObject,
+                 context: PythonObject) raises -> _VoteUnpack:
+    """UNPACK of a vote: per fitted member its held native state when its
+    family serves the operation (`_member_open`), else its door's block."""
+    var nk = trees_keys()
+    var members = _attr(model, nk[].k_estimators_, Python.list())
+    var n = _rows(Xa)
+    var got = _VoteUnpack()
+    try:
+        _vote_unpack_members(got, members, Xa, n, kind, classifier, weights, context)
+        # The native members' plans by address, now that `got.opened` is
+        # final: RUN reads them in place.
+        for i in range(len(got.members)):  # driver-loop: over members
+            if got.members[i].native:
+                got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+    except e:
+        _vote_close(got)
+        raise e^
+    return got^
+
+
+def _vote_unpack_members(mut got: _VoteUnpack, members: PythonObject, Xa: PythonObject, n: Int, kind: Int,
+                         classifier: Bool, weights: PythonObject, context: PythonObject) raises:
+    var operation = MEMBER_OP_PREDICT_PROBA if kind == _VOTE_SOFT else MEMBER_OP_PREDICT
+    for i in range(len(members)):  # driver-loop: over members (admission, once each)
+        var e = members[i]
+        var weight = Float64(py=weights[i]) if weights is not None else 1.0
+        # A classifier's float32 transform block is its door's (its predict
+        # labels as float32), as before.
+        var native = not (kind == _VOTE_BLOCK and classifier)
+        if native:
+            var opened = _member_open(e, Xa, operation, classifier and kind != _VOTE_BLOCK, context,
+                                      1 if kind == _VOTE_REGRESS else 0)
+            if opened.served and not opened.gil_free:
+                # A kind that must run with the GIL held answers here, on the
+                # public thread with the GIL held, as before the split; RUN
+                # then holds no lock any member call released before.
+                var answer = PythonObject(None)
+                try:
+                    answer = member_held_run(opened, trees_address(Xa), n, _cols(Xa), context)
+                finally:
+                    member_held_close(opened)
+                got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context, answer))
+                continue
+            if opened.served:
+                var class_cols = 0
+                if kind == _VOTE_SOFT:
+                    var cols = _sub_cols(e, context)
+                    _ = py_call(got.keep.append, cols)
+                    class_cols = trees_address(cols)
+                # The plan's address is set once every member is opened
+                # (`_vote_plans`): `got.opened` may still grow here.
+                got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
+                                              opened.dtype, class_cols, weight))
+                got.native += 1
+                got.opened.append(opened^)
+                continue
+        got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context, PythonObject(None)))
+
+
+def _vote_close(mut got: _VoteUnpack):
+    for i in range(len(got.opened)):  # driver-loop: over the opened native members
+        member_held_close(got.opened[i])
+
+
+def _vote_run(model: PythonObject, Xa: PythonObject, kind: Int, classifier: Bool, soft: Bool, k: Int,
+              weights: PythonObject, glue: EntryRef, acc: Int, codes: Int, width: Int,
+              context: PythonObject) raises:
+    """UNPACK, RUN with the GIL released when any member is native (each is
+    of a kind that may run without it: the others answered in UNPACK), and
+    the fallback rule: a native member that refuses is asked through its door
+    (which raises the estimator's words) and the vote runs again."""
+    var got = _vote_unpack(model, Xa, kind, classifier, weights, context)
+    var rows = VoteRows(trees_address(Xa), _rows(Xa), _cols(Xa))
+    var nk = trees_keys()
+    var members = _attr(model, nk[].k_estimators_, Python.list())
+    while True:  # driver-loop: over refusals (at most one round per native member)
+        var refused = VOTE_ALL_ANSWERED
+        try:
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = _vote_dispatch(glue, rows, got.members, kind, soft, k, acc, codes, width)
+            else:
+                refused = _vote_dispatch(glue, rows, got.members, kind, soft, k, acc, codes, width)
+        except e:
+            _vote_close(got)
+            raise e^
+        if refused == VOTE_ALL_ANSWERED:
+            break
+        var weight = got.members[refused].weight
+        got.members[refused] = _vote_door(members[refused], kind, Xa, rows.n, weight, got.keep, context,
+                                          PythonObject(None))
+        got.native -= 1
+        _vote_zero(acc, rows.n * (width if width > 0 else (1 if kind == _VOTE_REGRESS else k)))
+    _vote_close(got)
+    _ = Xa  # the rows are read through RUN
+    _ = got.keep  # the door blocks are read through RUN
+
+
+def _vote_zero(acc: Int, count: Int):
+    """A refused round may have written part of the scratch: zero it again."""
+    var p = _F64P(unsafe_from_address=acc)
+    for i in range(count):  # small-loop(the refusal path only: one zero pass before the vote runs again)
+        p[i] = 0.0
+
+
+def _vote_dispatch(glue: EntryRef, rows: VoteRows, members: List[VoteMember], kind: Int, soft: Bool, k: Int,
+                   acc: Int, codes: Int, width: Int) raises -> Int:
+    if width > 0:
+        return vote_transform_run(glue, rows, members, k, soft, width, acc)
+    if kind == _VOTE_REGRESS:
+        return vote_regress_run(glue, rows, members, acc)
+    if codes != 0:
+        return vote_codes_run(glue, rows, members, k, soft, acc, codes)
+    return vote_soft_run(glue, rows, members, k, acc)
 
 
 def _voting_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1201,7 +1370,11 @@ def _voting_predict_proba(model: PythonObject, X: PythonObject, context: PythonO
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0)))
-    return trees_reshape(_voting_soft(model, xt, Xa, context), Python.tuple(_rows(Xa), k), context)
+    var n = _rows(Xa)
+    var acc = _class_zero(xt, n * k, context)
+    _vote_run(model, Xa, _VOTE_SOFT, True, True, k, _voting_weights(model), _xr(xt), trees_address(acc), 0, 0,
+              context)
+    return trees_reshape(acc, Python.tuple(n, k), context)
 
 
 def _voting_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1217,16 +1390,13 @@ def _voting_codes(model: PythonObject, X: PythonObject, context: PythonObject) r
     var n = _rows(Xa)
     var nk = trees_keys()
     var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0)))
-    var acc: PythonObject
-    if String(_attr(model, nk[].k_voting, PythonObject(""))) == "soft":
-        acc = _voting_soft(model, xt, Xa, context)
-    else:
-        acc = _zeros(n * k, context)
-        var w = _voting_weights(model)
-        var members = _attr(model, nk[].k_estimators_, Python.list())
-        for i in range(len(members)):  # driver-loop: over members
-            _acc_votes(xt, acc, _member_label_codes(members[i], Xa, context), n, k, Float64(py=w[i]))
-    return _argmax(xt, acc, n, k, context)
+    var soft = String(_attr(model, nk[].k_voting, PythonObject(""))) == "soft"
+    var acc = _class_zero(xt, n * k, context)
+    var out = admitted_vector(n, "<i4", context)
+    _vote_run(model, Xa, _VOTE_SOFT if soft else _VOTE_HARD, True, soft, k, _voting_weights(model), _xr(xt),
+              trees_address(acc), trees_address(out), 0, context)
+    _ = acc  # the scratch is written through RUN
+    return out
 
 
 def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
@@ -1234,53 +1404,25 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
     var nk = trees_keys()
-    var members = _attr(model, nk[].k_estimators_, Python.list())
-    var m = len(members)
+    var m = len(_attr(model, nk[].k_estimators_, Python.list()))
     var soft = classifier and String(_attr(model, nk[].k_voting, PythonObject(""))) == "soft"
     var k = Int(py=_attr(model, nk[].k_n_classes_, PythonObject(0))) if classifier else 1
     var width = m * k if soft else m
     var out = _zeros(n * width, context)
-    var rows = _arange(xt, n, context)
-    for j in range(m):  # driver-loop: over members
-        var e = members[j]
-        if soft:
-            var p = _zeros(n * k, context)
-            _acc_cols_w(xt, p, _member_scores(e, "predict_proba", Xa, context), _sub_cols(e, context), n, k, 1.0, context)
-            var blk = admit_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "p", context, finite=False)
-            _ = _place(xt, out, n, width, blk.view(), rows, j * k)
-            _ = blk^
-        else:
-            var blk = _out2d(_predict32(e, Xa, context), n, context)
-            _ = _place(xt, out, n, width, blk.view(), rows, j)
-            _ = blk^
+    _vote_run(model, Xa, _VOTE_SOFT if soft else _VOTE_BLOCK, classifier, soft, k, PythonObject(None), _xr(xt),
+              trees_address(out), 0, width, context)
     return trees_reshape(out, Python.tuple(n, width), context)
 
 
 def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     """`VotingRegressor.predict`: the weighted average of the members'
     predictions."""
-    var b = trees_builtins()
     var Xa = _check_x(model, X, context)
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var nk = trees_keys()
-    var members = _attr(model, nk[].k_estimators_, Python.list())
-    var m = len(members)
-    var given = _attr(model, nk[].k_weights, PythonObject(None))
-    var w = Python.list()
-    if given is None:
-        for _ in range(m):  # driver-loop: over members
-            _ = py_call(w.append, PythonObject(1.0))
-    else:
-        var items = py_call(b.list, given)
-        for i in range(len(items)):  # driver-loop: over the user weights (one per member)
-            _ = py_call(w.append, py_call_typed(b.float, items[i]))
-    if len(w) != m:
-        raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
     var acc = _zeros(n, context)
-    for i in range(m):  # driver-loop: over members
-        _acc_w(xt, acc, _predict32(members[i], Xa, context), n, Float64(py=w[i]), context)
-    _scale(xt, acc, _fsum(w, context))
+    _vote_run(model, Xa, _VOTE_REGRESS, False, False, 1, _voting_weights(model), _xr(xt), trees_address(acc), 0,
+              0, context)
     return acc
 
 

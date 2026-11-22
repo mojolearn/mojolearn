@@ -30,6 +30,10 @@ from glm.linear_svc_native_device import linear_svc_device_v1
 from std.sys.compile import is_defined
 from std.testing import TestSuite
 from checks.native_tests.testsuite_cases import check_cases
+# test_class_and_sample_weight_product (lane py2mojo-D6, 2026-11-22)
+from core.class_weight_plan import class_weight_all_one, class_weight_plan
+from core.label_weights_native_api import LabelWeightsDriver, LabelWeightsRequest, LABEL_WEIGHTS_ROWS, LABEL_WEIGHTS_MULTIPLY
+from xtrees.label_weights_native import label_weights_native_v1
 
 
 # The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
@@ -248,6 +252,71 @@ def test_fixtures() raises:
         check_cases("fixture", LINEAR_SVC_CPU_CASES, _host_fixture)
     else:
         _device_fixtures_in_order()
+
+
+# ---- class_weight x sample_weight (lane py2mojo-D6, 2026-11-22) ----
+# Ported from python/mojolearn/tests/test_linear_svc_native_boundary.py
+# `test_sample_and_dictionary_weights_keep_existing_multiply_objective`: LinearSVC(C=2, class_weight={-5: 1, 9: 3},
+# tol=1e-6, max_iter=200), penalty_normalized False, on the eight unit points with sample_weight 2. The row weights
+# are composed as the door composes them (bindings/svc_linear_boundary_unpack.mojo `_qn_row_weights`: the class-weight
+# plan of the sorted classes, LABEL_WEIGHTS_ROWS, then LABEL_WEIGHTS_MULTIPLY with the sample weights), so rows weigh
+# 2 and 6: A = 3 after optimizing b = (1 - w) / 2, lambda = 1 / C = 1/2, hence w = 12/13, b = 1/26 and the objective
+# 3/13, each to 2e-4 as the original. The dictionary admission and the published attributes stay in Python.
+def weighted_fixture(driver: LinearSvcDriver) raises:
+    var n = 8
+    var d = 2
+    var source = List[Float32](length=n * d, fill=0)
+    var codes = List[Int32](length=n, fill=0)
+    var sample_weights = List[Float32](length=n, fill=2)
+    var xp = source.unsafe_ptr()
+    var cp = codes.unsafe_ptr()
+    def fill(row: Int) {imm xp, imm cp, imm d}:
+        cp[row] = Int32(row % 2)
+        xp[row * d] = Float32(-1.0 if row % 2 == 0 else 1.0)
+    host_parallelize(fill, n)
+    # class_weight {-5: 1.0, 9: 3.0} over the sorted classes [-5, 9]
+    var class_values: List[Float64] = [1.0, 3.0]
+    var plan_words = class_weight_plan(class_values, class_weight_all_one(class_values))
+    require(not plan_words.all_one and len(plan_words.words) == 2, "class-weight plan of {-5: 1, 9: 3}")
+    var labels = LabelWeightsDriver(label_weights_native_v1)
+    var class_rows = List[Float32](length=n, fill=0)
+    _ = labels.run(LABEL_WEIGHTS_ROWS, LabelWeightsRequest(Int(cp), Int(plan_words.words.unsafe_ptr()),
+        Int(class_rows.unsafe_ptr()), n, 2))
+    var weights = List[Float32](length=n, fill=0)
+    _ = labels.run(LABEL_WEIGHTS_MULTIPLY, LabelWeightsRequest(Int(sample_weights.unsafe_ptr()),
+        Int(class_rows.unsafe_ptr()), Int(weights.unsafe_ptr()), n, 0))
+    for row in range(n):  # small-loop: eight composed row weights
+        require(weights[row] == Float32(2.0 if row % 2 == 0 else 6.0),
+            "row weight " + String(row) + ": " + String(weights[row]) + " expected class weight x sample weight")
+    var options = LinearSvcOptions(n, d, 1, 1, 200, 50, 5, True, False, 4, 0.0, 0.5, 0.000001, 0.000000001)
+    var plan = LinearSvcFitPlan(1, d + 1)
+    plan.storage[0].prepare_info(1)
+    driver.fit(LinearSvcFitRequest(Int(xp), Int(cp), Int(weights.unsafe_ptr()), options.copy()), plan)
+    var w = List[Float32](length=d + 1, fill=0)
+    var coefficients = List[Float32](length=d, fill=0)
+    var biases = List[Float32](length=1, fill=0)
+    linear_svc_pack(plan.storage[0], 1, d, True, Int(w.unsafe_ptr()), Int(coefficients.unsafe_ptr()),
+        Int(biases.unsafe_ptr()))
+    require(close(coefficients[0], Float64(12) / 13) and close(coefficients[1], 0),
+        "coef_ " + String(coefficients[0]) + ", " + String(coefficients[1]) + " expected [12/13, 0]")
+    require(close(biases[0], Float64(1) / 26), "intercept_ " + String(biases[0]) + " expected 1/26")
+    require(close(plan.storage[0].info[0], Float64(3) / 13),
+        "objective_ " + String(plan.storage[0].info[0]) + " expected 3/13")
+    _ = source
+    _ = codes
+    _ = sample_weights
+    _ = class_rows
+    _ = weights
+    _ = plan_words
+    _ = w
+    _ = plan
+
+
+def test_class_and_sample_weight_product() raises:
+    comptime if CPU_COLUMN_BUILD:
+        weighted_fixture(LinearSvcDriver(linear_svc_host_v1))
+    else:
+        weighted_fixture(LinearSvcDriver(linear_svc_device_v1))
 
 
 def main() raises:
