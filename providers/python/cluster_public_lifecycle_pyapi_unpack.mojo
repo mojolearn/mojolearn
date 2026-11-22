@@ -123,6 +123,15 @@ def _admit_model(model: PythonObject, context: PythonObject, mut direct: Bool) r
         raise Error("TypeError: native cluster execution cannot invoke Python fit callbacks")
     for i in range(len(parameters.value())):  # driver-loop: fixed model parameter metadata, never a Python property
         var name = parameters.value()[i]
+        if String(name) == "device" and not py_contains(fields, name):
+            # An instance without `device` (built without its constructor,
+            # saved before the parameter existed) runs this installation's
+            # device: the route reads it with that default
+            # (device_route_boundary_door `device_request`). Reading it here
+            # through the public attribute lookup refused every query of such
+            # an instance ('native model has no attribute device').
+            direct = False
+            continue
         var value = _lookup(model, name, fields, plan, attributes)
         direct = direct and py_contains(fields, name) and value is fields[name]
         if String(name) == "init":
