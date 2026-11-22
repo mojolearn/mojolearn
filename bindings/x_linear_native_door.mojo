@@ -999,9 +999,13 @@ def _xl_public_operation(model: PythonObject, operation: Int, name: PythonObject
     # through a zero-filled snapshot (kernel-shap: 20 M predictions per explain,
     # +114 ms on a 334 ms row against 0.8.55, whose callers read the float32
     # output). The widening is exact, so the float32 words are the same words.
-    # The public predict (operation "regressor_predict") is unchanged: float64.
-    if (method == _XL_M_SCORE or operation == X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE or not estimator_outside()
-            or py_get(context, nk[].k_ndarray) is None):
+    # The public predict has one result for every caller (Andrew, 2026-11-22,
+    # lane predict-dtype): the kernel's float32 values (or labels) as a NumPy
+    # view, with no caller test and no float64 widening pass into a second
+    # buffer. The other public results keep the caller test.
+    var predicting = method == _XL_M_PREDICT
+    if (method == _XL_M_SCORE or operation == X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE
+            or py_get(context, nk[].k_ndarray) is None or (not predicting and not estimator_outside())):
         return result
     var b = native_loaded_module("builtins")
     if py_type(result) is b.tuple:
@@ -1014,8 +1018,6 @@ def _xl_public_operation(model: PythonObject, operation: Int, name: PythonObject
         return py_call(b.tuple, members)
     if py_type(result) is not py_item(context, nk[].k_array_class):
         return result
-    if (method == _XL_M_PREDICT and (operation == X_LINEAR_OPN_REGRESSOR_PREDICT or operation == X_LINEAR_OPN_ISOTONIC_PREDICT
-                                     or operation == X_LINEAR_OPN_CD_PREDICT)) or (
-            operation == X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION or operation == X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES):
+    if operation == X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION or operation == X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES:
         return _xl_widen(result, context)
     return native_array_ndarray_view(result, context)
