@@ -33,7 +33,8 @@ from std.ffi import c_int
 from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
-from bindings.py_cpython_table import cpython_table, cpython_utf8
+from bindings.py_cpython_table import cpython_table
+from bindings.cpython_utf8_unpack import cpython_utf8
 from bindings.native_instance_item_pack import native_instance_item
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_json_door import native_json_read, native_json_parse, native_path, native_path_exists

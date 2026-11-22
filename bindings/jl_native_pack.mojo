@@ -14,7 +14,8 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words_unpack import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
 from bindings.py_typed_call import typed_python_error
-from bindings.py_cpython_table import cpython_table, CPythonTable, cpython_utf8
+from bindings.py_cpython_table import cpython_table, CPythonTable
+from bindings.cpython_utf8_unpack import cpython_utf8
 from bindings.classical_attributes_door import classical_connect_numpy
 from providers.python.jl_scalar_pyapi_unpack import (
     JlTypeWords, jl_type_words, jl_type_word, jl_builtin_scalar, jl_scalar_word,

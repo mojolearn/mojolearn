@@ -49,7 +49,8 @@ from bindings.gbdt_category_unpack import gbdt_category_block_list, gbdt_categor
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admit_ids, admitted_array, admitted_vector
 from bindings.py_optional import py_present
 from gbdt.trees_gbdt_run import gbdt_mode_checked, gbdt_text_has_ctr, _type_or_value
-from bindings.py_cpython_table import cpython_table, cpython_utf8
+from bindings.py_cpython_table import cpython_table
+from bindings.cpython_utf8_unpack import cpython_utf8
 from core.trees_entry_table import TreesEntryKey
 from core.entry_table import EntryRef, entry_ref_vendor, entry_ref_mode
 from gbdt.fit_calls import (
@@ -125,7 +126,7 @@ def _text_span(text: PythonObject, mut nbytes: Int) raises -> Int:
     bytes CPython holds in the str (no copy; the image copies them once, as
     its Python entry did). The span lives as long as `text`, which the
     caller keeps named past the native call."""
-    # cpython_utf8 (bindings/py_cpython_table.mojo): the size read back
+    # cpython_utf8 (bindings/cpython_utf8_unpack.mojo): the size read back
     # through a volatile slot; the former `Int(MutPointer(to=size))` form
     # handed the image a byte count of 0 (lane sr-gbdt).
     var table = cpython_table()

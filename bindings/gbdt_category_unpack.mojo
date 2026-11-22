@@ -57,7 +57,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.py_typed_call import py_call_typed
-from bindings.py_cpython_table import cpython_table, CPythonTable, cpython_utf8
+from bindings.py_cpython_table import cpython_table, CPythonTable
+from bindings.cpython_utf8_unpack import cpython_utf8
 from bindings.sequential_arrays_door import sequential_address
 from bindings.cpython_borrowed_unpack import borrowed_type_word
 from bindings.classical_pandas_door import (
