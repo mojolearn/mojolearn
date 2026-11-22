@@ -1143,6 +1143,7 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[row_means_f64_binding]("row_means_f64")
         module.def_function[truncnorm_draws_binding]("truncnorm_draws")
         module.def_function[fsum_f64_binding]("fsum_f64")
+        # TOMBSTONE: lr_schedule_exact, lr_schedule_at (and bindings/lr_table_helpers_door.mojo) (dead native entries: their last callers were deleted tools) deleted 2026-11-25 by 83e95962da; code recoverable at 83e95962da^.
         # TOMBSTONE: encode_labels_* exports (their Mojo bodies stay live), lr_schedule_exact_block, next_combination_i64 (dead native entries: no live caller) deleted 2026-10-26 by e9a91ed29; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_core.patch
         # TOMBSTONE: lr_schedule_fill (dead native entry: no live caller) deleted 2026-10-26 by a98f13f57; code recoverable at 485ba9cc1.

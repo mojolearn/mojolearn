@@ -745,6 +745,7 @@ def build__mojolearn_svm_host() -> PythonObject:
         module.def_function[svr_fit_binding]("svr_fit")
         module.def_function[svr_predict_binding]("svr_predict")
         module.def_function[iforest_resident_release_binding]("iforest_resident_release")
+        # TOMBSTONE: iforest_resident (dead native entries: their last callers were deleted tools) deleted 2026-11-25 by 83e95962da; code recoverable at 83e95962da^.
         module.def_function[scale_gamma_limbs_host_binding]("scale_gamma_limbs")
         module.def_function[py2mojo_linear_flags_binding]("py2mojo_linear_flags")
         module.def_function[svc_ovo_layout_host_binding]("svc_ovo_layout")

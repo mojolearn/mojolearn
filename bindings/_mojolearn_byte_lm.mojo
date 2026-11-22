@@ -688,6 +688,7 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_attn_sticky_fallback_binding]("byte_lm_attn_sticky_fallback")
         module.def_function[byte_lm_attn_kv_corner_guard_binding]("byte_lm_attn_kv_corner_guard")
         module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
+        # TOMBSTONE: byte_lm_attention_arm (dead native entries: their last callers were deleted tools) deleted 2026-11-25 by 83e95962da; code recoverable at 83e95962da^.
         # TOMBSTONE: byte_lm_context_keeper_active, byte_lm_attention_estash_gate (dead native entries: diagnostic read-backs, no package or gate reader) deleted 2026-10-26 by 9d5242f68; code recoverable at a88745022.
         # Restore: git apply experiments/removed/dead_entries_byte_lm.patch
         # DEVIATION 2648: the step glue arm read-back (arm, trial).
