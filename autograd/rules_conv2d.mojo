@@ -42,6 +42,7 @@ from autograd.fold import blocked_fold
 from autograd.ops import AXIS_ROWS
 from autograd.rankn_conv_ops import (
     OP_RNV_CONV_GROWS, OP_RNV_COL2IM, OP_RNV_MAXPOOL_VJP, OP_RNV_AVGPOOL_VJP,
+    OP_RNV_BN_RED, OP_RNV_BN_RED_FIN, OP_RNV_BN_DX, OP_RNV_BN_DX_EVAL,
 )
 from sequence.exec_trait import Exec
 from autograd.rankn_bmm_ops import OP_RN_BMM
@@ -50,6 +51,8 @@ from sequence.ops import FP, Args, OP_GEMM
 comptime RN_CONV2D = 176
 comptime RN_MAXPOOL2D = 177
 comptime RN_AVGPOOL2D = 178
+# Sequential's batch norm (lane seq-blocks-3; autograd/rankn_conv.mojo rankn_batch_norm)
+comptime RN_BATCH_NORM = 179
 comptime RN_CONV_TAG_FIRST = 176
 comptime RN_CONV_TAG_LAST = 191
 
@@ -145,7 +148,7 @@ struct Conv2dRules(BackwardRules, ImplicitlyCopyable, Movable):
     """The backward of conv2d, max_pool2d and avg_pool2d recorded on the tape."""
 
     def supports(self, tag: Int) -> Bool:
-        return tag == RN_CONV2D or tag == RN_MAXPOOL2D or tag == RN_AVGPOOL2D
+        return tag == RN_CONV2D or tag == RN_MAXPOOL2D or tag == RN_AVGPOOL2D or tag == RN_BATCH_NORM
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         # every destination this rule touches is written word for word; the
@@ -176,8 +179,43 @@ struct Conv2dRules(BackwardRules, ImplicitlyCopyable, Movable):
                 a.p1 = gradients[0]
                 a.p11 = saved.p11
                 ex.launch[OP_RNV_AVGPOOL_VJP](a, saved.i4)
+        elif tag == RN_BATCH_NORM:
+            _batch_norm_vjp(ex, saved, upstream, gradients)
         else:
             raise Error("conv2d rules: unknown tag")
+
+
+def _batch_norm_vjp[E: Exec](mut ex: E, saved: Args, upstream: FP, gradients: List[FP]) raises:
+    """rankn_batch_norm's VJP: the per-channel sums of g and g xhat (blocked), their totals with
+    d gamma = sum g xhat and d beta = sum g, then dx (the training formula, or g invstd gamma
+    for a call that normalized with the running statistics). inputs: x, gamma, beta."""
+    var r = Args()
+    r.p0 = saved.p0
+    r.p1 = upstream
+    r.p2 = saved.p1
+    r.p3 = saved.p2
+    r.p11 = saved.p11
+    ex.launch[OP_RNV_BN_RED](r, saved.i1)
+    var f = Args()
+    f.p0 = saved.p2
+    f.p1 = saved.p1
+    f.p2 = gradients[1] if saved.i6 != 0 else saved.p2
+    f.p3 = gradients[2] if saved.i7 != 0 else saved.p2
+    f.p11 = saved.p11
+    f.i0 = saved.i6
+    f.i1 = saved.i7
+    ex.launch[OP_RNV_BN_RED_FIN](f, saved.i2)
+    if saved.i5 != 0:
+        var d = Args()
+        d.p0 = saved.p0
+        d.p1 = upstream
+        d.p2 = saved.p1
+        d.p3 = gradients[0]
+        d.p11 = saved.p11
+        if saved.i3 != 0:
+            ex.launch[OP_RNV_BN_DX](d, saved.i0)
+        else:
+            ex.launch[OP_RNV_BN_DX_EVAL](d, saved.i0)
 
 
 def _conv2d_vjp[E: Exec](

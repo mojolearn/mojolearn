@@ -41,7 +41,7 @@ from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_
 # Lane neural-blocks (2026-11-22): the neural building blocks (codes 32..41) and the version-2 backward rules
 from autograd.model_blocks import (
     LAYER_MULTIPLY, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads, block_shape,
-    is_block,
+    bn_state, is_block,
 )
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
@@ -1217,6 +1217,18 @@ def model_fit_state[E: Exec](
     else:
         ex.upload(P, Pio, np_)
     var Gr = ex.alloc(np_)
+    # Lane seq-blocks-3: state words (a batch norm's running statistics) live in the parameter vector, so
+    # checkpoints, state_dict and the digest carry them, but the optimizer must not move them: their gradient
+    # words are zero (filled once; no rule writes them) and each step restores them from Sv after opt_step,
+    # undoing a weight decay. Two copy launches a state range a step; none for a model without state.
+    var ranges = model_state_ranges(spec)
+    var n_state = 0
+    for r in range(len(ranges) // 2):  # driver-loop: over state ranges (description metadata)
+        n_state += ranges[2 * r + 1]
+    var Sv = dummy_ptr()
+    if n_state > 0:
+        Sv = ex.alloc(n_state)
+        _fill(ex, Gr, np_, Float32(0))
     var s1 = ex.alloc(np_)
     var s2 = ex.alloc(np_)
     var s3 = ex.alloc(np_)
@@ -1352,7 +1364,15 @@ def model_fit_state[E: Exec](
                 var weighted = tape.scale(ex, loss, Float32(B))
                 _copy(ex, dloss + bi, tape.value(weighted), 1)
             step += 1
+            var so = 0
+            for r in range(len(ranges) // 2):  # driver-loop: over state ranges (at most one a batch-norm layer)
+                _copy(ex, Sv + so, P + ranges[2 * r], ranges[2 * r + 1])
+                so += ranges[2 * r + 1]
             opt_step(ex, cfg.opt, st, step, lr, P, Gr, s1, s2, s3, np_)
+            so = 0
+            for r in range(len(ranges) // 2):  # driver-loop: over state ranges (at most one a batch-norm layer)
+                _copy(ex, P + ranges[2 * r], Sv + so, ranges[2 * r + 1])
+                so += ranges[2 * r + 1]
         epoch_tape.reset()
         var parts = epoch_tape.variable(ex, dloss, 1, n_batches, False)
         var mean = epoch_tape.scale(ex, epoch_tape.sum(ex, parts), inv_n)
@@ -1440,6 +1460,22 @@ def model_fit_state[E: Exec](
     epoch_tape.release(ex)
     _ = word^
     return n_iter
+
+
+def model_state_ranges(spec: ModelSpec) -> List[Int]:
+    """The parameter vector's state ranges, (offset, words) pairs: words a forward writes and the
+    optimizer never updates (a batch norm's running statistics). Empty for most models."""
+    var out = List[Int]()
+    if spec.version != SPEC2_VERSION:
+        return out^
+    for i in range(spec.n_layers()):  # driver-loop: over layers (description metadata)
+        var k = spec.kinds[i]
+        if is_block(k) and spec.param_off[i] >= 0:
+            var r = bn_state(k, spec.xargs, i)
+            if r[1] > 0:
+                out.append(spec.param_off[i] + r[0])
+                out.append(r[1])
+    return out^
 
 
 def _predict_split_same(spec: ModelSpec, rows_a: Int, rows_b: Int) -> Bool:

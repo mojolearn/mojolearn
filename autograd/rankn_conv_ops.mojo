@@ -28,13 +28,19 @@
 # operand is a non-negative element index or dimension below 2^31 (the
 # executor bounds every launch to Int32).
 #
-# Codes OP_RNV_FIRST..OP_RNV_LAST (4500..4519) are this family; 4508..4519
-# are reserved for this lane's later bodies. sequence/dispatch.mojo routes
-# and fences them.
+# Codes OP_RNV_FIRST..OP_RNV_LAST (4500..4519) are this family; 4508..4517
+# are the batch norm of Sequential (lane seq-blocks-3, below), 4518..4519
+# reserved. sequence/dispatch.mojo routes and fences them.
 from std.memory import bitcast
 from sequence.ops import Args, FP
 from checks.numerics import ftz, identical_div
 from autograd.rankn import rn_word
+from x_cnn.ops import FP as XFP, IP as XIP
+from x_cnn.ops import (
+    BN_GAMMA, BN_BETA, BN_SUMG, BN_SUMGX,
+    bn_blk_sum_at, bn_blk_mean_at, bn_blk_sq_at, bn_blk_var_running_at, bn_eval_stats_at, bn_apply_at,
+    bn_blk_red_at, bn_blk_red_fin_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
+)
 from x_cnn.ops import (
     CP_C, CP_H, CP_W, CP_OC, CP_KH, CP_KW, CP_SH, CP_SW, CP_PH, CP_PW, CP_DH, CP_DW,
     CP_OH, CP_OW, CP_BIAS,
@@ -50,6 +56,16 @@ comptime OP_RNV_MAXPOOL_FWD = 4504
 comptime OP_RNV_MAXPOOL_VJP = 4505
 comptime OP_RNV_AVGPOOL_FWD = 4506
 comptime OP_RNV_AVGPOOL_VJP = 4507
+comptime OP_RNV_BN_PREP = 4508
+comptime OP_RNV_BN_SUM = 4509
+comptime OP_RNV_BN_MEAN = 4510
+comptime OP_RNV_BN_SQ = 4511
+comptime OP_RNV_BN_VAR = 4512
+comptime OP_RNV_BN_APPLY = 4513
+comptime OP_RNV_BN_RED = 4514
+comptime OP_RNV_BN_RED_FIN = 4515
+comptime OP_RNV_BN_DX = 4516
+comptime OP_RNV_BN_DX_EVAL = 4517
 comptime OP_RNV_FIRST = 4500
 comptime OP_RNV_LAST = 4519
 
@@ -374,6 +390,112 @@ def op_rnv_avgpool_vjp(t: Int, a: Args):
     a.p1.unsafe_store(t, acc)
 
 
+# ---------------------------------------------------------------- batch norm (lane seq-blocks-3, 2026-11-22)
+# Sequential's batch_norm1d / batch_norm2d over (N, C, HW) samples. Every body below is x_cnn's own
+# element function (x_cnn/ops.mojo bn_blk_sum_at .. bn_bwd_eval_dx_at), called as it is: the same
+# math, one body (AGENTS.md "One body per operation"). x_cnn reads its [N, C, HW] parameter words
+# through an int32 pointer; here they are the tape descriptor bound to p11 (int32 bit patterns,
+# Tape.descriptor), read through a bitcast of that pointer (never an integer-made pointer). The
+# statistics are x_cnn's BLOCKED folds (bn_fold_block: blocks whose size depends on N * HW alone),
+# so the order is the same on every vendor and the host. x_cnn's own IDENTICAL default for its
+# BatchNorm layers is the grid-stats form (bn_gs_*, a shared-memory tree in x_cnn/device.mojo);
+# the tape executor runs plain element launches, so it takes the blocked bodies.
+# aux: [eps, momentum] then seven per-channel arrays (x_cnn's BN_* slots).
+
+
+@always_inline
+def _xf(p: FP) -> XFP:
+    return p.unsafe_origin_cast[MutAnyOrigin]()
+
+
+@always_inline
+def _xd(p: FP) -> XIP:
+    return p.bitcast[Int32]().unsafe_origin_cast[MutAnyOrigin]()
+
+
+@always_inline
+def op_rnv_bn_prep(c: Int, a: Args):
+    """Channel c: aux's eps (f0) and momentum (f1) words, gamma and beta (p0, p4) into their
+    slots; i0 = 1 (eval): the running statistics (p2 = [mean C | var C]) as this call's
+    statistics (bn_eval_stats_at). p1 aux; p11 the [N, C, HW] descriptor. Every channel's
+    thread stores the same two scalar words."""
+    var C = rn_word(a.p11, 1)
+    a.p1.unsafe_store(0, a.f0)
+    a.p1.unsafe_store(1, a.f1)
+    a.p1.unsafe_store(2 + BN_GAMMA * C + c, ftz(a.p0.unsafe_load(c)))
+    a.p1.unsafe_store(2 + BN_BETA * C + c, ftz(a.p4.unsafe_load(c)))
+    if a.i0 != 0:
+        var x = _xf(a.p2)
+        bn_eval_stats_at(c, x, _xf(a.p1), x, x, _xd(a.p11), _xd(a.p11))
+
+
+@always_inline
+def op_rnv_bn_sum(t: Int, a: Args):
+    """Block t's sum of x (p0) into part (p1): bn_blk_sum_at."""
+    var x = _xf(a.p0)
+    bn_blk_sum_at(t, x, _xf(a.p1), x, x, _xd(a.p11), _xd(a.p11))
+
+
+@always_inline
+def op_rnv_bn_mean(c: Int, a: Args):
+    """Channel c's mean from part (p0) into aux (p1): bn_blk_mean_at."""
+    var x = _xf(a.p0)
+    bn_blk_mean_at(c, x, _xf(a.p1), x, x, _xd(a.p11), _xd(a.p11))
+
+
+@always_inline
+def op_rnv_bn_sq(t: Int, a: Args):
+    """Block t's sum of (x - mean)^2: x p0, part p1, aux p2 (bn_blk_sq_at)."""
+    var x = _xf(a.p0)
+    bn_blk_sq_at(t, x, _xf(a.p1), _xf(a.p2), x, _xd(a.p11), _xd(a.p11))
+
+
+@always_inline
+def op_rnv_bn_var(c: Int, a: Args):
+    """Channel c's biased variance and invstd, then PyTorch's running update of p2 in place
+    (bn_blk_var_running_at): part p0, aux p1, running p2."""
+    var x = _xf(a.p0)
+    bn_blk_var_running_at(c, x, _xf(a.p1), _xf(a.p2), x, _xd(a.p11), _xd(a.p11))
+
+
+@always_inline
+def op_rnv_bn_apply(i: Int, a: Args):
+    """y = ((x - mean) invstd) gamma + beta: x p0, aux p1, y p2 (bn_apply_at)."""
+    var x = _xf(a.p0)
+    bn_apply_at(i, x, _xf(a.p1), _xf(a.p2), x, _xd(a.p11), _xd(a.p11))
+
+
+@always_inline
+def op_rnv_bn_red(t: Int, a: Args):
+    """Block t's sum of g and of g xhat: x p0, g p1, aux p2, part p3 (bn_blk_red_at)."""
+    bn_blk_red_at(t, _xf(a.p0), _xf(a.p1), _xf(a.p2), _xf(a.p3), _xd(a.p11), _xd(a.p11))
+
+
+@always_inline
+def op_rnv_bn_red_fin(c: Int, a: Args):
+    """Channel c's sum_g and sum_gx (bn_blk_red_fin_at: part p0, aux p1), then the parameter
+    gradients d gamma = sum_gx into p2 (i0 = 1) and d beta = sum_g into p3 (i1 = 1)."""
+    var x = _xf(a.p0)
+    bn_blk_red_fin_at(c, x, _xf(a.p1), x, x, _xd(a.p11), _xd(a.p11))
+    var C = rn_word(a.p11, 1)
+    if a.i0 != 0:
+        a.p2.unsafe_store(c, a.p1.unsafe_load(2 + BN_SUMGX * C + c))
+    if a.i1 != 0:
+        a.p3.unsafe_store(c, a.p1.unsafe_load(2 + BN_SUMG * C + c))
+
+
+@always_inline
+def op_rnv_bn_dx(i: Int, a: Args):
+    """Training-mode dx: x p0, g p1, aux p2, dx p3 (bn_bwd_dx_at)."""
+    bn_bwd_dx_at(i, _xf(a.p0), _xf(a.p1), _xf(a.p2), _xf(a.p3), _xd(a.p11), _xd(a.p11))
+
+
+@always_inline
+def op_rnv_bn_dx_eval(i: Int, a: Args):
+    """Eval-mode dx = g invstd gamma: x p0, g p1, aux p2, dx p3 (bn_bwd_eval_dx_at)."""
+    bn_bwd_eval_dx_at(i, _xf(a.p0), _xf(a.p1), _xf(a.p2), _xf(a.p3), _xd(a.p11), _xd(a.p11))
+
+
 @always_inline
 def apply_rankn_conv[OP: Int](t: Int, a: Args):
     comptime if OP == OP_RNV_IM2COL:
@@ -392,3 +514,23 @@ def apply_rankn_conv[OP: Int](t: Int, a: Args):
         op_rnv_avgpool_fwd(t, a)
     elif OP == OP_RNV_AVGPOOL_VJP:
         op_rnv_avgpool_vjp(t, a)
+    elif OP == OP_RNV_BN_PREP:
+        op_rnv_bn_prep(t, a)
+    elif OP == OP_RNV_BN_SUM:
+        op_rnv_bn_sum(t, a)
+    elif OP == OP_RNV_BN_MEAN:
+        op_rnv_bn_mean(t, a)
+    elif OP == OP_RNV_BN_SQ:
+        op_rnv_bn_sq(t, a)
+    elif OP == OP_RNV_BN_VAR:
+        op_rnv_bn_var(t, a)
+    elif OP == OP_RNV_BN_APPLY:
+        op_rnv_bn_apply(t, a)
+    elif OP == OP_RNV_BN_RED:
+        op_rnv_bn_red(t, a)
+    elif OP == OP_RNV_BN_RED_FIN:
+        op_rnv_bn_red_fin(t, a)
+    elif OP == OP_RNV_BN_DX:
+        op_rnv_bn_dx(t, a)
+    elif OP == OP_RNV_BN_DX_EVAL:
+        op_rnv_bn_dx_eval(t, a)

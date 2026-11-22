@@ -16,7 +16,8 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "conv1d": 15, "max_pool1d": 16, "avg_pool1d": 17, "adaptive_avg_pool1d": 18, "branch": 19,
           "concat": 20, "residual_block": 0, "parallel": 0,
           "silu": 32, "gelu": 33, "softplus": 34, "rms_norm": 35, "rotary": 36, "multiply": 37,
-          "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0}
+          "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
+          "batch_norm1d": 42, "batch_norm2d": 42}
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -420,6 +421,51 @@ class Sequential(_CheckMixin):
         """Append a tanh recurrent layer over ``(length, features)`` samples
         from a zero state; the output is every step's hidden state."""
         return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def batch_norm1d(self, num_features, eps=1e-5, momentum=0.1):
+        """Append batch normalization over the channels of ``(channels,)`` or
+        ``(channels, length)`` samples, as PyTorch's ``nn.BatchNorm1d``.
+
+        During :meth:`fit` each channel is normalized with the mean and
+        (biased) variance of the batch over its rows and positions, and the
+        running statistics are updated as
+        ``running = (1 - momentum) * running + momentum * batch`` (the
+        variance unbiased). :meth:`predict` and validation normalize with the
+        running statistics. Then a learned per-channel ``weight`` (initially
+        1) and ``bias`` (initially 0) are applied. The running statistics are
+        saved with the model (``params_``, :meth:`state_dict`, checkpoints)
+        and are never changed by the optimizer.
+
+        Parameters
+        ----------
+        num_features : int
+            The number of channels, the first axis of each sample.
+        eps : float, default 1e-5
+            Added to the variance before its square root.
+        momentum : float, default 0.1
+            Weight of the batch statistics in the running update, in [0, 1].
+
+        Example::
+
+            model = (mojolearn.Sequential(input_shape=(3, 64))
+                     .conv1d(16, 5, padding=2).batch_norm1d(16).relu()
+                     .adaptive_avg_pool1d(1).flatten().linear(2))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("batch_norm1d", (num_features, eps, momentum), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def batch_norm2d(self, num_features, eps=1e-5, momentum=0.1):
+        """Append batch normalization over the channels of
+        ``(channels, height, width)`` samples, as PyTorch's
+        ``nn.BatchNorm2d``: :meth:`batch_norm1d` with the statistics taken
+        over the rows and both spatial axes.
+
+        Example::
+
+            model = (mojolearn.Sequential(input_shape=(1, 28, 28))
+                     .conv2d(8, 3, padding=1).batch_norm2d(8).relu()
+                     .flatten().linear(10))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("batch_norm2d", (num_features, eps, momentum), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gated(self, gate, up):
         """Append a gated block: ``gate(h) * up(h)``, where ``h`` is the
@@ -894,7 +940,7 @@ _SEQUENTIAL_CONTEXT = {
                     "flatten", "conv2d", "max_pool2d", "avg_pool2d", "conv1d", "max_pool1d",
                     "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
                     "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
-                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent"),
+                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent", "batch_norm"),
 }
 
 
