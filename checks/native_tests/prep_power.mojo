@@ -35,6 +35,10 @@ comptime SPACING_ONE = 2.220446049250313e-16
 
 
 def yeo_johnson_inverse(x: Float64, lmbda: Float64) -> Float64:
+    # NumPy propagates NaN through np.power; Mojo's Float64 `**` returned inf for a NaN base on cpc1 (2026-11-22),
+    # so the oracle returns NaN first.
+    if isnan(x):
+        return x
     if x >= 0.0:
         if abs(lmbda) < SPACING_ONE:
             return exp(x) - 1.0
@@ -45,6 +49,8 @@ def yeo_johnson_inverse(x: Float64, lmbda: Float64) -> Float64:
 
 
 def box_cox_inverse(x: Float64, lmbda: Float64) -> Float64:
+    if isnan(x):
+        return x
     if lmbda == 0.0:
         return exp(x)
     return (x * lmbda + 1.0) ** (1.0 / lmbda)
