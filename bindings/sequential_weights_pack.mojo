@@ -6,6 +6,7 @@
 # qualification of arbitrary Python callbacks as native execution.
 # The PACK half of the former `bindings/sequential_weights.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/sequential_weights_unpack.mojo`.
+from autograd.model_blocks import block_param_names
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
@@ -34,9 +35,16 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
     for k in range(len(layers)):  # driver-loop: over parameter layer metadata
         var layer = layers[k]
         var code = Int(py=layer[0])
-        if code == 1 or code == 6 or code == 12:
+        if code == 1 or code == 6 or code == 12 or code == 15:
             var bias = code == 6 or (Int(py=layer[2]) == 1 if code == 1 else Int(py=layer[4][4]) == 1)
             _ = py_call(result.append, Python.tuple(k, bias))
+        elif code == 35 or code == 39 or code == 40 or code == 41:
+            # lane neural-blocks: a block layer's tensors by name (autograd/model_blocks.mojo block_param_names)
+            var suffixes = block_param_names(code)
+            var names = Python.list()
+            for j in range(len(suffixes)):  # small-loop(at most four tensors of a block layer)
+                _ = py_call(names.append, PythonObject(suffixes[j]))
+            _ = py_call(result.append, Python.tuple(k, False, py_call(native_loaded_module("builtins").tuple, names)))
     return result
 
 
@@ -71,6 +79,11 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
         var index = layers[k][0]
         var name = index if names is None else py_get(names, index, index)
         var stem = String(prefix) + String(py_call(b.str, name))
+        if len(layers[k]) == 3:
+            for j in range(len(layers[k][2])):  # small-loop(at most four tensors of a block layer)
+                _ = py_call(requests.append, Python.tuple(index, j))
+                _ = py_call(keys.append, stem + String(layers[k][2][j]))
+            continue
         _ = py_call(requests.append, Python.tuple(index, 0))
         _ = py_call(keys.append, stem + ".weight")
         if Bool(py=layers[k][1]):
@@ -136,7 +149,7 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
             uses_shape = uses_shape or Int(py=description[k][0]) >= 9
         if uses_shape:
             if py_item(fields, nk[].k_input_shape) is None:
-                raise Error("load_state_dict: set input_shape on a model with reshape, permute, flatten, conv2d or pooling layers")
+                raise Error("load_state_dict: set input_shape on a model with reshape, permute, flatten, convolution, pooling, branch or concat layers")
             sample = py_item(fields, nk[].k_input_shape)
         else:
             var first = Int(py=layers[0][0])
@@ -211,7 +224,8 @@ def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form
     mods.released()
     var n_params = len(params)
     var exported = sequential_array(mods, Python.tuple(n_params), py_item(context, nk[].k_float32), context)
-    var shapes = List[Int](length=2 * len(py_item(fields, nk[].k__layers)) * SEQUENTIAL_EXPORT_SHAPE_WORDS, fill=0)
+    var model_layers = py_item(fields, nk[].k__layers)
+    var shapes = List[Int](length=4 * len(model_layers) * SEQUENTIAL_EXPORT_SHAPE_WORDS, fill=0)
     var count = sequential_file_export(entries, program, table, Int(py=sequential_address(params)),
                                        Int(py=sequential_address(exported)), shapes)
     mods.released()
@@ -231,6 +245,9 @@ def sequential_export_weights(mut mods: NativeModules, model: PythonObject, form
         var window = exported[py_call(b.slice, off, off + size)]
         var value = py_call(window.reshape, py_call(b.tuple, dims))
         var name = String(shapes[base]) + (".bias" if shapes[base + 1] == 1 else ".weight")
+        var code = Int(py=model_layers[shapes[base]][0])
+        if code >= 32:
+            name = String(shapes[base]) + block_param_names(code)[shapes[base + 1]]
         if form == SEQUENTIAL_EXPORT_STATE_DICT:
             py_setitem(named, PythonObject(name), value)
         elif form == SEQUENTIAL_EXPORT_PARAMETERS:
