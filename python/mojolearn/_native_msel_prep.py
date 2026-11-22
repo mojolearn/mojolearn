@@ -140,7 +140,12 @@ def connect(context, register, registry):
                 methods['decision_function'] = ('family_svm_linear_svc_decision', (native, arg(0)))
             add(cls, linear_svm._NATIVE, linear_svm._NATIVE_CONTEXT, methods)
 
-    native = binding('_mojolearn_gp')
+    # The public operations' None binding (bindings/gp_native_pack.mojo `gp_operation`: the public sentinel), as
+    # GaussianProcessClassifier's schema below: the door resolves the estimator's device route and packs the public
+    # output. A pinned `_mojolearn_gp` binding ran a device="cpu" GPR of a search or a cross-validation on the
+    # process's GPU image and returned the float32 internal mean from GridSearchCV.predict where
+    # best_estimator_.predict returns float64 (proving suite, 2026-11-22).
+    native = constant(None)
     if gp is not None:
         add(gp.GaussianProcessRegressor, gp._NATIVE, gp._NATIVE_CONTEXT, {
             'fit': ('family_gp_gpr_fit', (native, arg(0), arg(1))),

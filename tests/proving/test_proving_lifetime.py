@@ -68,7 +68,9 @@ def test_bagging_predicts_the_same_after_the_input_is_freed(device):
 def test_gaussian_process_search_refit_predicts_after_del_x(device):
     # fx-borrow: a GP search refit, then predict after the training X is deleted.
     source = X.copy()
-    search = cls("GridSearchCV")(make("GaussianProcessRegressor", device), {"alpha": [1e-2, 1e-1]}, cv=3)
+    # identical mode pins the ridge: alpha is 0 or 2**-20 (the profile's jitter); any other alpha is refused at fit
+    # ("NUMERIC_IDENTICAL refuses the unpinned alpha", python/mojolearn/_gp_impl.py's fit, DEVIATION 1751).
+    search = cls("GridSearchCV")(make("GaussianProcessRegressor", device), {"alpha": [0.0, 2.0 ** -20]}, cv=3)
     search.fit(source, Y.copy())
     first = search.predict(X_NEW)
     del source
