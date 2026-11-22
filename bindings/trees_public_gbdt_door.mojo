@@ -58,6 +58,7 @@ from gbdt.fit_calls import (
     xg_resident_predict, xg_ordered_fit, xg_feature_freq_fit,
 )
 from bindings.trees_keys_unpack import trees_keys
+from core.shared_slot import SharedSlot
 from bindings.py_balanced import py_item
 # TOMBSTONE: trees_f32 / trees_forest_layout / trees_all_finite / TreesMatrix / trees_view / trees_check_rank / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
@@ -153,18 +154,51 @@ def gbdt_has_ctr(text: PythonObject) raises -> Bool:
     return gbdt_text_has_ctr(String(py_call(b.str, text)))
 
 
-def gbdt_host_tree_context(context: PythonObject) raises -> PythonObject:
+struct GbdtHostOwner(Defaultable, Movable):
+    """The CPU tree owner's context, resolved once per process by the first
+    CPU CTR predict (lane pv-lazy-connect, 2026-11-22). Immutable after
+    `ready`: the connected `host_tree_context` dictionary only."""
+    var ready: Bool
+    var context: PythonObject
+
+    def __init__(out self):
+        self.ready = False
+        self.context = PythonObject(None)
+
+
+comptime _GBDT_HOST_OWNER = SharedSlot[GbdtHostOwner, "MojolearnGbdtHostOwnerV1"]
+
+
+def gbdt_host_tree_context() raises -> PythonObject:
     """The CPU tree owner's context (`linear_model._CLASSICAL`'s
-    `host_tree_context`, connected when the host surface loads), read from
-    the loaded module's dictionary."""
+    `host_tree_context`), connected on first use and held in this door's
+    slot: later calls are one flag test.
+
+    The first call imports `mojolearn._classical_host`, whose import connects
+    the context (the import-time glue `ensemble.py` ran on every
+    `import mojolearn` before, about 0.25 s; cfd5db273f, removed here). Only a
+    device='cpu' model with CTR records reaches this, so `import mojolearn`
+    no longer pays for it. Thread safety: every step runs with the GIL held;
+    two threads racing the first call both import (the import lock makes the
+    second wait for the first and return the same module) and store the same
+    dictionary, and the flag is set only after the store, so no reader sees
+    a half-built slot. No spin lock is held across the import (it may release
+    the GIL). An image without the host surface refuses by name, as before."""
+    var g = _GBDT_HOST_OWNER.get_or_create_ptr()
+    if g[].ready:
+        return g[].context
     var nk = trees_keys()
-    var module = py_get(py_item(context, nk[].k_modules), "mojolearn.linear_model")
-    if module is None:
-        raise Error("ImportError: mojolearn: the CPU tree owner is not connected")
+    var module = PythonObject(None)
+    try:
+        module = Python.import_module("mojolearn._classical_host")
+    except e:
+        raise Error("ImportError: mojolearn: the CPU tree owner is not connected (" + String(e) + ")")
     var classical = py_get(py_fields(module), nk[].k__CLASSICAL)
     var host = py_get(classical, nk[].k_host_tree_context) if classical is not None else PythonObject(None)
     if host is None:
         raise Error("ImportError: mojolearn: the CPU tree owner is not connected")
+    g[].context = host
+    g[].ready = True
     return host
 
 
@@ -336,7 +370,7 @@ def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
         # The CPU restatement of a CTR model's apply (`HostGBDT`).
         var args = Python.tuple(X, py_item(fields, nk[].k_loss), text, py_item(fields, nk[].k_n_features_in_), py_item(fields, nk[].k_approx_dim_),
                                 py_item(fields, nk[].k_n_classes_), py_type(model).__name__, py_get(fields, nk[].k_category_map_))
-        return host_tree_operation(PythonObject(None), "host_tree_ctr_predict", args, gbdt_host_tree_context(context))
+        return host_tree_operation(PythonObject(None), "host_tree_ctr_predict", args, gbdt_host_tree_context())
     var dim = _int(py_item(fields, nk[].k_approx_dim_))
     var call = gbdt_apply_unpack(fields, X, entry, gbdt_resident(fields, table, entry), context)
     var out = admitted_vector(call.rows * dim, "<f4", context)
