@@ -277,6 +277,8 @@ step_shard() {
     set +e -u  # GitHub's default bash runs with -e: a failing check must not end the shard
     local out=${NC_OUT:-out} bindir=${NC_BIN:-bin}
     mkdir -p "$out/results" "$out/logs"
+    # fixture cases are tracked as one archive each (tools/fixture_packs.py): recreate their directories
+    if [ -f tools/fixture_packs.py ]; then python3 tools/fixture_packs.py unpack > /dev/null; fi
     bin="$bindir/run_$IN_COLUMN"
     case "$bin" in /*) ;; *) bin="./$bin" ;; esac
     chmod +x "$bin"

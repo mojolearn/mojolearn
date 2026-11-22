@@ -205,6 +205,8 @@ box-out/
 
 # Fixture packs (tools/fixture_packs.py): each case is tracked as <case>.tar; the unpacked case directories are
 # recreated by `python3 tools/fixture_packs.py unpack` and are never tracked.
+/checks/native_tests/fixtures/*/
+!/checks/native_tests/fixtures/mamba/
 /checks/native_tests/fixtures/mamba/*/
 !/checks/native_tests/fixtures/mamba/mamba2/
 !/checks/native_tests/fixtures/mamba/mamba3/

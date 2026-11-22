@@ -50,6 +50,8 @@ mkdir -p "$RES" && RES="$(cd "$RES" && pwd)"
 mkdir -p "$RES/results" "$RES/logs" "$RES/time"
 TREE=${NC_TREE:-/root/mojolearn-measure}
 cd "$TREE" || { echo "no tree $TREE"; exit 2; }
+# fixture cases are tracked as one archive each (tools/fixture_packs.py): recreate their directories
+[ -f tools/fixture_packs.py ] && python3 tools/fixture_packs.py unpack > /dev/null
 export PATH="/root/.pixi/bin:$PATH"
 say() { echo "[$(date +%H:%M:%S) native-checks-gpu] $*"; }
 [ -x /usr/local/cuda/bin/ptxas ] && export MODULAR_NVPTX_COMPILER_PATH=${MODULAR_NVPTX_COMPILER_PATH:-/usr/local/cuda/bin/ptxas}

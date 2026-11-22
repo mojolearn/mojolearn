@@ -1,4 +1,5 @@
 # Pack roots (tools/fixture_packs.py): every immediate subdirectory of a root is one case, tracked as <case>.tar.
+checks/native_tests/fixtures
 checks/native_tests/fixtures/mamba
 checks/native_tests/fixtures/mamba/mamba2
 checks/native_tests/fixtures/mamba/mamba3
