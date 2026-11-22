@@ -350,3 +350,38 @@ def test_prebuild_ignores_the_skipped_retry_job_when_no_group_needed_one():
             {"name": "device-parse retry ${{ matrix.key }} sm_89", "conclusion": "skipped"}]
     last = pc.parse_group_jobs(jobs)
     assert [j["name"] for j in last] == ["device-parse a sm_89"] and all(j["conclusion"] == "success" for j in last)
+
+
+def _groups_module():
+    spec = importlib.util.spec_from_file_location("native_testsuite_groups", ROOT / "tools/ops/native_testsuite_groups.py")
+    g = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(g)
+    return g
+
+
+def test_grouped_build_copy_lists_tests_by_name_and_keeps_listed_mains():
+    # lane ts-build, 2026-11-22: discovery from an imported module's main() saw 0 tests, so a member copy lists them
+    g = _groups_module()
+    src = ("# x\nfrom std.testing import TestSuite\nfrom m.h import helper, test_shared\n\ndef test_b() raises:\n"
+           "    pass\n\ndef _x():\n    pass\n\ndef test_a() raises:\n    pass\n\ndef main() raises:\n"
+           "    TestSuite.discover_tests[__functions_in_module()]().run()\n")
+    out, why = g.copy_source(src)
+    assert why == "" and "__functions_in_module" not in out
+    assert out.index("suite.test[test_shared]()") < out.index("suite.test[test_b]()") < out.index("suite.test[test_a]()")
+    listed = "def test_a() raises:\n    pass\n\ndef main() raises:\n    var suite = TestSuite()\n    suite.test[test_a]()\n    suite^.run()\n"
+    assert g.copy_source(listed) == (listed, "")
+    assert g.copy_source("def test_a() raises:\n    pass\n")[0] is None
+
+
+def test_grouped_build_deal_is_deterministic_balanced_and_keeps_families():
+    g = _groups_module()
+    names = [f"fam{f}_{i}" for f in range(6) for i in range(5)] + ["big_0", "big_1", "big_2", "big_3"]
+    cost = {n: 1.0 for n in names} | {"big_0": 9.0, "big_1": 9.0, "big_2": 9.0, "big_3": 9.0}
+    a = g.deal(names, cost, 4)
+    assert a == g.deal(list(reversed(names)), cost, 4)
+    assert sorted(n for grp in a for n in grp) == sorted(names)
+    loads = [sum(cost[n] for n in grp) for grp in a]
+    assert max(loads) - min(loads) <= 9.0
+    for f in range(6):  # a small family never splits
+        assert sum(1 for grp in a if any(n.startswith(f"fam{f}_") for n in grp)) == 1
+    assert len(g.deal(["one"], {"one": 1.0}, 8)) == 1
