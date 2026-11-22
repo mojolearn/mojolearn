@@ -90,9 +90,15 @@ def test_case_runs_on_the_default_arm(arm_root, device, name):
     if name == "voting_stacking_multioutput_ovr":
         for n in (-1, 1, 2):
             assert_same(result[f"voting_n_jobs_{n}"], result["voting_n_jobs_None"], f"voting n_jobs={n}")
-    if name in ("nan_refusals", "missing_class_folds"):
+    if name == "nan_refusals":
         for key, words in result.items():
             assert str(words) != "no error", f"{name}.{key}: the invalid input was admitted"
+    if name == "missing_class_folds":
+        # Stacking refuses a fold whose training rows lack a class, in words. CalibratedClassifierCV admits it: each
+        # fold's member is fitted on the classes present and its scores are mapped by the member's class codes (lane
+        # ma-callers R2 unit 4, `_cal_scores`), as scikit-learn's CalibratedClassifierCV does.
+        assert str(result["stacking"]) != "no error", f"{name}.stacking: the invalid input was admitted"
+        assert str(result["calibrated"]) == "no error", f"{name}.calibrated: {result['calibrated']}"
     if name == "grid_ridge_and_logistic":
         assert float(result["ridge_alpha"]) in (0.1, 1.0)
 
