@@ -14,8 +14,9 @@ model trained on a GPU infers the GPU groves engine's bits on a CPU. A groves
 archive saved under a numeric mode other than `identical` is refused by name,
 because this binding computes IDENTICAL bits only. `predict` and
 `predict_proba` return exactly what the GPU classes return for the same file.
-RF probabilities float32, RF regression float32, ET probabilities and
-regression float64, class labels through `_labels.decode_labels`.
+RF probabilities float32, ET probabilities and regression float64, RF
+regression float64 to a caller outside the package and float32 inside it
+(the estimator's own rule, `estimator_outside`), class labels through `_labels.decode_labels`.
 
 This module holds no arithmetic. What it promises is what the gate measured:
 tools/forest_host_gate.py compares the host predictions of a recorded model
