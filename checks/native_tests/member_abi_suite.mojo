@@ -646,12 +646,21 @@ def run_checks() raises:
             flag_ptr.unsafe_store(unit, UInt8(1))
 
     host_parallelize(_one, MEMBER_ABI_FIXTURES)
+    # Every failing fixture's own words, not only the first one's (each is
+    # rerun alone to get them), so one run lists every stale expectation.
+    var failures = String("")
+    var failed = 0
     for unit in range(MEMBER_ABI_FIXTURES):  # driver-loop: over the fixtures' flags
         if flags[unit] != UInt8(0):
-            # Raise the failing fixture's own words.
-            _fixture(unit)
-            raise Error("member ABI: fixture " + String(unit) + " failed on its host task and passed alone")
+            failed += 1
+            try:
+                _fixture(unit)
+                failures += "\n  fixture " + String(unit) + ": failed on its host task and passed alone"
+            except error:
+                failures += "\n  fixture " + String(unit) + ": " + String(error)
     _ = len(flags)
+    if failed > 0:
+        raise Error("member ABI: " + String(failed) + " of " + String(MEMBER_ABI_FIXTURES) + " fixtures failed:" + failures)
 
 
 def _sweep_b_member(which: Int) raises -> MemberRef:
