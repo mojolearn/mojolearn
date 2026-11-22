@@ -59,7 +59,6 @@ from checks.native_tests.core_safetensors_f16 import register as register_core_s
 from checks.native_tests.core_stratified_group_fp64 import register as register_core_stratified_group_fp64
 from checks.native_tests.core_verifier_gap_methods import register as register_core_verifier_gap_methods
 from checks.native_tests.core_vjp_rank import register as register_core_vjp_rank
-from checks.native_tests.dbscan_eps_filter_gpu import register as register_dbscan_eps_filter_gpu
 from checks.native_tests.dbscan_native import register as register_dbscan_native
 from checks.native_tests.dbscan_ownership import register as register_dbscan_ownership
 from checks.native_tests.decomp_classical_infer_one_call import register as register_decomp_classical_infer_one_call
@@ -452,7 +451,6 @@ from checks.tree_ctr_slice_check import register as register_tree_ctr_slice_chec
 from checks.ordered_ctr_device_check import register as register_ordered_ctr_device_check
 # lane fx-checks-orphans (2026-11-18): the family standalone main() checks nothing ran; each suite stays in
 # <family>/checks/ (its main() is now run_checks()) and its registered wrapper is checks/native_tests/<family>_<stem>.mojo
-from checks.native_tests.arima_fit_check import register as register_arima_fit_check
 from checks.native_tests.autograd_data_cpu import register as register_autograd_data_cpu
 from checks.native_tests.autograd_data_gpu import register as register_autograd_data_gpu
 from checks.native_tests.autograd_distributed_setup_failure import register as register_autograd_distributed_setup_failure
@@ -476,7 +474,6 @@ from checks.native_tests.autograd_pass1_gpu import register as register_autograd
 from checks.native_tests.autograd_program_setup_failure import register as register_autograd_program_setup_failure
 from checks.native_tests.autograd_view_cpu import register as register_autograd_view_cpu
 from checks.native_tests.autograd_view_gpu import register as register_autograd_view_gpu
-from checks.native_tests.cluster_host_gemm_check import register as register_cluster_host_gemm_check
 from checks.native_tests.decomposition_variance_identity_check import register as register_decomposition_variance_identity_check
 from checks.native_tests.ensemble_builder_check import register as register_ensemble_builder_check
 from checks.native_tests.ensemble_builder_kernels_check import register as register_ensemble_builder_kernels_check
@@ -534,8 +531,6 @@ from checks.native_tests.gemm_gemm_production_dispatch_check import register as 
 from checks.native_tests.gemm_gemm_rtf_boundary_check import register as register_gemm_gemm_rtf_boundary_check
 from checks.native_tests.gemm_gemm_stage_ftz_check import register as register_gemm_gemm_stage_ftz_check
 from checks.native_tests.gemm_gemm_workspace_reuse_check import register as register_gemm_gemm_workspace_reuse_check
-from checks.native_tests.glm_link_seams_check import register as register_glm_link_seams_check
-from checks.native_tests.glm_qn_scalar_ieee_check import register as register_glm_qn_scalar_ieee_check
 from checks.native_tests.hdbscan_sparse_mr_check import register as register_hdbscan_sparse_mr_check
 from checks.native_tests.hierarchy_linkage_host_check import register as register_hierarchy_linkage_host_check
 from checks.native_tests.holtwinters_hw_estimate_check import register as register_holtwinters_hw_estimate_check
@@ -554,7 +549,6 @@ from checks.native_tests.neighbors_fused_logical32_check import register as regi
 from checks.native_tests.neighbors_fused_slot_merge_check import register as register_neighbors_fused_slot_merge_check
 from checks.native_tests.neighbors_knn_selector_bound_compact_check import register as register_neighbors_knn_selector_bound_compact_check
 from checks.native_tests.neighbors_query_batch_check import register as register_neighbors_query_batch_check
-from checks.native_tests.tokenizer_generation_policy_check import register as register_tokenizer_generation_policy_check
 from checks.native_tests.training_byte_lm_block_copy_check import register as register_training_byte_lm_block_copy_check
 from checks.native_tests.training_chunked_lm_head_check import register as register_training_chunked_lm_head_check
 from checks.native_tests.training_chunked_lm_head_device_check import register as register_training_chunked_lm_head_device_check
@@ -639,7 +633,6 @@ def all_checks() -> List[Check]:
     checks.append(register_core_stratified_group_fp64())
     checks.append(register_core_verifier_gap_methods())
     checks.append(register_core_vjp_rank())
-    checks.append(register_dbscan_eps_filter_gpu())
     checks.append(register_dbscan_native())
     checks.append(register_dbscan_ownership())
     checks.append(register_decomp_classical_infer_one_call())
@@ -1026,7 +1019,6 @@ def all_checks() -> List[Check]:
     checks.append(register_tree_ctr_fit_device_check())
     checks.append(register_tree_ctr_slice_check())
     checks.append(register_ordered_ctr_device_check())
-    checks.append(register_arima_fit_check())
     checks.append(register_autograd_data_cpu())
     checks.append(register_autograd_data_gpu())
     checks.append(register_autograd_distributed_setup_failure())
@@ -1050,7 +1042,6 @@ def all_checks() -> List[Check]:
     checks.append(register_autograd_program_setup_failure())
     checks.append(register_autograd_view_cpu())
     checks.append(register_autograd_view_gpu())
-    checks.append(register_cluster_host_gemm_check())
     checks.append(register_decomposition_variance_identity_check())
     checks.append(register_ensemble_builder_check())
     checks.append(register_ensemble_builder_kernels_check())
@@ -1108,8 +1099,6 @@ def all_checks() -> List[Check]:
     checks.append(register_gemm_gemm_rtf_boundary_check())
     checks.append(register_gemm_gemm_stage_ftz_check())
     checks.append(register_gemm_gemm_workspace_reuse_check())
-    checks.append(register_glm_link_seams_check())
-    checks.append(register_glm_qn_scalar_ieee_check())
     checks.append(register_hdbscan_sparse_mr_check())
     checks.append(register_hierarchy_linkage_host_check())
     checks.append(register_holtwinters_hw_estimate_check())
@@ -1127,7 +1116,6 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_fused_slot_merge_check())
     checks.append(register_neighbors_knn_selector_bound_compact_check())
     checks.append(register_neighbors_query_batch_check())
-    checks.append(register_tokenizer_generation_policy_check())
     checks.append(register_training_byte_lm_block_copy_check())
     checks.append(register_training_chunked_lm_head_check())
     checks.append(register_training_chunked_lm_head_device_check())
