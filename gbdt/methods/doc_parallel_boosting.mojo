@@ -2857,6 +2857,7 @@ def sym_device_rounds_eligible(
     multi_device: Bool,
     n_estimators: Int,
     need_estimation: Bool,
+    tree_ctrs: Bool,
 ) -> Bool:
     """True when the fit's rounds run as one device loop
     (`fit_sym_rounds_on_device`); the refusals are listed in the blocks
@@ -2875,6 +2876,13 @@ def sym_device_rounds_eligible(
         and not trace_enabled
         and not multi_device
         and n_estimators > 0
+        # Feature combinations (a TreeCtrFit) search through the host
+        # loop's level driver (`run_tree_ctr_tree`), which the device
+        # rounds do not run: a FeatureFreq-only combination fit has one
+        # permutation, took the device rounds and grew trees with no
+        # persist record ("a tree without its persist record",
+        # tree_ctr_fit_device_check on the L40S, 9e49098bca; lane sr-gbdt)
+        and not tree_ctrs
     )
     if not common:
         return False
@@ -4554,7 +4562,7 @@ def fit_with_test(
         use_pointwise_searcher, non_symmetric, perm_count,
         feature_fraction < 1, random_strength, trace.enabled, objective,
         leaf_estimation_method, approx_dim, not device_plan.single(),
-        n_estimators, need_estimation,
+        n_estimators, need_estimation, len(tree_ctr) == 1,
     )
     if device_rounds:
         # the host loop's one `noise_rand` draw per tree, in tree order (a
