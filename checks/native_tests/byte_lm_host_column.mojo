@@ -29,11 +29,35 @@ Units (independent; the suite runs them across host cores):
      nothing; the step repeats its bits
   8  a four-row batch is a different gradient from the two-row one at the
      same parameter count
+
+`test_routes` (lane py2mojo-D, 2026-11-22; ported from
+`test_byte_lm_step_routes.py`): the original's inputs, `initial()`
+(standard_normal(34944) * 0.02, seed 41) and batch 0 of `batches()` (seed
+43), stored in `fixtures/byte_lm_routes/` by
+`tools/py2mojo_native_fixtures_b7.py`. Every claim is bit for bit.
+  0  `test_host_logits_reference_equals_threaded`: logits of batch 0's
+     inputs ([2, 32]) on the reference path equal the threaded path's
+  1  `test_host_loss_reference_equals_threaded`: the loss bits of batch 0
+  2  `test_host_step_rows_equals_step_oracle` in one build: on batch 0's
+     logits, `ce_host_rows` gives `ce_forward_oracle`'s loss and
+     `ce_backward_oracle`'s dlogits; on the step's gradient, `adam_host_rows`
+     gives `optimizer_step_oracle`'s parameters and both moments (the two arms
+     `byte_host_gradient` / `byte_host_train_step` select between with
+     -D MOJOLEARN_BYTE_LM_HOST_STEP_ROWS_OFF, training/byte_lm_host_backward.mojo)
+  3  `test_host_step_oracle_loss_equals_reference_inference_loss`: the
+     step's loss bits are the reference inference loss bits
 """
 from std.memory import bitcast
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_dispatch import byte_host_operation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from training.byte_lm_host_execution import byte_host_optimizer
+from training.checks.loss_contract import CeConfig
+from training.checks.loss_oracle import ce_backward_oracle, ce_forward_oracle
+from training.checks.optimizer_oracle import optimizer_step_oracle
+from training.loss_host_rows import ce_host_rows
+from training.optimizer_host_rows import adam_host_rows
+from checks.native_tests.tsa_metrics_fixture_words import fixture_f32, fixture_i32
 from std.testing import TestSuite, assert_true as require
 from checks.native_tests.testsuite_cases import check_cases
 
@@ -250,6 +274,91 @@ def run_case(unit: Int) raises:
 def test_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     check_cases("byte_lm_host_column", BYTE_LM_HOST_COLUMN_CASES, run_case)
+
+
+comptime ROUTES_DIR = "checks/native_tests/fixtures/byte_lm_routes/"
+comptime BYTE_LM_ROUTES_CASES = 4
+
+
+def routes_params(cfg: ByteConfig) raises -> List[Float32]:
+    """`initial()` of test_byte_lm_step_routes.py."""
+    return fixture_f32(ROUTES_DIR + "initial.f32", cfg.n_total())
+
+
+def routes_batch0(cfg: ByteConfig) raises -> List[Int32]:
+    """`batches()[0]`: the first `[batch, length + 1]` of the stored `[3, 2, 33]`."""
+    var stack = fixture_i32(ROUTES_DIR + "batches.i32", 3 * cfg.batch * (cfg.length + 1))
+    var out = List[Int32](capacity=cfg.batch * (cfg.length + 1))
+    for i in range(cfg.batch * (cfg.length + 1)):  # driver-loop: over one batch's token cells
+        out.append(stack[i])
+    return out^
+
+
+def split_rows(ids: List[Int32], cfg: ByteConfig, shift: Int) -> List[Int32]:
+    """`ids[:, :-1]` (shift 0) or `ids[:, 1:]` (shift 1), row-major."""
+    var out = List[Int32](capacity=cfg.batch * cfg.length)
+    for b in range(cfg.batch):  # driver-loop: over the batch rows
+        for l in range(cfg.length):
+            out.append(ids[b * (cfg.length + 1) + l + shift])
+    return out^
+
+
+def routes_case(unit: Int) raises:
+    var cfg = shape()
+    var params = routes_params(cfg)
+    var ids = routes_batch0(cfg)
+    if unit == 0:
+        var inputs = split_rows(ids, cfg, 0)
+        require(same_bits(logits(params, inputs, cfg.batch, cfg.length, cfg, 0, 0),
+                          logits(params, inputs, cfg.batch, cfg.length, cfg, 1, 0)),
+                "random-init logits: the reference path's bytes differ from the threaded path's")
+    elif unit == 1:
+        var reference = loss_bits(params, ids, cfg, 0, 0)
+        var threaded = loss_bits(params, ids, cfg, 1, 0)
+        require(reference == threaded, "random-init loss bits: reference " + String(reference) + ", threaded "
+                + String(threaded))
+    elif unit == 2:
+        var targets = split_rows(ids, cfg, 1)
+        var head = logits(params, split_rows(ids, cfg, 0), cfg.batch, cfg.length, cfg, 0, 0)
+        var ce_cfg = CeConfig.causal_lm(cfg.vocab_size)
+        var rows = ce_host_rows(head, targets, ce_cfg)
+        var oracle = ce_forward_oracle(head, targets, ce_cfg)
+        ce_backward_oracle(oracle, targets, ce_cfg)
+        require(bitcast[DType.uint32](rows[0]) == bitcast[DType.uint32](oracle.loss[0]),
+                "ce_host_rows loss " + String(rows[0]) + ", ce_forward_oracle " + String(oracle.loss[0]))
+        require(same_bits(rows[1], oracle.dlogits), "ce_host_rows dlogits differ from ce_backward_oracle's")
+        var n = cfg.n_total()
+        var zeros = filled(n, Float32(0))
+        var step = host_step(params, zeros, zeros, ids, cfg, default_scalars(), 0)
+        var opt = byte_host_optimizer(default_scalars())
+        var p_rows = params.copy()
+        var m_rows = zeros.copy()
+        var v_rows = zeros.copy()
+        adam_host_rows(p_rows, step.grad, m_rows, v_rows, opt, 1)
+        var p_oracle = params.copy()
+        var g_oracle = step.grad.copy()
+        var m_oracle = zeros.copy()
+        var v_oracle = zeros.copy()
+        var initialized = List[Bool](length=cfg.n_tensors(), fill=True)
+        _ = optimizer_step_oracle(p_oracle, g_oracle, m_oracle, v_oracle, initialized, cfg.offsets(), opt, 1)
+        require(same_bits(p_rows, p_oracle), "adam_host_rows parameters differ from optimizer_step_oracle's")
+        require(same_bits(m_rows, m_oracle), "adam_host_rows first moment differs from optimizer_step_oracle's")
+        require(same_bits(v_rows, v_oracle), "adam_host_rows second moment differs from optimizer_step_oracle's")
+        require(same_bits(step.p, p_rows), "the step's parameters differ from adam_host_rows on its gradient")
+    elif unit == 3:
+        var n = cfg.n_total()
+        var zeros = filled(n, Float32(0))
+        var step_bits = host_step(params, zeros, zeros, ids, cfg, default_scalars(), 0).bits
+        var reference = loss_bits(params, ids, cfg, 0, 0)
+        require(step_bits == reference, "step loss bits " + String(step_bits) + ", reference inference loss bits "
+                + String(reference))
+    else:
+        raise Error("unknown byte LM routes case")
+
+
+def test_routes() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    check_cases("byte_lm_host_routes", BYTE_LM_ROUTES_CASES, routes_case)
 
 
 def main() raises:
