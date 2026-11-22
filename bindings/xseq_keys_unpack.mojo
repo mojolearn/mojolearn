@@ -55,6 +55,9 @@ comptime XSEQ_OPN_ETS_PREDICT = 36
 comptime XSEQ_OPN_GARCH_INITIALIZE = 37
 comptime XSEQ_OPN_GARCH_FORECAST = 38
 comptime XSEQ_OPN_GARCH_FIT = 39
+# `vendor_used` of the MLP and recurrent estimators: metadata, no input,
+# answered from the estimator's route before any lifecycle step.
+comptime XSEQ_OPN_XSEQ_VENDOR_USED = 40
 
 
 struct XseqKeys(Defaultable, Movable):
@@ -502,6 +505,7 @@ def _xseq_keys_fill(nk: UnsafePointer[XseqKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "rnn_hidden_sequence", XSEQ_OPN_RNN_HIDDEN_SEQUENCE)
     py_op_add(ops, "rnn_score", XSEQ_OPN_RNN_SCORE)
     py_op_add(ops, "rnn_classifier_score", XSEQ_OPN_RNN_CLASSIFIER_SCORE)
+    py_op_add(ops, "xseq_vendor_used", XSEQ_OPN_XSEQ_VENDOR_USED)
     py_op_add(ops, "mlp_fit", XSEQ_OPN_MLP_FIT)
     py_op_add(ops, "mlp_predict", XSEQ_OPN_MLP_PREDICT)
     py_op_add(ops, "mlp_predict_proba", XSEQ_OPN_MLP_PREDICT_PROBA)

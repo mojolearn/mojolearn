@@ -102,6 +102,18 @@ class _KernelMethodBase(_NumericModeMixin):
     _mojolearn_device = True
     _WHERE = "kernel method"
 
+    # A pickle or a deepcopy of any kernel method carries no native handle:
+    # the identical provider (`_native_kernel_method_provider`, a native
+    # descriptor table of this process) and KernelRidge's device copy are
+    # left out by the native state and minted again by the copy's first
+    # operation. Nystroem and RBFSampler had no state hook, so a fitted
+    # identical estimator refused to pickle (test_kernel_methods_device_boundary).
+    def __getstate__(self):
+        return _NATIVE(self, "family_km_getstate", (), _NATIVE_CONTEXT)
+
+    def __setstate__(self, state):
+        _NATIVE(self, "family_km_setstate", (state,), _NATIVE_CONTEXT)
+
 
 # Maintainer notes: `alpha` IS the Cholesky ridge (DEVIATION 1660); a kernel
 # matrix that does not factor is refused by name, never solved by a

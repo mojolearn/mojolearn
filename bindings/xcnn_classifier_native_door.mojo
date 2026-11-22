@@ -29,7 +29,7 @@ from std.python._cpython import GILReleased
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider
 from sequence.xseq_neural_run import XseqNeuralEntry
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
-from bindings.xcnn_common_door import xcnn_builtins, xcnn_labels, xcnn_f32, xcnn_addr, xcnn_readonly
+from bindings.xcnn_common_door import xcnn_device_word, xcnn_builtins, xcnn_labels, xcnn_f32, xcnn_addr, xcnn_readonly
 from bindings.xcnn_common_door import xcnn_device_init, xcnn_device_inherit
 from bindings.xseq_native_common_door import XseqStream, xseq_neural_provider
 from bindings.neural_labels_native_unpack import neural_encode_labels, neural_decode_labels
@@ -183,6 +183,7 @@ def _classifier_fields(model: PythonObject, context: PythonObject, fitted: Bool 
 
 
 def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    xcnn_device_word(args, 17)
     neural_plain_value(args, 0, context)
     var b = _b()
     var fields = _fields(model)

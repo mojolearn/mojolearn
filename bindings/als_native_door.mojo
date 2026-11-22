@@ -24,7 +24,7 @@ from bindings.decomp_kit_native_door import (
     DecompF32, DecompDoor, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries_routed,
     decomp_input, decomp_resident_drop, decomp_kit_unpack, decomp_kit_publish, decomp_kit_out_shape,
     decomp_door_borrow, decomp_door_input, decomp_door_resident_hit, decomp_door_resident_input,
-    decomp_door_resident_derived, decomp_door_resident_keep,
+    decomp_door_resident_derived, decomp_door_resident_keep, decomp_kit_device_operation,
 )
 from bindings.decomp_kit_run import DKit
 from bindings.als_run import AlsFitWords, AlsTop, als_fit_run, als_recommend_run, als_unit_run, als_similar_run
@@ -218,6 +218,10 @@ def als_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var operation = String(py=call[1])
         var model = call[0]
         var args = call[2]
+        if operation == "vendor_used":
+            # Metadata, no input: the vendor of the image the estimator's
+            # route names (`cpu` for a device="cpu" estimator), as PLS.
+            return decomp_kit_device_operation(model, False, args, context).steal_data()
         # user_items is the estimator's own interaction matrix (dense or
         # sparse), not a feature table: no X refusals or width checks
         var method = decomp_public_method(operation)

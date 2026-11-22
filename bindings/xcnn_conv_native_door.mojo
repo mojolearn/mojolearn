@@ -15,6 +15,7 @@ from bindings.sequential_admission_door import sequential_admit_value, _one_of
 from bindings.xseq_native_common_door import XseqStream
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xcnn_common_door import (
+    xcnn_device_word,
     XCNN_F_GROUP, XCNN_F_PAD, XCNN_F_PIN, XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed,
     xcnn_idn, xcnn_resident, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_out_new,
     xcnn_reshape_t, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_reshape, xcnn_addr, xcnn_dev, xcnn_dev_get,
@@ -162,6 +163,7 @@ def _copy_words(dest: PythonObject, offset: Int, source: PythonObject, count: In
 
 
 def _conv_init(layer: PythonObject, args: PythonObject, one: Bool, context: PythonObject) raises -> PythonObject:
+    xcnn_device_word(args, 12)
     neural_plain_value(args, 0, Python.dict(admission_context=context))
     var fields = _fields(layer)
     xcnn_device_init(layer, fields, args[12], context)
@@ -956,6 +958,7 @@ def _block_bn(channels: PythonObject, mode: PythonObject, device: PythonObject,
 
 
 def _block_init(block: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    xcnn_device_word(args, 7)
     neural_plain_value(args, 0, Python.dict(admission_context=context))
     var fields = _fields(block)
     # The block's device, checked once here; every child layer takes it

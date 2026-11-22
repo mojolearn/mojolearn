@@ -2573,6 +2573,17 @@ class Isomap(_Base):
         self.neighbors_algorithm, self.n_jobs, self.metric, self.p = neighbors_algorithm, n_jobs, metric, p
         self.metric_params, self.numeric_mode, self.device = metric_params, numeric_mode, device
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _NATIVE(self, "family_mani_vendor_used", (), _NATIVE_CONTEXT)
+
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
         """Compute the embedding of X.
@@ -2691,6 +2702,17 @@ class ClassicalMDS(_Base):
     def __init__(self, n_components=2, *, metric="euclidean", metric_params=None, numeric_mode=None, device=None):
         self.n_components, self.metric, self.metric_params, self.numeric_mode = n_components, metric, metric_params, numeric_mode
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _NATIVE(self, "family_mani_vendor_used", (), _NATIVE_CONTEXT)
 
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
@@ -2828,6 +2850,17 @@ class MDS(_Base):
         return _NATIVE(self, "family_mani_mds_fit_transform",
                        (None, None, X, init, y), _NATIVE_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _NATIVE(self, "family_mani_vendor_used", (), _NATIVE_CONTEXT)
+
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None, init=None):
         """Compute the embedding.
@@ -2935,6 +2968,17 @@ class LocallyLinearEmbedding(_Base):
         self.tol, self.max_iter, self.method, self.hessian_tol = tol, max_iter, method, hessian_tol
         self.modified_tol, self.neighbors_algorithm, self.random_state = modified_tol, neighbors_algorithm, random_state
         self.n_jobs, self.numeric_mode, self.device = n_jobs, numeric_mode, device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _NATIVE(self, "family_mani_vendor_used", (), _NATIVE_CONTEXT)
 
     @_native_runtime_manifold_bridge.native_lifecycle
     def fit(self, X, y=None):
@@ -3447,6 +3491,17 @@ class AlternatingLeastSquares(_Base):
         scores : ndarray of shape (<= N,), float32
         """
         return _ALS_CALL(self, "similar_items", (itemid, N), _ALS_CONTEXT)
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _ALS_CALL(self, "vendor_used", (), _ALS_CONTEXT)
 
 
 class SparseCoder(_SparseCoding):

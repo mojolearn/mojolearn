@@ -642,6 +642,18 @@ def _mani_arguments(model: PythonObject, settings: ManifoldSettings, args: Pytho
     return py_call(native_loaded_module("builtins").tuple, resolved)
 
 
+def mani_decomp_vendor_used(model: PythonObject, settings: ManifoldSettings,
+                            context: PythonObject) raises -> PythonObject:
+    """`vendor_used` of Isomap, LocallyLinearEmbedding, MDS and ClassicalMDS:
+    the vendor word of the x_decomp image the estimator's binding route
+    names (`cpu` for a `device="cpu"` estimator beside a GPU set), the
+    route every fit and transform of these four takes (`_mani_arguments`).
+    Selected by the fitted mode when there is one, else the request."""
+    var mode = settings.fitted if settings.fitted is not None else settings.mode
+    var binding = estimator_binding_routed(model, mode, "_mojolearn_x_decomp", context)
+    return py_call(binding.x_decomp_vendor)
+
+
 def mani_decomp_operation(model: PythonObject, settings: ManifoldSettings, operation: Int, var args: PythonObject,
                           x: Optional[ArrayMetadata], context: PythonObject) raises -> PythonObject:
     """args = (optional decomp binding, optional default binding, X[, init])."""

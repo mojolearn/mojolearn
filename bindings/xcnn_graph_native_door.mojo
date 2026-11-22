@@ -39,6 +39,7 @@ from core.cast_in import cast_in_kind
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.py_optional import py_present
 from bindings.xcnn_common_door import (
+    xcnn_device_word,
     xcnn_builtins, xcnn_entries, xcnn_ref, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t,
     xcnn_on_dev, xcnn_new, xcnn_wrap, xcnn_host_of, xcnn_host_f32, xcnn_f32, xcnn_addr, xcnn_dev, xcnn_dev_get,
     xcnn_dev_upload, xcnn_shape, xcnn_size, xcnn_tuple, xcnn_host_i32, xcnn_device_io_off,
@@ -969,6 +970,7 @@ def _linear_fields(layer: PythonObject, context: PythonObject) raises -> PythonO
 
 
 def _linear_init(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    xcnn_device_word(args, 4)
     neural_plain_value(args, 0, Python.dict(admission_context=context))
     var fields = _fields(layer)
     xcnn_device_init(layer, fields, args[4], context)
@@ -1046,6 +1048,7 @@ def _linear_backward(lin: PythonObject, gradient: PythonObject, context: PythonO
 
 
 def _graph_init(layer: PythonObject, args: PythonObject, sage: Bool, context: PythonObject) raises -> PythonObject:
+    xcnn_device_word(args, 10 if sage else 9)
     neural_plain_value(args, 0, Python.dict(admission_context=context))
     var fields = _fields(layer)
     # The layer's device, checked once here (the last init argument); its

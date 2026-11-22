@@ -79,6 +79,17 @@ class _RecurrentBase(ParamsMixin):
         hidden_size): `nn.LSTM(..., batch_first=True)(X)[0]`."""
         return _XSEQ(self, "rnn_hidden_sequence", (X,), _XSEQ_CONTEXT)
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _XSEQ(self, "xseq_vendor_used", (), _XSEQ_CONTEXT)
+
 
 class _RecurrentRegressor(_RecurrentBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
