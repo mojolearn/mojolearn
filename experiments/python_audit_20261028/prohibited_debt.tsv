@@ -1,4 +1,0 @@
-# Known prohibited_source endpoints (tools/public_runtime_inventory.py endpoint ledger), recorded 2026-10-28
-# by lane/python-audit-static-20261028. DEBT TO REMOVE, NEVER AN EXEMPTION (AGENTS.md "No Python in the runtime":
-# existing checker baseline entries are debt). Only shrink this list: tools/tests/test_no_python_runtime.py --prune.
-file	name	owner	reason
