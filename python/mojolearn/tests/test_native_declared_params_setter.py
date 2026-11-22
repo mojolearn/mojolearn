@@ -67,14 +67,18 @@ def test_declared_setter_preserves_identity_fitted_state_and_unrelated_fields(fa
     operation = model.set_params
     assert clean(operation) is model
     assert all(model.__dict__[key] is value for key, value in before.items())
-    if not type(model)._parameters:
-        # LabelEncoder declares no constructor parameters. Its setter contract
-        # is an empty no-op plus rejection of every supplied parameter.
+    # `device` is a checked parameter (an arbitrary value is refused in words
+    # before any field changes), not an opaque scalar slot: the probe uses the
+    # other declared parameters.
+    scalars = [key for key in type(model)._parameters if key != 'device'
+               and type(object.__getattribute__(model, key)) in (type(None), str, int, float, bool)]
+    if not scalars:
+        # LabelEncoder declares only `device` (58e3150a5c). Its setter contract
+        # is a no-op plus rejection of every unknown parameter.
         clean(operation, unknown=1, expected_error=ValueError)
         assert model.__dict__ == before
         return
-    key = next(key for key in type(model)._parameters
-               if type(object.__getattribute__(model, key)) in (type(None), str, int, float, bool))
+    key = scalars[0]
     old = object.__getattribute__(model, key)
     value = array.array('f', [1.0, 2.0])
     assert clean(operation, **{key: value}) is model

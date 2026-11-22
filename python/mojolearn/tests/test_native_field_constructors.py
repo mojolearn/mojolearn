@@ -64,8 +64,23 @@ def oracle(cls, *args, owner=None, **kwargs):
     device = kwargs.pop('device', None) if added else None
     CONTEXTS[target]['originals'][target](model, *args, **kwargs)
     if added:
+        # The compiled constructor stores an added `device` LAST: a base
+        # class's native constructor reached through `super().__init__` may
+        # already have stored its own default mid-sequence (AdaBoost*, 946b5877d3).
+        vars(model).pop('device', None)
         vars(model)['device'] = device
     return model
+
+
+def original_again(cls, model, **kwargs):
+    """The retained original run again on `model` (a reinitialization), with
+    an installer-added `device` stored in place as the compiled constructor
+    stores it: the original body has no such parameter."""
+    added = device_added(cls)
+    device = kwargs.pop('device', None) if added else None
+    CONTEXTS[cls]['originals'][cls](model, **kwargs)
+    if added:
+        vars(model)['device'] = device
 
 
 def oracle_error(cls, *args, **kwargs):
@@ -119,7 +134,14 @@ def replacement_for(cls, values):
     checked = _VALUE_CHECKED.get(cls.__name__)
     if checked is not None:
         return values, dict(values, **checked['replacement'])
-    first = next(iter(values))
+    # A checked `device` is not an opaque value (an arbitrary object or str is
+    # refused in words): replace the first other parameter, or, for a class
+    # whose only parameter is `device` (LabelEncoder, 58e3150a5c), None -> 'cpu'.
+    checked_device = bool(CONTEXTS[cls]['plans'][cls].get('device_admit'))
+    others = [name for name in values if not (checked_device and name == 'device')]
+    if not others:
+        return values, dict(values, device='cpu')
+    first = others[0]
     values = dict(values, **{first: first + '-initial'})
     return values, dict(values, **{first: object()})
 
@@ -194,7 +216,7 @@ def test_reinitialization_keeps_unrelated_fields_in_place(cls):
     clean(model.__init__, **replacement)
     expected = oracle(cls, **values)
     vars(expected)['fitted_'] = marker
-    CONTEXTS[cls]['originals'][cls](expected, **replacement)
+    original_again(cls, expected, **replacement)
     assert_same(model, expected)
 
 
