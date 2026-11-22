@@ -56,7 +56,7 @@ def test_native_constructor_preserves_seeded_initialization_and_views(
         patch.setattr(training.Generator, "uniform", lambda *a: pytest.fail("Python RNG"))
         patch.setattr(training.Generator, "kaiming_uniform", lambda *a, **k: pytest.fail("Python RNG"))
         audit_native_call(model.__init__, config, generator=generator, accumulation_steps=2).assert_native()
-        parameters = audit_native_call(model.parameters).assert_native()
+        parameters = dict(audit_native_call(model.named_parameters).assert_native())
     assert model.generator is generator
     assert generator.state_dict() == reference_generator.state_dict()
     assert list(parameters) == list(expected)
