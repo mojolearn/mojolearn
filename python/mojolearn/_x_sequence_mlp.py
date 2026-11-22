@@ -52,6 +52,17 @@ class _BaseMLP(ParamsMixin):
         # installs the same entry as each concrete class's __init__.
         return _FULL_RESET_INIT(self, (), {"hidden_layer_sizes": hidden_layer_sizes, "activation": activation, "solver": solver, "alpha": alpha, "batch_size": batch_size, "learning_rate": learning_rate, "learning_rate_init": learning_rate_init, "power_t": power_t, "max_iter": max_iter, "shuffle": shuffle, "random_state": random_state, "tol": tol, "verbose": verbose, "warm_start": warm_start, "momentum": momentum, "nesterovs_momentum": nesterovs_momentum, "early_stopping": early_stopping, "validation_fraction": validation_fraction, "beta_1": beta_1, "beta_2": beta_2, "epsilon": epsilon, "n_iter_no_change": n_iter_no_change, "max_fun": max_fun, "numeric_mode": numeric_mode}, _FULL_RESET_CONTEXT, type(self))
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _XSEQ(self, "xseq_vendor_used", (), _XSEQ_CONTEXT)
+
 
 class MLPRegressor(_BaseMLP):
     """Multi-layer perceptron regressor, as scikit-learn's `MLPRegressor`.

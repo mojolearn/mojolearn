@@ -30,8 +30,10 @@ from bindings.xseq_keys_unpack import (
     xseq_keys, XSEQ_OPN_RNN_STATE_DICT, XSEQ_OPN_RNN_LOAD_STATE_DICT, XSEQ_OPN_RNN_FIT, XSEQ_OPN_RNN_PREDICT,
     XSEQ_OPN_RNN_SCORE, XSEQ_OPN_RNN_CLASSIFIER_SCORE, XSEQ_OPN_MLP_FIT, XSEQ_OPN_MLP_PREDICT, XSEQ_OPN_MLP_SCORE,
     XSEQ_OPN_MLP_CLASSIFIER_SCORE, XSEQ_OPN_PROPHET_INITIALIZE, XSEQ_OPN_PROPHET_ADD_SEASONALITY,
-    XSEQ_OPN_PROPHET_FIT, XSEQ_OPN_PROPHET_PREDICT,
+    XSEQ_OPN_PROPHET_FIT, XSEQ_OPN_PROPHET_PREDICT, XSEQ_OPN_XSEQ_VENDOR_USED,
 )
+from bindings.xseq_native_common_door import xseq_route
+from bindings.py_balanced import py_item, py_call
 
 
 def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
@@ -154,6 +156,14 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var name = call[1]
         var nk = xseq_keys()
         var operation = py_op_code(nk[].ops, name)
+        if operation == XSEQ_OPN_XSEQ_VENDOR_USED:
+            # `vendor_used`: the vendor word of the x_sequence image the
+            # estimator's route names (`cpu` for a device="cpu" estimator
+            # beside a GPU set). Metadata: no lifecycle step, no input.
+            var route = xseq_route(model, py_fields(model), call[3])
+            var vendor = py_call(py_item(route.entries, PythonObject("x_sequence_vendor")))
+            _ = route^
+            return vendor.steal_data()
         var owner = _xseq_owner(operation, name)
         var args = call[2]
         var context = call[3]
