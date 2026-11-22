@@ -15,7 +15,7 @@
 # is the thing being measured.
 set -u
 
-OUT="${MOJOLEARN_PREFLIGHT_OUT:-bench/results/vendor_preflight/$(date +%Y-%m-%d_%H%M%S)}"
+OUT="${MOJOLEARN_PREFLIGHT_OUT:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/vendor_preflight/$(date +%Y-%m-%d_%H%M%S)}"
 mkdir -p "$OUT"
 rc=0
 
