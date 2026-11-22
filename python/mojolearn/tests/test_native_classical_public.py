@@ -134,7 +134,7 @@ def test_host_model_load_predict_digest_and_roundtrip_keep_cpu_route(ordinary, h
     assert clean(loaded.numeric_mode_used) == "identical"
     routed = mojolearn.host_model(path)
     assert type(routed) is host and routed.estimator == ordinary.__name__
-    np.testing.assert_array_equal(clean(routed.predict, x).view("u8"), clean(loaded.predict, x).view("u8"))
+    np.testing.assert_array_equal(clean(routed.predict, x).view("u4"), clean(loaded.predict, x).view("u4"))
     import hashlib
     assert clean(loaded.model_sha256) == hashlib.sha256(np.asarray(model.coef_).tobytes()).hexdigest()
     saved = io.BytesIO()

@@ -155,7 +155,7 @@ def test_forest_grove_state_hash_properties_and_actual_native_release(tmp_path):
     assert state["_groves"] is None and "_binding" not in state
     restored = object.__new__(type(actual))
     audit_native_call(restored.__setstate__, state).assert_native()
-    assert _state(audit_native_call(restored.predict, _queries("float32")).assert_native()) == _state(expected.predict(_queries("float32")))
+    assert _state(audit_native_call(restored.predict, _queries("float32")).assert_native()) == _state(_as_user_sees(expected, expected.predict(_queries("float32"))))
     audit_native_call(type(actual).__del__, actual).assert_native()
     assert vars(actual)["_groves"] is None
     native = forest._load()

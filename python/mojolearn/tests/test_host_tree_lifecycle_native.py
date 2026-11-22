@@ -155,7 +155,8 @@ def test_groves_reinitialization_releases_previous_native_snapshot(tmp_path):
     out = frombytes(np.zeros(1, dtype="<f4").tobytes(), "<f4", (1,))
     with pytest.raises(Exception, match="unknown or released host grove"):
         forest._load().forest_host_groves_predict(handle, x._addr, out._addr, [1, 2, 1], 1)
-    assert _state(actual.predict(_queries("float32"))) == _state(LegacyHostForest(**options).predict(_queries("float32")))
+    legacy_forest = LegacyHostForest(**options)
+    assert _state(actual.predict(_queries("float32"))) == _state(_as_user_sees(legacy_forest, legacy_forest.predict(_queries("float32"))))
 
 
 def test_constructor_refuses_dictionary_descriptor_hooks(tmp_path):
