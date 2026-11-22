@@ -1,1 +1,0 @@
-595:            raise ValueError("a completed attempt is passed or failed; missing work remains untested")
