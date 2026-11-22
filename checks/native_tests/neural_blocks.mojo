@@ -94,9 +94,9 @@ def _model(sample: List[Int]) -> SeqModel:
     return m^
 
 
-def _head(mut m: SeqModel, out: Int = 2):
+def _head(mut m: SeqModel, units: Int = 2):
     m.layer(L_FLATTEN)
-    m.layer(L_LINEAR, out, 1)
+    m.layer(L_LINEAR, units, 1)
 
 
 def _cases() -> List[_Case]:
