@@ -125,15 +125,16 @@ struct DeviceEts(EtsRun):
 
 
 def _run_gpu() raises:
-    var y = ets_series()
-    var forecasts = List[Float32](length=ETS_FORECAST_WORDS, fill=Float32(0))
-    var y_address = Int(y.unsafe_ptr())
-    var f_address = Int(forecasts.unsafe_ptr())
-    for unit in range(ETS_UNITS):  # driver-loop: over the three fits on the one device context
-        ets_unit[DeviceEts](unit, y_address, f_address)
-    check_forecasts(forecasts)
-    _ = y^
-    print("PASS tsa_sequence_ets_gpu:", ETS_UNITS, "DampedETS fits")
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var y = ets_series()
+        var forecasts = List[Float32](length=ETS_FORECAST_WORDS, fill=Float32(0))
+        var y_address = Int(y.unsafe_ptr())
+        var f_address = Int(forecasts.unsafe_ptr())
+        for unit in range(ETS_UNITS):  # driver-loop: over the three fits on the one device context
+            ets_unit[DeviceEts](unit, y_address, f_address)
+        check_forecasts(forecasts)
+        _ = y^
+        print("PASS tsa_sequence_ets_gpu:", ETS_UNITS, "DampedETS fits")
 
 
 def _run_cpu() raises:

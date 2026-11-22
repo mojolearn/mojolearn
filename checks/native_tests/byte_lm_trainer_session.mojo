@@ -413,20 +413,21 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var vendor = byte_lm_vendor_word(COMPILED_VENDOR)
-    require(vendor > 0, "byte_lm_trainer_session_gpu needs a GPU build (cuda, hip or metal)")
-    publish_byte_lm_entries()
-    var failed = String("")
-    var count = 0
-    for unit in range(BYTE_LM_TRAINER_SESSION_CASES):  # driver-loop: over the cases on the one device
-        try:
-            run_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor), unit)
-        except error:
-            count += 1
-            failed += "\n      byte_lm_trainer_session row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("byte_lm_trainer_session: " + String(count) + " of " + String(BYTE_LM_TRAINER_SESSION_CASES) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var vendor = byte_lm_vendor_word(COMPILED_VENDOR)
+        require(vendor > 0, "byte_lm_trainer_session_gpu needs a GPU build (cuda, hip or metal)")
+        publish_byte_lm_entries()
+        var failed = String("")
+        var count = 0
+        for unit in range(BYTE_LM_TRAINER_SESSION_CASES):  # driver-loop: over the cases on the one device
+            try:
+                run_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor), unit)
+            except error:
+                count += 1
+                failed += "\n      byte_lm_trainer_session row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("byte_lm_trainer_session: " + String(count) + " of " + String(BYTE_LM_TRAINER_SESSION_CASES) + " cases failed" + failed)
 
 
 def test_cases() raises:

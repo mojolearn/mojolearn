@@ -105,21 +105,22 @@ def _run_cpu() raises:
 # The device widening: one launch over all 65,536 halves (one element per
 # thread), then the comparison chunk by chunk across host cores.
 def _run_gpu() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var halves = all_halves()
-    var widened = List[Float32](length=F16_HALVES, fill=Float32(0))
-    var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(widened.unsafe_ptr()))
-    var ctx = DeviceContext()
-    from_f16_device(ctx, wp, MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(halves.unsafe_ptr())),
-                    F16_HALVES)
-    _ = halves  # read through its address by the synchronous call above
-    var failures = List[Int](length=F16_CHUNKS, fill=-1)
-    var fp = failures.unsafe_ptr()
-    def task(chunk: Int) {imm fp, imm wp}:
-        fp.unsafe_store(chunk, check_chunk(wp, chunk))
-    host_parallelize(task, F16_CHUNKS)
-    _ = widened
-    _raise_chunks(failures)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var halves = all_halves()
+        var widened = List[Float32](length=F16_HALVES, fill=Float32(0))
+        var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(widened.unsafe_ptr()))
+        var ctx = DeviceContext()
+        from_f16_device(ctx, wp, MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(halves.unsafe_ptr())),
+                        F16_HALVES)
+        _ = halves  # read through its address by the synchronous call above
+        var failures = List[Int](length=F16_CHUNKS, fill=-1)
+        var fp = failures.unsafe_ptr()
+        def task(chunk: Int) {imm fp, imm wp}:
+            fp.unsafe_store(chunk, check_chunk(wp, chunk))
+        host_parallelize(task, F16_CHUNKS)
+        _ = widened
+        _raise_chunks(failures)
 
 
 def test_widen_every_half() raises:

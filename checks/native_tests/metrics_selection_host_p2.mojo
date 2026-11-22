@@ -102,8 +102,9 @@ struct DevicePrc(PrcCalls):
 
 
 def _run_gpu() raises:
-    check_curve[DevicePrc]()
-    print("PASS metrics_selection_host_p2_gpu: precision_recall_curve counts at every threshold")
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        check_curve[DevicePrc]()
+        print("PASS metrics_selection_host_p2_gpu: precision_recall_curve counts at every threshold")
 
 
 def test_precision_recall_curve() raises:

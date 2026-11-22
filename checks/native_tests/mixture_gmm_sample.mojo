@@ -298,17 +298,18 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var failed = String("")
-    var count = 0
-    for unit in range(GMM_SAMPLE_FIXTURES):  # driver-loop: over the fixtures on the one device
-        try:
-            fixture[DeviceGmmSample](unit)
-        except error:
-            count += 1
-            failed += "\n      mixture_gmm_sample row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("mixture_gmm_sample: " + String(count) + " of " + String(GMM_SAMPLE_FIXTURES) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var failed = String("")
+        var count = 0
+        for unit in range(GMM_SAMPLE_FIXTURES):  # driver-loop: over the fixtures on the one device
+            try:
+                fixture[DeviceGmmSample](unit)
+            except error:
+                count += 1
+                failed += "\n      mixture_gmm_sample row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("mixture_gmm_sample: " + String(count) + " of " + String(GMM_SAMPLE_FIXTURES) + " cases failed" + failed)
 
 
 def test_cases() raises:

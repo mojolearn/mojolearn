@@ -635,18 +635,19 @@ def _run_cpu() raises:
 
 
 def _run_gpu() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    comptime UNITS = MANI_REPEAT_FIXTURES + 2
-    var failed = String("")
-    var count = 0
-    for unit in range(UNITS):  # driver-loop: over the ordered device fixtures
-        try:
-            fixture[True](unit)
-        except error:
-            count += 1
-            failed += "\n      mani_decomp_repeat row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("mani_decomp_repeat: " + String(count) + " of " + String(UNITS) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        comptime UNITS = MANI_REPEAT_FIXTURES + 2
+        var failed = String("")
+        var count = 0
+        for unit in range(UNITS):  # driver-loop: over the ordered device fixtures
+            try:
+                fixture[True](unit)
+            except error:
+                count += 1
+                failed += "\n      mani_decomp_repeat row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("mani_decomp_repeat: " + String(count) + " of " + String(UNITS) + " cases failed" + failed)
 
 
 def test_cases() raises:

@@ -108,23 +108,24 @@ def run_host_fixture(unit: Int) raises:
 # The fixtures share this process's neural training context and run in
 # order; each launch keeps its own parallelism.
 def run_device_fixture(unit: Int) raises:
-    var values = rd_values()
-    var residual = List[Float32](length=RD_N, fill=0.5)
-    var ones = List[Float32](length=RD_N, fill=1.0)
-    var outputs = RdOutputs()
-    var p = rd_probability(unit)
-    var ctx = neural_ctx[_RD_DEV_CTX]()
-    var yp = f32_ptr(Int(outputs.forward.unsafe_ptr()))
-    _ = residual_dropout_device[False](ctx, yp, yp, f32_ptr(Int(values.unsafe_ptr())),
-                                       f32_ptr(Int(residual.unsafe_ptr())),
-                                       RD_N, RD_OFFSET, p, RD_SEED_LO, RD_SEED_HI, RD_STREAM)
-    var gp = f32_ptr(Int(ones.unsafe_ptr()))
-    _ = residual_dropout_device[True](ctx, f32_ptr(Int(outputs.dvalues.unsafe_ptr())),
-                                      f32_ptr(Int(outputs.dresidual.unsafe_ptr())), gp, gp,
-                                      RD_N, RD_OFFSET, p, RD_SEED_LO, RD_SEED_HI, RD_STREAM)
-    check_outputs(unit, outputs, values)
-    _ = residual^
-    _ = ones^
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var values = rd_values()
+        var residual = List[Float32](length=RD_N, fill=0.5)
+        var ones = List[Float32](length=RD_N, fill=1.0)
+        var outputs = RdOutputs()
+        var p = rd_probability(unit)
+        var ctx = neural_ctx[_RD_DEV_CTX]()
+        var yp = f32_ptr(Int(outputs.forward.unsafe_ptr()))
+        _ = residual_dropout_device[False](ctx, yp, yp, f32_ptr(Int(values.unsafe_ptr())),
+                                           f32_ptr(Int(residual.unsafe_ptr())),
+                                           RD_N, RD_OFFSET, p, RD_SEED_LO, RD_SEED_HI, RD_STREAM)
+        var gp = f32_ptr(Int(ones.unsafe_ptr()))
+        _ = residual_dropout_device[True](ctx, f32_ptr(Int(outputs.dvalues.unsafe_ptr())),
+                                          f32_ptr(Int(outputs.dresidual.unsafe_ptr())), gp, gp,
+                                          RD_N, RD_OFFSET, p, RD_SEED_LO, RD_SEED_HI, RD_STREAM)
+        check_outputs(unit, outputs, values)
+        _ = residual^
+        _ = ones^
 
 
 def _cpu_cases() raises:
@@ -132,16 +133,17 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    var failed = String("")
-    var count = 0
-    for unit in range(RD_MASK_FIXTURES):  # driver-loop: over fixtures on the one device
-        try:
-            run_device_fixture(unit)
-        except error:
-            count += 1
-            failed += "\n      training_residual_dropout_mask row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("training_residual_dropout_mask: " + String(count) + " of " + String(RD_MASK_FIXTURES) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var failed = String("")
+        var count = 0
+        for unit in range(RD_MASK_FIXTURES):  # driver-loop: over fixtures on the one device
+            try:
+                run_device_fixture(unit)
+            except error:
+                count += 1
+                failed += "\n      training_residual_dropout_mask row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("training_residual_dropout_mask: " + String(count) + " of " + String(RD_MASK_FIXTURES) + " cases failed" + failed)
 
 
 def test_cases() raises:

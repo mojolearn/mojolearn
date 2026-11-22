@@ -253,21 +253,22 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    var mode = Int(GLOBAL_NUMERIC_MODE)
-    var vendor = neighbors_vendor_word(COMPILED_VENDOR)
-    require(vendor > 0, "umap_ops_gpu: this build has no GPU vendor")
-    var api = UMAP_OPS_DEVICE_API.get_or_create_ptr()
-    check_umap_table(NeighborsEntryKey(mode, vendor), Int(api[].entries.unsafe_ptr()), umap_ops_device_v1)
-    var failed = String("")
-    var count = 0
-    for case_id in range(UMAP_SHARED_CASES):  # driver-loop: over the ordered device cases
-        try:
-            run_shared_case(umap_ops_device_v1, case_id)
-        except error:
-            count += 1
-            failed += "\n      umap_ops row " + String(case_id) + ": " + String(error)
-    if count > 0:
-        raise Error("umap_ops: " + String(count) + " of " + String(UMAP_SHARED_CASES) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var mode = Int(GLOBAL_NUMERIC_MODE)
+        var vendor = neighbors_vendor_word(COMPILED_VENDOR)
+        require(vendor > 0, "umap_ops_gpu: this build has no GPU vendor")
+        var api = UMAP_OPS_DEVICE_API.get_or_create_ptr()
+        check_umap_table(NeighborsEntryKey(mode, vendor), Int(api[].entries.unsafe_ptr()), umap_ops_device_v1)
+        var failed = String("")
+        var count = 0
+        for case_id in range(UMAP_SHARED_CASES):  # driver-loop: over the ordered device cases
+            try:
+                run_shared_case(umap_ops_device_v1, case_id)
+            except error:
+                count += 1
+                failed += "\n      umap_ops row " + String(case_id) + ": " + String(error)
+        if count > 0:
+            raise Error("umap_ops: " + String(count) + " of " + String(UMAP_SHARED_CASES) + " cases failed" + failed)
 
 
 def test_cases() raises:

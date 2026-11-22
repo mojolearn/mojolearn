@@ -395,17 +395,18 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var failed = String("")
-    var count = 0
-    for unit in range(QN_OBJECTIVE_FIXTURES):  # driver-loop: over the fixtures on the one device
-        try:
-            fixture(LinearSvcDriver(linear_svc_device_v1), unit)
-        except error:
-            count += 1
-            failed += "\n      solver_qn_objectives row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("solver_qn_objectives: " + String(count) + " of " + String(QN_OBJECTIVE_FIXTURES) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var failed = String("")
+        var count = 0
+        for unit in range(QN_OBJECTIVE_FIXTURES):  # driver-loop: over the fixtures on the one device
+            try:
+                fixture(LinearSvcDriver(linear_svc_device_v1), unit)
+            except error:
+                count += 1
+                failed += "\n      solver_qn_objectives row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("solver_qn_objectives: " + String(count) + " of " + String(QN_OBJECTIVE_FIXTURES) + " cases failed" + failed)
 
 
 def test_cases() raises:

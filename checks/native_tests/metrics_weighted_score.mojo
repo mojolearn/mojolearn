@@ -139,16 +139,17 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    var failed = String("")
-    var count = 0
-    for unit in range(WEIGHTED_UNITS):  # driver-loop: over the units on the one device context
-        try:
-            weighted_unit[DeviceWeighted](unit)
-        except error:
-            count += 1
-            failed += "\n      metrics_weighted_score row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("metrics_weighted_score: " + String(count) + " of " + String(WEIGHTED_UNITS) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var failed = String("")
+        var count = 0
+        for unit in range(WEIGHTED_UNITS):  # driver-loop: over the units on the one device context
+            try:
+                weighted_unit[DeviceWeighted](unit)
+            except error:
+                count += 1
+                failed += "\n      metrics_weighted_score row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("metrics_weighted_score: " + String(count) + " of " + String(WEIGHTED_UNITS) + " cases failed" + failed)
 
 
 def test_cases() raises:

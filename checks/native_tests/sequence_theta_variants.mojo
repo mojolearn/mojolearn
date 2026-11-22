@@ -90,17 +90,18 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    var ex = DeviceExec()
-    var failed = String("")
-    var count = 0
-    for unit in range(THV_FIXTURES):  # driver-loop: over fixtures on the one device
-        try:
-            run_variant_fixture(ex, unit)
-        except error:
-            count += 1
-            failed += "\n      sequence_theta_variants row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("sequence_theta_variants: " + String(count) + " of " + String(THV_FIXTURES) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var ex = DeviceExec()
+        var failed = String("")
+        var count = 0
+        for unit in range(THV_FIXTURES):  # driver-loop: over fixtures on the one device
+            try:
+                run_variant_fixture(ex, unit)
+            except error:
+                count += 1
+                failed += "\n      sequence_theta_variants row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("sequence_theta_variants: " + String(count) + " of " + String(THV_FIXTURES) + " cases failed" + failed)
 
 
 def test_cases() raises:

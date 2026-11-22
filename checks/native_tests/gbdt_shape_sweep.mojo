@@ -447,17 +447,18 @@ def _cpu_cases() raises:
 def _gpu_cases() raises:
     """One device fit at a time, in unit order: the first failing unit is the
     shape that faulted (a device fault stays on the context)."""
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var failed = String("")
-    var count = 0
-    for unit in range(SHAPE_UNITS):  # driver-loop: over units, ordered GPU work on one context
-        try:
-            shape_unit[_DeviceFit](unit)
-        except error:
-            count += 1
-            failed += "\n      gbdt_shape_sweep row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("gbdt_shape_sweep: " + String(count) + " of " + String(SHAPE_UNITS) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var failed = String("")
+        var count = 0
+        for unit in range(SHAPE_UNITS):  # driver-loop: over units, ordered GPU work on one context
+            try:
+                shape_unit[_DeviceFit](unit)
+            except error:
+                count += 1
+                failed += "\n      gbdt_shape_sweep row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("gbdt_shape_sweep: " + String(count) + " of " + String(SHAPE_UNITS) + " cases failed" + failed)
 
 
 def test_cases() raises:

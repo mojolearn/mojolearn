@@ -191,16 +191,17 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    var failed = String("")
-    var count = 0
-    for fixture_id in range(SEQUENCE_OPTIMIZER_FIXTURES):  # driver-loop: over the fixtures on the one device
-        try:
-            _device_fixture(fixture_id)
-        except error:
-            count += 1
-            failed += "\n      sequence_optimizer row " + String(fixture_id) + ": " + String(error)
-    if count > 0:
-        raise Error("sequence_optimizer: " + String(count) + " of " + String(SEQUENCE_OPTIMIZER_FIXTURES) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var failed = String("")
+        var count = 0
+        for fixture_id in range(SEQUENCE_OPTIMIZER_FIXTURES):  # driver-loop: over the fixtures on the one device
+            try:
+                _device_fixture(fixture_id)
+            except error:
+                count += 1
+                failed += "\n      sequence_optimizer row " + String(fixture_id) + ": " + String(error)
+        if count > 0:
+            raise Error("sequence_optimizer: " + String(count) + " of " + String(SEQUENCE_OPTIMIZER_FIXTURES) + " cases failed" + failed)
 
 
 def test_cases() raises:

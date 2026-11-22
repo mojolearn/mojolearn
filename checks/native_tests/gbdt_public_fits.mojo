@@ -1303,17 +1303,18 @@ def _cpu_cases() raises:
 
 
 def _gpu_cases() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var failed = String("")
-    var count = 0
-    for unit in range(GBDT_COMMON_UNITS):  # driver-loop: one device graph at a time (see the docstring)
-        try:
-            common_unit[_DeviceFit](unit)
-        except error:
-            count += 1
-            failed += "\n      common row " + String(unit) + ": " + String(error)
-    if count > 0:
-        raise Error("common: " + String(count) + " of " + String(GBDT_COMMON_UNITS) + " cases failed" + failed)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var failed = String("")
+        var count = 0
+        for unit in range(GBDT_COMMON_UNITS):  # driver-loop: one device graph at a time (see the docstring)
+            try:
+                common_unit[_DeviceFit](unit)
+            except error:
+                count += 1
+                failed += "\n      common row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("common: " + String(count) + " of " + String(GBDT_COMMON_UNITS) + " cases failed" + failed)
 
 
 def test_cases() raises:
