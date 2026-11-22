@@ -158,7 +158,7 @@ _pm = importlib.util.module_from_spec(_ps); _ps.loader.exec_module(_pm)
 _pm.check(native.byte_lm_profile())
 # THE CPU TRAINING BINDING, FROM THE INSTALLED WHEEL. It is reached through its
 # own path helper rather than _backend.binding(), so nothing above would notice
-# its absence, and a LanguageModelHostTrainer that raises at construction is
+# its absence, and a CPU trainer that raises at construction is
 # exactly what shipping the export without the binary produces.
 from mojolearn import _byte_lm_host
 host_so = pathlib.Path(_merged.binding_path(str(package / 'host'), '_mojolearn_byte_lm_host')).resolve()
@@ -167,9 +167,9 @@ assert pathlib.Path(_byte_lm_host.binary_path()).resolve() == host_so
 host = _byte_lm_host._load()
 assert host.byte_lm_host_numeric_mode() == 1
 assert host.byte_lm_host_vendor() == 'cpu'
-from mojolearn import LanguageModelHostTrainer, ByteLanguageModelConfig
+from mojolearn import LanguageModelTrainer, ByteLanguageModelConfig
 _shape = ByteLanguageModelConfig()
-LanguageModelHostTrainer([0.0] * _shape.n_total, lr=1e-3)
+LanguageModelTrainer([0.0] * _shape.n_total, data_schedule={'check': 'verify_wheel'}, lr=1e-3, device='cpu').close()
 print('PASS installed CPU training binding')
 # EVERY HOST BINDING THE MANIFEST SHIPS (the packaging lane, 2026-09-14),
 # from the installed wheel, through the package's own host loader, which

@@ -95,7 +95,7 @@ Every name below is exported from `mojolearn` or one of its submodules.
 | Neural building blocks | `Embedding`, `TransformerBlock`, `Mamba1Block`, `Mamba2Block`, `Mamba3Block`, `SambaStack`, `SambaConfig`, with their state classes |
 | Neural inference | `MLPInference`, `TransformerBlockInference`, `Mamba1BlockInference`, `Mamba2BlockInference`, `Mamba3BlockInference`, `SambaInference` |
 | Training | `SmallMLPTrainer`, `SGD`, `Adam`, `AdamW`, `clip_grad_norm_`, `cross_entropy`, and the `training` primitives `embedding_forward`, `embedding_backward`, `rms_norm_forward`, `rms_norm_backward`, `linear_forward`, `linear_backward` |
-| Language models | `LanguageModelTrainer`, `LanguageModelConfig`, `LanguageModelInference`, `LanguageModelHostTrainer`, `SmallByteLanguageModelTrainer`, `ByteLanguageModelConfig`, `ParallelByteLanguageModelTrainer` (`schedule="replica"`, `"model_pool"` or `"offload"`) |
+| Language models | `LanguageModelTrainer`, `LanguageModelConfig`, `LanguageModelInference`, `SmallByteLanguageModelTrainer`, `ByteLanguageModelConfig`, `ParallelByteLanguageModelTrainer` (`schedule="replica"`, `"model_pool"` or `"offload"`) |
 | Tokenizers | `BpeTokenizer` (the user supplies the vocabulary), `lm_corpus` |
 | Multi-GPU | `ParallelNeuralTrainer`, `parallel_classical`, `parallel_ensemble`, `parallel_forecasting`, `parallel_gaussian_process`, `parallel_graph`, `parallel_ivf`, `parallel_model_selection`, `parallel_neighbors`, `parallel_neighbors_reference`, `parallel_preprocessing` |
 | Cross-vendor training (experimental) | `mojolearn.cross_vendor` |
@@ -129,7 +129,7 @@ CPU path, and `fit` refuses each by name on a CPU-only install.
 
 **Byte-level language model.** `LanguageModelInference` runs the forward pass
 ([docs/BYTE_LM_CPU_INFERENCE.md](docs/BYTE_LM_CPU_INFERENCE.md)) and
-`LanguageModelHostTrainer` runs one training step, forward, backward and the
+`LanguageModelTrainer(device="cpu")` runs training steps, forward, backward and the
 AdamW update, reproducing the recorded GPU bytes
 ([docs/BYTE_LM_CPU_TRAINING.md](docs/BYTE_LM_CPU_TRAINING.md)). Identity is
 claimed per model profile and batch shape. Saved forest and gradient boosting
@@ -143,7 +143,7 @@ does not list.
 
 <!--fact:host_surface_table-->| family | binding under `mojolearn/host/` | routes (CPU-only install) | internal CPU reference lanes | predicts on a CPU from a saved model | gate | in a wheel |
 |---|---|---|---|---|---|---|
-| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, byte-lm, byte-lm-resident, language-model-config | LanguageModelInference, LanguageModelHostTrainer, SmallByteLanguageModelTrainer | .github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml) | yes |
+| byte_lm | `_mojolearn_byte_lm_host.so` | loaded by path | byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, byte-lm, byte-lm-resident, language-model-config | LanguageModelInference, SmallByteLanguageModelTrainer | .github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml) | yes |
 | forest | `_mojolearn_forest_host.so` | loaded by path | gbdt-categorical-ctr-tables, gbdt-tensor-ctr-tables, saved-model-host-infer, saved-model-host-infer-trees | RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor, GradientBoosting, OrderedRMSE, ExperimentalTwoLevelFeatureFreq (rf_classifier, rf_regressor, et_classifier, et_regressor, gbdt_symmetric, gbdt_depthwise, gbdt_lossguide, gbdt_rmse, gbdt_ordered_rmse, gbdt_feature_freq, gbdt_pointwise_bayesian_eval, gbdt_categorical_onehot) | tools/forest_host_gate.py (.github/workflows/forest-host-gate.yml) | yes |
 | tokenizer | `_mojolearn_tokenizer_host.so` | loaded by path | tokenizer, bpe-trainer, bpe-vocabulary, tokenized-corpus, hf-tokenizer, cross-vendor-fold, hf-model-surface, public-set-params | BpeTokenizer | pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py | yes |
 | neural | `_mojolearn_neural_host.so` | loaded by path | hf-causal-lm, hf-causal-lm-stream, hf-causal-lm-text | MLPInference, TransformerBlockInference, Mamba1BlockInference, Mamba2BlockInference, Mamba3BlockInference, SambaInference | python/mojolearn/tests/test_neural_inference.py, tools/step_vs_full_check.py and tools/identity_break.py (mlp, transformer, transformer-window, transformer-decode, mamba1, mamba2, mamba3, mamba1-decode, mamba2-decode, mamba3-decode, mamba2-dtlimit, samba, samba-decode, samba-untied-dropout-accum) | yes |

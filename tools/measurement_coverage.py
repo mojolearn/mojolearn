@@ -130,7 +130,6 @@ NOT_MEASURED = (
     ("mojolearn.models.Parallel*", "multi-GPU model, excluded from the single-GPU board (COVERAGE.md)"),
     # CPU host bindings: the CPU is never timed (AGENTS.md "Measurement and fairness": our CPU is never raced or timed)
     ("mojolearn.*Inference", "CPU host binding (inference); the board never times a CPU route (AGENTS.md)"),
-    ("mojolearn.LanguageModelHostTrainer", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
     ("mojolearn.Host*", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
     ("mojolearn.host_*", "CPU host binding; the board never times a CPU route (AGENTS.md)"),
     # no peer library implements it

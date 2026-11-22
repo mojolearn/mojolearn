@@ -9,8 +9,8 @@ refuses by name otherwise, and saved models predict on the CPU: classical
 estimators, forests and boosting, neural blocks and loaded language models.
 Their supported configurations are documented per API.
 ``LanguageModelInference`` runs the byte-LM forward pass
-(docs/BYTE_LM_CPU_INFERENCE.md). ``LanguageModelHostTrainer`` runs one training
-step, forward, backward and the AdamW update
+(docs/BYTE_LM_CPU_INFERENCE.md). ``LanguageModelTrainer(device="cpu")`` runs
+training steps, forward, backward and the AdamW update
 (docs/BYTE_LM_CPU_TRAINING.md), and reproduces the recorded GPU bytes of the
 retained three-vendor capture for all 128 of its steps: the gradient, the loss,
 and the post-step parameters and both Adam moments. Both are one model profile
@@ -172,7 +172,6 @@ _LAZY_NAMES = {
     "LanguageModelTrainer": ".language_model",
     "LanguageModelConfig": ".language_model",
     "LanguageModelInference": "._byte_lm_host",
-    "LanguageModelHostTrainer": "._byte_lm_host",
     "neural_inference": None,
     # The operation session (`mojolearn.ops`, autograd/ops_api.mojo) and model
     # import (plan MODEL_IMPORT (git history)): the package imports without NumPy.
@@ -410,7 +409,6 @@ __all__ = [
     "LanguageModelConfig",
     "LanguageModelTrainer",
     "LanguageModelInference",
-    "LanguageModelHostTrainer",
     "HostForest",
     "HostGBDT",
     "host_model",

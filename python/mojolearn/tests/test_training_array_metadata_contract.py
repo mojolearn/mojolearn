@@ -59,12 +59,14 @@ def test_cast_host_training_copy_keeps_canonical_metadata_and_owned_bytes():
     shape = _shape()
     source = np.linspace(-0.01, 0.01, shape.n_total, dtype="f8")
     expected = source.astype("f4").tobytes()
-    trainer = ml.LanguageModelHostTrainer(source, shape=shape)
+    trainer = ml.LanguageModelTrainer(source, shape=shape, data_schedule={'test': 'array-metadata'},
+                                      device='cpu', resident=False)
     source.fill(7)
     result = trainer.parameters_
     held = _numpy_view(result)
     assert held.tobytes() == expected
-    for value in (trainer.m_, trainer.v_):
+    state = trainer.export_state()
+    for value in (state['m'], state['v']):
         assert type(value.shape) is tuple
         assert not _numpy_view(value).any()
     del result, trainer

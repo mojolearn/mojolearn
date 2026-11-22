@@ -1012,8 +1012,8 @@ TRAINING_LANE_NAMES = {
     # host CPUs of the Apple M4, the H100 box and the MI325X box, IDENTICAL x3
     # on every cell; the CPU column is a fourth CPU. This list is the set the
     # full CPU column runs, not only fits: two of these are inference, and
-    # LanguageModelHostTrainer is the published CPU trainer the inference
-    # boundary keeps.
+    # LanguageModelTrainer(device="cpu") is the published CPU trainer the
+    # inference boundary keeps.
     "byte-lm-host-infer": "the byte LM forward pass on its reference path (inference)",
     "byte-lm-host-infer-threaded": "the byte LM forward pass on its threaded path (inference)",
     "byte-lm-host-train": "the published byte LM host training step",
@@ -1626,7 +1626,7 @@ FAMILIES = (
                         "byte-lm", "byte-lm-resident", "language-model-config"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LanguageModelInference", "LanguageModelHostTrainer", "SmallByteLanguageModelTrainer"),
+        classes=("LanguageModelInference", "SmallByteLanguageModelTrainer"),
         display="the byte LM forward pass and one training step",
         host_modules=(
             "training/byte_lm_host.mojo",
@@ -1641,7 +1641,7 @@ FAMILIES = (
             "byte_lm_host_api_v1", "byte_lm_host_numeric_mode", "byte_lm_host_vendor",
             "byte_lm_host_column", "byte_lm_host_sabotage",
             "byte_lm_host_profile", "byte_lm_host_logits", "byte_lm_host_loss",
-            "byte_lm_host_train_step", "all_finite_f32", "all_finite_f64",
+            "all_finite_f32", "all_finite_f64",
             "cast_f64_to_f32",
             # Greedy next bytes, the decode entry a9d933e4f added while
             # skipping discarded decode logits. It shipped as an EXPORT
@@ -1664,7 +1664,7 @@ FAMILIES = (
         gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
             "Ships: the byte LM's two public CPU surfaces, LanguageModelInference (forward from a "
-            "checkpoint) and the published LanguageModelHostTrainer, the one training entry the "
+            "checkpoint) and LanguageModelTrainer(device=\"cpu\"), the one training entry the "
             "inference boundary keeps public."
         ),
         ships_in_wheel=True,

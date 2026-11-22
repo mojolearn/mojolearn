@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 from ._verify_api import resolve, encode
 
-NAMES=frozenset(('LanguageModelConfig','LanguageModelHostTrainer','LanguageModelInference',
+NAMES=frozenset(('LanguageModelConfig','LanguageModelInference',
  'LanguageModelTrainer','ParallelByteLanguageModelTrainer','ParallelNeuralTrainer','SmallMLPTrainer'))
 
 #: ParallelByteLanguageModelTrainer's three placements, one class (the former
@@ -120,18 +120,8 @@ def training_checks(recorder,public,methods):
             if name=='LanguageModelConfig':
                 if method=='__post_init__':shape.__post_init__()
                 return {'config':shape.to_dict(),'native_shape':shape.native_shape,'registry':shape.parameter_shapes}
-            if name in ('LanguageModelHostTrainer','LanguageModelInference'):
-                params=source.state_dict()['parameters']
-                m=cls(params,shape=shape)
-                if name=='LanguageModelInference':return m.parameters_sha256()
-                m.train_step(ids)
-                if method=='from_state':
-                    other=cls.from_state(m.parameters_,m.m_,m.v_,shape=shape,completed_steps=1,lr=.125)
-                    assert other.parameters_sha256()==m.parameters_sha256()
-                    return other.loss(ids)
-                if method=='loss':return m.loss(ids)
-                value=getattr(m,method.split(':')[0]);value=value() if callable(value) else value
-                return value.to_dict() if method=='shape:get' else value
+            if name=='LanguageModelInference':
+                return cls(source.state_dict()['parameters'],shape=shape).parameters_sha256()
             if name=='LanguageModelTrainer':
                 source.train_step(ids)
                 if method=='evaluate':return source.evaluate(ids)

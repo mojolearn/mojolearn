@@ -40,7 +40,6 @@
       "KernelDensity",
       "KernelRidge",
       "LanguageModelConfig",
-      "LanguageModelHostTrainer",
       "LanguageModelInference",
       "LanguageModelTrainer",
       "Lasso",
@@ -2726,15 +2725,6 @@
       "source": "python/mojolearn/__init__.py",
       "canonical_algorithm": "mojolearn.LanguageModelConfig",
       "symbol_origin": "mojolearn._byte_lm_config.ByteLanguageModelConfig"
-    },
-    {
-      "algorithm": "mojolearn.LanguageModelHostTrainer",
-      "status": "missing",
-      "cases": [],
-      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
-      "source": "python/mojolearn/__init__.py",
-      "canonical_algorithm": "mojolearn.LanguageModelHostTrainer",
-      "symbol_origin": "mojolearn._byte_lm_host.LanguageModelHostTrainer"
     },
     {
       "algorithm": "mojolearn.LanguageModelInference",
