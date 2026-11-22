@@ -20,7 +20,7 @@ from bindings.classical_archive_linear_pack import archive_linear_pack
 from bindings.minmax_archive_native_unpack import minmax_archive_decoded
 from core.native_archive_read import NativeArchiveDecoded, native_archive_read_status
 from core.native_archive_linear import native_archive_string, native_archive_ancestry_matches, native_linear_archive_plan
-from bindings.classical_arrays_door import classical_numpy, classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
+from bindings.classical_arrays_door import classical_numpy, classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address, classical_is_array
 from bindings.host_array_native_pack import host_archive_typed
 from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
 from bindings.standard_archive_native_pack import standard_archive_decoded
@@ -66,10 +66,19 @@ def cholesky_archive_pack(cls: PythonObject, plan: NativeCholeskyArchivePlan,
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
     var value = _raw_archive_exact(arrays, name, dtype, context)
-    # The rank first (pv-categories, 2026-11-22): a vector needs no reorder,
-    # and a NumPy vector (HostGBDT(category_map=model.category_map_)) has no
-    # `order` attribute, so reading it first refused every such map.
-    if Int(py=value.ndim) < 2 or String(value.order) == "C":
+    # pv-catmap (2026-11-22): every value this returns is Array storage, the
+    # form the file reader publishes and a fit stores, because the readers
+    # downstream (gbdt_category_unpack's `trees_address`, the digest) read the
+    # Array's `_addr` slot. A NumPy array reaches here only from a constructor
+    # argument (HostGBDT(category_map=model.category_map_): the public
+    # attribute reads back an ndarray); it is copied once, here, into a fresh
+    # C-order Array (the exact dtype was checked above, so no cast), and the
+    # predict path reads it as it reads a loaded or fitted map. Before, the
+    # ndarray was held as given and the first predict refused "'numpy.ndarray'
+    # object has no attribute '_addr'".
+    var array = classical_is_array(value, context)
+    # The rank first (pv-categories, 2026-11-22): a vector needs no reorder.
+    if array and (Int(py=value.ndim) < 2 or String(value.order) == "C"):
         return value
     var dimensions = List[Int]()
     var strides = List[Int]()
@@ -78,7 +87,8 @@ def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: P
         strides.append(Int(py=value.strides[i]))
     var result = host_archive_typed(value.shape, dtype, context)
     host_archive_reorder_bytes(Int(py=classical_address(value)), dimensions, strides,
-        Int(py=value.size), Int(py=value._mv.itemsize), Int(py=classical_address(result)))
+        Int(py=value.size), Int(py=value._mv.itemsize) if array else Int(py=value.itemsize),
+        Int(py=classical_address(result)))
     _ = value  # keep the Python object alive through the native call above
     _ = result  # keep the Python object alive through the native call above
     return result
