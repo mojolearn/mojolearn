@@ -123,7 +123,7 @@ DEBT = {
     'bindings/causal_checkpoint_door.mojo': {'import_module': 2},
     'bindings/causal_exception_unpack.mojo': {'cpython': 2},
     'bindings/causal_lm_construct_door.mojo': {'cpython': 1},
-    'bindings/causal_lm_public_door.mojo': {'cpython': 2},
+    'bindings/causal_lm_public_door.mojo': {'cpython': 2, 'native_loaded_module': 1},  # raised fx-tooltests 2026-11-21
     'bindings/causal_model_config_door.mojo': {'cpython': 1},
     'bindings/causal_operation_owner_door.mojo': {'cpython': 3},
     'bindings/cfb_agglo_door.mojo': {'native_loaded_module': 5},
@@ -229,7 +229,7 @@ DEBT = {
     'bindings/iforest_public_lifecycle_pack.mojo': {'native_loaded_module': 1},
     'bindings/ipca_native_door.mojo': {'native_loaded_module': 3},
     'bindings/jl_native_pack.mojo': {'cpython': 1},
-    'bindings/kde_public_native_pack.mojo': {'native_loaded_module': 2},
+    'bindings/kde_public_native_pack.mojo': {'native_loaded_module': 3},  # raised fx-tooltests 2026-11-21
     'bindings/kde_public_native_unpack.mojo': {'native_loaded_module': 5},
     'bindings/kde_admission_boundary_unpack.mojo': {'native_loaded_module': 3},
     'bindings/kernel_methods_boundary_pack.mojo': {'native_loaded_module': 6},
@@ -270,7 +270,7 @@ DEBT = {
     'bindings/lr_schedule_block_door.mojo': {'cpython': 3},
     'bindings/lr_table_helpers_door.mojo': {'native_loaded_module': 1},
     'bindings/mamba_public_native_door.mojo': {'cpython': 1},
-    'bindings/mani_decomp_native_door.mojo': {'native_loaded_module': 13},
+    'bindings/mani_decomp_native_door.mojo': {'native_loaded_module': 14},  # raised fx-tooltests 2026-11-21
     'bindings/mani_kit_door.mojo': {'native_loaded_module': 3},
     'bindings/mani_tsne_native_unpack.mojo': {'native_loaded_module': 4},
     'bindings/mani_umap_native_door.mojo': {'native_loaded_module': 10},
@@ -307,7 +307,7 @@ DEBT = {
     'bindings/msel_parameter_grid_door.mojo': {'cpython': 1, 'native_loaded_module': 2},
     'bindings/msel_public_metadata_pack.mojo': {'native_loaded_module': 2},
     'bindings/msel_public_metadata_unpack.mojo': {'native_loaded_module': 1},
-    'bindings/msel_scorer_native_door.mojo': {'cpython': 3, 'native_loaded_module': 4},
+    'bindings/msel_scorer_native_door.mojo': {'cpython': 3, 'native_loaded_module': 6},  # raised fx-tooltests 2026-11-21
     'bindings/msel_search_door.mojo': {'native_loaded_module': 7},
     'bindings/msel_search_state_door.mojo': {'native_loaded_module': 5},
     'bindings/msel_split_door.mojo': {'native_loaded_module': 9},
@@ -344,7 +344,7 @@ DEBT = {
     'bindings/neighbors_knn_native_door.mojo': {'cpython': 2, 'native_loaded_module': 6},
     'bindings/neighbors_local_native_door.mojo': {'native_loaded_module': 4},
     'bindings/neighbors_semi_native_door.mojo': {'native_loaded_module': 8},
-    'bindings/neural_block_public_door.mojo': {'cpython': 1},
+    'bindings/neural_block_public_door.mojo': {'cpython': 2},  # raised fx-tooltests 2026-11-21
     'bindings/neural_labels_native_unpack.mojo': {'cpython': 4, 'native_loaded_module': 1},
     'bindings/neural_prefill_native_door.mojo': {'native_loaded_module': 5},
     'bindings/nmf_native_door.mojo': {'native_loaded_module': 5},
@@ -454,8 +454,8 @@ DEBT = {
     'bindings/sequential_checkpoint_door.mojo': {'native_loaded_module': 1},
     'bindings/sequential_execution_pack.mojo': {'native_loaded_module': 2},
     'bindings/sequential_inputs_door.mojo': {'cpython': 1},
-    'bindings/sequential_native_pack.mojo': {'native_loaded_module': 1},
-    'bindings/sequential_weights_pack.mojo': {'native_loaded_module': 1},
+    'bindings/sequential_native_pack.mojo': {'native_loaded_module': 2},  # raised fx-tooltests 2026-11-21
+    'bindings/sequential_weights_pack.mojo': {'native_loaded_module': 2},  # raised fx-tooltests 2026-11-21
     'bindings/sha256_door.mojo': {'native_loaded_module': 3},
     'bindings/small_mlp_items_door.mojo': {'cpython': 5, 'native_loaded_module': 2},
     'bindings/small_mlp_native_door.mojo': {'cpython': 1, 'import_module': 4},
@@ -618,6 +618,37 @@ DEBT = {
     'providers/python/x_cluster_out_pyapi_pack.mojo': {'native_loaded_module': 1},
     'providers/python/x_neighbors_admission_pyapi_door.mojo': {'native_loaded_module': 1},
     'providers/python/xseq_public_lifecycle_pyapi_door.mojo': {'native_loaded_module': 4},
+    # Added 2026-11-21 (lane fx-tooltests, cpu check cpc1-0022): the plan wave's new boundary files (member ABI
+    # boundary doors under providers/python/, arena owner, Arrow C data, digest, parameter-name and torch-form
+    # UNPACK / PACK) admit at the boundary; rows raised above are marked. Full list:
+    # ~/mojolearn-evidence/fx-tooltests/admitted-call-before.txt. Owed: thread `mut mods: NativeModules` through
+    # the member doors (one stamped lookup per call each today) and lower these rows.
+    'bindings/arena_owner_door.mojo': {'cpython': 4},
+    'bindings/arrow_c_data_unpack.mojo': {'cpython': 1, 'native_loaded_module': 2},
+    'bindings/fitted_digest_door.mojo': {'native_loaded_module': 1},
+    'bindings/fitted_digest_property_pack.mojo': {'native_loaded_module': 1},
+    'bindings/gbdt_category_unpack.mojo': {'native_loaded_module': 1},
+    'bindings/member_fit_notices_pack.mojo': {'native_loaded_module': 3},
+    'bindings/parameter_names_unpack.mojo': {'native_loaded_module': 2},
+    'bindings/torch_parameter_form_pack.mojo': {'native_loaded_module': 1},
+    'bindings/trees_gbdt_parameter_names_unpack.mojo': {'native_loaded_module': 1},
+    'providers/python/member_decomposition_boundary_door.mojo': {'native_loaded_module': 3},
+    'providers/python/member_density_boundary_door.mojo': {'native_loaded_module': 2},
+    'providers/python/member_discriminant_boundary_door.mojo': {'native_loaded_module': 2},
+    'providers/python/member_gp_boundary_door.mojo': {'native_loaded_module': 4},
+    'providers/python/member_hierarchy_boundary_door.mojo': {'native_loaded_module': 1},
+    'providers/python/member_kernel_svm_boundary_door.mojo': {'native_loaded_module': 2},
+    'providers/python/member_manifold_boundary_door.mojo': {'native_loaded_module': 2},
+    'providers/python/member_naive_bayes_boundary_door.mojo': {'native_loaded_module': 1},
+    'providers/python/member_prep_boundary_door.mojo': {'native_loaded_module': 11},
+    'providers/python/member_qn_regressor_boundary_door.mojo': {'native_loaded_module': 2},
+    'providers/python/member_scaler_boundary_door.mojo': {'native_loaded_module': 1},
+    'providers/python/member_select_boundary_door.mojo': {'native_loaded_module': 3},
+    'providers/python/member_spectral_boundary_door.mojo': {'native_loaded_module': 1},
+    'providers/python/member_xcluster_boundary_door.mojo': {'native_loaded_module': 3},
+    'providers/python/member_xdecomp_boundary_door.mojo': {'native_loaded_module': 7},
+    'providers/python/member_xlinear_boundary_door.mojo': {'cpython': 1},
+    'providers/python/member_xneighbors_boundary_door.mojo': {'native_loaded_module': 2},
     # END DEBT
 }
 
