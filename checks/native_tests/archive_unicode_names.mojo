@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Independent UCD/version-boundary fixtures; no Python decoder or oracle.
 
 Expected scalars are published Unicode code points. Version cutoffs come from
 the pinned official UCD files and tagged CPython sources in the provenance doc.
 Independent fixtures run in the native host pool; this is not model identity.
 """
-from core.host_parallel import host_parallelize
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_unicode_names import archive_unicode_name, archive_unicode_digit
-from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -90,38 +91,17 @@ def _refusal(unit: Int) raises:
     _require(failed, "unsupported Unicode interpreter profile must refuse")
 
 
-def run_checks() raises:
-    comptime FIXTURES = 48
-    var failed = List[Int](length=FIXTURES, fill=0)
-    var flags = failed.unsafe_ptr()
-    def task(unit: Int) {imm flags}:
-        try:
-            if unit < 40:
-                _version(unit)
-            elif unit < 44:
-                _profile(unit - 40)
-            else:
-                _refusal(unit - 44)
-        except problem:
-            print("FAIL archive_unicode_names fixture", unit, String(problem))
-            flags.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
-    var failures = 0
-    for flag in failed:
-        failures += flag
-    _require(failures == 0, "archive Unicode failed " + String(failures) + " fixtures")
-    print("PASS archive_unicode_names:", FIXTURES, "native fixtures, parallel")
+def test_version() raises:
+    check_cases("version", 40, _version)
 
 
-# The one runner (runner.mojo): the fixtures run across host cores inside
-# run_checks, which raises after printing each failed fixture; the check counts
-# as one case. Host column only: archive reading and writing is host work.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_profile() raises:
+    check_cases("profile", 4, _profile)
 
 
-def register() -> Check:
-    return Check("archive_unicode_names", cpu=True, gpu=False, serial="", run=run_cases)
+def test_refusal() raises:
+    check_cases("refusal", 4, _refusal)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

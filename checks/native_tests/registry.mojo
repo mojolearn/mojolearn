@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Every native check, registered: the one list `run_cpu.mojo` and `run_gpu.mojo` run.
 
-A new check is one file `<name>.mojo` with `run_cases` and `register()` (see
-`runner.mojo`) plus one import and one append here. The checks under
+A NEW check is a TestSuite file instead (`# native-check: <columns>` on its
+second line, `test_*` functions, its own `main()`; docs/plans/TESTSUITE_CONVERSION.md):
+it has no row here. This list holds the checks not yet converted; it goes when
+the last one is (the recipe's batches). The checks under
 `checks/native_tests/` import as `checks.native_tests.<name>`; the older
 standalone checks at the top of `checks/` stay where other checks import them
 from and are registered as `checks.<name>`. The CI enumerates the
@@ -20,18 +22,6 @@ from checks.native_tests.ann_cagra_filtered import register as register_ann_cagr
 from checks.native_tests.ann_ivf_surface import register as register_ann_ivf_surface
 from checks.native_tests.ann_ivfpq_host_filter import register as register_ann_ivfpq_host_filter
 from checks.native_tests.ann_ops import register as register_ann_ops
-from checks.native_tests.archive_cholesky import register as register_archive_cholesky
-from checks.native_tests.archive_codec import register as register_archive_codec
-from checks.native_tests.archive_linear import register as register_archive_linear
-from checks.native_tests.archive_minmax import register as register_archive_minmax
-from checks.native_tests.archive_parser import register as register_archive_parser
-from checks.native_tests.archive_path import register as register_archive_path
-from checks.native_tests.archive_reader import register as register_archive_reader
-from checks.native_tests.archive_repr import register as register_archive_repr
-from checks.native_tests.archive_standard import register as register_archive_standard
-from checks.native_tests.archive_text_cells import register as register_archive_text_cells
-from checks.native_tests.archive_unicode_names import register as register_archive_unicode_names
-from checks.native_tests.archive_writer import register as register_archive_writer
 from checks.native_tests.arima_state import register as register_arima_state
 from checks.native_tests.bf16_conversion import register as register_bf16_conversion
 from checks.native_tests.bf16_linalg import register as register_bf16_linalg
@@ -284,9 +274,6 @@ from checks.native_tests.logistic_query_width import register as register_logist
 from checks.native_tests.lr_schedule_check import register as register_lr_schedule_check
 from checks.native_tests.mani_tsne_run import register as register_mani_tsne_run
 from checks.native_tests.mani_umap_run import register as register_mani_umap_run
-from checks.native_tests.msel_helpers_entry import register as register_msel_helpers_entry
-from checks.native_tests.msel_search_stats import register as register_msel_search_stats
-from checks.native_tests.msel_split_plan import register as register_msel_split_plan
 from checks.native_tests.native_array_layout_check import register as register_native_array_layout_check
 from checks.native_tests.native_device_concurrency import register as register_native_device_concurrency
 from checks.native_tests.nearest_centroid_plan import register as register_nearest_centroid_plan
@@ -628,18 +615,6 @@ def all_checks() -> List[Check]:
     checks.append(register_ann_ivf_surface())
     checks.append(register_ann_ivfpq_host_filter())
     checks.append(register_ann_ops())
-    checks.append(register_archive_cholesky())
-    checks.append(register_archive_codec())
-    checks.append(register_archive_linear())
-    checks.append(register_archive_minmax())
-    checks.append(register_archive_parser())
-    checks.append(register_archive_path())
-    checks.append(register_archive_reader())
-    checks.append(register_archive_repr())
-    checks.append(register_archive_standard())
-    checks.append(register_archive_text_cells())
-    checks.append(register_archive_unicode_names())
-    checks.append(register_archive_writer())
     checks.append(register_arima_state())
     checks.append(register_bf16_conversion())
     checks.append(register_bf16_linalg())
@@ -888,9 +863,6 @@ def all_checks() -> List[Check]:
     checks.append(register_lr_schedule_check())
     checks.append(register_mani_tsne_run())
     checks.append(register_mani_umap_run())
-    checks.append(register_msel_helpers_entry())
-    checks.append(register_msel_search_stats())
-    checks.append(register_msel_split_plan())
     checks.append(register_native_array_layout_check())
     checks.append(register_native_device_concurrency())
     checks.append(register_nearest_centroid_plan())

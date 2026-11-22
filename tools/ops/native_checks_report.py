@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Native Mojo checks (checks/native_tests/, one shared runner): list, plan, shard, summarize and report.
 
-The unit of work is a check NAME from `checks/native_tests/registry.mojo`. Each check is one file `<name>.mojo`
+The unit of work is a check NAME: a TestSuite file (below) or a row of `checks/native_tests/registry.mojo`.
+
+TESTSUITE FILES (lane ts-pilot, 2026-11-22; docs/plans/TESTSUITE_CONVERSION.md). A file
+`checks/native_tests/<name>.mojo` whose second line is `# native-check: cpu`, `# native-check: gpu` or
+`# native-check: cpu gpu` is a check named `<name>` on those columns: `test_*` functions run by the standard
+library's `TestSuite` from the file's own `main()`. It is compiled to its own binary (`tools/ops/native_testsuite.sh
+build`) and run as one process (`native_testsuite.sh run`); its `Summary [ s ] N tests run: P passed , F failed , S
+skipped` line gives the result file's cases, failed_cases and skipped. No wrapper file and no registry row. The rest of
+this paragraph is the OLD path, for the checks not yet converted: Each check is one file `<name>.mojo`
 whose `register()` returns `Check("<name>", cpu=..., gpu=..., ...)`; the names and their columns are read from the
 source here (no compile), the same list the compiled mains print with `--list`. One compile per column
 (`run_cpu.mojo` with `-D MOJOLEARN_COLUMN_CPU=1`, `run_gpu.mojo`) builds every check; the runners then start the
@@ -63,17 +71,38 @@ _NUMBER = re.compile(r"\b0x[0-9a-fA-F]+\b|\b\d+\b")
 _REGISTERED = re.compile(r"^from checks\.((?:native_tests\.)?\w+) import register\b", re.M)
 _CHECK = re.compile(r'Check\(\s*"([\w.-]+)"\s*,\s*cpu=(True|False)\s*,\s*gpu=(True|False)')
 _CHECK_LINE = re.compile(r"^CHECK (\S+) column=(\w+) cases=(\d+) failed=(\d+) skipped=(\d+)", re.M)
+# The TestSuite summary (std.testing, Mojo 1.2.0): `Summary [ 0.010 ] 3 tests run: 2 passed , 1 failed , 0 skipped`
+_SUITE_LINE = re.compile(r"^Summary \[ *[\d.]+ *\] (\d+) tests run: (\d+) passed , (\d+) failed , (\d+) skipped", re.M)
+TESTSUITE_DIR = "checks/native_tests"
+_SUITE_MARK = re.compile(r"\A[^\n]*\n# native-check:((?: (?:cpu|gpu))+)[ \t]*\n")
+
+
+def testsuite_checks(root: Path) -> dict[str, tuple[bool, bool]]:
+    """{name: (cpu, gpu)} of every TestSuite check file (its second line `# native-check: <columns>`)."""
+    out: dict[str, tuple[bool, bool]] = {}
+    for path in sorted((Path(root) / TESTSUITE_DIR).glob("*.mojo")):
+        with path.open(errors="replace") as f:
+            head = f.readline() + f.readline()
+        m = _SUITE_MARK.match(head)
+        if m:
+            cols = m.group(1).split()
+            out[path.stem] = ("cpu" in cols, "gpu" in cols)
+    return out
 
 
 def load_checks(root: Path) -> dict[str, tuple[bool, bool]]:
-    """{name: (cpu, gpu)} of every check `registry.mojo` imports, read from each module's `register()`."""
+    """{name: (cpu, gpu)} of every check: the TestSuite files and every check `registry.mojo` imports (read from
+    each module's `register()`). A name in both is refused."""
     root = Path(root)
-    checks: dict[str, tuple[bool, bool]] = {}
+    checks: dict[str, tuple[bool, bool]] = testsuite_checks(root)
+    suites = set(checks)
     for module in _REGISTERED.findall((root / REGISTRY).read_text()):
         path = Path("checks") / (module.replace(".", "/") + ".mojo")
         m = _CHECK.search((root / path).read_text())
         if not m:
             raise ValueError(f"{path}: no Check(\"<name>\", cpu=.., gpu=..) in register()")
+        if m.group(1) in suites:
+            raise ValueError(f"{m.group(1)}: both a TestSuite file and a registry row")
         checks[m.group(1)] = (m.group(2) == "True", m.group(3) == "True")
     return checks
 
@@ -115,11 +144,15 @@ def matrix(shards: list[list[str]]) -> dict:
 
 
 def check_line(log_text: str) -> dict:
-    """The runner's `CHECK ...` line as {cases, failed_cases, skipped} (empty when the check never reported)."""
+    """The runner's `CHECK ...` line, or a TestSuite file's `Summary ...` line, as {cases, failed_cases, skipped}
+    (empty when the check never reported: a crash before the summary)."""
     m = _CHECK_LINE.search(log_text)
-    if not m:
-        return {}
-    return {"cases": int(m.group(3)), "failed_cases": int(m.group(4)), "skipped": int(m.group(5))}
+    if m:
+        return {"cases": int(m.group(3)), "failed_cases": int(m.group(4)), "skipped": int(m.group(5))}
+    m = _SUITE_LINE.search(log_text)
+    if m:
+        return {"cases": int(m.group(1)), "failed_cases": int(m.group(3)), "skipped": int(m.group(4))}
+    return {}
 
 
 _INT_KEYS = ("rc", "seconds", "maxrss_kb", "cases", "failed_cases", "skipped")
@@ -149,6 +182,9 @@ def parse_result(path: Path) -> dict:
 
 
 def first_error(block: str, rc: int | None) -> str:
+    for line in block.splitlines():
+        if line.startswith("CRASHED"):
+            return line.strip()
     for line in block.splitlines():
         m = _ERROR_LINE.search(line)
         if m:
@@ -236,6 +272,15 @@ def _cmd_list(a) -> int:
     return 0
 
 
+def _cmd_testsuite(a) -> int:
+    """The TestSuite check files of a column (filtered), one `<name> <path>` per line: what
+    tools/ops/native_testsuite.sh builds and runs."""
+    suites = testsuite_checks(Path(a.root))
+    for name in select(column_names(suites, a.column), a.filter):
+        print(name, f"{TESTSUITE_DIR}/{name}.mojo")
+    return 0
+
+
 def _cmd_plan(a) -> int:
     tasks = _names(a)
     shards = shard(tasks, a.per_shard, a.cap)
@@ -268,7 +313,7 @@ def _cmd_result(a) -> int:
     lines = log.splitlines()
     picks: list[int] = []
     for i, line in enumerate(lines):
-        if "error:" in line or line.lstrip().startswith("FAIL"):
+        if "error:" in line or line.lstrip().startswith(("FAIL", "CRASHED")):
             picks.append(i)
             if len(picks) == 5:
                 break
@@ -295,7 +340,7 @@ def _cmd_report(a) -> int:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name in ("list", "plan"):
+    for name in ("list", "plan", "testsuite"):
         s = sub.add_parser(name)
         s.add_argument("--root", default=".", help="repository root (holds checks/native_tests/registry.mojo)")
         s.add_argument("--column", default="cpu", choices=COLUMNS)
@@ -319,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("report")
     s.add_argument("results_dir")
     a = p.parse_args(argv)
-    cmds = {"list": _cmd_list, "plan": _cmd_plan, "summary": _cmd_summary, "result": _cmd_result, "report": _cmd_report}
+    cmds = {"testsuite": _cmd_testsuite, "list": _cmd_list, "plan": _cmd_plan, "summary": _cmd_summary, "result": _cmd_result, "report": _cmd_report}
     return cmds[a.cmd](a)
 
 

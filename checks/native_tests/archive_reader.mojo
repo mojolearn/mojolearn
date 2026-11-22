@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """End-to-end native member execution, without Python files or output objects."""
-from core.host_parallel import host_parallelize
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_archive_span import ArchiveSpan
 from core.native_archive_read import native_archive_read
 from core.native_archive_npy import native_npy_layout_collect, ArchiveLiteralWarning
 from core.native_archive_codec import archive_codec_library
 from checks.native_tests.archive_reader_vectors import archive_reader_fixture
-from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -74,36 +75,13 @@ def _warning_before_failure(unit: Int) raises:
     _ = source
 
 
-def run_checks() raises:
-    comptime FIXTURES = 10
-    var failed = List[Int](length=FIXTURES, fill=0)
-    var failures_ptr = failed.unsafe_ptr()
-    def task(unit: Int) {imm failures_ptr}:
-        try:
-            if unit < 8:
-                _fixture(unit)
-            else:
-                _warning_before_failure(unit - 8)
-        except problem:
-            print("FAIL archive_reader fixture", unit, String(problem))
-            failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "native archive reader failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
-    print("PASS archive_reader:", FIXTURES, "native fixtures, parallel")
+def test_fixture() raises:
+    check_cases("fixture", 8, _fixture)
 
 
-# The one runner (runner.mojo): the fixtures run across host cores inside
-# run_checks, which raises after printing each failed fixture; the check counts
-# as one case. Host column only: archive reading and writing is host work.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_warning_before_failure() raises:
+    check_cases("warning_before_failure", 2, _warning_before_failure)
 
 
-def register() -> Check:
-    return Check("archive_reader", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

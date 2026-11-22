@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Typed archive error-name graphs: display, aliases, cycles and first failure."""
-from core.host_parallel import host_parallelize
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_archive_repr import NativeArchiveReprNode, archive_repr_format
-from checks.native_tests.runner import Check, Column, Report
 
 
 def _require(ok: Bool, message: String) raises:
@@ -170,48 +171,37 @@ def _invalid(unit: Int) raises:
     _require(refused, "invalid native graph must refuse")
 
 
-def run_checks() raises:
-    comptime FIXTURES = 34
-    var failed = List[Int](length=FIXTURES, fill=0)
-    var failures_ptr = failed.unsafe_ptr()
-    def task(unit: Int) {imm failures_ptr}:
-        try:
-            if unit < 5:
-                _empty(unit)
-            elif unit < 10:
-                _single(unit - 5)
-            elif unit < 14:
-                _graph(unit - 10)
-            elif unit < 19:
-                _file(unit - 14)
-            elif unit < 23:
-                _file_cycle(unit - 19)
-            elif unit < 26:
-                _failure_order(unit - 23)
-            elif unit < 29:
-                _deep(unit - 26)
-            else:
-                _invalid(unit - 29)
-        except problem:
-            print("FAIL archive_repr fixture", unit, String(problem))
-            failures_ptr.unsafe_store(unit, 1)
-    host_parallelize(task, FIXTURES)
-    var failures = 0
-    for value in failed:
-        failures += value
-    _require(failures == 0, "archive representation failed " + String(failures) + " of " + String(FIXTURES) + " fixtures")
-    print("PASS archive_repr:", FIXTURES, "native fixtures, parallel")
+def test_empty() raises:
+    check_cases("empty", 5, _empty)
 
 
-# The one runner (runner.mojo): the fixtures run across host cores inside
-# run_checks, which raises after printing each failed fixture; the check counts
-# as one case. Host column only: archive reading and writing is host work.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_single() raises:
+    check_cases("single", 5, _single)
 
 
-def register() -> Check:
-    return Check("archive_repr", cpu=True, gpu=False, serial="", run=run_cases)
+def test_graph() raises:
+    check_cases("graph", 4, _graph)
+
+
+def test_file() raises:
+    check_cases("file", 5, _file)
+
+
+def test_file_cycle() raises:
+    check_cases("file_cycle", 4, _file_cycle)
+
+
+def test_failure_order() raises:
+    check_cases("failure_order", 3, _failure_order)
+
+
+def test_deep() raises:
+    check_cases("deep", 3, _deep)
+
+
+def test_invalid() raises:
+    check_cases("invalid", 5, _invalid)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
