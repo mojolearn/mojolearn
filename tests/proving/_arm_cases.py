@@ -124,7 +124,9 @@ def cvp_svc_decision_function():
 
 @case
 def cvs_error_score():
-    return {"scores": ms.cross_val_score(make("Ridge", alpha=-1.0), X, Y, error_score=0.5)}
+    # A number for error_score is cross_validate's (its docstring: "'raise' or float"); cross_val_score documents
+    # error_score='raise' only and refuses a number by name.
+    return {"scores": ms.cross_validate(make("Ridge", alpha=-1.0), X, Y, error_score=0.5)["test_score"]}
 
 
 @case
