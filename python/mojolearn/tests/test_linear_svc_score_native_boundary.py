@@ -74,8 +74,15 @@ def test_svc_score_native_metrics_factory_refuses_python_callback(fitted, monkey
         raise AssertionError("Python metrics factory invoked")
 
     monkeypatch.setitem(entries, "metrics_program_native_api_v1", forbidden)
-    with pytest.raises(TypeError, match="compiled extension entry"):
-        fitted.score(_query(), [-5, 9])
+    from mojolearn import _backend
+    if _backend.vendor() == "cpu":
+        # A CPU-only install runs the score plan on the CPU x_metrics entries of
+        # the estimator's label scope (d3453d7a3e, e0d947fa3c): the program
+        # factory is not read, and the score is the unreplaced one.
+        assert 0.0 <= float(fitted.score(_query(), [-5, 9])) <= 1.0
+    else:
+        with pytest.raises(TypeError, match="compiled extension entry"):
+            fitted.score(_query(), [-5, 9])
     assert calls == []
 
 

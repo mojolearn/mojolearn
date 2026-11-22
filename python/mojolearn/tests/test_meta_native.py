@@ -116,8 +116,11 @@ def test_unfitted_and_parameter_refusals_keep_their_wording():
         ml.VotingClassifier([("a", ml.DecisionTreeClassifier())], voting="x").fit(X, yc)
     with pytest.raises(ValueError, match="estimator names must be unique"):
         ml.VotingClassifier([("a", ml.DecisionTreeClassifier()), ("a", ml.DecisionTreeClassifier())]).fit(X, yc)
-    with pytest.raises(NotImplementedError, match="n_jobs"):
-        ml.MultiOutputRegressor(ml.Ridge(), n_jobs=2).fit(X, np.stack([yc, yc], 1).astype(np.float32))
+    # n_jobs bounds the member fits since 69ce6498f4 (the refusal was removed):
+    # two workers give the same model as one.
+    Y = np.stack([yc, yc], 1).astype(np.float32)
+    np.testing.assert_array_equal(np.asarray(ml.MultiOutputRegressor(ml.Ridge(), n_jobs=2).fit(X, Y).predict(X)),
+                                  np.asarray(ml.MultiOutputRegressor(ml.Ridge()).fit(X, Y).predict(X)))
     with pytest.raises(ValueError, match="method must be 'sigmoid' or 'isotonic'"):
         ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(), method="x").fit(X, yc)
 
