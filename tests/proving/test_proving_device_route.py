@@ -26,7 +26,14 @@ X3 = np.random.default_rng(1).random((80, 5, 3), dtype=np.float32)
 HOST_PROBE = r"""
 import json, sys
 import mojolearn
-loaded = lambda: sorted(m for m in sys.modules if m.split('.')[-1].startswith('_mojolearn') and m.endswith('_host'))
+from mojolearn import host_surface
+# The runtime owners (`_mojolearn_runtime_*_host` and the tokenizer host: host_surface.HOST_IMPORT_ALIASES, the
+# 2026-11-07 host split) are the package's compiled boundary on every installation, loaded at import by design;
+# only the CPU-device kernel images count here.
+owners = set(host_surface.HOST_IMPORT_ALIASES)
+owners.update(spec["binding"] for specs in host_surface.HOST_IMPORT_ALIASES.values() for spec in specs)
+loaded = lambda: sorted(m for m in sys.modules if m.split('.')[-1].startswith('_mojolearn') and m.endswith('_host')
+                        and m.split('.')[-1] not in owners)
 before = loaded()
 step = {}
 if len(sys.argv) > 1:
