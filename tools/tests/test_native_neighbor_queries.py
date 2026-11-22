@@ -107,7 +107,9 @@ def test_cpu_routes_use_only_explicit_host_loader(monkeypatch):
     def host(name):
         calls.append(name)
         module = ModuleType(name)
-        module.knn_search = len
+        # The k-NN queries call the image's neighbors operations table; the
+        # captured exports are the mode reader and the index prepare/release.
+        module.knn_index_prepare = len
         return module
 
     def gpu(*args):
@@ -119,7 +121,7 @@ def test_cpu_routes_use_only_explicit_host_loader(monkeypatch):
     monkeypatch.setitem(sys.modules, backend.__name__, backend)
     routes = ns["_routes"](("base",), {"_mojolearn": "core_host"})
     assert calls == ["core_host"] and tuple(routes["base"]) == ("identical",)
-    assert routes["base"]["identical"].knn_search is len
+    assert routes["base"]["identical"].knn_index_prepare is len
 
 
 def test_native_owner_replaces_lazy_python_getter_and_keeps_host_classes():
