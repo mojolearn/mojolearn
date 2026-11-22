@@ -38,8 +38,10 @@ def require(ok: Bool, message: String) raises:
 
 
 def all_close(actual: Float32, expected: Float64, rtol: Float64, atol: Float64, label: String) raises:
-    """numpy.testing.assert_allclose for one value: NaN only against NaN."""
+    """numpy.testing.assert_allclose for one value: NaN only against NaN, an infinity only against itself."""
     var a = Float64(actual)
+    if a == expected:
+        return
     if isnan(expected) or isnan(a):
         require(isnan(expected) and isnan(a), label + ": " + String(actual) + " expected " + String(expected))
         return
