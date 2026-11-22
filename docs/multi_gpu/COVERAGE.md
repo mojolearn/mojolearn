@@ -9,7 +9,7 @@ distributed fit of one estimator.
 ## Compute and memory are separate requirements
 
 The byte-LM replica driver pools AdamW moments, rollback copies and gradient-reduction
-scratch in disjoint device ranges. A separate `PooledByteLanguageModelTrainer`
+scratch in disjoint device ranges. Its `schedule="model_pool"` placement
 partitions decoder layers, parameters, moments, gradients and rollback storage,
 with embedding/head on the first GPU. Its 958,746,624-parameter fixture completes
 a step on two RTX 5090s while both the existing trainer and the same new

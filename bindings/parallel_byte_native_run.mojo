@@ -172,7 +172,7 @@ def parallel_session_close(mut session: ParallelByteSession) -> String:
 
 def parallel_session_require_split(session: ParallelByteSession, entry: String) raises:
     if session.schedule != PARALLEL_REPLICA:
-        raise Error(entry + " requires ParallelByteLanguageModelTrainer")
+        raise Error(entry + " requires schedule='replica'")
     if session.pool_optimizer or len(session.devices) != 1:
         raise Error(entry + " requires devices=(d,) and pool_optimizer=False")
     if session.provider == 0:

@@ -4,7 +4,7 @@
 """The byte LM host training step with its rows over host tasks against the
 serial oracle calls: bits and wall.
 
-lane/neural-pass6 (2026-09-30). `LanguageModelHostTrainer.train_step` runs the
+lane/neural-pass6 (2026-09-30). The CPU byte LM training step runs the
 loss's rows and the optimizer's elements over host tasks
 (`training/loss_host_rows.mojo`, `training/optimizer_host_rows.mojo`) and the
 serial oracle calls for both under `MOJOLEARN_BYTE_LM_HOST_STEP_ROWS=0`. The
@@ -55,16 +55,25 @@ def _sha(a):
 
 def _run(rows_on, shape, init, m0, v0, batches):
     """Every step's loss bits and state digests under one setting, and the walls."""
-    from mojolearn._byte_lm_host import LanguageModelHostTrainer
+    # The CPU step is LanguageModelTrainer(device="cpu") (the former
+    # LanguageModelHostTrainer, lane neural-consolidate 2026-11-22), run
+    # stateless so every step returns its gradient.
+    import numpy as np
+    from mojolearn import LanguageModelTrainer
     os.environ[ENV] = "1" if rows_on else "0"
-    trainer = LanguageModelHostTrainer(init.copy(), m=m0.copy(), v=v0.copy(), shape=shape, **ADAMW)
+    trainer = LanguageModelTrainer(init.copy(), shape=shape, data_schedule={"tool": "byte_lm_host_step_check"},
+                                   device="cpu", resident=False, step_result="full", **ADAMW)
+    state = trainer.export_state()
+    state["m"], state["v"] = m0.copy(), v0.copy()
+    trainer.load_state_dict(state)
     steps, walls = [], []
     for ids in batches:
         t0 = time.perf_counter()
-        bits = trainer.train_step(ids)
+        result = trainer.train_step(ids)
         walls.append(time.perf_counter() - t0)
-        steps.append(dict(loss_bits=int(bits), grad=_sha(trainer.gradient_),
-                          param=_sha(trainer.parameters_), m=_sha(trainer.m_), v=_sha(trainer.v_)))
+        after = trainer.export_state()
+        steps.append(dict(loss_bits=int(np.float32(result["loss"]).view(np.uint32)), grad=_sha(result["flat_gradients"]),
+                          param=_sha(after["parameters"]), m=_sha(after["m"]), v=_sha(after["v"])))
     return steps, walls
 
 

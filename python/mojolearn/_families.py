@@ -41,7 +41,7 @@ EAGER_BEFORE = (
     "lm_corpus", "_cholesky_impl", "kernel_methods", "mixture", "hdbscan", "resample",
     "_ivf_impl", "embedding", "_gp_impl", "_gpc_impl", "_training_impl", "training", "mamba",
     "_mamba_impl", "transformer", "_transformer_impl", "_samba_impl", "parallel_training",
-    "model_pool_training", "offload_training", "parallel_classical", "parallel_ensemble",
+    "parallel_classical", "parallel_ensemble",
     "parallel_forecasting", "parallel_gaussian_process", "parallel_graph", "parallel_ivf",
     "parallel_model_selection", "parallel_neighbors", "parallel_neighbors_reference",
     "parallel_preprocessing", "_expansion_linear", "_expansion_cluster", "_expansion_neighbors",

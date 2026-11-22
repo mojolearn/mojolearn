@@ -20,9 +20,6 @@ GCNConv	CNN/GNN lanes: no NVIDIA+AMD reference records
 SAGEConv	CNN/GNN lanes: no NVIDIA+AMD reference records
 Adafactor	sequence-adafactor lane: no NVIDIA+AMD reference records
 LAMB	sequence-lamb lane: no NVIDIA+AMD reference records
-LanguageModelHostTrainer	byte-lm-host-train lane: no NVIDIA+AMD reference records
-OffloadedByteLanguageModelTrainer	multi-GPU: NVIDIA-only evidence, no cross-vendor qualification
-PooledByteLanguageModelTrainer	multi-GPU: NVIDIA-only evidence, no cross-vendor qualification
 ParallelByteLanguageModelTrainer	multi-GPU: no cross-vendor qualification
 ParallelNeuralTrainer	multi-GPU: no cross-vendor qualification
 parallel_forecasting	multi-GPU: physical qualification pending

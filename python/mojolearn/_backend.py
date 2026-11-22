@@ -1659,7 +1659,7 @@ def host_families_built():
 #: `_mojolearn_forest_host` and `_mojolearn_tokenizer_host`, export their
 #: own names (`byte_lm_host_*`, `forest_host_*`, `tokenizer_host_*` and
 #: `bpe_*`) for surfaces of their own (LanguageModelInference,
-#: LanguageModelHostTrainer, HostForest, HostGBDT, BpeTokenizer), are
+#: LanguageModelTrainer(device="cpu"), HostForest, HostGBDT, BpeTokenizer), are
 #: loaded in `_byte_lm_host.py`, `_forest_host.py`, `_gbdt_host.py` and
 #: `tokenizer.py` (the last through `load_host_module` below), and are
 #: deliberately NOT routed: mapping `_mojolearn_rf` to the forest host
@@ -1930,8 +1930,8 @@ def _no_cpu_implementation(name, item, reason, basename=None):
         "loaded NO GPU binary set, so every GPU estimator, block and trainer "
         "without a host binding is unavailable here. The surfaces that "
         "compute on this box today are LanguageModelInference (byte LM "
-        "forward pass on the CPU), LanguageModelHostTrainer (one byte LM "
-        "training step on the CPU: forward, backward and the AdamW update), "
+        "forward pass on the CPU), LanguageModelTrainer(device=\"cpu\") (byte LM "
+        "training steps on the CPU: forward, backward and the AdamW update), "
         "HostForest and HostGBDT (predict and predict_proba of a saved forest "
         "or GradientBoosting model on the CPU), and the saved-model inference "
         "of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, "

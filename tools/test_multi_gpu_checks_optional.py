@@ -110,7 +110,7 @@ def test_the_unit_list_is_well_formed_and_every_retired_lane_has_a_unit_or_a_rea
     for module in ("parallel_classical", "parallel_ensemble", "parallel_forecasting", "parallel_gaussian_process",
                    "parallel_graph", "parallel_ivf", "parallel_model_selection", "parallel_neighbors",
                    "parallel_neighbors_reference", "parallel_preprocessing", "parallel_training",
-                   "model_pool_training", "_distributed_program"):
+                   "_distributed_program"):
         assert module in modules, module
         assert (ROOT / "python/mojolearn" / (module + ".py")).is_file(), module
     # a malformed line is refused

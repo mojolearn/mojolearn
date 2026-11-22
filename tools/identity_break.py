@@ -3431,16 +3431,27 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("byte-lm-host-train")
 def _(ml, X, yc, yr, Xh=None):
-    """LanguageModelHostTrainer, one CPU training step (its docstring says not
-    certified yet). It has no evaluation-only entry (`loss` IS a step), so
-    the held-out probe is the loss bits of a second step on the held-out
-    window."""
+    """One CPU training step of the byte LM: LanguageModelTrainer(device="cpu"),
+    stateless (the former LanguageModelHostTrainer, folded into it by lane
+    neural-consolidate, 2026-11-22: the same composed host step, same bits,
+    so this lane's cells keep their hashes). The held-out probe is the loss
+    bits of a second step on the held-out window, as before."""
     shape = ml.ByteLanguageModelConfig()
     _, flat = _byte_lm_params(shape)
-    m = ml.LanguageModelHostTrainer(flat, shape=shape)
-    bits = m.train_step(_ids(X, shape.batch, shape.length + 1))
-    return _fit(dict(loss_bits=_h(np.uint32(bits)), params=_h(np.asarray(m.parameters_)), m=_h(np.asarray(m.m_))),
-                m, lambda e: (np.uint32(e.train_step(_ids(Xh, shape.batch, shape.length + 1))),))
+    m = ml.LanguageModelTrainer(flat, shape=shape, data_schedule={"lane": "byte-lm-host-train"},
+                                device="cpu", resident=False, step_result="full")
+
+    def step_bits(trainer, ids):
+        return np.float32(trainer.train_step(ids)["loss"]).view(np.uint32)
+
+    bits = step_bits(m, _ids(X, shape.batch, shape.length + 1))
+    state = m.export_state()
+    return _fit(dict(loss_bits=_h(np.uint32(bits)), params=_h(np.asarray(state["parameters"])),
+                     m=_h(np.asarray(state["m"]))),
+                m, lambda e: (step_bits(e, _ids(Xh, shape.batch, shape.length + 1)),),
+                # the probe IS a step: it moves the trainer, so a saved file and the trainer in
+                # memory are compared at different steps; the model column stays n/a, as it was
+                model_na="n/a:probe-is-a-step")
 
 
 # The sequence blocks: (2, 16, 32) slabs from the fixture (_seq), hashed

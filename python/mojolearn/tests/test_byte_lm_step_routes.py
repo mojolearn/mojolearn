@@ -6,7 +6,7 @@ route; the CPU column's composed host step gives its words). The checks:
 evaluate before a step equals that step's loss; train_steps equals the same
 train_step calls word for word; `test_host_and_device_give_the_same_words`
 trains the same tiny model on the GPU trainer and on the CPU column's
-`LanguageModelHostTrainer` in one process and requires the same loss, gradient,
+trainer (`device="cpu"`) in one process and requires the same loss, gradient,
 parameter and moment words.
 """
 # TOMBSTONE: MOJOLEARN_BYTE_LM_PROGRAM_STEP (decided B arm, L40S ba08dac006 lm-train-step bytes B 1.36x slower) deleted 2026-11-17 by lane/fb12-loser-arms; code recoverable at 2203db7094.
@@ -68,13 +68,38 @@ def test_train_steps_equals_the_same_train_step_calls():
         multi.close()
 
 
+class _HostStep:
+    """Test control: the CPU column's trainer, `Trainer(device="cpu")` run
+    stateless with full step results (the former LanguageModelHostTrainer,
+    folded into it by lane neural-consolidate, 2026-11-22), read the way these
+    checks compare it: the loss as float32 words and the state arrays."""
+
+    def __init__(self):
+        self.trainer = Trainer(initial(), data_schedule={'dataset': 'route-test'}, lr=1e-3, betas=(.9, .999),
+                               eps=1e-8, weight_decay=.01, device='cpu', resident=False, step_result='full')
+        self.gradient_ = None
+
+    def loss(self, ids):
+        return self.trainer.evaluate(ids)
+
+    def train_step(self, ids):
+        result = self.trainer.train_step(ids)
+        self.gradient_ = result['flat_gradients']
+        return int(np.float32(result['loss']).view(np.uint32))
+
+    def _state(self, name):
+        return self.trainer.export_state()[name]
+
+    parameters_ = property(lambda self: self._state('parameters'))
+    m_ = property(lambda self: self._state('m'))
+    v_ = property(lambda self: self._state('v'))
+
+
 def _host_trainer():
     """The CPU column's trainer at the same initialization and optimizer, or
     a skip naming why the host binding is not loadable in this install."""
     try:
-        from mojolearn import LanguageModelHostTrainer
-        return LanguageModelHostTrainer(initial(), shape=Shape(), lr=1e-3, betas=(.9, .999), eps=1e-8,
-                                        weight_decay=.01)
+        return _HostStep()
     except (ImportError, OSError) as error:
         pytest.skip(f'the CPU byte LM binding is not loadable here: {error}')
 
@@ -108,7 +133,7 @@ def test_host_and_device_give_the_same_words():
 # the first assertion of test_host_and_device_give_the_same_words and failed
 # on the step losses (host 1085368213, device 1085370318 at step 0). The
 # bisect found every host forward equal and the cause in the door:
-# `LanguageModelHostTrainer.loss` ran a whole training step and published it
+# the host trainer's `loss` ran a whole training step and published it
 # (bindings/byte_lm_host_trainer_native_door.mojo), so the `train_step` after
 # it reported the loss AFTER an update. `loss` is now the forward alone.
 # Every test below runs on the CPU column alone and compares one pair of host

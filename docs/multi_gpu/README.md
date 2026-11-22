@@ -600,16 +600,17 @@ and recovery gates, retaining the earlier output hashes; its evidence is in
 
 ### Layer-owned byte-LM model training
 
-`mojolearn.model_pool_training.PooledByteLanguageModelTrainer` places decoder
+`ParallelByteLanguageModelTrainer(state, schedule="model_pool")` places decoder
 layers on separate GPUs. Canonical parameters, AdamW moments, gradients and
 rollback state are partitioned; no GPU owns a complete model replica. Layer
 kernel weight copies and saved forward/backward stages stay with their owner.
 The first selected device owns the embedding and language-model head.
 
 ```python
-from mojolearn.model_pool_training import PooledByteLanguageModelTrainer
+from mojolearn import ParallelByteLanguageModelTrainer
 
-with PooledByteLanguageModelTrainer(state, devices=(0, 1), logical_shards=3) as trainer:
+with ParallelByteLanguageModelTrainer(state, devices=(0, 1), logical_shards=3,
+                                      schedule="model_pool") as trainer:
     result = trainer.train_step([microbatch0, microbatch1, microbatch2])
     checkpoint = trainer.checkpoint()
     ownership = trainer.model_ownership()
@@ -625,8 +626,8 @@ independent of GPU count, so two GPUs can jointly train one microbatch.
 
 All owners snapshot before any update; a failed update restores every chunk.
 The canonical checkpoint retains `mojolearn.parallel-byte-lm.v1` and can move
-between this trainer and `ParallelByteLanguageModelTrainer` without changing
-the logical shard order. `model_ownership()` reports actual canonical buffer
+between this schedule and the `"replica"` and `"offload"` schedules without
+changing the logical shard order. `model_ownership()` reports actual canonical buffer
 allocations, excluding kernel weight copies, activations and workspaces.
 
 Qualification and capacity receipts live in
@@ -640,7 +641,7 @@ or eliminate the remaining root allocations in classical/tree estimators.
 
 ### One-GPU replay with host offload
 
-`mojolearn.offload_training.OffloadedByteLanguageModelTrainer` replays the same
+`ParallelByteLanguageModelTrainer(..., schedule="offload")` replays the same
 ordered checkpoint while keeping canonical parameters, moments, gradient sums
 and saved layer inputs in host memory. It loads one decoder layer at a time;
 backward reconstructs that layer's original forward stages from the saved
@@ -649,10 +650,10 @@ All arithmetic, including each sequential gradient add and AdamW update, uses
 the existing GPU kernels. Host work copies bytes and stages the transaction.
 
 ```python
-from mojolearn.offload_training import OffloadedByteLanguageModelTrainer
+from mojolearn import ParallelByteLanguageModelTrainer
 
-with OffloadedByteLanguageModelTrainer.from_checkpoint(
-    checkpoint, devices=(0,),
+with ParallelByteLanguageModelTrainer.from_checkpoint(
+    checkpoint, devices=(0,), schedule="offload",
 ) as replay:
     replay.train_step(next_microbatches)
     continued = replay.checkpoint()

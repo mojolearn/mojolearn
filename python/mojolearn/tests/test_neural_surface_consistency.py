@@ -16,14 +16,9 @@ def _defaults(fn, names):
     return {n: params[n].default for n in names}
 
 
-def test_host_trainer_optimizer_defaults_match_the_gpu_trainer():
-    # LanguageModelHostTrainer is the CPU twin of the GPU byte LM trainer. With
-    # weight_decay defaulting to 0.0 on the CPU and 0.01 on the GPU, the same
-    # parameters and ids gave two different first steps at library defaults.
-    names = ("lr", "betas", "eps", "weight_decay")
-    host = _defaults(_byte_lm_host.LanguageModelHostTrainer.__init__, names)
-    gpu = _defaults(_byte_lm_impl.SmallByteLanguageModelTrainer.__init__, names)
-    assert host == gpu
+# TOMBSTONE: test_host_trainer_optimizer_defaults_match_the_gpu_trainer deleted 2026-11-22 by lane
+# neural-consolidate: LanguageModelHostTrainer is gone; CPU training is the GPU trainer's own class
+# (device="cpu"), so there is one set of defaults.
 
 
 # test_mlp_batch_refuses_a_list_by_type_not_by_shape exercised the dead Python
