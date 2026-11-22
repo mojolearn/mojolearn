@@ -153,8 +153,10 @@ def test_scalar_index_keeps_existing_prepared_shape(owner, dtype):
     ('f8', [1e30], TypeError), ('f8', [-1e30], TypeError),
     ('f8', [float('inf'), float('nan')], OverflowError), ('f8', [float('nan'), float('inf')], ValueError),
     ('f2', [float('inf')], OverflowError), ('O', [2**80], TypeError), ('O', [float(2**80)], TypeError),
-    ('O', [np.bool_(True)], TypeError), ('i8', [-1], Exception), ('i8', [99], Exception),
+    ('O', [np.bool_(True)], TypeError), ('i8', [-1], ValueError), ('i8', [99], ValueError),
 ])
+# An index past the base rows: the fold store's typed take_rows entry (b2fba0968b, arena unit A) refuses it as a
+# ValueError, as gather_rows_bytes does; the deleted msel_take_rows export raised a bare Exception.
 def test_materialize_preserves_native_conversion_and_gather_errors(owner, dtype, values, category):
     rows = DeviceRows(np.arange(12, dtype='f4').reshape(4, 3), np.array(values, dtype=dtype), owner.take)
     _refused(audit_native_call(rows.materialize), category)

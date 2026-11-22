@@ -157,7 +157,13 @@ def _rows_attribute(model: PythonObject, name: PythonObject, context: PythonObje
     if which == "ndim":
         return PythonObject(1 + len(view.trailing))
     if which == "size":
-        return PythonObject(view.rows * view.row_words)
+        # rows x the trailing extents: the size of `shape`, also when the base
+        # has no rows (row_words is 0 there; arena unit C 9b369cd34f answered
+        # rows * row_words, 0 for a (0, 3) base and two indices).
+        var words = view.rows
+        for i in range(len(view.trailing)):  # driver-loop: over the base's trailing dimensions
+            words *= view.trailing[i]
+        return PythonObject(words)
     if which == "itemsize":
         return PythonObject(view.itemsize)
     if which == "row_words":

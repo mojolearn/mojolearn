@@ -173,7 +173,8 @@ def _refused_reinitialization(rows, base=None, indices=None):
 @pytest.mark.parametrize('field', ['base', 'indices'])
 def test_reinitialization_refuses_a_previous_view_pin_with_a_finalizer(field):
     calls = []
-    held = _Finalizer(calls)
+    # Only the object base holds the finalizer: an unreferenced one would run at the `del` below.
+    held = _Finalizer(calls) if field == 'base' else None
     previous = (np.array([[held, 1.]], dtype='O') if field == 'base' else np.array([0], dtype='i8'))
     rows = (DeviceRows(previous, np.array([0], dtype='i8'), None) if field == 'base' else
             DeviceRows(np.zeros((2, 3), dtype='f4'), previous, None))
