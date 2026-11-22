@@ -164,6 +164,19 @@ def run_sequence_cases():
     code, err = check(clone, git(clone, "rev-parse", "HEAD"))
     out.append(("git mv of a record with its log into verification/ passes",
                 [] if code == 0 else [f"exit {code}: {err[:300]}"]))
+    # 3c. a record (its log included) deleted in a pushed commit and restored (a revert) is not new run output
+    clone = scratch()
+    os.makedirs(os.path.join(clone, "verification/records"), exist_ok=True)
+    git(clone, "mv", "bench/results/old_run", "verification/records/old_run")
+    git(clone, "commit", "-q", "-m", "move")
+    git(clone, "rm", "-q", "-r", "verification/records/old_run")
+    git(clone, "commit", "-q", "-m", "delete")
+    git(clone, "push", "-q", "origin", "lane/x")
+    pushed = git(clone, "rev-parse", "HEAD")
+    git(clone, "revert", "--no-edit", "HEAD")
+    code, err = check(clone, git(clone, "rev-parse", "HEAD"), pushed)
+    out.append(("a restored record log under verification/ passes",
+                [] if code == 0 else [f"exit {code}: {err[:300]}"]))
     # 4. many offenders: at most 20 named, then a count
     clone = scratch()
     sha = commit(clone, [f"bench/results/many/f{i:02d}.json" for i in range(25)])

@@ -78,8 +78,16 @@ added=$(printf '%s\n%s\n' "$added" "$moved_in" | sed '/^$/d' | sort -u)
 [ -n "$added" ] || exit 0
 # only paths the pushed tree still holds (added then removed inside the push is fine)
 present=$(git ls-tree -r --name-only "$local_sha" -- bench/results docs/handoffs verification "${buckets[@]}" | sort -u)
+# A record restored under verification/ from the remote's own history (its exact blob was already pushed, e.g. a
+# revert of a deletion) is not new run output.
+restored() {
+    case "$1" in verification/*) ;; *) return 1 ;; esac
+    [ "$remote_sha" != "$zero" ] || return 1
+    blob=$(git rev-parse -q --verify "$local_sha:$1" 2>/dev/null) || return 1
+    [ -n "$(git log -1 --format=%H --find-object="$blob" "$remote_sha" 2>/dev/null)" ]
+}
 offending=$(comm -12 <(printf '%s\n' "$added") <(printf '%s\n' "$present") | while IFS= read -r p; do
-    [ -n "$p" ] && ! allowed "$p" && printf '%s\n' "$p"
+    [ -n "$p" ] && ! allowed "$p" && ! restored "$p" && printf '%s\n' "$p"
 done)
 [ -n "$offending" ] || exit 0
 
