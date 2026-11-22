@@ -11,3 +11,15 @@ index 3abc546586..9ee0d54d2b 100644
      return PythonObject(None)
  
  
+--- a/bindings/optimizer_native_router_door.mojo	2026-11-22 13:09:42
++++ b/bindings/optimizer_native_router_door.mojo	2026-11-22 13:09:42
+@@ -656,7 +656,8 @@
+         optimizer_load_buffers(module, provider, owner, m, v, initialized)
+         var fields = py_fields(owner)
+         py_setitem(fields, nk[].k_buf_initialized, initialized)
+-        py_setitem(fields, nk[].k_t, PythonObject(t))
++        # SABOTAGE (coverage-native-optimizer-load): checkpoint load increments the saved step
++        py_setitem(fields, nk[].k_t, PythonObject(t + 1))
+         return PythonObject(None)
+     if operation == OPTIMIZER_OPN_ZERO:
+         return door_zero(owner, values[0])

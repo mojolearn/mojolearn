@@ -105,3 +105,21 @@
      for i in range(n_rows * n_targets):
          out_ptr.unsafe_store(i, hout.unsafe_ptr().unsafe_load(i))
      _ = hout^
+--- a/glm/host/linear_predict_native.mojo	2026-11-22 13:10:24
++++ b/glm/host/linear_predict_native.mojo	2026-11-22 13:10:29
+@@ -29,9 +29,15 @@
+             request.rows, request.cols, intercept, host_predict_task_count(request.rows))
+         classical_widen_f32_f64(Int(np), request.dst, request.rows)
+         _ = narrow^
++        # SABOTAGE (coverage-glm-center-finish): the first prediction moved by 1/128 (CPU column)
++        var sab_w = f64_ptr(request.dst)
++        sab_w[0] = sab_w[0] + Float64(0.0078125)
+     else:
+         host_ols_predict_into(f32_ptr(request.x), f32_ptr(request.coef), f32_ptr(request.dst),
+             request.rows, request.cols, intercept, host_predict_task_count(request.rows))
++        # SABOTAGE (coverage-glm-center-finish): the first prediction moved by 1/128 (CPU column)
++        var sab_n = f32_ptr(request.dst)
++        sab_n[0] = sab_n[0] + Float32(0.0078125)
+     return 0
+ 
+ 
