@@ -18,7 +18,7 @@ outputs, T = 12):
       chain: T B <= 512 rows, one block, sequence/recurrent.mojo WGRAD_MIN_BLOCK);
       in the padded batch of six, every row's output is the alone row's words and
       the batch gradient is the float64 sum of the six alone gradients within
-      1e-5 relative (the batch folds the six rows' terms in one chain, the alone
+      1e-5 of the sum of the terms' magnitudes (the batch folds the six rows' terms in one chain, the alone
       runs fold each row's terms by itself: a different order of the same terms);
   (b) the fourth baseline: a GRU and an LSTM classifier fitted with lengths on
       variable-length synthetic tracks (class = the sign of the drift of channel
@@ -189,6 +189,7 @@ def run_alone_case[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
         all_rows.append(r)
     var words = List[Float32]()
     var grad_sum = List[Float64](length=np_, fill=0.0)
+    var grad_abs = List[Float64](length=np_, fill=0.0)
     var alone_out = List[Float32]()
     for r in range(_ROWS):  # small-loop(rows: one alone and one padded run each)
         var one: List[Int] = [r]
@@ -201,6 +202,7 @@ def run_alone_case[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
             alone_out.append(alone[o])
         for i in range(np_):  # small-loop(np: gradient sum)
             grad_sum[i] += Float64(alone[_O + i])
+            grad_abs[i] += abs(Float64(alone[_O + i]))
         words.extend(alone^)
     var dy_all = _seed(all_rows)
     var batch = step_words(ex, net, _batch(all_rows, lens, _T, 0), _ROWS, _T, lens, dy_all, params)
@@ -214,13 +216,14 @@ def run_alone_case[E: Exec](mut ex: E, which: Int) raises -> List[Float32]:
     var worst = 0.0
     for i in range(np_):  # small-loop(np: gradient comparison)
         var got = Float64(batch[_ROWS * _O + i])
-        var d = abs(got - grad_sum[i]) / (1e-6 + abs(grad_sum[i]))
+        # the float32 rounding of a sum is bounded by its terms' magnitudes, not by the sum
+        var d = abs(got - grad_sum[i]) / (1e-30 + grad_abs[i])
         if d > worst:
             worst = d
     if worst > 1e-5:
-        _fail(name + " batch gradient off the sum of the alone gradients: relative " + String(worst))
+        _fail(name + " batch gradient off the sum of the alone gradients: " + String(worst) + " of the terms' sum")
     print("SEQ_LENGTHS", name, "alone: 6 rows bit-equal padded vs unpadded (output + " + String(np_)
-          + " gradients); batch outputs bit-equal; batch gradient vs sum of alone: max relative", worst)
+          + " gradients); batch outputs bit-equal; batch gradient vs float64 sum of alone: max |diff| / sum|terms|", worst)
     words.extend(batch^)
     var digest = UInt64(1469598103934665603)
     _mix(digest, words)
