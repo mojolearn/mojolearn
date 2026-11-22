@@ -107,7 +107,9 @@ def _legacy_forest(members, engine):
     return LegacyHostForest(estimator=members["estimator"], n_features=int(members["meta"][0]),
         n_trees=int(members["meta"][1]), num_outputs=int(members["meta"][2]),
         classes=members["classes"].tolist() if "classes" in members else None,
-        device=members.get("device"), inference_engine=engine, **arrays)
+        # A loaded forest carries device=None, this installation's device: the
+        # file's `device` member is read for its refusal only (b0c8580738).
+        device=None, inference_engine=engine, **arrays)
 
 
 @pytest.mark.parametrize("estimator", forest._ESTIMATORS)

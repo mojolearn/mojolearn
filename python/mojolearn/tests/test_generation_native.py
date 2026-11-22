@@ -162,7 +162,7 @@ def test_model_and_array_python_callbacks_are_not_used(tmp_path, monkeypatch):
 def test_transitive_runtime_audit_covers_metadata_and_state(tmp_path):
     from mojolearn._verify_native_runtime import audit_native_call
     model = load_fixture(tmp_path, uniform=True)
-    parameters = audit_native_call(model.parameters).assert_native()
+    parameters = dict(audit_native_call(model.named_parameters).assert_native())
     assert parameters["lm_head.weight"] is model._head
     prompt = np.array([[33, 34]], dtype="i4")
     state = audit_native_call(model.allocate_state, 1, 8).assert_native()

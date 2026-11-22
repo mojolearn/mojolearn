@@ -52,7 +52,7 @@ def test_subgroup_id_and_pairs_are_refused_by_name():
 
 def test_a_fit_without_group_id_packs_the_old_layout():
     params = GradientBoosting()._params(32, 4, 0)
-    assert len(params) == 35
+    assert len(params) == 36
 
 
 # --- the grouping through the public fit: the sizes a group_id spells are

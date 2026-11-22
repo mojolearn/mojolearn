@@ -74,7 +74,7 @@ def test_cpu_samba_constructor_forward_and_parameter_copies_are_native(monkeypat
         patch.setattr(inference, "_binding", lambda: pytest.fail("Python binding selection"))
         audit_native_call(model.__init__, config, packed).assert_native()
         actual = audit_native_call(model.forward, ids).assert_native()
-        copied = audit_native_call(model.parameters).assert_native()
+        copied = dict(audit_native_call(model.named_parameters).assert_native())
         description = audit_native_call(model.__repr__).assert_native()
     assert actual.tobytes() == expected.tobytes()
     assert model.weight_format == format

@@ -60,11 +60,13 @@ def test_svr_refit_drops_previous_prepared_generation():
     np.testing.assert_allclose(model.predict(_points()), [-1.9, 1.9], rtol=0, atol=2e-4)
 
 
-def test_svr_bad_target_keeps_early_input_publication_and_no_fit_outputs():
+def test_svr_bad_target_publishes_no_fit_fields():
+    # The fitted fields are published together after RUN; a failed fit leaves
+    # the estimator as it was, `input_copied_` included (15f2d6be58).
     model = _model()
     with pytest.raises(ValueError, match="y|length|rows"):
         model.fit(_points(), [1])
-    assert "input_copied_" in vars(model)
+    assert "input_copied_" not in vars(model)
     assert "dual_coef_" not in vars(model)
     assert "support_" not in vars(model)
     assert "n_support_" not in vars(model)

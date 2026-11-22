@@ -34,6 +34,7 @@ from std.memory import unsafe_memcpy
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.native_class_admission_door import class_record, class_admit
 from bindings.py_cpython_table import cpython_table
+from bindings.cpython_utf8_unpack import cpython_utf8
 from bindings.native_instance_item_pack import native_instance_item
 from bindings.mode_metadata_native_door import _fields, _class_fields
 from bindings.native_json_door import native_json_read, native_json_parse, native_path, native_path_exists
@@ -351,8 +352,9 @@ def _bytes_append(value: PythonObject, mut arena: List[UInt8], allow_text: Bool 
         # `value` lives), so the bytes go straight into the arena: no
         # intermediate bytes object, no buffer pin, one entry resolved per
         # process instead of a by-name lookup per document.
+        # cpython_utf8: the size through a volatile slot (lane sr-gbdt)
         var text_size = Int(0)
-        var text_address = cpython_table()[].PyUnicode_AsUTF8AndSize(raw._obj_ptr, Int(MutPointer(to=text_size)))
+        var text_address = cpython_utf8(cpython_table(), raw._obj_ptr, text_size)
         if text_address == 0:
             var failure = stash_python_error()
             raise failure^

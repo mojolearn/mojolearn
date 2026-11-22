@@ -24,8 +24,9 @@ Checked:
   * one permutation (`permutation_count=1`: learn and estimation are the
     same order, one index) fits too;
   * with the learn rows as the eval set the held-out loss follows;
+  * feature combinations (complexity 2) fit under Ordered and round-trip;
   * what is refused by name: an estimation permutation that is not the
-    last, and feature combinations under Ordered.
+    last.
 """
 
 from max.gpu.host import DeviceContext
@@ -185,11 +186,22 @@ def check_ordered_ctr_device() raises:
         ctx, x, y, 0, 1, String("estimates on its last permutation"),
         "an estimation permutation that is not the last",
     )
-    _expect_refusal(
-        ctx, x, y, -1, 2, String("boosting_type='Ordered' is not implemented"),
-        "feature combinations under Ordered",
+    # Feature combinations under Ordered fit since 3f6d5496f4 (cat-ctr step 4
+    # unit 3, the fold searcher's level driver); this check still expected
+    # the refusal that commit removed (lane sr-gbdt, 2026-11-22).
+    var combo = _fit(ctx, x, y, 4, -1, 2, False)
+    _need(len(combo.losses) == OC_TREES, "one learn loss per tree (combinations)")
+    var combo_last = combo.losses[len(combo.losses) - 1]
+    print("  combinations (complexity 2), final loss:", combo_last)
+    _need(combo_last == combo_last, "the combinations fit's final loss is NaN")
+    _need(
+        combo_last < 0.25 * combo.losses[0],
+        "the combinations fit did not learn (loss " + String(combo_last) + ")",
     )
-    print("  Ordered CTRs fit, predict, eval, round-trip and refuse by name")
+    var combo_text = model_text(combo)
+    _need(model_text(load_model_text(combo_text)) == combo_text,
+          "the combinations model text changed on a round trip")
+    print("  Ordered CTRs fit (combinations too), predict, eval, round-trip and refuse by name")
 
 
 def run_checks() raises:

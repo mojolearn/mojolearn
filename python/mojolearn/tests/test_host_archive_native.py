@@ -318,7 +318,10 @@ def test_logistic_saved_label_types_and_coefficient_layout(tmp_path, labels, int
     restored = audit_native_call(host.HostLogisticRegression.load, path).assert_native()
     assert _state(vars(restored)) == _state(vars(original))
     before = restored._w.tobytes()
-    restored.coef_._mv[0] = -999
+    # A public trailing-underscore Array field reads as its ndarray view once
+    # NumPy is connected (bindings/classical_attributes_door.mojo
+    # _instance_result); write through that view.
+    restored.coef_.reshape(-1)[0] = -999
     assert restored._w.tobytes() == before
 
 
