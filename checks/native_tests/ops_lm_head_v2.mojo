@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The executor op OPS_LM_HEAD_V2 (autograd/lm_head_v2_op.mojo, the chunked
 LM head as one session op with its VJP) against the oracle
 (training/checks/chunked_lm_head_oracle.mojo), word for word, on the host
@@ -44,9 +45,10 @@ from sequence.exec_device import DeviceExec
 from checks.numerics import ftz, identical_log, identical_mul
 from training.checks.loss_contract import neg_by_bits
 from training.checks.chunked_lm_head_oracle import chunked_lm_head_v2_oracle, lm_head_v2_loss_fold
-from checks.native_tests.ops_higher import tensor, scale, values, gradient
+from checks.native_tests.ops_higher_common import tensor, scale, values, gradient
 from checks.native_tests.core_ops_common import uniform, dims2
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
 
 
 comptime OPS_LM_HEAD_V2_CASES = 4
@@ -168,10 +170,12 @@ def run_ops_lm_head_v2_case[E: Exec & Movable & Deinitable](
         _off_vocabulary(again, "inference session")
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(OPS_LM_HEAD_V2_CASES)
-    def task(which: Int) {imm cases}:
-        try:
+# The host column: the cases across host cores, each on its own two host sessions. The device column: DeviceExec
+# shares sequence_ctx() and its pool, so concurrent sessions would race that context's ownership (as in
+# core_ops_session): the cases run one after another and each kernel keeps its own parallelism.
+def test_lm_head_v2() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_case(which: Int) raises:
             var s = OpsSession[HostExec](HostExec(), ops_lm_head_v2_records(which, False))
             var again = OpsSession[HostExec](HostExec(), ops_lm_head_v2_records(which, True))
             try:
@@ -182,18 +186,9 @@ def _run_cpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(which, error)
-    report.parallel(task, OPS_LM_HEAD_V2_CASES)
-
-
-# DeviceExec shares sequence_ctx() and its pool, so concurrent sessions would
-# race that context's ownership (as in core_ops_session): the cases run one
-# after another and each kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(OPS_LM_HEAD_V2_CASES)
-    for which in range(OPS_LM_HEAD_V2_CASES):  # driver-loop: over the check's cases, one device queue
-        try:
+        check_cases("lm_head_v2", OPS_LM_HEAD_V2_CASES, host_case)
+    else:
+        def device_case(which: Int) raises:
             var s = OpsSession[DeviceExec](DeviceExec(), ops_lm_head_v2_records(which, False))
             var again = OpsSession[DeviceExec](DeviceExec(), ops_lm_head_v2_records(which, True))
             try:
@@ -204,19 +199,8 @@ def _run_gpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(which, error)
+        check_cases_serial("lm_head_v2", OPS_LM_HEAD_V2_CASES, device_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ops_lm_head_v2", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

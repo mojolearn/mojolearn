@@ -16,51 +16,15 @@ one binary per compile-time route define (their own pixi tasks), and
 `entry_table_image_provider` / `entry_table_image_consumer`, two shared
 images a controller loads separately (they cannot share one binary).
 """
-from checks.native_tests.core_import_lower import register as register_core_import_lower
-from checks.native_tests.core_ops_import_kinds import register as register_core_ops_import_kinds
-from checks.native_tests.core_ops_layernorm_view import register as register_core_ops_layernorm_view
-from checks.native_tests.core_ops_program import register as register_core_ops_program
-from checks.native_tests.core_ops_session import register as register_core_ops_session
-from checks.native_tests.core_ops_session_blocks import register as register_core_ops_session_blocks
-from checks.native_tests.core_partitioned_program import register as register_core_partitioned_program
-from checks.native_tests.core_program_fit_stop import register as register_core_program_fit_stop
-from checks.native_tests.core_program_loop import register as register_core_program_loop
-from checks.native_tests.core_program_loop_append import register as register_core_program_loop_append
-from checks.native_tests.core_vjp_rank import register as register_core_vjp_rank
 # TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (NOISE, A/B abf2) deleted 2026-11-20 by
 # lane/fx-verdicts6 with their check family_matrix_units; code recoverable at 06d1e8ff34.
 # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch (the check is in that patch)
 from checks.native_tests.kit_roundtrip import register as register_kit_roundtrip
-from checks.native_tests.ops_grad_identity import register as register_ops_grad_identity
-from checks.native_tests.ops_higher import register as register_ops_higher
-from checks.native_tests.ops_lm_head_v2 import register as register_ops_lm_head_v2
-from checks.native_tests.ops_optimizer_requests import register as register_ops_optimizer_requests
-from checks.native_tests.resident_second_call import register as register_resident_second_call
 from checks.native_tests.runner import Check
-from checks.native_tests.sequence_croston import register as register_sequence_croston
-from checks.native_tests.sequence_moe import register as register_sequence_moe
-from checks.native_tests.sequence_norm import register as register_sequence_norm
-from checks.native_tests.sequence_rnn import register as register_sequence_rnn
-from checks.native_tests.sequence_samba_surface import register as register_sequence_samba_surface
-from checks.native_tests.sequence_stl import register as register_sequence_stl
-from checks.native_tests.sequence_theta import register as register_sequence_theta
-from checks.native_tests.sequence_var import register as register_sequence_var
-from checks.native_tests.training_autograd_model import register as register_training_autograd_model
-from checks.native_tests.training_autograd_save_resume import register as register_training_autograd_save_resume
-from checks.native_tests.training_autograd_usability import register as register_training_autograd_usability
-from checks.native_tests.training_chunked_lm_head_door import register as register_training_chunked_lm_head_door
-from checks.native_tests.training_distributed_program import register as register_training_distributed_program
-from checks.native_tests.training_moe_backward_ownership import register as register_training_moe_backward_ownership
-from checks.native_tests.training_neural_inference import register as register_training_neural_inference
-from checks.native_tests.training_primitives import register as register_training_primitives
-from checks.native_tests.training_small_mlp import register as register_training_small_mlp
-from checks.native_tests.transformer_host_block import register as register_transformer_host_block
-from checks.native_tests.transformer_ops_program import register as register_transformer_ops_program
 # lane tests-to-mojo-models (2026-11-16)
 # lane tests-to-mojo-spatial (2026-11-16)
 # lane tests-to-mojo-trees (2026-11-16)
 # lane tests-to-mojo-neural (2026-11-15)
-from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 # lane checks-register (2026-11-16): the standalone main() checks no CI job ran, now registered
 
 # lane checks-toplevel (2026-11-16): the standalone main() checks at the top of checks/ no CI job ran, now registered
@@ -69,47 +33,11 @@ from checks.native_tests.training_small_mlp_relations import register as registe
 
 def all_checks() -> List[Check]:
     var checks = List[Check]()
-    checks.append(register_core_import_lower())
-    checks.append(register_core_ops_import_kinds())
-    checks.append(register_core_ops_layernorm_view())
-    checks.append(register_core_ops_program())
-    checks.append(register_core_ops_session())
-    checks.append(register_core_ops_session_blocks())
-    checks.append(register_core_partitioned_program())
-    checks.append(register_core_program_fit_stop())
-    checks.append(register_core_program_loop())
-    checks.append(register_core_program_loop_append())
-    checks.append(register_core_vjp_rank())
     checks.append(register_kit_roundtrip())
-    checks.append(register_ops_grad_identity())
-    checks.append(register_ops_higher())
-    checks.append(register_ops_lm_head_v2())
-    checks.append(register_ops_optimizer_requests())
-    checks.append(register_resident_second_call())
-    checks.append(register_sequence_croston())
-    checks.append(register_sequence_moe())
-    checks.append(register_sequence_norm())
-    checks.append(register_sequence_rnn())
-    checks.append(register_sequence_samba_surface())
-    checks.append(register_sequence_stl())
-    checks.append(register_sequence_theta())
-    checks.append(register_sequence_var())
-    checks.append(register_training_autograd_model())
-    checks.append(register_training_autograd_save_resume())
-    checks.append(register_training_autograd_usability())
-    checks.append(register_training_chunked_lm_head_door())
-    checks.append(register_training_distributed_program())
-    checks.append(register_training_moe_backward_ownership())
-    checks.append(register_training_neural_inference())
-    checks.append(register_training_primitives())
-    checks.append(register_training_small_mlp())
-    checks.append(register_transformer_host_block())
-    checks.append(register_transformer_ops_program())
     # lane tests-to-mojo-models (2026-11-16)
     # lane tests-to-mojo-spatial (2026-11-16)
     # lane tests-to-mojo-trees (2026-11-16)
     # lane tests-to-mojo-neural (2026-11-15)
-    checks.append(register_training_small_mlp_relations())
     # lane checks-register (2026-11-16)
     # lane checks-toplevel (2026-11-16)
     return checks^

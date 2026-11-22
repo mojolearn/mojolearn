@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The RMS-norm and linear training primitives against exact and Float64
 references (ported from the `arm_rms_norm` and `arm_linear` arms of
 `python/mojolearn/tests/test_training_primitives_surface.py`, lane
@@ -19,7 +20,6 @@ as a wrong number. Tolerances are the Python test's.
 from std.memory import bitcast
 from std.math import sqrt
 from checks.native_tests.training_check_common import same_words, all_finite, uniform_int
-from core.host_parallel import host_parallelize
 from core.mojolearn_training_host_impl import (
     rms_norm_forward_host_into,
     rms_norm_backward_host_into,
@@ -28,7 +28,8 @@ from core.mojolearn_training_host_impl import (
     accumulate_host_into,
 )
 from training.native_primitive_dispatch import native_primitive_operation
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
 
 
 comptime RMS_M = 5
@@ -171,10 +172,11 @@ def check_ordered_fold(stack: List[Float32]) raises:
         require(stack[base + 2 + i] == Float32(i) + 3, "the ordered fold of the second tensor is not first + 3")
 
 
-# ---- The host column (was training_primitives_cpu_suite.mojo) ----
-# RMS-norm and linear training primitives on the host column
-# (training_primitives_cases.mojo); the two independent fixtures run across
-# host cores.
+# ---- The host and device columns ----
+# RMS-norm and linear training primitives (training_primitives_cases.mojo). The host column: the three independent
+# fixtures run across host cores. The device column: through `native_primitive_operation` (operations 2..5 and 9);
+# the fixtures run in order: every call shares the one process training context (`neural_ctx`); the kernels keep
+# their own parallelism.
 comptime PRIMITIVE_FIXTURES = 3
 
 
@@ -216,93 +218,67 @@ def _fold() raises:
     check_ordered_fold(stack)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(PRIMITIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            if unit == 0:
-                _rms()
-            elif unit == 1:
-                _linear()
-            else:
-                _fold()
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, PRIMITIVE_FIXTURES)
+def _host_fixture(unit: Int) raises:
+    if unit == 0:
+        _rms()
+    elif unit == 1:
+        _linear()
+    else:
+        _fold()
 
 
-# ---- The device column (was training_primitives_gpu_suite.mojo) ----
-# RMS-norm and linear training primitives on the device
-# (training_primitives_cases.mojo), through `native_primitive_operation`
-# (operations 2..5). The two fixtures run in order: every call shares the one
-# process training context (`neural_ctx`); the kernels keep their own
-# parallelism.
-comptime PRIMITIVE_FIXTURES_gpu = 3
+def test_primitives() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("primitives", PRIMITIVE_FIXTURES, _host_fixture)
+    else:
+        def _rms_gpu() raises:
+            var x = rms_x()
+            var w = rms_w()
+            var dy = rms_dy()
+            var y = List[Float32](length=RMS_M * RMS_D, fill=0)
+            var dx = List[Float32](length=RMS_M * RMS_D, fill=0)
+            var dw = List[Float32](length=RMS_D, fill=0)
+            var eps: List[Float64] = [0.0]
+            _ = native_primitive_operation(2, [Int(y.unsafe_ptr()), Int(x.unsafe_ptr()), Int(w.unsafe_ptr())], [RMS_M, RMS_D], eps)
+            _ = native_primitive_operation(3, [Int(dx.unsafe_ptr()), Int(dw.unsafe_ptr()), Int(dy.unsafe_ptr()),
+                                               Int(x.unsafe_ptr()), Int(w.unsafe_ptr())], [RMS_M, RMS_D], eps)
+            check_rms(x, w, dy, y, dx, dw)
 
 
-def _rms_gpu() raises:
-    var x = rms_x()
-    var w = rms_w()
-    var dy = rms_dy()
-    var y = List[Float32](length=RMS_M * RMS_D, fill=0)
-    var dx = List[Float32](length=RMS_M * RMS_D, fill=0)
-    var dw = List[Float32](length=RMS_D, fill=0)
-    var eps: List[Float64] = [0.0]
-    _ = native_primitive_operation(2, [Int(y.unsafe_ptr()), Int(x.unsafe_ptr()), Int(w.unsafe_ptr())], [RMS_M, RMS_D], eps)
-    _ = native_primitive_operation(3, [Int(dx.unsafe_ptr()), Int(dw.unsafe_ptr()), Int(dy.unsafe_ptr()),
-                                       Int(x.unsafe_ptr()), Int(w.unsafe_ptr())], [RMS_M, RMS_D], eps)
-    check_rms(x, w, dy, y, dx, dw)
+        def _linear_gpu() raises:
+            var a = lin_a()
+            var w = lin_w()
+            var dc = lin_dc()
+            var c = List[Float32](length=LIN_M * LIN_N, fill=0)
+            var c1 = List[Float32](length=LIN_N, fill=0)
+            var da = List[Float32](length=LIN_M * LIN_K, fill=0)
+            var dw = List[Float32](length=LIN_N * LIN_K, fill=0)
+            var none = List[Float64]()
+            _ = native_primitive_operation(4, [Int(c.unsafe_ptr()), Int(a.unsafe_ptr()), Int(w.unsafe_ptr())], [LIN_M, LIN_N, LIN_K], none)
+            _ = native_primitive_operation(4, [Int(c1.unsafe_ptr()), Int(a.unsafe_ptr()), Int(w.unsafe_ptr())], [1, LIN_N, LIN_K], none)
+            _ = native_primitive_operation(5, [Int(da.unsafe_ptr()), Int(dw.unsafe_ptr()), Int(dc.unsafe_ptr()),
+                                               Int(a.unsafe_ptr()), Int(w.unsafe_ptr())], [LIN_M, LIN_N, LIN_K], none)
+            check_linear(a, w, dc, c, da, dw, c1)
 
 
-def _linear_gpu() raises:
-    var a = lin_a()
-    var w = lin_w()
-    var dc = lin_dc()
-    var c = List[Float32](length=LIN_M * LIN_N, fill=0)
-    var c1 = List[Float32](length=LIN_N, fill=0)
-    var da = List[Float32](length=LIN_M * LIN_K, fill=0)
-    var dw = List[Float32](length=LIN_N * LIN_K, fill=0)
-    var none = List[Float64]()
-    _ = native_primitive_operation(4, [Int(c.unsafe_ptr()), Int(a.unsafe_ptr()), Int(w.unsafe_ptr())], [LIN_M, LIN_N, LIN_K], none)
-    _ = native_primitive_operation(4, [Int(c1.unsafe_ptr()), Int(a.unsafe_ptr()), Int(w.unsafe_ptr())], [1, LIN_N, LIN_K], none)
-    _ = native_primitive_operation(5, [Int(da.unsafe_ptr()), Int(dw.unsafe_ptr()), Int(dc.unsafe_ptr()),
-                                       Int(a.unsafe_ptr()), Int(w.unsafe_ptr())], [LIN_M, LIN_N, LIN_K], none)
-    check_linear(a, w, dc, c, da, dw, c1)
+        def _fold_gpu() raises:
+            var stack = fold_stack()
+            var base = Int(stack.unsafe_ptr())
+            for shard in range(1, FOLD_SHARDS):  # dependent ordered fold: ascending shard order
+                var dst = base + 4 * shard * FOLD_COUNT
+                var src = base + 4 * (shard - 1) * FOLD_COUNT
+                _ = native_primitive_operation(9, [dst, src], [FOLD_COUNT, 2, -1], List[Float64]())
+            check_ordered_fold(stack)
 
-
-def _fold_gpu() raises:
-    var stack = fold_stack()
-    var base = Int(stack.unsafe_ptr())
-    for shard in range(1, FOLD_SHARDS):  # dependent ordered fold: ascending shard order
-        var dst = base + 4 * shard * FOLD_COUNT
-        var src = base + 4 * (shard - 1) * FOLD_COUNT
-        _ = native_primitive_operation(9, [dst, src], [FOLD_COUNT, 2, -1], List[Float64]())
-    check_ordered_fold(stack)
-
-
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(PRIMITIVE_FIXTURES_gpu)
-    for unit in range(PRIMITIVE_FIXTURES_gpu):  # ordered: one shared device context
-        try:
+        def device_fixture(unit: Int) raises:
             if unit == 0:
                 _rms_gpu()
             elif unit == 1:
                 _linear_gpu()
             else:
                 _fold_gpu()
-        except error:
-            cases.fail(unit, error)
+        check_cases_serial("primitives", PRIMITIVE_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_primitives", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

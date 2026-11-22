@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The recurrent models against a float64 restatement of PyTorch's cell
 equations (nn.RNN / nn.LSTM / nn.GRU), and the fit's loss going down
 (ported from python/mojolearn/tests/test_x_sequence_rnn.py: the regressor
@@ -29,7 +30,9 @@ from sequence.ops_impl import rnn_fit_impl, rnn_predict_impl
 from sequence.recurrent import Net
 from checks.native_tests.sequence_port_common import allclose, u01, normal
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, count_failures, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
+
 
 
 comptime RNN_FIXTURES = 6
@@ -187,43 +190,22 @@ def run_rnn_fixture[E: Exec](mut ex: E, unit: Int) raises:
     _ = seq^
 
 
-# ---- The host column (was sequence_rnn_cpu_suite.mojo) ----
-# Recurrent models against the float64 PyTorch cell equations, and their loss going down: the independent fixtures run across host cores, each on its own
-# HostExec with a private failure slot.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(RNN_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
+# ---- The host and device columns ----
+# Recurrent models against the float64 PyTorch cell equations, and their loss going down. The host column: the independent fixtures across host cores, each on its own HostExec.
+# The device column: the fixtures run in order on one DeviceExec: they share the one device and its queue,
+# and each fixture's kernels already spread its work across the device.
+def test_rnn() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(unit: Int) raises:
             var ex = HostExec()
             run_rnn_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, RNN_FIXTURES)
-
-
-# ---- The device column (was sequence_rnn_gpu_suite.mojo) ----
-# Recurrent models against the float64 PyTorch cell equations, and their loss going down, on the device column. The fixtures run in order on one
-# DeviceExec: they share the one device and its queue, and each fixture's
-# kernels already spread its work across the device.
-def _run_gpu(mut report: Report) raises:
-    var ex = DeviceExec()
-    var cases = report.cases(RNN_FIXTURES)
-    for unit in range(RNN_FIXTURES):  # driver-loop: over fixtures on the one device
-        try:
+        check_cases("rnn", RNN_FIXTURES, host_fixture)
+    else:
+        var ex = DeviceExec()
+        def device_fixture(unit: Int) raises {mut ex}:
             run_rnn_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
+        check_cases_serial("rnn", RNN_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("sequence_rnn", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

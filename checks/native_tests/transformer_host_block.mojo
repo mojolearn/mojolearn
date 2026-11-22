@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The Transformer block on the HOST column through the typed RUN of its
 host binding (transformer/transformer_host_binding_impl.mojo `_run_forward`
 and `_backward_run`, the calls `bindings/_mojolearn_transformer_host.mojo`
@@ -31,10 +32,11 @@ The two windows are independent and run across host cores
 """
 from std.math import isfinite
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from transformer.block_options import BlockOptions
 from transformer.transformer_host_binding_impl import _backward_run, _run_forward
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, require
+from checks.native_tests.training_check_common import lcg_fill
 
 
 # ---- The host column (was transformer_host_block_cpu_suite.mojo) ----
@@ -46,14 +48,6 @@ comptime _NKV = 1
 comptime _HD = 16
 comptime _IT = 64
 comptime _SMAX = 32
-
-
-def _fill(mut values: List[Float32], mut seed: UInt64, lo: Float32, hi: Float32):
-    # A fixed 64-bit LCG: a fixture, not data work.
-    for i in range(len(values)):  # small-loop(fixture: a few thousand test values)
-        seed = seed * 6364136223846793005 + 1442695040888963407
-        var unit = Float32(Int((seed >> 40) & 0xFFFFFF)) / Float32(16777216.0)
-        values[i] = lo + (hi - lo) * unit
 
 
 def _same(left: List[Float32], right: List[Float32], what: String) raises:
@@ -86,7 +80,7 @@ struct _HostBlock(Movable):
         for i in range(len(sizes)):  # small-loop(nine weight slots)
             var piece = List[Float32](length=sizes[i], fill=Float32(1.0))
             if i >= 2:  # the two layernorm weights are ones, as in the former test
-                _fill(piece, seed, Float32(-0.125), Float32(0.125))
+                lcg_fill(piece, seed, Float32(-0.125), Float32(0.125))
             self.w.append(piece^)
         self.window = window
 
@@ -154,9 +148,9 @@ def run_host_block_fixture(fixture_id: Int) raises:
     var blk = _HostBlock(window)
     var seed: UInt64 = 5
     var x = List[Float32](length=_B * 17 * _DM, fill=0)
-    _fill(x, seed, Float32(-2.0), Float32(2.0))
+    lcg_fill(x, seed, Float32(-2.0), Float32(2.0))
     var g = List[Float32](length=_B * 16 * _DM, fill=0)
-    _fill(g, seed, Float32(-1.0), Float32(1.0))
+    lcg_fill(g, seed, Float32(-1.0), Float32(1.0))
     var x16 = _tokens(x, 17, 0, 16)
 
     var whole16 = blk.fresh(x16, 16)
@@ -208,23 +202,10 @@ def run_host_block_fixture(fixture_id: Int) raises:
     raise Error(tag + ": a NaN input was not refused")
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(TRANSFORMER_HOST_BLOCK_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            run_host_block_fixture(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, TRANSFORMER_HOST_BLOCK_FIXTURES)
+# The host column only: the two windows run across host cores.
+def test_host_block() raises:
+    check_cases("host_block", TRANSFORMER_HOST_BLOCK_FIXTURES, run_host_block_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("transformer_host_block", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

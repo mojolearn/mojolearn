@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The operation session's compositions, moved from test_ops_session.py
 (2026-11-14). Each fixture runs on two independent sessions of one executor
 and the second must give the same float32 words (the former digest check).
@@ -26,7 +27,7 @@ table stay in the Python test.
 from std.math import exp
 from autograd.ops_api import OpsSession
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, op1, op2, total, values, gradient, same_words
+from checks.native_tests.ops_higher_common import tensor, op1, op2, total, values, gradient, same_words
 from checks.native_tests.core_ops_common import (
     normal,
     uniform,
@@ -38,10 +39,10 @@ from checks.native_tests.core_ops_common import (
     same_shape,
     opi,
 )
-from core.host_parallel import host_parallelize
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
 
 
 comptime CORE_OPS_SESSION_FIXTURES = 4
@@ -276,13 +277,13 @@ def run_core_ops_session_fixture[E: Exec & Movable & Deinitable](
         raise Error("unknown core_ops_session fixture " + String(fixture_id))
 
 
-# ---- The host column (was core_ops_session_cpu_suite.mojo) ----
-# The operation session's compositions: each fixture on its own two host sessions, the fixtures run
-# across host cores with a private failure slot each.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_OPS_SESSION_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
+# The operation session's compositions. The host column: each fixture on its own two host sessions, the fixtures across host cores. The device
+# column: DeviceExec shares sequence_ctx() and its pool, so independent concurrent sessions would race that context's
+# ownership (as in ops_higher's device column); the fixtures run one after another and each kernel keeps its own
+# parallelism.
+def test_ops_session() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
             var record = core_ops_session_records(fixture_id)
             var s = OpsSession[HostExec](HostExec(), record)
             var again = OpsSession[HostExec](HostExec(), record)
@@ -294,21 +295,9 @@ def _run_cpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, CORE_OPS_SESSION_FIXTURES)
-
-
-# ---- The device column (was core_ops_session_gpu_suite.mojo) ----
-# The operation session's compositions on the device, in order.
-#
-# DeviceExec shares sequence_ctx() and its pool, so independent concurrent
-# sessions would race that context's ownership (as in ops_higher_gpu); the
-# fixtures run one after another and each kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_OPS_SESSION_FIXTURES)
-    for fixture_id in range(CORE_OPS_SESSION_FIXTURES):
-        try:
+        check_cases("ops_session", CORE_OPS_SESSION_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var record = core_ops_session_records(fixture_id)
             var s = OpsSession[DeviceExec](DeviceExec(), record)
             var again = OpsSession[DeviceExec](DeviceExec(), record)
@@ -320,19 +309,8 @@ def _run_gpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("ops_session", CORE_OPS_SESSION_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_ops_session", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

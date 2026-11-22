@@ -22,10 +22,10 @@ across host cores.
 from core.member_abi import MEMBER_OP_TRANSFORM
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from checks.native_tests.py2mojo_host_members import (
-    HostMember, MEMBER_PREP, PREP_MEMBERS_DIR, host_idn_fam, rows_close, require,
+    HostMember, MEMBER_PREP, PREP_MEMBERS_DIR, host_idn_fam, rows_close,
 )
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, fixture_f32
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, require
 
 comptime N = 203
 comptime D = 5

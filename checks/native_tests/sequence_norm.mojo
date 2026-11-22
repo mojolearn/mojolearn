@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """LayerNorm forward and backward against a float64 restatement of
 F.layer_norm and its gradients, and the module's normalised rows (ported
 from python/mojolearn/tests/test_x_sequence_norm.py `test_forward_backward`
@@ -19,7 +20,9 @@ from sequence.exec import Exec, HostExec
 from sequence.ops_impl import layer_norm_impl
 from checks.native_tests.sequence_port_common import allclose, normal
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, count_failures, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
+
 
 
 comptime NORM_FIXTURES = 2
@@ -147,43 +150,22 @@ def run_norm_fixture[E: Exec](mut ex: E, unit: Int) raises:
     _ = rstd^
 
 
-# ---- The host column (was sequence_norm_cpu_suite.mojo) ----
-# LayerNorm forward/backward against the float64 F.layer_norm restatement: the independent fixtures run across host cores, each on its own
-# HostExec with a private failure slot.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(NORM_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
+# ---- The host and device columns ----
+# LayerNorm forward/backward against the float64 F.layer_norm restatement. The host column: the independent fixtures across host cores, each on its own HostExec.
+# The device column: the fixtures run in order on one DeviceExec: they share the one device and its queue,
+# and each fixture's kernels already spread its work across the device.
+def test_norm() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(unit: Int) raises:
             var ex = HostExec()
             run_norm_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, NORM_FIXTURES)
-
-
-# ---- The device column (was sequence_norm_gpu_suite.mojo) ----
-# LayerNorm forward/backward against the float64 F.layer_norm restatement, on the device column. The fixtures run in order on one
-# DeviceExec: they share the one device and its queue, and each fixture's
-# kernels already spread its work across the device.
-def _run_gpu(mut report: Report) raises:
-    var ex = DeviceExec()
-    var cases = report.cases(NORM_FIXTURES)
-    for unit in range(NORM_FIXTURES):  # driver-loop: over fixtures on the one device
-        try:
+        check_cases("norm", NORM_FIXTURES, host_fixture)
+    else:
+        var ex = DeviceExec()
+        def device_fixture(unit: Int) raises {mut ex}:
             run_norm_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
+        check_cases_serial("norm", NORM_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("sequence_norm", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

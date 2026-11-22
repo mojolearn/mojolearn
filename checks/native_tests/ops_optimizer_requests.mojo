@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Typed optimizer request/state contracts, independent constant-gradient math.
 
 Depends on producer e0af392644. Previous numerical fixtures keep their packed
@@ -18,9 +19,9 @@ from core.cast_in import CastIn
 from core.hostptr import f32_ptr
 from sequence.exec_trait import Exec
 from sequence.exec import HostExec
-from core.host_parallel import host_parallelize
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
 
 
 comptime OPS_REQUEST_FIXTURES = 17
@@ -180,14 +181,13 @@ def run_request_metadata(fixture_id: Int) raises:
         require(refused, "packed restore length accepted")
 
 
-# ---- The host column entry (was ops_optimizer_requests_cpu.mojo) ----
-# Canonical typed optimizer requests: parallel host fixtures.
-#
-# Metadata cases use no executor; math cases own independent sessions.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(OPS_REQUEST_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
+# ---- The host and device columns ----
+# Canonical typed optimizer requests. The host column: parallel host fixtures; metadata cases use no executor, math
+# cases own independent sessions. The device column: the math fixtures in order on the shared context (DeviceExec
+# shares sequence_ctx/pool; existing numerical kernels remain parallel. No concurrent-session proof is claimed).
+def test_optimizer_requests() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
             if fixture_id >= OPS_REQUEST_MATH_FIXTURES:
                 run_request_metadata(fixture_id)
                 return
@@ -201,19 +201,9 @@ def _run_cpu(mut report: Report) raises:
                 raise error
             restored.close()
             s.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, OPS_REQUEST_FIXTURES)
-
-
-# ---- The device column entry (was ops_optimizer_requests_gpu.mojo) ----
-# Canonical typed optimizer requests: ordered shared-context GPU fixtures.
-#
-# DeviceExec shares sequence_ctx/pool; existing numerical kernels remain parallel. No concurrent-session proof is claimed.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(OPS_REQUEST_MATH_FIXTURES)
-    for fixture_id in range(OPS_REQUEST_MATH_FIXTURES):
-        try:
+        check_cases("optimizer_requests", OPS_REQUEST_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var s = OpsSession[DeviceExec](DeviceExec(), True)
             var restored = OpsSession[DeviceExec](DeviceExec(), True)
             try:
@@ -224,19 +214,8 @@ def _run_gpu(mut report: Report) raises:
                 raise error
             restored.close()
             s.close()
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("optimizer_requests", OPS_REQUEST_MATH_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ops_optimizer_requests", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

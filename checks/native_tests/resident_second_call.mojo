@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """A second identical call uploads nothing fitted.
 
 Per family that keeps fitted state on the device, the fitted operand goes up
@@ -81,7 +82,8 @@ from x_linear.dispatch import ALGO_ISOTONIC_PREDICT, LINK_IDENTITY
 from x_linear.ops_entry_device import xl_decision_device_run, xl_fit_device_run
 
 from checks.native_tests.core_ops_common import uniform
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases_serial, require
 
 
 comptime RSC_CASES = 7
@@ -368,26 +370,31 @@ def _case(ctx: DeviceContext, which: Int) raises:
         _isotonic()
 
 
-def _run_gpu(mut report: Report) raises:
+# The device column only. The resident families run in order, one device queue each in turn. The families whose
+# fitted copies are counted need `-D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1` (the native checks' GPU build passes it);
+# without it `main()` skips that test and only the samba case runs.
+comptime _COUNTED_CASES = RSC_CASES - 1
+
+
+def _counted_case(row: Int) -> Int:
+    """Row `row` of the counted table: every case but samba, in the old order."""
+    return row if row < _CASE_SAMBA else row + 1
+
+
+def test_counted_uploads() raises:
     var ctx = DeviceContext()
-    var cases = report.cases(RSC_CASES)
-    for which in range(RSC_CASES):  # driver-loop: over the resident families, one device queue each in turn
-        if not RESIDENT_UPLOAD_COUNT and which != _CASE_SAMBA:
-            cases.skip(which, "built without -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1: fitted copies are not counted")
-            continue
-        try:
-            _case(ctx, which)
-        except error:
-            cases.fail(which, error)
+    def counted(row: Int) raises {imm ctx}:
+        _case(ctx, _counted_case(row))
+    check_cases_serial("counted_uploads", _COUNTED_CASES, counted)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_samba() raises:
+    var ctx = DeviceContext()
+    _case(ctx, _CASE_SAMBA)
 
 
-def register() -> Check:
-    return Check("resident_second_call", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    var suite = TestSuite.discover_tests[__functions_in_module()]()
+    comptime if not RESIDENT_UPLOAD_COUNT:
+        suite.skip[test_counted_uploads]()
+    suite^.run()

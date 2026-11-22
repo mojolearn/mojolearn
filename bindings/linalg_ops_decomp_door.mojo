@@ -36,7 +36,7 @@ from x_decomp.descriptor_schema import (
 )
 from core.entry_table import EntryRef, entry_ref_call
 from bindings.linalg_ops_kit_run import LinKit, KIT_F32P, lin_svd_tall_run, lin_svd_hermitian_run
-from bindings.linalg_ops_decomp_run import _lin_tsqr_on
+from bindings.linalg_ops_kit_run import _lin_tsqr_on
 from bindings.linalg_keys_unpack import linalg_keys
 from bindings.py_balanced import py_item
 from bindings.operation_names_linops import (

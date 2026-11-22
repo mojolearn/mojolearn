@@ -15,7 +15,7 @@ They are not GPU tests and compute no model arithmetic.
 Five independent fixtures, run across the host's cores.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_cases import check_cases, require
 from std.memory import bitcast
 from core.native_descriptor_abi import NativeDescriptorError
 from core.neural_descriptor_run import NeuralDescriptorRecord
@@ -35,8 +35,7 @@ from bindings.parallel_byte_native_run import (
 )
 
 from checks.native_tests.parallel_byte_stand_in import (
-    W_STEP, W_CLOSES, W_ROLLBACKS, W_FAULT_OP, W_SKEW_OP, W_LAST_ADDRESSES, W_LAST_INTS, W_FIRST_INT, W_COUNT,
-    STEP_AT_OPEN, SHARDS, DIMS, require, refused, entry, stand_in, provider, session, opened, text_of,
+    W_STEP, W_CLOSES, W_ROLLBACKS, W_FAULT_OP, W_SKEW_OP, W_LAST_ADDRESSES, W_LAST_INTS, W_FIRST_INT, W_COUNT, STEP_AT_OPEN, SHARDS, DIMS, refused, entry, stand_in, provider, session, opened, text_of,
 )
 
 comptime PARALLEL_BYTE_SESSION_FIXTURES = 5

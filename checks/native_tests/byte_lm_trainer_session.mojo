@@ -30,6 +30,32 @@ Units:
        byte, leave the step at 1 and do not write the caller's ids
   6    a full step's flat gradient is a lean step's gradient export, with
        the same loss word
+
+`test_routes` (lane py2mojo-D, 2026-11-22): the original tests' NumPy
+inputs, stored in `fixtures/byte_lm_routes/` (test_byte_lm_step_routes.py,
+seeds 41 and 43) and `fixtures/byte_lm_host6/`
+(test_cpu_training_embedding_ivf.py, seed 6) by
+`tools/py2mojo_native_fixtures_b7.py`. The column's resident session (host
+on the CPU column, the device on a GPU column) against the CPU column's
+stateless step (`training/byte_lm_host_dispatch.mojo::byte_host_operation`,
+the body the host trainer's stateless operation and `LanguageModelHostTrainer`
+run). Every claim is bit for bit.
+  0    test_byte_lm_step_routes.py `test_evaluate_before_a_step_is_that_steps_loss`:
+       a finite evaluation before a step is that step's loss word
+  1    `test_host_and_device_give_the_same_words` and
+       `test_host_and_device_give_the_same_loss_words`: the host loss before a
+       step is the session's evaluation; three steps give the same loss
+       words; the exported parameters and both moments are the host step's;
+       the loss after equals the evaluation after
+  2    (CPU column) test_cpu_training_embedding_ivf.py
+       `test_byte_lm_trainer_runs_on_the_host_when_built`, numeric half:
+       three stateless steps and three resident steps over rows 2k..2k+1 give
+       the same loss words, the last flat gradient is the resident gradient
+       export and the parameters are the exported ones; the resident logits
+       of rows 0..1 are the reference path's logits of those parameters
+       (threaded 0), as are the stateless (threaded) logits. The checkpoint
+       round trip, the session rollback, the vendor word and the absent
+       multi-GPU entry stay in the Python test.
 """
 from std.memory import bitcast
 from core.entry_table import EntryRef
@@ -47,8 +73,9 @@ from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_glue_entry import publish_byte_lm_entries
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, require
+from checks.native_tests.testsuite_cases import check_cases, require, fixture_f32, fixture_i32
 from std.sys.compile import is_defined
+from training.byte_lm_host_dispatch import byte_host_operation
 
 
 comptime BYTE_LM_TRAINER_SESSION_CASES = 7
@@ -428,6 +455,168 @@ def _gpu_cases() raises:
                 failed += "\n      byte_lm_trainer_session row " + String(unit) + ": " + String(error)
         if count > 0:
             raise Error("byte_lm_trainer_session: " + String(count) + " of " + String(BYTE_LM_TRAINER_SESSION_CASES) + " cases failed" + failed)
+
+
+comptime ROUTES_DIR = "checks/native_tests/fixtures/byte_lm_routes/"
+comptime HOST6_DIR = "checks/native_tests/fixtures/byte_lm_host6/"
+comptime ROUTES_CASES_CPU = 3
+comptime ROUTES_CASES_GPU = 2
+comptime HOST_OP_LOGITS = 0  # training/byte_lm_host_dispatch.mojo
+comptime HOST_OP_LOSS = 2
+comptime HOST_OP_STEP = 3
+
+
+def stateless_words(cfg: ByteConfig, threaded: Int, batch: Int = 0, length: Int = 0, completed: Int = 0) -> List[Int]:
+    """The fifteen words the host doors hand `byte_host_operation`."""
+    return [cfg.batch, cfg.length, cfg.d_model, cfg.n_heads, cfg.n_kv, cfg.head_dim, cfg.intermediate,
+            cfg.n_layers, cfg.vocab_size, Int(cfg.chunked_lm_head_v2), threaded, 0, batch, length, completed]
+
+
+def stateless_scalars() -> List[Float64]:
+    """The trainer's optimizer (lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01)."""
+    return [1e-3, 0.9, 0.999, 1e-8, 0.01]
+
+
+struct Stateless(Movable):
+    """The CPU column's stateless trainer: the state on the host, one `byte_host_operation` step a call."""
+    var cfg: ByteConfig
+    var p: List[Float32]
+    var m: List[Float32]
+    var v: List[Float32]
+    var grad: List[Float32]
+    var completed: Int
+
+    def __init__(out self, cfg: ByteConfig, var p: List[Float32]) raises:
+        var n = cfg.n_total()
+        self.cfg = cfg.copy()
+        self.p = p^
+        self.m = List[Float32](length=n, fill=Float32(0))
+        self.v = List[Float32](length=n, fill=Float32(0))
+        self.grad = List[Float32]()
+        self.completed = 0
+
+    def step(mut self, ids: List[Int32]) raises -> Float32:
+        var n = self.cfg.n_total()
+        var grad = List[Float32](length=n, fill=Float32(0))
+        var post_p = List[Float32](length=n, fill=Float32(0))
+        var post_m = List[Float32](length=n, fill=Float32(0))
+        var post_v = List[Float32](length=n, fill=Float32(0))
+        var a: List[Int] = [Int(self.p.unsafe_ptr()), Int(self.m.unsafe_ptr()), Int(self.v.unsafe_ptr()),
+                            Int(ids.unsafe_ptr()), Int(grad.unsafe_ptr()), Int(post_p.unsafe_ptr()),
+                            Int(post_m.unsafe_ptr()), Int(post_v.unsafe_ptr())]
+        var bits = byte_host_operation(HOST_OP_STEP, a, stateless_words(self.cfg, 0, completed=self.completed),
+                                       stateless_scalars())
+        _ = ids  # read through its address by the synchronous call above
+        self.p = post_p^
+        self.m = post_m^
+        self.v = post_v^
+        self.grad = grad^
+        self.completed += 1
+        return bitcast[DType.float32](UInt32(bits))
+
+    def loss(self, ids: List[Int32]) raises -> Float32:
+        var a: List[Int] = [Int(self.p.unsafe_ptr()), Int(ids.unsafe_ptr())]
+        var bits = byte_host_operation(HOST_OP_LOSS, a, stateless_words(self.cfg, 1), List[Float64]())
+        _ = ids
+        return bitcast[DType.float32](UInt32(bits))
+
+    def logits(self, ids: List[Int32], batch: Int, length: Int, threaded: Int) raises -> List[Float32]:
+        var out = List[Float32](length=batch * length * self.cfg.vocab_size, fill=Float32(0))
+        var a: List[Int] = [Int(self.p.unsafe_ptr()), Int(ids.unsafe_ptr()), Int(out.unsafe_ptr())]
+        var written = byte_host_operation(HOST_OP_LOGITS, a, stateless_words(self.cfg, threaded, batch, length),
+                                          List[Float64]())
+        _ = ids
+        require(written == len(out), "host logits wrote " + String(written) + " cells")
+        return out^
+
+
+def inputs_of(ids: List[Int32], cfg: ByteConfig, batch: Int) -> List[Int32]:
+    """`ids[:, :-1]` of a `[batch, length + 1]` block."""
+    var out = List[Int32](capacity=batch * cfg.length)
+    for b in range(batch):  # driver-loop: over the block's rows
+        for l in range(cfg.length):
+            out.append(ids[b * (cfg.length + 1) + l])
+    return out^
+
+
+def same_word(a: Float32, b: Float32, label: String) raises:
+    if bitcast[DType.uint32](a) != bitcast[DType.uint32](b):
+        raise Error(label + ": " + String(a) + " (word " + String(bitcast[DType.uint32](a)) + ") against "
+                    + String(b) + " (word " + String(bitcast[DType.uint32](b)) + ")")
+
+
+def routes_case(key: ByteLmEntryKey, unit: Int) raises:
+    var cfg = shape()
+    var n = cfg.n_total()
+    var width = cfg.batch * (cfg.length + 1)
+    if unit == 0 or unit == 1:
+        var initial = fixture_f32(ROUTES_DIR + "initial.f32", n)
+        var stack = fixture_i32(ROUTES_DIR + "batches.i32", 3 * width)
+        var column = Resident(key, cfg, initial.copy())
+        try:
+            if unit == 0:
+                var batch0 = slice_ids(stack, 0, width)
+                var before = column.evaluate(batch0)
+                require(finite(before), "the evaluation before a step is not finite")
+                same_word(before, column.step(batch0, 1, False).losses[0], "evaluate before a step against its loss")
+            else:
+                var host = Stateless(cfg, initial^)
+                var batch0 = slice_ids(stack, 0, width)
+                same_word(host.loss(batch0), column.evaluate(batch0), "host loss against the session's evaluation")
+                for k in range(3):  # driver-loop: over the fixture's training steps (each depends on the last)
+                    var ids = slice_ids(stack, k * width, width)
+                    same_word(host.step(ids), column.step(ids, 1, False).losses[0], "step " + String(k) + " loss")
+                var state = column.export_state()
+                same_f32(host.p, state.p, "parameters after three steps")
+                same_f32(host.m, state.m, "first moment after three steps")
+                same_f32(host.v, state.v, "second moment after three steps")
+                same_word(host.loss(batch0), column.evaluate(batch0), "host loss against the evaluation after")
+        finally:
+            column.close()
+    elif unit == 2:
+        var flat = fixture_f32(HOST6_DIR + "flat.f32", n)
+        var ids6 = fixture_i32(HOST6_DIR + "ids.i32", 6 * (cfg.length + 1))
+        var stateless = Stateless(cfg, flat.copy())
+        var resident = Resident(key, cfg, flat^)
+        try:
+            for k in range(3):  # driver-loop: over the fixture's training steps (each depends on the last)
+                var ids = slice_ids(ids6, k * width, width)
+                same_word(stateless.step(ids), resident.step(ids, 1, False).losses[0], "step " + String(k) + " loss")
+            same_f32(stateless.grad, resident.export_gradients(), "the stateless gradient against the resident export")
+            same_f32(stateless.p, resident.export_state().p, "stateless parameters against the resident export")
+            var q = inputs_of(ids6, cfg, 2)
+            var want = stateless.logits(q, 2, cfg.length, 0)
+            same_f32(stateless.logits(q, 2, cfg.length, 1), want, "stateless logits against the reference path")
+            same_f32(resident.logits(q, 2, cfg.length), want, "resident logits against the reference path")
+        finally:
+            resident.close()
+    else:
+        raise Error("unknown byte LM routes case")
+
+
+def _host_routes_case(unit: Int) raises:
+    routes_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), unit)
+
+
+def test_routes() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        publish_byte_lm_host_entries()
+        check_cases("byte_lm_trainer_routes", ROUTES_CASES_CPU, _host_routes_case)
+    else:
+        var vendor = byte_lm_vendor_word(COMPILED_VENDOR)
+        require(vendor > 0, "byte_lm_trainer_routes needs a GPU build (cuda, hip or metal)")
+        publish_byte_lm_entries()
+        var failed = String("")
+        var count = 0
+        for unit in range(ROUTES_CASES_GPU):  # driver-loop: over the cases on the one device
+            try:
+                routes_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor), unit)
+            except error:
+                count += 1
+                failed += "\n      byte_lm_trainer_routes row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("byte_lm_trainer_routes: " + String(count) + " of " + String(ROUTES_CASES_GPU) + " cases failed" + failed)
 
 
 def test_cases() raises:

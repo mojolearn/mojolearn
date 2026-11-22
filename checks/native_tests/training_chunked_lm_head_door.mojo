@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The chunked LM head v2 host stages against a Float64 reference (ported from
 `python/mojolearn/tests/test_chunked_lm_head_door.py`, lane tmig-training,
 2026-11-14).
@@ -23,7 +24,8 @@ from std.math import exp, log
 from core.host_parallel import host_parallelize
 from training.checks.chunked_lm_head_oracle import chunked_lm_head_v2_oracle, chunked_lm_head_v2_oracle_forward
 from checks.native_tests.training_check_common import close64, all_close, same_words, uniform
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import require
 
 
 # ---- The host column (was training_chunked_lm_head_door_suite.mojo) ----
@@ -153,26 +155,14 @@ def _two_calls() raises:
     require(same_words(a.d_weight, b.d_weight), "two calls: dWeight moved")
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CLH_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            if unit == 0:
-                _against_reference()
-            else:
-                _two_calls()
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, CLH_FIXTURES)
+# The host column only; TestSuite runs the two cases one after another (each is small: 5 rows, 513 words).
+def test_against_reference() raises:
+    _against_reference()
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
+def test_two_calls() raises:
+    _two_calls()
 
 
-def register() -> Check:
-    return Check("training_chunked_lm_head_door", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -18,10 +18,10 @@ and the meta-estimators (Bagging, AdaBoost, Voting, Stacking, MultiOutput, OneVs
 RandomTreesEmbedding: each composes its members in a door over Python objects).
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from checks.native_tests.py2mojo_forest_fits import (
-    RfSpec, rf_fit, predict, argmax_rows, tree_depth_leaves, accuracy, r2, require,
+    RfSpec, rf_fit, predict, argmax_rows, tree_depth_leaves, accuracy, r2,
 )
 
 comptime SK_DIR = "checks/native_tests/fixtures/trees_sk/"

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Distributed and partitioned captured programs: independent gradients,
 replica snapshots, optimizer migration and checkpoint continuation (moved
 from python/mojolearn/tests/test_distributed_program.py and
@@ -73,17 +74,17 @@ from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
 from sequence.ops import FP
-from checks.native_tests.ops_higher import tensor, op1, op2, values
+from checks.native_tests.ops_higher_common import tensor, op1, op2, values
 from checks.native_tests.core_ops_common import dims2
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from sequence.x_sequence_impl import device_executors
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, check_cases_serial, require
 
 
 comptime DISTRIBUTED_FIXTURES = 13
 comptime _LOSS_MSE = 1
-comptime _SERIAL = "sessions, distributed programs and partitions live in unlocked process-wide tables"
 
 
 def _optimizer(kind: Int, lr: Float32, weight_decay: Float32) -> OpsOptimizerRequest:
@@ -426,11 +427,22 @@ def distributed_ready_or_partition[E: Exec & Movable & Deinitable, KIND: Int](pa
         distributed_ready[E, KIND](id)
 
 
-# ---- The host column ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(DISTRIBUTED_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
+# ---- The host and device columns ----
+# Serial by nature on both columns: sessions, distributed programs and partitions live in unlocked process-wide
+# tables (the old registration's serial reason), so the fixtures run one after another; each program runs its own
+# ranks in parallel.
+def _devices() raises -> List[Int]:
+    """MOJOLEARN_DISTRIBUTED_PROGRAM_DEVICES (comma-separated physical ids), default (0,)."""
+    var text = getenv("MOJOLEARN_DISTRIBUTED_PROGRAM_DEVICES", "0")
+    var out = List[Int]()
+    for part in text.split(","):
+        out.append(Int(String(part)))
+    return out^
+
+
+def test_distributed_program() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(unit: Int) raises:
             var sid = ops_session_open[HostExec, OPS_HOST](HostExec(), False)
             try:
                 var executors = List[HostExec]()
@@ -443,25 +455,9 @@ def _run_cpu(mut report: Report) raises:
                 ops_session_close[HostExec, OPS_HOST](sid)
                 raise error
             ops_session_close[HostExec, OPS_HOST](sid)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, DISTRIBUTED_FIXTURES)
-
-
-# ---- The device column ----
-def _devices() raises -> List[Int]:
-    """MOJOLEARN_DISTRIBUTED_PROGRAM_DEVICES (comma-separated physical ids), default (0,)."""
-    var text = getenv("MOJOLEARN_DISTRIBUTED_PROGRAM_DEVICES", "0")
-    var out = List[Int]()
-    for part in text.split(","):
-        out.append(Int(String(part)))
-    return out^
-
-
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(DISTRIBUTED_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
+        check_cases_serial("distributed_program", DISTRIBUTED_FIXTURES, host_fixture)
+    else:
+        def device_fixture(unit: Int) raises:
             var sid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), False)
             try:
                 var devices = _devices()
@@ -473,20 +469,8 @@ def _run_gpu(mut report: Report) raises:
                 ops_session_close[DeviceExec, OPS_DEVICE](sid)
                 raise error
             ops_session_close[DeviceExec, OPS_DEVICE](sid)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, DISTRIBUTED_FIXTURES)
+        check_cases_serial("distributed_program", DISTRIBUTED_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_distributed_program", cpu=True, gpu=True, serial=_SERIAL, run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

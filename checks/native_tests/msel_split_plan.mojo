@@ -15,8 +15,20 @@ builds the same programs.
 
 Each case is a `test_*` of this TestSuite file (one process, its own binary); each publishes the
 host helper table first, so any one runs alone (`--only`). No Python participates.
+
+`test_train_test_split_stratify` (lane py2mojo-D, batch 5, 2026-11-22; ported from
+python/mojolearn/tests/test_ne2_search_workers.py `test_train_test_split_stratify_is_deterministic`): the plan
+`train_test_split(stratify=y, test_size=0.3, random_state=7)` builds (bindings/msel_split_door.mojo
+`msel_train_test_split` -> `msel_strat_shuffle_split(y, 1, ...)` -> `msel_plan_strat_shuffle`, then
+`msel_split_fill`), with the x_metrics host program entry in its route. The labels are the original's draw
+(`_labels(n=41, k=4, seed=9)`, stored as their sorted-label codes in `fixtures/msel_tts/` by
+`tools/py2mojo_native_fixtures_b5.py`); 41 rows give 28 train and 13 test rows (scikit-learn's ceil(0.3 n)).
+Two plans of the same inputs give the same rows word for word; train and test are disjoint and together cover
+every row. The gather of the caller's x and y by those rows stays in the Python file.
 """
 from std.testing import TestSuite
+from bindings.msel_split_plan_run import msel_plan_strat_shuffle
+from x_metrics.descriptor_host import metrics_program_host_v1
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.entry_table import entry_ref_unresolved
 from core.msel_entry_table import MselEntryKey
@@ -27,7 +39,7 @@ from bindings.msel_split_plan_run import (
     msel_plan_default_folds, msel_plan_group_kfold, msel_plan_group_set, msel_plan_indexed, msel_plan_select,
     msel_plan_time_series, msel_seed_refusal, msel_split_fill,
 )
-from checks.native_tests.testsuite_cases import require
+from checks.native_tests.testsuite_cases import require, fixture_i32
 
 
 def _route() raises -> MselSplitRoute:
@@ -216,6 +228,48 @@ def test_first_seen_and_seed() raises:
     require(refused, "a bad seed is refused where the splitter draws")
     var rng = MselSeed(7, False).rng()
     require(rng.seed == 7 and rng.draws == 0, "a seed starts at draw 0")
+
+
+comptime MSEL_TTS_DIR = "checks/native_tests/fixtures/msel_tts/"
+
+
+def _strat_split_rows(codes: List[Int32], k: Int, seed: UInt64) raises -> Filled:
+    var none = entry_ref_unresolved()
+    var route = MselSplitRoute(msel_helpers_ref(MselEntryKey(Int(GLOBAL_NUMERIC_MODE), 0)), none,
+                               metrics_program_host_v1, False, False)
+    var plan = msel_plan_strat_shuffle(route, MselCodes(Int(codes.unsafe_ptr()), len(codes), k), 1, 28, 13,
+                                       MselSeed(seed, False))
+    require(plan.splits() == 1 and plan.train_sizes[0] == 28 and plan.test_sizes[0] == 13,
+            "train_test_split stratify: one split of 28 train and 13 test rows")
+    var rows = _fill(route, plan)
+    _ = codes  # read through its address above
+    return rows^
+
+
+def test_train_test_split_stratify() raises:
+    # The publication _mojolearn_core_host makes at module init (a repeat publishes the same pointer).
+    publish_msel_helpers_host()
+    var codes = fixture_i32(MSEL_TTS_DIR + "tts-codes.i32", 41)
+    var k = Int(fixture_i32(MSEL_TTS_DIR + "tts-classes.i32", 1)[0])
+    var one = _strat_split_rows(codes, k, 7)
+    var two = _strat_split_rows(codes, k, 7)
+    for i in range(28):  # driver-loop: over a 28-row split
+        require(one.trains[0][i] == two.trains[0][i], "train_test_split stratify: train row " + String(i) + " moved: "
+                + String(one.trains[0][i]) + " then " + String(two.trains[0][i]))
+    for i in range(13):  # driver-loop: over a 13-row split
+        require(one.tests[0][i] == two.tests[0][i], "train_test_split stratify: test row " + String(i) + " moved: "
+                + String(one.tests[0][i]) + " then " + String(two.tests[0][i]))
+    var seen = List[Int](length=41, fill=0)
+    for i in range(28):  # driver-loop: over a 28-row split
+        var r = Int(one.trains[0][i])
+        require(r >= 0 and r < 41, "train_test_split stratify: train row out of range")
+        seen[r] += 1
+    for i in range(13):  # driver-loop: over a 13-row split
+        var r = Int(one.tests[0][i])
+        require(r >= 0 and r < 41, "train_test_split stratify: test row out of range")
+        seen[r] += 1
+    for r in range(41):  # driver-loop: over 41 rows
+        require(seen[r] == 1, "train_test_split stratify: row " + String(r) + " taken " + String(seen[r]) + " times")
 
 
 def main() raises:

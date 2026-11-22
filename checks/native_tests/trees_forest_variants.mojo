@@ -17,9 +17,9 @@ one case table across the host cores.
 """
 from std.memory import bitcast
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
 from checks.native_tests.py2mojo_forest_fits import (
-    RfSpec, Forest, rf_fit, predict, require, RF_ENTROPY, RF_POISSON, RF_GAMMA, RF_INVERSE_GAUSSIAN,
+    RfSpec, Forest, rf_fit, predict, RF_ENTROPY, RF_POISSON, RF_GAMMA, RF_INVERSE_GAUSSIAN,
 )
 from bindings.forest_config_run import FOREST_FEATURES_LOG2
 

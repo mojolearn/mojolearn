@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The bounded program loop over an append-only KV cache: the state a loop
 leaves does not depend on its chunk (lane fx-kv-inplace, 2026-11-18).
 
@@ -38,11 +39,12 @@ from autograd.program_io import ProgramInput
 from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, op2, values, same_words
+from checks.native_tests.ops_higher_common import tensor, op2, values, same_words
 from checks.native_tests.core_ops_common import dims2, opi
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, check_cases_serial, require
 
 
 comptime CORE_PROGRAM_LOOP_APPEND_FIXTURES = 2
@@ -173,17 +175,16 @@ def run_core_program_loop_append_fixture[E: Exec & Movable & Deinitable, KIND: I
         same_words(got[0], want[0], tag + ": the exported key/value cache differs from check_every 1's")
 
 
-# ---- The host column ----
+# ---- The host and device columns ----
 # Serial by nature: control_prepare/control_run reach a session through the
 # process-wide session table (autograd/ops_api.mojo _OPS_SESSIONS), whose
 # open/close append to and pop from unlocked lists, so concurrent sessions
 # from host tasks would race on that table (core_program_loop says the same).
 # Two fixtures of nine block steps each over a (2, 8) input, one after
-# another, each on its own session.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_PROGRAM_LOOP_APPEND_FIXTURES)
-    for fixture_id in range(CORE_PROGRAM_LOOP_APPEND_FIXTURES):
-        try:
+# another, each on its own session; on the device column they share the device context.
+def test_program_loop_append() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
             var sid = ops_session_open[HostExec, OPS_HOST](HostExec(), False)
             try:
                 run_core_program_loop_append_fixture[HostExec, OPS_HOST](sid, fixture_id)
@@ -191,17 +192,9 @@ def _run_cpu(mut report: Report) raises:
                 ops_session_close[HostExec, OPS_HOST](sid)
                 raise error
             ops_session_close[HostExec, OPS_HOST](sid)
-        except error:
-            cases.fail(fixture_id, error)
-
-
-# ---- The device column ----
-# Serial by nature, for the same session-table reason; the two fixtures share
-# the device context and run one after another, each on its own session.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_PROGRAM_LOOP_APPEND_FIXTURES)
-    for fixture_id in range(CORE_PROGRAM_LOOP_APPEND_FIXTURES):
-        try:
+        check_cases_serial("program_loop_append", CORE_PROGRAM_LOOP_APPEND_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var sid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), False)
             try:
                 run_core_program_loop_append_fixture[DeviceExec, OPS_DEVICE](sid, fixture_id)
@@ -209,19 +202,8 @@ def _run_gpu(mut report: Report) raises:
                 ops_session_close[DeviceExec, OPS_DEVICE](sid)
                 raise error
             ops_session_close[DeviceExec, OPS_DEVICE](sid)
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("program_loop_append", CORE_PROGRAM_LOOP_APPEND_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_program_loop_append", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

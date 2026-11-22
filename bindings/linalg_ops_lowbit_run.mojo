@@ -6,6 +6,8 @@ provider's ABI (unchanged); each `lin_call` site passes its operation's code
 (lane bw2-linalg, 2026-11-20: `lin_op_code`, up to fifteen String compares
 per call, is deleted)."""
 
+from bindings.tensor_view import shape_text
+
 comptime LIN_OP_GEMM = 0
 comptime LIN_OP_GEMM_BF16 = 1
 comptime LIN_OP_GEMM_INT8 = 2
@@ -28,3 +30,16 @@ comptime LIN_OP_GEMM_FUSED = 15
 # The operation count the door admits (gemm/linalg_dispatch.mojo
 # LINALG_NATIVE_OPERATION_COUNT).
 comptime LIN_OPERATION_COUNT = 16
+
+
+# Moved verbatim from bindings/lowbit_weight_run.mojo (lane bindings-inline, 2026-11-22).
+# RUN of the low-bit weight provider (providers/python/lowbit_weight_pyapi.mojo):
+# the empty-input refusal from typed shape words. No Python import
+# (tools/python_free_dirs.sh). Lane rs-shared-infra-b (2026-11-12): moved word
+# for word.
+
+def low_empty(name: String, shape: List[Int]) raises:
+    var what = "feature(s)" if len(shape) == 2 and shape[0] != 0 else "sample(s)"
+    var text = shape_text(shape)
+    raise Error("mojolearn: " + name + " is empty, shape " + text + ": Found array with 0 " + what
+        + " (shape=" + text + ") while a minimum of 1 is required.")

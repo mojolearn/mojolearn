@@ -48,10 +48,10 @@ from bindings.scaler_lifecycle_run import (
 )
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from checks.native_tests.py2mojo_host_members import (
-    HostMember, MEMBER_SCALER, PREP_SCALERS_DIR, host_route, all_close, rows_close, same_bits, require, take, take32,
+    HostMember, MEMBER_SCALER, PREP_SCALERS_DIR, host_route, all_close, rows_close, same_bits, take, take32,
 )
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, fixture_f32
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, require
 
 comptime N = 257
 comptime D = 5

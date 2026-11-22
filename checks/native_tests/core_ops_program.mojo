@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Captured programs equal the eager session word for word, moved from
 test_ops_program.py (2026-11-14): the mixture classifier's predict path and
 the Shapes section's attention product.
@@ -26,12 +27,12 @@ from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
 from sequence.ops import FP
-from checks.native_tests.ops_higher import tensor, op1, op2, scale, values, same_words
+from checks.native_tests.ops_higher_common import tensor, op1, op2, scale, values, same_words
 from checks.native_tests.core_ops_common import normal, dims2, dims3, dims4, opi
-from core.host_parallel import host_parallelize
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
 
 
 comptime CORE_OPS_PROGRAM_FIXTURES = 2
@@ -204,13 +205,13 @@ def core_ops_program_records(fixture_id: Int) -> Bool:
     return False
 
 
-# ---- The host column (was core_ops_program_cpu_suite.mojo) ----
-# Captured programs against the eager session: each fixture on its own two host sessions, the fixtures run
-# across host cores with a private failure slot each.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_OPS_PROGRAM_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
+# Captured programs against the eager session. The host column: each fixture on its own two host sessions, the fixtures across host cores. The device
+# column: DeviceExec shares sequence_ctx() and its pool, so independent concurrent sessions would race that context's
+# ownership (as in ops_higher's device column); the fixtures run one after another and each kernel keeps its own
+# parallelism.
+def test_ops_program() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
             var record = core_ops_program_records(fixture_id)
             var s = OpsSession[HostExec](HostExec(), record)
             var again = OpsSession[HostExec](HostExec(), record)
@@ -222,21 +223,9 @@ def _run_cpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, CORE_OPS_PROGRAM_FIXTURES)
-
-
-# ---- The device column (was core_ops_program_gpu_suite.mojo) ----
-# Captured programs against the eager session on the device, in order.
-#
-# DeviceExec shares sequence_ctx() and its pool, so independent concurrent
-# sessions would race that context's ownership (as in ops_higher_gpu); the
-# fixtures run one after another and each kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_OPS_PROGRAM_FIXTURES)
-    for fixture_id in range(CORE_OPS_PROGRAM_FIXTURES):
-        try:
+        check_cases("ops_program", CORE_OPS_PROGRAM_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var record = core_ops_program_records(fixture_id)
             var s = OpsSession[DeviceExec](DeviceExec(), record)
             var again = OpsSession[DeviceExec](DeviceExec(), record)
@@ -248,19 +237,8 @@ def _run_gpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("ops_program", CORE_OPS_PROGRAM_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_ops_program", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

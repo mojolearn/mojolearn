@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """SmallMLPTrainer's captured program against independent Float64 equations
 (lane tmig-training, 2026-11-14). Ported from
 `python/mojolearn/tests/test_small_mlp_numerical_edges.py` (the whole file)
@@ -63,10 +64,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from autograd.ops_api import OPS_HOST, OPS_DEVICE
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, require
 
 
-comptime SMALL_MLP_FIXTURES = 5
 comptime IN = 8
 comptime HID = 16
 comptime OUT = 3
@@ -521,69 +522,50 @@ def parallel_apply_fixture[E: Exec & Movable & Deinitable, KIND: Int](var ex: E)
     _close[E, KIND](handle)
 
 
-# ---- The host column (was training_small_mlp_cpu_suite.mojo) ----
-# SmallMLPTrainer program fixtures on the cpu column (training_small_mlp_cases.mojo).
+# ---- The host and device columns ----
+# SmallMLPTrainer program fixtures on the host column (HostExec) or the device column (DeviceExec).
 #
-# The fixtures run one after another: the program store and the session
-# registry they open into (autograd/small_mlp_program.mojo `_STORE`,
-# autograd/ops_api.mojo `ops_session_open`) are process lists appended
-# without a lock, so concurrent opens from pool workers would race. The work
-# inside each fixture is the program's own parallel kernels.
-def _run_cpu(mut report: Report) raises:
+# The fixtures run one after another (TestSuite runs the tests in order): the program store and the session
+# registry they open into (autograd/small_mlp_program.mojo `_STORE`, autograd/ops_api.mojo `ops_session_open`)
+# are process lists appended without a lock, so concurrent opens from pool workers would race. The work inside
+# each fixture is the program's own parallel kernels.
+
+
+def test_adamw() raises:
+    comptime if CPU_COLUMN_BUILD:
+        adamw_fixture[HostExec, OPS_HOST](HostExec())
+    else:
+        adamw_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
+
+
+def test_loss_and_grads() raises:
+    comptime if CPU_COLUMN_BUILD:
+        loss_and_grads_fixture[HostExec, OPS_HOST](HostExec())
+    else:
+        loss_and_grads_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
+
+
+def test_sessions() raises:
+    comptime if CPU_COLUMN_BUILD:
+        sessions_fixture[HostExec, OPS_HOST](HostExec(), HostExec())
+    else:
+        sessions_fixture[DeviceExec, OPS_DEVICE](DeviceExec(), DeviceExec())
+
+
+def test_parallel_gradient() raises:
+    comptime if CPU_COLUMN_BUILD:
+        parallel_gradient_fixture[HostExec, OPS_HOST](HostExec())
+    else:
+        parallel_gradient_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
+
+
+def test_parallel_apply() raises:
+    comptime if CPU_COLUMN_BUILD:
+        parallel_apply_fixture[HostExec, OPS_HOST](HostExec())
+    else:
+        parallel_apply_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
+
+
+def main() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SMALL_MLP_FIXTURES)
-    for unit in range(SMALL_MLP_FIXTURES):  # ordered: see the module note
-        try:
-            if unit == 0:
-                adamw_fixture[HostExec, OPS_HOST](HostExec())
-            elif unit == 1:
-                loss_and_grads_fixture[HostExec, OPS_HOST](HostExec())
-            elif unit == 2:
-                sessions_fixture[HostExec, OPS_HOST](HostExec(), HostExec())
-            elif unit == 3:
-                parallel_gradient_fixture[HostExec, OPS_HOST](HostExec())
-            else:
-                parallel_apply_fixture[HostExec, OPS_HOST](HostExec())
-        except error:
-            cases.fail(unit, error)
-
-
-# ---- The device column (was training_small_mlp_gpu_suite.mojo) ----
-# SmallMLPTrainer program fixtures on the gpu column (training_small_mlp_cases.mojo).
-#
-# The fixtures run one after another: the program store and the session
-# registry they open into (autograd/small_mlp_program.mojo `_STORE`,
-# autograd/ops_api.mojo `ops_session_open`) are process lists appended
-# without a lock, so concurrent opens from pool workers would race. The work
-# inside each fixture is the program's own parallel kernels.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SMALL_MLP_FIXTURES)
-    for unit in range(SMALL_MLP_FIXTURES):  # ordered: see the module note
-        try:
-            if unit == 0:
-                adamw_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
-            elif unit == 1:
-                loss_and_grads_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
-            elif unit == 2:
-                sessions_fixture[DeviceExec, OPS_DEVICE](DeviceExec(), DeviceExec())
-            elif unit == 3:
-                parallel_gradient_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
-            else:
-                parallel_apply_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_small_mlp", cpu=True, gpu=True, serial="", run=run_cases)
+    TestSuite.discover_tests[__functions_in_module()]().run()

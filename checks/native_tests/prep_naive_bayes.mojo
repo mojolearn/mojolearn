@@ -26,11 +26,11 @@ from bindings.prep_classify_prog_run import (
     CLS_KIND_GNB, CLS_KIND_MNB, CLS_KIND_BNB, CLS_KIND_CNB, CLS_PRIOR_FIT, CLS_PRIOR_UNIFORM,
 )
 from checks.native_tests.prep_cls_host import (
-    PREP_NB_DIR, NbModel, ClsAnswer, require, check_close, agreement, abs_words, gnb_fit, dnb_fit, cls_scores,
+    PREP_NB_DIR, NbModel, ClsAnswer, check_close, agreement, abs_words, gnb_fit, dnb_fit, cls_scores,
 )
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32
+from checks.native_tests.testsuite_cases import check_cases, fixture_f32, fixture_i32, require
 
 comptime NB_N = 600
 comptime NB_D = 6

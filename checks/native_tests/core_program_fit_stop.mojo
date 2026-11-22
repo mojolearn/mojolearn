@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Program.fit's stopping criterion on the device, moved from
 test_program_fit_stop.py (2026-11-14), through the typed entries the public
 door calls (autograd/program_entries.mojo program_fit_parameters and
@@ -25,11 +26,12 @@ from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
 from sequence.ops import FP
-from checks.native_tests.ops_higher import tensor, op2, same_words
+from checks.native_tests.ops_higher_common import tensor, op2, same_words
 from checks.native_tests.core_ops_common import normal, dims2
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, require
 
 
 comptime CORE_PROGRAM_FIT_STOP_FIXTURES = 2  # check_tol_stop, check_every_epoch
@@ -133,67 +135,31 @@ def check_every_epoch(plain: FitRun, never: FitRun) raises:
     require(never.ran == 4 and len(never.curve) == 4, "tol -1e30 runs every epoch")
 
 
-# ---- The host column (was core_program_fit_stop_cpu_suite.mojo) ----
-# Program.fit's device stopping criterion on host sessions.
+# ---- The host and device columns ----
+# Program.fit's device stopping criterion on host sessions (host column) or device sessions (device column).
 #
 # Serial by nature: program_fit_parameters/program_fit_native reach a session
 # through the process-wide session table (autograd/ops_api.mojo
 # _OPS_SESSIONS), whose open/close append to and pop from unlocked lists, so
 # concurrent sessions from host tasks would race on that table. Four tiny fits
-# (40 x 3, at most 12 epochs) run one after another.
-def _run_cpu(mut report: Report) raises:
-    var failed = 0
-    try:
+# (40 x 3, at most 12 epochs) run one after another (TestSuite runs the tests in order).
+def test_tol_stop() raises:
+    comptime if CPU_COLUMN_BUILD:
         check_tol_stop(fit_run[HostExec, OPS_HOST](HostExec(), 12, Float32(1e3), 2),
                        fit_run[HostExec, OPS_HOST](HostExec(), 3, Float32(0.0), 0))
-    except error:
-        print("FAIL core_program_fit_stop_cpu fixture 0", String(error))
-        failed += 1
-    try:
-        check_every_epoch(fit_run[HostExec, OPS_HOST](HostExec(), 4, Float32(0.0), 0),
-                          fit_run[HostExec, OPS_HOST](HostExec(), 4, Float32(-1e30), 1))
-    except error:
-        print("FAIL core_program_fit_stop_cpu fixture 1", String(error))
-        failed += 1
-    require(failed == 0, "core_program_fit_stop_cpu failed " + String(failed) + " of 2")
-    print("PASS core_program_fit_stop_cpu: 2 fixtures (session table: serial)")
-
-
-# ---- The device column (was core_program_fit_stop_gpu_suite.mojo) ----
-# Program.fit's device stopping criterion on device sessions.
-#
-# Serial by nature: program_fit_parameters/program_fit_native reach a session
-# through the process-wide session table (autograd/ops_api.mojo
-# _OPS_SESSIONS), whose open/close append to and pop from unlocked lists, so
-# concurrent sessions from host tasks would race on that table. Four tiny fits
-# (40 x 3, at most 12 epochs) run one after another.
-def _run_gpu(mut report: Report) raises:
-    var failed = 0
-    try:
+    else:
         check_tol_stop(fit_run[DeviceExec, OPS_DEVICE](DeviceExec(), 12, Float32(1e3), 2),
                        fit_run[DeviceExec, OPS_DEVICE](DeviceExec(), 3, Float32(0.0), 0))
-    except error:
-        print("FAIL core_program_fit_stop_gpu fixture 0", String(error))
-        failed += 1
-    try:
+
+
+def test_every_epoch() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_every_epoch(fit_run[HostExec, OPS_HOST](HostExec(), 4, Float32(0.0), 0),
+                          fit_run[HostExec, OPS_HOST](HostExec(), 4, Float32(-1e30), 1))
+    else:
         check_every_epoch(fit_run[DeviceExec, OPS_DEVICE](DeviceExec(), 4, Float32(0.0), 0),
                           fit_run[DeviceExec, OPS_DEVICE](DeviceExec(), 4, Float32(-1e30), 1))
-    except error:
-        print("FAIL core_program_fit_stop_gpu fixture 1", String(error))
-        failed += 1
-    require(failed == 0, "core_program_fit_stop_gpu failed " + String(failed) + " of 2")
-    print("PASS core_program_fit_stop_gpu: 2 fixtures (session table: serial)")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_program_fit_stop", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

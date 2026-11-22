@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Validation, best-state restore and captured-program training (moved from
 python/mojolearn/tests/test_autograd_usability.py, lane tmig-training-2,
 2026-11-15), through the entries the public doors call: the Sequential fit
@@ -57,11 +58,12 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.ops_higher import tensor, op2, linear, loss, values
+from checks.native_tests.ops_higher_common import tensor, op2, linear, loss, values
 from checks.native_tests.core_ops_common import normal, dims2, dims3
 from checks.native_tests.training_sequential_common import SeqModel, L_LINEAR
 from checks.native_tests.training_check_common import same_words
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
 
 
 comptime USABILITY_CASES = 7
@@ -357,21 +359,26 @@ def _open_recording[KIND: Int]() raises -> Int:
         return ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), True)
 
 
-# ---- The host column ----
-# The three Sequential cases run across host cores on private executors; the
-# four program cases then run in order (process-wide session table).
-def _run_cpu(mut report: Report) raises:
-    var seq = report.cases(3)
-    def task(unit: Int) {imm seq}:
-        try:
+# ---- The host and device columns ----
+# The host column: the three Sequential cases run across host cores on private executors; the four program cases run
+# in order (process-wide session table). The device column: every case runs in order on the one device. TestSuite
+# runs the two tests in this order.
+def test_sequential_usability() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_case(unit: Int) raises:
             var ex = HostExec()
             run_sequential_case(ex, unit)
-        except error:
-            seq.fail(unit, error)
-    report.parallel(task, 3)
-    var prog = report.cases(4)
-    for unit in range(4):  # driver-loop: over program cases (unlocked session table)
-        try:
+        check_cases("sequential", 3, host_case)
+    else:
+        var ex = DeviceExec()
+        def device_case(unit: Int) raises {mut ex}:
+            run_sequential_case(ex, unit)
+        check_cases_serial("sequential", 3, device_case)
+
+
+def test_program_usability() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_case(unit: Int) raises:
             var sid = ops_session_open[HostExec, OPS_HOST](HostExec(), False)
             try:
                 run_program_case[HostExec, OPS_HOST](sid, unit + 3)
@@ -379,23 +386,9 @@ def _run_cpu(mut report: Report) raises:
                 ops_session_close[HostExec, OPS_HOST](sid)
                 raise error
             ops_session_close[HostExec, OPS_HOST](sid)
-        except error:
-            prog.fail(unit, error)
-
-
-# ---- The device column ----
-# Every case runs in order on the one device.
-def _run_gpu(mut report: Report) raises:
-    var ex = DeviceExec()
-    var seq = report.cases(3)
-    for unit in range(3):  # driver-loop: over cases on the one device
-        try:
-            run_sequential_case(ex, unit)
-        except error:
-            seq.fail(unit, error)
-    var prog = report.cases(4)
-    for unit in range(4):  # driver-loop: over program cases on the one device
-        try:
+        check_cases_serial("program", 4, host_case)
+    else:
+        def device_case(unit: Int) raises:
             var sid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), False)
             try:
                 run_program_case[DeviceExec, OPS_DEVICE](sid, unit + 3)
@@ -403,19 +396,8 @@ def _run_gpu(mut report: Report) raises:
                 ops_session_close[DeviceExec, OPS_DEVICE](sid)
                 raise error
             ops_session_close[DeviceExec, OPS_DEVICE](sid)
-        except error:
-            prog.fail(unit, error)
+        check_cases_serial("program", 4, device_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_autograd_usability", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
