@@ -240,17 +240,11 @@ from checks.native_tests.entry_table_contract import register as register_entry_
 from checks.native_tests.exec_owned_reuse import register as register_exec_owned_reuse
 from checks.native_tests.finite_scan import register as register_finite_scan
 from checks.native_tests.fitted_digest import register as register_fitted_digest
-from checks.native_tests.gp_contract import register as register_gp_contract
-from checks.native_tests.gp_label_owner import register as register_gp_label_owner
-from checks.native_tests.gp_owner import register as register_gp_owner
-from checks.native_tests.gp_state import register as register_gp_state
 from checks.native_tests.hdbscan_plan import register as register_hdbscan_plan
 from checks.native_tests.hierarchy_connectivity_plan import register as register_hierarchy_connectivity_plan
 from checks.native_tests.host_entry_forest import register as register_host_entry_forest
 from checks.native_tests.ipca_contract import register as register_ipca_contract
 from checks.native_tests.ipca_state import register as register_ipca_state
-from checks.native_tests.kde_contract import register as register_kde_contract
-from checks.native_tests.kde_state import register as register_kde_state
 from checks.native_tests.kmeans_contract import register as register_kmeans_contract
 from checks.native_tests.kmeans_variants_contract import register as register_kmeans_variants_contract
 from checks.native_tests.kmeans_variants_lease import register as register_kmeans_variants_lease
@@ -267,10 +261,6 @@ from checks.native_tests.linear_boundary_contracts import register as register_l
 from checks.native_tests.linear_entry_production import register as register_linear_entry_production
 from checks.native_tests.linear_model_state import register as register_linear_model_state
 from checks.native_tests.lof_plan_contract import register as register_lof_plan_contract
-from checks.native_tests.logistic_config import register as register_logistic_config
-from checks.native_tests.logistic_contracts import register as register_logistic_contracts
-from checks.native_tests.logistic_model_state import register as register_logistic_model_state
-from checks.native_tests.logistic_query_width import register as register_logistic_query_width
 from checks.native_tests.lr_schedule_check import register as register_lr_schedule_check
 from checks.native_tests.mani_tsne_run import register as register_mani_tsne_run
 from checks.native_tests.mani_umap_run import register as register_mani_umap_run
@@ -299,8 +289,6 @@ from checks.native_tests.prep_entry_table import register as register_prep_entry
 from checks.native_tests.qn_door_run import register as register_qn_door_run
 from checks.native_tests.registry_epoch import register as register_registry_epoch
 from checks.native_tests.ridge_multi_entry import register as register_ridge_multi_entry
-from checks.native_tests.samba_entry_table import register as register_samba_entry_table
-from checks.native_tests.seq_opt_entry import register as register_seq_opt_entry
 from checks.native_tests.sequence_input_plan_check import register as register_sequence_input_plan_check
 from checks.native_tests.spectral_contract import register as register_spectral_contract
 from checks.native_tests.spectral_state import register as register_spectral_state
@@ -311,8 +299,6 @@ from checks.native_tests.trees_entry_forest import register as register_trees_en
 from checks.native_tests.trees_entry_gbdt import register as register_trees_entry_gbdt
 from checks.native_tests.trees_entry_glue import register as register_trees_entry_glue
 from checks.native_tests.tsqr_host_ownership import register as register_tsqr_host_ownership
-from checks.native_tests.tsvd_contract import register as register_tsvd_contract
-from checks.native_tests.tsvd_lease_state import register as register_tsvd_lease_state
 from checks.native_tests.x_linear_door_run import register as register_x_linear_door_run
 from checks.native_tests.xcnn_bn_run import register as register_xcnn_bn_run
 from checks.native_tests.xcnn_classifier_run import register as register_xcnn_classifier_run
@@ -530,7 +516,6 @@ from checks.native_tests.hdbscan_sparse_mr_check import register as register_hdb
 from checks.native_tests.hierarchy_linkage_host_check import register as register_hierarchy_linkage_host_check
 from checks.native_tests.holtwinters_hw_estimate_check import register as register_holtwinters_hw_estimate_check
 from checks.native_tests.holtwinters_hw_predict_ptr_check import register as register_holtwinters_hw_predict_ptr_check
-from checks.native_tests.ivf_ops_table import register as register_ivf_ops_table
 from checks.native_tests.kernel_methods_nystroem_basis_sort_check import register as register_kernel_methods_nystroem_basis_sort_check
 from checks.native_tests.metrics_host_binary_ranking_check import register as register_metrics_host_binary_ranking_check
 from checks.native_tests.metrics_host_rand_score_check import register as register_metrics_host_rand_score_check
@@ -798,17 +783,11 @@ def all_checks() -> List[Check]:
     checks.append(register_exec_owned_reuse())
     checks.append(register_finite_scan())
     checks.append(register_fitted_digest())
-    checks.append(register_gp_contract())
-    checks.append(register_gp_label_owner())
-    checks.append(register_gp_owner())
-    checks.append(register_gp_state())
     checks.append(register_hdbscan_plan())
     checks.append(register_hierarchy_connectivity_plan())
     checks.append(register_host_entry_forest())
     checks.append(register_ipca_contract())
     checks.append(register_ipca_state())
-    checks.append(register_kde_contract())
-    checks.append(register_kde_state())
     checks.append(register_kmeans_contract())
     checks.append(register_kmeans_variants_contract())
     checks.append(register_kmeans_variants_lease())
@@ -825,10 +804,6 @@ def all_checks() -> List[Check]:
     checks.append(register_linear_entry_production())
     checks.append(register_linear_model_state())
     checks.append(register_lof_plan_contract())
-    checks.append(register_logistic_config())
-    checks.append(register_logistic_contracts())
-    checks.append(register_logistic_model_state())
-    checks.append(register_logistic_query_width())
     checks.append(register_lr_schedule_check())
     checks.append(register_mani_tsne_run())
     checks.append(register_mani_umap_run())
@@ -843,7 +818,6 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_local_run())
     checks.append(register_neighbors_semi_run())
     checks.append(register_neighbors_split_run())
-    checks.append(register_ivf_ops_table())
     checks.append(register_neural_entry())
     checks.append(register_nmf_contract())
     checks.append(register_nmf_state())
@@ -858,8 +832,6 @@ def all_checks() -> List[Check]:
     checks.append(register_qn_door_run())
     checks.append(register_registry_epoch())
     checks.append(register_ridge_multi_entry())
-    checks.append(register_samba_entry_table())
-    checks.append(register_seq_opt_entry())
     checks.append(register_sequence_input_plan_check())
     checks.append(register_spectral_contract())
     checks.append(register_spectral_state())
@@ -870,8 +842,6 @@ def all_checks() -> List[Check]:
     checks.append(register_trees_entry_gbdt())
     checks.append(register_trees_entry_glue())
     checks.append(register_tsqr_host_ownership())
-    checks.append(register_tsvd_contract())
-    checks.append(register_tsvd_lease_state())
     checks.append(register_x_linear_door_run())
     checks.append(register_xcnn_bn_run())
     checks.append(register_xcnn_classifier_run())
