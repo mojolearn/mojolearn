@@ -1191,29 +1191,30 @@ comptime _VOTE_BLOCK = 3      # a transform block: float32 (n, c) predictions
 
 struct _VoteUnpack(Movable):
     """What `_vote_unpack` read: the typed members, the held native states
-    they point into (closed by `_vote_close`), the Python owners of the door
-    blocks, and whether every native member may run with no GIL."""
+    they point into (closed by `_vote_close`; every one may run with no
+    GIL), and the Python owners of the door blocks."""
     var members: List[VoteMember]
     var opened: List[MemberHeldCall]
     var keep: PythonObject
     var native: Int
-    var gil_free: Bool
 
     def __init__(out self) raises:
         self.members = List[VoteMember]()
         self.opened = List[MemberHeldCall]()
         self.keep = Python.list()
         self.native = 0
-        self.gil_free = True
 
 
 def _vote_door(member: PythonObject, kind: Int, Xa: PythonObject, n: Int, weight: Float64, keep: PythonObject,
-               context: PythonObject) raises -> VoteMember:
+               context: PythonObject, answer: PythonObject) raises -> VoteMember:
     """One member's block from its own door (the old per-member path, which
-    raises the estimator's own words), its owners kept in `keep`."""
+    raises the estimator's own words), its owners kept in `keep`. `answer`:
+    the Array its held native state already wrote (`member_held_run`), else
+    None and the door is called."""
     if kind == _VOTE_SOFT:
-        var xa = admit_f32(meta_member_call(member, "predict_proba", Python.tuple(Xa), context), 2,
-                           "sub-estimator output", context, finite=False)
+        var scores = answer if answer is not None else meta_member_call(member, "predict_proba", Python.tuple(Xa),
+                                                                         context)
+        var xa = admit_f32(scores, 2, "sub-estimator output", context, finite=False)
         var cols = _sub_cols(member, context)
         _ = py_call(keep.append, xa.array)
         _ = py_call(keep.append, cols)
@@ -1222,20 +1223,23 @@ def _vote_door(member: PythonObject, kind: Int, Xa: PythonObject, n: Int, weight
         return out^
     if kind == _VOTE_HARD:
         var codes: PythonObject
-        if _forest_classifier_member(member, context):
+        if answer is not None:
+            codes = answer if String(answer.dtype) == "<i4" else _i32_vec(answer, "codes", context)
+        elif _forest_classifier_member(member, context):
             codes = _member_codes(member, Xa, context)
         else:
             codes = _i32_vec(meta_member_call(member, "predict", Python.tuple(Xa), context), "codes", context)
         _ = py_call(keep.append, codes)
         return VoteMember(trees_address(codes), 1, 0, weight)
     if kind == _VOTE_REGRESS:
-        var xa = admit_f32(meta_member_call(member, Python.tuple(Xa), context), 1, "sub-estimator output", context,
-                           finite=False)
+        var xa = admit_f32(answer if answer is not None else meta_member_call(member, Python.tuple(Xa), context), 1,
+                           "sub-estimator output", context, finite=False)
         _ = py_call(keep.append, xa.array)
         var out = VoteMember(xa.address, 1, 0, weight)
         _ = xa^
         return out^
-    var blk = _out2d(meta_member_call(member, Python.tuple(Xa), context), n, context)
+    var blk = _out2d(answer if answer is not None else meta_member_call(member, Python.tuple(Xa), context), n,
+                     context)
     _ = py_call(keep.append, blk.array)
     var out = VoteMember(blk.address, blk.cols, 0, weight)
     _ = blk^
@@ -1275,6 +1279,17 @@ def _vote_unpack_members(mut got: _VoteUnpack, members: PythonObject, Xa: Python
         if native:
             var opened = _member_open(e, Xa, operation, classifier and kind != _VOTE_BLOCK, context,
                                       1 if kind == _VOTE_REGRESS else 0)
+            if opened.served and not opened.gil_free:
+                # A kind that must run with the GIL held answers here, on the
+                # public thread with the GIL held, as before the split; RUN
+                # then holds no lock any member call released before.
+                var answer = PythonObject(None)
+                try:
+                    answer = member_held_run(opened, trees_address(Xa), n, _cols(Xa), context)
+                finally:
+                    member_held_close(opened)
+                got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context, answer))
+                continue
             if opened.served:
                 var class_cols = 0
                 if kind == _VOTE_SOFT:
@@ -1285,11 +1300,10 @@ def _vote_unpack_members(mut got: _VoteUnpack, members: PythonObject, Xa: Python
                 # (`_vote_plans`): `got.opened` may still grow here.
                 got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
                                               opened.dtype, class_cols, weight))
-                got.gil_free = got.gil_free and opened.gil_free
                 got.native += 1
                 got.opened.append(opened^)
                 continue
-        got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context))
+        got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context, PythonObject(None)))
 
 
 def _vote_close(mut got: _VoteUnpack):
@@ -1300,8 +1314,8 @@ def _vote_close(mut got: _VoteUnpack):
 def _vote_run(model: PythonObject, Xa: PythonObject, kind: Int, classifier: Bool, soft: Bool, k: Int,
               weights: PythonObject, glue: EntryRef, acc: Int, codes: Int, width: Int,
               context: PythonObject) raises:
-    """UNPACK, RUN with the GIL released when every native member may run
-    without it (a mix runs held, as each such member's call ran before), and
+    """UNPACK, RUN with the GIL released when any member is native (each is
+    of a kind that may run without it: the others answered in UNPACK), and
     the fallback rule: a native member that refuses is asked through its door
     (which raises the estimator's words) and the vote runs again."""
     var got = _vote_unpack(model, Xa, kind, classifier, weights, context)
@@ -1311,7 +1325,7 @@ def _vote_run(model: PythonObject, Xa: PythonObject, kind: Int, classifier: Bool
     while True:  # driver-loop: over refusals (at most one round per native member)
         var refused = VOTE_ALL_ANSWERED
         try:
-            if got.native > 0 and got.gil_free:
+            if got.native > 0:
                 with GILReleased(Python()):
                     refused = _vote_dispatch(glue, rows, got.members, kind, soft, k, acc, codes, width)
             else:
@@ -1322,7 +1336,8 @@ def _vote_run(model: PythonObject, Xa: PythonObject, kind: Int, classifier: Bool
         if refused == VOTE_ALL_ANSWERED:
             break
         var weight = got.members[refused].weight
-        got.members[refused] = _vote_door(members[refused], kind, Xa, rows.n, weight, got.keep, context)
+        got.members[refused] = _vote_door(members[refused], kind, Xa, rows.n, weight, got.keep, context,
+                                          PythonObject(None))
         got.native -= 1
         _vote_zero(acc, rows.n * (width if width > 0 else (1 if kind == _VOTE_REGRESS else k)))
     _vote_close(got)
