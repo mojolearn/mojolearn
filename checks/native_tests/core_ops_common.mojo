@@ -17,7 +17,11 @@ from std.memory import bitcast
 from autograd.ops_api import OpsSession
 from autograd.rankn import ShapeN
 from sequence.exec_trait import Exec
-from checks.native_tests.runner import require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 def _mix(x: UInt64) -> UInt64:

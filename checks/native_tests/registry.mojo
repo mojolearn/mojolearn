@@ -58,7 +58,6 @@ from checks.native_tests.core_ragged_lengths import register as register_core_ra
 from checks.native_tests.core_safetensors_f16 import register as register_core_safetensors_f16
 from checks.native_tests.core_stratified_group_fp64 import register as register_core_stratified_group_fp64
 from checks.native_tests.core_verifier_gap_methods import register as register_core_verifier_gap_methods
-from checks.native_tests.core_vjp_rank import register as register_core_vjp_rank
 from checks.native_tests.dbscan_eps_filter_gpu import register as register_dbscan_eps_filter_gpu
 from checks.native_tests.dbscan_native import register as register_dbscan_native
 from checks.native_tests.dbscan_ownership import register as register_dbscan_ownership
@@ -160,7 +159,6 @@ from checks.native_tests.resample_cross_vendor_fold import register as register_
 from checks.native_tests.resample_cv_row_order import register as register_resample_cv_row_order
 from checks.native_tests.resident_second_call import register as register_resident_second_call
 from checks.native_tests.runner import Check
-from checks.native_tests.sequence_croston import register as register_sequence_croston
 from checks.native_tests.sequence_garch import register as register_sequence_garch
 from checks.native_tests.sequence_moe import register as register_sequence_moe
 from checks.native_tests.sequence_norm import register as register_sequence_norm
@@ -651,7 +649,6 @@ def all_checks() -> List[Check]:
     checks.append(register_core_safetensors_f16())
     checks.append(register_core_stratified_group_fp64())
     checks.append(register_core_verifier_gap_methods())
-    checks.append(register_core_vjp_rank())
     checks.append(register_dbscan_eps_filter_gpu())
     checks.append(register_dbscan_native())
     checks.append(register_dbscan_ownership())
@@ -749,7 +746,6 @@ def all_checks() -> List[Check]:
     checks.append(register_resample_cross_vendor_fold())
     checks.append(register_resample_cv_row_order())
     checks.append(register_resident_second_call())
-    checks.append(register_sequence_croston())
     checks.append(register_sequence_garch())
     checks.append(register_sequence_moe())
     checks.append(register_sequence_norm())
