@@ -571,7 +571,8 @@ class Sequential(_CheckMixin):
             Targets: (n_samples,) or (n_samples, n_outputs) for ``mse`` and
             ``huber``; one label per row for ``cross_entropy`` (any number
             of classes, one model output per class) and ``bce_with_logits``
-            (two classes, one model output).
+            (two classes, one model output); the ``(n_samples, length)``
+            int32 next-token ids for ``token_cross_entropy``.
         epochs : int, default 10
             Passes over the data (with ``resume=True``, passes added to
             the ones already run).
