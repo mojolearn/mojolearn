@@ -129,3 +129,11 @@ Session.lstm	added 2026-11-19, not yet in a release verification
 Session.gru	added 2026-11-19, not yet in a release verification
 Session.rnn	added 2026-11-19, not yet in a release verification
 check	added 2026-11-20, not yet run from an installed wheel on a GPU (also skips the estimator method `.check`, conf.py _skip_member by name)
+Sequential.conv1d	seq-blocks 1-D blocks: no verify lane or GPU column yet
+Sequential.max_pool1d	seq-blocks 1-D blocks: no verify lane or GPU column yet
+Sequential.avg_pool1d	seq-blocks 1-D blocks: no verify lane or GPU column yet
+Sequential.adaptive_avg_pool1d	seq-blocks 1-D blocks: no verify lane or GPU column yet
+Sequential.branch	seq-blocks containers: no verify lane or GPU column yet
+Sequential.concat	seq-blocks containers: no verify lane or GPU column yet
+Sequential.residual_block	seq-blocks containers: no verify lane or GPU column yet
+Sequential.parallel	seq-blocks containers: no verify lane or GPU column yet
