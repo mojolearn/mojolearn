@@ -87,3 +87,18 @@ already import `std.testing` for its assertions; none uses `TestSuite`.
 When: right after the proving run is green on the integration build, in the same change as the wrapper cut. Proof:
 the same test names as before, full native run green on the CPU box and the L40S. Then the 164 numeric Python
 tests move into these suites (section 1), each Python test deleted only after its Mojo suite is green.
+
+## 6. Security basics (Andrew, 2026-11-22: only the easy items of the release-infrastructure list)
+
+Three small items, none of which changes product code. Not before the 0.8.67 verification; each is days, not weeks.
+
+- `SECURITY.md` and a short threat model: how to report, which versions are supported, and who attacks what (a
+  malicious model or checkpoint file, a compromised build, a poisoned dependency). Writing only.
+- Verifiable build provenance for the PyPI wheels: PyPI Trusted Publishing and GitHub artifact attestations on the
+  release workflow, so each wheel carries a signed statement of the commit and workflow that built it. Say
+  "verifiable provenance", not "reproducible builds" (bit-for-bit rebuilds depend on the compiler and are not claimed).
+- Static analysis where a ready tool exists: CodeQL on the Python package and on the Actions workflows. The Mojo
+  kernels have no off-the-shelf analyser; the repo's own audits (freed-before-use, math lint) are named as that layer.
+
+Left out on purpose (not easy): hardened input and checkpoint parsing with fuzzing of every loader, and the CI/CD
+hardening pass (actions pinned by hash, least-privilege tokens, box credentials).
