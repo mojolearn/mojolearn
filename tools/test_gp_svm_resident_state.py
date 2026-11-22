@@ -42,9 +42,14 @@ class ResidentSourceContract(unittest.TestCase):
         self.assertNotIn("py_setitem(fields", lease)
         self.assertIn("gp_resident_lease(model, _GPR_RESIDENT_SLOT,", _read("bindings/gp_regressor_native_door.mojo"))
         self.assertIn("gp_resident_lease(model, _GPC_RESIDENT_SLOT,", _read("bindings/gp_classifier_native_door.mojo"))
-        svc = _read("bindings/svc_kernel_native_door.mojo")
-        self.assertIn('"svc_predict_resident"', svc)
-        self.assertIn('"svr_predict_resident"', svc)
+        # The kernel-SVM door was split into UNPACK / RUN files: the resident
+        # entries are connected natively (no name lookup through CPython), and
+        # each UNPACK takes the lease of the fitted state for a device query.
+        svc = _read("bindings/svc_kernel_query_unpack.mojo")
+        self.assertIn('fitted_resident_lease(model, _SVC_RESIDENT_SLOT, binding, "svm_resident_lease", mirrors)', svc)
+        svr = _read("bindings/svc_kernel_svr_unpack.mojo")
+        self.assertIn('neural_descriptor_entry(binding, "svr_predict_resident", False)', svr)
+        self.assertIn('svr_resident_pin(model, _SVR_RESIDENT_SLOT, binding, connection, mirrors)', svr)
 
     def test_bindings_register_the_entries(self):
         gp = _read("bindings/_mojolearn_gp.mojo")
