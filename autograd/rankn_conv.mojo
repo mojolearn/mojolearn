@@ -93,6 +93,51 @@ def rankn_conv2d[E: Exec](
         The output, shape (N, out_channels, OH, OW) with
         OH = (H + 2 padding - kh) // stride + 1 and OW likewise.
     """
+    return _rankn_conv(tape, ex, x, weight, bias, stride, stride, padding, padding, groups)
+
+
+def rankn_conv1d[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor] = None,
+    stride: Int = 1, padding: Int = 0, groups: Int = 1,
+) raises -> Tensor:
+    """One-dimensional convolution (cross-correlation) of a batch of sequences.
+
+    The same node as rankn_conv2d over (N, C, 1, L) with a (OC, C // groups, 1, K) kernel,
+    step (1, stride) and pads (0, padding): one im2col, one GEMM chain over the C // groups K
+    terms, one output launch, and the conv2d backward.
+
+    Args:
+        tape: The tape that records the operation.
+        ex: The executor.
+        x: The input, shape (N, C, L).
+        weight: The kernels, shape (out_channels, C // groups, K).
+        bias: Optional, out_channels values added to each output channel.
+        stride: The step between windows.
+        padding: Zeros added at both ends of each sequence.
+        groups: The number of channel groups; it divides C and out_channels.
+
+    Returns:
+        The output, shape (N, out_channels, OL), OL = (L + 2 padding - K) // stride + 1.
+    """
+    var sx = tape.shape_of(x)
+    var sw = tape.shape_of(weight)
+    if sx.ndim != 3:
+        raise Error("conv1d: x must be a rank-3 tensor")
+    if sw.ndim != 3:
+        raise Error("conv1d: weight must be a rank-3 tensor")
+    var x4 = tape.view_nd(ex, x, _shape4(sx.d[0], sx.d[1], 1, sx.d[2]))
+    var w4 = tape.view_nd(ex, weight, _shape4(sw.d[0], sw.d[1], 1, sw.d[2]))
+    var y4 = _rankn_conv(tape, ex, x4, w4, bias, 1, stride, 0, padding, groups)
+    var sy = tape.shape_of(y4)
+    return tape.view_nd(ex, y4, _shape3(sy.d[0], sy.d[1], sy.d[3]))
+
+
+def _rankn_conv[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, weight: Tensor, bias: Optional[Tensor],
+    stride_h: Int, stride_w: Int, padding_h: Int, padding_w: Int, groups: Int,
+) raises -> Tensor:
+    """rankn_conv2d with the height and width steps and pads given apart (x_cnn's CP_* words hold
+    them apart); the one convolution of the tape, used by conv2d and conv1d."""
     var sx = _dims4(tape, x, "conv2d: x")
     var sw = _dims4(tape, weight, "conv2d: weight")
     var N = sx.d[0]
@@ -111,14 +156,14 @@ def rankn_conv2d[E: Exec](
             raise Error("conv2d: groups must divide the input channels and out_channels")
         if sw.d[1] * groups != C:
             raise Error("conv2d: weight's second dimension must equal x's channels // groups")
-    if stride <= 0 or padding < 0:
+    if stride_h <= 0 or stride_w <= 0 or padding_h < 0 or padding_w < 0:
         raise Error("conv2d: stride must be positive and padding non-negative")
     var has_bias = Bool(bias)
     if has_bias:
         var b = bias.value()
         if tape.rows(b) * tape.cols(b) != OC:
             raise Error("conv2d: bias must hold out_channels values")
-    var raw: List[Int] = [N, C, H, W, OC, KH, KW, stride, stride, padding, padding, 1, 1, 0, 0,
+    var raw: List[Int] = [N, C, H, W, OC, KH, KW, stride_h, stride_w, padding_h, padding_w, 1, 1, 0, 0,
                           1 if has_bias else 0, 0]
     var block = conv_params(raw)
     var OH = Int(block[CP_OH])
@@ -192,11 +237,26 @@ def _pool_block(sx: ShapeN, kernel_size: Int, stride: Int, padding: Int) raises 
     if kernel_size <= 0 or stride < 0 or padding < 0:
         raise Error("pool: kernel_size must be positive, stride and padding non-negative")
     var s = kernel_size if stride == 0 else stride
+    return _pool_block_hw(sx, kernel_size, kernel_size, s, s, padding, padding)
+
+
+def _pool_block_hw(sx: ShapeN, kh: Int, kw: Int, sh: Int, sw: Int, ph: Int, pw: Int) raises -> List[Int32]:
     # [N, C, H, W, KH, KW, SH, SW, PH, PW, DH, DW, OH, OW, count_include_pad,
     #  reverse, ceil_mode, divisor_override]
-    var raw: List[Int] = [sx.d[0], sx.d[1], sx.d[2], sx.d[3], kernel_size, kernel_size, s, s,
-                          padding, padding, 1, 1, 0, 0, 1, 0, 0, 0]
+    var raw: List[Int] = [sx.d[0], sx.d[1], sx.d[2], sx.d[3], kh, kw, sh, sw,
+                          ph, pw, 1, 1, 0, 0, 1, 0, 0, 0]
     return pool_params(raw)
+
+
+def _pool_block_1d(sx: ShapeN, kernel_size: Int, stride: Int, padding: Int) raises -> List[Int32]:
+    """The PP_* words of a 1-D pool over (N, C, 1, L): window (1, kernel_size),
+    step (1, stride; 0 means kernel_size), pads (0, padding)."""
+    if kernel_size <= 0 or stride < 0 or padding < 0:
+        raise Error("pool1d: kernel_size must be positive, stride and padding non-negative")
+    if 2 * padding > kernel_size:
+        raise Error("pool1d: padding must be at most half of kernel_size")
+    var s = kernel_size if stride == 0 else stride
+    return _pool_block_hw(sx, 1, kernel_size, 1, s, 0, padding)
 
 
 def rankn_max_pool2d[E: Exec](
@@ -221,26 +281,7 @@ def rankn_max_pool2d[E: Exec](
         The output, shape (N, C, OH, OW).
     """
     var sx = _dims4(tape, x, "max_pool2d: x")
-    var block = _pool_block(sx, kernel_size, stride, padding)
-    var OH = Int(block[PP_OH])
-    var OW = Int(block[PP_OW])
-    var count = sx.d[0] * sx.d[1] * OH * OW
-    var desc = tape.descriptor(ex, _words(block))
-    var xv = tape.value_of(ex, x)
-    var out = tape.reserve(ex, count)
-    var winners = tape.reserve(ex, count)
-    var a = Args()
-    a.p0 = xv
-    a.p1 = out
-    a.p2 = winners
-    a.p11 = desc
-    ex.launch[OP_RNV_MAXPOOL_FWD](a, count)
-    var saved = Args()
-    saved.p10 = winners
-    saved.p11 = desc
-    saved.i4 = sx.count()
-    saved.i5 = 1 if (tape.is_recording() and tape.requires_grad(x)) else 0
-    return tape.custom_nd(ex, [x], out, _shape4(sx.d[0], sx.d[1], OH, OW), RN_MAXPOOL2D, saved)
+    return _max_pool(tape, ex, x, sx, _pool_block(sx, kernel_size, stride, padding))
 
 
 def rankn_avg_pool2d[E: Exec](
@@ -263,7 +304,32 @@ def rankn_avg_pool2d[E: Exec](
         The output, shape (N, C, OH, OW).
     """
     var sx = _dims4(tape, x, "avg_pool2d: x")
-    var block = _pool_block(sx, kernel_size, stride, padding)
+    return _avg_pool(tape, ex, x, sx, _pool_block(sx, kernel_size, stride, padding))
+
+
+def _max_pool[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, sx: ShapeN, block: List[Int32]) raises -> Tensor:
+    var OH = Int(block[PP_OH])
+    var OW = Int(block[PP_OW])
+    var count = sx.d[0] * sx.d[1] * OH * OW
+    var desc = tape.descriptor(ex, _words(block))
+    var xv = tape.value_of(ex, x)
+    var out = tape.reserve(ex, count)
+    var winners = tape.reserve(ex, count)
+    var a = Args()
+    a.p0 = xv
+    a.p1 = out
+    a.p2 = winners
+    a.p11 = desc
+    ex.launch[OP_RNV_MAXPOOL_FWD](a, count)
+    var saved = Args()
+    saved.p10 = winners
+    saved.p11 = desc
+    saved.i4 = sx.count()
+    saved.i5 = 1 if (tape.is_recording() and tape.requires_grad(x)) else 0
+    return tape.custom_nd(ex, [x], out, _shape4(sx.d[0], sx.d[1], OH, OW), RN_MAXPOOL2D, saved)
+
+
+def _avg_pool[E: Exec](mut tape: Tape, mut ex: E, x: Tensor, sx: ShapeN, block: List[Int32]) raises -> Tensor:
     var OH = Int(block[PP_OH])
     var OW = Int(block[PP_OW])
     var count = sx.d[0] * sx.d[1] * OH * OW
@@ -280,3 +346,69 @@ def rankn_avg_pool2d[E: Exec](
     saved.i4 = sx.count()
     saved.i5 = 1 if (tape.is_recording() and tape.requires_grad(x)) else 0
     return tape.custom_nd(ex, [x], out, _shape4(sx.d[0], sx.d[1], OH, OW), RN_AVGPOOL2D, saved)
+
+
+def _shape3(a: Int, b: Int, c: Int) -> ShapeN:
+    var dims = Array[Int, RN_MAX_RANK](fill=1)
+    dims[0] = a
+    dims[1] = b
+    dims[2] = c
+    return ShapeN(3, dims)
+
+
+def rankn_max_pool1d[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, kernel_size: Int, stride: Int = 0, padding: Int = 0,
+) raises -> Tensor:
+    """One-dimensional max pooling of a batch of sequences.
+
+    Each output is the largest value of its kernel_size window; padded
+    positions are never chosen, and of tied values the first receives the
+    gradient. The max_pool2d node over (N, C, 1, L).
+
+    Args:
+        tape: The tape that records the operation.
+        ex: The executor.
+        x: The input, shape (N, C, L).
+        kernel_size: The window's length.
+        stride: The step between windows; 0 means kernel_size.
+        padding: Positions added at both ends (at most half of kernel_size).
+
+    Returns:
+        The output, shape (N, C, OL).
+    """
+    var s3 = tape.shape_of(x)
+    if s3.ndim != 3:
+        raise Error("max_pool1d: x must be a rank-3 tensor")
+    var sx = _shape4(s3.d[0], s3.d[1], 1, s3.d[2])
+    var x4 = tape.view_nd(ex, x, sx)
+    var y4 = _max_pool(tape, ex, x4, sx, _pool_block_1d(sx, kernel_size, stride, padding))
+    var sy = tape.shape_of(y4)
+    return tape.view_nd(ex, y4, _shape3(sy.d[0], sy.d[1], sy.d[3]))
+
+
+def rankn_avg_pool1d[E: Exec](
+    mut tape: Tape, mut ex: E, x: Tensor, kernel_size: Int, stride: Int = 0, padding: Int = 0,
+) raises -> Tensor:
+    """One-dimensional average pooling of a batch of sequences: each output is
+    the mean of its kernel_size window, the zero padding counted in the
+    window's size. The avg_pool2d node over (N, C, 1, L).
+
+    Args:
+        tape: The tape that records the operation.
+        ex: The executor.
+        x: The input, shape (N, C, L).
+        kernel_size: The window's length.
+        stride: The step between windows; 0 means kernel_size.
+        padding: Zeros added at both ends (at most half of kernel_size).
+
+    Returns:
+        The output, shape (N, C, OL).
+    """
+    var s3 = tape.shape_of(x)
+    if s3.ndim != 3:
+        raise Error("avg_pool1d: x must be a rank-3 tensor")
+    var sx = _shape4(s3.d[0], s3.d[1], 1, s3.d[2])
+    var x4 = tape.view_nd(ex, x, sx)
+    var y4 = _avg_pool(tape, ex, x4, sx, _pool_block_1d(sx, kernel_size, stride, padding))
+    var sy = tape.shape_of(y4)
+    return tape.view_nd(ex, y4, _shape3(sy.d[0], sy.d[1], sy.d[3]))
