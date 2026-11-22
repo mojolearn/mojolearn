@@ -1,3 +1,0 @@
-quant	0	13s	expected=pass	held=yes
-quant-sabotage	1	14s	expected=fail	held=yes
-quant-value-sabotage	1	14s	expected=fail	held=yes
