@@ -94,10 +94,11 @@ struct NativeArchiveMember(Movable):
         self.dtype = dtype^
         self.shape = shape^
         self.strides = strides^
-        self.source = source if source else Int(owned.unsafe_ptr())
         self.size = size
         self.width = width
         self.owned = owned^
+        # The address of owned bytes is read from the field, after the move.
+        self.source = source if source else Int(self.owned.unsafe_ptr())
 
     def prepare(mut self):
         var step = self.width
@@ -111,8 +112,16 @@ struct NativeArchiveMember(Movable):
         var storage = List[UInt8](length=self.size, fill=0)
         archive_copy_bytes(self.source, self.shape, self.strides, self.size // self.width,
                            self.width, Int(storage.unsafe_ptr()))
-        self.source = Int(storage.unsafe_ptr())
-        self.owned = storage^
+        # fx-digest-order (2026-11-21): the C-order bytes go into the field
+        # by swap and `source` is read back from the field. Before, the
+        # field was assigned with `self.owned = storage^` while `source` held
+        # the address taken from the local: a member that OWNED its strided
+        # bytes then kept them unlinearized (fitted_digest fixtures 14, 16:
+        # owned bytes failed, borrowed bytes passed). The old bytes are freed
+        # with `storage` after the swap.
+        swap(self.owned, storage)
+        self.source = Int(self.owned.unsafe_ptr())
+        _ = storage
         _ = self.shape
         _ = self.strides
 
