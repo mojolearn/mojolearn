@@ -192,10 +192,7 @@ def test_member_route_serves_the_marked_predictor(device, name):
     y = C if classifier else Y
     own = np.asarray(make(name, device).fit(X, y).predict(X)).astype(np.float64)
     if classifier:
-        answers = {
-            "voting": cls("VotingClassifier")([("a", make(name, device)), ("b", make(name, device))]).fit(X, C),
-            "ovr": cls("OneVsRestClassifier")(make(name, device)).fit(X, C),
-        }
+        answers = {"voting": cls("VotingClassifier")([("a", make(name, device)), ("b", make(name, device))]).fit(X, C)}
         both = cls("MultiOutputClassifier")(make(name, device)).fit(X, np.stack([C, C], axis=1))
     else:
         answers = {"voting": cls("VotingRegressor")([("a", make(name, device)), ("b", make(name, device))]).fit(X, Y)}
@@ -205,6 +202,13 @@ def test_member_route_serves_the_marked_predictor(device, name):
     got["multioutput_0"], got["multioutput_1"] = columns[:, 0], columns[:, 1]
     for key, value in got.items():
         assert np.array_equal(value, own), f"{name} {key} over its member differs from its own predict"
+    if classifier:
+        # One-vs-rest over two classes fits ONE member on the labels (scikit-learn's OneVsRestClassifier); over
+        # more it fits one binary member per class, which is not the member's own multiclass model.
+        two = (C > 0).astype(C.dtype)
+        own_two = np.asarray(make(name, device).fit(X, two).predict(X)).astype(np.float64)
+        ovr = np.asarray(cls("OneVsRestClassifier")(make(name, device)).fit(X, two).predict(X)).astype(np.float64)
+        assert np.array_equal(ovr, own_two), f"{name} one-vs-rest over its member differs from its own predict"
 
 
 @pytest.mark.parametrize("device", DEVICES)
