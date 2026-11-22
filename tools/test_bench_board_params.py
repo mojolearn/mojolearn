@@ -352,7 +352,8 @@ def test_exception_table_names_lane_param_and_arm(monkeypatch):
     arms["xgboost-cpu"]._p["max_depth"] = 8
     monkeypatch.setattr(BP, "EXCEPTIONS", [("gbdt-depth*", "max_depth", "xgboost-*", "planted")])
     rep = BP.enforce("gbdt-depthwise", arms, stream=io.StringIO())
-    assert rep["verdict"] == "MATCHED" and rep["exceptions"][0]["param"] == "max_depth"
+    # the planted max_depth exception is reported (beside the max_ctr_complexity excuse for XGBoost)
+    assert rep["verdict"] == "MATCHED" and "max_depth" in {e["param"] for e in rep["exceptions"]}
     # the same exception does not cover another lane
     with pytest.raises(BP.ParamsRefused):
         BP.enforce("gbdt-lossguide", arms, stream=io.StringIO())
