@@ -282,6 +282,7 @@ INDEX_NOTES = {
     CELLS_INDEX: (
         "COLUMN-SHAPED JSONS OUTSIDE identity_break read by tools/verification_matrix.py and",
         "tools/part_set_census.py (never by the verify table). Same rules as identity_break/INDEX.tsv.",
+        "A byte-identical copy of an identity_break record is not listed (it was counted twice).",
     ),
 }
 

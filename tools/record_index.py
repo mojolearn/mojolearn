@@ -87,6 +87,14 @@ def generate(v, root, force):
         diff = sorted(inside_glob ^ {r["path"] for r in walked})
         print(f"REFUSED: the walk and the glob disagree inside identity_break ({len(diff)}): {diff[:5]}")
         return 1
+    # CORRECTION (2026-11-21): a byte-identical copy, outside identity_break, of a verify input (a box's
+    # remote output or an artifacts/ copy of the committed record) was counted twice by the matrix and the
+    # census. It is plainly a copy: it is not indexed. Copies inside identity_break stay (table inputs).
+    inputs = {r["sha256"]: r["path"] for r in walked}
+    copies = [r for r in outside if r["sha256"] in inputs]
+    outside = [r for r in outside if r["sha256"] not in inputs]
+    for r in copies:
+        print("COPY-NOT-INDEXED " + r["path"] + " = " + inputs[r["sha256"]])
     v.write_index(root, v.RECORD_INDEX, walked, v.INDEX_NOTES[v.RECORD_INDEX])
     v.write_index(root, v.CELLS_INDEX, outside, v.INDEX_NOTES[v.CELLS_INDEX])
     by_sha = {}
