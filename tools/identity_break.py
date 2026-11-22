@@ -4800,7 +4800,9 @@ def _(ml, X, yc, yr, Xh=None):
 # sabotage arm coverage-gbdt-host_boost_fused_cursor
 # (tools/identity_lanes/coverage_sabotage.tsv). Every option the fit reads is
 # passed, so no default flip moves a cell. Four lanes, not one, so the
-# verifier's per-lane workers spread the 26 fits across cores.
+# verifier's per-lane workers spread the 29 fits across cores. They replace
+# tools/gbdt_cpu_cat_digests.py (pv-gbdt-cpu-cat's one-off CPU-against-GPU
+# script over the same 19 configurations), deleted with this change.
 _GBDT_CAT_ROWS = 3000
 #: NOT a power of two: `leaf * 0.5` is exact, so at 0.5 the fused and the
 #: rounded cursor updates are the same bits and no cell could tell them apart
@@ -4909,6 +4911,10 @@ def _(ml, X, yc, yr, Xh=None):
          dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
         ("rmse_onehot_poisson", "RMSE", _GBDT_CAT_ONEHOT,
          dict(bootstrap_type="Poisson", subsample=0.66, random_strength=0.0)),
+        ("rmse_onehot_bernoulli", "RMSE", _GBDT_CAT_ONEHOT,
+         dict(bootstrap_type="Bernoulli", subsample=0.7, random_strength=0.0)),
+        ("logloss_onehot_bayesian_t2", "Logloss", _GBDT_CAT_ONEHOT,
+         dict(bootstrap_type="Bayesian", bagging_temperature=2.0, random_strength=0.0)),
     ])
 
 
@@ -4923,6 +4929,7 @@ def _(ml, X, yc, yr, Xh=None):
         ("logloss_onehot_noise", "Logloss", _GBDT_CAT_ONEHOT, dict(bootstrap_type="No", random_strength=1.0)),
         ("logloss_ctr_defaults", "Logloss", _GBDT_CAT_CTR, _GBDT_CAT_DEFAULTS),
         ("rmse_onehot_defaults", "RMSE", _GBDT_CAT_ONEHOT, _GBDT_CAT_DEFAULTS),
+        ("logloss_onehot_defaults", "Logloss", _GBDT_CAT_ONEHOT, _GBDT_CAT_DEFAULTS),
         ("logloss_ctr_mcc2_defaults", "Logloss", _GBDT_CAT_MCC2, dict(_GBDT_CAT_DEFAULTS, max_ctr_complexity=2)),
     ])
 
