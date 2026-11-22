@@ -59,6 +59,7 @@ from bindings.operation_names_mix import (
     MIX_OPN_FAMILY_MIX_BGMM_SCORE, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_FIT,
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SCORE,
     MIX_OPN_FAMILY_MIX_GMM_PUBLIC_INITIALIZE, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING, MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE,
+    MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT,
 )
 from bindings.operation_names_svm import SVM_OPN_FAMILY_SVM_GMM_SAMPLE
 from bindings.svm_keys_unpack import svm_keys
@@ -584,7 +585,10 @@ def _gmm_public_operation(model: PythonObject, operation: Int, args: PythonObjec
     if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_BINDING:
         _check_mode(binding, model, context)
         return binding
-    var outside = estimator_outside()
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the labels as a NumPy view, with no caller test. The
+    # other public results keep the caller test.
+    var outside = operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_PREDICT or estimator_outside()
     if operation == MIX_OPN_FAMILY_MIX_GMM_PUBLIC_SAMPLE:
         host_inference_scalar(args[0], context)
         var result = svm_mixture_operation(model, SVM_OPN_FAMILY_SVM_GMM_SAMPLE, Python.tuple(binding, args[0]), context)
