@@ -3276,6 +3276,39 @@ def _binding_exports(rel):
     return {name: impl for name, (impl, _params) in registered_functions(text).items()}
 
 
+_PUBLISH_CALL_RE = re.compile(
+    r"\b[A-Za-z_][A-Za-z0-9_]*publish[A-Za-z0-9_]*\s*(?:\[([^\]\n]*)\])?\s*\(([^()]*)\)")
+
+
+@_by_path
+def _published_entries(rel):
+    """The top-level definitions of a binding that it PUBLISHES FOR NATIVE
+    CALLERS: every function or struct of the file named in the parameters or
+    arguments of a `<...>publish<...>[...](...)` call, as
+    `gbdt_entry_publish["..."]("cpu", gbdt_host_entry_v1)` and
+    `gbdt_member_publish_image[_GbdtMemberHostImage]("cpu")` in
+    bindings/_mojolearn_gbdt_host.mojo.
+
+    A published entry is an export with no Python name. `_binding_exports`
+    reads `def_function` registrations only, so when gradient boosting's
+    predict moved from the `gbdt_predict` export to the image's native entry
+    (9c65b76827), `core/gbdt_host_predict.mojo` lost every gbdt lane and kept
+    only the saved-model route (`hf-checkpoint`). Comments and string literals
+    are not read. Only definitions of the binding's OWN file count: a
+    publisher the binding imports and calls with no local definition
+    (`linear_member_publish(mode, vendor, publisher)`) publishes an entry this
+    reader does not follow."""
+    defs = _mojo_defs_for(rel)
+    if defs is None:
+        return frozenset()
+    code = "".join(m.group("code") or " " for m in _MOJO_TOKEN_RE.finditer(_read(rel)))
+    out = set()
+    for match in _PUBLISH_CALL_RE.finditer(code):
+        for part in match.groups():
+            out.update(n for n in _MOJO_IDENT_RE.findall(part or "") if n in defs[0])
+    return frozenset(out)
+
+
 @_by_path
 def _delegated_exports(rel):
     """export name -> (file, impl) for the exports a binding registers through
@@ -5391,6 +5424,38 @@ def lane_sources():
                     refs.update(_mojo_export_refs(body))
                     passed.update(passed_operations(body))
                     pending.extend(_mojo_named_imports(src, set(_MOJO_IDENT_RE.findall(body))))
+                # PUBLISHED NATIVE ENTRIES (`_published_entries`). A lane that
+                # calls an export of this image is connected to it, and its
+                # native owners reach the image's other operations through the
+                # entry the image publishes, by operation number and with no
+                # export name to read. The entry is followed like an export,
+                # over the file's exact definitions: the image struct whose
+                # static methods it dispatches to is one of them
+                # (`_GbdtHostImage`), which the def-to-def blocks above do not
+                # hold under its own name.
+                published = _published_entries(src)
+                if published:
+                    units = _mojo_defs_for(src)[0]
+                    bodies, seen, stack = [], set(), sorted(published)
+                    while stack:
+                        name = stack.pop()
+                        if name in seen:
+                            continue
+                        seen.add(name)
+                        body = units.get(name)
+                        if body is None:
+                            continue
+                        if ops is not None:
+                            body = dispatch_view(body, ops)[0]
+                        bodies.append(body)
+                        idents = set(_MOJO_IDENT_RE.findall(body))
+                        stack.extend(other for other in units if other not in seen and other in idents)
+                    body = "\n".join(bodies)
+                    idents = set(_MOJO_IDENT_RE.findall(body))
+                    named.update(idents)
+                    refs.update(_mojo_export_refs(body))
+                    passed.update(passed_operations(body))
+                    pending.extend(_mojo_named_imports(src, idents))
                 # An imported symbol is followed definition by definition
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
