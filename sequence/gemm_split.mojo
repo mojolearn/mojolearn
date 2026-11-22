@@ -93,13 +93,6 @@ def gemm_split_block(K: Int) -> Int:
 
 
 @always_inline
-def gemm_split_parts(K: Int) -> Int:
-    """S = ceil(K / gemm_split_block(K)), 1 <= S <= SK_MAX_S for K >= 1."""
-    var r = gemm_split_block(K)
-    return (K + r - 1) // r
-
-
-@always_inline
 def gemm_split_lanes(S: Int) -> Int:
     """Threads the device gives one cell: the smallest power of two >= S
     (<= SK_MAX_S), so a 256-thread block holds 256 / lanes whole cells."""

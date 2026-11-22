@@ -270,14 +270,6 @@ def _bgmm_fit_call(binding: PythonObject, x: PythonObject, aux: List[Float32], v
     return result^
 
 
-def _bgmm_score_call(binding: PythonObject, x: PythonObject, aux: List[Float32], n: Int, d: Int, k: Int,
-                     flags: Int) raises -> BgmmResultSlot:
-    """ENTRY_BGMM_SCORE on the typed transport (ints [n, d, k, flags])."""
-    var result = _bgmm_score_span(binding, x, VariantsSpan(Int(aux.unsafe_ptr()), len(aux)), n, d, k, flags)
-    _ = aux  # the borrowed words stay alive through the entry above
-    return result^
-
-
 def _bgmm_score_span(binding: PythonObject, x: PythonObject, aux: VariantsSpan, n: Int, d: Int, k: Int,
                      flags: Int) raises -> BgmmResultSlot:
     """ENTRY_BGMM_SCORE on the typed transport over model words the caller

@@ -531,29 +531,6 @@ def _ada_state_of(session_id: Int, k_needed: Bool, name: String) raises -> AdaSt
     return AdaState(st.n, st.k, st.w.copy(), st.codes.copy(), st.values.copy(), st.cw.copy(), st.has_cw)
 
 
-def _default_rf_params(n_trees: Int) raises -> RF_params:
-    """A benign `RF_params` for the predict-side metadata: predict reads the
-    forest's trees, not these knobs, but the structs require one."""
-    return RF_params(
-        n_trees=Int32(n_trees),
-        bootstrap=True,
-        max_samples=Float32(1.0),
-        seed=UInt64(0),
-        n_streams=Int32(4),
-        tree_params=DecisionTreeParams(
-            max_depth=Int32(16),
-            max_leaves=Int32(-1),
-            max_features=Float32(1.0),
-            max_n_bins=Int32(128),
-            min_samples_leaf=Int32(1),
-            min_samples_split=Int32(2),
-            split_criterion=GINI,
-            min_impurity_decrease=Float32(0.0),
-            max_batch_size=Int32(4096),
-        ),
-    )
-
-
 def _rf_predict_native(model: List[Int], x_addr: Int, out_addr: Int, n_rows: Int, n_cols: Int, n_trees: Int,
                        num_outputs: Int, regression: Bool) raises -> Int:
     """The sequential vote (XF_PREDICT; lane calltable-forest): classifier

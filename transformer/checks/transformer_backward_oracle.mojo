@@ -590,38 +590,6 @@ def backward_oracle_dump(
     return out^
 
 
-def record_transformer_backward_card(
-    mut trace: IdentityTrace, prefix: String, st: TransformerBackwardStages
-) raises:
-    """Write all thirty-seven stages to an identity trace, in card order.
-
-    `prefix` becomes `prefix + "." + tag`, or the bare tag when empty. Tags
-    must be UNIQUE WITHIN A TRACE and `core/identity_trace.mojo` enforces
-    it, so a driver that records a FORWARD card and a BACKWARD card into one
-    trace must give them different prefixes. This function does not check
-    that, because the trace already does and its error message is better.
-
-    The tags here all begin `bwd.`, so they cannot collide with the
-    forward's thirty even under an empty prefix. That is deliberate: a
-    single trace holding both cards is the shape a check file wants, because
-    the forward stages ARE the backward's saved inputs and a divergence in
-    one is diagnosed by looking at the other.
-
-    `[[mojo-len-string]]`: `len(String)` is unsupported in this toolchain;
-    `byte_length()` is the spelling."""
-    var values = backward_oracle_dump(st)
-    for i in range(TRANSFORMER_BACKWARD_STAGE_COUNT):
-        var tag = backward_stage_tag(i)
-        if prefix.byte_length() > 0:
-            tag = prefix + String(".") + tag
-        # A LOCAL COPY rather than `values[i]` at the call site, keeping a
-        # mutable-argument borrow off a list element -- the shape that
-        # produced this repository's origin-unification errors.
-        var one = values[i].copy()
-        trace.record_list_f32(tag, one)
-        _ = one^
-
-
 # ===========================================================================
 # THE NEW SEAMS
 # ===========================================================================

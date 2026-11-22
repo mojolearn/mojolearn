@@ -410,10 +410,6 @@ struct LrSchedule(ImplicitlyCopyable, Movable):
     var min_lr: Float32
 
 
-def constant_schedule() -> LrSchedule:
-    return LrSchedule(SCHED_CONSTANT, 1, 0, 1, Float32(1.0), Float32(0.0))
-
-
 def scheduled_lr(s: LrSchedule, base: Float32, t: Int) -> Float32:
     """The learning rate of one-based step t."""
     var lr = base

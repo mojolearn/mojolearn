@@ -195,9 +195,3 @@ def member_held_release(mut held: MemberHeld):
     held.loose = False
     held.published = False
 
-
-def member_held_drop(model: PythonObject) raises:
-    """Forget `model`'s held state now (a refit door that wants its arrays
-    released at once). Not required for correctness: the generation word
-    already makes the old state a miss."""
-    records_drop(RECORDS_PREPARED, model, MEMBER_HELD_SLOT)

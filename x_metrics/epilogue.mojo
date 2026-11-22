@@ -97,33 +97,6 @@ def fsum(vals: List[Float64]) -> Float64:
     return hi
 
 
-def fsum_partials(vals: List[Float64], mut p: List[Float64]):
-    """`fsum`'s first loop (CPython's math.fsum partials), continued over
-    the partials already in `p`: afterwards the exact sum of `p` is the
-    exact sum of what it held plus every value of `vals` (lane
-    metrics-apple3)."""
-    for k in range(len(vals)):
-        var x = vals[k]
-        var i = 0
-        for j in range(len(p)):
-            var y = p[j]
-            if abs(x) < abs(y):
-                var t = x
-                x = y
-                y = t
-            var hi = x + y
-            var yr = hi - x
-            var lo = y - yr
-            if lo != 0.0:
-                p[i] = lo
-                i += 1
-            x = hi
-        while len(p) > i:
-            _ = p.pop()
-        if x != 0.0:
-            p.append(x)
-
-
 def kept(a: Int, fps: Int, tps: Int, keep: Int, c: Int, drop: Bool) -> List[Int]:
     """The curve points `_drop_collinear` keeps: all of them when not
     `drop` or c <= 2; the device's flags (`keep` >= 0, an unweighted curve);

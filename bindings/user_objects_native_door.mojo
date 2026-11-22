@@ -525,21 +525,6 @@ def _nested_into(env: _Env, obj: PythonObject, array_type: PythonObject, out_buf
     return py_call(env.op.add, Python.tuple(PythonObject(n)), first)
 
 
-def _key_bytes(env: _Env, raw: PythonObject, mut keys: List[UInt8]) raises -> Int:
-    # the bytes of a bytes object, appended to `keys` (one memcpy through array('B'))
-    var arr = py_call(env.array, "B", raw)
-    var n = len(arr)
-    var at = len(keys)
-    for _ in range(n):  # driver-loop: over one key's bytes (room for the memcpy)
-        keys.append(UInt8(0))
-    if n > 0:
-        unsafe_memcpy(dest=keys.unsafe_ptr() + at,
-               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=_address(arr)), count=n)
-        _ = arr  # keep the Python object alive through the native call above
-    _ = arr^
-    return n
-
-
 def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) raises -> PythonObject:
     # ensemble._pairs_arrays: each pair checked in their Pool's order, then
     # flattened winner, loser; one finite nonnegative weight per pair

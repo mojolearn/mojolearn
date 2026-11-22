@@ -29,35 +29,6 @@ def xn_admit(binding: PythonObject) raises -> PythonObject:
     return xn_admit_checked(binding)
 
 
-def xn_pcs_draw_entry(binding: PythonObject) raises -> PythonObject:
-    # Capture the legacy entry only on that existing route; the native route
-    # reads its operation-local capability snapshot and never resolves it.
-    # Optional, not a PythonObject(None) sentinel (modular/modular#7546).
-    var legacy = Optional[PythonObject]()
-    var available = False
-    if xn_is_module(binding):
-        legacy = py_present(neural_descriptor_entry(binding, "x_neighbors_kfeat_pcs_draw_idn", False))
-        available = Bool(legacy)
-    else:
-        available = (xn_capabilities(binding) & 8) != 0
-    if not available:
-        raise Error("NotImplementedError: mojolearn PolynomialCountSketch: this binary lacks "
-                    + "x_neighbors_kfeat_pcs_draw_idn (rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
-    return py_or_none(legacy)
-
-
-def xn_pcs_draw(binding: PythonObject, legacy: PythonObject, seed: Int,
-                components: Int, total: Int, index_address: Int, sign_address: Int) raises:
-    if legacy is not None:
-        # Remaining normal-route migration debt, until shared mode admission
-        # promotes the native provider. This is still CPython numerical dispatch.
-        _ = family_call(legacy, Python.list(seed, components, total), index_address, sign_address)
-        return
-    var snapshot = binding.downcast_value_ptr[CompiledBindingSnapshot]()
-    _ = neural_descriptor_execute(snapshot[].provider, xn_operation_id("pcs_draw"),
-                                  [index_address, sign_address], [seed, components, total], [])
-
-
 def xn_admit_arguments(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var source = args[0]
     var backend = context["backend_fields"]

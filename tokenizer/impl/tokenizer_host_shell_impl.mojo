@@ -112,12 +112,6 @@ def tokenizer_store_i64(dst: MutPointer[Int64, MutUntrackedOrigin], values: List
         dst[k] = Int64(values[k])
 
 
-def tokenizer_store_u8(dst: MutPointer[UInt8, MutUntrackedOrigin], values: List[UInt8]):
-    """`values` at `dst` (one memcpy)."""
-    if len(values) > 0:
-        unsafe_memcpy(dest=dst, src=values.unsafe_ptr(), count=len(values))
-
-
 def tokenizer_append_bytes(mut arena: List[UInt8], bytes: List[UInt8]):
     """`bytes` appended to `arena`, byte by byte."""
     for j in range(len(bytes)):

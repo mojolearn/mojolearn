@@ -45,26 +45,6 @@ comptime LINEAR_DEVICE_CPU = DEVICE_CPU
 comptime LINEAR_DEVICE_INSTALL = DEVICE_INSTALL
 
 
-def linear_device_code(word: String) -> Int:
-    return device_code(word)
-
-
-def linear_device_name(code: Int) -> String:
-    return device_name(code)
-
-
-def linear_device_refusal(shown: String) raises:
-    device_refusal(shown)
-
-
-def linear_device_gpu_absent() raises:
-    device_gpu_absent()
-
-
-def linear_device_installed(device: Int, process_vendor: Int) raises -> Int:
-    return device_installed(device, process_vendor)
-
-
 def linear_route_resolve(device: Int, key: LinearEntryKey, expected_vendor: Int,
     expected_mode: Int, explicit_host: Bool) raises -> DeviceRoute:
     """Read the family's fit and predict entries of `key` once and admit

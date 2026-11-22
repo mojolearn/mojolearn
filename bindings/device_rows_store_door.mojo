@@ -43,15 +43,3 @@ def door_rows_store(value: PythonObject, context: PythonObject) raises -> DoorRo
     var view = arena_rows(value, rows_context["maxabs_rows_owner"], context["door_rows_class"])
     return arena_rows_store(view, rows_context)
 
-
-def door_rows_store_routed(route_device: Int, value: PythonObject, context: PythonObject) raises -> DoorRowsStore:
-    """`door_rows_store` for an estimator with a device route: a CPU-route
-    estimator (`route_device == DEVICE_CPU`, the device its route RESOLVED
-    to, never the parameter) reads no device store. `DoorRowsStore.none()`
-    sends its door to the host gather (`admit_x`: a parallel gather out of
-    the fold's host base, never a download and never a device launch), so a
-    `device="cpu"` member of a cross-validation on a GPU installation runs
-    its fold on the CPU. A device route keeps the resident store."""
-    if route_device == DEVICE_CPU:
-        return DoorRowsStore.none()
-    return door_rows_store(value, context)

@@ -65,17 +65,6 @@ def give_host_i32(ctx: DeviceContext, var buf: HostBuffer[DType.int32]) raises:
     _ = buf^
 
 
-def take_dev_f32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
-    """A device buffer of at least `n` (>= 1) floats."""
-    var want = n if n > 0 else 1
-    step_count_device_alloc()
-    return ctx.enqueue_create_buffer[DType.float32](want)
-
-
-def give_dev_f32(ctx: DeviceContext, var buf: DeviceBuffer[DType.float32]) raises:
-    _ = buf^
-
-
 def take_dev_i32(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.int32]:
     """A device buffer of at least `n` (>= 1) int32 words."""
     var want = n if n > 0 else 1

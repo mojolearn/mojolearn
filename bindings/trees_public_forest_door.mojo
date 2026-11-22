@@ -601,13 +601,6 @@ def forest_key(native: PythonObject) raises -> EntryRef:
     return xf_ref(ForestEntryKey(family, TreesEntryKey(Int(py=key[0]), Int(py=key[1]))))
 
 
-def _check_count(value: PythonObject, message: String) raises -> Int:
-    var b = trees_builtins()
-    if _is_bool(value) or not Bool(py=py_call(b.isinstance, value, b.int)):
-        raise Error(message)
-    return Int(py=value)
-
-
 def forest_export_handle(key: EntryRef, handle: Int, selection: String,
                          context: PythonObject) raises -> PythonObject:
     """One owned native fit copied into the five model Arrays, its handle

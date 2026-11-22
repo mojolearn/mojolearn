@@ -23,62 +23,6 @@ from max.gpu import WARP_SIZE
 comptime HUBER_U = 16
 
 
-def _fold_inliers(rr: FP, y: FP, n: Int, thr: Float32, sw: Bool) -> Float32:
-    """The lead's `sq` over rows ascending (inliers |r| <= thr only), its
-    loads issued HUBER_U rows ahead."""
-    var sq = Float32(0)
-    var i = 0
-    while i < n:
-        var m = min(HUBER_U, n - i)
-        var rv = Array[Float32, HUBER_U](fill=Float32(0))
-        var wv = Array[Float32, HUBER_U](fill=Float32(0))
-        comptime for u in range(HUBER_U):
-            if u < m:
-                rv[u] = ld(rr, i + u)
-                if sw:
-                    wv[u] = ld(y, n + i + u)
-        comptime for u in range(HUBER_U):
-            if u < m:
-                var r = rv[u]
-                if not (fabs(r) > thr):
-                    if sw:
-                        sq = fmad(fm(wv[u], r), r, sq)
-                    else:
-                        sq = fmad(r, r, sq)
-        i += HUBER_U
-    return sq
-
-
-def _fold_outliers(rr: FP, y: FP, n: Int, thr: Float32, sw: Bool) -> Tuple[Float32, Int, Float32]:
-    """The lead's `out_abs`, `n_out` and `w_out` over rows ascending
-    (outliers |r| > thr only), loads issued HUBER_U rows ahead."""
-    var out_abs = Float32(0)
-    var n_out = 0
-    var w_out = Float32(0)
-    var i = 0
-    while i < n:
-        var m = min(HUBER_U, n - i)
-        var rv = Array[Float32, HUBER_U](fill=Float32(0))
-        var wv = Array[Float32, HUBER_U](fill=Float32(0))
-        comptime for u in range(HUBER_U):
-            if u < m:
-                rv[u] = ld(rr, i + u)
-                if sw:
-                    wv[u] = ld(y, n + i + u)
-        comptime for u in range(HUBER_U):
-            if u < m:
-                var ar = fabs(rv[u])
-                if ar > thr:
-                    if sw:
-                        w_out = fa(w_out, wv[u])
-                        out_abs = fmad(wv[u], ar, out_abs)
-                    else:
-                        n_out += 1
-                        out_abs = fa(out_abs, ar)
-        i += HUBER_U
-    return (out_abs, n_out, w_out)
-
-
 # ------------------------------------------------ the blocked order (lane/neural-pass97 order)
 @always_inline
 def _huber_part(o: Int, cells: Int, d: Int, x: FP, y: FP, n: Int, cr: FP, rr: FP, thr: Float32, sw: Bool,

@@ -118,27 +118,6 @@ def iso_gather_one(j: Int, x: FP, y: FP, n: Int, has_w: Bool, perm: IP, xs: FP, 
     st(ws, j, ld(y, n + r) if has_w else Float32(1))
 
 
-def iso_bounds_from(xs: FP, nk: Int, cand: IP, nc: Int, starts: IP) -> Int:
-    """`iso_bounds` over the candidate rows cand[0:nc] (ascending): the rows
-    whose x differs from the row before. A row with the previous row's x
-    never starts a group (it is 0 above the group's first x or the same
-    distance as the row before), so walking only the candidates takes the
-    same steps and writes the same starts (lane/neural-pass117)."""
-    var m = 0
-    sti(starts, 0, 0)
-    var cx = ld(xs, 0)
-    for q in range(nc):
-        var j = ldi(cand, q)
-        var xj = ld(xs, j)
-        if fs(xj, cx) >= Float32(1e-6):
-            m += 1
-            sti(starts, m, j)
-            cx = xj
-    m += 1
-    sti(starts, m, nk)
-    return m
-
-
 def iso_bounds(xs: FP, nk: Int, starts: IP) -> Int:
     """_make_unique's groups: starts[g] the first sorted row of group g (a row
     starts a group when it is at least 1e-6 above the group's first x),

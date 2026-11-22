@@ -255,19 +255,6 @@ def label_edges_kernel(
         _ = Atomic.max(root_key, weight_order_key(lam))
 
 
-def label_jump_kernel(
-    src: MutPointer[Int32, MutAnyOrigin],
-    dst: MutPointer[Int32, MutAnyOrigin],
-    n_nodes: Int32,
-):
-    """One pointer-jumping round, `dst[v] = src[src[v]]`. Reads `src` only
-    and writes `dst` only."""
-    var v = Int(block_dim.x) * Int(block_idx.x) + Int(thread_idx.x)
-    if v >= Int(n_nodes):
-        return
-    dst.unsafe_store(v, src.unsafe_load(Int(src.unsafe_load(v))))
-
-
 def label_points_kernel(
     rep: MutPointer[Int32, MutAnyOrigin],
     child_lambda: MutPointer[Float32, MutAnyOrigin],

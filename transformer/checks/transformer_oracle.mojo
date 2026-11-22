@@ -1002,58 +1002,6 @@ def oracle_dump(st: TransformerStages) -> List[List[Float32]]:
     return out^
 
 
-def record_transformer_card(
-    mut trace: IdentityTrace, prefix: String, st: TransformerStages
-) raises:
-    """Write all thirty stages to an identity trace, in card order.
-
-    DEVIATION 1003: this function is why `transformer_oracle.mojo` imports
-    `core/identity_trace.mojo`, which imports `max.gpu.host` for
-    `DeviceBuffer` and `DeviceContext`. A host-only oracle acquiring a GPU
-    dependency is a real cost and the alternative was to put the recorder in
-    `transformer_check.mojo`. It is here because the brief for this lane
-    requires the ORACLE to record the card, and because putting the recorder
-    beside `oracle_dump` and `stage_tag` keeps the tag-to-value pairing in
-    one file instead of two. The cost if wrong is that the oracle cannot be
-    compiled on a box with no MAX GPU package; `mamba_check.mojo` imports
-    the same module and runs host-only in phases 1-2, so this is believed
-    fine and has NOT been verified, because this lane compiles nothing.
-
-    DEVIATION 1004: the three rope stages are recorded on EVERY call, where
-    contract section 9 says they are "recorded once per configuration rather
-    than per call". The contract's intent is preserved (the table is built
-    once by `build_rope_table` and these are the same bits every time) and
-    the departure is in the card's shape. The reason is the tag-alignment
-    invariant above: a card that carries thirty tags after a prefill and
-    twenty-seven after a decode step gives `identity_trace_diff.py` two
-    different tag sequences to align, and the alignment it produces is
-    plausible and wrong. Three redundant records per call, each of at most
-    `P_max * head_dim/2` floats, is the price. If a future driver wants them
-    once, it must drop them from EVERY call and record them separately under
-    their own prefix, not conditionally.
-
-    `prefix` becomes `prefix + "." + tag`, or the bare tag when empty. Tags
-    must be UNIQUE WITHIN A TRACE (`core/identity_trace.mojo` enforces it and
-    raises), so a driver making a prefill call and then a decode call MUST
-    give them different prefixes. This function does not check that, because
-    the trace already does and its error message is better."""
-    # `[[mojo-len-string]]`: `len(String)` is not supported in this
-    # toolchain; `byte_length()` is the spelling.
-    var values = oracle_dump(st)
-    for i in range(TRANSFORMER_STAGE_COUNT):
-        var tag = stage_tag(i)
-        if prefix.byte_length() > 0:
-            tag = prefix + String(".") + tag
-        # A LOCAL COPY rather than `values[i]` at the call site. One host
-        # copy of a stage on a path that already drains the queue for every
-        # record is not a cost, and it keeps a mutable-argument borrow off a
-        # list element, which is the shape that produced the origin
-        # unification errors this repository has been bitten by.
-        var one = values[i].copy()
-        trace.record_list_f32(tag, one)
-        _ = one^
-
-
 # ===========================================================================
 # THE SEAMS
 # ===========================================================================

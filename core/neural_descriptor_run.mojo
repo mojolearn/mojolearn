@@ -48,18 +48,6 @@ def neural_descriptor_record(provider_id: Int) -> NeuralDescriptorRecordPtr:
     return NeuralDescriptorRecordPtr(unsafe_from_address=provider_id)
 
 
-def neural_descriptor_record_entry(provider_id: Int) -> NativeDescriptorCall:
-    return neural_descriptor_record(provider_id)[].entry
-
-
-def neural_descriptor_record_count(provider_id: Int) -> Int:
-    return len(neural_descriptor_record(provider_id)[].calls)
-
-
-def neural_descriptor_record_workspace(provider_id: Int) -> Int:
-    return Int(neural_descriptor_record(provider_id)[].workspace.unsafe_ptr())
-
-
 def neural_descriptor_record_admit(provider_id: Int, operation: Int) raises:
     """Refuse an operation outside the admitted table and count the attempt."""
     var record = neural_descriptor_record(provider_id)

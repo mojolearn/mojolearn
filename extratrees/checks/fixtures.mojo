@@ -241,13 +241,6 @@ def unit_float(h: UInt64) -> Float32:
     return Float32(Float64(h >> 40) / 16777216.0)
 
 
-def unit_float_open(h: UInt64) -> Float32:
-    """`(0, 1]` on the same grid: `(k + 1) / 2^24`. Used for the UPPER band of
-    a gap fixture, so that the band's minimum is STRICTLY above the gap's top
-    endpoint and the invariant interval can be stated CLOSED."""
-    return Float32(Float64((h >> 40) + 1) / 16777216.0)
-
-
 def unit_float20_open(h: UInt64) -> Float32:
     """`(0, 1]` on the COARSER 2^20 grid: `(k + 1) / 2^20`.
 
@@ -886,12 +879,3 @@ def analytic_all_constant() -> AnalyticFixture:
         0.0,
     )
 
-
-def analytic_fixtures(seed: UInt64) -> List[AnalyticFixture]:
-    """All four, in one list, for a check that wants to sweep them."""
-    var out = List[AnalyticFixture]()
-    out.append(analytic_separable_gap(seed))
-    out.append(analytic_regression_step(seed))
-    out.append(analytic_tie_pair(seed))
-    out.append(analytic_all_constant())
-    return out^

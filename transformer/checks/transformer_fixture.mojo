@@ -585,28 +585,6 @@ def fixture_score_plant(
     return p^
 
 
-
-
-def slice_batch_row(
-    x: List[Float32], b: Int, l: Int, d_model: Int, row: Int
-) raises -> List[Float32]:
-    """One sequence out of a `[B, L, d_model]` batch, as a `[1, L, d_model]` batch. The gate must also show that row 0 and row 1 DIFFER."""
-    if row < 0 or row >= b:
-        raise Error(
-            String("transformer_fixture: batch row ")
-            + String(row)
-            + " out of range for B = "
-            + String(b)
-        )
-    var row_len = l * d_model
-    var out = List[Float32]()
-    for i in range(row_len):
-        out.append(x[row * row_len + i])
-    return out^
-
-
-
-
 def bits32_hex(v: Float32) -> String:
     """`<hex bits>` for a Float32."""
     comptime DIGITS = "0123456789abcdef"

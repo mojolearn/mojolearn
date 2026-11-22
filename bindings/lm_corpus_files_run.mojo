@@ -215,10 +215,6 @@ def corpus_run_is_file(path: String) -> Bool:
     return isfile(path)
 
 
-def corpus_run_is_dir(path: String) -> Bool:
-    return isdir(path)
-
-
 def corpus_run_file_size(path: String) raises -> Int:
     var size = 0
     var number = 0

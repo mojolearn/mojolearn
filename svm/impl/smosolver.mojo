@@ -479,14 +479,6 @@ def hash_f32_list(values: List[Float32]) -> UInt64:
     return h
 
 
-def hash_i32_list(values: List[Int32]) -> UInt64:
-    var tmp = values.copy()
-    var p = tmp.unsafe_ptr().bitcast[UInt8]()
-    var h = fnv1a64_bytes(FNV_OFFSET, p, len(tmp) * 4)
-    _ = tmp^
-    return h
-
-
 def tile_rows_f32_kernel(
     dst: MutPointer[Float32, MutAnyOrigin], src: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32, n_in: Int32,

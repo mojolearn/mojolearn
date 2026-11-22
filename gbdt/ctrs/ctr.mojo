@@ -85,20 +85,6 @@ def ctr_type_name(t: Int) -> String:
     return String("CtrTypesCount")
 
 
-def need_target(t: Int) raises -> Bool:
-    """`NeedTarget` (`ctr_type.cpp:8-24`)."""
-    if (
-        t == CTR_BUCKETS
-        or t == CTR_BORDERS
-        or t == CTR_BINARIZED_TARGET_MEAN_VALUE
-        or t == CTR_FLOAT_TARGET_MEAN_VALUE
-    ):
-        return True
-    if t == CTR_FEATURE_FREQ or t == CTR_COUNTER:
-        return False
-    raise Error("Unknown ctr type " + ctr_type_name(t))
-
-
 def need_target_classifier(t: Int) raises -> Bool:
     """`NeedTargetClassifier` (`ctr_type.cpp:26-42`). This is the predicate
     that decides whether TARGET BINARIZATION has to run at all."""
@@ -131,27 +117,6 @@ def is_permutation_dependent_ctr_type(t: Int) raises -> Bool:
     if t == CTR_COUNTER or t == CTR_FEATURE_FREQ:
         return False
     raise Error("Unknown ctr type " + ctr_type_name(t))
-
-
-def is_binarized_target_ctr(t: Int) -> Bool:
-    """`IsBinarizedTargetCtr` (`ctr.h:14-16`) -- the `THistoryBasedCtrCalcer`
-    arm of `TCalcCtrHelper::VisitEqualUpToPriorCtrs`."""
-    return t == CTR_BUCKETS or t == CTR_BORDERS
-
-
-def is_float_target_ctr(t: Int) -> Bool:
-    """`IsFloatTargetCtr` (`ctr.h:18-20`)."""
-    return t == CTR_FLOAT_TARGET_MEAN_VALUE
-
-
-def is_cat_feature_statistic_ctr(t: Int) -> Bool:
-    """`IsCatFeatureStatisticCtr` (`ctr.h:22-24`) -- the bin-freq arm."""
-    return t == CTR_FEATURE_FREQ
-
-
-def is_borders_based_ctr(t: Int) -> Bool:
-    """`IsBordersBasedCtr` (`ctr.h:26-28`)."""
-    return t == CTR_BORDERS
 
 
 def is_supported_ctr_type_gpu(t: Int) -> Bool:
@@ -254,21 +219,3 @@ def is_equal_up_to_prior_and_binarization(
     """
     return left.param_id == right.param_id and left.ctr_type == right.ctr_type
 
-
-def create_ctr_config_for_feature_freq(
-    prior: Float32, unique_values: Int
-) -> TCtrConfig:
-    """`CreateCtrConfigForFeatureFreq` (`ctr.h:83-90`).
-
-    NOT the simple-ctr default. Their default FeatureFreq prior comes from
-    `GetDefaultPriors` and is `{0.0, 1}`; this constructor's
-    `{prior, 0.5 * uniqueValues}` is used where a config is minted from a
-    cardinality rather than from an option. Kept because it is theirs and
-    because the two denominators are easy to confuse.
-    """
-    return TCtrConfig(
-        CTR_FEATURE_FREQ,
-        TPrior(prior, Float32(0.5) * Float32(unique_values)),
-        0,
-        0,
-    )

@@ -42,12 +42,6 @@ comptime STEP_ITER = 2
 comptime STEP_FAIL = 6
 
 
-@always_inline
-def step_open(gate: StepI32) -> Bool:
-    """True while the loop runs (the done word is 0)."""
-    return gate.unsafe_load(STEP_DONE) == Int32(0)
-
-
 def step_gate_open_word(ctx: DeviceContext) raises -> DeviceBuffer[DType.int32]:
     """One zeroed Int32 word: the gate of an op called outside a loop."""
     var w = ctx.enqueue_create_buffer[DType.int32](1)

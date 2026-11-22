@@ -55,10 +55,6 @@ def _linear_names_pack(ridge: Bool, list_result: Bool) raises -> PythonObject:
     return result^
 
 
-def classical_parameter_names(ridge: Bool) raises -> PythonObject:
-    return _linear_names_pack(ridge, False)
-
-
 def classical_parameter_list(ridge: Bool) raises -> PythonObject:
     return _linear_names_pack(ridge, True)
 

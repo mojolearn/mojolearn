@@ -250,12 +250,3 @@ def gemm_int8_oracle(
             c.append(v)
     return c^
 
-
-def gemm_int8_from_f32_oracle(
-    a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int
-) -> List[Float32]:
-    """Quantize both operands by the profile's own rule, then the product.
-    The one-call form the checks and the bindings' convenience path use."""
-    var qa = quantize_rows_int8(a, m, k)
-    var qb = quantize_rows_int8(b, n, k)
-    return gemm_int8_oracle(qa.q, qa.e, qb.q, qb.e, m, n, k)

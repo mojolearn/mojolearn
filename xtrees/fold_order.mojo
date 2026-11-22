@@ -71,19 +71,6 @@ def fold_tree_host(mut p: List[Float64], m: Int, w: Int):
         s *= 2
 
 
-def fold_sum_host(v: List[Float64], n: Int) -> Float64:
-    """CHUNK then TREE over v[0 .. n): the fixed-order sum."""
-    var m = fold_chunks(n)
-    var p = List[Float64](length=m, fill=0.0)
-    for c in range(m):
-        var run: Float64 = 0.0
-        for i in range(c * FOLD_CHUNK, min((c + 1) * FOLD_CHUNK, n)):
-            run = run + v[i]
-        p[c] = run
-    fold_tree_host(p, m, 1)
-    return p[0]
-
-
 def fold_tree_pass_kernel(p: MutPointer[UInt64, MutAnyOrigin], m: Int64, w: Int64, s: Int64):
     """One TREE pass: p[j] += p[j + s] (field by field) for j % (2 s) == 0,
     j + s < m. One thread per (pair, field), grid-stride; pairs are disjoint,

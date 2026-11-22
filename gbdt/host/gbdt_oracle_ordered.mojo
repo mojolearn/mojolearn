@@ -153,15 +153,6 @@ comptime GBDT_ORD_PINNED_SM = 32
 comptime GBDT_ORD_HB_BLOCK = 512
 
 
-def _refuse_ordered(what: String) raises:
-    raise Error(
-        "no CPU implementation of _mojolearn_gbdt.gbdt_fit_ordered_rmse for "
-        + what + "; the gbdt host binding trains the gbdt-ordered-rmse lane"
-        " only (unit weights, OneByteFeatures), see"
-        " gbdt/host/gbdt_oracle_ordered.mojo"
-    )
-
-
 # ===========================================================================
 # THE FOLDS (`dynamic_boosting_folds.mojo`, `oblivious_tree_fold_tasks.mojo`)
 # ===========================================================================
@@ -459,64 +450,6 @@ struct _PwHelper(Movable):
             self.dirty.append(slot)
 
 
-def _pw_thread_points(
-    off: Int, sz: Int, full_pass: Bool
-) -> List[List[Int]]:
-    """Every thread's point sequence in a half-byte launch, `-1` for a zero
-    point: `compute_histogram_2` on a full pass, `compute_histogram` (one
-    point per iteration) on a partial one (`compute_point_hist2_loop.mojo`),
-    at `PW_HB_BLOCK` 512, multiplier 1, the uniform iteration."""
-    var out = List[List[Int]]()
-    for t in range(GBDT_ORD_HB_BLOCK):
-        var pts = List[Int]()
-        if full_pass:
-            var last_id = min(128 - (off & 127), sz)
-            pts.append(off + t if (t < 128 and t < last_id) else -1)
-            var ds = sz - last_id if sz > last_id else 0
-            var base = off + last_id
-            var tail = ds & 63
-            if tail != 0:
-                pts.append(base + ds - tail + t if (t < 64 and t < tail) else -1)
-            ds -= tail
-            if ds > 0:
-                comptime stripe = GBDT_ORD_HB_BLOCK * 2
-                var i = 2 * t
-                var max_iters = (ds + stripe - 1) // stripe
-                var own = 0
-                if ds > i:
-                    own = (ds - i + stripe - 1) // stripe
-                var cur = base + i
-                for j in range(max_iters):
-                    if j < own:
-                        pts.append(cur)
-                        pts.append(cur + 1)
-                    else:
-                        pts.append(-1)
-                        pts.append(-1)
-                    cur += stripe
-        else:
-            var last_id = min(32 - (off & 31), sz)
-            pts.append(off + t if t < last_id else -1)
-            var ds = sz - last_id if sz > last_id else 0
-            var base = off + last_id
-            var tail = ds & 31
-            if tail != 0:
-                pts.append(base + ds - tail + t if t < tail else -1)
-            ds -= tail
-            if ds > 0:
-                comptime stripe = GBDT_ORD_HB_BLOCK
-                var max_iters = (ds + stripe - 1) // stripe
-                var own = 0
-                if ds > t:
-                    own = (ds - t + stripe - 1) // stripe
-                var cur = base + t
-                for j in range(max_iters):
-                    pts.append(cur if j < own else -1)
-                    cur += stripe
-        out.append(pts^)
-    return out^
-
-
 def _pw_half_byte_group(
     points: List[List[Int]],
     docs: List[Int],
@@ -574,66 +507,6 @@ def _pw_half_byte_group(
         var e = tid & 15
         cells[tid] = stage1[32 * fold2 + e] + stage1[32 * fold2 + e + 16]
     return cells^
-
-
-def _pw_live_runs(off: Int, sz: Int, full_pass: Bool) -> List[Int]:
-    """`_pw_thread_points` by RUNS: for every point index `k`, the triple
-    (first position, position step per thread, live thread count). Every
-    thread's `k`-th point is `first + step * t` for `t` below the count and
-    a zero point past it, because each arm's live threads are a PREFIX of
-    the block: the head `t < min(128, last_id)` (32 on a partial pass), the
-    tail `t < tail`, and a striped trip `j` owns a point exactly when
-    `ds - i > j * stripe` with `i` rising in `t`."""
-    var runs = List[Int]()
-    if full_pass:
-        var last_id = min(128 - (off & 127), sz)
-        runs.append(off)
-        runs.append(1)
-        runs.append(max(0, min(128, last_id)))
-        var ds = sz - last_id if sz > last_id else 0
-        var base = off + last_id
-        var tail = ds & 63
-        if tail != 0:
-            runs.append(base + ds - tail)
-            runs.append(1)
-            runs.append(min(64, tail))
-        ds -= tail
-        if ds > 0:
-            comptime stripe = GBDT_ORD_HB_BLOCK * 2
-            var max_iters = (ds + stripe - 1) // stripe
-            for j in range(max_iters):
-                # thread t is live iff 2t < ds - j * stripe
-                var live = (ds - j * stripe + 1) // 2
-                if live > GBDT_ORD_HB_BLOCK:
-                    live = GBDT_ORD_HB_BLOCK
-                for d in range(2):
-                    runs.append(base + j * stripe + d)
-                    runs.append(2)
-                    runs.append(live)
-    else:
-        var last_id = min(32 - (off & 31), sz)
-        runs.append(off)
-        runs.append(1)
-        runs.append(max(0, last_id))
-        var ds = sz - last_id if sz > last_id else 0
-        var base = off + last_id
-        var tail = ds & 31
-        if tail != 0:
-            runs.append(base + ds - tail)
-            runs.append(1)
-            runs.append(tail)
-        ds -= tail
-        if ds > 0:
-            comptime stripe = GBDT_ORD_HB_BLOCK
-            var max_iters = (ds + stripe - 1) // stripe
-            for j in range(max_iters):
-                var live = ds - j * stripe
-                if live > GBDT_ORD_HB_BLOCK:
-                    live = GBDT_ORD_HB_BLOCK
-                runs.append(base + j * stripe)
-                runs.append(1)
-                runs.append(live)
-    return runs^
 
 
 def _pw_binary_cells(

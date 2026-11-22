@@ -97,49 +97,6 @@ struct MetricScratch(Movable):
         self.partials_n = 0
 
 
-def _mean_of_terms_into[E: Exec](
-    mut ex: E, kind: Int, p0: FP, p1: FP, n: Int, cols: Int, dst: FP, mut scratch: MetricScratch,
-) raises:
-    """dst[0] = the mean of the n metric terms of `kind`: the launches and
-    the fold of `_mean_of_terms`, so the same bits, with no download and no
-    allocation once `scratch` holds n rows."""
-    _check_rows(n)
-    scratch.reserve(ex, n)
-    var a = Args()
-    a.p0 = p0
-    a.p1 = p1
-    a.p2 = scratch.terms
-    a.i0 = kind
-    a.i1 = cols
-    ex.launch[OP_LS_METRIC_TERM](a, n)
-    blocked_fold(ex, dst, scratch.terms, n, 1, AXIS_ALL, identical_div(Float32(1), Float32(n)), scratch.partials)
-
-
-def accuracy_into[E: Exec](
-    mut ex: E, y_true: FP, y_pred: FP, n: Int, dst: FP, mut scratch: MetricScratch,
-) raises:
-    """`accuracy` written into the executor word dst[0], left on the device."""
-    _mean_of_terms_into(ex, MT_EQUAL, y_true, y_pred, n, 1, dst, scratch)
-
-
-def accuracy_from_scores_into[E: Exec](
-    mut ex: E, y_true: FP, scores: FP, n: Int, classes: Int, dst: FP, mut scratch: MetricScratch,
-) raises:
-    """`accuracy_from_scores` written into the executor word dst[0]."""
-    if classes < 1:
-        raise Error("accuracy needs at least one class column")
-    _mean_of_terms_into(ex, MT_ARGMAX_EQUAL, y_true, scores, n, classes, dst, scratch)
-
-
-def log_loss_into[E: Exec](
-    mut ex: E, y_true: FP, probability: FP, n: Int, classes: Int, dst: FP, mut scratch: MetricScratch,
-) raises:
-    """`log_loss` written into the executor word dst[0]."""
-    if classes < 1:
-        raise Error("log_loss needs at least one probability column")
-    _mean_of_terms_into(ex, MT_LOG_LOSS, y_true, probability, n, classes, dst, scratch)
-
-
 def _sort_blocks[E: Exec](mut ex: E, keys: FP, labels: FP, k_first: Int, k_last: Int, block: Int, blocks: Int) raises:
     var s = Args()
     s.p0 = keys

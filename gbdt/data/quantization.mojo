@@ -126,16 +126,6 @@ def nan_substitution(treatment: Int) -> Float32:
     return Float32(-inf[DType.float32]())
 
 
-def substitute_nans(mut values: List[Float32], treatment: Int):
-    """`BinarizeFloats<UseNanSubstitution=true>`'s prologue, in place."""
-    if treatment == NAN_TREATMENT_AS_IS:
-        return
-    var sub = nan_substitution(treatment)
-    for i in range(len(values)):
-        if values[i] != values[i]:
-            values[i] = sub
-
-
 def calc_quantization(
     var values: List[Float32], border_count: Int, nan_mode_option: Int,
     border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,

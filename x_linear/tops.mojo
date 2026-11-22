@@ -91,14 +91,6 @@ def t_mean(t: Team, v: FP, n: Int, k: Int = 0) -> Float32:
     return t.bcast(m, k)
 
 
-def t_sumsq(t: Team, v: FP, n: Int, k: Int = 0) -> Float32:
-    """The lead's ascending fold acc = v_i * v_i + acc (one rounding), broadcast."""
-    var acc = Float32(0)
-    if t.lead():
-        acc = fold_sq(v, 0, n)
-    return t.bcast(acc, k)
-
-
 # ----------------------------------------------------------------------------
 # UNROLLED CHAINS: one thread's ascending fold over rows, its loads issued a
 # block of CHAIN_U_DEVICE ahead of the arithmetic, so a device thread waits on
@@ -309,26 +301,6 @@ def chain_cfmad_ix(a: FP, aoff: Int, astep: Int, ma: Float32, b: FP, boff: Int, 
         var i = Int(ix.unsafe_load(q))
         acc = _acc_fmad(fs(ld(a, aoff + i * astep), ma), fs(ld(b, boff + i * bstep), mb), acc)
         q += 1
-    return acc
-
-
-@always_inline
-def fold_one_fmad(v: FP, off: Int, n: Int) -> Float32:
-    """acc = fmad(1, v[off + i], acc), i ascending (an intercept column of
-    ones in a cross product, spelled as the plain loop spells it)."""
-    comptime U = CHAIN_U_DEVICE if (is_nvidia_gpu() or is_amd_gpu() or is_apple_gpu()) else 1
-    var acc = Float32(0)
-    var i = 0
-    while i + U <= n:
-        var buf = SIMD[DType.float32, U]()
-        comptime for u in range(U):
-            buf[u] = ld(v, off + i + u)
-        comptime for u in range(U):
-            acc = _acc_fmad(Float32(1), buf[u], acc)
-        i += U
-    while i < n:
-        acc = _acc_fmad(Float32(1), ld(v, off + i), acc)
-        i += 1
     return acc
 
 

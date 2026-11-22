@@ -238,11 +238,6 @@ comptime UNPINNED_ARM = is_defined["MOJOLEARN_GEMM_UNPINNED_ARM"]()
 comptime UNPINNED_NACC = 4
 
 
-def unpinned_gemm_arm_enabled() -> Bool:
-    """Whether this binary can run the unpinned arm at all."""
-    return UNPINNED_ARM
-
-
 def unpinned_gemm_banner(nacc: Int) -> String:
     """The line a bench MUST print beside any number from this arm.
 
@@ -255,25 +250,6 @@ def unpinned_gemm_banner(nacc: Int) -> String:
     if not UNPINNED_ARM:
         return head + " -- DISABLED in this binary"
     return head + " -- ENABLED"
-
-
-def unpinned_gemm_workspace_floats(m: Int, n: Int, k: Int, plan: Int) -> Int:
-    """Call-through to `identical_gemm_workspace_floats`. EQUAL BY
-    CONSTRUCTION, and that is the point of it existing rather than the
-    caller being told to use the other one.
-
-    The unpinned SPLITK arm materializes the same `m * n * P` level-0
-    partials at the same `stride = P`, so a workspace sized for the pinned
-    arm serves this one exactly and the two arms cannot be given different
-    allocations by accident. If this function ever stops being a
-    call-through, the workspace has become a second variable and the
-    experiment is over.
-    """
-    return identical_gemm_workspace_floats(m, n, k, plan)
-
-
-def unpinned_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
-    return identical_gemm_workspace_max_floats(m, n, k)
 
 
 # ===========================================================================

@@ -71,53 +71,6 @@ from checks.numerics import ftz, identical_div
 comptime RAFT_MATRIX_TPB = 64
 
 
-def get_lower_triangular_kernel(
-    src: MutPointer[Float32, MutAnyOrigin],
-    dst: MutPointer[Float32, MutAnyOrigin],
-    n_rows_in: Int32,
-    n_cols_in: Int32,
-    k_in: Int32,
-):
-    """`getUpperTriangular` (`:204-212`), relabelled row-major.
-
-    Theirs:
-
-        idx_t i = idx % m, j = idx / m;
-        if (i < k && j < k && j >= i) { dst[i + j * k] = src[idx]; }
-
-    Ours walks the same linear index over an `n_rows x n_cols` ROW-major
-    source, so `i = idx / n_cols` and `j = idx % n_cols`, and keeps the
-    `j >= i` clause the other way up (`j <= i`) because in row-major storage
-    that is the same set of cells theirs selects. `dst` is `k x k`.
-    """
-    var m = Int(n_rows_in)
-    var n = Int(n_cols_in)
-    var k = Int(k_in)
-    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx >= m * n:
-        return
-    var i = idx // n
-    var j = idx % n
-    if i < k and j < k and j <= i:
-        dst.unsafe_store(i * k + j, src.unsafe_load(idx))
-
-
-def copy_vector_to_matrix_diagonal_kernel(
-    vec: MutPointer[Float32, MutAnyOrigin],
-    matrix: MutPointer[Float32, MutAnyOrigin],
-    lda_in: Int32,
-    k_in: Int32,
-):
-    """`copyVectorToMatrixDiagonal` (`:232-237`). `matrix[idx + idx * lda]`
-    and `matrix[idx * lda + idx]` are the same cell, so this one is
-    layout-free: the diagonal is the diagonal."""
-    var lda = Int(lda_in)
-    var k = Int(k_in)
-    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx < k:
-        matrix.unsafe_store(idx * lda + idx, vec.unsafe_load(idx))
-
-
 def copy_vector_from_matrix_diagonal_kernel(
     vec: MutPointer[Float32, MutAnyOrigin],
     matrix: MutPointer[Float32, MutAnyOrigin],
@@ -139,21 +92,3 @@ def copy_vector_from_matrix_diagonal_kernel(
     if idx < k:
         vec.unsafe_store(idx, matrix.unsafe_load(idx * lda + idx))
 
-
-def matrix_diagonal_inverse_kernel(
-    a: MutPointer[Float32, MutAnyOrigin],
-    len_in: Int32,
-):
-    """`matrixDiagonalInverse` (`:283-288`). `in[idx + idx*len] = 1.0 / ...`.
-
-    **NO CALLER IN THIS LANE, BY DESIGN. DEVIATION 1645.** The divide is
-    routed through `identical_div` and flushed through `ftz` so that a FAST
-    caller elsewhere gets this tree's arithmetic rather than a second one,
-    but nothing on an identity path here calls it, and the reason is in the
-    file banner: a reciprocal is a second rounding.
-    """
-    var n = Int(len_in)
-    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if idx < n:
-        var d = ftz(a.unsafe_load(idx * n + idx))
-        a.unsafe_store(idx * n + idx, ftz(identical_div(Float32(1.0), d)))

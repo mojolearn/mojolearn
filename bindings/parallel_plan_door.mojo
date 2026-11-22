@@ -55,12 +55,6 @@ def plan_devices(value: PythonObject, operation: String, cooperative: Bool,
     return devices
 
 
-def plan_on_gpu(context: PythonObject) raises -> Bool:
-    """True on a CUDA, HIP or Metal install (a plan is bound); False on a
-    CPU-only install (no plan: the host binding runs the owner)."""
-    return plan_vendor_is_gpu(String(py_get(context, PythonObject("vendor"), PythonObject("cpu"))))
-
-
 def plan_enter(binding: PythonObject, devices: PythonObject, rebuild: String,
                families: Int = DEVICE_PLAN_WORKER) raises:
     """Bind `devices` to the calling thread in `binding`'s DSO for the owner

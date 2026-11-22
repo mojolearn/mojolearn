@@ -352,20 +352,6 @@ def emb_fold_balanced_tree_diagnostic(
     return ftz(current[0])
 
 
-def emb_fold_via_fma_diagnostic(
-    contributions: List[Float32], seed: Float32
-) -> Float32:
-    """**DIAGNOSTIC.** The contract's own chain, spelled with `identical_mul_add(dy, 1.0, acc)` instead of a plain add. **It must agree with `emb_backward_cell` at EVERY input, and that is a LEMMA rather than a choice** (contract 4.1, DEVIATION 1317)."""
-    var acc = seed
-    for i in range(len(contributions)):
-        acc = ftz(
-            identical_mul_add(ftz(contributions[i]), Float32(1.0), ftz(acc))
-        )
-    return ftz(acc)
-
-
-
-
 def emb_forward_oracle(
     w: List[Float32], ids: List[Int32], cfg: EmbConfig
 ) raises -> List[Float32]:
@@ -472,17 +458,6 @@ struct EmbStages(Movable):
         self.perm = List[Int32]()
         self.dw_seed = List[Float32]()
         self.dw = List[Float32]()
-
-
-def emb_forward_stages(
-    w: List[Float32], ids: List[Int32], cfg: EmbConfig
-) raises -> EmbStages:
-    """The forward's three card stages. Contract section 10."""
-    var st = EmbStages()
-    st.ids = ids.copy()
-    st.weight = w.copy()
-    st.fwd = emb_forward_oracle(w, ids, cfg)
-    return st^
 
 
 def emb_backward_stages(

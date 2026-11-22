@@ -224,16 +224,6 @@ comptime LEAF_ESTIMATION_EXACT = 2
 comptime LEAF_ESTIMATION_SIMPLE = 3
 
 
-def leaf_estimation_method_name(m: Int) -> String:
-    if m == LEAF_ESTIMATION_GRADIENT:
-        return String("Gradient")
-    if m == LEAF_ESTIMATION_NEWTON:
-        return String("Newton")
-    if m == LEAF_ESTIMATION_EXACT:
-        return String("Exact")
-    return String("Simple")
-
-
 @fieldwise_init
 struct CatBoostOptions(Copyable, Movable):
     """Their option names, their defaults, and what this implementation honors."""
@@ -763,12 +753,6 @@ comptime PROJECTION_SIMPLE_CTR = 1
 
 comptime COUNTER_CALC_FULL = 0
 comptime COUNTER_CALC_SKIP_TEST = 1
-
-
-def counter_calc_method_name(m: Int) -> String:
-    if m == COUNTER_CALC_FULL:
-        return String("Full")
-    return String("SkipTest")
 
 
 @fieldwise_init

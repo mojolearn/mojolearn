@@ -95,11 +95,6 @@ def scratch(n: Int) -> FP:
     return alloc[Float32](n if n > 0 else 1).unsafe_origin_cast[MutAnyOrigin]()
 
 
-@always_inline
-def scratch_i(n: Int) -> IP:
-    return alloc[Int32](n if n > 0 else 1).unsafe_origin_cast[MutAnyOrigin]()
-
-
 # ---------------------------------------------------------------- conv layout loops
 # The element functions decode every output index with four or five integer
 # divisions (x_cnn/ops.mojo im2col_at, conv_out_at, dout_rows_at, col2im_at):
@@ -383,40 +378,6 @@ def conv2d_backward_cols(cols: FP, w: FP, dout: FP, gx: FP, gw: FP, gb: FP, prm:
     _ = ps^
 
 
-def conv2d_forward_host(
-    x: List[Float32], w: List[Float32], bias: List[Float32], prm: List[Int32]
-) raises -> List[Float32]:
-    var rows = Int(prm[CP_N]) * Int(prm[CP_OH]) * Int(prm[CP_OW])
-    var xs = x.copy()
-    var ws = w.copy()
-    var bs = bias.copy()
-    var out = zeros(rows * Int(prm[CP_OC]))
-    conv2d_forward_into(hp(xs), hp(ws), hp(bs), hp(out), prm)
-    _ = xs^
-    _ = ws^
-    _ = bs^
-    return out^
-
-
-def conv2d_backward_host(
-    x: List[Float32], w: List[Float32], dout: List[Float32], prm: List[Int32]
-) raises -> List[Float32]:
-    """[gx | gw | gb]."""
-    var OC = Int(prm[CP_OC])
-    var ckk = Int(prm[CP_C]) * Int(prm[CP_KH]) * Int(prm[CP_KW])
-    var nx = Int(prm[CP_N]) * Int(prm[CP_C]) * Int(prm[CP_H]) * Int(prm[CP_W])
-    var xs = x.copy()
-    var ws = w.copy()
-    var ds = dout.copy()
-    var result = zeros(nx + OC * ckk + OC)
-    var rp = hp(result)
-    conv2d_backward_into(hp(xs), hp(ws), hp(ds), rp, rp + nx, rp + nx + OC * ckk, prm, True)
-    _ = xs^
-    _ = ws^
-    _ = ds^
-    return result^
-
-
 def conv_block_forward_into(
     x: FP, w: FP, bias: FP, dst: FP, idx: IP, cprm: List[Int32], pprm: List[Int32], pool: Bool,
     keep: Bool, kcols: FP, ky: FP,
@@ -647,42 +608,6 @@ def map2_into[f: ElemFn](a: FP, b: FP, dst: FP, n_out: Int):
     _ = zp^
 
 
-def maxpool2d_forward_host(x: List[Float32], prm: List[Int32], mut idx: List[Int32]) raises -> List[Float32]:
-    var no = _pool_sizes(prm)[1]
-    var xs = x.copy()
-    var out = zeros(no)
-    idx = List[Int32](length=no if no > 0 else 1, fill=Int32(0))
-    maxpool2d_forward_into(hp(xs), hp(out), hi(idx), prm)
-    _ = xs^
-    return out^
-
-
-def maxpool2d_backward_host(dout: List[Float32], idx: List[Int32], prm: List[Int32]) raises -> List[Float32]:
-    var ds = dout.copy()
-    var ix = idx.copy()
-    var gx = zeros(_pool_sizes(prm)[0])
-    maxpool2d_backward_into(hp(ds), hi(ix), hp(gx), prm)
-    _ = ds^
-    _ = ix^
-    return gx^
-
-
-def avgpool2d_forward_host(x: List[Float32], prm: List[Int32]) raises -> List[Float32]:
-    var xs = x.copy()
-    var out = zeros(_pool_sizes(prm)[1])
-    avgpool2d_forward_into(hp(xs), hp(out), prm)
-    _ = xs^
-    return out^
-
-
-def avgpool2d_backward_host(dout: List[Float32], prm: List[Int32]) raises -> List[Float32]:
-    var ds = dout.copy()
-    var gx = zeros(_pool_sizes(prm)[0])
-    avgpool2d_backward_into(hp(ds), hp(gx), prm)
-    _ = ds^
-    return gx^
-
-
 def map2_host[f: ElemFn](a: List[Float32], b: List[Float32], n_out: Int, prm: List[Int32]) raises -> List[Float32]:
     var sa = a.copy()
     var sb = b.copy()
@@ -693,21 +618,6 @@ def map2_host[f: ElemFn](a: List[Float32], b: List[Float32], n_out: Int, prm: Li
     _ = sb^
     _ = ps^
     return out^
-
-
-def relu_forward_host(x: List[Float32]) raises -> List[Float32]:
-    var prm: List[Int32] = [0, 0, 0]
-    return map2_host[relu_fwd_at](x, x, len(x), prm)
-
-
-def relu_backward_host(x: List[Float32], g: List[Float32]) raises -> List[Float32]:
-    var prm: List[Int32] = [0, 0, 0]
-    return map2_host[relu_bwd_at](x, g, len(x), prm)
-
-
-def add_host(a: List[Float32], b: List[Float32]) raises -> List[Float32]:
-    var prm: List[Int32] = [0, 0, 0]
-    return map2_host[add_at](a, b, len(a), prm)
 
 
 def linear_forward_into(x: FP, w: FP, bias: FP, dst: FP, n: Int, d_in: Int, d_out: Int):
@@ -726,32 +636,6 @@ def linear_backward_into(x: FP, w: FP, g: FP, gx: FP, gw: FP, gb: FP, n: Int, d_
     gemm_host_into(g, hp(ones), gb, OP_TN, d_out, 1, n)
     gemm_host_into(g, w, gx, OP_NN, n, d_in, d_out)
     _ = ones^
-
-
-def linear_forward_host(x: List[Float32], w: List[Float32], bias: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
-    var xs = x.copy()
-    var ws = w.copy()
-    var bs = bias.copy()
-    var out = zeros(n * d_out)
-    linear_forward_into(hp(xs), hp(ws), hp(bs), hp(out), n, d_in, d_out)
-    _ = xs^
-    _ = ws^
-    _ = bs^
-    return out^
-
-
-def linear_backward_host(x: List[Float32], w: List[Float32], g: List[Float32], n: Int, d_in: Int, d_out: Int) raises -> List[Float32]:
-    """[gx | gw | gb]."""
-    var xs = x.copy()
-    var ws = w.copy()
-    var gs = g.copy()
-    var r = zeros(n * d_in + d_out * d_in + d_out)
-    var rp = hp(r)
-    linear_backward_into(hp(xs), hp(ws), hp(gs), rp, rp + n * d_in, rp + n * d_in + d_out * d_in, n, d_in, d_out)
-    _ = xs^
-    _ = ws^
-    _ = gs^
-    return r^
 
 
 def blocked_mean(values: List[Float32], n: Int) -> Float32:
@@ -799,19 +683,6 @@ def softmax_xent_into(logits: FP, labels: IP, grad: FP, proba: FP, n: Int, k: In
         if n > 0:
             return blocked_mean(rl, n)
     return seq_mean(rl, n)
-
-
-def softmax_xent_host(logits: List[Float32], labels: List[Int32], n: Int, k: Int) raises -> List[Float32]:
-    var sl = logits.copy()
-    var sy = labels.copy()
-    var grad = zeros(n * k)
-    var proba = zeros(n * k)
-    var loss = softmax_xent_into(hp(sl), hi(sy), hp(grad), hp(proba), n, k)
-    _ = sl^
-    _ = sy^
-    grad.extend(proba^)
-    grad.append(loss)
-    return grad^
 
 
 def sgd_into(w: FP, g: FP, v: FP, hyper: List[Float32], n: Int):
@@ -895,56 +766,12 @@ def batchnorm_backward_into(x: FP, g: FP, aux: FP, dst: FP, prm: List[Int32], tr
     _ = part^
 
 
-def batchnorm_forward_host(
-    x: List[Float32], running: List[Float32], aux: List[Float32], prm: List[Int32], training: Bool
-) raises -> List[Float32]:
-    var sx = x.copy()
-    var sr = running.copy()
-    var sa = aux.copy()
-    var out = zeros(len(x))
-    batchnorm_forward_into(hp(sx), hp(sr), hp(sa), hp(out), prm, training)
-    _ = sx^
-    out.extend(sr^)
-    out.extend(sa^)
-    return out^
-
-
-def batchnorm_backward_host(
-    x: List[Float32], g: List[Float32], aux: List[Float32], prm: List[Int32], training: Bool
-) raises -> List[Float32]:
-    var sx = x.copy()
-    var sg = g.copy()
-    var sa = aux.copy()
-    var out = zeros(len(x))
-    batchnorm_backward_into(hp(sx), hp(sg), hp(sa), hp(out), prm, training)
-    _ = sx^
-    _ = sg^
-    out.extend(sa^)
-    return out^
-
-
 def dropout2d_into(x: FP, dst: FP, mask: FP, prm: List[Int32], hyper: List[Float32], n: Int):
     var ps = prm.copy()
     var sh = hyper.copy()
     run[dropout2d_at](x, mask, dst, hp(sh), hi(ps), hi(ps), n)
     _ = ps^
     _ = sh^
-
-
-def dropout2d_host(x: List[Float32], prm: List[Int32], hyper: List[Float32]) raises -> List[Float32]:
-    var n = len(x)
-    var sx = x.copy()
-    var mask = zeros(n)
-    var out = zeros(n)
-    dropout2d_into(hp(sx), hp(out), hp(mask), prm, hyper, n)
-    _ = sx^
-    out.extend(mask^)
-    return out^
-
-
-def mul_host(a: List[Float32], b: List[Float32]) raises -> List[Float32]:
-    var prm: List[Int32] = [0, 0, 0]
-    return map2_host[mul_at](a, b, len(a), prm)
 
 
 def spmm_host(vals: List[Float32], h: List[Float32], csr: List[Int32], prm: List[Int32]) raises -> List[Float32]:
@@ -1068,17 +895,6 @@ def adam_into(w: FP, g: FP, mv: FP, hyper: List[Float32], n: Int):
     run[adam_at](w, g, mv, hp(sh), hi(prm), hi(prm), n)
     _ = sh^
     _ = prm^
-
-
-def adam_host(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
-    var n = len(w)
-    var sw = w.copy()
-    var sg = g.copy()
-    var sm = mv.copy()
-    adam_into(hp(sw), hp(sg), hp(sm), hyper, n)
-    _ = sg^
-    sw.extend(sm^)
-    return sw^
 
 
 def csr_build_host(rows: IP, cols: IP, nnz: Int, n: Int, csr_out: IP, order_out: IP):

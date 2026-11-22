@@ -153,10 +153,6 @@ def _log1p64(x: Float64) -> Float64:
     return external_call["log1p", Float64](x)
 
 
-def _exp64(x: Float64) -> Float64:
-    return external_call["exp", Float64](x)
-
-
 def _expf_ideal(x: Float64) -> Float64:
     """The reference's inner exp for the three activations: libm's double
     exp ROUNDED ONCE TO FLOAT32 and row-10 flushed (so above 88.72284 it

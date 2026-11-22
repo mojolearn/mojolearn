@@ -296,18 +296,6 @@ def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: Pyt
     return cast_w64_bits(word, source_kind, source_width)
 
 
-def _sparse_coordinate(value: PythonObject, limit: Int, context: PythonObject) raises -> Int:
-    var nk = host_rest_keys()
-    var b = native_loaded_module("builtins")
-    var cls = py_type(value)
-    if cls is not b.int and not _one_of(cls, py_item(context, nk[].k_integer_types)) and cls is not _sparse_aliases(context)[0].type and cls is not _sparse_aliases(context)[1].type:
-        raise Error("TypeError: sparse coordinates must be native integers")
-    var index = Int(bitcast[DType.int64](_sparse_scalar_word(value, 1, 8, context)))
-    if index < 0 or index >= limit:
-        raise Error("sparse coordinate exceeds its declared shape")
-    return index
-
-
 struct _SparseKinds(Movable):
     """p3-array-arena: the scalar classes a DOK/LIL element may have, read
     ONCE per conversion as native addresses (was: per element, a builtins

@@ -34,6 +34,3 @@ def py_slice(value: PythonObject, start: Int, stop: Int) raises -> PythonObject:
 def py_slice_from(value: PythonObject, start: Int) raises -> PythonObject:
     return py_slice(value, PythonObject(start), PythonObject(None), PythonObject(None))
 
-
-def py_slice_to(value: PythonObject, stop: Int) raises -> PythonObject:
-    return py_slice(value, PythonObject(None), PythonObject(stop), PythonObject(None))

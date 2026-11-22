@@ -247,13 +247,6 @@ def int15_sabotage_name() -> String:
         return String("none")
 
 
-def int15_admits(m: Int, n: Int, k: Int) -> Bool:
-    """Every shape the profile accepts: positive extents and
-    `k <= INT15_MAX_K`. One sentence for all three plans, so no plan
-    refuses a shape another serves."""
-    return m > 0 and n > 0 and k > 0 and k <= INT15_MAX_K
-
-
 def _refuse(m: Int, n: Int, k: Int, who: String) raises:
     if m <= 0 or n <= 0 or k <= 0:
         raise Error(

@@ -92,38 +92,6 @@ def gpsvm_builtin_scalar(mut mods: NativeModules, value: PythonObject) raises ->
             or value is None)
 
 
-def gpsvm_key_fields(mut mods: NativeModules, key: PythonObject, fields: PythonObject, skip: List[String]) raises:
-    """Append an exact field dictionary's entries (names, values, exact
-    containers item by item, non-scalars with their class), except the
-    call-written `skip` names, then the count of entries appended."""
-    var b = mods.module("builtins")
-    var items = py_call(b.list, py_call(fields.items))
-    var count = 0
-    for i in range(len(items)):  # driver-loop: over a fitted model's stored fields (identity only)
-        var name = items[i][0]
-        if py_type(name) is b.str:
-            var text = String(name)
-            var skipped = False
-            for j in range(len(skip)):  # small-loop(skip: call-written field names)
-                if skip[j] == text:
-                    skipped = True
-                    break
-            if skipped:
-                continue
-        records_key_append(key, name)
-        trees_key_shallow(mods, key, items[i][1], 0)
-        count += 1
-    records_key_append(key, PythonObject(count))
-
-
-def gpsvm_context_key(key: PythonObject, context: PythonObject, names: List[String]) raises:
-    """The admission context and the connected entries the skipped admission
-    read, by identity."""
-    records_key_append(key, context)
-    for i in range(len(names)):  # small-loop(names: fixed connected context entries)
-        records_key_append(key, py_get(context, PythonObject(names[i])))
-
-
 def gpsvm_key_value(mut mods: NativeModules, key: PythonObject, residual: PythonObject, value: PythonObject,
                     context: PythonObject, depth: Int) raises -> Bool:
     """Append the identities `classical_admit_value(value)` reads: the value,

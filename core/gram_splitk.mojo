@@ -817,21 +817,6 @@ def _gram_splitk_partial_body[
                 partials.unsafe_store(chunk * mn + cell, ftz(val))
 
 
-def gram_splitk_partial_kernel_arm[CELLS: Int, ARM: Int](
-    partials: MutPointer[Float32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin],
-    m_in: Int32,
-    k_in: Int32,
-    chunk_rows_in: Int32,
-):
-    """The plain partial kernel at a NAMED strided arm (DEVIATION 2711), so
-    a probe can launch arm 0 and arm 1 in one binary and compare; the
-    shipped entry below takes `GRAM_STRIDED_ARM`."""
-    _gram_splitk_partial_body[CELLS, False, ARM](
-        partials, x, x, m_in, k_in, chunk_rows_in
-    )
-
-
 def gram_splitk_partial_kernel[CELLS: Int](
     partials: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],

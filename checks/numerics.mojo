@@ -114,14 +114,6 @@ def nv_fma_rn_f32(a: Float32, b: Float32, c: Float32) -> Float32:
     ](a, b, c)
 
 
-@always_inline
-def nv_fma_rn_ftz_f32(a: Float32, b: Float32, c: Float32) -> Float32:
-    """PTX `fma.rn.ftz.f32`."""
-    return inlined_assembly[
-        "fma.rn.ftz.f32 $0, $1, $2, $3;", Float32, constraints="=f,f,f,f", has_side_effect=False
-    ](a, b, c)
-
-
 # SCHEDULABLE NVIDIA PRODUCTS (lane fix-nv-mul-rn-via-fma, 2026-11-14, owed
 # row `fix-nv-mul-rn-via-fma`). 0.8.55 (0e4de0f46e) spelled the pinned
 # product and the hardware flush as the LLVM intrinsics

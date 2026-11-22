@@ -123,22 +123,6 @@ comptime LLAMA_PROJ_DOWN = 6
 comptime LLAMA_PROJ_COUNT = 7
 
 
-def llama_proj_name(which: Int) -> String:
-    if which == LLAMA_PROJ_Q:
-        return "q_proj"
-    if which == LLAMA_PROJ_K:
-        return "k_proj"
-    if which == LLAMA_PROJ_V:
-        return "v_proj"
-    if which == LLAMA_PROJ_O:
-        return "o_proj"
-    if which == LLAMA_PROJ_GATE:
-        return "gate_proj"
-    if which == LLAMA_PROJ_UP:
-        return "up_proj"
-    return "down_proj"
-
-
 def _refuse_k(k: Int, what: String) raises:
     if k < 1 or k > INT15_MAX_K:
         raise Error(

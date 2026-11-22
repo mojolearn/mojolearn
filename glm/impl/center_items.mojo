@@ -92,13 +92,6 @@ def exact_add(mut acc: Array[Int64, CS_WORDS], v: Float32):
 
 
 @always_inline
-def exact_merge(mut acc: Array[Int64, CS_WORDS], other: Array[Int64, CS_WORDS]):
-    comptime for L in range(CS_LIMBS):
-        acc[L] = acc[L] + other[L]
-    acc[CS_LIMBS] = acc[CS_LIMBS] | other[CS_LIMBS]
-
-
-@always_inline
 def _bit(d: Array[UInt64, CS_WORDS], i: Int) -> UInt64:
     return (d[i >> 5] >> UInt64(i & 31)) & UInt64(1)
 

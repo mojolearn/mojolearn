@@ -627,12 +627,6 @@ def _cast_x(view: PythonObject, est: String, context: PythonObject, defer_finite
     return _cast_x_validated(view, est, context, defer_finite, order, as_array, finite, captured)
 
 
-def _check_x_view(view: PythonObject, est: String, context: PythonObject, defer_finite: Bool = False,
-    order: String = "C", as_array: Bool = False, finite: Bool = True) raises -> PythonObject:
-    var captured = _x_shape_unpack(view, est, context, True)
-    return _cast_x_validated(view, est, context, defer_finite, order, as_array, finite, captured)
-
-
 def _admitted_rows(source: PythonObject, est: String, context: PythonObject, device_x: Bool,
                    finite: Bool = True) raises -> AdmittedX:
     """A model-selection fold (`_arena_io.DeviceRows`) admitted without its

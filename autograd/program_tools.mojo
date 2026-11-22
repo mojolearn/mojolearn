@@ -221,51 +221,6 @@ def _same_node(p: OpsProgram, k: Int, q: OpsProgram, j: Int, args: List[Int]) ->
     return True
 
 
-def program_cse(p: OpsProgram) -> OpsProgram:
-    # Candidate GRAPH_CSE_20261020: caller opt-in, default OFF. No fusion,
-    # reassociation or reduction rewrite. Full-workload NVIDIA+AMD A/B and
-    # three-vendor identity remain pending; no performance claim is made.
-    # Matching is graph-structural, independent of shape or dataset names.
-    var q = OpsProgram()
-    q.n_in = p.n_in
-    q.in_shapes = p.in_shapes.copy()
-    q.in_kinds = p.in_kinds.copy()
-    q.params = p.params.copy()
-    q.param_shapes = p.param_shapes.copy()
-    q.param_kinds = p.param_kinds.copy()
-    q.out_shapes = p.out_shapes.copy()
-    var refs = List[Int]()
-    for k in range(p.n_in):  # driver-loop: over input refs remain unchanged
-        refs.append(k)
-    for k in range(p.n_nodes()):  # driver-loop: over original graph nodes
-        var args = List[Int]()
-        for a in range(p.a_at[k], p.a_at[k + 1]):  # driver-loop: over remapped input refs
-            var r = p.args[a]
-            args.append(r if r < 0 else refs[r])
-        var found = -1
-        if _cse_safe(p.code[k]):
-            for j in range(q.n_nodes()):  # driver-loop: over earlier candidate nodes
-                if _same_node(p, k, q, j, args):
-                    found = j
-                    break
-        if found >= 0:
-            refs.append(q.n_in + found)
-            continue
-        refs.append(q.n_values())
-        q.code.append(p.code[k])
-        for a in range(len(args)):  # driver-loop: over node reference words
-            q.args.append(args[a])
-        for a in range(p.i_at[k], p.i_at[k + 1]):  # driver-loop: over node integer words
-            q.ints.append(p.ints[a])
-        for a in range(p.f_at[k], p.f_at[k + 1]):  # driver-loop: over node float words
-            q.fs.append(p.fs[a])
-        q.end_node()
-    for k in range(len(p.outs)):  # driver-loop: over output refs
-        var r = p.outs[k]
-        q.outs.append(r if r < 0 else refs[r])
-    return q^
-
-
 struct ProgramTrace(Movable):
     var enabled: Bool
     var nodes: List[Int]

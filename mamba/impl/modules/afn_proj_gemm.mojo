@@ -100,18 +100,6 @@ comptime AFN_MAMBA_PROJ_SPLITK = AFN_W2EPI_ALL or (
 comptime AFN_MAMBA_PROJ_ROUTE = AFN_MAMBA_PROJ_EPILOGUE or AFN_MAMBA_PROJ_SPLITK
 
 
-def afn_w2epi_switches() -> String:
-    """The w2-epi switches this build has on, for a probe or a log line."""
-    var s = String("")
-    comptime if AFN_MAMBA_PROJ_EPILOGUE:
-        s += "MAMBA_PROJ_EPILOGUE "
-    comptime if AFN_MAMBA_PROJ_SPLITK:
-        s += "MAMBA_PROJ_SPLITK "
-    if s == "":
-        return String("none")
-    return s
-
-
 # ===========================================================================
 # The split policy (MOJOLEARN_AFN_MAMBA_PROJ_SPLITK)
 # ===========================================================================

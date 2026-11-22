@@ -136,34 +136,6 @@ def _forward[E: Exec](
     return flat^
 
 
-def _tape_cases[E: Exec](mut ex: E) raises:
-    var names: List[String] = ["infer_perceptron", "infer_elementwise", "infer_losses", "infer_into"]
-    var outs = List[FP]()
-    for _ in range(4):
-        outs.append(ex.alloc(12))
-    var tape = Tape()
-    for which in range(4):
-        var recorded = _forward(which, tape, ex, outs, True)
-        var recorded_slots = tape._cursor
-        var inferred = _forward(which, tape, ex, outs, False)
-        # gradient storage is tape storage: inference must take fewer slots
-        if tape._cursor >= recorded_slots:
-            raise Error(names[which] + ": inference forward allocated gradient storage")
-        _same_bits(names[which], recorded, inferred)
-    # Repeated inference graphs reuse storage and never grow it.
-    var slots = 0
-    for iteration in range(10):
-        _ = _forward(0, tape, ex, outs, False)
-        if iteration == 1:
-            slots = len(tape._buffers)
-        elif iteration > 1 and slots != len(tape._buffers):
-            raise Error("repeated inference graphs grow tape storage")
-    tape.record()
-    tape.release(ex)
-    for i in range(4):
-        ex.free(outs[i])
-
-
 def _refusals[E: Exec](mut ex: E) raises:
     var tape = Tape()
     tape.no_grad()
@@ -266,15 +238,3 @@ def _mlp_case[E: Exec](mut ex: E, name: String, var sizes: List[Int], act: Int, 
     _ = x^
     _ = params^
 
-
-def run_infer_checks[E: Exec](mut ex: E) raises:
-    _tape_cases(ex)
-    _refusals(ex)
-    # hidden activation codes: 1 sigmoid, 2 tanh, 3 relu; output 0 identity
-    var deep: List[Int] = [3, 5, 4, 2]
-    var logistic: List[Int] = [3, 4, 1]
-    var regression: List[Int] = [3, 6, 2]
-    _mlp_case(ex, "infer_mlp_relu_softmax", deep^, 3, ACT_SOFTMAX)
-    _mlp_case(ex, "infer_mlp_tanh_logistic", logistic^, 2, 1)
-    _mlp_case(ex, "infer_mlp_sigmoid_identity", regression^, 1, 0)
-    print("PASS infer models=7 refusals=4")

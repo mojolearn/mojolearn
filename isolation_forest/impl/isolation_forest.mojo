@@ -744,14 +744,6 @@ def _mp_i32(buf: DeviceBuffer[DType.int32]) -> MutPointer[Int32, MutAnyOrigin]:
     return buf.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
 
 
-def _mp_u32(buf: DeviceBuffer[DType.uint32]) -> MutPointer[UInt32, MutAnyOrigin]:
-    return buf.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
-
-
-def _mp_i64(buf: DeviceBuffer[DType.int64]) -> MutPointer[Int64, MutAnyOrigin]:
-    return buf.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
-
-
 # ---------------------------------------------------------------------------
 # The XORWOW tables on the device (DEVIATION 683), built once per context use.
 # ---------------------------------------------------------------------------

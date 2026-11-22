@@ -104,17 +104,6 @@ def bf16_resident_narrow_kernel(dst: _U16P, src: _F32P, count: Int64):
     dst.unsafe_store(i, f32_to_bf16_bits_rne(src.unsafe_load(i)))
 
 
-def bf16_resident_narrow_t_kernel(dst: _U16P, src: _F32P, rows: Int64, cols: Int64):
-    """dst[rows x cols] = bf16(src[cols x rows]^T): the narrow and the transpose of a stored-transposed operand in
-    one launch, one element of dst a thread (coalesced store, strided load)."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(rows) * Int(cols):
-        return
-    var r = i // Int(cols)
-    var col = i - r * Int(cols)
-    dst.unsafe_store(i, f32_to_bf16_bits_rne(src.unsafe_load(col * Int(rows) + r)))
-
-
 def bf16_resident_epilogue_kernel(dst: _U16P, c: _F32P, bias: _F32P, n: Int64, count: Int64, kind: Int64):
     """dst[i] = bf16(act(c[i] + bias[i mod n])): the follower of a product whose consumer is a bf16 unit. The add
     and the activation are FP32 on the stored FP32 product; only the store is rounded. One element a thread."""
@@ -155,31 +144,6 @@ def bf16_image_narrow(
             pd,
             ps,
             Int64(cells),
-            grid_dim=((cells + BF16_RESIDENT_TPB - 1) // BF16_RESIDENT_TPB, 1, 1),
-            block_dim=(BF16_RESIDENT_TPB, 1, 1),
-        )
-    else:
-        raise Error("bf16 resident: built without -D MOJOLEARN_GEMM_FAST_BF16_RESIDENT")
-
-
-def bf16_image_narrow_transposed(
-    ctx: DeviceContext, mut img: Bf16Image, mut src: DeviceBuffer[DType.float32], rows: Int, cols: Int
-) raises:
-    """img[rows x cols] = bf16(src[cols x rows]^T): one asynchronous launch. For an operand stored transposed
-    (the X of a weight gradient X^T dY), since `linalg.matmul` has no `transpose_a`."""
-    comptime if GEMM_FAST_BF16_RESIDENT:
-        var cells = rows * cols
-        if rows < 0 or cols < 0 or cells > img.cells or cells > len(src):
-            raise Error("bf16 resident: transposed narrow does not fit its image or source")
-        if cells == 0:
-            return
-        var pd = img.bits.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        var ps = src.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-        ctx.enqueue_function[bf16_resident_narrow_t_kernel](
-            pd,
-            ps,
-            Int64(rows),
-            Int64(cols),
             grid_dim=((cells + BF16_RESIDENT_TPB - 1) // BF16_RESIDENT_TPB, 1, 1),
             block_dim=(BF16_RESIDENT_TPB, 1, 1),
         )

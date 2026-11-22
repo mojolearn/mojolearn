@@ -93,6 +93,3 @@ def prepare_data_host(
         out.append(y[i])
     return out^
 
-
-def n_obs_after_diff(n_obs: Int, d: Int, D: Int, s: Int) -> Int:
-    return n_obs - d - s * D

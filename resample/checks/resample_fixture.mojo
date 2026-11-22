@@ -366,25 +366,3 @@ def build_pooled(fix: Int, salt: Int) -> List[Float32]:
 # The Monte Carlo boxes
 # ===========================================================================
 
-
-def unit_square_lower() -> List[Float32]:
-    """`[0.0, 0.0]`."""
-    return [Float32(0.0), Float32(0.0)]
-
-
-def unit_square_upper() -> List[Float32]:
-    """`[1.0, 1.0]`. Volume exactly 1, so a wrong volume factor cannot hide
-    behind a rounding."""
-    return [Float32(1.0), Float32(1.0)]
-
-
-def shifted_box_lower() -> List[Float32]:
-    """`[-2.0, 0.5]`, a box that is neither the unit square nor centred, so
-    the affine map's `lo` term is load-bearing and a dropped `+ lower` shows
-    up rather than cancelling."""
-    return [Float32(-2.0), Float32(0.5)]
-
-
-def shifted_box_upper() -> List[Float32]:
-    """`[2.0, 2.5]`. Spans 4 and 2, volume exactly 8."""
-    return [Float32(2.0), Float32(2.5)]

@@ -118,12 +118,6 @@ def pca_sabotage_name(arm: Int) -> String:
     return String("PCA_SAB_UNKNOWN")
 
 
-def pca_sabotage_is_kernel_arm(arm: Int) -> Bool:
-    """False for the driver arms, which the check applies by changing what it
-    PASSES rather than by launching a different kernel."""
-    return arm != PCA_SAB_NONE and arm != PCA_SAB_WHITEN_TRANSFORM_ROWS
-
-
 def sabotage_whiten_scale_kernel(
     dst: MutPointer[Float32, MutAnyOrigin],
     src: MutPointer[Float32, MutAnyOrigin],

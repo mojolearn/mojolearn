@@ -92,22 +92,6 @@ struct ChunkedLMHeadV2Result(Movable):
     var d_weight: List[Float32]
 
 
-def _logit(
-    hidden: List[Float32], weight: List[Float32], row: Int, vocab_id: Int,
-    width: Int,
-) -> Float32:
-    var acc = Float32(0.0)
-    for feature in range(width):
-        # The identical contract flushes source operands and every fused
-        # fold. A final-only flush retains host/device-specific subnormal
-        # contributions, including their sign when the final value is zero.
-        acc = ftz(identical_mul_add(
-            ftz(hidden[row * width + feature]),
-            ftz(weight[vocab_id * width + feature]), acc,
-        ))
-    return ftz(acc)
-
-
 def _gp_oracle(
     hidden: List[Float32], weight: List[Float32], targets: List[Int32],
     rows: Int, vocab: Int, width: Int, with_grad: Bool,

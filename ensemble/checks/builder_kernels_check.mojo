@@ -523,44 +523,6 @@ struct ArmResult(ImplicitlyCopyable, Movable):
 # --------------------------------------------------------------------------
 
 
-def run_histogram[
-    sabotage: Int = 0
-](
-    ctx: DeviceContext,
-    mut fx: Fixture,
-    use_global: Bool,
-    mut hists: DeviceBuffer[DType.uint32],
-    mut blob: DeviceArgs[HistogramArgs[ObjT]],
-) raises:
-    hists.enqueue_fill(0)
-    ctx.synchronize()
-    var obj = ClassificationObjectiveFunction[DT, LT, BinT](
-        Int32(N_CLASSES), Int32(1), CRITERION_GINI
-    )
-    # DEVIATION 1893: the caller stages the args blob; the launcher
-    # takes the device pointer.
-    var argsp = blob.upload(
-        ctx, HistogramArgs[ObjT](fx.dataset(), fx.quantiles(), obj^)
-    )
-    launch_build_histograms_kernel[ObjT, TPB=TPB, sabotage=sabotage](
-        ctx,
-        hists.unsafe_ptr()
-        .unsafe_origin_cast[MutUntrackedOrigin]()
-        .unsafe_bitcast[BinT](),
-        MAX_N_BINS,
-        fx.dataset(),
-        fx.wi_ptr(),
-        COL_START,
-        fx.cs_ptr(),
-        fx.wl_ptr(),
-        fx.n_blocks_dimx,
-        GRID_Y,
-        SharedMemoryConfig(use_global, 0),
-        argsp,
-    )
-    ctx.synchronize()
-
-
 def arm_histogram[
     sabotage: Int = 0
 ](

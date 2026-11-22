@@ -84,20 +84,6 @@ def sage_max_feature4_at(tile: Int, h: FP, unused: FP, aux: FP, dst: FP, q: IP, 
             dst.unsafe_store(i, maxima[lane])
 
 
-@always_inline
-def dropout_apply4_at(tile: Int, x: FP, mask: FP, dst: FP, table: FP, unused: IP, p: IP):
-    var spatial = Int(p.unsafe_load(2))
-    var tiles = (spatial + NEURAL_AUX_FEATURE_TILE - 1) // NEURAL_AUX_FEATURE_TILE
-    var channel = tile // tiles
-    var first = (tile % tiles) * NEURAL_AUX_FEATURE_TILE
-    var value = table.unsafe_load(channel)
-    comptime for lane in range(NEURAL_AUX_FEATURE_TILE):
-        if first + lane < spatial:
-            var i = channel * spatial + first + lane
-            mask.unsafe_store(i, value)
-            dst.unsafe_store(i, ftz(identical_mul(ftz(x.unsafe_load(i)), value)))
-
-
 def dropout_channel_kernel(x: FP, mask: FP, dst: FP, hyper: FP, p: IP):
     """One block owns a channel, independent of spatial shape or board rows."""
     var channel = Int(block_idx.x)

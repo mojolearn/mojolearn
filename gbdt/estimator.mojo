@@ -393,51 +393,6 @@ struct GbdtFitParams(Copyable, Movable):
     var max_ctr_complexity: Int
 
 
-def default_gbdt_fit_params() -> GbdtFitParams:
-    """CatBoost's own defaults, and the ones `train` already carries.
-
-    `learning_rate` is 0.03 (`boosting_options.cpp:10`), `l2_leaf_reg` 3.0,
-    `depth` 6, `border_count` 128, `iterations` 100. The three `-1`s mean
-    UNSET, which is their `TOption::NotSet()`: the loss decides.
-    """
-    return GbdtFitParams(
-        128, 100, 6,
-        Float32(0.03), Float32(3.0), UInt64(0), SCORE_FUNCTION_COSINE,
-        String("RMSE"),
-        Float32(-1.0), Float32(-1.0), Float32(-1.0), Float32(-1.0),
-        Float32(-1.0),
-        -1, -1,
-        String(""), Float32(1.0), Float32(-1.0),
-        String(""), Float64(-1.0), -1,
-        -1, 1,
-        # nan_mode, random_strength, use_pointwise_searcher,
-        # border_build_max_samples, permutation_count,
-        # ctr_estimation_permutation_id, class_weights.
-        #
-        # EVERY ONE OF THESE IS `train`'s OWN DEFAULT, not CatBoost's where
-        # the two differ, because this struct's job is to reproduce a bare
-        # `train(...)` call and a second opinion about a default is a second
-        # answer. `random_strength` is the one that differs: CatBoost ships
-        # 1.0 (`oblivious_tree_options.cpp:17`) and `train` ships 0.0.
-        String("Min"), Float32(0.0), False,
-        200_000, -1, -1,
-        # boost_from_average -1: their unset option, resolved inside
-        # `train` by the AdjustBoostFromAverageDefaultValue implementation
-        -1,
-        List[Float32](),
-        # grow_policy SymmetricTree, max_leaves unset, min_data_in_leaf 1
-        String("SymmetricTree"), -1, 1, Float64(-1), Float64(-1), Float64(1),
-        # feature_border_type: their default, GreedyLogSum
-        String("GreedyLogSum"),
-        # boosting_type Plain, fold_len_multiplier 2, fold_permutation_block
-        # unset
-        String("Plain"), Float64(2.0), 0,
-        # max_ctr_complexity: no feature combinations (the public default,
-        # 4 with categorical columns, is resolved by the fit door)
-        1,
-    )
-
-
 @fieldwise_init
 struct GbdtFitResult(Movable):
     """What a fit produces besides the model.

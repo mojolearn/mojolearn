@@ -92,35 +92,6 @@ def fast_mma_boruvka_applies(n_features: Int) -> Bool:
     return n_features >= 1 and n_features <= MB_MAX_D
 
 
-def mb_center_kernel(
-    x: MutPointer[Float32, MutAnyOrigin],
-    mean: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-    k_in: Int32,
-):
-    """One block of 256: column means (any order; the center never reaches
-    the answer)."""
-    var n = Int(n_in)
-    var k = Int(k_in)
-    var tid = Int(thread_idx.x)
-    var f = tid % 32
-    var part = tid // 32
-    var part_sum = stack_allocation[256, Float32, address_space=AddressSpace.SHARED]()
-    var s = Float32(0)
-    if f < k:
-        var r = part
-        while r < n:
-            s += x[r * k + f]
-            r += 8
-    part_sum[tid] = s
-    barrier()
-    if tid < k:
-        var t = Float32(0)
-        for p in range(8):
-            t += part_sum[p * 32 + tid]
-        mean[tid] = t / Float32(n)
-
-
 def mb_shift_kernel[MR: Bool](
     x: MutPointer[Float32, MutAnyOrigin],
     mean: MutPointer[Float32, MutAnyOrigin],

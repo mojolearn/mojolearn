@@ -128,13 +128,6 @@ def list_i32(src: MutPointer[Int32, MutUntrackedOrigin], n: Int) -> List[Int32]:
     return out^
 
 
-def store_f32(dst: MutPointer[Float32, MutUntrackedOrigin], values: List[Float32], n: Int):
-    """One memcpy of the first n words of `values` into a borrowed output."""
-    if n > 0:
-        unsafe_memcpy(dest=dst, src=values.unsafe_ptr(), count=n)
-    _ = len(values)
-
-
 def list_u32(src: MutPointer[UInt32, MutUntrackedOrigin], n: Int) -> List[UInt32]:
     """One memcpy of n borrowed uint32 words into an owned List."""
     var out = List[UInt32](unsafe_uninit_length=max(n, 0))

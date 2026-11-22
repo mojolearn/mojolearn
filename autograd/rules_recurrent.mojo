@@ -418,18 +418,6 @@ def rnn_layer[E: Exec](
     return tape.custom(ex, [gx, w_hh, b_hh], w.hall[l] + B * H, T * B, H, RNN_LAYER, saved)
 
 
-def rnn_last_step[E: Exec](mut tape: Tape, mut ex: E, seq: Tensor, B: Int) raises -> Tensor:
-    """The last B rows of a time-major sequence [T B, H], as a view."""
-    var rows = tape.rows(seq)
-    var H = tape.cols(seq)
-    if B <= 0 or rows % B != 0:
-        raise Error("recurrent last step: rows must be a multiple of the batch")
-    var saved = Args()
-    saved.i0 = (rows - B) * H
-    saved.i1 = B * H
-    return tape.custom(ex, [seq], tape.value(seq) + (rows - B) * H, B, H, RNN_LAST_STEP, saved)
-
-
 # ------------------------------------------------------------------ backward rules
 def _linear_bwd[E: Exec](
     mut ex: E, saved: Args, up: FP, inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],

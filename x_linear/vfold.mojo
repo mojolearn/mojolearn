@@ -186,12 +186,3 @@ def vwsq(t: Team, th: FP, toff: Int, d: Int, stride: Int, kp: Int, parts: FP) ->
     """sum over kp classes and j < d of th[toff + k stride + j]^2."""
     return _vfold[2, VOP_SUM](t, th, toff, th, toff, kp * d, d, stride, parts)
 
-
-def vdot1(a: FP, ia: Int, b: FP, ib: Int, p: Int) -> Float32:
-    """`vdot` on one thread (no team)."""
-    return _vfold_serial[0, VOP_SUM](a, ia, b, ib, p, 0, 0)
-
-
-def vwsq1(th: FP, toff: Int, d: Int, stride: Int, kp: Int) -> Float32:
-    """`vwsq` on one thread."""
-    return _vfold_serial[2, VOP_SUM](th, toff, th, toff, kp * d, d, stride)

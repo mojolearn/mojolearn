@@ -126,17 +126,6 @@ def _p3_numpy_fill(factory: PythonObject) raises:
     g[].factory = Int(factory._obj_ptr)
 
 
-def p3_numpy_scalar_class(factory: PythonObject, cls: PythonObject) raises -> Bool:
-    """True when `cls` is one of the exact NumPy real scalar types."""
-    _p3_numpy_fill(factory)
-    var g = P3_NUMPY_CLASSES.get_or_create_ptr()
-    var address = Int(cls._obj_ptr)
-    for i in range(len(g[].scalars)):  # driver-loop: fixed set of 14 class addresses
-        if g[].scalars[i] == address:
-            return True
-    return False
-
-
 def p3_numpy_scalar_classes(factory: PythonObject) raises -> List[Int]:
     """The exact NumPy real scalar type addresses (copy, for a native loop)."""
     _p3_numpy_fill(factory)

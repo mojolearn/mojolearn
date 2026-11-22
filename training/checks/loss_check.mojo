@@ -473,47 +473,6 @@ def _download_f32(
     return out^
 
 
-def _plant_bits_f32(
-    ctx: DeviceContext,
-    mut buf: DeviceBuffer[DType.float32],
-    count: Int,
-    idx: Int,
-    pattern: UInt32,
-) raises:
-    """Write one bit pattern into one cell of a device buffer, as a HOST
-    ROUND TRIP.
-
-    `transformer/impl/.../modeling_llama.mojo::_plant_bits`'s spelling
-    and its reason: a plant kernel would need an `Int32` index buffer and a
-    `UInt32` bit buffer, which are element types nothing else in this lane
-    uses, and a download-store-upload uses only forms already exercised
-    here. It costs two drains and a full buffer copy per plant, on the
-    handful of plants clause (f) performs, in a profile that publishes no
-    timing number.
-
-    **AN INDEX THAT MISSES IS REFUSED.** A plant landing outside the USED
-    region is worse than no plant: the gate goes green and proves nothing.
-    The bound is `count`, the used cell count, not `len(buf)`."""
-    if idx < 0 or idx >= count:
-        raise Error(
-            String("loss_check: plant index ")
-            + String(idx)
-            + " is outside the used region of "
-            + String(count)
-            + " cells. A plant that misses makes the gate green and proves"
-            + " nothing ([[verify-reach-not-output]])."
-        )
-    var host = ctx.enqueue_create_host_buffer[DType.float32](count)
-    ctx.synchronize()
-    var view = buf.create_sub_buffer[DType.float32](0, count)
-    download_host_into[DType.float32](ctx, view, host)
-    ctx.synchronize()
-    host.unsafe_ptr().unsafe_store(idx, f32_from_bits(pattern))
-    upload_host_into[DType.float32](ctx, view, host)
-    ctx.synchronize()
-    _ = view
-
-
 def nonfinite_cells(values: List[Float32]) -> Int:
     """How many cells are NaN or infinity, BY BITS.
 

@@ -57,29 +57,6 @@ def is_fused(metric: Int) -> Bool:
     return metric == METRIC_L2_EXPANDED or metric == METRIC_L2_SQRT_EXPANDED
 
 
-def sampling_probability(
-    distance_to_nearest: Float64,
-    cluster_cost: Float64,
-    oversampling_factor: Float64,
-    n_clusters: Int,
-) -> Float64:
-    """`SamplingOp::operator()` at `kmeans_common.cuh:73-81`.
-
-        prob_x = (oversampling_factor * n_clusters * a.value) / cluster_cost
-
-    compared against a uniform draw per point. This is k-means|| step 3: an
-    entire OVERSAMPLED round of centers is drawn in one parallel pass, where
-    classic k-means++ draws exactly one center per sequential pass. That
-    difference is the whole reason the scalable variant exists, and it is why
-    `oversampling_factor` is an algorithm switch rather than a knob.
-    """
-    if cluster_cost == 0.0:
-        return 0.0
-    return (
-        oversampling_factor * Float64(n_clusters) * distance_to_nearest
-    ) / cluster_cost
-
-
 def check_convergence(
     clustering_cost: Float64,
     prior_clustering_cost: Float64,

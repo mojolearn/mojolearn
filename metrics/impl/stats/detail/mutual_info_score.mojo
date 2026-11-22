@@ -114,16 +114,6 @@ def col_sums(c: List[Int32], k: Int) -> List[Int64]:
     return b^
 
 
-def mutual_info_from_contingency(
-    c: List[Int32], k: Int, size: Int
-) raises -> Float64:
-    """`mutual_info_kernel` (:46-81) then `h_MI / size` (:161), on the host
-    in ascending (i, j) order (DEVIATIONS 650, 651). The untraced entry;
-    `mutual_info_from_contingency_traced` is the implementation."""
-    var off = IdentityTrace.disabled()
-    return mutual_info_from_contingency_traced(off, c, k, size, String(""))
-
-
 def mutual_info_from_contingency_traced(
     mut trace: IdentityTrace,
     c: List[Int32],

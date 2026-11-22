@@ -113,10 +113,6 @@ def svc_zero_division(float_division: Bool) raises:
     raise Error("RuntimeError: division by zero")
 
 
-def svc_read_f64(array: PythonObject, index: Int) raises -> Float64:
-    return FAMILY_F64P(unsafe_from_address=Int(py=classical_address(array)))[index]
-
-
 def svc_read_f32(array: PythonObject, index: Int) raises -> Float64:
     return Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(array)))[index])
 
@@ -150,28 +146,10 @@ def svc_shape_of(obj: PythonObject, context: PythonObject) raises -> PythonObjec
     return py_call(svc_builtins().tuple, dimensions)
 
 
-def svc_flatten_labels(y: PythonObject, context: PythonObject) raises -> PythonObject:
-    return _flatten_labels(y, context)
-
-
-def svc_labels_1d(y: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`linear_model._labels_1d`: (labels list or None, shape)."""
-    var shape = svc_shape_of(y, context)
-    if len(shape) != 1:
-        return Python.tuple(PythonObject(None), shape)
-    return Python.tuple(svc_flatten_labels(y, context), shape)
-
-
 # TOMBSTONE: svc_encode_1d (the SVM's second label encoder) deleted 2026-11-08 by lane a2-admit-family; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A2_FAMILY_ADMISSION_HELPERS.patch. Its callers
 # test the 1-D shape (svc_shape_of) and call classical_encode_labels, which
 # now carries the no-label-helpers branch it had.
-
-
-def svc_sorted_classes(labels: PythonObject, context: PythonObject) raises -> PythonObject:
-    # Preserve the shared first-seen representative and sorted-class rule.
-    var encoded = _sorted_classes(labels, context)
-    return Python.tuple(encoded.classes, encoded.codes)
 
 
 def svc_label_kind(classes: PythonObject, context: PythonObject) raises -> Int:

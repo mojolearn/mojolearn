@@ -615,21 +615,3 @@ def partitions_agree(a: List[Int32], b: List[Int32]) -> Bool:
             map_ba.append(la)
     return True
 
-
-def oracle_linkage(fix: Int, n_clusters: Int) -> OracleLinkage:
-    var m = fixture_n(fix)
-    var d = fixture_d(fix)
-    var x = fixture_as_list(fix)
-    var dists = host_pinned_distance_matrix(x, m, d, True)
-    var mst = host_kruskal(dists, m)
-    var children = host_dendrogram(mst[0], mst[1], m)
-    var labels = host_extract_flattened_clusters(children, n_clusters, m)
-    var partition = host_partition(mst[0], mst[1], m, n_clusters)
-    var total32 = Float64(0.0)
-    for i in range(m - 1):
-        total32 = total32 + Float64(mst[2][i])
-    var total64 = host_kruskal_f64(x, m, d)
-    return OracleLinkage(
-        m, dists^, mst[0].copy(), mst[1].copy(), mst[2].copy(), children^,
-        labels^, partition^, total32, total64,
-    )

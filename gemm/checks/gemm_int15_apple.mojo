@@ -161,12 +161,6 @@ def int15_apple_geometry(m: Int) -> Int:
     return INT15_APPLE_GEOMETRY_WIDE
 
 
-def int15_apple_geometry_name(geometry: Int) -> String:
-    if geometry == INT15_APPLE_GEOMETRY_ROW:
-        return String("ROW 8x128 (1x4 simdgroups, 1x4 fragments)")
-    return String("WIDE 64x64 (2x2 simdgroups, 4x4 fragments)")
-
-
 @always_inline
 def _stage_left[
     ROWS: Int, KB: Int, NT: Int, ST: Int

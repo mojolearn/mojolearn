@@ -972,23 +972,4 @@ def unique_inverse_unit(t: Int, f: FP, q: IP):
 # Float32 word; mm_step sees that word in the incumbent feature order.
 # No transformed full matrix, and no source mutation or retained data cache.
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-def centered_matmul_unit(t: Int, f: FP, q: IP):
-    """q=[X,n,d,M,Y,W,B,sb0,sb1,OUT,nc,BIAS,ALPHA]; t=row*nc+column."""
-    var d = p(q, 2)
-    var nc = p(q, 10)
-    var row = t // nc
-    var col = t % nc
-    var mrow = 0
-    if p(q, 4) >= 0:
-        mrow = Int(ld(f, p(q, 4) + row))
-    var acc = Float32(0)
-    for j in range(d):
-        var v = sub(ld(f, p(q, 0) + row * d + j), ld(f, p(q, 3) + mrow * d + j))
-        if p(q, 5) >= 0:
-            v = mul(v, ld(f, p(q, 5) + j))
-        acc = mm_step(acc, v, ld(f, p(q, 6) + j * p(q, 7) + col * p(q, 8)))
-    if p(q, 12) >= 0:
-        acc = mul(acc, ld(f, p(q, 12)))
-    if p(q, 11) >= 0:
-        acc = add(acc, ld(f, p(q, 11) + col))
-    st(f, p(q, 9) + t, acc)
+

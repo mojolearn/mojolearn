@@ -217,16 +217,6 @@ def alternative_from_name(name: String) raises -> Int:
     )
 
 
-def alternative_name(alt: Int) -> String:
-    if alt == ALT_TWO_SIDED:
-        return String("two-sided")
-    if alt == ALT_LESS:
-        return String("less")
-    if alt == ALT_GREATER:
-        return String("greater")
-    return String("?")
-
-
 def bca_validate(statistic: Int, n: Int) raises:
     """DEVIATION 1699 (closed 2026-09-28 by DEVIATION 5410): what BCa can be
     asked for, in one place so the wording is the same on the device path and
@@ -722,10 +712,3 @@ def bca_interval(
     var hi = quantile_of_sorted_host(sorted_dist, 0, n_resamples, alpha_2)
     return BcaEnds(alpha_1, alpha_2, z0, Interval(lo, hi))
 
-
-def bca_arm_name(stat: Int) -> String:
-    """Which jackknife arm BCa uses for a statistic (DEVIATION 1699). Used by
-    the card header."""
-    if stat == STAT_MEAN or stat == STAT_STD or stat == STAT_DIFF_MEANS:
-        return stat_name(stat)
-    return String("none (order statistic; needs the sort path)")

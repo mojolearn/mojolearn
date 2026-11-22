@@ -395,26 +395,6 @@ def set_tree_params(
     params.validity_check()
 
 
-def default_tree_params() raises -> DecisionTreeParams:
-    """Not in their header: C++ gets these from the default arguments of
-    `set_tree_params` on a stack-declared struct
-    (`randomforest.cu:566-576`). Mojo has no uninitialized struct, so the
-    same defaults are spelled once here."""
-    var p = DecisionTreeParams(
-        max_depth=-1,
-        max_leaves=-1,
-        max_features=1.0,
-        max_n_bins=128,
-        min_samples_leaf=1,
-        min_samples_split=2,
-        split_criterion=CRITERION_END,
-        min_impurity_decrease=0.0,
-        max_batch_size=4096,
-    )
-    set_tree_params(p)
-    return p
-
-
 # ---------------------------------------------------------------------------
 # TreeMetaDataNode -- `decisiontree.hpp:92-101`
 # ---------------------------------------------------------------------------

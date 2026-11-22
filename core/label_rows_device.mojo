@@ -149,25 +149,3 @@ def device_argmax_rows(
 # block goes up once and the kernel reads row r at `(r * l + l - 1) * v`:
 # the same keys, the same first-max rule, the same codes.
 
-
-def _argmax_last_u32_kernel(src: _U32, rows_: Int32, length_: Int32, cols_: Int32, dst: _I64):
-    var r = _tid()
-    if r >= Int(rows_):
-        return
-    var cols = Int(cols_)
-    var base = (r * Int(length_) + Int(length_) - 1) * cols
-    var best = 0
-    var b0 = src.unsafe_load(base)
-    if not _nan32(b0):
-        var best_key = _key32(b0)
-        for c in range(1, cols):
-            var v = src.unsafe_load(base + c)
-            if _nan32(v):
-                continue
-            var kv = _key32(v)
-            if kv > best_key:
-                best = c
-                best_key = kv
-    dst.unsafe_store(r, Int64(best))
-
-

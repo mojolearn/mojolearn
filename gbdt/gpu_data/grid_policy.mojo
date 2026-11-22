@@ -48,15 +48,6 @@ def policy_mask(policy: Int) -> UInt32:
     return (UInt32(1) << UInt32(bits_per_feature(policy))) - 1
 
 
-def policy_bin_count(policy: Int) -> Int:
-    """`TCompressedIndexHelper::BinCount()`, `1 << bits`.
-
-    The number of bin values the packing can REPRESENT, which is one more
-    than the number of folds a feature may use.
-    """
-    return 1 << bits_per_feature(policy)
-
-
 def policy_max_folds(policy: Int) -> Int:
     """`TCompressedIndexHelper::MaxFolds()`, `(1 << bits) - 1`.
 
@@ -74,11 +65,6 @@ def policy_shift(policy: Int, feature_id: Int) -> Int:
     """
     var local_id = feature_id % features_per_int(policy)
     return 32 - (1 + local_id) * bits_per_feature(policy)
-
-
-def policy_shifted_mask(policy: Int, feature_id: Int) -> UInt32:
-    """`TCompressedIndexHelper::ShiftedMask(featureId)`."""
-    return policy_mask(policy) << UInt32(policy_shift(policy, feature_id))
 
 
 def policy_for_fold_count(fold_count: Int) -> Int:

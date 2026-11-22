@@ -786,23 +786,6 @@ def reference_score_samples_f64(
     return out^
 
 
-def reference_mean_log_likelihood_f64(
-    x: List[Float64],
-    means: List[Float64],
-    cov: List[Float64],
-    weights: List[Float64],
-    n: Int,
-    d: Int,
-    ncomp: Int,
-) raises -> Float64:
-    """`score`, `_base.py:375-393`: the mean of `score_samples`."""
-    var s = reference_score_samples_f64(x, means, cov, weights, n, d, ncomp)
-    var acc = Float64(0.0)
-    for i in range(n):
-        acc += s[i]
-    return acc / Float64(n)
-
-
 def to_f64(v: List[Float32]) -> List[Float64]:
     """A float32 list widened, exactly. Every float32 is a float64, so this
     loses nothing and the reference is comparing against the same numbers the

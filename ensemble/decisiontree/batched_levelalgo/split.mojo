@@ -938,23 +938,3 @@ struct Split[dtype: DType](TrivialRegisterPassable):
                 scratch[unsafe_offset=vlane] = self.copy()
             barrier()
 
-
-def init_split_kernel[
-    dtype: DType
-](splits: MutPointer[Split[dtype], MutAnyOrigin], len: Int32):
-    """`initSplit`, `split.cuh:284-289`.
-
-    Theirs is `raft::linalg::writeOnlyUnaryOp` over a lambda that assigns a
-    default-constructed `Split`. RAFT's `writeOnlyUnaryOp` is a plain
-    grid-stride write-only map with no read of the destination, so the
-    kernel below IS that map with their lambda inlined -- there is no
-    vendor primitive being stood in for and nothing is unfused by writing
-    it out.
-    """
-    from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-
-    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var stride = Int(grid_dim.x) * Int(block_dim.x)
-    while idx < Int(len):
-        splits[unsafe_offset=idx] = Split[dtype]()
-        idx += stride

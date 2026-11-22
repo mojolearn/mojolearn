@@ -30,10 +30,6 @@ def in_f32(addrs: PythonObject, i: Int, n: Int) raises -> List[Float32]:
     return read_f32(a_int(addrs, i), n)
 
 
-def in_i32(addrs: PythonObject, i: Int, n: Int) raises -> List[Int32]:
-    return read_i32(a_int(addrs, i), n)
-
-
 def ptr_f32(addrs: PythonObject, i: Int) raises -> F32P:
     """The caller's float32 array itself (no copy): the host binding reads
     and writes it in place, under the GIL-released call that owns it."""

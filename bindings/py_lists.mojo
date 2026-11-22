@@ -55,22 +55,6 @@ def py_list_f32(values: List[Float32]) raises -> PythonObject:
     return out
 
 
-def py_list_i32(values: List[Int32]) raises -> PythonObject:
-    var out = _py_result_list(len(values))
-    ref cpy = Python().cpython()
-    # Resolved once per process (cpython_table), not by name per publish.
-    var t = cpython_table()
-    for i in range(len(values)):  # driver-loop: over completed native scalar result slots for Python publication
-        var item = t[].PyLong_FromLongLong(Int64(values[i]))
-        if not item:
-            raise cpy.unsafe_get_error()
-        # SetItem steals the new reference on BOTH success and failure.
-        if t[].PyList_SetItem(out._obj_ptr, i, item) != 0:
-            raise cpy.unsafe_get_error()
-    _ = values
-    return out
-
-
 def py_list_i64(values: List[Int64]) raises -> PythonObject:
     var out = _py_result_list(len(values))
     ref cpy = Python().cpython()
@@ -78,38 +62,6 @@ def py_list_i64(values: List[Int64]) raises -> PythonObject:
     var t = cpython_table()
     for i in range(len(values)):  # driver-loop: over completed native scalar result slots for Python publication
         var item = t[].PyLong_FromLongLong(Int64(values[i]))
-        if not item:
-            raise cpy.unsafe_get_error()
-        # SetItem steals the new reference on BOTH success and failure.
-        if t[].PyList_SetItem(out._obj_ptr, i, item) != 0:
-            raise cpy.unsafe_get_error()
-    _ = values
-    return out
-
-
-def py_list_u32(values: List[UInt32]) raises -> PythonObject:
-    var out = _py_result_list(len(values))
-    ref cpy = Python().cpython()
-    # Resolved once per process (cpython_table), not by name per publish.
-    var t = cpython_table()
-    for i in range(len(values)):  # driver-loop: over completed native scalar result slots for Python publication
-        var item = t[].PyLong_FromUnsignedLongLong(UInt64(values[i]))
-        if not item:
-            raise cpy.unsafe_get_error()
-        # SetItem steals the new reference on BOTH success and failure.
-        if t[].PyList_SetItem(out._obj_ptr, i, item) != 0:
-            raise cpy.unsafe_get_error()
-    _ = values
-    return out
-
-
-def py_list_u64(values: List[UInt64]) raises -> PythonObject:
-    var out = _py_result_list(len(values))
-    ref cpy = Python().cpython()
-    # Resolved once per process (cpython_table), not by name per publish.
-    var t = cpython_table()
-    for i in range(len(values)):  # driver-loop: over completed native scalar result slots for Python publication
-        var item = t[].PyLong_FromUnsignedLongLong(UInt64(values[i]))
         if not item:
             raise cpy.unsafe_get_error()
         # SetItem steals the new reference on BOTH success and failure.

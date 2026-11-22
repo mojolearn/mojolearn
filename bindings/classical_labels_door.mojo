@@ -126,12 +126,6 @@ def _labels_connect(context: PythonObject) raises:
         classical_connect_numpy(context)
 
 
-def labels_bool_type(t: PythonObject, context: PythonObject) raises -> Bool:
-    """Exactly `bool` or NumPy's `bool_` (labels_primitive_kind 2)."""
-    _labels_connect(context)
-    return labels_primitive_kind(t, context) == 2
-
-
 def labels_real_type(t: PythonObject, context: PythonObject) raises -> Bool:
     """An exact native bool, integer or real scalar class: the former
     numbers.Real test (plus NumPy bool_) by identity."""
@@ -144,12 +138,6 @@ def labels_integral_type(t: PythonObject, context: PythonObject) raises -> Bool:
     numbers.Integral test by identity."""
     _labels_connect(context)
     return labels_primitive_kind(t, context) == 3
-
-
-def labels_text_type(t: PythonObject, context: PythonObject) raises -> Bool:
-    """Exactly str or NumPy's str_."""
-    _labels_connect(context)
-    return labels_primitive_kind(t, context) == 1
 
 
 def labels_table(context: PythonObject, mode: String, name: String) raises -> PythonObject:
@@ -170,15 +158,6 @@ def labels_table(context: PythonObject, mode: String, name: String) raises -> Py
 def labels_entry(table: PythonObject, name: String) raises -> PythonObject:
     """A connected compiled entry point, or None when the binary has none."""
     return py_get(table, PythonObject(name))
-
-
-def labels_need(table: PythonObject, name: String, message: String, kind: String = "RuntimeError") raises -> PythonObject:
-    """A connected entry point the operation requires, refused with the
-    Python wording when the binary predates it."""
-    var entry = py_get(table, PythonObject(name))
-    if entry is None:
-        raise Error(kind + ": " + message)
-    return entry
 
 
 # TOMBSTONE: labels_helper / labels_call (the base binding's `_buffer._native` callables in the `labels_helpers` context table, one PyObject_CallObject per step) deleted 2026-11-09 by lane s1-shared-state-hardening-and-selector; code recoverable at 91863cfb35^ (244c15e707).
@@ -857,22 +836,6 @@ def _text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optio
         return None
     var result = found.take()
     return ClassicalLabels(result.classes, result.codes.values, result.count)
-
-
-def native_text_buffer_labels(y: PythonObject, context: PythonObject) raises -> Optional[NativeTextLabels]:
-    var found = _text_buffer_labels_into[_NativeTextCodes](y, context)
-    if not found:
-        return None
-    var result = found.take()
-    return NativeTextLabels(result.classes, result.codes.values^)
-
-
-def native_text_list_labels(flat: PythonObject, context: PythonObject) raises -> Optional[NativeTextLabels]:
-    var found = _text_list_labels_into[_NativeTextCodes](flat, context)
-    if not found:
-        return None
-    var result = found.take()
-    return NativeTextLabels(result.classes, result.codes.values^)
 
 
 def _list_labels(y: PythonObject, context: PythonObject) raises -> Optional[ClassicalLabels]:

@@ -172,11 +172,6 @@ def kf_score(y: FP, p: FP, s: Int, e: Int) -> Float32:
     return kf_score_final(ssr, sst)
 
 
-def kf_fw_words(n: Int, d: Int, k: Int, na: Int) -> Int:
-    """Host scratch: xm d | ym 1 | G d*d | xty d | aw d*d | w na*d | b na | p na*(n//k + 1) | sums na."""
-    return d + 1 + d * d + d + d * d + na * d + na + na * (n // k + 1) + na
-
-
 def ridge_kfold_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP):
     """ip: [k, fit_intercept, n_alphas]; fp: alphas. res: the mean score of
     each alpha. The host form: cells and rows as independent units."""

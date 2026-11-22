@@ -95,10 +95,6 @@ def mx_truthy(value: PythonObject) raises -> Bool:
     return Bool(py=py_call(mx_b().bool, value))
 
 
-def mx_is_none(value: PythonObject) -> Bool:
-    return value is None
-
-
 def mx_eq(a: PythonObject, b: PythonObject) raises -> Bool:
     """`bool(a == b)`."""
     return Bool(py=py_call(mx_b().bool, py_call(native_loaded_module("operator").eq, a, b)))

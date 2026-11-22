@@ -149,28 +149,6 @@ def paths_equal(a: TLeafPath, b: TLeafPath) -> Bool:
     return True
 
 
-def previous_split(path: TLeafPath) raises -> TLeafPath:
-    """Their `PreviousSplit` (`:62-69`), the PARENT's path.
-
-    Their `CB_ENSURE(size > 0, "Error: can't remove split")` is kept as a
-    raise. It fires on the root, and the root has no parent -- a caller that
-    reaches this with an empty path has lost track of which leaves are new,
-    which is a bookkeeping bug and not a boundary case to swallow.
-
-    This is the key their sibling pairing groups on
-    (`split_properties_helper.cpp:1293`): two siblings differ only in the last
-    direction, so dropping the last entry makes them collide, and that
-    collision is the entire mechanism behind "build the smaller, derive the
-    larger"."""
-    var size = path.get_depth()
-    if size == 0:
-        raise Error("Error: can't remove split")
-    var prev = TLeafPath()
-    for i in range(size - 1):
-        prev.add_split(path.splits[i], path.directions[i])
-    return prev^
-
-
 def split_leaf_path(
     path: TLeafPath, split: TBinarySplit, direction: Int
 ) -> TLeafPath:

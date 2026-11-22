@@ -241,15 +241,6 @@ struct _HostThreadPolicy(Defaultable, Movable):
 comptime _HOST_THREAD_POLICY = SharedSlot[_HostThreadPolicy, "MojolearnHostThreadPolicyV2"]
 
 
-def host_predict_threads_requested() -> Int:
-    """The ceiling MOJOLEARN_CPU_THREADS asks for, or 0 when it is unset,
-    empty, not an integer or not positive. Read once per process."""
-    try:
-        return _HOST_THREAD_POLICY.get_or_create_ptr()[].requested
-    except:
-        return _host_threads_env()
-
-
 def host_predict_workers() -> Int:
     """The resolved worker ceiling (environment, else physical cores,
     clamped to [1, HOST_PREDICT_MAX_TASKS]). Read once per process."""

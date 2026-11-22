@@ -254,10 +254,6 @@ def mc_dtype_name(obj: PythonObject, context: PythonObject) raises -> String:
     return "type " + String(py_type(obj).__name__)
 
 
-def mc_flatten(obj: PythonObject, context: PythonObject) raises -> PythonObject:
-    return metric_flatten(obj, context)
-
-
 def mc_types_all(types: PythonObject, classes: PythonObject) raises -> Bool:
     var listed = mc_list(types)
     for i in range(mc_len(listed)):  # driver-loop: no Python metaclass/subclass hook executes

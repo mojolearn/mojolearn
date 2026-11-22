@@ -507,15 +507,6 @@ def column_has_float_atomics(column: Int) -> Bool:
     )
 
 
-def column_compares_flush_subnormals(column: Int) -> Bool:
-    """CAPABILITY. The CPU column answers False: `ftz` is explicit under
-    IDENTICAL (checks/numerics.mojo flushes by bits, not by MXCSR), and a
-    host compare sees the subnormal it is handed."""
-    if column == COLUMN_CPU:
-        return False
-    return column == COLUMN_APPLE
-
-
 comptime VENDOR_TF32_PRODUCT_REL_BOUND = Float64(1.0e-3)
 
 
@@ -732,11 +723,6 @@ comptime DETECTED_COLUMN = (
 def column_is_simulated() -> Bool:
     """True when `-D MOJOLEARN_COLUMN_*` names a vendor this device is not."""
     return TARGET_COLUMN != DETECTED_COLUMN
-
-
-def column_is_host(column: Int) -> Bool:
-    """Whether `column` is the CPU column, the one a build with no accelerator target compiles."""
-    return column == COLUMN_CPU
 
 
 def hist_floats_per_thread_for[kernel: Int]() -> Int:
@@ -1152,15 +1138,6 @@ def lib_spec_for(
             + "-lane fold it has to perform"
         )
     return spec^
-
-
-
-def lib_smem_pages(kernel: Int, column: Int, page_bytes: Int) -> Int:
-    """SCHEDULING."""
-    if 2 * page_bytes <= column_shared_limit(column):
-        return 2
-    return 1
-
 
 
 def lib_block_bounds_a_float_fold[kernel: Int]() -> Bool:

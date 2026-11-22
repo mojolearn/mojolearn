@@ -198,40 +198,6 @@ def read_f32_file(path: String) raises -> List[Float32]:
     return values^
 
 
-def read_u32_file(path: String) raises -> List[UInt32]:
-    """A stored little-endian uint32 vector (raw words)."""
-    var bytes = read_fixture_bytes(path)
-    require(len(bytes) % 4 == 0, path + ": not a 32-bit word vector")
-    var count = len(bytes) // 4
-    var values = List[UInt32](length=count, fill=0)
-    var vp = values.unsafe_ptr()
-    var bp = bytes.unsafe_ptr()
-    def word(i: Int) {imm vp, imm bp}:
-        vp.unsafe_store(i, UInt32(bp[4 * i]) | (UInt32(bp[4 * i + 1]) << 8) | (UInt32(bp[4 * i + 2]) << 16)
-                        | (UInt32(bp[4 * i + 3]) << 24))
-    host_parallelize(word, count)
-    _ = bytes^
-    return values^
-
-
-def read_f64_file(path: String) raises -> List[Float64]:
-    """A stored little-endian float64 vector."""
-    var bytes = read_fixture_bytes(path)
-    require(len(bytes) % 8 == 0, path + ": not a float64 vector")
-    var count = len(bytes) // 8
-    var values = List[Float64](length=count, fill=0.0)
-    var vp = values.unsafe_ptr()
-    var bp = bytes.unsafe_ptr()
-    def word(i: Int) {imm vp, imm bp}:
-        var w = UInt64(0)
-        for k in range(8):  # small-loop(byte assembly): eight bytes of one word
-            w |= UInt64(bp[8 * i + k]) << UInt64(8 * k)
-        vp.unsafe_store(i, bitcast[DType.float64](w))
-    host_parallelize(word, count)
-    _ = bytes^
-    return values^
-
-
 def _wanted(checks: List[Check], column: Column, names: List[String]) raises -> List[Int]:
     var picked = List[Int]()
     var every = len(names) == 0

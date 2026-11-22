@@ -171,14 +171,6 @@ comptime RBC_PSCAN_PER_THREAD = 8
 comptime RBC_PSCAN_CHUNK = RBC_SCAN_TPB * RBC_PSCAN_PER_THREAD
 
 
-def rbc_fast_scan_on() -> Bool:
-    """Always on (lane cgr4-download-loop, 2026-10-03): the device-wide scan
-    is the scan on every vendor and tier. Integer adds with the same Int32
-    wrap, so every offset and `ex_scan[n]` are the one-block kernel's values;
-    the one-block kernel only serves a scan of at most one chunk."""
-    return True
-
-
 comptime RBC_MAX_BLOCKS = 512
 """`rbc_max_reduce_launch`'s grid cap: above this many blocks' worth of rows
 every thread grid-strides, and the second pass is one block over at most

@@ -74,6 +74,3 @@ def samba_caps(entries: PythonObject) raises -> PythonObject:
     prepared_put(mods, _SAMBA_CAPS_SLOT, canonical, record)
     return record
 
-
-def samba_cap(entries: PythonObject, index: Int) raises -> Bool:
-    return Bool(py=samba_caps(entries)[index])

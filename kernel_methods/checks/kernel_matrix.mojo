@@ -253,24 +253,6 @@ def km_kernel_from_name(name: String) raises -> Int:
     )
 
 
-def km_gamma_default(n_features: Int) -> Float64:
-    """`gamma = 1.0 / X.shape[1]` when the caller passes none.
-
-    THEIR default, and it is theirs three times over: cuML's
-    `polynomial_kernel`, `sigmoid_kernel`, `rbf_kernel` and
-    `laplacian_kernel` each open with `if gamma is None: gamma = 1.0 /
-    X.shape[1]` (`pairwise_kernels.py:21, 31, 42, 52`), and scikit-learn's
-    do the same. Computed in FLOAT64 on the host and narrowed once at the
-    kernel-argument boundary, because `1 / d` for a non-power-of-two `d` is
-    inexact and doing it twice in two precisions is two numbers.
-
-    NOT applied silently: `km_validate_kernel_params` refuses a non-positive
-    gamma, and the estimator surfaces record the gamma they used in the
-    card's header so a run is reproducible from its own transcript.
-    """
-    return 1.0 / Float64(n_features)
-
-
 def km_validate_kernel_params(kp: KernelParams, what: String) raises:
     """Every refusal a kernel parameter block can earn, BY NAME, on the host,
     before a buffer is allocated. DEVIATION 1686.

@@ -1106,12 +1106,6 @@ def host_archive_float_repr(value: Float64) raises -> String:
     return _archive_builtin_repr(PythonObject(value))
 
 
-def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
-                            context: PythonObject) raises -> PythonObject:
-    """`host_archive_rbc_metric_object` of a saved float p."""
-    return host_archive_rbc_metric_object(cls_name, metric, PythonObject(p), context)
-
-
 def host_archive_rbc_metric_object(cls_name: String, metric: PythonObject, p: PythonObject,
                                    context: PythonObject) raises -> PythonObject:
     """`neighbors._resolve_rbc_metric(cls_name, metric, p)` for a saved

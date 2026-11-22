@@ -133,10 +133,6 @@ def json_item(doc: JsonDoc, node: Int, index: Int) -> Int:
     return doc.kids[node][index]
 
 
-def json_is_string(doc: JsonDoc, node: Int) -> Bool:
-    return node >= 0 and doc.kind[node] == JSON_STRING
-
-
 def json_string(doc: JsonDoc, node: Int) -> String:
     """The text of a string node; empty for anything else."""
     if node < 0 or doc.kind[node] != JSON_STRING:
@@ -235,18 +231,6 @@ def _json_token_int(token: String, mut exact: Bool) raises -> Int:
             raise Error("OverflowError: corpus metadata integer exceeds the native word")
         value *= 10
     return -value if negative else value
-
-
-def json_is_integer(doc: JsonDoc, node: Int) -> Bool:
-    """A number node whose token is an integer literal (no point, no exponent)."""
-    if node < 0 or doc.kind[node] != JSON_NUMBER:
-        return False
-    var view = doc.text[node].as_bytes()
-    for i in range(len(view)):  # small-loop(bytes of one number token)
-        var c = Int(view[i])
-        if (c < 48 or c > 57) and c != 45:
-            return False
-    return len(view) > 0
 
 
 def json_number_int(doc: JsonDoc, node: Int) raises -> Int:

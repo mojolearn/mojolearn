@@ -128,17 +128,3 @@ def mul_v[w: Int](a: SIMD[DType.float32, w], b: SIMD[DType.float32, w]) -> SIMD[
             ](rebind[SIMD[DType.float32, 16]](a * b)))
     return a * b
 
-
-@always_inline
-def div_v[w: Int](a: SIMD[DType.float32, w], b: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
-    """`identical_div` (`portable_divf`: operands flushed, one correctly
-    rounded division, result flushed; the flush unconditional), lane by
-    lane. The host binding builds IDENTICAL only."""
-    return _ftz_always_v[w](_ftz_always_v[w](a) / _ftz_always_v[w](b))
-
-
-@always_inline
-def _ftz_always_v[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
-    """`checks/numerics.mojo::_ftz_always`, lane by lane: exponent field
-    zero becomes the signed zero, in every mode."""
-    return _flush_bits[w](x)

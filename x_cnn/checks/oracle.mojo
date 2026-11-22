@@ -46,62 +46,9 @@ def _inf() -> Float32:
 
 
 # ---------------------------------------------------------------- 5700
-def o_col2im(
-    dcols: List[Float32], N: Int, C: Int, H: Int, W: Int, KH: Int, KW: Int, SH: Int, SW: Int,
-    PH: Int, PW: Int, DH: Int, DW: Int, OH: Int, OW: Int, alt: Bool,
-) -> List[Float32]:
-    var out = List[Float32](capacity=N * C * H * W)
-    var ckk = C * KH * KW
-    for n in range(N):
-        for c in range(C):
-            for h in range(H):
-                for w in range(W):
-                    var acc = Float32(0)
-                    for a in range(KH):
-                        var kh = KH - 1 - a if alt else a
-                        for b in range(KW):
-                            var kw = KW - 1 - b if alt else b
-                            var th = h + PH - kh * DH
-                            var tw = w + PW - kw * DW
-                            if th < 0 or tw < 0 or th % SH != 0 or tw % SW != 0:
-                                continue
-                            var oh = th // SH
-                            var ow = tw // SW
-                            if oh >= OH or ow >= OW:
-                                continue
-                            var r = (n * OH + oh) * OW + ow
-                            acc = ftz(acc + ftz(dcols[r * ckk + (c * KH + kh) * KW + kw]))
-                    out.append(acc)
-    return out^
 
 
 # ---------------------------------------------------------------- 5701
-def o_conv_dw(
-    x: List[Float32], dout: List[Float32], N: Int, C: Int, H: Int, W: Int, OC: Int, KH: Int, KW: Int,
-    SH: Int, SW: Int, PH: Int, PW: Int, OH: Int, OW: Int, alt: Bool,
-) -> List[Float32]:
-    """dW (OC x C*KH*KW) = G^T cols over the N*OH*OW rows (dilation 1)."""
-    var rows = N * OH * OW
-    var ckk = C * KH * KW
-    var cols = List[Float32](capacity=rows * ckk)
-    var g = List[Float32](capacity=rows * OC)
-    for n in range(N):
-        for oh in range(OH):
-            for ow in range(OW):
-                for c in range(C):
-                    for kh in range(KH):
-                        for kw in range(KW):
-                            var h = oh * SH - PH + kh
-                            var w = ow * SW - PW + kw
-                            var v = Float32(0)
-                            if h >= 0 and h < H and w >= 0 and w < W:
-                                v = ftz(x[((n * C + c) * H + h) * W + w])
-                            cols.append(v)
-                for oc in range(OC):
-                    g.append(ftz(dout[((n * OC + oc) * OH + oh) * OW + ow]))
-    if alt:
-        return gemm_oracle_serial(g, cols, OP_TN, OC, ckk, rows)
-    return gemm_oracle(g, cols, OP_TN, OC, ckk, rows)
 
 
 # ---------------------------------------------------------------- 5702
@@ -140,72 +87,10 @@ def _o_blocked_sum(v: List[Float32]) -> Float32:
     return total
 
 
-def o_bn_stats(x: List[Float32], N: Int, C: Int, HW: Int, eps: Float32, alt: Bool) -> List[Float32]:
-    """[mean C | biased var C | invstd C]."""
-    var mean = List[Float32]()
-    var var_b = List[Float32]()
-    var inv = List[Float32]()
-    var count = Float32(N * HW)
-    for c in range(C):
-        var xs = List[Float32]()
-        for a in range(N):
-            var n = N - 1 - a if alt else a
-            for k in range(HW):
-                xs.append(ftz(x[(n * C + c) * HW + k]))
-        var m = ftz(identical_div(_o_blocked_sum(xs), count))
-        var ds = List[Float32]()
-        for a in range(N):
-            var n = N - 1 - a if alt else a
-            for k in range(HW):
-                var d = ftz(ftz(x[(n * C + c) * HW + k]) - m)
-                ds.append(ftz(identical_mul(d, d)))
-        var v = ftz(identical_div(_o_blocked_sum(ds), count))
-        mean.append(m)
-        var_b.append(v)
-        inv.append(ftz(identical_rsqrt(ftz(v + eps))))
-    mean.extend(var_b^)
-    mean.extend(inv^)
-    return mean^
-
-
 # ---------------------------------------------------------------- 5703
-def o_dropout_mask(
-    N: Int, C: Int, HW: Int, seed_lo: UInt32, seed_hi: UInt32, thresh: UInt64, p: Float32, alt: Bool
-) -> List[Float32]:
-    var out = List[Float32](capacity=N * C * HW)
-    var scale = ftz(identical_div(Float32(1), ftz(Float32(1) - p)))
-    for n in range(N):
-        for c in range(C):
-            var ctr_word = UInt32(c * N + n) if alt else UInt32(n * C + c)
-            var u = philox4x32_10(SIMD[DType.uint32, 4](ctr_word, 0, 0, 0), SIMD[DType.uint32, 2](seed_lo, seed_hi))[0]
-            var m = scale if UInt64(u) >= thresh else Float32(0)
-            for _ in range(HW):
-                out.append(m)
-    return out^
 
 
 # ---------------------------------------------------------------- 5704
-def o_spmm(
-    vals: List[Float32], h: List[Float32], rowptr: List[Int], col: List[Int], n: Int, F: Int, mode: Int, alt: Bool
-) -> List[Float32]:
-    var out = List[Float32](capacity=n * F)
-    for r in range(n):
-        var lo = rowptr[r]
-        var hi = rowptr[r + 1]
-        for f in range(F):
-            var acc = Float32(0)
-            for t in range(hi - lo):
-                var e = hi - 1 - t if alt else lo + t
-                var v = ftz(h[col[e] * F + f])
-                if mode == 0:
-                    v = ftz(identical_mul(ftz(vals[e]), v))
-                elif mode == 2:
-                    v = ftz(identical_div(v, ftz(vals[e])))
-                acc = ftz(acc + v)
-            if mode == 1 and hi > lo:
-                acc = ftz(identical_div(acc, Float32(hi - lo)))
-            out.append(acc)
-    return out^
 
 
 # ---------------------------------------------------------------- 5705, 5708
@@ -256,55 +141,9 @@ def o_softmax(logits: List[Float32], labels: List[Int], n: Int, k: Int, raw: Boo
 
 
 # ---------------------------------------------------------------- 5706
-def o_maxpool(x: List[Float32], NC: Int, H: Int, W: Int, K: Int, S: Int, P: Int, OH: Int, OW: Int, alt: Bool) -> List[Float32]:
-    """[out | winner index as float] (square window, dilation 1)."""
-    var out = List[Float32]()
-    var idx = List[Float32]()
-    for nc in range(NC):
-        for oh in range(OH):
-            for ow in range(OW):
-                var best = Float32(0)
-                var bi = -1
-                for kh in range(K):
-                    for kw in range(K):
-                        var h = oh * S - P + kh
-                        var w = ow * S - P + kw
-                        if h < 0 or h >= H or w < 0 or w >= W:
-                            continue
-                        var v = ftz(x[(nc * H + h) * W + w])
-                        var take = (v >= best) if alt else (v > best)
-                        if bi < 0 or take or v != v:
-                            best = v
-                            bi = h * W + w
-                out.append(best)
-                idx.append(Float32(bi))
-    out.extend(idx^)
-    return out^
 
 
 # ---------------------------------------------------------------- 5707
-def o_avgpool(x: List[Float32], NC: Int, H: Int, W: Int, K: Int, S: Int, P: Int, OH: Int, OW: Int, alt: Bool) -> List[Float32]:
-    """count_include_pad=True, floor mode."""
-    var out = List[Float32]()
-    for nc in range(NC):
-        for oh in range(OH):
-            for ow in range(OW):
-                var hs = oh * S - P
-                var ws = ow * S - P
-                var div = (min(hs + K, H + P) - hs) * (min(ws + K, W + P) - ws)
-                var acc = Float32(0)
-                for kh in range(K):
-                    for kw in range(K):
-                        var h = hs + kh
-                        var w = ws + kw
-                        if h < 0 or h >= H or w < 0 or w >= W:
-                            continue
-                        acc = ftz(acc + ftz(x[(nc * H + h) * W + w]))
-                if alt:
-                    out.append(ftz(identical_mul(acc, ftz(identical_div(Float32(1), Float32(div))))))
-                else:
-                    out.append(ftz(identical_div(acc, Float32(div))))
-    return out^
 
 
 # ---------------------------------------------------------------- 5709
@@ -330,172 +169,15 @@ def o_sgd(w: List[Float32], g: List[Float32], v: List[Float32], lr: Float32, mom
 
 
 # ---------------------------------------------------------------- 5710
-def o_gcn_norm(w: List[Float32], rowptr: List[Int], col: List[Int], n: Int, alt: Bool) -> List[Float32]:
-    var dis = List[Float32]()
-    for r in range(n):
-        var acc = Float32(0)
-        for e in range(rowptr[r], rowptr[r + 1]):
-            acc = ftz(acc + ftz(w[e]))
-        dis.append(ftz(identical_rsqrt(acc)) if acc > Float32(0) else Float32(0))
-    var out = List[Float32]()
-    for r in range(n):
-        for e in range(rowptr[r], rowptr[r + 1]):
-            var s = ftz(dis[col[e]])
-            var t = ftz(dis[r])
-            if alt:
-                out.append(ftz(identical_mul(ftz(w[e]), ftz(identical_mul(s, t)))))
-            else:
-                out.append(ftz(identical_mul(ftz(identical_mul(s, ftz(w[e]))), t)))
-    return out^
 
 
 # ---------------------------------------------------------------- 5711
-def _o_src(hp: Int, before: Int, size: Int, mode: Int) -> Int:
-    var h = hp - before
-    if h >= 0 and h < size:
-        return h
-    if mode == 0:
-        return -1
-    if mode == 1:
-        return -h if h < 0 else 2 * (size - 1) - h
-    if mode == 2:
-        return 0 if h < 0 else size - 1
-    return (h % size + size) % size
-
-
-def o_pad_bwd(g: List[Float32], NC: Int, H: Int, W: Int, t: Int, b: Int, l: Int, r: Int, mode: Int, alt: Bool) -> List[Float32]:
-    """dx of a 2-D pad: every padded position's gradient summed onto its
-    source pixel in (hp, wp) ascending order; alt: descending."""
-    var Hp = H + t + b
-    var Wp = W + l + r
-    var out = List[Float32](capacity=NC * H * W)
-    for nc in range(NC):
-        for h in range(H):
-            for w in range(W):
-                var acc = Float32(0)
-                for a in range(Hp):
-                    var hp = Hp - 1 - a if alt else a
-                    if _o_src(hp, t, H, mode) != h:
-                        continue
-                    for c in range(Wp):
-                        var wp = Wp - 1 - c if alt else c
-                        if _o_src(wp, l, W, mode) != w:
-                            continue
-                        acc = ftz(acc + ftz(g[(nc * Hp + hp) * Wp + wp]))
-                out.append(acc)
-    return out^
 
 
 # ---------------------------------------------------------------- 5712
-def o_adapt_avg_bwd(g: List[Float32], NC: Int, H: Int, W: Int, OH: Int, OW: Int, alt: Bool) -> List[Float32]:
-    """dx of adaptive average pooling: g / window size summed over the
-    windows holding each pixel, (oh, ow) ascending; alt: descending."""
-    var out = List[Float32](capacity=NC * H * W)
-    for nc in range(NC):
-        for h in range(H):
-            for w in range(W):
-                var acc = Float32(0)
-                for a in range(OH):
-                    var oh = OH - 1 - a if alt else a
-                    var hs = (oh * H) // OH
-                    var he = ((oh + 1) * H + OH - 1) // OH
-                    if h < hs or h >= he:
-                        continue
-                    for b in range(OW):
-                        var ow = OW - 1 - b if alt else b
-                        var ws = (ow * W) // OW
-                        var we = ((ow + 1) * W + OW - 1) // OW
-                        if w < ws or w >= we:
-                            continue
-                        var gv = ftz(g[(nc * OH + oh) * OW + ow])
-                        acc = ftz(acc + ftz(identical_div(gv, Float32((he - hs) * (we - ws)))))
-                out.append(acc)
-    return out^
 
 
 # ---------------------------------------------------------------- 5713, 5714
-def o_adapt_max_fwd(x: List[Float32], NC: Int, H: Int, W: Int, OH: Int, OW: Int, alt: Bool) -> List[Float32]:
-    """[out | winner index as float] of adaptive max pooling (torch's
-    windows [floor(o*H/OH), ceil((o+1)*H/OH))), (h, w) ascending, the first
-    maximum wins, a NaN wins (DEVIATION 5706's tie); alt: the last maximum."""
-    var out = List[Float32]()
-    var idx = List[Float32]()
-    for nc in range(NC):
-        for oh in range(OH):
-            var hs = (oh * H) // OH
-            var he = ((oh + 1) * H + OH - 1) // OH
-            for ow in range(OW):
-                var ws = (ow * W) // OW
-                var we = ((ow + 1) * W + OW - 1) // OW
-                var best = Float32(0)
-                var bi = -1
-                for h in range(hs, he):
-                    for w in range(ws, we):
-                        var v = ftz(x[(nc * H + h) * W + w])
-                        var take = (v >= best) if alt else (v > best)
-                        if bi < 0 or take or v != v:
-                            best = v
-                            bi = h * W + w
-                out.append(best)
-                idx.append(Float32(bi))
-    out.extend(idx^)
-    return out^
-
-
-def o_sage_max_bwd(
-    h: List[Float32], g: List[Float32], rowptr: List[Int], col: List[Int], n: Int, F: Int, alt: Bool
-) -> List[Float32]:
-    """The SAGE max aggregation's gradient: rowptr/col are the FORWARD
-    (target) CSR; the max, its tie count, then for every source the sum over
-    its outgoing entries (targets ascending) of g / count where it is a
-    maximum. alt: the targets descending."""
-    var mx = List[Float32](length=n * F, fill=Float32(0))
-    var cnt = List[Float32](length=n * F, fill=Float32(0))
-    for t in range(n):
-        for f in range(F):
-            var first = True
-            for e in range(rowptr[t], rowptr[t + 1]):
-                var v = ftz(h[col[e] * F + f])
-                if first or v > mx[t * F + f]:
-                    mx[t * F + f] = v
-                    cnt[t * F + f] = Float32(1)
-                    first = False
-                elif v == mx[t * F + f]:
-                    cnt[t * F + f] = cnt[t * F + f] + Float32(1)
-    # every (source, target) entry, grouped by source with targets ascending
-    var out = List[Float32](capacity=n * F)
-    for s in range(n):
-        var targets = List[Int]()
-        for t in range(n):
-            for e in range(rowptr[t], rowptr[t + 1]):
-                if col[e] == s:
-                    targets.append(t)
-        for f in range(F):
-            var acc = Float32(0)
-            var v = ftz(h[s * F + f])
-            for a in range(len(targets)):
-                var t = targets[len(targets) - 1 - a] if alt else targets[a]
-                var o = t * F + f
-                if v == mx[o] and cnt[o] > Float32(0):
-                    acc = ftz(acc + ftz(identical_div(ftz(g[o]), cnt[o])))
-            out.append(acc)
-    return out^
-
-
-def o_l2norm(x: List[Float32], n: Int, F: Int, alt: Bool) -> List[Float32]:
-    """Row L2 normalization, the squares folded in column order (alt: reversed)."""
-    var out = List[Float32](capacity=n * F)
-    for r in range(n):
-        var sq = Float32(0)
-        for a in range(F):
-            var f = F - 1 - a if alt else a
-            var v = ftz(x[r * F + f])
-            sq = ftz(sq + ftz(identical_mul(v, v)))
-        var norm = ftz(identical_sqrt(sq))
-        var den = norm if norm > Float32(1e-12) else Float32(1e-12)
-        for f in range(F):
-            out.append(ftz(identical_div(ftz(x[r * F + f]), den)))
-    return out^
 
 
 # ---------------------------------------------------------------- 5715

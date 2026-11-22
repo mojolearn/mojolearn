@@ -51,38 +51,3 @@ def compact_indices_host(flags: _HB, n: Int, dst: _HI) raises -> Int:
     host_cells(scatter, len(starts) - 1, CH_TILE)
     return Int(starts[len(starts) - 1])
 
-
-def compact_i32_host(src: _HI, flags: _HB, n: Int, dst: _HI) raises -> Int:
-    """dst[0, count) = src's flagged elements in index order; returns count."""
-    if n <= 0:
-        return 0
-    var starts = _compact_starts(flags, n)
-    var sp = _HI(unsafe_from_address=Int(starts.unsafe_ptr()))
-
-    def scatter(t: Int) {imm src, imm flags, imm sp, imm dst, imm n}:
-        var at = Int(sp.unsafe_load(t))
-        for i in range(t * CH_TILE, min((t + 1) * CH_TILE, n)):
-            if flags.unsafe_load(i) != UInt8(0):
-                dst.unsafe_store(at, src.unsafe_load(i))
-                at += 1
-
-    host_cells(scatter, len(starts) - 1, CH_TILE)
-    return Int(starts[len(starts) - 1])
-
-
-def compact_f32_host(src: _HF, flags: _HB, n: Int, dst: _HF) raises -> Int:
-    """dst[0, count) = src's flagged elements in index order; returns count."""
-    if n <= 0:
-        return 0
-    var starts = _compact_starts(flags, n)
-    var sp = _HI(unsafe_from_address=Int(starts.unsafe_ptr()))
-
-    def scatter(t: Int) {imm src, imm flags, imm sp, imm dst, imm n}:
-        var at = Int(sp.unsafe_load(t))
-        for i in range(t * CH_TILE, min((t + 1) * CH_TILE, n)):
-            if flags.unsafe_load(i) != UInt8(0):
-                dst.unsafe_store(at, src.unsafe_load(i))
-                at += 1
-
-    host_cells(scatter, len(starts) - 1, CH_TILE)
-    return Int(starts[len(starts) - 1])

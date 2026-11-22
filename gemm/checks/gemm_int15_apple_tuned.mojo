@@ -320,16 +320,6 @@ def int15_apple_tuned_variant_name(variant: Int) -> String:
     return String("unknown")
 
 
-def int15_apple_tuned_chunk_steps(variant: Int) -> Int:
-    """The steps of `k` in one chunk of the variant's form: the steps the
-    float accumulators run before they are carried."""
-    if variant == TUNED_F2_T32_KB16 or variant == TUNED_F2_T32_KB32 or variant == TUNED_F2D_T32_KB16 or variant == TUNED_F2D_T32_KB32 or variant == TUNED_F2_W64_KB16 or variant == TUNED_F2D_T16_KB32 or variant == TUNED_F2D_T32X16_KB32 or variant == TUNED_F2D_T32_KB32_B128 or variant == TUNED_F2D_W64_KB16_B128 or variant == TUNED_F2D_ROW64_KB16 or variant == TUNED_F2_T32_KB8 or variant == TUNED_F2_T32X64_KB16 or variant == TUNED_F2_T64X32_KB16 or variant == TUNED_F2_SG8_KB16 or variant == TUNED_F2_T16_KB16 or variant == TUNED_F2_T32_KB16_B128 or variant == TUNED_F2_ROW64_KB16 or variant == TUNED_F2_T32_KB16_PF or variant == TUNED_F2_T32_KB32_PF:
-        return INT15_TUNED2_CHUNK_STEPS
-    if variant == TUNED_F3_T32_KB16 or variant == TUNED_F3R_T32_KB16 or variant == TUNED_F3R_T32_KB32 or variant == TUNED_F3R_T16_KB32 or variant == TUNED_F3_ROW64_KB16:
-        return INT15_TUNED3_CHUNK_STEPS
-    return INT15_TUNED4_CHUNK_STEPS
-
-
 @always_inline
 def _stage_planes[
     ROWS: Int, KB: Int, NT: Int, PMAJOR: Bool, ST: Int, MODE: Int, SCALAR: Bool

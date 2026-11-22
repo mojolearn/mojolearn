@@ -73,38 +73,6 @@ def _intercept(d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Flo
     return fs(ym, acc)
 
 
-def _wmean_center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, wsum: Float32) -> Float32:
-    """Weighted means (their _preprocess_data with sample_weight); w at y + n."""
-    if not fi:
-        fill(fw, xm, d, Float32(0))
-        return Float32(0)
-    fill(fw, xm, d, Float32(0))
-    for i in range(n):
-        axpy_acc(fw, xm, ld(y, n + i), x, i * d, d)
-    for j in range(d):
-        st(fw, xm + j, fd(ld(fw, xm + j), wsum))
-    var acc = Float32(0)
-    for i in range(n):
-        acc = fmad(ld(y, n + i), ld(y, i), acc)
-    return fd(acc, wsum)
-
-
-#: FAST on Apple (lane/apple-fast-classical, 2026-10-02): the evidence
-#: iteration's sse from the normal equations instead of a pass over the rows,
-#: relative to a REFERENCE row pass (lane/apple-fast-bayes): with s0 the sse
-#: of a row pass at w0, dw = w - w0, q = Xc'yc and G = Xc'Xc,
-#: |yc - Xc w|^2 = s0 + dw'(G (w + w0) - 2 q): O(d) (BayesianRidge, in the
-#: eigenbasis) or O(d^2) (ARD) an iteration in place of n * d on ONE block
-#: (300 iterations x 1M rows x 220 features of `_t_sse`). The plain form
-#: yy - 2 w'q + w'G w cancelled to below zero on istella (220 features,
-#: near-null Gram directions with f32 noise eigenvalues, w huge along them):
-#: sse clamped to 0, alpha to inf, coef NaN. The delta form carries an error
-#: bound (2^-12 relative on every entry of G and q); when it could move sse by
-#: more than 2^-8 of itself (or sse is not positive or finite) that iteration
-#: makes the row pass and it becomes the new reference. Unweighted fits, n >= d
-#: (w0 lives in the host's sse scratch, unused on the device); ip[5] (set by
-#: x_linear/device.mojo, `MOJOLEARN_X_LINEAR_GRAM_SSE=0` is the A/B arm) turns
-#: it on. IDENTICAL and the other vendors never compile it.
 comptime X_LINEAR_GRAM_SSE = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
 #: |error| <= mag * 2^-12 must stay <= 2^-8 * sse: mag * 2^-4 <= sse
 comptime GRAM_SSE_TRUST = Float32(0.0625)

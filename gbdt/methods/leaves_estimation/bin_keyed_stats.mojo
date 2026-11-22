@@ -286,56 +286,6 @@ def enqueue_bin_keyed_counts(
         )
 
 
-def _bk_copy_f32_kernel(
-    dst: MutPointer[Float32, MutAnyOrigin],
-    src: MutPointer[Float32, MutAnyOrigin],
-    n_in: Int32,
-):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        dst.unsafe_store(i, src.unsafe_load(i))
-
-
-def _bk_copy_u32_kernel(
-    dst: MutPointer[UInt32, MutAnyOrigin],
-    src: MutPointer[UInt32, MutAnyOrigin],
-    n_in: Int32,
-):
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i < Int(n_in):
-        dst.unsafe_store(i, src.unsafe_load(i))
-
-
-def enqueue_bk_copy_f32(
-    ctx: DeviceContext,
-    mut dst: DeviceBuffer[DType.float32],
-    mut src: DeviceBuffer[DType.float32],
-    n: Int,
-) raises:
-    """`dst[0:n] = src[0:n]` (the oracle's working cursor, original order)."""
-    if n < 1:
-        return
-    ctx.enqueue_function[_bk_copy_f32_kernel](
-        dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n),
-        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-
-
-def enqueue_bk_copy_u32(
-    ctx: DeviceContext,
-    mut dst: DeviceBuffer[DType.uint32],
-    mut src: DeviceBuffer[DType.uint32],
-    n: Int,
-) raises:
-    """`dst[0:n] = src[0:n]` (the oracle's `d_bins`, original order)."""
-    if n < 1:
-        return
-    ctx.enqueue_function[_bk_copy_u32_kernel](
-        dst.unsafe_ptr(), src.unsafe_ptr(), Int32(n),
-        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-
-
 # TOMBSTONE note (fb11 follow-up, 2026-11-17): `_bk_apply_kernel` / `enqueue_bin_keyed_apply` removed:
 # no caller since MOJOLEARN_TREES_CTR_SORTFREE_SUMS was deleted (2026-11-15, lane/expdel2-42-trees);
 # that experiment's patch (experiments/removed/MOJOLEARN_TREES_CTR_SORTFREE_SUMS.expdel2-42-trees.patch)

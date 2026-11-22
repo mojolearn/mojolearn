@@ -51,20 +51,6 @@ def validate_sparse_weights(graph: SparseFuzzySimplicialGraph) raises -> Float32
     return max_weight
 
 
-def sparse_weight_at(graph: SparseFuzzySimplicialGraph, row: Int, col: Int) -> Float32:
-    var lo = graph.offsets[row]
-    var hi = graph.offsets[row + 1]
-    while lo < hi:
-        var mid = lo + (hi - lo) // 2
-        if Int(graph.indices[mid]) < col:
-            lo = mid + 1
-        else:
-            hi = mid
-    if lo < graph.offsets[row + 1] and Int(graph.indices[lo]) == col:
-        return graph.values[lo]
-    return Float32(0.0)
-
-
 def optimize_sparse_layout_identical_reference(
     initial_embedding: List[Float32],
     graph: SparseFuzzySimplicialGraph,

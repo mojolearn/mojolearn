@@ -191,19 +191,6 @@ def svc_decode(owner: PythonObject, var classes: PythonObject, codes: List[Int64
         return values
 
 
-def svc_threshold_codes(scores: PythonObject, threshold: Float64, strict: Bool, below: Int, above: Int,
-                        context: PythonObject) raises -> PythonObject:
-    """`_labels.threshold_codes` of a C-order float32 Array: int64 codes."""
-    var n = Int(py=scores.size)
-    var out = family_array(Python.tuple(PythonObject(n)), "<i8", context)
-    if n > 0:
-        _ = family_call(svc_base("threshold_labels_i64", context), classical_address(scores), PythonObject(0),
-                        PythonObject(n), PythonObject(threshold), PythonObject(1 if strict else 0),
-                        PythonObject(below), PythonObject(above), classical_address(out))
-        _ = out  # keep the Python object alive through the native call above
-    return out
-
-
 def svc_argmax_rows(scores: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.argmax_rows` of a C-order (n, c) float32 or float64 Array."""
     var n = Int(py=scores.shape[0])

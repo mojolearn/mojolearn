@@ -181,28 +181,6 @@ def rankn_narrow[E: Exec](
     return tape.custom_nd(ex, [x], output, out_shape, RN_NARROW, saved)
 
 
-def rankn_split[E: Exec](
-    mut tape: Tape, mut ex: E, x: Tensor, sizes: List[Int], axis: Int,
-) raises -> List[Tensor]:
-    """x cut along `axis` into consecutive pieces of the given sizes, which
-    must add up to x's dim there."""
-    var s = tape.shape_of(x)
-    if s.ndim < 1:
-        raise Error("split: the tensor needs at least one dimension")
-    var a = rn_normalize_axis(axis, s.ndim)
-    var covered = 0
-    for j in range(len(sizes)):  # driver-loop: over split pieces
-        covered += sizes[j]
-    if len(sizes) < 1 or covered != s.d[a]:
-        raise Error("split: the sizes must add up to the dimension along the axis")
-    var pieces = List[Tensor]()
-    var start = 0
-    for j in range(len(sizes)):  # driver-loop: over split pieces
-        pieces.append(rankn_narrow(tape, ex, x, a, start, sizes[j]))
-        start += sizes[j]
-    return pieces^
-
-
 # ---------------------------------------------------------------- take
 def rankn_take[E: Exec](
     mut tape: Tape, mut ex: E, x: Tensor, ids: IdsHandle, axis: Int,

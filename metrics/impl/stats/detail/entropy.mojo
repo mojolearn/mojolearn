@@ -104,15 +104,6 @@ def count_labels(
     return out^
 
 
-def entropy_from_counts(counts: List[Int32], size: Int) raises -> Float64:
-    """`divideScalar` then `mapThenSumReduce(entropyOp)` (:129-135), on the
-    host (DEVIATIONS 650, 651). `entropyOp(p) = p ? -1 * p * log(p) : 0`
-    (:35-43). The untraced entry; `entropy_from_counts_traced` is the
-    implementation and a disabled trace records nothing."""
-    var off = IdentityTrace.disabled()
-    return entropy_from_counts_traced(off, counts, size, String(""))
-
-
 def entropy_from_counts_traced(
     mut trace: IdentityTrace,
     counts: List[Int32],

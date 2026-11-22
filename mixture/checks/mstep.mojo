@@ -2115,23 +2115,6 @@ def gmm_first_fail_kernel(
     status.unsafe_store(1, comp)
 
 
-def gmm_logdet_halve_kernel(
-    raw: MutPointer[Float32, MutAnyOrigin],
-    info: MutPointer[Int32, MutAnyOrigin],
-    log_det_chol: MutPointer[Float32, MutAnyOrigin],
-    ncomp: Int32,
-):
-    """Per component whose factor succeeded: `log_det_chol[k] =
-    ftz(-0.5 * log det Sigma_k)` (DEVIATION 1726), the multiply the
-    host-read chain did on the host, here on the device."""
-    var k = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if k >= Int(ncomp):
-        return
-    if info.unsafe_load(k) != Int32(0):
-        return
-    log_det_chol.unsafe_store(k, ftz(identical_mul(Float32(-0.5), raw.unsafe_load(k))))
-
-
 struct GmmCholScratch(Movable):
     """The precision Cholesky's device words and scratch, allocated once per
     fit: one info word per component, the status pair, and when the fit's

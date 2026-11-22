@@ -227,16 +227,6 @@ def power_from_log(lg: Float32, nonneg: Bool, lam: Float32, method: Int) -> Floa
     return sub(Float32(0), div(sub(expf(mul(l2, lg)), Float32(1)), l2))
 
 
-def yeo_johnson(x: Float32, lam: Float32) -> Float32:
-    """scipy.stats.yeojohnson's transform of one value (x not NaN)."""
-    return power_from_log(power_log(x, 0), x >= Float32(0), lam, 0)
-
-
-def box_cox(x: Float32, lam: Float32) -> Float32:
-    """scipy.special.boxcox of one value (x > 0)."""
-    return power_from_log(power_log(x, 1), True, lam, 1)
-
-
 def power(x: Float32, lam: Float32, method: Int) -> Float32:
     return power_from_log(power_log(x, method), x >= Float32(0), lam, method)
 

@@ -275,14 +275,6 @@ def xseq_is_f64(value: PythonObject) raises -> Bool:
     return Int(py=dtype.num) == 12 and Bool(py=dtype.isnative)
 
 
-def xseq_ndim(value: PythonObject) raises -> Int:
-    return Int(py=value.ndim)
-
-
-def xseq_dim(value: PythonObject, axis: Int) raises -> Int:
-    return Int(py=value.shape[axis])
-
-
 # TOMBSTONE: xseq_f32 (admission helper, merged into the one path) deleted 2026-11-08 by lane a4-admit-sequence-tsa-neural; code recoverable at f7d10d2b09.
 # Restore: experiments/removed/A4_ADMISSION_HELPERS.patch. It is
 # `admit_nd_f32` (bindings/admitted_sequence.mojo): the same borrow rule and

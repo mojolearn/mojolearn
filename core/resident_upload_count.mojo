@@ -69,9 +69,3 @@ def resident_upload_copies(family: Int) raises -> Int:
         return _RUC_SLOT.get_or_create_ptr()[].copies[family]
     return 0
 
-
-def resident_upload_cells(family: Int) raises -> Int:
-    """The family's fitted words copied since process start (0 without the define)."""
-    comptime if RESIDENT_UPLOAD_COUNT:
-        return _RUC_SLOT.get_or_create_ptr()[].cells[family]
-    return 0

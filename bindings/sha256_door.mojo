@@ -42,17 +42,3 @@ def sha256_digest(hasher: Sha256) raises -> PythonObject:
     """hasher.digest(): the 32 raw digest bytes as Python bytes."""
     return py_call(native_loaded_module("builtins").bytes.fromhex, PythonObject(hasher.hexdigest()))
 
-
-def sha256_digest_of(value: PythonObject) raises -> PythonObject:
-    """hashlib.sha256(value).digest() for a bytes-like Python value."""
-    var hasher = Sha256()
-    sha256_update(hasher, value)
-    return sha256_digest(hasher)
-
-
-def sha256_sliced8(value: PythonObject) raises -> PythonObject:
-    """The cross-vendor v2 slice digest of a bytes-like Python value."""
-    var store = _sha256_store(value)
-    var hex = sha256_sliced8_hex(Int(py=store.buffer_info()[0]), len(store))
-    _ = store^
-    return PythonObject(hex)

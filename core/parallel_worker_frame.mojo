@@ -226,13 +226,6 @@ struct WireRecord(Copyable, Movable):
         return self.texts[t].copy()
 
 
-def wire_text_record(message: String) -> WireRecord:
-    """The record of an error reply: one text."""
-    var record = WireRecord()
-    record.text(message)
-    return record^
-
-
 def _wire_text_words(text: String) -> Int:
     return (text.byte_length() + 7) // 8
 

@@ -395,12 +395,6 @@ struct MselMetricPrepared(Movable):
         return family_call(entry, PythonObject(None), self.operation, envelope, self.metric_context)
 
 
-def msel_metric_call(function: PythonObject, y: PythonObject, predicted: PythonObject,
-                     keywords: PythonObject, context: PythonObject) raises -> PythonObject:
-    var prepared = MselMetricPrepared()
-    return prepared.call(function, y, predicted, keywords, context, PythonObject(None), PythonObject(None))
-
-
 def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> PythonObject:
     var array = predicted
     var dtype = String(array.dtype)

@@ -165,22 +165,6 @@ def gmm_sabotage_name(sab: Int) -> String:
     return String("UNKNOWN")
 
 
-def gmm_sabotage_is_driver_arm(sab: Int) -> Bool:
-    """True when the arm is a BRANCH IN A DRIVER rather than a kernel here.
-
-    The drivers use this to decide which kernel to launch, so the production
-    kernel is reached at every driver arm and a driver arm can never be
-    mistaken for a kernel one.
-    """
-    if sab == GMM_SAB_TOL_ULP:
-        return True
-    if sab == GMM_SAB_VENDOR_MATMUL:
-        return True
-    if sab == GMM_SAB_COLLAPSE_RESET:
-        return True
-    return False
-
-
 def gmm_ulp_down(v: Float32) -> Float32:
     """`v` moved ONE ULP toward zero, by its bits. `GMM_SAB_TOL_ULP`'s whole
     mechanism, on the HOST, where the convergence comparison lives.

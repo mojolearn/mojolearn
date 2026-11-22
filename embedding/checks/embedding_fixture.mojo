@@ -452,36 +452,6 @@ comptime EMB_PLANT_OOR_HIGH = 12
 comptime EMB_PLANT_OOR_NEG = 13
 
 
-def emb_plant_name(p: Int) -> String:
-    if p == EMB_PLANT_NODUP:
-        return String("NODUP")
-    if p == EMB_PLANT_DUPSAME:
-        return String("DUPSAME")
-    if p == EMB_PLANT_ORDER3:
-        return String("ORDER3")
-    if p == EMB_PLANT_TREE4:
-        return String("TREE4")
-    if p == EMB_PLANT_NEGZERO1:
-        return String("NEGZERO1")
-    if p == EMB_PLANT_SUBACC:
-        return String("SUBACC")
-    if p == EMB_PLANT_SUBW:
-        return String("SUBW")
-    if p == EMB_PLANT_EMPTY:
-        return String("EMPTY")
-    if p == EMB_PLANT_PAD:
-        return String("PAD")
-    if p == EMB_PLANT_HOT:
-        return String("HOT")
-    if p == EMB_PLANT_SPLIT:
-        return String("SPLIT")
-    if p == EMB_PLANT_OOR_HIGH:
-        return String("OOR_HIGH")
-    if p == EMB_PLANT_OOR_NEG:
-        return String("OOR_NEG")
-    return String("none")
-
-
 @fieldwise_init
 struct EmbCase(Copyable, Movable):
     """One runnable case.

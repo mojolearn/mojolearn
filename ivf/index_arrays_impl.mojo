@@ -31,22 +31,6 @@ def ivf_store_search_result(
         cp.unsafe_store(i, n_candidates[i])
 
 
-
-def ivf_store_ids_counts(
-    ip: MutPointer[Int32, MutUntrackedOrigin],
-    cp: MutPointer[Int32, MutUntrackedOrigin],
-    indices: List[UInt32],
-    n_candidates: List[Int32],
-    m: Int,
-    k: Int,
-):
-    """ORIGINAL row ids as int32 and the candidate count per query (the
-    host build-and-search door's tail after its distance copy)."""
-    for i in range(m * k):
-        ip.unsafe_store(i, ivf_id_to_i32(indices[i]))
-    for i in range(m):
-        cp.unsafe_store(i, n_candidates[i])
-
 def ivf_store_index_arrays(
     cp: MutPointer[Float32, MutUntrackedOrigin],
     np_: MutPointer[Float32, MutUntrackedOrigin],

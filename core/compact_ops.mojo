@@ -101,14 +101,6 @@ def compact_f32_kernel(gate: StepI32, src: _F, flags: _B, offsets: StepI32, dst:
         dst.unsafe_store(Int(offsets.unsafe_load(i)), src.unsafe_load(i))
 
 
-def compact_flag_nonzero_kernel(src: _F, flags: _B, n_in: Int32):
-    """flags[i] = 1 where src[i] != 0 (NaN counts as nonzero), else 0."""
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= Int(n_in):
-        return
-    flags.unsafe_store(i, UInt8(1) if src.unsafe_load(i) != Float32(0.0) else UInt8(0))
-
-
 struct CompactScratch(Movable):
     """The scan's exclusive offsets and block sums for up to `capacity`
     elements. Allocate once per fit, outside the loop."""

@@ -545,22 +545,6 @@ def bootstrap_index_host(
     return out^
 
 
-def monte_carlo_point_host(
-    key: UInt64,
-    i_first: Int,
-    n_samples: Int,
-    lower: List[Float32],
-    span: List[Float32],
-) -> List[Float32]:
-    """`monte_carlo_point_kernel` on the host, in index order."""
-    var d = len(lower)
-    var out = List[Float32]()
-    for ii in range(n_samples):
-        for k in range(d):
-            out.append(draw_uniform_in(key, i_first + ii, k, lower[k], span[k]))
-    return out^
-
-
 def permutation_ranks_host(key: UInt64, r: Int, n_pooled: Int) -> List[Int32]:
     """The rank of every pooled position under replicate `r`'s total order.
 

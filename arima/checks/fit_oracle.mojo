@@ -130,32 +130,6 @@ def _f32(v: List[Float64]) -> List[Float32]:
     return out^
 
 
-def batched_jones_transform_f64(
-    order: ARIMAOrder, batch_size: Int, is_inv: Bool, ph: ARIMAParamsHost
-) raises -> ARIMAParamsHost:
-    """`batched_jones_transform` in Float64, narrowed back to Float32 on the
-    way out because `kalman_host_f64` takes `ARIMAParamsHost`. The
-    narrowing is the reference's whole error budget; see the banner."""
-    var ar = ph.ar.copy()
-    var ma = ph.ma.copy()
-    var sar = ph.sar.copy()
-    var sma = ph.sma.copy()
-    if order.p != 0:
-        ar = _f32(jones_transform_f64(_f64(ph.ar), batch_size, order.p, True, is_inv))
-    if order.q != 0:
-        ma = _f32(jones_transform_f64(_f64(ph.ma), batch_size, order.q, False, is_inv))
-    if order.P != 0:
-        sar = _f32(jones_transform_f64(_f64(ph.sar), batch_size, order.P, True, is_inv))
-    if order.Q != 0:
-        sma = _f32(jones_transform_f64(_f64(ph.sma), batch_size, order.Q, False, is_inv))
-    var sigma2 = List[Float32]()
-    for i in range(batch_size):
-        sigma2.append(Float32(max(Float64(ph.sigma2[i]), MIN_SIGMA2_F64)))
-    return ARIMAParamsHost(
-        mu=ph.mu.copy(), ar=ar^, ma=ma^, sar=sar^, sma=sma^, sigma2=sigma2^
-    )
-
-
 # ---------------------------------------------------------------------------
 # the objective and its Float64 gradient
 # ---------------------------------------------------------------------------

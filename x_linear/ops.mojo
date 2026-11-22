@@ -519,17 +519,6 @@ def chol_solve_group(l: FP, loff: Int, m: Int, b: FP, first: Int, count: Int):
 # Restore: git apply experiments/removed/X_LINEAR_JACOBI_EIG_SEAM_5003.patch
 
 
-def col_means(x: FP, n: Int, d: Int, rows: IP, n_rows: Int, use_rows: Bool, res: FP, ooff: Int):
-    """Column means over all rows (or the listed rows), rows ascending
-    (one pass over the rows, each column its own accumulator)."""
-    fill(res, ooff, d, Float32(0))
-    for r in range(n_rows):
-        var i = ldi(rows, r) if use_rows else r
-        add_acc(res, ooff, x, i * d, d)
-    for j in range(d):
-        st(res, ooff + j, fd(ld(res, ooff + j), i2f(n_rows)))
-
-
 def mean_of(y: FP, n: Int) -> Float32:
     var acc = Float32(0)
     for i in range(n):

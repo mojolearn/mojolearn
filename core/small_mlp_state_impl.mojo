@@ -163,11 +163,6 @@ def mlp_copy_tensor_out(state: MlpState, index: Int, dst_addr: Int):
     unsafe_memcpy(dest=dst, src=state.params.unsafe_ptr() + mlp_offset(index), count=mlp_size(index))
 
 
-def mlp_copy_tensor_in(mut state: MlpState, index: Int, src_addr: Int):
-    var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=src_addr)
-    unsafe_memcpy(dest=state.params.unsafe_ptr() + mlp_offset(index), src=src, count=mlp_size(index))
-
-
 def mlp_copy_f32(src_addr: Int, dst_addr: Int, n: Int):
     var src = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=src_addr)
     var dst = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_addr)

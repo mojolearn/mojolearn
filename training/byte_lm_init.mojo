@@ -138,12 +138,3 @@ def byte_init_params(config: ByteConfig,
         offset += count
     return out^
 
-
-def byte_init_grid_points(config: ByteConfig) raises -> Int:
-    """How many distinct drawn values the grid admits, for the gate to assert.
-
-    257 for the retained shape: 256 grid points plus the 1.0 the norm vectors
-    carry. A generator that drifted onto a finer grid would still look
-    plausible in a histogram and would fail this."""
-    _ = config
-    return 2 * INIT_CENTER + 1

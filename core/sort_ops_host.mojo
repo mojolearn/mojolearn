@@ -116,14 +116,3 @@ def sort_op_f32_host(keys: _HF, order: _HI, n: Int, descending: Bool) raises:
     _ = tvl^
     _ = cl^
 
-
-def sort_op_gather_rows_f32_host(src: _HF, order: _HI, dst: _HF, rows: Int, cols: Int):
-    """dst[r, c] = src[order[r], c] (core/sort_ops.mojo
-    `sort_op_gather_rows_f32`), rows in parallel."""
-
-    def row(r: Int) {imm src, imm order, imm dst, imm cols}:
-        var s = Int(order.unsafe_load(r))
-        for c in range(cols):
-            dst.unsafe_store(r * cols + c, src.unsafe_load(s * cols + c))
-
-    host_cells(row, rows, cols)

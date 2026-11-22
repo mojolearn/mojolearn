@@ -1108,16 +1108,6 @@ def fused_attention_arm_name(arm: Int) -> String:
     return name
 
 
-def fused_attention_arm_reach_bit(arm: Int) -> Int:
-    """The sabotage bit that proves reach for `arm`: ATTN_ARM_SABOTAGE_NEW
-    when the arm carries a second-round kernel bit (so the proof names the
-    new kernel, not the stash_tiled kernels under it), else
-    ATTN_ARM_SABOTAGE."""
-    if (arm & ATTN_ARM_NEW_BITS) != 0:
-        return ATTN_ARM_SABOTAGE_NEW
-    return ATTN_ARM_SABOTAGE
-
-
 comptime ATTN_ZT_BK = 64
 """Keys per block iteration of `fused_bwd_ydy_tiled_kernel` (DEVIATION 2528)."""
 comptime ATTN_ZT_KS = 16
@@ -1280,18 +1270,6 @@ def fused_attention_arm_zsched(arm: Int) -> Int:
     return arm & ATTN_ARM_ZSCHED_BITS
 
 
-def fused_attention_zsched_name(arm: Int) -> String:
-    """`zdefer`, `zlag`, or `-` for the harness's `PATH` line."""
-    var w = fused_attention_arm_zsched(arm)
-    if w == ATTN_ARM_BWD_ZDEFER:
-        return String("zdefer")
-    if w == ATTN_ARM_BWD_ZLAG:
-        return String("zlag")
-    if w != 0:
-        return String("both")
-    return String("-")
-
-
 def fused_attention_kv_keys(arm: Int) -> Int:
     """Keys per block the DEVIATION 2596 / 2597 dk/dv launch runs for `arm`:
     0 when the arm names none; for `_kvrecompute`, `fused_rows_per_block(64)`
@@ -1443,11 +1421,6 @@ the way `ATTN_SHIPPED_BWD_ESTASH` did."""
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_TILE_ORDER.patch
 
 
-def fused_attention_arm_bswz(arm: Int) -> Bool:
-    """Whether `arm` carries DEVIATION 2900's `_bswz` token."""
-    return (arm & ATTN_ARM_BSWZ) != 0
-
-
 @always_inline
 def _blk_map[SWZ: Bool, REV: Bool](
     raw: Int, ntb: Int, nh: Int, b: Int
@@ -1475,21 +1448,6 @@ def _blk_map[SWZ: Bool, REV: Bool](
         var tile = raw % ntb
         var rest = raw // ntb
         return (tile, rest % nh, rest // nh)
-
-
-def fused_attention_arm_estash(arm: Int) -> Bool:
-    """Whether `arm` carries DEVIATION 2650's `_estash` token."""
-    return (arm & ATTN_ARM_BWD_ESTASH) != 0
-
-
-def fused_attention_estash_name(arm: Int) -> String:
-    """`-`, `estash` or `estash_dres`: the exp stash token of `arm`
-    (DEVIATIONS 2650 and 2651), for a PATH line."""
-    if (arm & ATTN_ARM_BWD_ESTASH) == 0:
-        return String("-")
-    if (arm & ATTN_ARM_ESTASH_DRES) != 0:
-        return String("estash_dres")
-    return String("estash")
 
 
 comptime ATTN_APPLE_ESTASH_GATED = (
@@ -1675,13 +1633,6 @@ def fused_attention_arm_bswz_runs(arm: Int) -> Bool:
     comptime if ATTN_ARM_TRIAL:
         return True
     return ATTN_DEFAULT_BSWZ
-
-
-def fused_attention_bswz_name(arm: Int) -> String:
-    """`-` or `bswz`: DEVIATION 2900's token in `arm`, for a PATH line."""
-    if (arm & ATTN_ARM_BSWZ) == 0:
-        return String("-")
-    return String("bswz")
 
 
 def _attn_kv_ran_bits(arm: Int, keys: Int) -> Int:

@@ -222,13 +222,6 @@ struct TCommand(Copyable, Movable):
         self.stream_id_result = id
 
 
-def stream_kernel_command(stream: TCudaStream = DEFAULT_STREAM) -> TCommand:
-    """Their `TGpuKernelTask` as the worker sees it
-    (`gpu_single_worker.cpp:77-93`). The kernel body is not in the command;
-    see the DEVIATION BLOCK."""
-    return TCommand(ECommandType.StreamKernel, stream)
-
-
 def host_task_command(
     type: ECpuFuncType = ECpuFuncType.DeviceNonblocking,
 ) -> TCommand:
@@ -249,39 +242,6 @@ def blocking_device_sync_command() -> TCommand:
     return host_task_command(ECpuFuncType.DeviceBlocking)
 
 
-def allocate_memory_command(
-    handle: UInt64, size: UInt64, ptr_type: EPtrType
-) -> TCommand:
-    """Their `IAllocateMemoryTask` (`task.h:109-121`)."""
-    var cmd = TCommand(ECommandType.MemoryAllocation, DEFAULT_STREAM)
-    cmd.handle = handle
-    cmd.size = size
-    cmd.ptr_type = ptr_type
-    return cmd^
-
-
-def free_memory_command(handle: UInt64) -> TCommand:
-    """Their `IFreeMemoryTask` (`task.h:123-131`)."""
-    var cmd = TCommand(ECommandType.MemoryDeallocation, DEFAULT_STREAM)
-    cmd.handle = handle
-    return cmd^
-
-
-def reset_command(
-    gpu_memory_part: Float64 = 0.0, pinned_memory_size: UInt64 = 0
-) -> TCommand:
-    """Their `TResetCommand` (`task.h:88-107`).
-
-    `TCudaSingleDevice::Stop` sends `TResetCommand(0.0, 0)`
-    (`single_device.h:252`), which is the shutdown spelling: drop the memory
-    providers and allocate nothing back.
-    """
-    var cmd = TCommand(ECommandType.Reset, DEFAULT_STREAM)
-    cmd.gpu_memory_part = gpu_memory_part
-    cmd.pinned_memory_size = pinned_memory_size
-    return cmd^
-
-
 def request_stream_command() -> TCommand:
     """Their `IRequestStreamCommand` (`request_stream_task.h:7-20`).
 
@@ -296,17 +256,6 @@ def request_stream_command() -> TCommand:
     straight, which is the same code the case runs.
     """
     return TCommand(ECommandType.RequestStream, DEFAULT_STREAM)
-
-
-def free_stream_command(var streams: List[Int32]) -> TCommand:
-    """Their `TFreeStreamCommand` (`request_stream_task.h:48-69`).
-
-    It frees a LIST of streams, not one: `TCudaSingleDevice::Stop` hands over
-    every user stream at once (`single_device.h:242`).
-    """
-    var cmd = TCommand(ECommandType.FreeStream, DEFAULT_STREAM)
-    cmd.streams = streams^
-    return cmd^
 
 
 def stop_worker_command() -> TCommand:

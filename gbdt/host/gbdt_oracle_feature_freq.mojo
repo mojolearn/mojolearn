@@ -153,16 +153,6 @@ comptime GBDT_FF_TAKE_BIN = 0
 comptime GBDT_FF_TAKE_GREATER = 1
 
 
-def _refuse_ff(what: String) raises:
-    raise Error(
-        "no CPU implementation of"
-        " _mojolearn_gbdt.gbdt_fit_two_level_feature_freq for " + what
-        + "; the gbdt host binding trains the gbdt-feature-freq"
-        " and gbdt-tensor-ctr-tables lanes (unit weights, half-byte and one-byte"
-        " policies), see gbdt/host/gbdt_oracle_feature_freq.mojo"
-    )
-
-
 # ===========================================================================
 # THE TENSOR COLUMN (`tensor_ctr_value_table.mojo`, host helpers restated)
 # ===========================================================================

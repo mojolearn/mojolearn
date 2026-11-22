@@ -130,12 +130,6 @@ def ivf_duplicate_fixture(n: Int, d: Int, salt: Int) -> List[Float32]:
     return out^
 
 
-def ivf_duplicate_group(i: Int) -> Int:
-    """The duplicate group row `i` belongs to. Its members are `3g`, `3g+1`
-    and `3g+2`, and the lowest-index member is `3g`."""
-    return i // 3
-
-
 def ivf_signed_zero_fixture(n: Int, d: Int, salt: Int) -> List[Float32]:
     """`n x d` hashed rows whose column 0 is `+0.0` on even rows and
     `-0.0` on odd ones, and whose remaining columns repeat by PAIRS.

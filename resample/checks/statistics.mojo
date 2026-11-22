@@ -1298,35 +1298,6 @@ comptime MC_F_COUNT = 3
 comptime MC_DIMS = 2
 
 
-def mc_integrand_name(f_id: Int) -> String:
-    if f_id == MC_F_CONST:
-        return String("const")
-    if f_id == MC_F_SUM:
-        return String("sum")
-    if f_id == MC_F_PRODUCT:
-        return String("product")
-    return String("?")
-
-
-def mc_integrand_from_name(name: String) raises -> Int:
-    if name == "const":
-        return MC_F_CONST
-    if name == "sum":
-        return MC_F_SUM
-    if name == "product":
-        return MC_F_PRODUCT
-    raise Error(
-        "monte_carlo_integrate: unknown integrand '"
-        + name
-        + "'. The supplied integrands are const (f = 1), sum (f = x0 + x1)"
-        " and product (f = x0 * x1), each with a closed form this lane gates"
-        " against. A new integrand is one comptime arm of mc_integrand plus"
-        " one line of mc_closed_form; it cannot be passed in as a callable,"
-        " for statistics.mojo's reason -- the fold has to be pinned where"
-        " this lane can see it."
-    )
-
-
 @always_inline
 def mc_integrand[f_id: Int](
     key: UInt64,

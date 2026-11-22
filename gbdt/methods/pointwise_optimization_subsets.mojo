@@ -284,26 +284,6 @@ def zero_partitions_kernel(
         i += stride
 
 
-def deinterleave_partitions_kernel(
-    partitions: MutPointer[UInt32, MutAnyOrigin],
-    part_offset: MutPointer[UInt32, MutAnyOrigin],
-    part_size: MutPointer[UInt32, MutAnyOrigin],
-    part_count_in: Int32,
-):
-    """ADAPTER, NO REFERENCE FILE."""
-    var part_count = Int(part_count_in)
-    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    var stride = Int(block_dim.x) * Int(grid_dim.x)
-    while i < part_count:
-        part_offset.unsafe_store(
-            i, partitions.unsafe_load(i * PARTITION_RECORD + PART_OFFSET)
-        )
-        part_size.unsafe_store(
-            i, partitions.unsafe_load(i * PARTITION_RECORD + PART_SIZE)
-        )
-        i += stride
-
-
 def pack_partition_stats_kernel(
     reduced_weight: MutPointer[Float32, MutAnyOrigin],
     reduced_target: MutPointer[Float32, MutAnyOrigin],

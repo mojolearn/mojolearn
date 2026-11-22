@@ -471,13 +471,6 @@ def _batch_in(value: PythonObject) raises -> List[Float32]:
     return x^
 
 
-def _owned_rows(value: PythonObject, rows: Int, label: String) raises -> List[Float32]:
-    var x = List[Float32](length=rows * 8, fill=Float32(0))
-    _words_into(value, [rows, 8], label, Int(x.unsafe_ptr()))
-    mlp_require_finite(Int(x.unsafe_ptr()), rows * 8, label)
-    return x^
-
-
 def _targets_in(value: PythonObject, rows: Int) raises -> List[Int32]:
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var view = _view(value, "SmallMLPTrainer targets must be an integer array")

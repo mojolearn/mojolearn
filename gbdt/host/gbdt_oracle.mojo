@@ -689,59 +689,6 @@ def _generate_seed_for_borders(from_seed: UInt64) -> UInt64:
     return sd
 
 
-def _sample_indices_for_borders(nrr: Int, sn: Int, sd0: UInt64) -> List[UInt32]:
-    """`sample_indices_for_borders` (`gbdt/train.mojo:605-664`), both
-    branches, over the same `TRandom`."""
-    var sample_idx = List[UInt32]()
-    var rnd0 = TRandom(_generate_seed_for_borders(sd0))
-    if sn >= nrr:
-        for i in range(nrr):
-            sample_idx.append(UInt32(i))
-    elif sn > 1 and Float64(sn) > Float64(nrr) / log2(Float64(sn)):
-        sample_idx.resize(nrr, UInt32(0))
-        for i in range(nrr):
-            sample_idx[i] = UInt32(i)
-        for i in range(sn):
-            var j = i + Int(rnd0.next_uniform_l() % UInt64(nrr - i))
-            var t = sample_idx[i]
-            sample_idx[i] = sample_idx[j]
-            sample_idx[j] = t
-        sample_idx.resize(sn, UInt32(0))
-    else:
-        var seen = List[Bool]()
-        seen.resize(nrr, False)
-        while len(sample_idx) < sn:
-            var c = Int(rnd0.next_uniform_l() % UInt64(nrr))
-            if not seen[c]:
-                seen[c] = True
-                sample_idx.append(UInt32(c))
-    return sample_idx^
-
-
-def _sorted_by_twiddled_key(values: List[Float32]) -> List[Float32]:
-    """The device border sort's order (`radix_sort.mojo:299-395`): ascending
-    by the monotone twiddle, negatives `~bits`, the rest `bits | 0x80000000`,
-    so the output depends on the value bits alone."""
-    var keys = List[UInt32](capacity=len(values))
-    for i in range(len(values)):
-        var bits = bitcast[DType.uint32](values[i])
-        if (bits & UInt32(0x80000000)) != UInt32(0):
-            keys.append(~bits)
-        else:
-            keys.append(bits | UInt32(0x80000000))
-    sort(keys)
-    var out = List[Float32](capacity=len(values))
-    for i in range(len(keys)):
-        var k = keys[i]
-        var bits: UInt32
-        if (k & UInt32(0x80000000)) != UInt32(0):
-            bits = k ^ UInt32(0x80000000)
-        else:
-            bits = ~k
-        out.append(bitcast[DType.float32](bits))
-    return out^
-
-
 def _best_split_phase_b(
     var values: List[Float32], max_borders_count: Int
 ) raises -> List[Float32]:

@@ -35,17 +35,6 @@ def xprep_key(entries: PythonObject) raises -> EntryRef:
     return xp_transport_ref(PrepEntryKey(mode, vendor))
 
 
-def xprep_call(key: EntryRef, op: Int, addresses: List[Int], ints: List[Int]) raises -> Int:
-    """One x_prep transport operation (x_prep/transport_abi.mojo) through the
-    image's published entry, with the GIL released as the Python entries
-    released it. The caller keeps every addressed buffer alive."""
-    var result = 0
-    var py = Python()
-    with GILReleased(py):
-        result = xp_transport_call(key, op, addresses, ints)
-    return result
-
-
 # TOMBSTONE: the x_metrics Python-entry arms of `_store_put`/`_store_free` (unreachable; lane
 # pyout-metrics-cnn) deleted 2026-11-11; code recoverable at 6f82d0255d.
 

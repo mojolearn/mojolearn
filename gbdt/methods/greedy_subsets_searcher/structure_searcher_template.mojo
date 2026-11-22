@@ -55,20 +55,6 @@ comptime STEP_SPLIT_POINTS = 4
 comptime STEP_REORDER = 5
 
 
-def step_name(step: Int) -> String:
-    if step == STEP_BUILD_HISTOGRAMS:
-        return String("build histograms (smaller child only)")
-    if step == STEP_SUBTRACT_SIBLINGS:
-        return String("subtract siblings (one batched launch)")
-    if step == STEP_SCAN_BINS:
-        return String("scan bins (buys the score kernel its shape)")
-    if step == STEP_COMPUTE_SCORES:
-        return String("score candidates, leaf loop serial in-thread")
-    if step == STEP_SPLIT_POINTS:
-        return String("flag rows by side, write in-leaf sequence")
-    return String("reorder each leaf range, stable")
-
-
 @fieldwise_init
 struct LevelSchedule(Copyable, Movable):
     """What one level costs, before any of it runs.

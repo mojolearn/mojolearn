@@ -1197,11 +1197,6 @@ def lp(mut l: List[Float32]) -> FP:
     return l.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
-@always_inline
-def lpi(mut l: List[Int32]) -> IP:
-    return l.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-
-
 # ------------------------------------------------ mixed residency
 # lane gap-neural-overhead2 (2026-10-02). Each single-op entry has ONE body,
 # the `_m` form, whose array arguments are each EITHER a host address
@@ -1295,16 +1290,6 @@ def gemm_into(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, op: Int) raises:
     gemm_m([_a(a), _a(b), _a(c)], 0, m, n, k, op)
 
 
-def gemm_device(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, op: Int) raises -> List[Float32]:
-    var sa = a.copy()
-    var sb = b.copy()
-    var out = List[Float32](length=m * n, fill=Float32(0))
-    gemm_into(lp(sa), lp(sb), lp(out), m, n, k, op)
-    _ = sa^
-    _ = sb^
-    return out^
-
-
 # TOMBSTONE: MOJOLEARN_NN14_BOUNDED_IM2COL (DELETE-ARM, EXP:1943 record read, rule e) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_NN14_BOUNDED_IM2COL.expdel2-35-neural.patch
 
@@ -1371,16 +1356,6 @@ def maxpool2d_forward_into(x: FP, prm: List[Int32], dst: FP, idx_out: IP) raises
     maxpool2d_forward_m([_a(x), _a(dst), _ai(idx_out)], 0, prm)
 
 
-def maxpool2d_forward_device(x: List[Float32], prm: List[Int32], mut idx: List[Int32]) raises -> List[Float32]:
-    var no = _pool_sizes(prm)[1]
-    var sx = x.copy()
-    var out = List[Float32](length=no, fill=Float32(0))
-    idx = List[Int32](length=no, fill=Int32(0))
-    maxpool2d_forward_into(lp(sx), prm, lp(out), lpi(idx))
-    _ = sx^
-    return out^
-
-
 def maxpool2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
     """a = [dout, idx (int32), dx]."""
     var sizes = _pool_sizes(prm)
@@ -1425,14 +1400,6 @@ def avgpool2d_forward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
 
 def avgpool2d_forward_into(x: FP, prm: List[Int32], dst: FP) raises:
     avgpool2d_forward_m([_a(x), _a(dst)], 0, prm)
-
-
-def avgpool2d_forward_device(x: List[Float32], prm: List[Int32]) raises -> List[Float32]:
-    var sx = x.copy()
-    var out = List[Float32](length=_pool_sizes(prm)[1], fill=Float32(0))
-    avgpool2d_forward_into(lp(sx), prm, lp(out))
-    _ = sx^
-    return out^
 
 
 def avgpool2d_backward_m(a: List[Int], dev: Int, prm: List[Int32]) raises:
@@ -1625,19 +1592,6 @@ def softmax_xent_into[resident: Bool = False](
     return seq_mean(rows, n)
 
 
-def softmax_xent_device(logits: List[Float32], labels: List[Int32], n: Int, k: Int) raises -> List[Float32]:
-    """[grad (n*k) | proba (n*k) | mean loss (1)] (the List form, for the seam check)."""
-    var sl = logits.copy()
-    var sy = labels.copy()
-    var out = List[Float32](length=2 * n * k + 1, fill=Float32(0))
-    var base = lp(out)
-    var loss = softmax_xent_into(lp(sl), lpi(sy), n, k, base, base + n * k)
-    out[2 * n * k] = loss
-    _ = sl^
-    _ = sy^
-    return out^
-
-
 def sgd_into[resident: Bool = False](w: FP, g: FP, v: FP, hyper: List[Float32], n: Int) raises:
     """In place: w and the momentum buffer v."""
     var ctx = cnn_ctx()
@@ -1658,18 +1612,6 @@ def sgd_into[resident: Bool = False](w: FP, g: FP, v: FP, hyper: List[Float32], 
     _ = dh^
     _ = dp^
     _ = ctx^
-
-
-def sgd_device(w: List[Float32], g: List[Float32], v: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
-    """[w' | v'] (the List form, for the seam check)."""
-    var n = len(w)
-    var sw = w.copy()
-    var sg = g.copy()
-    var sv = v.copy()
-    sgd_into(lp(sw), lp(sg), lp(sv), hyper, n)
-    sw.extend(sv^)
-    _ = sg^
-    return sw^
 
 
 # lane/cnn-apple2: BatchNorm's per-channel folds (x_cnn/ops.mojo bn_stats_at,
@@ -1946,21 +1888,6 @@ def batchnorm_forward_into(x: FP, running: FP, aux: FP, prm: List[Int32], traini
     batchnorm_forward_m([_a(x), _a(running), _a(aux), _a(y_out)], 0, prm, training)
 
 
-def batchnorm_forward_device(
-    x: List[Float32], running: List[Float32], aux: List[Float32], prm: List[Int32], training: Bool
-) raises -> List[Float32]:
-    """[y | running' | aux'] (the List form, for the seam check)."""
-    var sx = x.copy()
-    var sr = running.copy()
-    var sa = aux.copy()
-    var out = List[Float32](length=len(x), fill=Float32(0))
-    batchnorm_forward_into(lp(sx), lp(sr), lp(sa), prm, training, lp(out))
-    out.extend(sr^)
-    out.extend(sa^)
-    _ = sx^
-    return out^
-
-
 def batchnorm_backward_m(a: List[Int], dev: Int, prm: List[Int32], training: Bool) raises:
     """a = [x, g, aux (in place: sum_g = dbeta and sum_gx = dgamma), dx]."""
     var C = Int(prm[1])
@@ -2054,17 +1981,6 @@ def dropout2d_into(x: FP, n: Int, prm: List[Int32], hyper: List[Float32], y_out:
     dropout2d_m([_a(x), _a(y_out), _a(mask_out)], 0, n, prm, hyper)
 
 
-def dropout2d_device(x: List[Float32], prm: List[Int32], hyper: List[Float32]) raises -> List[Float32]:
-    """[y | mask] (the List form, for the seam check)."""
-    var n = len(x)
-    var sx = x.copy()
-    var out = List[Float32](length=2 * n, fill=Float32(0))
-    var base = lp(out)
-    dropout2d_into(lp(sx), n, prm, hyper, base, base + n)
-    _ = sx^
-    return out^
-
-
 # TOMBSTONE: MOJOLEARN_NN48_CSR_TILES (DELETE-ARM, unmeasured opt-in, rule a) deleted 2026-11-15 by lane/expdel2-35-neural; code recoverable at 145be10898.
 # Restore: git apply experiments/removed/MOJOLEARN_NN48_CSR_TILES.patch
 
@@ -2097,16 +2013,6 @@ def spmm_into(vals: FP, nvals: Int, h: FP, csr: List[Int32], prm: List[Int32], d
     var c = csr.copy()
     spmm_m([_a(vals), _a(h), Int(c.unsafe_ptr()), _a(dst)], 0, nvals, len(c), prm)
     _ = c^
-
-
-def spmm_device(vals: List[Float32], h: List[Float32], csr: List[Int32], prm: List[Int32]) raises -> List[Float32]:
-    var sv = vals.copy()
-    var sh = h.copy()
-    var out = List[Float32](length=Int(prm[0]) * Int(prm[1]), fill=Float32(0))
-    spmm_into(lp(sv), len(sv), lp(sh), csr, prm, lp(out))
-    _ = sv^
-    _ = sh^
-    return out^
 
 
 def gcn_norm_device(w: List[Float32], csr: List[Int32], prm: List[Int32]) raises -> List[Float32]:
@@ -2142,14 +2048,6 @@ def pad2d_backward_into(g: FP, prm: List[Int32], dst: FP) raises:
     var ng = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
     var n_out = nc * Int(prm[2]) * Int(prm[3])
     map2_into[pad_bwd_at](g, ng, g, 0, n_out, prm, dst)
-
-
-def pad2d_backward_device(g: List[Float32], prm: List[Int32]) raises -> List[Float32]:
-    var sg = g.copy()
-    var out = List[Float32](length=Int(prm[0]) * Int(prm[1]) * Int(prm[2]) * Int(prm[3]), fill=Float32(0))
-    pad2d_backward_into(lp(sg), prm, lp(out))
-    _ = sg^
-    return out^
 
 
 def adaptive_device[f: ElemFn](a: List[Float32], idx: List[Int32], n_out: Int, prm: List[Int32], mut idx_out: List[Int32]) raises -> List[Float32]:
@@ -2539,18 +2437,6 @@ def adam_into[resident: Bool = False](w: FP, g: FP, mv: FP, hyper: List[Float32]
     _ = dh^
     _ = dp^
     _ = ctx^
-
-
-def adam_device(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
-    """[w' | mv'] (the List form, for the seam check)."""
-    var n = len(w)
-    var sw = w.copy()
-    var sg = g.copy()
-    var sm = mv.copy()
-    adam_into(lp(sw), lp(sg), lp(sm), hyper, n)
-    sw.extend(sm^)
-    _ = sg^
-    return sw^
 
 
 def opt_many_resident[adam: Bool](

@@ -40,14 +40,6 @@ def gp_unnorm_cell(v: Float32, s: Float32, mu: Float32, mode: Int) -> Float32:
     return ftz(identical_sqrt(c))
 
 
-def gp_unnorm_host(src: List[Float32], n: Int, s: Float32, mu: Float32, mode: Int) -> List[Float32]:
-    """The host column's loop over `gp_unnorm_cell`."""
-    var out = List[Float32](capacity=n)
-    for i in range(n):
-        out.append(gp_unnorm_cell(src[i], s, mu, mode))
-    return out^
-
-
 def gpc_ovr_targets(codes: List[Int32], n: Int, k: Int) -> List[Float32]:
     """The binary targets of one-vs-rest class k: 1 where the class code is
     k, 0 elsewhere (lane apple-fast-py2mojo-cluster: `_gpc_impl.py` built

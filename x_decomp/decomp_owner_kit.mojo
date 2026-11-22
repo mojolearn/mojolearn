@@ -187,10 +187,6 @@ trait DecompDev:
         ...
 
 
-def words_of(ref words: List[Float32]) -> F32Ptr:
-    return F32Ptr(unsafe_from_address=Int(words.unsafe_ptr()))
-
-
 def kit_eigh[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES], a: Int) raises -> Tuple[Int, Int]:
     """`_Kit.eigh(A)`: (w 1 x n ascending, v n x n eigenvectors in columns),
     host words; an operand already on the device is solved on a device copy

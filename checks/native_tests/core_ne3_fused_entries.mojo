@@ -141,14 +141,6 @@ def _argmax_f32(values: List[Float32], row: Int, width: Int) -> Int:
     return best
 
 
-def _argmax_f64(values: List[Float64], row: Int, width: Int) -> Int:
-    var best = 0
-    for c in range(1, width):  # small-loop(classes of one row)
-        if values[row * width + c] > values[row * width + best]:
-            best = c
-    return best
-
-
 def _close(got: Float64, expected: Float64, rtol: Float64, atol: Float64) -> Bool:
     """`np.testing.assert_allclose`'s element rule."""
     return abs(got - expected) <= atol + rtol * abs(expected)

@@ -86,15 +86,6 @@ def count_unique(
     return (n_uniq, min_label, max_label)
 
 
-def adjusted_rand_index_from_contingency(
-    c: List[Int32], k: Int, size: Int
-) raises -> Float64:
-    """Lines :161-191 from a host copy of the matrix. The untraced entry;
-    `adjusted_rand_index_from_contingency_traced` is the implementation."""
-    var off = IdentityTrace.disabled()
-    return adjusted_rand_index_from_contingency_traced(off, c, k, size)
-
-
 def adjusted_rand_index_from_contingency_traced(
     mut trace: IdentityTrace, c: List[Int32], k: Int, size: Int
 ) raises -> Float64:

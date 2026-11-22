@@ -930,13 +930,6 @@ def _transformer_param_words(blk: PythonObject, st: PythonObject, b: Int, l: Int
     return p^
 
 
-def _transformer_args(
-    model: PythonObject, blk: PythonObject, st: PythonObject, x: PythonObject, y: PythonObject,
-    b: Int, l: Int, planes: Bool, mut keep: List[PythonObject],
-) raises -> PythonObject:
-    return py_ints(_transformer_arg_words(model, blk, st, x, y, b, l, planes, keep))
-
-
 def _transformer_params(blk: PythonObject, st: PythonObject, b: Int, l: Int) raises -> PythonObject:
     return py_ints(_transformer_param_words(blk, st, b, l))
 

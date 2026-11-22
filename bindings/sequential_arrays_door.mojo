@@ -127,11 +127,6 @@ def sequential_x_snapshot(mut mods: NativeModules, value: PythonObject, name: St
     return _sequential_snapshot(owned, name, True, nd)
 
 
-def sequential_x(mut mods: NativeModules, value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    var snapshot = sequential_x_snapshot(mods, value, name, context)
-    return snapshot.keep
-
-
 def sequential_curve(value: PythonObject, count: Int) raises -> PythonObject:
     var result = Python.list()
     if count == 0:

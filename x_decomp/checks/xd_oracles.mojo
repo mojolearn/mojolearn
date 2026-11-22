@@ -736,22 +736,6 @@ def oracle_lasso(g: List[Float32], q: List[Float32], w0: List[Float32], n: Int, 
     return W^
 
 
-def oracle_omp_first(g: List[Float32], q: List[Float32], n: Int, k: Int, alt: Int = 0) -> List[Int32]:
-    """OMP's first atom per row: argmax |q_j|, ties to the LOWER index
-    (alt 1: the higher)."""
-    var out = List[Int32](length=n, fill=Int32(0))
-    for i in range(n):
-        var lam = 0
-        var best = Float32(-1)
-        for j in range(k):
-            var v = abs(ftz(q[i * k + j]))
-            if (v >= best) if alt == 1 else (v > best):
-                best = v
-                lam = j
-        out[i] = Int32(lam)
-    return out^
-
-
 # ------------------------------------------------------------ LDA (5313)
 def oracle_lda_step(x: List[Float32], ew: List[Float32], d0: List[Float32], e0: List[Float32], n: Int, k: Int, v: Int, prior: Float32, alt: Int = 0) -> List[Float32]:
     """ONE `_update_doc_distribution` iteration per document (words ascending
@@ -808,48 +792,6 @@ def oracle_dijkstra(w: List[Float32], n: Int, alt: Int = 0) -> List[Float32]:
                     if dv < Float32(0) or nd < dv:
                         out[s * n + v2] = nd
                         changed = True
-    return out^
-
-
-def oracle_barycenter(x: List[Float32], y: List[Float32], nbr: List[Int], n: Int, d: Int, k: Int, reg: Float32, alt: Int = 0) -> List[Float32]:
-    """sklearn barycenter_weights: G = Z Z^T + R I with R = reg * trace(G)
-    (alt 1: R = reg), w = G^-1 1 by Cholesky, normalized to sum 1."""
-    var out = List[Float32](length=n * k, fill=Float32(0))
-    for i in range(n):
-        var z = List[Float32](length=k * d, fill=Float32(0))
-        for a in range(k):
-            for f in range(d):
-                z[a * d + f] = o_sub(y[nbr[i * k + a] * d + f], x[i * d + f])
-        var g = List[Float32](length=k * k, fill=Float32(0))
-        var tr = Float32(0)
-        for a in range(k):
-            for b in range(k):
-                var acc = Float32(0)
-                for f in range(d):
-                    acc = o_fma(z[a * d + f], z[b * d + f], acc)
-                g[a * k + b] = acc
-            tr = o_add(tr, g[a * k + a])
-        var R = reg if (alt == 1 or not (tr > Float32(0))) else o_mul(reg, tr)
-        for a in range(k):
-            g[a * k + a] = o_add(g[a * k + a], R)
-        var L = oracle_chol(g, k)
-        var w = List[Float32](length=k, fill=Float32(0))
-        for a in range(k):
-            var acc = Float32(1)
-            for p in range(a):
-                acc = o_fma(-L[a * k + p], w[p], acc)
-            w[a] = o_div0(acc, L[a * k + a])
-        for aa in range(k):
-            var a = k - 1 - aa
-            var acc = ftz(w[a])
-            for p in range(a + 1, k):
-                acc = o_fma(-L[p * k + a], w[p], acc)
-            w[a] = o_div0(acc, L[a * k + a])
-        var tot = Float32(0)
-        for a in range(k):
-            tot = o_add(tot, w[a])
-        for a in range(k):
-            out[i * k + a] = o_div0(w[a], tot)
     return out^
 
 

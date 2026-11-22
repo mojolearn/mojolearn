@@ -400,48 +400,6 @@ def fg_tcount_kernel(
     _ = Atomic.fetch_add(tcnt.unsafe_offset(Int(acols[e])), Int32(1))
 
 
-def fg_exscan_kernel(
-    inp: MutPointer[Int32, MutAnyOrigin],
-    outp: MutPointer[Int32, MutAnyOrigin],
-    n_in: Int32,
-):
-    """One threadgroup: `outp` = exclusive scan of `inp`, total at `[n]`."""
-    var t = Int(thread_idx.x)
-    var n = Int(n_in)
-    var chunk = (n + FG_SCAN_TPB - 1) // FG_SCAN_TPB
-    var lo = t * chunk
-    var hi = lo + chunk
-    if hi > n:
-        hi = n
-    var sh = stack_allocation[
-        FG_SCAN_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
-    ]()
-    var a = Int32(0)
-    var r = lo
-    while r < hi:
-        a += inp[r]
-        r += 1
-    sh[t] = a
-    barrier()
-    var off = 1
-    while off < FG_SCAN_TPB:
-        var v = sh[t]
-        if t >= off:
-            v += sh[t - off]
-        barrier()
-        sh[t] = v
-        barrier()
-        off *= 2
-    var p = sh[t] - a
-    r = lo
-    while r < hi:
-        outp[r] = p
-        p += inp[r]
-        r += 1
-    if t == FG_SCAN_TPB - 1:
-        outp[n] = sh[t]
-
-
 def fg_tscatter_kernel(
     acols: MutPointer[UInt32, MutAnyOrigin],
     toff: MutPointer[Int32, MutAnyOrigin],

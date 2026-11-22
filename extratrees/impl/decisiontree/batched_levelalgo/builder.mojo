@@ -7401,12 +7401,6 @@ def train_classification_device_resident(
     return trees[0].copy()
 
 
-def dataset_len_ok(
-    x_col_major: List[Float32], n_rows: Int32, n_cols: Int32
-) -> Bool:
-    return len(x_col_major) == Int(n_rows) * Int(n_cols)
-
-
 def search_batch_regression_enqueue(
     ctx: DeviceContext,
     mut ws: LevelWorkspace,
@@ -8543,28 +8537,5 @@ def train_regression_device_resident(
     return trees[0].copy()
 
 
-def train_loop_shape() -> String:
-    """`builder.cuh:344-359`, `Builder::train`, quoted rather than executed.
-
-    Their loop is exactly:
-
-        NodeQueue queue(params, maxNodes(), n_sampled_rows, num_outputs);
-        while (queue.HasWork()) {
-          auto work_items = queue.Pop();
-          auto [splits_host_ptr, splits_count] = doSplit(work_items);
-          queue.Push(work_items, splits_host_ptr);
-        }
-        auto tree = queue.GetTree();
-        this->SetLeafPredictions(tree, queue.GetInstanceRanges());
-
-    `doSplit` and `SetLeafPredictions` were device work this lane had not
-    written when this quotation was added, so the shape was recorded instead of
-    executed. They are written now: `train_classification` (`:570`) and
-    `train_classification_device` (`:1259`) both run this loop, and
-    `set_leaf_predictions_classification` (`:405`) is its last line. What is
-    kept here is the verbatim quotation of their source that those trainers'
-    docstrings cite -- a citation, no longer a placeholder.
-    """
-    return "see docstring"
 # TOMBSTONE: MOJOLEARN_ET_TPB_256 (DROPPED-slower) deleted 2026-10-03 by 4a78e109a; code recoverable at 4a78e109a^.
 # Restore: git apply experiments/removed/MOJOLEARN_ET_TPB_256.patch; record in docs/TOMBSTONES.md.

@@ -112,14 +112,6 @@ comptime METRIC_L2_EXPANDED = 0
 comptime METRIC_L2_SQRT_EXPANDED = 1
 
 
-def init_method_name(init: Int) -> String:
-    if init == INIT_KMEANS_PLUS_PLUS:
-        return String("KMeansPlusPlus")
-    if init == INIT_RANDOM:
-        return String("Random")
-    return String("Array")
-
-
 @fieldwise_init
 struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
     """`cuvs::cluster::kmeans::params`, field for field, default for default.

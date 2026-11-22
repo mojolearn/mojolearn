@@ -8171,16 +8171,6 @@ def gemm_step_arm_plan_label(arm: Int) -> String:
     return s
 
 
-def identical_gemm_step_ksplit_workspace_floats(
-    m: Int, n: Int, k: Int, group_leaves: Int
-) raises -> Int:
-    """`m n G`, the node workspace one ksplit call allocates (0 at `k == 0`)."""
-    if m <= 0 or n <= 0:
-        return 0
-    var rg = _ksplit_resolve_leaves(group_leaves, contract_partition(k)[1])
-    return m * n * rg[1]
-
-
 def identical_gemm_step_ksplit_into(
     ctx: DeviceContext,
     mut c: DeviceBuffer[DType.float32],
@@ -8243,63 +8233,6 @@ def identical_gemm_step_ksplit_into(
     identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
     step_count_sync()
     ctx.synchronize()
-
-
-def identical_gemm_step_ksplit_phase_into(
-    ctx: DeviceContext,
-    mut c: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32],
-    mut b: DeviceBuffer[DType.float32],
-    mut ws: DeviceBuffer[DType.float32],
-    m: Int,
-    n: Int,
-    k: Int,
-    op: Int,
-    group_leaves: Int,
-) raises -> Tuple[Int, Int, Int]:
-    """`identical_gemm_step_ksplit_into` (clean) with a host synchronize
-    after each phase: `(alloc_ns, group_ns, fold_ns)`. The price harness's
-    PHASE lines (2593). A non-trial build runs the shipped dispatch
-    (`identical_gemm_shipped_into`) and reports it all as `group_ns`."""
-    if m <= 0 or n <= 0:
-        return (0, 0, 0)
-    comptime if GEMM_ARM_TRIAL:
-        var part = contract_partition(k)
-        var leaf = part[0]
-        var p_count = part[1]
-        var st = gemm_operand_strides(op, m, n, k)
-        var rg = _ksplit_resolve_leaves(group_leaves, p_count)
-        if p_count <= 0:
-            var tz = perf_counter_ns()
-            _launch_step_arm[
-                GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False, False
-            ](ctx, c, a, b, m, n, k, leaf, p_count, st)
-            step_count_sync()
-            ctx.synchronize()
-            return (0, Int(perf_counter_ns() - tz), 0)
-        var t0 = perf_counter_ns()
-        step_count_device_alloc()
-        var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
-        step_count_sync()
-        ctx.synchronize()
-        var t1 = perf_counter_ns()
-        _ksplit_groups_launch[
-            GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
-        ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
-        step_count_sync()
-        ctx.synchronize()
-        var t2 = perf_counter_ns()
-        _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
-        step_count_sync()
-        ctx.synchronize()
-        var t3 = perf_counter_ns()
-        _ = gws
-        return (Int(t1 - t0), Int(t2 - t1), Int(t3 - t2))
-    var ts = perf_counter_ns()
-    identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
-    step_count_sync()
-    ctx.synchronize()
-    return (0, Int(perf_counter_ns() - ts), 0)
 
 
 def gemm_step_ksplit_finest_leaves(m: Int, n: Int, k: Int) -> Int:
@@ -10398,65 +10331,6 @@ def identical_gemm_step_kfold_into(
     identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
     step_count_sync()
     ctx.synchronize()
-
-
-def identical_gemm_step_kfold_phase_into(
-    ctx: DeviceContext,
-    mut c: DeviceBuffer[DType.float32],
-    mut a: DeviceBuffer[DType.float32],
-    mut b: DeviceBuffer[DType.float32],
-    mut ws: DeviceBuffer[DType.float32],
-    m: Int,
-    n: Int,
-    k: Int,
-    op: Int,
-    geom: Int,
-) raises -> Tuple[Int, Int, Int]:
-    """`identical_gemm_step_kfold_into` (clean) with a host synchronize after
-    each phase: `(alloc_ns, group_ns, fold_ns)`, the price harness's PHASE line
-    for the arms (`phase_of=arm_kfold`). `k == 0` reports its one launch as
-    `group_ns`. A non-trial build runs the shipped dispatch and reports it all
-    as `group_ns`."""
-    _ = _kfold_ksplit_geometry(geom)
-    if m <= 0 or n <= 0:
-        return (0, 0, 0)
-    comptime if GEMM_ARM_TRIAL:
-        var gl = gemm_step_geometry_group_leaves(geom, m, n, k)
-        var part = contract_partition(k)
-        var leaf = part[0]
-        var p_count = part[1]
-        var st = gemm_operand_strides(op, m, n, k)
-        if p_count <= 0:
-            var tz = perf_counter_ns()
-            _kfold_run[False](ctx, c, a, b, m, n, k, op, gl)
-            return (0, Int(perf_counter_ns() - tz), 0)
-        var rg = _ksplit_resolve_leaves(gl, p_count)
-        var t0 = perf_counter_ns()
-        step_count_device_alloc()
-        var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
-        step_count_sync()
-        ctx.synchronize()
-        var t1 = perf_counter_ns()
-        _ksplit_groups_launch[
-            GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, False
-        ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
-        step_count_sync()
-        ctx.synchronize()
-        var t2 = perf_counter_ns()
-        if rg[1] <= GEMM_KFOLD_MAX_GROUPS:
-            _kfold_fold_launch[False](ctx, c, gws, m, n, rg[1])
-        else:
-            _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
-        step_count_sync()
-        ctx.synchronize()
-        var t3 = perf_counter_ns()
-        _ = gws
-        return (Int(t1 - t0), Int(t2 - t1), Int(t3 - t2))
-    var ts = perf_counter_ns()
-    identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
-    step_count_sync()
-    ctx.synchronize()
-    return (0, Int(perf_counter_ns() - ts), 0)
 
 
 def _kfold_ksplit_geometry(geom: Int) raises -> Int:

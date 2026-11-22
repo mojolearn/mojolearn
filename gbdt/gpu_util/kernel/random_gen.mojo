@@ -42,12 +42,6 @@ def advance_seed_k(s: UInt64, k: Int) -> UInt64:
     return out
 
 
-def advance_seed32(s: UInt32) -> UInt32:
-    """`AdvanceSeed32` (`random_gen.cuh:41-44`), the LCG the seed
-    generator mixes with."""
-    return UInt32(1664525) * s + UInt32(1013904223)
-
-
 def next_uniform_f(s: UInt64) -> Tuple[Float32, UInt64]:
     """`NextUniformF` (`random_gen.cuh:33-39`): advance, then scale the
     mixed word to [0, 1). Returns the draw AND the advanced seed; Mojo has

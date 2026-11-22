@@ -102,20 +102,6 @@ def gemm_step_lm_call(i: Int) raises -> Tuple[Int, Int, Int, Int, Int]:
 comptime GEMM_STEP_CONTROL_CALLS = 6
 
 
-def gemm_step_control_call_name(i: Int) -> String:
-    if i == 0:
-        return String("ctl_tn_768x768x768")
-    if i == 1:
-        return String("ctl_nt_768x768x2048")
-    if i == 2:
-        return String("ctl_nn_768x768x2048")
-    if i == 3:
-        return String("ctl_nt_1536x1408x768")
-    if i == 4:
-        return String("ctl_nt_1664x1408x768")
-    return String("ctl_nt_1024x1024x2048")
-
-
 def gemm_step_control_call(i: Int) raises -> Tuple[Int, Int, Int, Int, Int]:
     """`(op, m, n, k, 0)` for control call `i`: zero calls per step."""
     if i == 0:
@@ -274,23 +260,3 @@ def gemm_step_selected(spec: String, name: String) -> Bool:
         return True
     return (String(",") + spec + ",").find(String(",") + name + ",") >= 0
 
-
-def gemm_step_median_ms(samples: List[Int]) -> Float64:
-    """Median of nanosecond samples, in milliseconds (insertion sort on a
-    copy; a handful of samples)."""
-    var n = len(samples)
-    if n == 0:
-        return Float64(0.0)
-    var s = List[Int]()
-    for i in range(n):
-        s.append(samples[i])
-    for i in range(1, n):
-        var v = s[i]
-        var j = i - 1
-        while j >= 0 and s[j] > v:
-            s[j + 1] = s[j]
-            j -= 1
-        s[j + 1] = v
-    if n % 2 == 1:
-        return Float64(s[n // 2]) / 1.0e6
-    return (Float64(s[n // 2 - 1]) + Float64(s[n // 2])) / 2.0e6

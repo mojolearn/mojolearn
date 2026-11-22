@@ -220,63 +220,6 @@ def read_str(obj: PythonObject, name: StaticString = "value") raises -> String:
 
 # ------------------------------------------------------------ attribute / item reads
 
-def read_attr(obj: PythonObject, name: StaticString) raises -> PythonObject:
-    """`getattr(obj, name)` through one PyObject_GetAttrString (descriptor
-    semantics as the attribute syntax)."""
-    ref cpy = Python().cpython()
-    var raw = cpy.PyObject_GetAttrString(obj._obj_ptr, String(name))
-    if not raw:
-        var pending = _pending_error()
-        raise pending^
-    return PythonObject(from_owned=raw)
-
-
-def read_attr_int(obj: PythonObject, name: StaticString) raises -> Int:
-    return read_int(read_attr(obj, name), name)
-
-
-def read_attr_index(obj: PythonObject, name: StaticString) raises -> Int:
-    return read_index(read_attr(obj, name))
-
-
-def read_attr_float(obj: PythonObject, name: StaticString) raises -> Float64:
-    return read_float(read_attr(obj, name))
-
-
-def read_attr_bool(obj: PythonObject, name: StaticString) raises -> Bool:
-    return read_bool(read_attr(obj, name))
-
-
-def read_attr_str(obj: PythonObject, name: StaticString) raises -> String:
-    return read_str(read_attr(obj, name), name)
-
-
-def read_item(fields: PythonObject, key: StaticString) raises -> PythonObject:
-    """`fields[key]` of an exact dict with exact-str keys, through the
-    native dictionary lookup (no `__getitem__`, `__hash__` or `__eq__` hook
-    runs). One PyDict_GetItemWithError after the exact-type checks."""
-    return native_instance_item(fields, PythonObject(key))
-
-
-def read_item_int(fields: PythonObject, key: StaticString) raises -> Int:
-    return read_int(read_item(fields, key), key)
-
-
-def read_item_index(fields: PythonObject, key: StaticString) raises -> Int:
-    return read_index(read_item(fields, key))
-
-
-def read_item_float(fields: PythonObject, key: StaticString) raises -> Float64:
-    return read_float(read_item(fields, key))
-
-
-def read_item_bool(fields: PythonObject, key: StaticString) raises -> Bool:
-    return read_bool(read_item(fields, key))
-
-
-def read_item_str(fields: PythonObject, key: StaticString) raises -> String:
-    return read_str(read_item(fields, key), key)
-
 
 # ------------------------------------------------------------ array arguments
 
@@ -568,18 +511,6 @@ def pack_f32(src_address: Int, rows: Int, cols: Int, context: PythonObject) rais
     result of `rows` x `cols` (`cols` < 0: the 1-D shape `(rows,)`). Use
     `pack_room` instead when RUN can write the Array directly."""
     return _pack_copy("<f4", 4, src_address, rows, cols, context)
-
-
-def pack_f64(src_address: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
-    return _pack_copy("<f8", 8, src_address, rows, cols, context)
-
-
-def pack_i32(src_address: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
-    return _pack_copy("<i4", 4, src_address, rows, cols, context)
-
-
-def pack_i64(src_address: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:
-    return _pack_copy("<i8", 8, src_address, rows, cols, context)
 
 
 def pack_u8(src_address: Int, rows: Int, cols: Int, context: PythonObject) raises -> PythonObject:

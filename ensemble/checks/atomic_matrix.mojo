@@ -155,36 +155,3 @@ def column_has_float32_atomics(column: Int) -> Bool:
         return True
     return False
 
-
-def struct_in_shared_memory_must_be_trivial(column: Int) -> Bool:
-    """Whether a Mojo struct needs `TrivialRegisterPassable` to be stored
-    in threadgroup/shared memory.
-
-    A TOOLCHAIN row rather than a hardware one, and it is here because it
-    cost a compile cycle and will cost another one for whoever implements the
-    split kernel next. Mojo 1.0 refuses, by name:
-
-        error: value of type 'Split[...]' cannot be copied or moved into a
-               non-default address space
-        error: non-implicitly trivially copyable value cannot be copied
-               from a non-default address space
-
-    for a struct declared merely `(Copyable, Movable)`. Declaring it
-    `TrivialRegisterPassable` resolves it, and a pointer parameter that may
-    receive shared memory must additionally be parameterized on its
-    `AddressSpace` -- a plain `MutPointer[T, o]` will not bind one.
-
-    THEIR CODE HAS THE SAME CONSTRAINT AND SOLVES IT THE SAME WAY, which is
-    the reason this is a spelling row and not a deviation:
-    `builder_kernels_impl.cuh:366-369` does not declare
-    `__shared__ Split<DataT,IdxT> split_scratch[...]`. It declares a raw
-    `__shared__ __align__(alignof(Split<DataT,IdxT>)) unsigned char
-    split_scratch_storage[...]` and `reinterpret_cast`s it -- because a
-    non-trivially-constructible type cannot be `__shared__` in CUDA either.
-    Two toolchains, one constraint, two spellings of the same workaround.
-
-    True everywhere; recorded per column so the table shape stays uniform
-    and so a future column that differs has somewhere to say so.
-    """
-    _ = column
-    return True
