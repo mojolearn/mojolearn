@@ -12,6 +12,7 @@ so no bit moves. The Python `backward` reads the same fields (`_aux`,
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xcnn_common_door import (
+    xcnn_device_word,
     XCNN_F_LAYER_IO, xcnn_builtins, xcnn_entries, xcnn_word, xcnn_ptr, xcnn_mixed, xcnn_idn, xcnn_resident, xcnn_shape,
     xcnn_size, xcnn_tuple, xcnn_is_t, xcnn_on_dev, xcnn_new, xcnn_host_f32, xcnn_f32, xcnn_reshape, xcnn_addr,
     xcnn_dev, xcnn_dev_get, xcnn_dev_upload, xcnn_dev_has, xcnn_dev_handle, xcnn_download, xcnn_slice_f32, xcnn_put_f32,
@@ -85,6 +86,7 @@ def _ones(count: Int, context: PythonObject) raises -> PythonObject:
 
 
 def _bn_init(layer: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    xcnn_device_word(args, 7)
     neural_plain_value(args, 0, context)
     var fields = _fields(layer)
     xcnn_device_init(layer, fields, args[7], context)

@@ -49,7 +49,7 @@ from x_cnn.door_run import (
 from bindings.xcnn_keys_unpack import xcnn_keys
 from core.device_route import DEVICE_INSTALL, device_route_plan, device_route_admit, device_cpu_absent
 from providers.python.device_route_boundary_door import (
-    DeviceRouteOwner, device_route_held, device_route_keep, device_request, device_admit_class, device_route_clear,
+    DeviceRouteOwner, device_route_held, device_route_keep, device_request, device_admit_class, device_route_clear, device_unpack,
     device_cpu_connect_late, device_route_record, device_owner_current,
 )
 
@@ -631,6 +631,15 @@ def xcnn_labels(layer: PythonObject, fields: PythonObject, context: PythonObject
     var labels = owner.downcast_value_ptr[DeviceRouteOwner]()[].cls
     _ = owner  # the route's pins keep the provider until the copy above is held
     return labels
+
+
+def xcnn_device_word(args: PythonObject, at: Int) raises:
+    """A constructor's `device` (args[at]) checked in the shared words
+    BEFORE the constructor's metadata scan of its whole argument tuple: an
+    unknown value such as b"cpu" is refused as a device (ValueError), not as
+    a conversion hook of the scan (TypeError). One identity compare for the
+    default None; `xcnn_device_init` admits it fully after the scan."""
+    _ = device_unpack(args[at], xcnn_builtins())
 
 
 def xcnn_device_init(layer: PythonObject, fields: PythonObject, value: PythonObject,
