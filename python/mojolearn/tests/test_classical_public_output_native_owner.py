@@ -39,7 +39,8 @@ def clean(audit):
 
 @pytest.mark.parametrize("cls", [LinearRegression, Ridge])
 @pytest.mark.parametrize("layout", ["float32", "float64", "strided"])
-def test_native_public_prediction_widens_after_kernel_and_preserves_score_bits(cls, layout, monkeypatch):
+def test_native_public_prediction_is_the_kernel_float32_for_every_caller_and_preserves_score_bits(cls, layout, monkeypatch):
+    # One result for every caller (lane predict-dtype, 2026-11-22): no float64 widening of the public predict.
     rng = np.random.default_rng(872)
     x = rng.normal(size=(17, 3)).astype("f4")
     y = (x @ np.array([0.75, -1.5, 0.125], dtype="f4") + np.float32(0.25)).astype("f4")
@@ -47,7 +48,7 @@ def test_native_public_prediction_widens_after_kernel_and_preserves_score_bits(c
     query = x.astype("f8") if layout == "float64" else x[::-1] if layout == "strided" else x
     expected = legacy_public_predict(model, query)
     expected_score = model.score(x, y)
-    assert expected.dtype == np.dtype("f8")
+    assert expected.dtype == np.dtype("f4")
 
     def forbidden(*args, **kwargs):
         raise AssertionError("Python output conversion reached")
@@ -60,8 +61,8 @@ def test_native_public_prediction_widens_after_kernel_and_preserves_score_bits(c
         actual = clean(audit_native_call(native_predict_public, model, query))
         internal = clean(audit_native_call(native_predict_internal, model, query))
         score = clean(audit_native_call(native_score, model, x, y))
-    assert actual.dtype == np.dtype("f8")
+    assert actual.dtype == np.dtype("f4")
     assert internal.dtype == np.dtype("f4")
-    np.testing.assert_array_equal(actual.view("u8"), expected.view("u8"))
-    np.testing.assert_array_equal(actual.view("u8"), internal.astype("f8").view("u8"))
+    np.testing.assert_array_equal(actual.view("u4"), expected.view("u4"))
+    np.testing.assert_array_equal(actual.view("u4"), internal.view("u4"))
     assert np.float64(score).view("u8") == np.float64(expected_score).view("u8")

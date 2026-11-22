@@ -410,7 +410,7 @@ def test_kernel_ridge_column_target_warns_and_returns_flat_public_prediction():
     prediction = model.predict(x[:2])
     assert type(prediction) is np.ndarray
     assert prediction.shape == (2,)
-    assert prediction.dtype == np.float64
+    assert prediction.dtype == np.float32
     assert not vars(model).get("_mojolearn_fitting", 0)
 
 

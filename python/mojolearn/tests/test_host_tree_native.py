@@ -35,16 +35,12 @@ def _forest_pair(tmp_path, estimator, engine="sequential", labels=None):
 
 
 def _as_user_sees(model, prediction):
-    """The oracle's prediction as the product hands it to a caller outside the
-    package. `audit_native_call` is such a caller (`_verify_native_runtime`
-    sets `__mojolearn_user_boundary__`), and there a regressor's predict is
-    float64 for every family: the estimator's `_public_result`
-    (bindings/trees_public_lifecycle_native_door.mojo) widens a random
-    forest's float32 vote and the twin follows it (bindings/
-    host_tree_native_door.mojo, `estimator_outside`; lane r2-known,
-    2026-11-22). The frozen oracle keeps the package-internal float32; the
-    widening is exact."""
-    return prediction if model.is_classifier else prediction.astype("<f8")
+    """The oracle's prediction as the product hands it to every caller: a
+    regressor's predict is the forest's float32 mean vote for both families
+    (lane predict-dtype, 2026-11-22: one type for every caller, no float64
+    widening). The frozen oracle answers extra trees in float64, the exact
+    widening of those float32 words, so narrowing it back is exact."""
+    return prediction if model.is_classifier else np.asarray(prediction).astype("<f4")
 
 
 def _queries(kind, columns=2):
