@@ -43,7 +43,7 @@ from bindings.py_balanced import py_item
 
 # ---- from bindings/cholesky_archive_native_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Cholesky archive final-owner PACK and file output ownership."""
+# Cholesky archive final-owner PACK and file output ownership.
 # The PACK half of the former `bindings/cholesky_archive_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/cholesky_archive_native_unpack.mojo`.
 

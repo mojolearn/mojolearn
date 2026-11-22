@@ -97,23 +97,22 @@ from bindings.samba_decode_native_unpack import (
 
 # ---- from bindings/samba_decode_native_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""The native door of `SambaDecodeSession` (lane fix-d1-decode-sessions,
-2026-11-08).
-
-`SambaStack.decode_session(state)` opens one Samba stack program on the
-training image (SAMBA_PROGRAM_OPEN of core/samba_entry_table_programs.mojo,
-training/samba_program.mojo, lane x6-samba-on-executor; a native registry
-handle since lane samba-sessions-native, 2026-11-12): the registry, every layer's carried state and the
-hidden state between layers stay on the device, and a step is one id upload,
-one step op per layer and one logits download. It is the same program, the
-same ops and the same order as the per-call `SambaStack.step` on a device
-build, so the bytes are the per-call step's.
-
-THE HOST ARM. On a host build (no published program entry) or the CPU inference
-model, the session steps a session-owned copy of the caller's state
-(bindings/samba_decode_native_unpack.mojo, `_private`): `sync_state` copies it
-out to the caller's state, as the device arm's export does.
-"""
+# The native door of `SambaDecodeSession` (lane fix-d1-decode-sessions,
+# 2026-11-08).
+#
+# `SambaStack.decode_session(state)` opens one Samba stack program on the
+# training image (SAMBA_PROGRAM_OPEN of core/samba_entry_table_programs.mojo,
+# training/samba_program.mojo, lane x6-samba-on-executor; a native registry
+# handle since lane samba-sessions-native, 2026-11-12): the registry, every layer's carried state and the
+# hidden state between layers stay on the device, and a step is one id upload,
+# one step op per layer and one logits download. It is the same program, the
+# same ops and the same order as the per-call `SambaStack.step` on a device
+# build, so the bytes are the per-call step's.
+#
+# THE HOST ARM. On a host build (no published program entry) or the CPU inference
+# model, the session steps a session-owned copy of the caller's state
+# (bindings/samba_decode_native_unpack.mojo, `_private`): `sync_state` copies it
+# out to the caller's state, as the device arm's export does.
 # The PACK half of the former `bindings/samba_decode_native.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/samba_decode_native_unpack.mojo`.
 # RUN: typed pieces, no Python import.

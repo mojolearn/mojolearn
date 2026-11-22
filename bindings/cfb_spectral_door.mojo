@@ -103,7 +103,7 @@ from bindings.py_balanced import py_item
 
 # ---- from bindings/spectral_preparation_boundary_unpack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Spectral preparation boundary image pins around typed native requests."""
+# Spectral preparation boundary image pins around typed native requests.
 
 
 struct SpectralPreparationConnection(Movable):
@@ -147,7 +147,7 @@ def spectral_knn_run(connection: SpectralPreparationConnection, request: Spectra
 
 # ---- from bindings/spectral_assignment_boundary_unpack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Alternative label assignment UNPACK/PACK; execution is one native call."""
+# Alternative label assignment UNPACK/PACK; execution is one native call.
 
 
 def spectral_assignment_run(binding: PythonObject, request: SpectralAssignmentRequest,
@@ -165,7 +165,7 @@ def spectral_assignment_run(binding: PythonObject, request: SpectralAssignmentRe
 
 # ---- from bindings/spectral_assignment_boundary_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Alternative label assignment UNPACK/PACK; execution is one native call."""
+# Alternative label assignment UNPACK/PACK; execution is one native call.
 # The PACK half of the former `bindings/spectral_assignment_boundary.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/spectral_assignment_boundary_unpack.mojo`.
 

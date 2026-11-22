@@ -95,7 +95,7 @@ from bindings.py_balanced import py_item
 
 # ---- from bindings/host_logistic_query_boundary_unpack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""One host Logistic admission shared by public inference and score."""
+# One host Logistic admission shared by public inference and score.
 
 
 

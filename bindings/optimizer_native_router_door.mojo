@@ -76,7 +76,7 @@ from bindings.py_keys import py_op_code
 
 # ---- from bindings/optimizer_serialization_boundary_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Optimizer copy/pickle UNPACK/PACK; process-local handles never serialize."""
+# Optimizer copy/pickle UNPACK/PACK; process-local handles never serialize.
 
 
 def optimizer_restore_state(owner: PythonObject, state: PythonObject, context: PythonObject) raises -> PythonObject:

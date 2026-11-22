@@ -1031,7 +1031,7 @@ from checks.numerics import NUMERIC_IDENTICAL as _SPECTRAL_PREP_IDENTICAL
 # ---- from bindings/labels_host_ops_unpack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Legacy public host label wrappers: scalar UNPACK, native RUN, scalar PACK."""
+# Legacy public host label wrappers: scalar UNPACK, native RUN, scalar PACK.
 
 
 def unique_inverse_binding(src_addr: PythonObject, n: PythonObject, kind: PythonObject,

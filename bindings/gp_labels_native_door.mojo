@@ -61,7 +61,7 @@ from bindings.gp_keys_unpack import gp_keys
 
 # ---- from bindings/gp_labels_boundary_unpack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""GP label provider image pins around the existing typed label descriptor."""
+# GP label provider image pins around the existing typed label descriptor.
 
 
 struct GPLabelsConnection(Movable):
@@ -90,7 +90,7 @@ def gp_labels_gather(connection: GPLabelsConnection, kind: Int, request: LabelsG
 
 # ---- from bindings/gp_label_order_boundary_unpack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Exact builtin integer class ordering over the shared native key index."""
+# Exact builtin integer class ordering over the shared native key index.
 
 
 def gp_integer_classes[S: _TextCodeStorage](labels: List[PythonObject],

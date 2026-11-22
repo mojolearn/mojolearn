@@ -859,7 +859,7 @@ from gemm.contract import CONTRACT_K_LEAF_MIN
 
 # ---- from bindings/residual_dropout_boundary_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Public training residual-dropout layer; GPU forward and paired backward."""
+# Public training residual-dropout layer; GPU forward and paired backward.
 # The PACK half of the former `bindings/residual_dropout_boundary.mojo` (fence-flip-2 split, 2026-11-12).
 # Its two device-array entries and the UNPACK half (`_rd_dev_handles`) were deleted 2026-11-21 by
 # lane/dw-autograd-seq (recoverable at 6184091ce8): the door calls the native table instead.

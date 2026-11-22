@@ -188,7 +188,7 @@ from core.native_archive_cholesky import NativeCholeskyArchiveSaved, native_chol
 
 # ---- from bindings/cholesky_archive_native_unpack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Cholesky archive final-owner PACK and file output ownership."""
+# Cholesky archive final-owner PACK and file output ownership.
 
 
 def cholesky_archive_write(path: PythonObject, var factor: NativeArchiveMember,

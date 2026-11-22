@@ -243,7 +243,7 @@ def runtime_classical_unavailable_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr)
 
 # ---- from bindings/optimizer_lifecycle_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Optimizer finalization uses its typed control and retained provider owner."""
+# Optimizer finalization uses its typed control and retained provider owner.
 # The PACK half of the former `bindings/optimizer_lifecycle.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/optimizer_lifecycle_unpack.mojo`.
 
@@ -259,7 +259,7 @@ def optimizer_finalize_binding(owner: PythonObject) raises -> PythonObject:
 
 # ---- from bindings/optimizer_lifecycle_unpack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Optimizer finalization uses its typed control and retained provider owner."""
+# Optimizer finalization uses its typed control and retained provider owner.
 
 
 

@@ -558,7 +558,7 @@ from gemm.contract import CONTRACT_K_LEAF_MIN
 
 # ---- from bindings/residual_dropout_boundary_host_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""Public training residual-dropout layer; CPU-only forward and backward."""
+# Public training residual-dropout layer; CPU-only forward and backward.
 
 
 def residual_dropout_binding(x_addr: PythonObject,residual_addr: PythonObject,
@@ -599,11 +599,11 @@ def residual_dropout_backward_binding(dy_addr: PythonObject,dx_addr: PythonObjec
 # ---- from bindings/optimizer_public_host_pyapi_pack.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The Python door of the public optimizers on the CPU binding
-(`_mojolearn_training_host`; lane neural-optimizers, 2026-10-21; lane
-optimizers-thin-glue): the GPU door's entries (bindings/optimizer_public_pyapi.mojo)
-over training/host/optimizer_public_host.mojo, through the shared door
-bindings/optimizer_public_door.mojo (`HostOptKernels`)."""
+# The Python door of the public optimizers on the CPU binding
+# (`_mojolearn_training_host`; lane neural-optimizers, 2026-10-21; lane
+# optimizers-thin-glue): the GPU door's entries (bindings/optimizer_public_pyapi.mojo)
+# over training/host/optimizer_public_host.mojo, through the shared door
+# bindings/optimizer_public_door.mojo (`HostOptKernels`).
 # The PACK half of the former `bindings/optimizer_public_host_pyapi.mojo` (fence-flip-2 split, 2026-11-12);
 # the UNPACK half is `bindings/optimizer_public_host_pyapi_unpack.mojo`.
 

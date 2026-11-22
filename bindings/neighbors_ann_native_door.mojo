@@ -66,26 +66,25 @@ from providers.python.neighbors_public_lifecycle_pyapi_door import (
 
 # ---- from bindings/ann_fit_ops_native_door.mojo (inlined: its one importer is this file) ----
 # SPDX-License-Identifier: Apache-2.0
-"""The boundary of the ANN fit operations (lane dw-neighbors, 2026-11-21):
-what the four fit doors of bindings/neighbors_ann_native_door.mojo
-(`IVFPQIndex`, `IVFSQIndex`, `IVFRaBitQIndex`, `CagraIndex`) share to reach
-the x_ann image through its operations table
-(core/neighbors_entry_table_ann.mojo).
-
-UNPACK is `ann_ops_key` (bindings/native_ops_key_ann_unpack.mojo: one exact
-read of the image's module dictionary for the key it recorded when it
-published) and one table lookup for the entry, once per fit. RUN is
-x_ann/neighbors_ann_fit_run.mojo (typed requests, no Python). The
-`ann_door_*` calls here hold the interpreter lock rule of the old exports:
-  - the five builds run with the GIL RELEASED around the whole table call,
-    on a GPU image and on the CPU column alike;
-  - the registration of a resident IVF-PQ build and the release of a
-    resident handle run with the GIL HELD: the resident registry
-    (x_ann/resident.mojo) is guarded by it and has no lock word.
-The resident IVF-PQ fit is therefore two table calls, the two phases its
-export had: the build is never under the GIL and the registry is never
-reached without it.
-"""
+# The boundary of the ANN fit operations (lane dw-neighbors, 2026-11-21):
+# what the four fit doors of bindings/neighbors_ann_native_door.mojo
+# (`IVFPQIndex`, `IVFSQIndex`, `IVFRaBitQIndex`, `CagraIndex`) share to reach
+# the x_ann image through its operations table
+# (core/neighbors_entry_table_ann.mojo).
+#
+# UNPACK is `ann_ops_key` (bindings/native_ops_key_ann_unpack.mojo: one exact
+# read of the image's module dictionary for the key it recorded when it
+# published) and one table lookup for the entry, once per fit. RUN is
+# x_ann/neighbors_ann_fit_run.mojo (typed requests, no Python). The
+# `ann_door_*` calls here hold the interpreter lock rule of the old exports:
+#   - the five builds run with the GIL RELEASED around the whole table call,
+#     on a GPU image and on the CPU column alike;
+#   - the registration of a resident IVF-PQ build and the release of a
+#     resident handle run with the GIL HELD: the resident registry
+#     (x_ann/resident.mojo) is guarded by it and has no lock word.
+# The resident IVF-PQ fit is therefore two table calls, the two phases its
+# export had: the build is never under the GIL and the registry is never
+# reached without it.
 
 #: "No resident handle" (the registry mints handles from 1).
 comptime ANN_NO_HANDLE = 0
