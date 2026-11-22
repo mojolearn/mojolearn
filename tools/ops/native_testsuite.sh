@@ -159,6 +159,10 @@ build)
         done
     done < <(grep '^group ' "$gen/plan.txt")
     failed=$(awk '{print $1}' "$list" | while read -r x; do [ -x "$bindir/ts/$x" ] || printf '%s ' "$x"; done)
+    regrouped=$(awk '{print $2}' "$out/logs/testsuite-regroup-$column.txt" | wc -l)
+    echo "testsuite: $n files built in $(( $(date +%s) - start ))s ($ng groups, $ns planned singles, $regrouped files of failed groups rebuilt alone); failed to compile: ${failed:-none}"
+    exit 0 ;;
+one)
     column=${2:?one <column> [-D DEFINE ...] <name> [<name> ...]}; shift 2
     extra=""; names=()
     while [ $# -gt 0 ]; do
