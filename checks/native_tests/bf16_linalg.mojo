@@ -343,7 +343,9 @@ def main() raises:
         suite.test[test_fast_cold_one_hot]()
         suite.test[test_fast_products]()
     else:
+        suite.test[test_fast_cold_one_hot]()
         suite.skip[test_fast_cold_one_hot]()
+        suite.test[test_fast_products]()
         suite.skip[test_fast_products]()
     comptime if CPU_COLUMN_BUILD:
         suite.test[test_host_fixtures]()

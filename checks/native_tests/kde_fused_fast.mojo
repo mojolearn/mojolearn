@@ -230,7 +230,10 @@ def main() raises:
         suite.test[test_float_min_sentinel]()
         suite.test[test_batch_invariance]()
     else:
+        suite.test[test_fused_equals_staged]()
         suite.skip[test_fused_equals_staged]()
+        suite.test[test_float_min_sentinel]()
         suite.skip[test_float_min_sentinel]()
+        suite.test[test_batch_invariance]()
         suite.skip[test_batch_invariance]()
     suite^.run()
