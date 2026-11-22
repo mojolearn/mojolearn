@@ -148,8 +148,20 @@ run_unit() {
                     ( flock 9; git -C "$0" fetch -q --unshallow origin || echo "TOOLS: the box could not unshallow its repo; tests that read git history may fail where GitHub passes" ) 9> "$1/src.lock"
                 fi
                 pixi install --locked -e test || exit 2
+                # --filter (NC_FILTER, comma globs) selects tool test files by basename; it was not passed
+                # here, so a filtered tools check ran every file (fx-tooltests, 2026-11-21).
+                files=()
+                if [ "$4" != "*" ]; then
+                    IFS=, read -ra globs <<< "$4"
+                    for p in tools/test_*.py tools/tests/test_*.py; do
+                        for g in "${globs[@]}"; do
+                            case "${p##*/}" in $g) files+=("$p"); break ;; esac
+                        done
+                    done
+                    [ "${#files[@]}" -gt 0 ] || { echo "TOOLS: --filter $4 matches no tool test file" >&2; exit 2; }
+                fi
                 MOJOLEARN_TOOL_TESTS_OUT="$2/tools" MOJOLEARN_TEST_PY="$PWD/.pixi/envs/test/bin/python" MOJOLEARN_TEST_WORKERS="$3" \
-                    bash tools/run_tool_tests.sh' "$SRC" "$BASE" "$RES" "$CORES") ;;
+                    bash tools/run_tool_tests.sh "${files[@]}"' "$SRC" "$BASE" "$RES" "$CORES" "$FILTER") ;;
         *) echo "unknown unit $name" >&2; UNIT_PID=''; return 2 ;;
     esac
     rm -f "$RES/rc/$name"
