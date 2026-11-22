@@ -558,6 +558,13 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
 
 **The restore patches live OUTSIDE the repo (Andrew, 2026-11-25: "if experiments are done and tombstoned we can remove them ... move experiments removed out of the repo, leave on drive"): `~/mojolearn-evidence/experiments-removed/<DEFINE>.patch`, with a copy in R2, never in the tree. A done, tombstoned experiment leaves nothing in the repo but its tombstones and its `EXPERIMENTS.md` row; its code is recoverable at the sha the tombstone names. The same holds for run output and finished-campaign material: it is deleted from the tree (git history keeps it); only measurements are kept, in `~/mojolearn-evidence/` and R2. A decided A/B whose losing arm (or superseded old path) is still in the code is an owed deletion: the deletion carries the four tombstone parts below.**
 
+**Experiment cards, A/B notes and finished plans live OUTSIDE the repo too (Andrew, 2026-11-25: "move the cards and
+finished plans to the evidence store like the restore patches, and keep only EXPERIMENTS.md and TOMBSTONES.md").**
+A card, A/B note, measurement note or finished plan that no code and no rule file names is kept under
+`~/mojolearn-evidence/repo-data/<same repo path>` (rows in its `MANIFEST.tsv`), not in the tree.
+`docs/apple-fast/EXPERIMENTS.md` and `docs/TOMBSTONES.md` stay in the repo and stay permanent. A paused
+programme's ARMS stay in the code as before; its cards are read from the evidence store when it is reopened.
+
 Andrew, 2026-10-10: a deleted experiment is documented both inline and centrally. The deletion commit (or its lane) leaves all four:
 
 1. **Inline tombstone** at every deletion site: `# TOMBSTONE: MOJOLEARN_<DEFINE> (<verdict>) deleted <date> by <sha>; code recoverable at <sha>^.` plus a `# Restore:` line naming the patch.
