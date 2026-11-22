@@ -658,6 +658,13 @@ def _(ml, X, yc, yr, Xh=None):
     return _composed(ml, (8, 2), lambda m: m.linear(321).softplus().ssd_scan(1).flatten().linear(1), 2)
 
 
+@lane("sequence-composed-mamba3")
+def _(ml, X, yc, yr, Xh=None):
+    """A Mamba-3 core from the public layers over (8, 4) samples: linear(30) to [v | k | q | dt | A | trap]
+    (2 heads of 4 channels, 4 states), trapezoid_scan(2, 4), flatten, linear(1)."""
+    return _composed(ml, (8, 4), lambda m: m.linear(30).trapezoid_scan(2, 4).flatten().linear(1), 5)
+
+
 @lane("sequence-composed-recurrent")
 def _(ml, X, yc, yr, Xh=None):
     """A recurrent model from the public layers over (8, 4) samples: lstm(8), gru(6), flatten, linear(1)."""
@@ -673,6 +680,6 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _COMPOSED_LANES = ("sequence-composed-transformer", "sequence-composed-mamba1", "sequence-composed-mamba2",
-                   "sequence-composed-recurrent", "sequence-composed-conv1d")
+                   "sequence-composed-mamba3", "sequence-composed-recurrent", "sequence-composed-conv1d")
 _batch_decl("n/a:training-step (one seeded training step of a composed model through the tape; its forward "
             "outputs are train parts, digested whole)", *_COMPOSED_LANES)
