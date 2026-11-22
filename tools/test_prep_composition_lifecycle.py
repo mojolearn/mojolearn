@@ -32,6 +32,9 @@ class CompositionDoors(unittest.TestCase):
             _application_subclass=lambda cls: False,
             _ENCODE_CONTEXT=context,
             _ENCODE_CALL=lambda *args: self.calls.append(args) or self.result,
+            # _mode.py's `declare as _digest_declare` (the digest tables'
+            # once-per-class row, entered by CheckMixin.__init_subclass__): inert.
+            _digest_declare=lambda cls: None,
         )
         # Execute the actual class-definition hooks with inert installers, then
         # the actual two public class definitions. No mojolearn import occurs.

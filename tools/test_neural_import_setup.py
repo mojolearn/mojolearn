@@ -32,6 +32,14 @@ def mode_declarations():
                  "_sk_validate": types.SimpleNamespace(FIT_METHODS={"fit"},
                      arg_slots=lambda method: (None, None, None))}
     namespace["_device_record"] = namespace["_DEVICE_RECORDED"].append
+    # _mode.py imports `declare as _digest_declare` (and the digest reader and
+    # connection) from _digest_fields: the shared base enters each class in the
+    # digest tables at its definition. The import is supplied inert here, like
+    # the device-table row above; the digest tables are not under test.
+    namespace["_DIGEST_DECLARED"] = []
+    namespace["_digest_declare"] = namespace["_DIGEST_DECLARED"].append
+    namespace["_digest_read"] = lambda model: None
+    namespace["_DIGEST_CONNECTION"] = {}
     exec(compile(ast.Module(body=nodes, type_ignores=[]), "_mode setup declarations", "exec"), namespace)
     # The real import installs a native generic slot here. Its behavior is not
     # under test; this sentinel proves the selected classes own their final slot.
