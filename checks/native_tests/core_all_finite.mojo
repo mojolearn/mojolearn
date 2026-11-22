@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The finiteness predicate behind `_buffer.all_finite`, on the literal vectors
 of test_numpy_free_core.py `test_all_finite_host_path` (its native verdicts).
 
@@ -19,12 +20,23 @@ column calls the base binding's `LabelsDeviceKernels.finite`
 (bindings/_mojolearn.mojo `all_finite_f32_binding`). The empty-Array shortcut
 and the integer-dtype TypeError stay in the Python test (boundary).
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 
 from core.host_helpers_impl import all_finite_f32, all_finite_f64
 from core.hostptr import f32_ptr, f64_ptr
 from core.labels_native_device import LabelsDeviceKernels
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 comptime ALL_FINITE_CASES = 10
 
@@ -94,36 +106,16 @@ def run_case(index: Int) raises:
         require(_verdict64(both) == 0, label + ": +Inf/-Inf f64 accepted")
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(ALL_FINITE_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_case(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, ALL_FINITE_CASES)
+def test_cases() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("all_finite", ALL_FINITE_CASES, run_case)
+    else:
+        for unit in range(ALL_FINITE_CASES):  # driver-loop: the device column shares the base binding's one process-wide device context, cases in order
+            try:
+                run_case(unit)
+            except problem:
+                raise Error("all_finite row " + String(unit) + ": " + String(problem))
 
 
-# The device column shares the base binding's one process-wide device context,
-# so its cases are submitted in order.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(ALL_FINITE_CASES)
-    for unit in range(ALL_FINITE_CASES):  # driver-loop: over the ordered shared-context cases
-        try:
-            run_case(unit)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_all_finite", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

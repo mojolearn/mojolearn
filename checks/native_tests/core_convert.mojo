@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Float64 -> float32 narrowing and float32 transposes, moved from
 test_native_convert.py (the native functions of that file).
 
@@ -25,15 +26,25 @@ planted at seeded positions so the rounding cases land in every tile position
 across the shapes, as before. The binding's refusals (negative counts, null
 addresses) and the through-`_buffer` arms stay in the Python test (boundary).
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import cos, log, sqrt
 from std.memory import bitcast
 from core.core_host_impl import transpose_to_f32
 from core.host_helpers_impl import cast_f64_to_f32
-from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr, f64_ptr
 from core.mojolearn_shell_impl import cast_f64_to_f32_host, tiled_transpose_to_f32
 from core.hotpath_device_run import hpdev_try_cast_f64_to_f32, hpdev_try_transpose_to_f32
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime CONVERT_SHAPES = 13
@@ -396,21 +407,6 @@ struct HostShellConvert(ConvertCalls):
         tiled_transpose_to_f32[DType.float32](f32_ptr(src), f32_ptr(dst), rows, cols)
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime UNITS = 2 * CONVERT_FIXTURES
-    var cases = report.cases(UNITS)
-    def task(unit: Int) {imm cases}:
-        var fixture = unit % CONVERT_FIXTURES
-        try:
-            if unit < CONVERT_FIXTURES:
-                run_convert_fixture[HostHelpersConvert](fixture)
-            else:
-                run_convert_fixture[HostShellConvert](fixture)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, UNITS)
-
-
 # ---- The device column (was core_convert_gpu_suite.mojo) ----
 # The device narrowing and transposes the GPU base binding takes
 # (core/hotpath_device_run.mojo `hpdev_try_cast_f64_to_f32`,
@@ -434,24 +430,31 @@ struct DeviceConvert(ConvertCalls):
         require(hpdev_try_transpose_to_f32(src, dst, rows, cols, False), "device transpose_f32 not taken")
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CONVERT_FIXTURES)
-    for fixture in range(CONVERT_FIXTURES):
-        try:
-            run_convert_fixture[DeviceConvert](fixture)
-        except error:
-            cases.fail(fixture, error)
+def _helpers_fixture(unit: Int) raises:
+    run_convert_fixture[HostHelpersConvert](unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _shell_fixture(unit: Int) raises:
+    run_convert_fixture[HostShellConvert](unit)
 
 
-def register() -> Check:
-    return Check("core_convert", cpu=True, gpu=True, serial="", run=run_cases)
+def _device_fixture(unit: Int) raises:
+    run_convert_fixture[DeviceConvert](unit)
+
+
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("helpers fixture", CONVERT_FIXTURES, _helpers_fixture)
+        check_cases("shell fixture", CONVERT_FIXTURES, _shell_fixture)
+    else:
+        # The device narrowing and transposes use the base binding's one process-wide device context, so fixtures are
+        # submitted in order; a False return (a sabotage build, or a size outside the device twin) fails the fixture.
+        for unit in range(CONVERT_FIXTURES):  # driver-loop: ordered on the one device context
+            try:
+                _device_fixture(unit)
+            except problem:
+                raise Error("device fixture row " + String(unit) + ": " + String(problem))
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

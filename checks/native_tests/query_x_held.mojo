@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The held predict query of a resident kernel model (lane
 fix-svc-query-resident, 2026-11-14; core/query_x_held.mojo,
 core/device_query_x.mojo `DeviceQueryX.held`, core/fitted_resident_store.mojo
@@ -17,6 +18,7 @@ core/device_query_x.mojo `DeviceQueryX.held`, core/fitted_resident_store.mojo
 This is the completion test of the lane: the SVC / SVR / GP / KernelRidge
 resident predicts call exactly these functions. GPU columns only; the test
 owns its context and its store."""
+from std.testing import TestSuite
 from std.math import nan
 from std.memory import bitcast, UnsafePointer
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
@@ -33,7 +35,6 @@ from core.fitted_resident_store import (
     fitted_resident_stats,
 )
 from core.shared_slot import SharedSlot
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report
 
 
 # ---- The device column (was query_x_held_gpu_suite.mojo) ----
@@ -184,7 +185,6 @@ def _lease_holds(ctx: DeviceContext) raises:
     print("PASS query_x_held lease holds")
 
 
-
 def _lease_holds_held_tail(store: UnsafePointer[FittedResidentStore, MutAnyOrigin], ctx: DeviceContext, lease: Int, x: List[Float32], rows: Int, cols: Int,
                            addr: Int) raises:
     _require(fitted_resident_stats(store)[5] == 1, "the lease keeps its query after the call")
@@ -208,7 +208,9 @@ def _lease_holds_held_tail(store: UnsafePointer[FittedResidentStore, MutAnyOrigi
     fitted_query_put(store, lease, q3^.release())
     _require(fitted_resident_stats(store)[5] == 0, "a closed lease keeps nothing")
 
-def _run_gpu(mut report: Report) raises:
+
+def test_held_on_one_context() raises:
+    """The three held-query cases in their order on one DeviceContext."""
     comptime assert TARGET_COLUMN != COLUMN_CPU
     var ctx = DeviceContext()
     _held_matches_per_call(ctx)
@@ -217,13 +219,5 @@ def _run_gpu(mut report: Report) raises:
     ctx.synchronize()
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("query_x_held", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

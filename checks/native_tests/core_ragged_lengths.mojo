@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The ragged (right-padded) batch passes of `lengths=`, moved from
 test_ragged_lengths.py (2026-11-14): the byte passes that
 python/mojolearn/_ragged.py hands to the native `ragged_rows_bytes`
@@ -20,12 +21,22 @@ The destination of modes 0 and 2 starts as 0xAB bytes, so every byte the
 pass must write is seen written. The lengths admission, refusals and the
 ragged_forward composition with the caller's run stay in the Python test.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.array_helpers_impl import ragged_rows_bytes
-from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceContext
 from core.input_device import device_ragged_rows
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime RAGGED_FIXTURES = 4
@@ -147,44 +158,23 @@ def check_unit(unit: Int) raises:
     check_ragged(unit, f)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(RAGGED_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            check_unit(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, RAGGED_FIXTURES)
+def test_ragged() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("ragged", RAGGED_FIXTURES, check_unit)
+    else:
+        # Each device pass is one thread per destination byte; the fixtures share the context's stream.
+        var ctx = DeviceContext()
+        for unit in range(RAGGED_FIXTURES):  # driver-loop: ordered on one DeviceContext
+            try:
+                var f = ragged_fixture(unit)
+                var src = Int(f.src.unsafe_ptr()) if f.mode != 1 else Int(f.dst.unsafe_ptr())
+                var wrote = device_ragged_rows(ctx, src, Int(f.dst.unsafe_ptr()), Int(f.lens.unsafe_ptr()),
+                                               f.n, f.row, f.pos, f.mode)
+                require(wrote, "the device pass declined fixture " + String(unit))
+                check_ragged(unit, f)
+            except problem:
+                raise Error("ragged row " + String(unit) + ": " + String(problem))
 
 
-# ---- The device column (was core_ragged_lengths_gpu_suite.mojo) ----
-# The device ragged passes, in order on one DeviceContext: each pass is one
-# thread per destination byte, and the four fixtures share the context's
-# stream, so ordering them costs nothing.
-def _run_gpu(mut report: Report) raises:
-    var ctx = DeviceContext()
-    var cases = report.cases(RAGGED_FIXTURES)
-    for unit in range(RAGGED_FIXTURES):
-        try:
-            var f = ragged_fixture(unit)
-            var src = Int(f.src.unsafe_ptr()) if f.mode != 1 else Int(f.dst.unsafe_ptr())
-            var wrote = device_ragged_rows(ctx, src, Int(f.dst.unsafe_ptr()), Int(f.lens.unsafe_ptr()),
-                                           f.n, f.row, f.pos, f.mode)
-            require(wrote, "the device pass declined fixture " + String(unit))
-            check_ragged(unit, f)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_ragged_lengths", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

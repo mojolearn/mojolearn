@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The fused whole-step entries of lane ne3-g-svc-gp-neighbors against the
 per-op chains and reference relations (ported from
 `python/mojolearn/tests/test_ne3_fused_entries.py`; the six ported functions
@@ -40,6 +41,9 @@ requests they call (`core/ocsvm_plan.mojo`, `core/nearest_centroid_plan.mojo`,
 `neighbors/neighbors_semi_run.mojo`), at the constructor defaults. The data are
 the original shapes (`_blobs`: 96 rows, 5 features, class `i % 3` shifted by
 2 * class; 37 queries shifted by 1.5; 200 labels in [0, 4) and [0, 6)) drawn
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from a SplitMix64 Box-Muller stream regenerated here instead of NumPy's PCG64:
 every assertion is a relation that holds for any such data.
 """
@@ -72,7 +76,15 @@ from metrics.estimator import (
     homogeneity_score_host, completeness_score_host, v_measure_score_host,
     homogeneity_completeness_v_measure_host,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime NE3_UNITS = 12
@@ -634,39 +646,24 @@ def fixture[H: HcvCalls](entry: NativeDescriptorCall, unit: Int) raises:
         lp_knn_unit(driver, unit == 11)
 
 
-# ---- The host column: independent fixtures across the host cores ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(NE3_UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture[HostHcv](xn_native_v1, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, NE3_UNITS)
+def _host_fixture(unit: Int) raises:
+    fixture[HostHcv](xn_native_v1, unit)
 
 
-# ---- The device column ----
-# The descriptor's graphs and the metrics entries share one DeviceContext, so
-# the fixtures are submitted in order (as nearest_centroid_numeric does); the
-# kernels keep their own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(NE3_UNITS)
-    for unit in range(NE3_UNITS):  # driver-loop: over the fixtures on the one device context
-        try:
-            fixture[DeviceHcv](xn_native_v1_gpu, unit)
-        except error:
-            cases.fail(unit, error)
+def _device_fixture(unit: Int) raises:
+    fixture[DeviceHcv](xn_native_v1_gpu, unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", NE3_UNITS, _host_fixture)
+    else:
+        for unit in range(NE3_UNITS):  # driver-loop: the descriptor's graphs and the metrics entries share one DeviceContext, fixtures in order
+            try:
+                _device_fixture(unit)
+            except problem:
+                raise Error("fixture row " + String(unit) + ": " + String(problem))
 
 
-def register() -> Check:
-    return Check("core_ne3_fused_entries", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

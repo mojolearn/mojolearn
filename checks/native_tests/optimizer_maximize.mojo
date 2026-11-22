@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native maximize correctness seam, independent sign-bit oracle.
 
 Four optimizer configurations, clipping off/on, two seed labels and three
@@ -7,6 +8,8 @@ fixtures retain all three tensor extents and planted signed zeros. The
 existing final-verifier driver/registration remains until a coordinated switch;
 this check is correctness coverage, not an identity run or release verdict.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from training.optimizer_public_common import PublicStep, PublicStepOut, OptHyper
@@ -15,7 +18,15 @@ from training.host.optimizer_public_host import host_close
 from core.neural_context import neural_ctx
 from training.optimizer_kernels_gpu import GpuOptKernels, _NEURAL_CTX
 from training.optimizer_public import resident_close
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime MAXIMIZE_FIXTURES = 16
@@ -219,16 +230,6 @@ struct HostHarness(OptimizerTestKernels):
         return host_close(handle)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(MAXIMIZE_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            run_maximize_fixture[HostHarness](fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, MAXIMIZE_FIXTURES)
-
-
 # ---- The device column (was optimizer_maximize_gpu_suite.mojo) ----
 # Native GPU maximize; ordered submission for shared neural context/pool.
 #
@@ -249,28 +250,18 @@ struct GpuHarness(OptimizerTestKernels):
         return resident_close(ctx, handle)
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(MAXIMIZE_FIXTURES)
-    for fixture_id in range(MAXIMIZE_FIXTURES):
+def test_maximize() raises:
+    # Serial on both columns: the fixtures share the process-global host optimizer slot pool (host) and the shared
+    # neural context/pool (device); the update kernels and native input cells stay parallel inside each fixture.
+    for fixture_id in range(MAXIMIZE_FIXTURES):  # driver-loop: over the fixtures of the shared optimizer pool
         try:
-            run_maximize_fixture[GpuHarness](fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+            comptime if CPU_COLUMN_BUILD:
+                run_maximize_fixture[HostHarness](fixture_id)
+            else:
+                run_maximize_fixture[GpuHarness](fixture_id)
+        except problem:
+            raise Error("maximize row " + String(fixture_id) + ": " + String(problem))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    # Serial: the host state slots live in the process-global HOST_OPT_POOL, which host_open appends to without a
-    # lock (training/host/optimizer_public_host.mojo:51-63); parallel fixtures raced it (index 3 out of bounds at
-    # optimizer_public_host.mojo:141 on the GitHub CPU run of 384d53115c).
-    return Check("optimizer_maximize", cpu=True, gpu=True,
-                 serial="fixtures share the process-global host optimizer slot pool", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

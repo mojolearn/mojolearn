@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Resampling batch and pointer-form invariants, moved from
 test_ne2_rounds_pointer_forms.py (lane ne2-b-rounds N053, N078; 2026-11-14).
 
@@ -23,9 +24,11 @@ Fixtures (NE2_FIXTURES):
 The frame, sequence and dtype arms and the refusal wording stay in Python
 (boundary).
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import isfinite
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from resample.host.resample_host import (
     host_bootstrap,
     host_bootstrap_unpaired,
@@ -40,7 +43,15 @@ from resample.estimator import (
     permutation_test_host,
     resample_indices_host,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime NE2_FIXTURES = 6
@@ -205,16 +216,6 @@ struct HostResample(ResampleCalls):
         return host_permutation_test(x, y, STAT_DIFF_MEANS, n_resamples, seed, ALT_TWO_SIDED, r_first).null_distribution.copy()
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(NE2_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_ne2_fixture[HostResample](unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, NE2_FIXTURES)
-
-
 # ---- The device column (was core_ne2_rounds_gpu_suite.mojo) ----
 # The device resampling entries (resample/estimator.mojo, the
 # `_mojolearn_resample` entries), fixtures in order: they share the binding's
@@ -246,24 +247,24 @@ struct DeviceResample(ResampleCalls):
         return permutation_test_host(x, y, STAT_DIFF_MEANS, n_resamples, seed, ALT_TWO_SIDED, r_first).null_distribution.copy()
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(NE2_FIXTURES)
-    for unit in range(NE2_FIXTURES):
-        try:
-            run_ne2_fixture[DeviceResample](unit)
-        except error:
-            cases.fail(unit, error)
+def _host_fixture(unit: Int) raises:
+    run_ne2_fixture[HostResample](unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _device_fixture(unit: Int) raises:
+    run_ne2_fixture[DeviceResample](unit)
 
 
-def register() -> Check:
-    return Check("core_ne2_rounds", cpu=True, gpu=True, serial="", run=run_cases)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", NE2_FIXTURES, _host_fixture)
+    else:
+        for unit in range(NE2_FIXTURES):  # driver-loop: the resampling binding's process context, fixtures in order; every call keeps its kernel parallelism
+            try:
+                _device_fixture(unit)
+            except problem:
+                raise Error("fixture row " + String(unit) + ": " + String(problem))
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

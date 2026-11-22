@@ -37,14 +37,7 @@ from checks.native_tests.cnn_blocks import register as register_cnn_blocks
 from checks.native_tests.cnn_conv import register as register_cnn_conv
 from checks.native_tests.cnn_pool import register as register_cnn_pool
 from checks.native_tests.cnn_trainer import register as register_cnn_trainer
-from checks.native_tests.core_all_finite import register as register_core_all_finite
-from checks.native_tests.core_chunked_lm_head_denormals import register as register_core_chunked_lm_head_denormals
-from checks.native_tests.core_convert import register as register_core_convert
-from checks.native_tests.core_device_units import register as register_core_device_units
-from checks.native_tests.core_helpers import register as register_core_helpers
 from checks.native_tests.core_import_lower import register as register_core_import_lower
-from checks.native_tests.core_ne2_rounds import register as register_core_ne2_rounds
-from checks.native_tests.core_ne3_fused_entries import register as register_core_ne3_fused_entries
 from checks.native_tests.core_ops_import_kinds import register as register_core_ops_import_kinds
 from checks.native_tests.core_ops_layernorm_view import register as register_core_ops_layernorm_view
 from checks.native_tests.core_ops_program import register as register_core_ops_program
@@ -54,17 +47,11 @@ from checks.native_tests.core_partitioned_program import register as register_co
 from checks.native_tests.core_program_fit_stop import register as register_core_program_fit_stop
 from checks.native_tests.core_program_loop import register as register_core_program_loop
 from checks.native_tests.core_program_loop_append import register as register_core_program_loop_append
-from checks.native_tests.core_ragged_lengths import register as register_core_ragged_lengths
-from checks.native_tests.core_safetensors_f16 import register as register_core_safetensors_f16
-from checks.native_tests.core_stratified_group_fp64 import register as register_core_stratified_group_fp64
-from checks.native_tests.core_verifier_gap_methods import register as register_core_verifier_gap_methods
 from checks.native_tests.core_vjp_rank import register as register_core_vjp_rank
 from checks.native_tests.dbscan_eps_filter_gpu import register as register_dbscan_eps_filter_gpu
 from checks.native_tests.dbscan_native import register as register_dbscan_native
 from checks.native_tests.dbscan_ownership import register as register_dbscan_ownership
 from checks.native_tests.decomp_classical_infer_one_call import register as register_decomp_classical_infer_one_call
-from checks.native_tests.decomp_holtwinters_inference import register as register_decomp_holtwinters_inference
-from checks.native_tests.decomp_ne2_g_decomp_entries import register as register_decomp_ne2_g_decomp_entries
 from checks.native_tests.eigh_route import register as register_eigh_route
 from checks.native_tests.embedding_ne3_entries import register as register_embedding_ne3_entries
 from checks.native_tests.embedding_surface import register as register_embedding_surface
@@ -84,10 +71,7 @@ from checks.native_tests.gp_normalization import register as register_gp_normali
 from checks.native_tests.gp_theta import register as register_gp_theta
 from checks.native_tests.gpc_score import register as register_gpc_score
 from checks.native_tests.gpr_score import register as register_gpr_score
-from checks.native_tests.hdbscan_native import register as register_hdbscan_native
-from checks.native_tests.hdbscan_surface import register as register_hdbscan_surface
 from checks.native_tests.holtwinters_state import register as register_holtwinters_state
-from checks.native_tests.iforest_forest_export import register as register_iforest_forest_export
 from checks.native_tests.int8_linalg import register as register_int8_linalg
 from checks.native_tests.ipca_native import register as register_ipca_native
 from checks.native_tests.kde_native import register as register_kde_native
@@ -131,7 +115,6 @@ from checks.native_tests.neighbors_ops import register as register_neighbors_ops
 from checks.native_tests.neighbors_umap_surface import register as register_neighbors_umap_surface
 from checks.native_tests.neighbors_weighted_largek import register as register_neighbors_weighted_largek
 from checks.native_tests.nmf_native import register as register_nmf_native
-from checks.native_tests.ocsvm_native import register as register_ocsvm_native
 from checks.native_tests.oob_exact_sum import register as register_oob_exact_sum
 from checks.native_tests.ops_grad_identity import register as register_ops_grad_identity
 from checks.native_tests.ops_higher import register as register_ops_higher
@@ -140,18 +123,12 @@ from checks.native_tests.ops_optimizer import register as register_ops_optimizer
 from checks.native_tests.ops_optimizer_requests import register as register_ops_optimizer_requests
 from checks.native_tests.ops_session import register as register_ops_session
 from checks.native_tests.optics_native import register as register_optics_native
-from checks.native_tests.optimizer_descriptor import register as register_optimizer_descriptor
-from checks.native_tests.optimizer_device import register as register_optimizer_device
-from checks.native_tests.optimizer_maximize import register as register_optimizer_maximize
-from checks.native_tests.optimizer_owner import register as register_optimizer_owner
 from checks.native_tests.pca_native import register as register_pca_native
 from checks.native_tests.pca_owned_ops import register as register_pca_owned_ops
 from checks.native_tests.pca_whitening import register as register_pca_whitening
 from checks.native_tests.pcs_native import register as register_pcs_native
 from checks.native_tests.prep_label_binarizer_inverse_window import register as register_prep_label_binarizer_inverse_window
 from checks.native_tests.prep_robust_scaler_native_lifecycle import register as register_prep_robust_scaler_native_lifecycle
-from checks.native_tests.prophet_state import register as register_prophet_state
-from checks.native_tests.query_x_held import register as register_query_x_held
 from checks.native_tests.rankn_conv import register as register_rankn_conv
 from checks.native_tests.rankn_graph import register as register_rankn_graph
 from checks.native_tests.rankn_math import register as register_rankn_math
@@ -173,12 +150,6 @@ from checks.native_tests.sequence_theta_variants import register as register_seq
 from checks.native_tests.sequence_var import register as register_sequence_var
 from checks.native_tests.solver_estimators_ops import register as register_solver_estimators_ops
 from checks.native_tests.solver_qn_objectives import register as register_solver_qn_objectives
-from checks.native_tests.spectral_assignment import register as register_spectral_assignment
-from checks.native_tests.spectral_dense import register as register_spectral_dense
-from checks.native_tests.spectral_native import register as register_spectral_native
-from checks.native_tests.spectral_prediction import register as register_spectral_prediction
-from checks.native_tests.spectral_rbf import register as register_spectral_rbf
-from checks.native_tests.spectral_resident import register as register_spectral_resident
 from checks.native_tests.svc_accuracy_native import register as register_svc_accuracy_native
 from checks.native_tests.svc_probability import register as register_svc_probability
 from checks.native_tests.svr_native import register as register_svr_native
@@ -282,7 +253,6 @@ from checks.native_tests.neighbors_local_run import register as register_neighbo
 from checks.native_tests.neighbors_semi_run import register as register_neighbors_semi_run
 from checks.native_tests.neighbors_split_run import register as register_neighbors_split_run
 from checks.native_tests.neural_entry import register as register_neural_entry
-from checks.native_tests.nonzero_scan import register as register_nonzero_scan
 from checks.native_tests.pandas_input_plan_check import register as register_pandas_input_plan_check
 from checks.native_tests.parallel_archive_entry import register as register_parallel_archive_entry
 from checks.native_tests.pca_contract import register as register_pca_contract
@@ -301,7 +271,6 @@ from checks.native_tests.trees_entry_dart import register as register_trees_entr
 from checks.native_tests.trees_entry_forest import register as register_trees_entry_forest
 from checks.native_tests.trees_entry_gbdt import register as register_trees_entry_gbdt
 from checks.native_tests.trees_entry_glue import register as register_trees_entry_glue
-from checks.native_tests.tsqr_host_ownership import register as register_tsqr_host_ownership
 from checks.native_tests.tsvd_contract import register as register_tsvd_contract
 from checks.native_tests.tsvd_lease_state import register as register_tsvd_lease_state
 from checks.native_tests.x_linear_door_run import register as register_x_linear_door_run
@@ -524,7 +493,6 @@ from checks.native_tests.gemm_gemm_stage_ftz_check import register as register_g
 from checks.native_tests.gemm_gemm_workspace_reuse_check import register as register_gemm_gemm_workspace_reuse_check
 from checks.native_tests.glm_link_seams_check import register as register_glm_link_seams_check
 from checks.native_tests.glm_qn_scalar_ieee_check import register as register_glm_qn_scalar_ieee_check
-from checks.native_tests.hdbscan_sparse_mr_check import register as register_hdbscan_sparse_mr_check
 from checks.native_tests.hierarchy_linkage_host_check import register as register_hierarchy_linkage_host_check
 from checks.native_tests.holtwinters_hw_estimate_check import register as register_holtwinters_hw_estimate_check
 from checks.native_tests.holtwinters_hw_predict_ptr_check import register as register_holtwinters_hw_predict_ptr_check
@@ -605,14 +573,7 @@ def all_checks() -> List[Check]:
     checks.append(register_cnn_conv())
     checks.append(register_cnn_pool())
     checks.append(register_cnn_trainer())
-    checks.append(register_core_all_finite())
-    checks.append(register_core_chunked_lm_head_denormals())
-    checks.append(register_core_convert())
-    checks.append(register_core_device_units())
-    checks.append(register_core_helpers())
     checks.append(register_core_import_lower())
-    checks.append(register_core_ne2_rounds())
-    checks.append(register_core_ne3_fused_entries())
     checks.append(register_core_ops_import_kinds())
     checks.append(register_core_ops_layernorm_view())
     checks.append(register_core_ops_program())
@@ -622,17 +583,11 @@ def all_checks() -> List[Check]:
     checks.append(register_core_program_fit_stop())
     checks.append(register_core_program_loop())
     checks.append(register_core_program_loop_append())
-    checks.append(register_core_ragged_lengths())
-    checks.append(register_core_safetensors_f16())
-    checks.append(register_core_stratified_group_fp64())
-    checks.append(register_core_verifier_gap_methods())
     checks.append(register_core_vjp_rank())
     checks.append(register_dbscan_eps_filter_gpu())
     checks.append(register_dbscan_native())
     checks.append(register_dbscan_ownership())
     checks.append(register_decomp_classical_infer_one_call())
-    checks.append(register_decomp_holtwinters_inference())
-    checks.append(register_decomp_ne2_g_decomp_entries())
     checks.append(register_eigh_route())
     checks.append(register_embedding_ne3_entries())
     checks.append(register_embedding_surface())
@@ -649,10 +604,7 @@ def all_checks() -> List[Check]:
     checks.append(register_gp_theta())
     checks.append(register_gpc_score())
     checks.append(register_gpr_score())
-    checks.append(register_hdbscan_native())
-    checks.append(register_hdbscan_surface())
     checks.append(register_holtwinters_state())
-    checks.append(register_iforest_forest_export())
     checks.append(register_int8_linalg())
     checks.append(register_ipca_native())
     checks.append(register_kde_native())
@@ -696,7 +648,6 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_umap_surface())
     checks.append(register_neighbors_weighted_largek())
     checks.append(register_nmf_native())
-    checks.append(register_ocsvm_native())
     checks.append(register_oob_exact_sum())
     checks.append(register_ops_grad_identity())
     checks.append(register_ops_higher())
@@ -705,18 +656,12 @@ def all_checks() -> List[Check]:
     checks.append(register_ops_optimizer_requests())
     checks.append(register_ops_session())
     checks.append(register_optics_native())
-    checks.append(register_optimizer_descriptor())
-    checks.append(register_optimizer_device())
-    checks.append(register_optimizer_maximize())
-    checks.append(register_optimizer_owner())
     checks.append(register_pca_native())
     checks.append(register_pca_owned_ops())
     checks.append(register_pca_whitening())
     checks.append(register_pcs_native())
     checks.append(register_prep_label_binarizer_inverse_window())
     checks.append(register_prep_robust_scaler_native_lifecycle())
-    checks.append(register_prophet_state())
-    checks.append(register_query_x_held())
     checks.append(register_rankn_conv())
     checks.append(register_rankn_graph())
     checks.append(register_rankn_math())
@@ -737,12 +682,6 @@ def all_checks() -> List[Check]:
     checks.append(register_sequence_var())
     checks.append(register_solver_estimators_ops())
     checks.append(register_solver_qn_objectives())
-    checks.append(register_spectral_assignment())
-    checks.append(register_spectral_dense())
-    checks.append(register_spectral_native())
-    checks.append(register_spectral_prediction())
-    checks.append(register_spectral_rbf())
-    checks.append(register_spectral_resident())
     checks.append(register_svc_accuracy_native())
     checks.append(register_svc_probability())
     checks.append(register_svr_native())
@@ -847,7 +786,6 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_split_run())
     checks.append(register_ivf_ops_table())
     checks.append(register_neural_entry())
-    checks.append(register_nonzero_scan())
     checks.append(register_pandas_input_plan_check())
     checks.append(register_parallel_archive_entry())
     checks.append(register_pca_contract())
@@ -866,7 +804,6 @@ def all_checks() -> List[Check]:
     checks.append(register_trees_entry_forest())
     checks.append(register_trees_entry_gbdt())
     checks.append(register_trees_entry_glue())
-    checks.append(register_tsqr_host_ownership())
     checks.append(register_tsvd_contract())
     checks.append(register_tsvd_lease_state())
     checks.append(register_x_linear_door_run())
@@ -1086,7 +1023,6 @@ def all_checks() -> List[Check]:
     checks.append(register_gemm_gemm_workspace_reuse_check())
     checks.append(register_glm_link_seams_check())
     checks.append(register_glm_qn_scalar_ieee_check())
-    checks.append(register_hdbscan_sparse_mr_check())
     checks.append(register_hierarchy_linkage_host_check())
     checks.append(register_holtwinters_hw_estimate_check())
     checks.append(register_holtwinters_hw_predict_ptr_check())

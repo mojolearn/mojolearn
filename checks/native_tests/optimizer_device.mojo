@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual optimizer device descriptor and native storage-plan contracts."""
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_descriptor_abi import NativeDescriptorCall
 from training.optimizer_native_api import OptimizerNativeDriver, OPT_NATIVE_COUNT
@@ -16,7 +20,15 @@ from core.host_parallel import host_parallelize
 from training.host.optimizer_native import optimizer_host_v1
 from training.optimizer_native_gpu import optimizer_gpu_v1
 from training.optimizer_device_handle import OptimizerDeviceHandle
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime DEVICE_MALFORMED = 20
@@ -272,21 +284,6 @@ def unsupported(driver: OptimizerNativeDriver, fixture_id: Int) raises:
     _ = source
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime COUNT = DEVICE_COMMON + 3
-    var cases = report.cases(COUNT)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var driver = OptimizerNativeDriver(optimizer_host_v1, True)
-            if fixture_id < DEVICE_COMMON:
-                common(driver, fixture_id)
-            else:
-                unsupported(driver, fixture_id - DEVICE_COMMON)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, COUNT)
-
-
 # ---- The device column (was optimizer_device_gpu_suite.mojo) ----
 # Native device allocation/transfer/lease checks; unchanged training kernels.
 comptime DEVICE_GPU_EXTRA = 8
@@ -434,47 +431,37 @@ def lease(driver: OptimizerNativeDriver, fixture_id: Int) raises:
     _ = setup_owner
 
 
-def _run_gpu(mut report: Report) raises:
-    # Malformed envelopes and pure plans never enter the device pool, so those
-    # independent fixtures dispatch across host workers. GPU resource operations
-    # below remain ordered for the existing shared context/handle pool.
-    var failures = List[Int](length=DEVICE_COMMON, fill=0)
-    var fp = failures.unsafe_ptr()
-    def task(fixture_id: Int) {imm fp}:
-        try:
-            common(OptimizerNativeDriver(optimizer_gpu_v1, False), fixture_id)
-        except error:
-            fp.unsafe_store(fixture_id, 1)
-            print("FAIL optimizer_device_gpu common", fixture_id, String(error))
-    host_parallelize(task, DEVICE_COMMON)
-    var failed = 0
-    for value in failures:
-        failed += value
-    for fixture_id in range(DEVICE_GPU_EXTRA):
-        try:
-            var driver = OptimizerNativeDriver(optimizer_gpu_v1, False)
-            if fixture_id < 3:
-                roundtrip(driver, fixture_id)
-            elif fixture_id == 3:
-                refused_calls(driver)
-            else:
-                lease(driver, fixture_id - 4)
-        except error:
-            failed += 1
-            print("FAIL optimizer_device_gpu resource", fixture_id, String(error))
-    require(failed == 0, "optimizer_device_gpu failed " + String(failed) + " fixtures")
-    print("PASS optimizer_device_gpu:", DEVICE_COMMON + DEVICE_GPU_EXTRA, "native descriptor/storage/lease fixtures")
+def _host_fixture(fixture_id: Int) raises:
+    var driver = OptimizerNativeDriver(optimizer_host_v1, True)
+    if fixture_id < DEVICE_COMMON:
+        common(driver, fixture_id)
+    else:
+        unsupported(driver, fixture_id - DEVICE_COMMON)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _device_common(fixture_id: Int) raises:
+    common(OptimizerNativeDriver(optimizer_gpu_v1, False), fixture_id)
 
 
-def register() -> Check:
-    return Check("optimizer_device", cpu=True, gpu=True, serial="", run=run_cases)
+def test_storage() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("storage", DEVICE_COMMON + 3, _host_fixture)
+    else:
+        # Malformed envelopes and pure plans never enter the device pool, so those independent fixtures run across
+        # host workers; the GPU resource operations below stay ordered for the shared context/handle pool.
+        check_cases("device common", DEVICE_COMMON, _device_common)
+        for fixture_id in range(DEVICE_GPU_EXTRA):  # driver-loop: ordered device resource operations
+            try:
+                var driver = OptimizerNativeDriver(optimizer_gpu_v1, False)
+                if fixture_id < 3:
+                    roundtrip(driver, fixture_id)
+                elif fixture_id == 3:
+                    refused_calls(driver)
+                else:
+                    lease(driver, fixture_id - 4)
+            except problem:
+                raise Error("device resource row " + String(fixture_id) + ": " + String(problem))
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
