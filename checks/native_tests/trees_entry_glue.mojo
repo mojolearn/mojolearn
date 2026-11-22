@@ -537,7 +537,7 @@ def run_case(unit: Int) raises:
 # ---- test_x_trees_sanity.py (lane py2mojo-C, 2026-11-22): `test_stacking_folds_match_sklearn` and the raw-binding
 # arm of `test_calibration`, against scikit-learn's folds, `_sigmoid_calibration` and IsotonicRegression stored by
 # `tools/py2mojo_native_fixtures_b3.py` in `fixtures/trees_glue/`. The CalibratedClassifierCV log-loss arm stays in
-# Python (a composition over PythonObject members in bindings/trees_public_meta_door.mojo).
+# Python (a composition over Python-object members in bindings/trees_public_meta_door.mojo).
 comptime GLUE_DIR = "checks/native_tests/fixtures/trees_glue/"
 comptime TREES_GLUE_SKLEARN_CASES = 3
 
