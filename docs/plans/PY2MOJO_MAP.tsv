@@ -1,0 +1,781 @@
+python_file	test	class	mojo_test_or_suite	status	batch	reason
+checks/binary_ranking_smoke.py	<script>	b	checks/native_tests/metrics_selection_host_p2.mojo	owed	5	mixed: GPU PR curve/AUC vs pairwise oracle (ties, +-0, 513 rows, one-class) not native; str/int64 labels stay Py
+checks/classification_forest_scoring.py	<script>	c		stays Python		sklearn make_scorer interop on RF/ET with string labels; fast+identical witness; public-method composition
+checks/classification_metrics_binding.py	<script>	a	metrics/checks/classification_metrics_check.mojo::main	covered		mixed: per-class integer-count oracle, every average/zero_division native; sklearn cmp + default-mode stay Py
+checks/forest_export_public.py	<script>	c		stays Python		process/env export gate (MOJOLEARN_FOREST_EXPORT=verify) over public fits; files/records
+checks/forest_inference_public.py	<script>	a	checks/forest_inference_gpu.mojo	covered		mixed: fixed32-grove oracle native (handcrafted forests); pickle/save/resident lifetime stays Py
+checks/gbdt_adapters_smoke.py	<script>	c		stays Python		adapter classes vs base GradientBoosting model_ equality: public-method composition/adapter glue
+checks/gbdt_binary_prediction_smoke.py	<script>	b	NEW:checks/native_tests/gbdt_binary_probabilities.mojo	owed	4	binary sigmoid probs/classes vs float64 oracle incl +-0, subnormals; gbdt_public_fits uses it, no oracle
+checks/gbdt_feature_fraction_ab.py	<script>	c		stays Python		old/new binary A/B digest tool (measurement/verification tooling, not a test)
+checks/gbdt_feature_fraction_binding.py	<script>	b	checks/native_tests/gbdt_public_fits.mojo	owed	4	mixed: feature_fraction 1.0 == default, 0.5/tiny change model, repeat bits; pickle fingerprint+adapter parts stay
+checks/gbdt_querywise_pointwise_check.py	<script>	b	checks/native_tests/gbdt_public_fits.mojo	owed	4	mixed: QueryRMSE/PairLogit/YetiRank under use_pointwise_searcher option effects; npz/vendor file records stay
+checks/log_loss_smoke.py	<script>	b	NEW:checks/native_tests/metrics_log_loss.mojo	owed	5	log_loss eps-clipped fsum oracle, labels, 257 rows; no metrics log_loss native check found
+checks/min_child_hessian_binding.py	<script>	a	checks/min_child_hessian_check.mojo::test_min_child_hessian	covered		mixed: GPU fits with thresholds covered natively; save/load + numeric_mode binding read stay Python
+checks/min_split_gain_binding.py	<script>	a	checks/min_split_gain_check.mojo::test_min_split_gain	covered		same 0/.25/4/4.25 groups, thresholds vs split counts; binding ABI-tail part is boundary
+checks/minmax_scaler_smoke.py	<script>	b	NEW:checks/native_tests/prep_scalers.mojo	owed	1	mixed: MinMax fit/transform/inverse vs host oracle has no native case; dtype/no-share stays Python
+checks/model_selection_smoke.py	<script>	c		stays Python		Python FoldOracle estimator + scoring callable through cross_val_score: sklearn protocol/callbacks
+checks/native_tests/fixtures/mamba/gen_corpus.py	<script>	c		stays Python		tooling: fixture generator for the Mamba-1 reference corpus
+checks/regression_errors_binding.py	<script>	a	metrics/checks/regression_errors_check.mojo::main	covered		mixed: Float64 oracle + repeat bits native; float return type, inputs unchanged, mode readback stay Py
+checks/rf_class_weight_smoke.py	<script>	a	checks/native_tests/ensemble_sample_weight_check.mojo::test_sample_weight_check (arm_d, arm_e)	covered		mixed: class_weight->sample_weight resolution and weighted bins native; also class_weight_plan.mojo
+checks/standard_scaler_smoke.py	<script>	b	NEW:checks/native_tests/prep_standard_scaler.mojo	owed	1	mixed: mean/var/scale/transform/inverse vs NumPy; pickle, dtype refusal, no-alias stay Python
+python/mojolearn/tests/_legacy_host_density_constructors.py	<script>	c		stays Python		helper module (frozen constructors as test oracles), no test of its own
+python/mojolearn/tests/_package_evidence.py	<script>	c		stays Python		tooling: test-only package provenance helper
+python/mojolearn/tests/test_arena_ranges.py	test_ranges_and_resident_move_no_bit	c		stays Python		env switch MOJOLEARN_ARENA_RANGES + resident() store lifetime across public calls
+python/mojolearn/tests/test_arena_ranges.py	test_device_cache_frees_deterministically	c		stays Python		Python DeviceCache object lifetime/release counts
+python/mojolearn/tests/test_arima_parameter_lifetime.py	test_public_parameter_bits_and_owner_lifetime	c		stays Python		public params_ copies keep owner/stride after gc, child process; 3 params
+python/mojolearn/tests/test_autograd_public.py	test_guide_sequential_quickstart	c		stays Python		docs-guide Python block run verbatim; shapes, finite, repeat digest of public surface
+python/mojolearn/tests/test_autograd_public.py	test_guide_session_quickstart	c		stays Python		mixed: docs-guide block verbatim; MSE grad vs NumPy is covered by autograd loss/gradient checks
+python/mojolearn/tests/test_autograd_public.py	test_guide_session_training_loop	c		stays Python		docs-guide block verbatim; public surface, repeat digest
+python/mojolearn/tests/test_autograd_public.py	test_guide_export_and_load	c		stays Python		docs-guide block; export/load files, served == fitted (public-method composition)
+python/mojolearn/tests/test_autograd_public.py	test_guide_mixture_classifier	c		stays Python		docs-guide block verbatim; shapes/finite/printed digest
+python/mojolearn/tests/test_autograd_public.py	test_guide_shapes	c		stays Python		docs-guide block; dtype/shape of returned objects
+python/mojolearn/tests/test_autograd_public.py	test_guide_shapes_sequential	c		stays Python		docs-guide block; shapes, params size, flat == structured (public composition)
+python/mojolearn/tests/test_autograd_public.py	test_guide_program	c		stays Python		docs-guide block; program files, served vs eager (public composition)
+python/mojolearn/tests/test_autograd_public.py	test_guide_import_weights	c		stays Python		docs-guide block; state_dict import vs session (public composition, interop)
+python/mojolearn/tests/test_autograd_public.py	test_guide_import_model	c		stays Python		docs-guide block; model import files, run vs served vs eager (public composition)
+python/mojolearn/tests/test_autograd_public.py	test_guide_import_pretrained	c		stays Python		docs-guide block; framework interop, files
+python/mojolearn/tests/test_autograd_public.py	test_guide_verify_model	c		stays Python		docs-guide block; verify-model CLI, files/records
+python/mojolearn/tests/test_autograd_public.py	test_docstring_examples_run	c		stays Python		doctest of public docstrings; no numeric assertion
+python/mojolearn/tests/test_autograd_usability.py	test_validation_labels_use_training_vocabulary	c		stays Python		mixed: int64 label vocabulary + unknown-class refusal; validation losses native (training_autograd_usability)
+python/mojolearn/tests/test_byte_lm_host_ragged_lifetime.py	test_host_ragged_tokens_match_independent_rows	c		stays Python		input-storage lifetime through padded copy, threaded (2 params); Python object lifetime
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_evaluate_before_a_step_is_that_steps_loss	b	checks/native_tests/byte_lm_trainer_session.mojo	owed	7	evaluate-before-step == step loss on resident GPU trainer; host analogue only (byte_lm_host_column unit 7)
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_train_steps_equals_the_same_train_step_calls	a	checks/native_tests/byte_lm_trainer_session.mojo::test_cases units 0-2	covered		train_steps == single steps: loss words, count, state bytes (cpu+gpu)
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_host_and_device_give_the_same_words	b	NEW:checks/native_tests/byte_lm_host_device_words.mojo	owed	7	host step vs device step loss/param/moment words in one process (like linalg_decompositions.mojo)
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_host_logits_reference_equals_threaded	b	checks/native_tests/byte_lm_host_column.mojo	owed	7	unit 1 uses zero parameters only (trivial); needs random-init params
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_host_loss_reference_equals_threaded	b	checks/native_tests/byte_lm_host_column.mojo	owed	7	unit 0 uses zero parameters only (trivial); needs random-init params
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_host_trainer_loss_equals_threaded_inference_loss	c		stays Python		two Python doors (trainer.loss, inference.loss_bits) onto the same native OP_LOSS; door composition
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_host_step_loss_equals_host_loss	a	checks/native_tests/byte_lm_host_column.mojo::test_cases unit 7	covered		loss bits == step loss bits at current params, loss writes nothing
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_host_step_rows_equals_step_oracle	b	checks/native_tests/byte_lm_host_column.mojo	owed	7	ce_host_rows/adam_host_rows vs serial oracle; today a two-build record, native can call both in one build
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_host_step_oracle_loss_equals_reference_inference_loss	b	checks/native_tests/byte_lm_host_column.mojo	owed	7	step loss vs unthreaded reference loss with nonzero params; not covered
+python/mojolearn/tests/test_byte_lm_step_routes.py	test_host_and_device_give_the_same_loss_words	b	NEW:checks/native_tests/byte_lm_host_device_words.mojo	owed	7	host forward loss vs device evaluate words
+python/mojolearn/tests/test_byte_lm_surface.py	test_registry_and_named_parameter_packing	c		stays Python		boundary: named-array registry packing, input copy, refusal
+python/mojolearn/tests/test_byte_lm_surface.py	test_train_copies_inputs_and_returns_all_preupdate_gradients	c		stays Python		mixed: copy/returned-dict boundary is the point; twin-step equality is byte_lm_trainer_session units 0-6
+python/mojolearn/tests/test_byte_lm_surface.py	test_state_load_snapshot_isolation_and_cursor_validation	c		stays Python		boundary: exception
+python/mojolearn/tests/test_byte_lm_surface.py	test_mode_refuses_without_overriding_process	c		stays Python		boundary: exception, process/env
+python/mojolearn/tests/test_byte_lm_surface.py	test_checkpoint_bytes_survive_source_buffer_and_path_replacement	c		stays Python		boundary: process/env, files/records
+python/mojolearn/tests/test_byte_lm_surface.py	test_checkpoint_file_and_bytes_restore_the_same_state	c		stays Python		boundary: files/records
+python/mojolearn/tests/test_byte_lm_surface.py	test_checkpoint_bytes_reject_mutable_or_implicit_conversion	c		stays Python		boundary: exception
+python/mojolearn/tests/test_byte_lm_surface.py	test_checkpoint_bytes_limit_precedes_json_parsing	c		stays Python		boundary: exception, process/env
+python/mojolearn/tests/test_byte_lm_surface.py	test_checkpoint_bytes_keep_strict_json_and_schema_admission	c		stays Python		boundary: exception
+python/mojolearn/tests/test_byte_lm_surface.py	test_tokens_require_exact_int32_shape_and_range	c		stays Python		boundary: exception
+python/mojolearn/tests/test_byte_lm_surface.py	test_configuration_refuses_before_construction	c		stays Python		boundary: exception
+python/mojolearn/tests/test_byte_lm_surface.py	test_bad_state_refuses_transactionally	c		stays Python		boundary: exception, callback refusal
+python/mojolearn/tests/test_byte_lm_surface.py	test_checkpoint_canonical_complete_and_resume	c		stays Python		boundary: files/records
+python/mojolearn/tests/test_byte_lm_surface.py	test_checkpoint_refuses_corruption_wrong_schema_and_excess_size	c		stays Python		boundary: exception, files/records
+python/mojolearn/tests/test_byte_lm_surface.py	test_per_state_lock_serializes_steps	c		stays Python		boundary: threads
+python/mojolearn/tests/test_byte_lm_surface.py	test_terminal_state_can_evaluate_but_cannot_train	c		stays Python		boundary: exception
+python/mojolearn/tests/test_byte_lm_surface.py	test_run_metadata_retains_binding_source_profile_dataset_and_config	c		stays Python		boundary: returned object type
+python/mojolearn/tests/test_causal_lease_two_threads.py	test_every_concurrent_caller_completes_with_its_single_thread_output	c		stays Python		boundary: Python threads sharing one model lease
+python/mojolearn/tests/test_causal_lease_two_threads.py	test_exposed_model_runs_both_callers_on_private_sessions	c		stays Python		boundary: Python threads, private sessions
+python/mojolearn/tests/test_causal_lease_two_threads.py	test_load_state_dict_drops_the_lease_with_the_weights	c		stays Python		boundary: lease lifetime on load_state_dict
+python/mojolearn/tests/test_class_weight_shared_families.py	test_shared_class_weights_match_explicit_sample_weights	b	checks/native_tests/class_weight_plan.mojo	owed	4	mixed, 9 params: balanced/partial weights x sample weight not in plan suite; numpy-scalar keys stay Python
+python/mojolearn/tests/test_class_weight_shared_families.py	test_shared_class_weight_unknown_key_precedes_weight_range	c		stays Python		exception text/order raised to Python; 3 params
+python/mojolearn/tests/test_class_weight_shared_families.py	test_shared_families_keep_numeric_weight_admission	c		stays Python		admission of bool/str weight values, exception; 12 params
+python/mojolearn/tests/test_class_weight_shared_families.py	test_tree_weight_native_mapping_types_keep_missing_class_default	c		stays Python		admission of Python mapping types (OrderedDict/defaultdict); 4 params
+python/mojolearn/tests/test_class_weight_shared_families.py	test_tree_weight_key_rejects_path_equality_before_set_membership	c		stays Python		refusal of Python __eq__/__hash__ hooks; exception
+python/mojolearn/tests/test_classical_host_native_owner.py	test_native_host_load_cpu_predict_score_hash_and_save_match_existing_contract	c		stays Python		Host* load/save/hash/score contract, returned dtype, native audit: boundary
+python/mojolearn/tests/test_classical_host_native_owner.py	test_native_host_hash_preserves_none_empty_and_noncontiguous_storage	c		stays Python		hash of None/empty/noncontiguous Python storage: buffer admission
+python/mojolearn/tests/test_classical_host_native_owner.py	test_native_host_preserves_saved_fast_mode_refusal_at_inference	c		stays Python		saved fast-mode refusal raised to Python
+python/mojolearn/tests/test_classical_host_native_owner.py	test_native_host_not_fitted_message_uses_the_supported_subclass_name	c		stays Python		NotFittedError type/message
+python/mojolearn/tests/test_classical_pandas_native_owner.py	test_native_pandas_whole_fit_predict_score_preserves_old_public_driver	c		stays Python		pandas framework interop
+python/mojolearn/tests/test_classical_pandas_native_owner.py	test_native_pandas_does_not_enter_standard_python_conversion_or_metadata	c		stays Python		pandas interop, callback refusal
+python/mojolearn/tests/test_classical_pandas_native_owner.py	test_native_pandas_preserves_promotion_before_float32_at_double_rounding_boundaries	c		stays Python		pandas dtype promotion at admission (interop)
+python/mojolearn/tests/test_classical_pandas_native_owner.py	test_native_pandas_refuses_custom_hooks_before_reading_them	c		stays Python		pandas interop, hook refusal
+python/mojolearn/tests/test_classical_pandas_native_owner.py	test_native_pandas_preserves_ordinary_refusals	c		stays Python		exceptions raised to Python, pandas interop
+python/mojolearn/tests/test_classical_public_output_native_owner.py	test_native_public_prediction_widens_after_kernel_and_preserves_score_bits	c		stays Python		boundary: float64 public output dtype, layouts, native-call audit (6 params)
+python/mojolearn/tests/test_cpu_training_e2.py	test_spectral_runs_on_the_host_when_built	a	checks/native_tests/spectral_native.mojo::test_graphs	covered		mixed: host-column spectral graphs native; host-route selection/sabotage readback stays Python
+python/mojolearn/tests/test_cpu_training_e2.py	test_scalers_run_on_the_host_when_built	b	NEW:checks/native_tests/prep_scalers.mojo	owed	1	Standard/MinMax host fit stats, zero-var column, inverse: no native numeric case (archive_* are checkpoints)
+python/mojolearn/tests/test_cpu_training_e2.py	test_logistic_runs_on_the_host_when_built	a	checks/native_tests/logistic_numeric.mojo::test_logistic_numeric	covered		mixed: host-column logistic fits native; two-fit repeat/route stays Python
+python/mojolearn/tests/test_cpu_training_e2.py	test_metrics_run_on_the_host_when_built	c		stays Python		1 vs 7 row tasks in separate processes (MOJOLEARN_CPU_THREADS): process/env
+python/mojolearn/tests/test_cpu_training_e2.py	test_kmeans_fit_runs_on_the_host_when_built	a	checks/native_tests/kmeans_native.mojo::test_fixtures	covered		mixed: host-column KMeans fixtures native; repeat/route stays Python
+python/mojolearn/tests/test_cpu_training_embedding_ivf.py	test_embedding_runs_on_the_host_when_built	b	checks/native_tests/embedding_surface.mojo	owed	7	mixed: fold/pad/carry asserted natively on gpu column only; add cpu column; refusal/loader stay Python
+python/mojolearn/tests/test_cpu_training_embedding_ivf.py	test_ivf_runs_on_the_host_when_built	b	checks/native_tests/ann_ivf_surface.mojo	owed	7	mixed: host IVF all-lists == brute force, euclid = sqrt(sq); native host covers filter only
+python/mojolearn/tests/test_cpu_training_embedding_ivf.py	test_byte_lm_trainer_runs_on_the_host_when_built	b	checks/native_tests/byte_lm_trainer_session.mojo	owed	7	mixed: stateless==resident, checkpoint, rollback not native; evaluate covered unit 4; loader checks stay
+python/mojolearn/tests/test_cpu_training_forest_variants.py	test_variants_fit_on_the_host_when_built	b	checks/native_tests/ensemble_forest_check.mojo	owed	4	host fits of RF/ET variants (poisson, gamma, entropy, parallel_groves) need native cases; mixed
+python/mojolearn/tests/test_cpu_training_gbdt_ordered.py	test_ordered_save_load_and_ctr_predictions_on_the_host_when_built	a	checks/native_tests/gbdt_public_fits.mojo::test_cases	covered		named port; save/load half stays Python (files)
+python/mojolearn/tests/test_cpu_training_gp.py	test_gaussian_process_fits_on_the_host_when_built	c		stays Python		bytes equal at 1 vs 4 row tasks in separate processes: process/env; GP numerics in gp_native
+python/mojolearn/tests/test_cross_vendor.py	test_group_agrees_and_matches_one_process	a	checks/native_tests/resample_cross_vendor_fold.mojo::test_cross_vendor_fold	covered		mixed: ordered fold native (fixtures 0-4); socket coordinator group stays Py
+python/mojolearn/tests/test_cross_vendor.py	test_refuses_a_replica_that_drifts	c		stays Python		boundary: coordinator refusal raised to Python
+python/mojolearn/tests/test_cross_vendor.py	test_refuses_shards_not_owned_exactly_once	c		stays Python		boundary: coordinator refusal (2 params)
+python/mojolearn/tests/test_cross_vendor.py	test_chained_group_equals_the_gathered_group_and_one_process	a	checks/native_tests/resample_cross_vendor_fold.mojo::test_cross_vendor_fold	covered		mixed: prefix fold = flat fold is fixture 4; chained socket protocol stays Py
+python/mojolearn/tests/test_cross_vendor.py	test_chained_refuses_a_non_contiguous_block	c		stays Python		boundary: coordinator refusal
+python/mojolearn/tests/test_cross_vendor.py	test_chained_refuses_a_replica_that_drifts	c		stays Python		boundary: coordinator refusal
+python/mojolearn/tests/test_cross_vendor.py	test_chained_three_workers_unequal_blocks	a	checks/native_tests/resample_cross_vendor_fold.mojo::test_cross_vendor_fold	covered		mixed: unequal prefix blocks = flat fold is fixture 4; worker groups stay Py
+python/mojolearn/tests/test_cross_vendor_native.py	test_native_hash_matches_independent_sha256_and_field_order	c		stays Python		state hash field order kept in Python per resample_cross_vendor_fold.mojo docstring (boundary)
+python/mojolearn/tests/test_cross_vendor_native.py	test_native_fold_admission_refusals_have_no_python_work	c		stays Python		admission refusals raised to Python, audit of Python work; params
+python/mojolearn/tests/test_cross_vendor_native.py	test_hash_and_fold_read_views_in_place_with_the_same_digests_and_bits	c		stays Python		buffer-view admission (bytearray/memoryview); fold bits themselves in resample_cross_vendor_fold.mojo
+python/mojolearn/tests/test_cross_vendor_worker_native.py	test_native_batch_feed_owns_and_indexes_absolute_steps	c		stays Python		native feed ownership/indexing of Python layouts, ValueError refusal
+python/mojolearn/tests/test_cross_vendor_worker_native.py	test_native_rate_table_preserves_float32_schedule_and_bounds	c		stays Python		returned Python float of schedule + bounds refusal
+python/mojolearn/tests/test_cross_vendor_worker_native.py	test_borrowed_array_raw_memoryview_keeps_native_exporter_admitted	c		stays Python		memoryview exporter admission
+python/mojolearn/tests/test_cross_vendor_worker_native.py	test_complete_native_gpu_worker_independent_uniform_loss_decay_and_hash	c		stays Python		subprocess socket worker, checkpoint files, events: process/files/records
+python/mojolearn/tests/test_dart_buffer_lifetime.py	test_binary_probability_rows	c		stays Python		boundary: returned (n,2) shape, finite, rows sum 1
+python/mojolearn/tests/test_decomp_resident_lifecycle.py	test_partial_fit_chain_same_bits	c		stays Python		resident state vs replaced Python arrays (object lifetime); not a numeric kernel check
+python/mojolearn/tests/test_decomp_resident_lifecycle.py	test_lifecycle	c		stays Python		resident buffers vs Python attribute replace/del/gc; read-only ndarray error
+python/mojolearn/tests/test_decomp_resident_lifecycle.py	test_lifecycle	c		stays Python		resident buffers vs Python attribute replace/del/gc (second family base)
+python/mojolearn/tests/test_default_scorer_process.py	test_default_scorer_process_survives	c		stays Python		process/env
+python/mojolearn/tests/test_default_scorer_process.py	test_host_guard_refuses_a_cpu_below_x86_64_v3	c		stays Python		host guard, loader, exception
+python/mojolearn/tests/test_default_scorer_process.py	test_host_guard_admits_an_x86_64_v3_cpu	c		stays Python		host guard, loader
+python/mojolearn/tests/test_default_scorer_process.py	test_host_guard_ignores_other_platforms	c		stays Python		host guard, loader
+python/mojolearn/tests/test_estimator_score_p2.py	test_classifier_score_matches_its_predictions_and_refuses_short_y	c		stays Python		score vs own predict + ValueError: public-method composition; 8 params
+python/mojolearn/tests/test_estimator_score_p2.py	test_regressor_score_is_r2_of_its_predictions_and_refuses_short_y	c		stays Python		score vs R2 of own predict + ValueError: public-method composition; 13 params
+python/mojolearn/tests/test_estimator_score_p2.py	test_recurrent_classifier_score	c		stays Python		score vs own predict: public-method composition; 3 params
+python/mojolearn/tests/test_estimator_score_p2.py	test_recurrent_regressor_score	c		stays Python		score vs own predict: public-method composition; 3 params
+python/mojolearn/tests/test_estimator_score_p2.py	test_stacking_regressor_fit_transform_stacks_member_predictions	c		stays Python		fit_transform vs members' predict/transform + refusal: public-method composition
+python/mojolearn/tests/test_estimator_score_p2.py	test_stacking_regressor_fit_transform_parallel_jobs_match_serial	c		stays Python		n_jobs=2 vs serial public calls compared: public-method composition
+python/mojolearn/tests/test_fowlkes_mallows_score.py	test_public_and_no_longer_a_named_absence	c		stays Python		source-text/export surface assertion (deletion candidate)
+python/mojolearn/tests/test_fowlkes_mallows_score.py	test_manifest_covers_the_lane_and_the_export	c		stays Python		source-text manifest assertion (deletion candidate)
+python/mojolearn/tests/test_fowlkes_mallows_score.py	test_sparse_is_refused_by_name	c		stays Python		exception raised to Python
+python/mojolearn/tests/test_fowlkes_mallows_score.py	test_empty_is_zero_like_sklearn	b	checks/native_tests/metrics_fowlkes_mallows.mojo::test_fowlkes_mallows unit 0	converted (py2mojo-pilot)	pilot	FMI empty-input value; no native FMI case found
+python/mojolearn/tests/test_fowlkes_mallows_score.py	test_refusals_before_the_binding	c		stays Python		exceptions raised to Python
+python/mojolearn/tests/test_fowlkes_mallows_score.py	test_matches_sklearn_bitwise_on_small_cases	b	checks/native_tests/metrics_fowlkes_mallows.mojo::test_fowlkes_mallows units 1-7	converted (py2mojo-pilot)	pilot	FMI bitwise vs sklearn small cases (parametrized); no native FMI case found
+python/mojolearn/tests/test_fowlkes_mallows_score.py	test_matches_sklearn_bitwise_on_a_random_pair	b	checks/native_tests/metrics_fowlkes_mallows.mojo::test_fowlkes_mallows unit 8	converted (py2mojo-pilot)	pilot	FMI bitwise on random pair + symmetry; no native FMI case found
+python/mojolearn/tests/test_generation_engine_admission.py	test_default_dispatch_constructs_native_engine_owners	c		stays Python		binary selection / engine owner construction; fixture records
+python/mojolearn/tests/test_generation_route_controls.py	test_explicit_legacy_route_has_independent_upload_policy	c		stays Python		boundary: files/records
+python/mojolearn/tests/test_generation_route_controls.py	test_resident_route_does_not_manufacture_reload_off_arm	c		stays Python		boundary: files/records
+python/mojolearn/tests/test_generation_route_controls.py	test_incompatible_explicit_resident_route_does_not_fallback	c		stays Python		boundary: exception, files/records
+python/mojolearn/tests/test_generation_route_controls.py	test_checkpoint_sampling_policy_survives_route_changes	c		stays Python		boundary: build-route checkpoint record and two-build artifact compare
+python/mojolearn/tests/test_generation_route_controls.py	test_exposed_weights_are_read_only_after_use	c		stays Python		boundary: read-only exposed NumPy weight refusal
+python/mojolearn/tests/test_generation_route_controls.py	test_explicit_legacy_reuse_failure_preserves_progress_and_cleans_owner	c		stays Python		boundary: exception, dtype/shape of returned object, files/records
+python/mojolearn/tests/test_gp_svm_resident_lifecycle.py	test_lifecycle	c		stays Python		boundary: resident lease, read-only arrays, replacement, deletion
+python/mojolearn/tests/test_hdbscan_host_lifetime.py	test_hdbscan_row_norm_owner_survives_distance_tasks	b	checks/native_tests/hdbscan_native.mojo	owed	6	native norm-buffer lifetime: strided 2000/4000x4 leaf+EOM fit hash pins; no native case
+python/mojolearn/tests/test_hdbscan_native_boundary.py	test_prediction_record_stays_outside_public_fields_and_preserves_array_identity	c		stays Python		Python vars/identity of public fields after predict calls
+python/mojolearn/tests/test_hdbscan_native_boundary.py	test_prepared_query_rechecks_rebound_tree_counts	c		stays Python		refusal raised to Python on rebound attributes
+python/mojolearn/tests/test_hdbscan_native_boundary.py	test_prepared_query_rechecks_rebound_fitted_dimensions	c		stays Python		refusal raised to Python on rebound attributes
+python/mojolearn/tests/test_hdbscan_native_boundary.py	test_prediction_metadata_foreign_key_refused_without_hooks	c		stays Python		callback/hook refusal
+python/mojolearn/tests/test_hdbscan_native_boundary.py	test_query_factory_replacement_cannot_execute_python	c		stays Python		callback refusal of replaced factory
+python/mojolearn/tests/test_hdbscan_native_boundary.py	test_public_prediction_exporters_survive_native_plan_and_model_teardown	c		stays Python		Python object lifetime of exported arrays
+python/mojolearn/tests/test_hdbscan_native_boundary.py	test_prediction_training_storage_retains_copy_on_borrow	c		stays Python		borrowed caller array copied at admission (mutation after fit)
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_preserves_consumed_physical_and_logical_bytes	c		stays Python		density hash of admitted buffer bytes: buffer admission
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_keeps_fortran_array_physical_order	c		stays Python		Fortran-order buffer admission
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_preserves_missing_none_and_native_errors	c		stays Python		None/missing fields and errors to Python
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_preserves_native_field_collections	c		stays Python		native field collections of Python model object
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_preserves_registered_subclass_native_slots	c		stays Python		registered subclass slots: Python type boundary
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_refuses_python_protocols_before_hooks	c		stays Python		refusal of Python protocol hooks
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_rejects_replaced_array_buffer_property	c		stays Python		replaced buffer property refusal: buffer admission
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_uses_connected_native_entries	c		stays Python		loader/connected native entries
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_consumes_storage_without_retaining_owners	c		stays Python		Python object lifetime
+python/mojolearn/tests/test_host_density_hash_native.py	test_density_hash_without_numpy_has_exact_digest	c		stays Python		subprocess without numpy: import surface/process
+python/mojolearn/tests/test_host_radius_bindings.py	test_saved_radius_sorted_ties_and_empty_rows	c		stays Python		saved model + host_model vs fitted (files, public composition); 4 metrics
+python/mojolearn/tests/test_iforest_output_boundary.py	test_iforest_method_outputs	c		stays Python		dtype/shape of returned objects; 3 params
+python/mojolearn/tests/test_iforest_output_boundary.py	test_iforest_predict_is_the_sign_of_decision_function	c		stays Python		public-method composition (predict vs decision_function)
+python/mojolearn/tests/test_kde_fused_fast.py	test_fused_equals_staged_within_float32_fold_tolerance	b	NEW:checks/native_tests/kde_fused_fast.mojo	owed, paused (Apple fast: AGENTS.md 'A paused programme's arms are not unmeasured')	P	FAST-only fused arm vs staged (12 params, env trace switch); Apple fast paused, keep opt-in
+python/mojolearn/tests/test_kde_fused_fast.py	test_all_out_of_range_row_scores_float_min_not_minus_inf	b	NEW:checks/native_tests/kde_fused_fast.mojo	owed, paused (Apple fast: AGENTS.md 'A paused programme's arms are not unmeasured')	P	FAST fused FLOAT_MIN sentinel; staged path covered in kde/checks/kde_check.mojo
+python/mojolearn/tests/test_kde_fused_fast.py	test_query_score_does_not_depend_on_its_batch	b	NEW:checks/native_tests/kde_fused_fast.mojo	owed, paused (Apple fast: AGENTS.md 'A paused programme's arms are not unmeasured')	P	FAST fused batch invariance; identical path covered in kde/checks/kde_check.mojo
+python/mojolearn/tests/test_kde_fused_fast.py	test_matches_sklearn_when_available	a	checks/native_tests/kde_native.mojo::test_kde_native	covered		48 KDE profiles vs independent refs (kernels x metrics)
+python/mojolearn/tests/test_krr_options.py	test_refusals	c		stays Python		boundary: exception, dtype/shape of returned object
+python/mojolearn/tests/test_krr_options.py	test_weights_match_scikit_learn	a	checks/native_tests/kernel_methods_krr_options.mojo::test_host_fixtures	covered		mixed: weighted/precomputed exact props native; sklearn tolerance oracle stays Py (zero-weight dual=0 not native)
+python/mojolearn/tests/test_label_binarizer_inverse_window.py	test_binary_transform_round_trip	c		stays Python		public-method composition (transform then inverse_transform) with Python label vocabulary; window native
+python/mojolearn/tests/test_label_binarizer_inverse_window.py	test_binary_rejects_three_columns	c		stays Python		ValueError refusal
+python/mojolearn/tests/test_linalg_decompositions.py	test_the_three_doors_ship_in_the_linalg_family	c		stays Python		source-text/manifest: host_surface family exports and lanes
+python/mojolearn/tests/test_linalg_decompositions.py	test_qr_r_public_shape_and_dtype_match_numpy	c		stays Python		returned shape/dtype + input untouched (2 params); numerics already in linalg_numerical.mojo
+python/mojolearn/tests/test_linalg_decompositions.py	test_eigh_is_ascending_like_numpy_and_solves_its_own_equation	b	checks/native_tests/linalg_numerical.mojo	owed	6	64x5 Gram eigh vs NumPy eigvalsh + residual; native has only 4x4 diagonal case
+python/mojolearn/tests/test_linalg_decompositions.py	test_eigh_reads_one_triangle_like_numpy	b	checks/native_tests/linalg_numerical.mojo	owed	6	mixed: UPLO L/U ignores other triangle bitwise; ValueError for UPLO X stays Python
+python/mojolearn/tests/test_linalg_decompositions.py	test_svdvals_is_descending_like_numpy	b	checks/native_tests/linalg_numerical.mojo	owed	6	48x5 svdvals vs NumPy; native order checked only on rank-48x3 dup and constant 64x10
+python/mojolearn/tests/test_linalg_decompositions.py	test_the_same_input_gives_the_same_bits	b	checks/native_tests/linalg_numerical.mojo	owed	6	repeat-call bits of svdvals/qr/svd; native suite states no repeated-execution check
+python/mojolearn/tests/test_linalg_decompositions.py	test_qr_modes_are_numpys	b	checks/native_tests/linalg_numerical.mojo	owed	6	mixed (4 params): reduced/complete/raw Q,R,tau vs LAPACK incl wide; bad-mode ValueError stays
+python/mojolearn/tests/test_linalg_decompositions.py	test_qr_default_preserves_published_r_only_shape_and_bytes	c		stays Python		public-method composition: qr(a) == qr(a, mode=r) and shape
+python/mojolearn/tests/test_linalg_decompositions.py	test_svd_is_numpys	b	checks/native_tests/linalg_numerical.mojo	owed	6	8 params: U,S,Vh vs NumPy, orthonormality, reconstruction; no native svd-with-vectors case
+python/mojolearn/tests/test_linalg_decompositions.py	test_svd_rank_deficient_and_hermitian	b	checks/native_tests/linalg_numerical.mojo	owed	6	rank-deficient svd reconstruction + hermitian=True vs NumPy; not covered
+python/mojolearn/tests/test_linalg_decompositions.py	test_a_wide_matrix_takes_the_transpose	b	checks/native_tests/linalg_numerical.mojo	owed	6	wide 4x16 svdvals and qr r vs NumPy; not covered
+python/mojolearn/tests/test_linalg_decompositions.py	test_eigh_refuses_a_non_square_matrix	c		stays Python		ValueError refusal
+python/mojolearn/tests/test_linalg_decompositions.py	test_float64_is_refused_and_never_cast	c		stays Python		TypeError dtype admission (3 params)
+python/mojolearn/tests/test_linalg_decompositions.py	test_svdvals_converges_on_constant_columns	a	checks/native_tests/linalg_numerical.mojo::test_fixtures unit 4	covered		constant-64x10 vs NumPy F64 spectrum, same rtol 1e-4 / atol 1e-5*s0 (plus null directions)
+python/mojolearn/tests/test_linalg_fast_bf16.py	test_cold_matmul_entry_keeps_packed_uploads_alive	b	checks/native_tests/bf16_linalg.mojo	owed, paused (Apple fast: AGENTS.md 'A paused programme's arms are not unmeasured')	P	mixed, Apple fast (paused): cold-context one-hot matmul; subprocess part stays Python
+python/mojolearn/tests/test_linalg_fast_bf16.py	test_conversion_rounding_native_boundary_and_owned_lifetime	a	checks/native_tests/bf16_conversion.mojo::test_host_units	covered		mixed: RNE words covered (all 65536 halves); owned-lifetime del stays Python
+python/mojolearn/tests/test_linalg_fast_bf16.py	test_products_tail_shapes_transposes_and_float32_a	b	checks/native_tests/bf16_linalg.mojo	owed, paused (Apple fast: AGENTS.md 'A paused programme's arms are not unmeasured')	P	Apple fast matmul_bf16 entry not in bf16_linalg (identical/host gemm only); 18 params
+python/mojolearn/tests/test_linalg_fast_bf16.py	test_strided_readonly_inputs_and_output_ownership	c		stays Python		buffer admission, out= ownership
+python/mojolearn/tests/test_linalg_fast_bf16.py	test_invalid_parameters_refuse_before_dispatch	c		stays Python		exceptions raised to Python
+python/mojolearn/tests/test_linalg_fast_bf16.py	test_generic_bf16_native_aliases_and_keyword_operands	c		stays Python		Python aliases and keyword operands at the public boundary
+python/mojolearn/tests/test_linear_archive_generic_native.py	test_generic_linear_keeps_writable_and_rebound_coefficient_owners	c		stays Python		files/records: NPZ load routes, writable/rebound Python owners, save (12 params)
+python/mojolearn/tests/test_linear_svc_native_boundary.py	test_native_codes_pack_original_label_dtype_and_huge_integer_semantics	c		stays Python		returned label dtype/huge ints packing
+python/mojolearn/tests/test_linear_svc_native_boundary.py	test_query_reads_mutated_native_weight_storage_and_rebound_class_labels	c		stays Python		public _w/classes_ mutation read by query; coef_ copy: buffer admission
+python/mojolearn/tests/test_linear_svc_native_boundary.py	test_native_all_one_class_weight_retains_scalar_public_result_forms	c		stays Python		mixed: result types/dtypes; w=.8 obj=.2 numeric is linear_svc_native.mojo unit 1
+python/mojolearn/tests/test_linear_svc_native_boundary.py	test_sample_and_dictionary_weights_keep_existing_multiply_objective	b	checks/native_tests/linear_svc_native.mojo	owed	6	class_weight dict x sample_weight product (A=3, w=12/13); unit 4 covers sample weights only
+python/mojolearn/tests/test_linear_svc_native_boundary.py	test_multiclass_public_metadata_and_exporter_lifetime_survive_plan_release	c		stays Python		public metadata and exporter lifetime
+python/mojolearn/tests/test_linear_svc_native_boundary.py	test_early_parameter_refusal_keeps_original_publication_stage	c		stays Python		exception stage raised to Python
+python/mojolearn/tests/test_linear_svc_native_boundary.py	test_linear_svc_native_factory_refuses_python_replacement	c		stays Python		callback refusal of replaced factory
+python/mojolearn/tests/test_linear_svc_native_boundary.py	test_shared_linear_svr_decision_transport_keeps_public_weight_mutation	c		stays Python		public _w mutation read by SVR predict: buffer admission
+python/mojolearn/tests/test_logistic_native_predict.py	test_matches_strict_threshold_without_python_scores	c		stays Python		mixed: callback refusal (patched decision_function) + public labels; six score rows native in logistic_numeric.mojo
+python/mojolearn/tests/test_logistic_native_predict.py	test_float_and_object_labels_keep_public_types	c		stays Python		returned label types for float/str classes
+python/mojolearn/tests/test_meta_members_native.py	test_hard_vote_of_forest_members_matches_their_predictions	b	NEW:checks/native_tests/trees_meta_vote.mojo	owed	4	hard-vote fold over member predictions (bindings/trees_public_meta_door.mojo) has no native case
+python/mojolearn/tests/test_meta_members_native.py	test_binary_ovr_and_multioutput_forest_members_answer_their_labels	c		stays Python		public composition: meta predict vs member predict, class-label mapping
+python/mojolearn/tests/test_meta_members_native.py	test_meta_classifier_score_is_the_accuracy_of_its_predict	c		stays Python		public composition: score vs predict, str labels (10 params); weighted accuracy in metrics_weighted_score
+python/mojolearn/tests/test_meta_members_native.py	test_multioutput_score_is_the_all_outputs_match_fraction	c		stays Python		public composition: score vs accuracy_score
+python/mojolearn/tests/test_meta_members_native.py	test_multioutput_string_labels_predict_and_score	c		stays Python		boundary: string labels, returned rows, exception
+python/mojolearn/tests/test_meta_members_native.py	test_meta_configuration_changes_are_seen_after_the_admission_stamp	c		stays Python		boundary: set_params admission stamp, exception
+python/mojolearn/tests/test_meta_members_native.py	test_staged_member_tables_follow_a_member_refit	c		stays Python		boundary: member set_params/refit, exception
+python/mojolearn/tests/test_meta_members_native.py	test_soft_vote_is_the_weighted_mean_of_member_probabilities	b	NEW:checks/native_tests/trees_meta_vote.mojo	owed	4	weighted soft-vote fold (atol 1e-6) has no native case
+python/mojolearn/tests/test_meta_members_native.py	test_bagging_members_hold_their_own_seeds_and_the_validated_parameters	c		stays Python		sklearn protocol: members get_params seeds/max_depth, shape
+python/mojolearn/tests/test_meta_members_native.py	test_dart_and_adaboost_fits_repeat_bit_for_bit	b	checks/native_tests/trees_entry_dart.mojo	owed	4	mixed: DART/AdaBoost fit repeat bits not native; member seeds via get_params stay Py
+python/mojolearn/tests/test_meta_members_native.py	test_dart_tree_explainer_is_additive	b	NEW:checks/native_tests/xtrees_shap_additive.mojo	owed	4	SHAP sum + expected_value = DART predict (xtrees/shap_device.mojo) has no native case
+python/mojolearn/tests/test_meta_members_native.py	test_permutation_test_score_with_redrawn_folds_repeats	c		stays Python		public composition: same public call twice, lengths/p-value range
+python/mojolearn/tests/test_meta_members_native.py	test_roc_auc_ovr_micro_is_the_raveled_binary_auc	b	NEW:checks/native_tests/metrics_roc_auc_ovr.mojo	owed	4	mixed: ovr micro AUC = raveled binary AUC (weighted) not native; bad-input refusal stays Py
+python/mojolearn/tests/test_metrics_device_score.py	test_score_on_the_default_device_is_a_float	c		stays Python		returned Python type float (2 params)
+python/mojolearn/tests/test_metrics_device_score.py	test_cpu_device_score_loads_the_cpu_metrics_binary	c		stays Python		binary selection: sys.modules import surface
+python/mojolearn/tests/test_metrics_device_score.py	test_cpu_device_score_does_nothing_on_the_gpu	c		stays Python		device routing activity record (launches/uploads)
+python/mojolearn/tests/test_metrics_device_score.py	test_default_device_score_still_runs_on_the_gpu_beside_a_cpu_estimator	c		stays Python		device routing activity record
+python/mojolearn/tests/test_metrics_device_score.py	test_identical_mode_cpu_device_score_returns_the_gpu_bits	c		stays Python		cross-column identity in one process via device= routing; verify territory
+python/mojolearn/tests/test_metrics_device_score.py	test_set_params_to_cpu_moves_score_to_the_cpu_metrics_binary	c		stays Python		sklearn set_params + binary routing
+python/mojolearn/tests/test_metrics_device_score.py	test_score_refuses_a_target_of_another_length_on_every_device	c		stays Python		exception refusal
+python/mojolearn/tests/test_metrics_undefined_score.py	test_zero_weight_infinite_score_is_explicit_positive_nan	b	checks/native_tests/metrics_r2_epilogue.mojo::test_r2_epilogue units 0-2	converted (py2mojo-pilot)	pilot	r2 reg_epi NaN rule (zero-weight inf -> +qNaN, force_finite) not covered natively
+python/mojolearn/tests/test_metrics_undefined_score.py	test_finite_scores_and_nonzero_weight_infinity_keep_semantics	b	checks/native_tests/metrics_r2_epilogue.mojo::test_r2_epilogue units 3-6	converted (py2mojo-pilot)	pilot	r2 variance_weighted/uniform/raw with inf and 0/0 not covered natively
+python/mojolearn/tests/test_native_array_view_lifetime.py	test_ridge_attribute_view_retains_external_exporter	c		stays Python		buffer admission, Python exporter lifetime (4 params)
+python/mojolearn/tests/test_native_array_view_lifetime.py	test_ridge_row_view_keeps_offset_and_owner	c		stays Python		buffer view offset and Python owner lifetime
+python/mojolearn/tests/test_native_array_view_lifetime.py	test_mapped_preprocessing_storage_without_store_keeps_owning_slice	c		stays Python		mmap/memoryview owner lifetime
+python/mojolearn/tests/test_native_array_view_lifetime.py	test_kernel_pca_retained_training_copy_survives_argument_lifetime	c		stays Python		caller buffer lifetime/mutation after fit
+python/mojolearn/tests/test_native_cv_gbdt_nb.py	test_native_gbr_cv_default_named_scores_and_predictions_match_explicit_fits	c		stays Python		public-method composition: CV scores/predictions vs explicit public fits; native audit
+python/mojolearn/tests/test_native_cv_gbdt_nb.py	test_native_gbr_grid_search_preserves_constructor_and_refit_semantics	c		stays Python		sklearn protocol: GridSearch constructor/refit semantics, vars()
+python/mojolearn/tests/test_native_cv_gbdt_nb.py	test_native_gaussian_nb_cv_copies_priors_and_keeps_native_fold_route	c		stays Python		priors object copy/identity, CV vs explicit fits: composition + Python objects
+python/mojolearn/tests/test_native_cv_gbdt_nb.py	test_native_gaussian_nb_group_permutation_contract_and_parameter_search	c		stays Python		public-method composition: permutation score/pvalue vs fold scores, search predict
+python/mojolearn/tests/test_native_cv_gbdt_nb.py	test_native_cv_connects_cold_arena_context_before_ndarray_row_snapshot	c		stays Python		ndarray owner types in arena: buffer admission/loader
+python/mojolearn/tests/test_native_cv_gbdt_nb.py	test_native_gbr_and_nb_refuse_configuration_and_input_hooks_before_invocation	c		stays Python		refusal of Python hooks before invocation
+python/mojolearn/tests/test_native_cv_gbdt_nb.py	test_native_gbr_refuses_replaced_loss_descriptor_before_its_hook	c		stays Python		refusal of replaced Python descriptor
+python/mojolearn/tests/test_native_cv_outputs.py	test_string_prediction_placement_is_native_and_matches_separate_folds	c		stays Python		public composition: cross_val_predict vs per-fold fits, string labels
+python/mojolearn/tests/test_native_cv_outputs.py	test_native_split_descriptor_preserves_canonical_unicode_and_array_hashes	c		stays Python		boundary/records: canonical JSON unicode and array hashes of split descriptor
+python/mojolearn/tests/test_native_cv_row_order.py	test_group_permutation_keeps_group_arena_and_draw_owners	a	checks/native_tests/resample_cv_row_order.mojo::test_cv_row_order	covered		named port of group draws; input-not-mutated/pvalue composition stays Python (mixed)
+python/mojolearn/tests/test_native_cv_scorers.py	test_named_scorer_public_cv_is_native	c		stays Python		boundary: dtype/shape of returned object
+python/mojolearn/tests/test_native_cv_scorers.py	test_public_make_scorer_and_call_use_native_metric_options	c		stays Python		public composition: scorer vs metric, float64 output, TypeError (2 params)
+python/mojolearn/tests/test_native_cv_scorers.py	test_every_named_metric_has_a_registered_native_plan	c		stays Python		source/manifest: scorer table entries have plans
+python/mojolearn/tests/test_native_cv_scorers.py	test_every_fixed_metric_plan_connects_its_defining_module	c		stays Python		boundary: returned object type
+python/mojolearn/tests/test_native_cv_scorers.py	test_expansion_only_metric_scorer_consumes_native_prediction	c		stays Python		public composition: scorer vs public metric on kernel prediction, dtype
+python/mojolearn/tests/test_native_cv_scorers.py	test_custom_scorer_and_metric_callbacks_refuse_before_call	c		stays Python		boundary: returned object type, callback refusal
+python/mojolearn/tests/test_native_cv_scorers.py	test_binary_top_k_scorer_consumes_positive_class_probability	c		stays Python		public composition: top_k scorer vs metric, scorer options
+python/mojolearn/tests/test_native_cv_scorers.py	test_every_named_scorer_consumes_native_prediction_and_matches_public_metric	c		stays Python		public composition: every named scorer vs public metric (parametrized over scorer table)
+python/mojolearn/tests/test_native_decomp_buffer_owners.py	test_manifold_svd_keeps_resident_sort_scratch	c		stays Python		resident scratch/buffer owners; returned object shape
+python/mojolearn/tests/test_native_decomp_buffer_owners.py	test_elliptic_score_copies_admitted_weight_storage	c		stays Python		buffer admission copy of caller storage
+python/mojolearn/tests/test_native_metric_scorer_helpers.py	test_pinball_real_scalar_uses_native_type_identity_and_storage	c		stays Python		admission of Python real scalar types; numeric part trivial
+python/mojolearn/tests/test_native_metric_scorer_helpers.py	test_classification_label_preparation_has_no_python_protocol_frames	c		stays Python		Python protocol refusal over containers (list/str/bigint/Array); 4 params
+python/mojolearn/tests/test_native_metric_scorer_helpers.py	test_metric_warning_filters_and_real_exception_category_are_native	c		stays Python		warnings/exception category raised to Python
+python/mojolearn/tests/test_native_metric_scorer_helpers.py	test_custom_label_protocol_is_refused_before_hooks_run	c		stays Python		callback refusal
+python/mojolearn/tests/test_native_metric_scorer_helpers.py	test_native_array_report_materializes_results_without_array_tolist	c		stays Python		returned object materialization, callback refusal
+python/mojolearn/tests/test_native_rfe_cold_context.py	test_rfe_ridge_first_operation_connects_its_input_context	c		stays Python		fresh-process import order, input context connection, audit records (4 params)
+python/mojolearn/tests/test_native_sgd_weight_lifetime.py	test_unit_class_weights_preserve_weighted_sgd_fit	c		stays Python		subprocess; prepared owner lifetime; public composition (class_weight vs baseline fit)
+python/mojolearn/tests/test_native_steady_state.py	test_repeated_calls_keep_nothing	c		stays Python		Python refcounts/tracemalloc across repeated calls
+python/mojolearn/tests/test_native_stratified_connection.py	test_repeated_stratified_uses_connected_entry_and_exact_repeat_seed_order	c		stays Python		public composition + loader poisoning: Repeated vs StratifiedKFold seeds
+python/mojolearn/tests/test_native_stratified_connection.py	test_permutation_stratification_never_reenters_metrics_loader	c		stays Python		boundary: loader not re-entered; public call vs itself
+python/mojolearn/tests/test_native_transient_buffer_lifetimes.py	test_cluster_class_scratch_survives_native_encoding	c		stays Python		Python-allocated scratch lifetime under PYTHONMALLOC=debug, child process
+python/mojolearn/tests/test_native_transient_buffer_lifetimes.py	test_stratified_shuffle_keeps_permutation_arena_and_rows	c		stays Python		Python-allocated scratch lifetime under PYTHONMALLOC=debug, child process
+python/mojolearn/tests/test_native_transient_buffer_lifetimes.py	test_leave_p_out_keeps_combination_indices_until_partitioned	c		stays Python		Python-allocated scratch lifetime under PYTHONMALLOC=debug, child process
+python/mojolearn/tests/test_native_transient_buffer_lifetimes.py	test_voting_sum_keeps_native_fsum_input	c		stays Python		Python-allocated scratch lifetime under PYTHONMALLOC=debug, child process
+python/mojolearn/tests/test_native_transient_buffer_lifetimes.py	test_calibration_keeps_temporary_class_column_indices	c		stays Python		Python-allocated scratch lifetime under PYTHONMALLOC=debug, child process
+python/mojolearn/tests/test_native_transient_buffer_lifetimes.py	test_forest_and_adaboost_keep_encoded_labels_through_fit	c		stays Python		Python-allocated scratch lifetime under PYTHONMALLOC=debug, child process
+python/mojolearn/tests/test_native_transient_buffer_lifetimes.py	test_silhouette_class_scratch_survives_native_encoding	c		stays Python		Python-allocated scratch lifetime under PYTHONMALLOC=debug, child process
+python/mojolearn/tests/test_native_transient_buffer_lifetimes.py	test_bagging_oob_keeps_sum_and_count_owners_until_native_r2_finishes	c		stays Python		Python-allocated scratch lifetime under PYTHONMALLOC=debug, child process
+python/mojolearn/tests/test_ne2_g_decomp_entries.py	test_dictionary_transform_gram_kept_and_refit_seen	c		stays Python		public-method composition: repeat transform, refit vs fresh model (query cache); native suite is GMM only
+python/mojolearn/tests/test_ne2_g_decomp_entries.py	test_sparse_pca_transform_gram_kept_and_ridge_alpha_seen	c		stays Python		set_params ridge_alpha honoured + repeat transform; public composition
+python/mojolearn/tests/test_ne2_g_decomp_entries.py	test_pca_query_record_sees_replaced_state_and_refit	c		stays Python		replaced Python fitted attribute + refit seen by query record
+python/mojolearn/tests/test_ne2_g_decomp_entries.py	test_pca_inverse_after_transform_record	c		stays Python		repeat inverse_transform after transform record; public composition
+python/mojolearn/tests/test_ne2_g_decomp_entries.py	test_repeated_queries_after_once_per_table_check	c		stays Python		repeat transform after once-per-table vendor check (3 params); public composition
+python/mojolearn/tests/test_ne2_g_decomp_entries.py	test_decomp_input_cast_and_scan_in_one_pass	c		stays Python		dtype admission cast (f64/int64) + NaN/inf ValueError
+python/mojolearn/tests/test_ne2_g_decomp_entries.py	test_pca_input_cast_and_scan_in_one_pass	c		stays Python		dtype admission cast + inf ValueError
+python/mojolearn/tests/test_ne2_g_decomp_entries.py	test_elliptic_envelope_score_and_predict	c		stays Python		label set, score of own predict, repeat mahalanobis; public composition
+python/mojolearn/tests/test_ne2_search_workers.py	test_stratified_shuffle_split_one_program_invariants	a	checks/native_tests/resample_cv_row_order.mojo::test_cv_row_order	covered		mixed: fixtures 9-14 (counts, disjoint, order); int64 dtype + float test_size stay Python
+python/mojolearn/tests/test_ne2_search_workers.py	test_train_test_split_stratify_is_deterministic	b	checks/native_tests/resample_cv_row_order.mojo	owed	5	train_test_split stratify draw not among resample fixtures
+python/mojolearn/tests/test_ne2_search_workers.py	test_permutation_test_score_groups_is_deterministic	c		stays Python		public composition (Ridge fits + metric); resample_cv_row_order.mojo keeps it in Python
+python/mojolearn/tests/test_ne2_search_workers.py	test_every_splitter_kind_splits_and_counts	c		stays Python		public composition: len(split) vs get_n_splits, repeat
+python/mojolearn/tests/test_ne2_search_workers.py	test_group_count_matches_the_distinct_labels	c		stays Python		admission of group dtypes (i8/i4); counts trivial
+python/mojolearn/tests/test_ne2_search_workers.py	test_scorer_class_record_drops_on_class_change	c		stays Python		Python class-change record drop, exception
+python/mojolearn/tests/test_ne2_search_workers.py	test_scorer_field_keys_record_drops_on_dictionary_change	c		stays Python		Python dict mutation record drop, exception
+python/mojolearn/tests/test_ne2_search_workers.py	test_fixed_owner_record_drops_on_assignment	c		stays Python		Python attribute assignment drops owner record, exception
+python/mojolearn/tests/test_ne2_search_workers.py	test_device_rows_flag_is_on	c		stays Python		Python registry flag; source/manifest-like assertion
+python/mojolearn/tests/test_ne2_search_workers.py	test_device_rows_folds_score_like_the_host_path	b	NEW:checks/native_tests/msel_device_rows_folds.mojo	owed	5	device-rows vs host CV fold scores, bit-equal; switch toggled via Python registry
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_native_scalar_parameters_keep_existing_conversion	c		stays Python		boundary: gamma scalar conversion/resolution; kernel numerics in ocsvm_native.mojo
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_public_storage_survives_native_scratch_and_pickle	c		stays Python		boundary: pickling/copy, object lifetime, returned object type, dtype/shape of returned object
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_replaced_coefficients_keep_weak_cache_identity_semantics	c		stays Python		boundary: replaced public attribute invalidates cache
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_precomputed_index_conversion_does_not_call_array_tolist	c		stays Python		boundary: process/env
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_rebound_factory_is_refused_without_python_call	c		stays Python		boundary: exception, process/env
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_path_scalar_is_refused_before_comparison_hook	c		stays Python		boundary: exception, files/records
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_invalid_scalar_array_diagnostic_avoids_numpy_formatter	c		stays Python		boundary: exception
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_refusals_keep_gamma_and_fitted_publication_stages	c		stays Python		boundary: exception
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_rebound_ndarray_type_is_refused_before_dtype_hook	c		stays Python		boundary: exception, process/env
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_precomputed_array_rank_preserves_native_route	c		stays Python		boundary: kernel arg rank admission, TypeError, no formatter (3 params)
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_scalar_conversions_refuse_python_hooks_at_existing_stage	c		stays Python		boundary: exception, process/env, files/records
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_native_numeric_options_keep_existing_conversion	c		stays Python		boundary: scalar/array/object option conversion (3 params)
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_multielement_object_numeric_options_keep_typeerror	c		stays Python		boundary: exception
+python/mojolearn/tests/test_ocsvm_native_transport_boundary.py	test_ocsvm_multielement_object_comparison_keeps_ambiguous_truth	c		stays Python		boundary: exception
+python/mojolearn/tests/test_ops_graph.py	test_graph_execution_case	c		stays Python		verification tooling (_verify_graph audits/digests)
+python/mojolearn/tests/test_optics_native_boundary.py	test_optics_retains_scalar_fraction_and_count_admission	c		stays Python		boundary: min_samples int/float/fraction admission (4 params); graph numerics in optics_native.mojo
+python/mojolearn/tests/test_optics_native_boundary.py	test_optics_min_samples_refusal_precedes_later_float_conversion	c		stays Python		boundary: exception
+python/mojolearn/tests/test_optics_native_boundary.py	test_optics_dbscan_refit_keeps_old_hierarchy_owner	c		stays Python		boundary: fitted attribute identity across refit
+python/mojolearn/tests/test_optics_native_boundary.py	test_optics_exporters_survive_native_result_and_model_teardown	c		stays Python		boundary: pickle, exporter lifetime after teardown
+python/mojolearn/tests/test_parallel_cv_installed.py	test_shipped_scorer_and_complete_receipt	c		stays Python		verification tooling receipt
+python/mojolearn/tests/test_parallel_cv_installed.py	test_complete_receipt_rejects_missing_or_changed_evidence	c		stays Python		verification tooling, exceptions
+python/mojolearn/tests/test_parallel_cv_installed.py	test_cross_vendor_comparison_ignores_native_but_compares_numerics	c		stays Python		verification tooling comparison logic
+python/mojolearn/tests/test_parallel_cv_installed.py	test_existing_output_preserved_before_backend_access	c		stays Python		files/records, exception
+python/mojolearn/tests/test_parallel_cv_source.py	test_archive_requires_full_commit_and_hashes_actual_payload	c		stays Python		verify tooling: parallel-CV source identity hashing
+python/mojolearn/tests/test_parallel_neural_native.py	test_complete_training_oracle_checkpoint_replay_and_child_audit	a	checks/native_tests/training_small_mlp.mojo::run_cases unit 3	covered		mixed: shard grad vs calculus (unit 3) + ordered sum (training_primitives); workers/checkpoint/audit stay Py
+python/mojolearn/tests/test_parallel_neural_native.py	test_worker_failure_rolls_back_and_retry_restarts_owned_processes	c		stays Python		boundary: returned object type
+python/mojolearn/tests/test_parallel_neural_native.py	test_samba_parallel_dropout_clipping_schedule_and_checkpoint_replay	b	checks/native_tests/sequence_samba_surface.mojo	owed	7	mixed: samba 2-shard sum + clip + warmup-cosine AdamW vs reference not native; workers/replay stay Py
+python/mojolearn/tests/test_parallel_neural_native.py	test_samba_last_dropout_stream_commits_and_restores_exhausted_checkpoint	c		stays Python		boundary: returned object type
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_complete_exact_owner_matches_existing_bits_and_independent_subspace	a	checks/native_tests/pca_native.mojo::test_pca_native	covered		mixed (18 params): subspace/spectrum vs f64 SVD native (+pca_whitening); audit/bits-vs-old stays
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_exact_input_preparation_and_consumed_output_bypass_python_helpers	c		stays Python		input layout preparation, monkeypatched helpers: buffer admission/callback refusal
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_exact_constructor_metadata_and_transactional_reset	c		stays Python		sklearn protocol get/set_params, vars() reset
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_exact_refusals_are_whole_native_operations	c		stays Python		refusals raised to Python, state preserved
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_refuses_python_protocols_before_their_hooks	c		stays Python		refusal of Python storage hooks
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_archive_bytes_legacy_roundtrip_and_native_continuation	c		stays Python		archive save/load bytes: files/records
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_private_archive_owner_preserves_native_file_exception	c		stays Python		file exception types to Python
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_archive_corruption_does_not_change_a_live_model	c		stays Python		corrupted npz load refusal, live model unchanged: files/exception
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_randomized_complete_owner_preserves_seed_power_and_consumed_outputs	b	checks/native_tests/pca_native.mojo	owed	6	mixed (6 params): pca_native has one randomized unit; power/normalizer/oversample/seed cases missing
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_randomized_rank_deficient_owner_publishes_requested_arrays	c		stays Python		shape/dtype of returned arrays
+python/mojolearn/tests/test_pca_exact_native_owner.py	test_randomized_native_refusals_and_failed_fit_preserve_previous_state	c		stays Python		refusals and Python-visible state preservation
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_fit_does_not_call_mutable_python_binding_selector	c		stays Python		callback refusal, binding selection
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_fit_refuses_input_protocols_before_entering_hooks	c		stays Python		input protocol refusal, buffer admission
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_fit_refuses_mutated_scalar_subclasses_without_coercion	c		stays Python		scalar subclass admission, exception
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_kernel_inference_refuses_mutated_fitted_metadata	c		stays Python		mutated Python fitted metadata refusal
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_neighbors_return_completed_distance_label_and_probability_results	b	NEW:checks/native_tests/neighbors_knn_classify.mojo	owed	6	mixed: tiny kneighbors/predict_proba; neighbors/checks/knn_classify_check.mojo not wired; str labels stay Py
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_precomputed_kernel_ridge_returns_multioutput_result	c		stays Python		shape of returned multioutput object
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_lof_public_score_samples_and_decision_have_matching_offset	c		stays Python		public composition (score_samples vs decision_function)
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_centroid_public_log_probabilities_are_finished_results	c		stays Python		returned object shape / public composition
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_kernel_aliases_resolve_to_the_same_public_classes	c		stays Python		import surface aliases
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_new_public_results_do_not_reenter_python_compatibility	c		stays Python		returned object type, no Python re-entry
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_ivf_extend_accepts_strided_rows_and_searches_appended_ids	c		stays Python		strided buffer admission, returned ids
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_ivf_extend_admits_before_mutation_and_leaves_fit_unchanged_on_refusal	c		stays Python		refusal before mutation, exception
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_kernel_feature_fit_keeps_ignored_target_validation_and_cleans_fit_depth	c		stays Python		exception, returned object type
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_kernel_ridge_column_target_warns_and_returns_flat_public_prediction	c		stays Python		warning and returned shape
+python/mojolearn/tests/test_peer1_provider_boundary.py	test_ann_search_returns_stable_completed_results_with_strided_filters	c		stays Python		strided filter admission, returned objects
+python/mojolearn/tests/test_portable_kernel_models.py	test_all_six_kernel_variants_ship_all_recorded_fixtures	c		stays Python		verification tooling: shipped verify_reference manifest/fixtures
+python/mojolearn/tests/test_ptx_fallback.py	test_an_upgraded_install_with_a_leftover_ptx_distribution_selects_the_new_ptx_set	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_a_leftover_ptx_distribution_alone_is_not_an_nvidia_install	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_a_device_with_a_native_set_loads_it	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_every_other_nvidia_device_takes_ptx_in_every_mode	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_a_device_older_than_8_0_refuses_and_never_selects_cpu	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_gpu_arch_sm_80_selects_ptx_on_a_native_device	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_the_removed_switches_have_no_effect	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_per_call_identical_is_served_on_a_ptx_process	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_a_ptx_process_with_no_binary_never_selects_cpu	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_incremental_component_source_is_pinned_and_retained	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_loaded_ptx_bindings_are_recorded_and_checked	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_manifest_differing_from_the_vendor_marker_refuses	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_payload_and_source_failures_refuse_in_every_tier	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_a_dirty_source_manifest_refuses	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_a_marker_without_the_ptx_slot_refuses	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_an_empty_ptx_directory_refuses	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_ptx_fallback.py	test_other_native_errors_never_reach_ptx	c		stays Python		boundary: loader PTX slot / binary selection
+python/mojolearn/tests/test_public_cnn_verifier_methods.py	test_convolution_fit_records_features_without_changing_weights	c		stays Python		fit returns self, n_features_in_, weights/transform unchanged (2 params); public state
+python/mojolearn/tests/test_public_cnn_verifier_methods.py	test_batchnorm_fit_updates_one_training_batch_and_restores_mode	a	checks/native_tests/cnn_batchnorm.mojo::test_case units 0-2	covered		mixed (4 params): running mean/var momentum update native; training flag restore stays Python
+python/mojolearn/tests/test_public_cnn_verifier_methods.py	test_cnn_predict_gathers_actual_class_words	c		stays Python		predict == classes_[argmax proba], dtype/shape, image vs row input (2 params)
+python/mojolearn/tests/test_public_model_selection_verifier_gaps.py	test_check_cv_consumes_each_sample_once_and_scorer_factories_match_r2	c		stays Python		sklearn protocol: check_cv/get_scorer/make_scorer, unknown scorer ValueError
+python/mojolearn/tests/test_public_model_selection_verifier_gaps.py	test_validation_curve_matches_independently_fit_fold_models	c		stays Python		public-method composition: validation_curve vs independently fit Ridge per fold
+python/mojolearn/tests/test_public_model_selection_verifier_gaps.py	test_learning_curve_matches_native_models_on_each_training_prefix	c		stays Python		public-method composition: learning_curve vs per-prefix Ridge fits
+python/mojolearn/tests/test_public_model_selection_verifier_gaps.py	test_randomized_search_fit_predict_score_and_refit_state	c		stays Python		public-method composition + refit=False AttributeError
+python/mojolearn/tests/test_public_model_selection_verifier_gaps.py	test_randomized_search_classification_response_delegations	c		stays Python		delegation to best_estimator_ predict_proba/decision_function
+python/mojolearn/tests/test_public_model_selection_verifier_gaps.py	test_randomized_search_transform_delegates_to_refitted_native_scaler	c		stays Python		delegation of transform to best_estimator_
+python/mojolearn/tests/test_py_bugs.py	test_search_draws_its_folds_once	b	checks/native_tests/msel_split_plan.mojo	owed	5	mixed: GridSearch draws unseeded shuffled folds once (equal split scores); spy part stays
+python/mojolearn/tests/test_py_bugs.py	test_validation_curve_draws_its_folds_once	b	checks/native_tests/msel_split_plan.mojo	owed	5	mixed: validation_curve draws folds once (equal columns); shape check stays
+python/mojolearn/tests/test_py_bugs.py	test_learning_curve_takes_nested_prefixes_of_one_order	b	checks/native_tests/msel_split_plan.mojo	owed	5	nested prefixes of one shuffle order; pass1 portable_math match is wrong; no native case
+python/mojolearn/tests/test_py_bugs.py	test_learning_curve_last_shuffle_gather_retains_all_permutation_owners	b	checks/native_tests/msel_split_plan.mojo	owed	5	native permutation owner lifetime in last gather, parametrized folds x seeds; not native
+python/mojolearn/tests/test_py_bugs.py	test_python_fold_spy_is_refused_before_any_callback	c		stays Python		callback refusal; 3 params
+python/mojolearn/tests/test_py_bugs.py	test_rnn_schedule_bound_is_2_31_not_2_24	c		stays Python		exception raised to Python at the int32 bound
+python/mojolearn/tests/test_regression_metrics.py	test_public_export_and_borrowed_array_contents	c		stays Python		mixed: float return type, readonly strided borrow; value covered by regression_errors_check
+python/mojolearn/tests/test_regression_metrics.py	test_strict_float32_dtype	c		stays Python		dtype refusal raised to Python; params
+python/mojolearn/tests/test_regression_metrics.py	test_invalid_shape_length_or_value	c		stays Python		refusal raised to Python
+python/mojolearn/tests/test_regression_metrics.py	test_invalid_weight_or_multioutput	c		stays Python		refusal raised to Python
+python/mojolearn/tests/test_regression_metrics.py	test_supported_options_reach_expansion	b	checks/native_tests/metrics_weighted_score.mojo	owed	5	weighted MSE/MAE/RMSE + raw_values vs definition; native weighted covers accuracy/R2 only
+python/mojolearn/tests/test_regression_metrics.py	test_singleton_and_overflow_result_are_preserved	a	metrics/checks/regression_errors_check.mojo::main	covered		max vs -max -> +inf, x==x -> 0, single sample: same units in native check; 3 params
+python/mojolearn/tests/test_regression_metrics.py	test_invalid_mode_refused	c		stays Python		numeric_mode refusal raised to Python
+python/mojolearn/tests/test_regression_metrics.py	test_shared_loader_resolves_live_default_and_explicit_mode	c		stays Python		loader/binary selection by mode
+python/mojolearn/tests/test_regression_metrics.py	test_cpu_only_install_serves_the_installed_module_without_load_set	c		stays Python		import/loader on CPU-only install
+python/mojolearn/tests/test_resample_bca.py	<script>	b	resample/checks/resample_check.mojo	owed	5	BCa interval vs SciPy arithmetic for mean/std/diff; check_jackknife_and_bca checks pieces only
+python/mojolearn/tests/test_resident_sampling_policy.py	test_candidate_matches_host_policy_and_chunk_checkpoint	c		stays Python		two-build record comparison (_build_arms), checkpoint schema: files/records, opt-in experiment
+python/mojolearn/tests/test_resident_sampling_policy.py	test_legacy_checkpoint_does_not_adopt_enabled_policy	c		stays Python		legacy checkpoint schema state_dict: files/records
+python/mojolearn/tests/test_resident_sampling_policy.py	test_candidate_failure_releases_lease_and_preserves_completed_count	c		stays Python		exception + lease/Python state after failure
+python/mojolearn/tests/test_resident_sampling_policy.py	test_exposed_parameter_fallback_keeps_candidate_policy	c		stays Python		two-build record comparison, exposed Python parameters (parametrized)
+python/mojolearn/tests/test_resident_sampling_policy.py	test_candidate_eos_and_padding_match_host_policy	c		stays Python		two-build record comparison: files/records
+python/mojolearn/tests/test_resident_sampling_policy.py	test_candidate_native_engine_uses_same_policy	c		stays Python		two-build record comparison, state_dict policy (parametrized)
+python/mojolearn/tests/test_rf_class_weight.py	test_unit_path	a	checks/native_tests/class_weight_plan.mojo::test_scalar_contract units 0-1	covered		unit class weights take the unweighted path (4 params); unit decision native
+python/mojolearn/tests/test_rf_class_weight.py	test_balanced_and_partial_mapping	b	checks/native_tests/class_weight_plan.mojo	owed	4	balanced n/(k*n_c) and partial mapping weights equal sample_weight fit; balanced words not checked natively
+python/mojolearn/tests/test_rf_class_weight.py	test_invalid_weights	c		stays Python		ValueError refusals (9 params)
+python/mojolearn/tests/test_rf_class_weight.py	test_invalid_option	c		stays Python		ValueError refusals (4 params)
+python/mojolearn/tests/test_rf_class_weight.py	test_fit_dispatch	a	checks/native_tests/class_weight_plan.mojo::test_scalar_contract units 0-1	covered		unit weights unweighted, {a:2} == per-row words; unit flag and row words native (test_publication)
+python/mojolearn/tests/test_runtime_classical_partition.py	test_public_classical_fit_predict_and_archive_use_native_entries	c		stays Python		boundary: native-entry audit, resident type owner, input-protocol refusal
+python/mojolearn/tests/test_runtime_classical_partition.py	test_tree_resident_type_comes_from_the_single_classical_owner	c		stays Python		boundary: native-entry audit, resident type owner, input-protocol refusal
+python/mojolearn/tests/test_runtime_classical_partition.py	test_classical_public_input_protocol_is_refused_before_callback	c		stays Python		boundary: native-entry audit, resident type owner, input-protocol refusal
+python/mojolearn/tests/test_runtime_report.py	test_fields_and_public_agreement	c		stays Python		boundary: runtime_report() returned dict
+python/mojolearn/tests/test_runtime_report.py	test_host_rows_read_back_their_column	c		stays Python		boundary: runtime_report() returned dict
+python/mojolearn/tests/test_runtime_report.py	test_host_expected_path_is_the_resolver_answer	c		stays Python		boundary: runtime_report() returned dict
+python/mojolearn/tests/test_runtime_report.py	test_fresh_and_read_only	c		stays Python		boundary: runtime_report() returned dict
+python/mojolearn/tests/test_runtime_report.py	test_loads_nothing_and_enters_no_python	c		stays Python		boundary: runtime_report() returned dict
+python/mojolearn/tests/test_runtime_report.py	test_identity_is_the_file_sha256	c		stays Python		boundary: runtime_report() returned dict
+python/mojolearn/tests/test_samba_attention_wiring.py	test_native_abi_window_and_owned_outputs	c		stays Python		mixed: raw ABI addresses, owned non-shared outputs; block backward numerics in transformer/checks
+python/mojolearn/tests/test_samba_attention_wiring.py	test_missing_native_backward_is_actionable	c		stays Python		RuntimeError message to Python
+python/mojolearn/tests/test_samba_attention_wiring.py	test_mixed_stack_reverse_order_and_registry	b	checks/native_tests/sequence_samba_surface.mojo	owed	7	mixed attention/mamba3 stack loss+grads vs reference (tied/untied); no native stack-grad case
+python/mojolearn/tests/test_samba_checkpoint_native.py	test_public_streamed_checkpoint_matches_independent_format_and_resume	c		stays Python		boundary: checkpoint file format, resume, path callbacks
+python/mojolearn/tests/test_samba_checkpoint_native.py	test_public_legacy_json_checkpoint_preserves_complete_state	c		stays Python		boundary: process/env, files/records
+python/mojolearn/tests/test_samba_checkpoint_native.py	test_public_checkpoint_rejects_corruption_before_model_publication	c		stays Python		boundary: callback refusal, files/records
+python/mojolearn/tests/test_samba_checkpoint_native.py	test_failed_checkpoint_save_preserves_existing_file_and_leaves_no_temporary	c		stays Python		boundary: files/records
+python/mojolearn/tests/test_samba_checkpoint_native.py	test_checkpoint_missing_path_and_python_path_callback_refusals	c		stays Python		boundary: callback refusal, files/records
+python/mojolearn/tests/test_samba_checkpoint_native.py	test_streamed_checkpoint_spanning_several_write_chunks	c		stays Python		boundary: files/records
+python/mojolearn/tests/test_skewed_chi2_native_capability.py	test_identical_skewed_chi2_snapshot_fit_and_transform	c		stays Python		public composition: fit_transform vs fit+transform bits, shapes (2 params)
+python/mojolearn/tests/test_standard_archive_native.py	test_standard_archive_owns_writable_statistics_and_preserves_count_types	c		stays Python		files/records: NPZ load/save, writable owners, Python count types (15 params); words in archive_standard.mojo
+python/mojolearn/tests/test_standard_archive_native.py	test_standard_archive_refusal_preserves_exception_and_releases_export	c		stays Python		exception propagation and export release (2 params)
+python/mojolearn/tests/test_svr_native_transport_boundary.py	test_svr_public_prefixes_survive_native_fit_plan_release_and_pickle	c		stays Python		pickling, object lifetime, returned types
+python/mojolearn/tests/test_svr_native_transport_boundary.py	test_svr_replaced_public_mirror_invalidates_prepared_lease	c		stays Python		Python attribute replacement, object lifetime
+python/mojolearn/tests/test_svr_native_transport_boundary.py	test_svr_refit_drops_previous_prepared_generation	b	checks/native_tests/svr_native.mojo	owed	6	refit with new target gives new predictions (prepared generation); no refit case natively
+python/mojolearn/tests/test_svr_native_transport_boundary.py	test_svr_bad_target_publishes_no_fit_fields	c		stays Python		exception, no fields published to Python
+python/mojolearn/tests/test_svr_native_transport_boundary.py	test_svr_rebound_native_factory_is_refused_without_python_call	c		stays Python		callback refusal
+python/mojolearn/tests/test_svr_native_transport_boundary.py	test_svr_storage_protocol_rebinding_never_invokes_python_hook	c		stays Python		Python hook refusal
+python/mojolearn/tests/test_tokenizer_fingerprint.py	test_without_normalization_uses_compiled_unicode	c		stays Python		checkpoint fingerprint record; Python unicode_version attribute
+python/mojolearn/tests/test_tokenizer_fingerprint.py	test_normalization_retains_its_version	c		stays Python		checkpoint fingerprint record
+python/mojolearn/tests/test_torch_program_module_admission.py	test_optional_framework_import_order	c		stays Python		torch framework interop/import
+python/mojolearn/tests/test_torch_program_module_admission.py	test_ordinary_module_hook_is_not_executed	c		stays Python		torch module hook refusal
+python/mojolearn/tests/test_torch_program_module_admission.py	test_replaced_namespace_is_refused_without_hooks	c		stays Python		import surface/torch interop refusal
+python/mojolearn/tests/test_torch_state_dict.py	test_sequential_load_torch_state_dict	c		stays Python		framework interop: torch state_dict into Sequential
+python/mojolearn/tests/test_torch_state_dict.py	test_native_sequential_torch_parameters_and_views_avoid_array_protocol	c		stays Python		framework interop: torch tensors, no array protocol
+python/mojolearn/tests/test_torch_state_dict.py	test_native_sequential_refuses_torch_subclass_before_tensor_properties	c		stays Python		boundary: returned object type, framework interop
+python/mojolearn/tests/test_torch_state_dict.py	test_session_load_torch_state_dict	c		stays Python		framework interop: torch state_dict into ops.Session weights, transpose bits
+python/mojolearn/tests/test_trees_repeat.py	test_every_entry_point_twice_on_gpu_and_cpu	c		stays Python		boundary: second call per process (DeviceContext lifetime), GPU/CPU digests
+python/mojolearn/tests/test_umap_transform.py	test_requires_fit_and_valid_queries	c		stays Python		exceptions raised to Python
+python/mojolearn/tests/test_umap_transform.py	test_training_shortcut_is_copy_and_snapshots_are_isolated	c		stays Python		copy/shares_memory of returned arrays
+python/mojolearn/tests/test_umap_transform.py	test_unseen_repeat_and_readonly_conversion	a	checks/native_tests/neighbors_umap_surface.mojo::test_fixtures	covered		named port; float64/read-only conversion half stays Python (mixed)
+python/mojolearn/tests/test_umap_transform.py	test_three_dimensions_and_single_query	a	checks/native_tests/neighbors_umap_surface.mojo::test_fixtures	covered		named port (3-D, single query)
+python/mojolearn/tests/test_umap_transform.py	test_optimizer_controls_and_fitted_parameter_guard	a	checks/native_tests/neighbors_umap_surface.mojo::test_fixtures	covered		named port of optimizer controls; fitted-parameter guard stays Python (mixed)
+python/mojolearn/tests/test_umap_transform.py	test_parameter_change_requires_refit_and_failed_fit_preserves_model	c		stays Python		'changed after fit' refusals and preserved model state
+python/mojolearn/tests/test_verification_coverage.py	test_reference_support_does_not_count_old_conflicted_or_na_as_numeric_evidence	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_all_246_appendix_entries_are_preserved_and_resolve	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_report_commands_match_actual_profile_selection	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_parameter_reset_reference_is_available	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_inspection_and_batch_flags_route_to_suite	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_a_pending_reason_annotates_and_only_a_blocking_one_withholds	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_partial_lane_is_not_counted_as_end_to_end	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_local_batch_pass_without_hash_is_still_owed	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_extended_probes_reuse_fit_and_detect_drift	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_select_d_cpu_chooses_first_stationary_order_and_preserves_input	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_an_unreferenced_lane_no_longer_blocks_a_pass_but_a_wrong_one_does	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_missing_portable_models_cannot_silently_pass	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_sampler_replay_failure_is_not_misreported_as_missing_reference	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_reference_builder_can_include_extended_checks	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_historical_evidence_is_exposed_without_release_certification	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_equal_hashes_do_not_hide_incomparable_experiments	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_bundled_ctr_models_are_complete_and_digest_checked	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_probe_error_cannot_be_hidden_by_matching_hashes	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_invalid_probe_value_cannot_become_a_matching_reference	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_failed_reload_refuses_the_model_part_even_when_saved_bytes_match	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_no_lane_reports_an_admission_the_table_cannot_support	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_complete_endpoint_inventory_is_separate_from_execution	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_an_absent_part_is_named_where_build_table_skips_it	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_a_whole_column_reports_no_absence_at_all	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verification_coverage.py	test_gpu_parallel_coverage_does_not_claim_default_execution	c		stays Python		verify tooling: coverage contract
+python/mojolearn/tests/test_verify_causal_lm.py	test_comparator_compares_logits_and_input_bytes	c		stays Python		verify tooling: causal LM records/digests
+python/mojolearn/tests/test_verify_causal_lm.py	test_host_vs_device_state_is_recorded_not_required	c		stays Python		verify tooling: causal LM records/digests
+python/mojolearn/tests/test_verify_causal_lm.py	test_incomplete_records_refused	c		stays Python		verify tooling: causal LM records/digests
+python/mojolearn/tests/test_verify_causal_lm.py	test_reset_refuses_foreign_state_before_native_work	c		stays Python		verify tooling: causal LM records/digests
+python/mojolearn/tests/test_verify_causal_lm.py	test_both_truncated_records_are_not_a_pass	c		stays Python		verify tooling: causal LM records/digests
+python/mojolearn/tests/test_verify_causal_lm.py	test_fixture_names_exactly_cover_supported_family	c		stays Python		verify tooling: causal LM records/digests
+python/mojolearn/tests/test_verify_causal_lm.py	test_state_digest_is_canonical_kv_state	c		stays Python		verify tooling: causal LM records/digests
+python/mojolearn/tests/test_verify_compare_challenge.py	test_two_documents_written_out_of_the_shipped_table_read_agree	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_synthesis_is_really_the_shipped_table_and_not_a_mock	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_correct_pair_still_reads_agree_and_says_what_it_now_shows	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_synthesist_has_no_challenge_to_answer_and_is_caught	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_neither_party_answering_is_legal_and_labelled_rather_than_failed	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_stale_challenge_from_an_earlier_seal_of_the_same_files_is_caught	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_challenge_from_a_different_pair_is_caught	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_self_chosen_challenge_is_caught	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_one_party_committing_to_itself_twice_cannot_derive_a_challenge	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_copied_challenge_response_is_caught_by_the_second_commitment	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_challenge_commitment_in_the_wrong_type_is_malformed	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_document_with_no_challenge_nonce_is_still_absent	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_without_the_second_round_a_copied_response_passes_and_says_so	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_challenge_answered_over_different_input_is_not_read_as_a_divergence	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_challenge_answer_that_differs_is_a_mismatch_not_a_broken_challenge	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_narrowed_challenge_shows_up_as_cells_only_one_side_carries	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_challenge_broken_sits_directly_under_commitment_broken	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_broken_challenge_outranks_a_cell_mismatch	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_challenge_is_a_function_of_both_commitments_and_of_neither_alone	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_challenge_domain_is_not_the_commitment_domain	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_adding_a_challenge_does_not_break_an_already_published_commitment	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_every_field_the_comparer_reads_moves_the_challenge_commitment	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_covered_list_is_pinned_so_a_change_has_to_be_deliberate	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_challenge_commitment_is_bound_to_the_document_it_answers_for	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_challenge_commitment_that_ships_inside_the_document_proves_nothing	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_copied_challenge_nonce_is_refused	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_published_challenge_commitment_with_no_response_to_check_is_not_a_pass	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_a_malformed_challenge_block_is_broken_rather_than_ignored	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_runner_answers_and_the_answer_moves_with_the_challenge	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_runner_refuses_a_document_the_challenge_is_not_about	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_runner_refuses_an_unsealed_document	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_the_runner_refuses_to_answer_a_second_challenge	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_challenge.py	test_two_stub_runs_of_the_same_challenge_agree_end_to_end	c		stays Python		verify tooling: compare --challenge
+python/mojolearn/tests/test_verify_compare_commitment.py	test_the_attack_this_lane_exists_for_passes_without_commitments	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_the_same_attack_is_caught_when_the_forger_committed_first	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_the_forger_cannot_reseal_after_copying	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_the_forger_who_keeps_their_own_nonce_and_swaps_only_the_hardware	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_the_forger_who_keeps_their_own_nonce_and_swaps_only_the_contract	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_commitment_to_cells_alone_would_not_have_caught_the_provenance_swap	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_every_field_the_comparer_reads_moves_the_commitment	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_fields_nobody_compares_do_not_move_the_commitment	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_the_covered_list_is_pinned_so_a_change_has_to_be_deliberate	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_innocent_reserialization_does_not_break_a_commitment	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_duplicated_cell_row_is_still_covered	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_comparison_without_commitments_still_agrees_and_says_it_is_weaker	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_verified_pair_says_so_on_the_result_line	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_one_sided_commitment_names_the_party_that_is_not_bound	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_commitment_that_ships_inside_the_document_proves_nothing_and_says_so	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_one_commitment_presented_twice_is_refused	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_copied_nonce_is_refused	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_commitment_with_no_nonce_to_check_it_against_is_not_a_pass	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_an_unreadable_commitment_is_not_silently_ignored	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_document_edited_after_sealing_is_reported_even_with_no_exchange	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_commitment_in_the_wrong_type_is_malformed_not_self_declared	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_malformed_commitment_outranks_the_published_comparison	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_an_unsealed_document_is_still_absent_not_malformed	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_sealing_does_not_disarm_the_byte_identical_refusal	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_broken_commitment_outranks_every_cell_outcome	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_two_seals_of_the_same_document_give_different_commitments	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_a_commitment_reads_from_a_pasted_line_or_a_file	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_cli_seals_a_document_and_prints_one_line_to_publish	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_cli_refuses_to_reprint_a_line_for_a_document_edited_after_sealing	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_cli_the_whole_protocol_end_to_end	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_cli_json_carries_the_commitment_block	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_commitment.py	test_cli_rejects_the_flags_where_they_would_mean_nothing	c		stays Python		verify tooling: compare --commitment
+python/mojolearn/tests/test_verify_compare_profiles.py	test_both_gpu_and_cpu_cross_check_results_are_compared	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_two_machines_agreeing_on_the_same_local_divergence_cannot_pass	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_missing_or_failed_cross_checks_are_not_silently_dropped	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_duplicate_cross_check_cells_are_malformed	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_matching_na_cross_check_reasons_are_not_counted_as_matches	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_cross_check_commitments_bind_values_and_scope_but_not_timing_or_order	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_portable_models_add_their_nonbase_input_fingerprints_without_running_models	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_compare_can_save_its_own_json_report	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_incompatible_batch_does_not_discard_train_and_inference_matches	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_real_mismatch_outranks_unrelated_incompatible_cells	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_different_scopes_keep_matches_and_name_both_missing_sides	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_compare_profiles.py	test_no_compatible_cells_remains_incomparable	c		stays Python		verify tooling: report comparisons
+python/mojolearn/tests/test_verify_distributed.py	test_complete_receipt_and_exact_comparison	c		stays Python		verify tooling: distributed receipts, wheel record
+python/mojolearn/tests/test_verify_distributed.py	test_incomplete_or_false_pass_evidence_rejected	c		stays Python		verify tooling: distributed receipts, wheel record
+python/mojolearn/tests/test_verify_distributed.py	test_transport_controls_set_and_restore_the_native_switch	c		stays Python		verify tooling: distributed receipts, wheel record
+python/mojolearn/tests/test_verify_distributed.py	test_transport_restored_after_exception	c		stays Python		verify tooling: distributed receipts, wheel record
+python/mojolearn/tests/test_verify_distributed.py	test_invalid_device_arguments_do_not_start_workers	c		stays Python		verify tooling: distributed receipts, wheel record
+python/mojolearn/tests/test_verify_distributed.py	test_wheel_record_verifies_python_and_native_origin	c		stays Python		verify tooling: distributed receipts, wheel record
+python/mojolearn/tests/test_verify_model.py	test_sha256_is_sha256	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_digest_is_fnv1a64	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_seeded_inputs_are_exact_and_repeatable	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_program_report_hashes_match_the_written_file	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_program_save_without_verify_writes_no_report	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_program_report_round_trips	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_program_differs_on_a_perturbed_weight	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_sequential_checkpoint_and_export	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_inputs_from_a_file	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_refuses_a_file_that_is_not_a_model	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_model.py	test_verify_on_the_other_column	c		stays Python		verify tooling: verify-model report
+python/mojolearn/tests/test_verify_public_api.py	test_every_original_gap_has_an_executable_fixture_route	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_bitwise_comparison_detects_one_bit_and_rejects_incomplete_evidence	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_normal_public_checks_include_faults_and_propagate_failures	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_fault_requires_changed_consumed_output_and_clean_restoration	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_default_cli_routes_to_main_verifier_without_light_flag	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_missing_public_reference_cannot_mask_an_existing_mismatch	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_reference_admission_requires_complete_matching_current_release	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_recorder_never_overwrites_an_earlier_failed_operation	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_neural_scope_includes_its_api_and_faults_without_classical_estimators	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_neural_command_routes_public_checks_to_neural_scope	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_encoding_preserves_scalar_rank_layout_and_signed_zero	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_inventory_regeneration_cannot_hide_a_new_unmapped_api	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_release_label_reuses_only_unchanged_executed_native_inputs	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_verify_public_api.py	test_changed_native_bytes_are_judged_by_their_outputs	c		stays Python		verify tooling: completeness, fault admission
+python/mojolearn/tests/test_weighted_score.py	test_weight_refusals_before_the_binding	c		stays Python		ValueError refusals (5 params)
+python/mojolearn/tests/test_weighted_score.py	test_normalize_false_sums_correct_sample_weights	b	checks/native_tests/metrics_weighted_score.mojo	owed	5	weighted accuracy count normalize=False (dyadic weights 2.5, 6.5); suite says it stays in Python
+python/mojolearn/tests/test_weighted_score.py	test_gradient_boosting_adapters_score_takes_sample_weight	c		stays Python		public-method composition: adapter score == weighted metric of predict
+python/mojolearn/tests/test_x_ann_repeat.py	test_every_ann_entry_point_twice_on_gpu_and_cpu	c		stays Python		subprocess per binding (GPU and CPU), repeat-call hang; binary selection
+python/mojolearn/tests/test_x_cnn_batchnorm.py	test_reference_matches_torch	c		stays Python		oracle self-check: NumPy reference vs torch, no product call; product held by cnn_batchnorm.mojo
+python/mojolearn/tests/test_x_cnn_batchnorm.py	test_options_reference_matches_torch	c		stays Python		oracle self-check: NumPy reference vs torch, no product call; product held by cnn_batchnorm.mojo
+python/mojolearn/tests/test_x_cnn_blocks.py	test_dropout2d_eval_returns_x	c		stays Python		boundary: public layer eval() returns x; mask numerics in cnn_blocks.mojo::test_case unit 0
+python/mojolearn/tests/test_x_cnn_blocks.py	test_adaptive_reference_matches_torch	c		stays Python		framework interop: NumPy reference vs torch oracle; native adaptive pools in cnn_blocks.mojo units 1-7
+python/mojolearn/tests/test_x_cnn_conv.py	test_reference_matches_torch	c		stays Python		oracle-only (NumPy ref vs torch), no product call; cnn_conv.mojo keeps it in Python
+python/mojolearn/tests/test_x_cnn_conv.py	test_option_reference_matches_torch	c		stays Python		oracle-only (NumPy ref vs torch), no product call; cnn_conv.mojo keeps it in Python
+python/mojolearn/tests/test_x_cnn_gnn.py	test_gcn	b	NEW:checks/native_tests/xcnn_graph_numeric.mojo	owed	8	GCNConv forward/backward vs float64 ref not native (xcnn_graph_run has refusals only); 4 params
+python/mojolearn/tests/test_x_cnn_gnn.py	test_sage	b	NEW:checks/native_tests/xcnn_graph_numeric.mojo	owed	8	SAGEConv mean/sum forward/backward vs float64 ref; 2 params
+python/mojolearn/tests/test_x_cnn_gnn.py	test_sage_max_normalize	b	NEW:checks/native_tests/xcnn_graph_numeric.mojo	owed	8	max+root+bias and normalize; xcnn_sage_max_adjoint covers only bare max aggregate; 2 params
+python/mojolearn/tests/test_x_cnn_gnn.py	test_max_reference_matches_torch	c		stays Python		oracle-only (NumPy ref vs torch), no product call
+python/mojolearn/tests/test_x_cnn_gnn.py	test_sage_project	b	NEW:checks/native_tests/xcnn_graph_numeric.mojo	owed	8	SAGEConv project=True forward/backward; 2 params
+python/mojolearn/tests/test_x_cnn_gnn.py	test_forward_again_on_the_cached_graph	c		stays Python		mixed: graph cache keyed on caller ndarray, in-place edit rebuild (Python buffer lifetime); 2 params
+python/mojolearn/tests/test_x_cnn_gnn.py	test_sage_forward_again_on_the_cached_graph	c		stays Python		graph cache reuse on caller ndarray; repeat bits
+python/mojolearn/tests/test_x_cnn_pool.py	test_reference_matches_torch	c		stays Python		validates the Python f64 oracle against torch (no mojolearn call): external-oracle tooling
+python/mojolearn/tests/test_x_cnn_pool.py	test_ceil_reference_matches_torch	c		stays Python		validates the ceil-mode Python oracle against torch: external-oracle tooling
+python/mojolearn/tests/test_x_linear_sanity.py	<script>	b	NEW:checks/native_tests/x_linear_sanity.mojo	owed	6	25 estimator cases vs sklearn within tolerance; x_linear seams_check is bit seams only, not these fits
+python/mojolearn/tests/test_x_metrics_repeat.py	test_every_entry_twice_in_one_process	c		stays Python		repeat-call in one process, binary selection; hang guard
+python/mojolearn/tests/test_x_metrics_sanity.py	test_metrics_sanity	c		stays Python		external sklearn oracle sweep (tooling); metric numerics have native gates in metrics/checks
+python/mojolearn/tests/test_x_neighbors_repeat.py	test_every_entry_point_twice_on_gpu_and_cpu	c		stays Python		subprocess per column, env vendor switch, cross-column digest record
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_lof	a	checks/native_tests/lof_native.mojo::test_lof_native	covered		LOF density/score vs independent f64 references (novelty route too)
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_nearest_centroid	a	checks/native_tests/nearest_centroid_native.mojo::test_fit_query	covered		metric/shrink fit+query fixtures (4 params); priors=empirical not seen
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_ocsvm	a	checks/native_tests/ocsvm_native.mojo::test_fixtures	covered		original OCSVM workloads, kernel/KKT references (4 kernels)
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_kernel_pca	a	checks/native_tests/kpca_native.mojo::test_kpca_native	covered		four original 80x6 workloads, original tolerances
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_polynomial_count_sketch	a	checks/native_tests/pcs_native.mojo::test_pcs_native	covered		PCS vs full polynomial expansion oracle, original 60x6 seed7
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_additive_chi2	a	checks/native_tests/x_neighbors_sketch_check.mojo::test_sketch	covered		seam 5213 chi2 samplers vs host oracle (planted fixture), 3 params
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_skewed_chi2	a	checks/native_tests/x_neighbors_sketch_check.mojo::test_sketch	covered		seam 5213 skewed transform fold vs host oracle (planted fixture)
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_label_propagation	a	checks/native_tests/x_neighbors_semi_check.mojo::test_semi	covered		seam 5214 hard/soft clamp + normalized Laplacian (4 params, planted fixture)
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_knn_imputer	a	checks/native_tests/x_neighbors_semi_check.mojo::test_semi	covered		seam 5215 donors + weighted mean (3 params, planted fixture)
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_pagerank	a	x_neighbors/checks/graph_check.mojo::main	covered		seam 5216 PageRank step + dangling; graph_check has no TestSuite entry yet
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_connected_components	a	x_neighbors/checks/graph_check.mojo::main	covered		seam 5217 min-label product; graph_check has no TestSuite entry yet
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_louvain	b	NEW:checks/native_tests/x_neighbors_graph_check.mojo	owed	6	numeric: modularity_ equals labels' modularity, quality vs ref; graph_check has only 5204 tie
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_svgp	b	NEW:checks/native_tests/neighbors_svgp.mojo	owed	6	SVGP mean/var/ELBO vs f64 closed form; graph_check 5205 SVGP check removed, no native case
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_nearest_centroid_options	a	checks/native_tests/nearest_centroid_native.mojo::test_fit_query	covered		mixed: deviations/log-proba via shrink fixtures; CSR input equality stays Python (2 params)
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_ocsvm_sample_weight_and_precomputed	b	checks/native_tests/ocsvm_native.mojo	owed	6	mixed: non-unit/zero sample weights not in native (fill=1); precomputed==rbf is composition
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_kernel_pca_options	c		stays Python		eigenvalue shape + feature names (numerics already moved to kpca_native)
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_samplers_options	c		stays Python		sparse in/out, RandomState seed admission, feature names: boundary
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_label_propagation_score	c		stays Python		public-method composition: score() over predict vs sklearn
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_knn_imputer_options	a	checks/native_tests/x_neighbors_semi_check.mojo::test_semi	covered		mixed: sentinel missing_values/indicator numerics; feature names stay Python
+python/mojolearn/tests/test_x_neighbors_sanity.py	test_pagerank_options	a	x_neighbors/checks/graph_check.mojo::main	covered		seam 5216 dangling weights; nstart refusals in neighbors_graph_run; no TestSuite entry
+python/mojolearn/tests/test_x_prep_binarizer.py	test_binarizer	b	checks/native_tests/prep_scalers_sklearn.mojo::test_binarizer	converted (py2mojo-pilot)	pilot	Binarizer thresholds vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_discriminant.py	test_lda	b	NEW:checks/native_tests/prep_discriminant.mojo	owed	2	LDA coef/intercept/proba/evr/transform vs sklearn; no x_prep native checks
+python/mojolearn/tests/test_x_prep_discriminant.py	test_qda	b	NEW:checks/native_tests/prep_discriminant.mojo	owed	2	QDA scalings/proba/decision vs sklearn
+python/mojolearn/tests/test_x_prep_discriminant.py	test_priors	b	NEW:checks/native_tests/prep_discriminant.mojo	owed	2	LDA/QDA priors vs sklearn
+python/mojolearn/tests/test_x_prep_discriminant.py	test_solvers_and_shrinkage	b	NEW:checks/native_tests/prep_discriminant.mojo	owed	2	LDA solvers and shrinkage vs sklearn
+python/mojolearn/tests/test_x_prep_encoders.py	test_ordinal	b	NEW:checks/native_tests/prep_encoders.mojo	owed	2	OrdinalEncoder transform vs sklearn
+python/mojolearn/tests/test_x_prep_encoders.py	test_ordinal_missing_and_inverse	b	NEW:checks/native_tests/prep_encoders.mojo	owed	2	OrdinalEncoder missing values and inverse vs sklearn
+python/mojolearn/tests/test_x_prep_encoders.py	test_onehot	b	NEW:checks/native_tests/prep_encoders.mojo	owed	2	OneHotEncoder transform/drop vs sklearn
+python/mojolearn/tests/test_x_prep_encoders.py	test_given_categories	b	NEW:checks/native_tests/prep_encoders.mojo	owed	2	encoders with given categories vs sklearn
+python/mojolearn/tests/test_x_prep_imputer.py	test_strategies	b	NEW:checks/native_tests/prep_simple_imputer.mojo	owed	1	SimpleImputer statistics/transform per strategy vs sklearn
+python/mojolearn/tests/test_x_prep_imputer.py	test_numeric_missing	b	NEW:checks/native_tests/prep_simple_imputer.mojo	owed	1	SimpleImputer numeric missing_values vs sklearn
+python/mojolearn/tests/test_x_prep_iterative.py	test_iterative	b	NEW:checks/native_tests/prep_iterative_imputer.mojo	owed	1	IterativeImputer fit/transform + n_iter_ vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_iterative.py	test_iterative_options	b	NEW:checks/native_tests/prep_iterative_imputer.mojo	owed	1	mixed: options numerics need native; Ridge-estimator refusal stays Python
+python/mojolearn/tests/test_x_prep_kbins.py	test_strategies	b	NEW:checks/native_tests/prep_kbins.mojo	owed	2	KBins edges/n_bins/transform/inverse vs sklearn (freeze refs); no native case
+python/mojolearn/tests/test_x_prep_kbins.py	test_onehot	b	NEW:checks/native_tests/prep_kbins.mojo	owed	2	onehot-dense transform/inverse vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_labels.py	test_label_encoder	b	NEW:checks/native_tests/prep_labels.mojo	owed	2	LabelEncoder classes/transform/inverse vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_labels.py	test_label_binarizer	b	NEW:checks/native_tests/prep_labels.mojo	owed	2	LabelBinarizer transform/threshold inverse; prep_label_binarizer_inverse_window covers window only
+python/mojolearn/tests/test_x_prep_labels.py	test_multilabel_binarizer	b	NEW:checks/native_tests/prep_labels.mojo	owed	2	MultiLabelBinarizer vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_naive_bayes.py	test_gaussian	b	NEW:checks/native_tests/prep_naive_bayes.mojo	owed	2	GaussianNB theta/var/prior/proba vs sklearn; no native NB case
+python/mojolearn/tests/test_x_prep_naive_bayes.py	test_multinomial	b	NEW:checks/native_tests/prep_naive_bayes.mojo	owed	2	MultinomialNB counts/log probs vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_naive_bayes.py	test_bernoulli	b	NEW:checks/native_tests/prep_naive_bayes.mojo	owed	2	BernoulliNB (binarize, alpha) vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_naive_bayes.py	test_complement	b	NEW:checks/native_tests/prep_naive_bayes.mojo	owed	2	ComplementNB (norm) vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_naive_bayes.py	test_categorical	b	NEW:checks/native_tests/prep_naive_bayes.mojo	owed	2	CategoricalNB log probs/proba vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_naive_bayes.py	test_sample_weight_and_min_categories	b	NEW:checks/native_tests/prep_naive_bayes.mojo	owed	2	NB sample_weight and min_categories vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_normalizer.py	test_normalizer	b	checks/native_tests/prep_scalers_sklearn.mojo::test_normalizer	converted (py2mojo-pilot)	pilot	l1/l2/max vs sklearn incl zero row; no Mojo case
+python/mojolearn/tests/test_x_prep_parity.py	test_infrequent	b	NEW:checks/native_tests/prep_encoders.mojo	owed	2	infrequent categories, drop, handle_unknown vs sklearn; label_binarizer_window unrelated
+python/mojolearn/tests/test_x_prep_parity.py	test_multilabel_binarizer	b	checks/native_tests/prep_label_binarizer_inverse_window.mojo	owed	2	multilabel LabelBinarizer transform/inverse/threshold vs sklearn; window suite is binary/multiclass
+python/mojolearn/tests/test_x_prep_parity.py	test_simple_imputer_callable_refused	c		stays Python		callable strategy refused, never called
+python/mojolearn/tests/test_x_prep_parity.py	test_covariance_estimator	c		stays Python		mixed: covariance_estimator callback refusal is the point; QDA eigen parity part to prep_discriminant
+python/mojolearn/tests/test_x_prep_parity.py	test_target_encoder_cv_categories	b	NEW:checks/native_tests/prep_target_encoder.mojo	owed	2	mixed: fit_transform/encodings vs sklearn with given folds; splitter refusals stay Python
+python/mojolearn/tests/test_x_prep_parity.py	test_nb_partial_fit	b	NEW:checks/native_tests/prep_naive_bayes.mojo	owed	2	5 NB partial_fit counts/proba vs sklearn, partial_fit==fit bits
+python/mojolearn/tests/test_x_prep_parity.py	test_kbins_quantile_methods	b	NEW:checks/native_tests/prep_kbins.mojo	owed	2	KBins 9 quantile methods x 3 bin counts vs numpy/sklearn
+python/mojolearn/tests/test_x_prep_parity.py	test_kbins_sample_weight	b	NEW:checks/native_tests/prep_kbins.mojo	owed	2	KBins sample_weight edges vs sklearn
+python/mojolearn/tests/test_x_prep_polynomial.py	test_poly	b	NEW:checks/native_tests/prep_polynomial.mojo	owed	1	mixed: powers_/transform vs sklearn need native; F-order flags stay Python
+python/mojolearn/tests/test_x_prep_power.py	test_power	b	NEW:checks/native_tests/prep_power.mojo	owed	1	Yeo-Johnson/Box-Cox lambdas, transform, inverse vs sklearn; no Mojo case
+python/mojolearn/tests/test_x_prep_quantile.py	test_quantile	b	NEW:checks/native_tests/prep_quantile.mojo	owed	1	mixed: quantiles/transform/clamp vs sklearn; no native QuantileTransformer case; sklearn oracle stays Py
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_standard_nan_fit_and_transform	b	NEW:checks/native_tests/prep_scaler_options.mojo	owed	1	StandardScaler NaN-ignoring stats/transform vs sklearn, finite cells same bits as clean
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_standard_nan_free_fit_is_the_binding_path	c		stays Python		n_samples_seen_ Python int type + partial_fit == fit bits (public composition)
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_standard_sample_weight	b	NEW:checks/native_tests/prep_scaler_options.mojo	owed	1	weighted mean/var/scale vs sklearn, unit and scalar weights
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_standard_partial_fit	b	NEW:checks/native_tests/prep_scaler_options.mojo	owed	1	mixed: incremental stats over 3 batches vs sklearn; None-attribute checks stay Python
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_standard_all_nan_feature	b	NEW:checks/native_tests/prep_scaler_options.mojo	owed	1	all-NaN column stats NaN, count 0, later batch first sighting (numeric)
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_minmax_nan_and_partial_fit	b	NEW:checks/native_tests/prep_scaler_options.mojo	owed	1	MinMax NaN extrema, clip, running partial_fit, all-NaN poisoning vs sklearn
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_copy_false_writes_in_place	c		stays Python		buffer admission: in-place write (out is buf), float64 TypeError
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_inf_refused_nan_allowed	c		stays Python		ValueError refusals
+python/mojolearn/tests/test_x_prep_scaler_options.py	test_save_load_vector_counts	c		stays Python		files: save/load round trip, n_samples_seen_ type
+python/mojolearn/tests/test_x_prep_scalers.py	test_robust_scaler	b	checks/native_tests/prep_scalers_sklearn.mojo::test_robust_scaler	converted (py2mojo-pilot)	pilot	native covers (25,75) only; quantile_range (10,90)/(5,80) and unit_variance not covered
+python/mojolearn/tests/test_x_prep_scalers.py	test_maxabs_scaler	b	checks/native_tests/prep_scalers_sklearn.mojo::test_maxabs_scaler	converted (py2mojo-pilot)	pilot	MaxAbs scale/transform vs sklearn with ties, zero col, NaN; no Mojo case
+python/mojolearn/tests/test_x_prep_selection.py	test_variance_threshold	b	NEW:checks/native_tests/prep_feature_selection.mojo	owed	2	variances_ and support vs sklearn; no Mojo case
+python/mojolearn/tests/test_x_prep_selection.py	test_scores_and_kbest	b	NEW:checks/native_tests/prep_feature_selection.mojo	owed	2	f_classif/chi2/f_regression scores and p vs sklearn, KBest support
+python/mojolearn/tests/test_x_prep_selection.py	test_mutual_info	b	NEW:checks/native_tests/prep_feature_selection.mojo	owed	2	mutual_info_classif/regression vs sklearn atol 3e-3
+python/mojolearn/tests/test_x_prep_selection.py	test_mutual_info_discrete	b	NEW:checks/native_tests/prep_feature_selection.mojo	owed	2	mixed: discrete_features forms vs sklearn; forms admission and ValueError stay Python
+python/mojolearn/tests/test_x_prep_selection.py	test_rfe	b	NEW:checks/native_tests/prep_feature_selection.mojo	owed	2	RFE(LDA) ranking_ vs sklearn
+python/mojolearn/tests/test_x_prep_selection.py	test_score_edges_and_rfe_getter	b	NEW:checks/native_tests/prep_feature_selection.mojo	owed	2	mixed: NaN/inf score edges, force_finite; callable importance_getter TypeError stays Python
+python/mojolearn/tests/test_x_prep_spline.py	test_spline	b	NEW:checks/native_tests/prep_spline.mojo	owed	1	SplineTransformer uniform/quantile/continue extrapolation vs sklearn
+python/mojolearn/tests/test_x_prep_spline.py	test_spline_options	b	NEW:checks/native_tests/prep_spline.mojo	owed	1	mixed: explicit knots, periodic/linear, sample_weight, handle_missing vs sklearn; NaN ValueError stays
+python/mojolearn/tests/test_x_prep_target_encoder.py	test_fit_transform_like_reference	b	NEW:checks/native_tests/prep_target_encoder.mojo	owed	2	TargetEncoder transform vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_target_encoder.py	test_cross_fit_uses_fold_encodings	b	NEW:checks/native_tests/prep_target_encoder.mojo	owed	2	cross-fit fold encodings; no native case
+python/mojolearn/tests/test_x_prep_target_encoder.py	test_stratified_folds_unshuffled_are_the_reference	b	NEW:checks/native_tests/prep_target_encoder.mojo	owed	2	stratified fold assignment + encodings vs sklearn; no native case
+python/mojolearn/tests/test_x_prep_twice.py	test_x_prep_run_many_times_twice_in_one_process	c		stays Python		subprocess per binding, repeat-call hang guard
+python/mojolearn/tests/test_x_sequence_ets.py	test_against_statsforecast	b	checks/native_tests/tsa_sequence_ets.mojo	owed	8	AutoETS forecast parity (stored oracle needed); tsa_sequence_ets covers structure only
+python/mojolearn/tests/test_x_sequence_garch.py	test_matches_arch	b	checks/native_tests/sequence_garch.mojo	owed	8	arch-package param/LL agreement; native port has recovery half only (store arch params as fixture)
+python/mojolearn/tests/test_x_sequence_mlp.py	test_against_sklearn	b	NEW:checks/native_tests/xseq_mlp_fit.mojo	owed	8	MLP loss curves (Adam, SGD invscaling/adaptive) need native independent reference; sklearn oracle stays Py
+python/mojolearn/tests/test_x_sequence_mlp.py	test_shapes_and_proba	c		stays Python		boundary: returned shapes, proba rows sum, n_iter_
+python/mojolearn/tests/test_x_sequence_prophet.py	test_recovers_structure	b	checks/native_tests/prophet_state.mojo	owed	8	trend break/weekly/holiday recovery, batch row == single fit params; not native
+python/mojolearn/tests/test_x_sequence_rnn.py	test_state_dict_round_trip	c		stays Python		state_dict round trip (port docstring: stays in Python)
+python/mojolearn/tests/test_x_sequence_rnn.py	test_public_predict_shapes_and_labels	c		stays Python		shape/labels of returned Python objects
+python/mojolearn/tests/test_x_sequence_theta.py	test_against_statsforecast	c		stays Python		external oracle (statsforecast); sequence_theta.mojo keeps it in Python by design
+python/mojolearn/tests/test_x_trees_sanity.py	test_decision_tree_classifier	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	quality vs sklearn accuracy, depth, proba sums, class-0 weighting recall
+python/mojolearn/tests/test_x_trees_sanity.py	test_decision_tree_regressor	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	R2 vs sklearn tree
+python/mojolearn/tests/test_x_trees_sanity.py	test_decision_tree_random_splitter	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	random splitter quality, max_leaf_nodes bound
+python/mojolearn/tests/test_x_trees_sanity.py	test_bagging_classifier	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	bagging accuracy vs sklearn, proba sums
+python/mojolearn/tests/test_x_trees_sanity.py	test_bagging_regressor	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	bagging R2 vs sklearn, max_features 0.8
+python/mojolearn/tests/test_x_trees_sanity.py	test_adaboost_classifier	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	AdaBoost accuracy vs sklearn multi and binary, proba sums
+python/mojolearn/tests/test_x_trees_sanity.py	test_adaboost_regressor	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	AdaBoost R2 vs sklearn
+python/mojolearn/tests/test_x_trees_sanity.py	test_dart	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	DART R2/accuracy vs LightGBM dart (pass1 c was wrong: numeric quality)
+python/mojolearn/tests/test_x_trees_sanity.py	test_dart_options	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	DART options quality vs LightGBM, proba shape and sums
+python/mojolearn/tests/test_x_trees_sanity.py	test_random_trees_embedding	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	one leaf per tree, 0/1 cells; downstream sklearn LR signal part stays Python
+python/mojolearn/tests/test_x_trees_sanity.py	test_voting	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	soft/hard/weighted voting quality vs sklearn
+python/mojolearn/tests/test_x_trees_sanity.py	test_stacking_folds_match_sklearn	b	checks/native_tests/trees_entry_glue.mojo	owed	3	device folds vs sklearn StratifiedKFold/KFold on 103 rows; native has only a 4-row case
+python/mojolearn/tests/test_x_trees_sanity.py	test_stacking	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	stacking classifier/regressor quality vs sklearn
+python/mojolearn/tests/test_x_trees_sanity.py	test_multioutput	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	multioutput shape, column relation -2x, accuracy
+python/mojolearn/tests/test_x_trees_sanity.py	test_onevsrest	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	OvR accuracy vs sklearn, proba sums
+python/mojolearn/tests/test_x_trees_sanity.py	test_calibration	b	checks/native_tests/trees_entry_glue.mojo	owed	3	Platt a,b and isotonic fit/predict vs sklearn via raw binding; native has 3-row smoke only; log_loss part too
+python/mojolearn/tests/test_x_trees_sanity.py	test_tree_explainer_matches_shap_recursion	b	NEW:checks/native_tests/trees_shap.mojo	owed	3	TreeSHAP additivity + shap recursion oracle (RF, DART); zero_cover_check covers one edge only
+python/mojolearn/tests/test_x_trees_sanity.py	test_kernel_explainer	b	NEW:checks/native_tests/trees_shap.mojo	owed	3	mixed: KernelExplainer vs shap package and additivity; shape part stays Python (pass1 c wrong)
+python/mojolearn/tests/test_x_trees_sanity.py	test_permutation_explainer	b	NEW:checks/native_tests/trees_shap.mojo	owed	3	permutation SHAP additivity and closeness to exact kernel SHAP
+python/mojolearn/tests/test_x_trees_sanity.py	test_kernel_explainer_logit	b	NEW:checks/native_tests/trees_shap.mojo	owed	3	logit-link KernelExplainer vs shap, additivity in log-odds
+python/mojolearn/tests/test_x_trees_sanity.py	test_bagging_oob_score	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	mixed: oob_score_ vs sklearn, oob proba sums; bootstrap=False ValueError stays
+python/mojolearn/tests/test_x_trees_sanity.py	test_cv_splitter_objects	c		stays Python		admission of native splitter objects and index-pair lists as cv; public composition
+python/mojolearn/tests/test_x_trees_sanity.py	test_extratrees_deviance_criteria	b	NEW:checks/native_tests/trees_sklearn_quality.mojo	owed	3	mixed: poisson/gamma/inverse_gaussian R2 vs sklearn; negative-target ValueError stays
+tests/api/test_digest.py	test_digest_is_one_lower_case_hex_string	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_equal_fits_have_equal_digests_and_changed_data_changes_it	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_unfitted_model_has_no_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_digest_is_hashed_at_the_read_and_never_stored_on_the_model	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_an_in_place_write_into_a_fitted_array_changes_the_next_read	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_refit_changes_the_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_set_params_drops_the_fitted_state_and_the_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_a_replaced_fitted_attribute_changes_the_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_the_class_name_is_part_of_the_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_a_model_and_its_loaded_copies_have_one_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_a_random_splitter_tree_has_a_digest_from_its_tree_arrays	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_cpu_device_gives_the_gpu_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_meta_estimator_digest_includes_its_members	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_private_fitted_state_is_in_the_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_how_the_input_arrived_is_not_in_the_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_fast_mode_has_no_digest	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_receipt_and_reproduce_are_gone	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_digest.py	test_field_tables_name_real_classes	c		stays Python		boundary: model.digest_ records (same fit/changed data/load)
+tests/api/test_gbdt_category_inputs.py	test_object_array_matches_list_rows	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_unicode_and_bytes_arrays_with_numeric_text	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_unicode_array_numeric_column_refused_in_words	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_pandas_columns_match_list_rows	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_pandas_python_string_column	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_pandas_category_codes_are_not_the_categories	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_pandas_missing_is_one_category	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_predict_maps_unseen_values_through_the_stored_map	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_numeric_category_column_and_numeric_feature	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_string_column_matches_list_rows	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_large_string_and_chunked	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_sliced_chunk_offsets	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_dictionary_column	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_missing_is_one_category	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_categories_of_a_categorical	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_fit_object_predict_agree	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_column_outside_cat_features_refused	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_arrow_numeric_type_refused_by_name	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_gbdt_category_inputs.py	test_text_in_numeric_pandas_column_refused	c		stays Python		categorical input admission (object/unicode/pandas/arrow forms) and refusals: framework interop
+tests/api/test_host_gbdt_category_map.py	test_host_matches_model_on_list_rows_with_unseen_and_none	c		stays Python		public-method composition HostGBDT vs GradientBoosting on list rows/None
+tests/api/test_host_gbdt_category_map.py	test_host_matches_model_on_every_input_form	c		stays Python		input forms (object/U/S/pandas): buffer admission + composition
+tests/api/test_host_gbdt_category_map.py	test_host_refuses_in_the_models_words	c		stays Python		exceptions raised to Python
+tests/api/test_host_gbdt_category_map.py	test_digest_equal_and_map_kept	c		stays Python		pickle/digest/category_map_: pickling, records
+tests/api/test_host_gbdt_category_map.py	test_constructor_takes_the_map	c		stays Python		constructor argument + cast refusal; composition
+tests/api/test_host_gbdt_category_map.py	test_model_without_a_map_unchanged	c		stays Python		public-method composition, attribute absence, digest
+tests/api/test_host_gbdt_category_map.py	test_logloss_proba_matches	c		stays Python		public-method composition: HostGBDT vs model predict_proba
+tests/api/test_host_gbdt_category_map.py	test_ctr_models_match	c		stays Python		composition HostGBDT vs model on CTR files; CTR host natives in gbdt_*_ctr_host_check
+tests/proving/_arm_cases.py	<script>	c		stays Python		proving harness cases: pickling, sklearn protocol, process/env, import surface
+tests/proving/test_proving_categories.py	test_proving_numpy_scalar_and_bytes_cells_match_python_cells	c		stays Python		buffer admission of numpy.str_/bytes category cells
+tests/proving/test_proving_categories.py	test_proving_numpy_float32_numeric_cells	c		stays Python		buffer admission of numpy.float32 cells
+tests/proving/test_proving_categories.py	test_proving_numpy_int64_category_cells_match_python_ints	c		stays Python		buffer admission of numpy.int64 cells
+tests/proving/test_proving_categories.py	test_proving_str_and_bytes_of_one_value_are_one_category	c		stays Python		category map of str vs bytes Python values
+tests/proving/test_proving_categories.py	test_proving_every_column_categorical_s_and_u_arrays	c		stays Python		S vs U arrays vs list rows admission
+tests/proving/test_proving_categories.py	test_proving_cpu_ctr_predict_connects_the_host_owner_on_first_use	c		stays Python		fresh-process import surface, lazy host owner connection
+tests/proving/test_proving_digest.py	test_proving_gpu_digest_equals_cpu_digest_for_every_case	c		stays Python		boundary: digest_ proving reuse of api tests
+tests/proving/test_proving_digest.py	test_proving_predict_and_transform_leave_the_digest	c		stays Python		boundary: digest_ proving reuse of api tests
+tests/proving/test_proving_digest.py	test_proving_loaded_model_has_the_fitted_digest	c		stays Python		boundary: digest_ proving reuse of api tests
+tests/proving/test_proving_digest.py	test_proving_host_twin_has_the_saving_models_digest	c		stays Python		boundary: digest_ proving reuse of api tests
+tests/proving/test_proving_digest.py	test_proving_reinit_to_cpu_then_predict_runs_and_refit_keeps_the_digest	c		stays Python		boundary: digest_ proving reuse of api tests
+tests/proving/test_proving_threads.py	test_two_threads_fit_and_predict_like_one	c		stays Python		boundary: two Python threads on one model, output equals one-thread run
+tests/proving/test_proving_threads.py	test_two_threads_predict_one_fitted_model	c		stays Python		boundary: two Python threads on one model
+tests/proving/test_proving_threads.py	test_two_threads_save_one_fitted_forest	c		stays Python		boundary: two Python threads on one model
+tests/proving/test_proving_threads.py	test_two_threads_cross_val_score_like_one	c		stays Python		boundary: two Python threads on one model, output equals one-thread run
+tests/proving/test_proving_threads.py	test_two_threads_bagging_over_a_member_like_one	c		stays Python		boundary: two Python threads on one model, output equals one-thread run
+tests/proving/test_proving_threads.py	test_two_threads_bagging_classifier_over_a_forest	c		stays Python		boundary: two Python threads on one model
+tests/proving/test_proving_threads.py	test_two_threads_fit_linear_regression_on_the_gpu	c		stays Python		boundary: two Python threads on one model
+tests/test_autograd_smoke.py	test_mlp_fit_default_path	c		stays Python		installed-wheel smoke: repeat-fit digest, writes vendor digest file
+tests/test_autograd_smoke.py	test_lstm_fit_default_path	c		stays Python		installed-wheel smoke: repeat-fit digest, writes vendor digest file
+tests/tools/test_six_lane_matrix_io.py	test_raw_gzip_and_legacy_path_have_identical_logical_digest	c		stays Python		tooling: matrix storage/metadata
+tests/tools/test_six_lane_matrix_io.py	test_existing_raw_takes_precedence_and_corruption_is_not_hidden	c		stays Python		tooling: matrix storage/metadata
+tests/tools/test_six_lane_matrix_io.py	test_missing_and_corrupt_gzip_fail	c		stays Python		tooling: matrix storage/metadata
+tests/tools/test_six_lane_matrix_io.py	test_writer_is_deterministic_and_external_raw_stays_supported	c		stays Python		tooling: matrix storage/metadata
+tests/tools/test_six_lane_matrix_io.py	test_frozen_raw_and_compressed_commits_resolve_without_rewriting	c		stays Python		tooling: matrix storage/metadata
+tests/tools/test_six_lane_review_history.py	test_migration_preserves_original_bytes_and_legacy_read_path	c		stays Python		tooling: publication storage
+tests/tools/test_six_lane_review_history.py	test_append_versions_keeps_failures_and_deduplicates_exact_rows	c		stays Python		tooling: publication storage
+tests/tools/test_six_lane_review_history.py	test_repeated_publication_is_byte_deterministic	c		stays Python		tooling: publication storage
+tests/tools/test_six_lane_review_history.py	test_interrupted_migration_merges_both_forms	c		stays Python		tooling: publication storage
+tests/tools/test_six_lane_review_history.py	test_corrupt_history_fails_without_discarding_legacy	c		stays Python		tooling: publication storage
