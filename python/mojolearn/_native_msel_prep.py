@@ -197,6 +197,21 @@ def connect(context, register, registry):
         add(neighbors.RadiusNeighbors, neighbors._NATIVE, neighbors._NATIVE_CONTEXT, {
             'fit': ('family_xn_radius_fit', (arg(0), arg(1))),
         }, initial={'_index': None, '_metric_value': None, '_metric_arg': None})
+    # NearestCentroid (proving suite 2026-11-22: cross_val_score refused it as "pending migration"). Its public
+    # methods' recipes (python/mojolearn/_expansion_neighbors.py): the None sentinel, then X (and y). Its member
+    # kind (core/xneighbors_member.mojo) publishes no score, so the default scorer takes these doors; its
+    # constructor stores its parameters only (field copy, init None).
+    xneighbors = loaded('_expansion_neighbors')
+    if xneighbors is not None:
+        native = constant(None)
+        add(xneighbors.NearestCentroid, xneighbors._NATIVE, xneighbors._NATIVE_CONTEXT, {
+            'fit': ('family_xn_loc_nc_fit', (native, arg(0), arg(1))),
+            'predict': ('family_xn_loc_nc_predict', (native, arg(0))),
+            'decision_function': ('family_xn_loc_nc_decision_function', (native, arg(0))),
+            'predict_proba': ('family_xn_loc_nc_predict_proba', (native, arg(0))),
+            'predict_log_proba': ('family_xn_loc_nc_predict_log_proba', (native, arg(0))),
+            'score': ('family_xn_loc_nc_score', (native, arg(0), arg(1), keyword('sample_weight'))),
+        })
     # KernelDensity, ARIMA and Cholesky were pending migration since f4d37e5eec deleted the Python
     # model_selection._clone: the native clone refused them (smoke 2026-11-15). Their native initializers
     # derive fields (ARIMA's k_, n_exog_), so the clone runs the initializer with the stored parameters.

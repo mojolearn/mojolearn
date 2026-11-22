@@ -47,12 +47,23 @@ def test_gaussian_nb_cross_val_score_in_resident_equals_outside_and_uploads_once
     assert sum(u for u, _ in three.values()) == uploads, (three, stats)
 
 
+def _validate_in_scope(estimator, X_, y, cv, **more):
+    resident = _resident()
+    with resident():
+        scores = np.asarray(cls("cross_validate")(estimator, X_, y, cv=cv, **more)["test_score"])
+        stats = resident.stats()
+    return scores, stats
+
+
 def test_failing_unit_in_resident_gives_error_score_and_releases_the_pin():
+    # A number for error_score is cross_validate's ("error_score : 'raise' or float", its docstring);
+    # cross_val_score documents error_score='raise' only and refuses a number by name (_arm_cases.cvs_error_score).
     bad = X.copy()
     bad[5, 2] = np.nan
-    outside = np.asarray(cls("cross_val_score")(cls("GaussianNB")(), bad, binary(C), cv=3, error_score=0.0))
+    outside = np.asarray(cls("cross_validate")(cls("GaussianNB")(), bad, binary(C), cv=3,
+                                               error_score=0.0)["test_score"])
     before = sys.getrefcount(bad)
-    inside, _ = _scores_in_scope(cls("GaussianNB")(), bad, binary(C), 3, error_score=0.0)
+    inside, _ = _validate_in_scope(cls("GaussianNB")(), bad, binary(C), 3, error_score=0.0)
     assert_same(inside, outside, "error_score in resident()")
     assert np.any(inside == 0.0)
     assert sys.getrefcount(bad) == before, "a failing unit left a pin on X"

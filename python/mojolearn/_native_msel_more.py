@@ -139,7 +139,14 @@ def _derive_member(cls, fields, names):
     # - the owner context is the one `*_CONTEXT` dictionary of the class's module that its fit names (the context
     #   the family's member admit receives is therefore the one its fit door receives);
     # - the constructor must only store its parameters under their own names (every name its code uses is a
-    #   parameter), because a member-only plan clones by copying those fields.
+    #   parameter), because a member-only plan clones by copying those fields. A NATIVE constructor
+    #   (python/mojolearn/_native_full_reset_params.py and _native_declared_constructors.py `_initializer`: the
+    #   class's __init__ replaced at import by a direct native call) is read from its own write schema instead: it
+    #   qualifies when every write is a parameter stored under its own name or a constant (the constants become the
+    #   plan's initial fields, as the hand-written schemas of python/mojolearn/_native_msel_prep.py give them).
+    #   Proving suite 2026-11-22: every marked class of those constructors (the naive Bayes kinds, the kernel
+    #   approximations, the encoders, ...) was left unregistered, so no meta-estimator reached its member. The
+    #   answer's third item is those initial fields.
     from types import BuiltinFunctionType, FunctionType
     rows = tuple(vars(base) for base in cls.__mro__[:-1])  # glue: the class's own ancestry, import-time
     fit = next((row['fit'] for row in rows if 'fit' in row), None)
@@ -147,14 +154,30 @@ def _derive_member(cls, fields, names):
     fit = getattr(fit, '__wrapped__', fit)
     if type(fit) is not FunctionType or type(init) is not FunctionType or fit.__globals__ is not fields:
         return None
-    if not set(init.__code__.co_names) <= set(names) or init.__code__.co_freevars:
+    initial = {}
+    if init.__code__.co_freevars == ('owner',) and init.__closure__[0].cell_contents is cls:
+        schema = init.__globals__.get('_CONTEXT', {}).get('plans', {}).get(cls)  # glue: the native constructor's schema
+        if schema is None:
+            return None
+        stored = set()
+        for field, kind, value, _rule in schema['events']:  # glue: one class's fixed constructor writes, import-time
+            if kind == 'parameter' and field == value:
+                stored.add(field)
+            elif kind == 'constant':
+                if field not in names:
+                    initial[field] = value
+            else:
+                return None
+        if not set(names) <= stored:
+            return None
+    elif not set(init.__code__.co_names) <= set(names) or init.__code__.co_freevars:
         return None
     used = fit.__code__.co_names
     contexts = [name for name in used if name.endswith('_CONTEXT') and type(fields.get(name)) is dict]  # glue: one fit door
     entries = [name for name in used if type(fields.get(name)) is BuiltinFunctionType]  # glue: one fit door
     if len(contexts) != 1:
         return None
-    return (fields[entries[0]] if len(entries) == 1 else None), fields[contexts[0]]
+    return (fields[entries[0]] if len(entries) == 1 else None), fields[contexts[0]], initial
 
 
 def connect_members(context, register, registry):
@@ -205,5 +228,5 @@ def connect_members(context, register, registry):
                 register(cls, derived[0], derived[1], names, None, methods)
                 plan = registry[cls]
                 plan['member_only'] = True
-            plan['initial_fields'] = {}
+            plan['initial_fields'] = {} if row is not None else derived[2]
             plan['keywords'] = {key: () for key in methods}  # glue: no keyword arguments in these recipes

@@ -287,6 +287,9 @@ def nan_refusals():
         fitted = build().fit(X, y)
         out[f"{word}_predict_x"] = _error(lambda: fitted.predict(X_NAN))
     out["cross_val_score"] = _error(lambda: ms.cross_val_score(make("Ridge"), X_NAN, Y))
+    # GaussianNB's fold door reads a held fold's rows with no finite test of its own (bindings/
+    # prep_classify_common_door.mojo cls_x2d): it fitted and scored folds holding NaN rows (proving read 2026-11-22).
+    out["cross_val_score_gaussian_nb"] = _error(lambda: ms.cross_val_score(make("GaussianNB"), X_NAN, C))
     out["cross_val_predict"] = _error(lambda: ms.cross_val_predict(make("Ridge"), X_NAN, Y))
     out["grid_refit"] = _error(lambda: ms.GridSearchCV(make("Ridge"), {"alpha": [1.0]}).fit(X_NAN, Y))
     return out

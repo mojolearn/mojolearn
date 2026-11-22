@@ -18,6 +18,9 @@ from bindings.classical_arrays_door import classical_address, classical_dtype_st
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_validate_unpack import classical_view
 from bindings.x_prep_native_inputs_door import _rows_fields, _values
+from bindings.py_admitted_registry import admitted_held_index
+from bindings.admitted_meta_scope_unpack import admitted_held_verify
+from core.host_finite_scan import host_all_finite_f32
 from bindings.classical_labels_door import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog_door import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
 from bindings.prep_classify_prog_run import cls_col_stats, cls_class_stats, cls_nb_counts, ClsDaMode
@@ -208,12 +211,34 @@ def cls_x2d(source: PythonObject, context: PythonObject) raises -> XIn:
     var d = 0
     if py_type(source) is py_item(context, nk[].k_maxabs_rows_class):
         var fold = _rows_fields(source, context)
-        if fold.dtype == "<f4" and len(fold.trailing) == 1:
+        # WHO REFUSES A NON-FINITE FOLD: model selection holds X with its
+        # finite test deferred to the member doors (bindings/msel_cv_door.mojo),
+        # and these programs hold no finite test (core/naive_bayes_member.mojo
+        # `_capabilities`), so this door reads the held base's recorded verdict
+        # (one scan per held X at most, then recorded: nothing per fold), and
+        # on a thread that does not hold the base one parallel host scan of
+        # its words (`host_all_finite_f32`, across the cores). A base that is
+        # not proved finite takes the fold's host rows and the usual
+        # admission, which refuses a non-finite row of THIS fold in the
+        # estimator's words (a fold without one still fits). Proving suite
+        # 2026-11-22: cross_validate over a GaussianNB fitted folds holding
+        # NaN rows and scored them.
+        var dense = fold.dtype == "<f4" and len(fold.trailing) == 1
+        var proved = False
+        if dense:
+            var held = admitted_held_index(fold.base)
+            if held >= 0:
+                proved = admitted_held_verify(held)
+            else:
+                var words = F32P(unsafe_from_address=Int(py=classical_address(fold.base)))
+                proved = host_all_finite_f32(words, fold.base_rows * fold.trailing[0])
+            _ = fold.base  # the base is read through its address above: keep it alive past the scan
+        if proved:
             n = fold.rows
             d = fold.trailing[0]
         else:
-            # the host rows and the usual conversion (DeviceRows.materialize)
-            value = _values(source, context, True)
+            # the host rows (DeviceRows.materialize) and the usual admission
+            value = admit_x(_values(source, context, True), 2, "X", context)
             n = Int(py=value.shape[0])
             d = Int(py=value.shape[1])
     else:
