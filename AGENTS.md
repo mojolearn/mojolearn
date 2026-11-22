@@ -113,8 +113,10 @@ retired with a reason within two weeks. Applies to hardware, firmware and softwa
   (`docs/plans/SPEED_AND_CLEANUP_2026-11-18.md`; lane `ideas-mode-policy`). An `identical` build is never changed by a
   relaxation: a row switched off in an `identical` build is a compile error. `deterministic` stays retired; keep the
   rejection tests for retired mode values. The paper covers `identical` only, and uses the table to state what
-  identity costs kernel by kernel. Public docs keep saying `fast` is Apple only until `fast` has been built, checked
-  for quality and measured on a vendor; the same change that qualifies it there updates the docs (part 7).
+  identity costs kernel by kernel. Public docs describe `fast` availability from the currently
+  supported implementations and do not carry forward stale mode restrictions (Andrew, 2026-11-22; part 7).
+- **`fast` is active (Andrew, 2026-11-22, restating 2026-11-19).** Mojolearn offers `fast` as well as `identical`; the stop on
+  dedicated `fast` work is lifted. Nothing is removed, archived or classed as dead because it serves `fast`.
 
 ### The GPU path
 
@@ -306,7 +308,7 @@ finds in the same round; a wave without that audit does not merge.
    cell (vendor split) but does not block the average. Apple never votes and `identical` is never tuned for Apple;
    Apple `identical` hashes must still match (2026-10-13).
 3. Measure `identical` on NVIDIA, AMD and Apple and update every board (main board included) as results land,
-   through the board tools only. A full-board run is `identical` on the three; `fast` is not rerun.
+   through the board tools only. A full-board identity-mode run is `identical` on the three; `fast` measurement follows the current campaign scope.
 4. Standing order: when a problem is found, fix it. Do not just comment on it or defer it.
 5. Read logs with grep and short tails (see "Logs and context").
 6. OPPONENT CLOCKS (Andrew, 2026-10-07/08; `tools/board_clock_audit.py`): every stored opponent cell carries a
@@ -561,13 +563,10 @@ with the old rule as the B arm, timed on neighboring shapes and one non-board da
   at its sha). The default path stays byte-identical. An arm recorded as promoted but still opt-in in the code becomes the
   default (bits change on every column together) and its switch goes. The 1,300 undecided defines of
   `docs/plans/EXPERIMENT_DELETIONS_2026-11-15.md` go under this rule.
-- **A paused programme's arms are not unmeasured (Andrew, 2026-11-15).** The four-week clock does not run for a
-  programme Andrew has paused: while Apple `fast` investment is stopped, its opt-in arms that are still in the code
-  stay, opt-in and default off, to be run when he reopens it. Deleting on a calendar rule is for arms that could have
-  been run and were not; nothing is classed as waste because its programme is paused.
-  Its experiment CARDS do not stay in the repo (Andrew, 2026-11-22): a card is a record, not code. Each card has its
-  row in `docs/apple-fast/EXPERIMENTS.md` (verdict, or "never run") and its file in the evidence store
-  (`~/mojolearn-evidence/repo-data/`, manifest row, R2 copy), from where it is restored when the programme reopens.
+- **A paused programme's arms are not unmeasured (Andrew, 2026-11-15; updated 2026-11-22).** The four-week clock does not run for a
+  programme Andrew has paused: its opt-in arms and never-run experiment cards stay in the code, opt-in and default
+  off, until reopened. Deleting on a calendar rule is for arms that could have been run and were not; nothing is
+  classed as waste because its programme is paused. `fast` is now active again.
 
 #### Deleting an experiment
 
@@ -680,8 +679,9 @@ them for you.
   short example. No status notes, internal file paths, dates, lane or run names, or all-caps asides. Engineering
   notes belong in `#` comments next to the code.
 - Public docs state the contract in one sentence, verbatim: "In `identical` mode, Mojolearn returns the same bits on Apple,
-  NVIDIA and AMD GPUs." Every `numeric_mode` doc that lists `'fast'` says Apple only. Docs never offer `fast` on
-  NVIDIA, AMD or the CPU.
+  NVIDIA and AMD GPUs." Describe `fast` availability from current supported implementations; do not carry forward
+  stale mode restrictions. Outreach does not need an added "within a release" qualifier (Andrew, 2026-11-22).
+  This wording preference does not change the engineering identity contract or promise cross-version bit compatibility.
 - Omit, never caveat. Something broken, unverified or unfinished is not documented: leave it out of docs-site and
   list it in `docs-site/api_exclude.txt` (name and reason). No "Known defect", "NOT IMPLEMENTED" or status notes;
   write `identical` and `fast` in lower case. Excluded names never appear in public docs, the README or the site.

@@ -979,3 +979,24 @@ Replaced in AGENTS.md "Deleting an experiment" on Andrew's word (2026-11-25). Th
 > **Protected on disk too (Andrew, 2026-11-14): `experiments/removed/`, `docs/TOMBSTONES.md` and `docs/apple-fast/EXPERIMENTS.md` are never pruned, trimmed, moved out of the repo or excluded from a wheel-size, disk-space or dead-code cleanup, whatever their size; a cleanup lane lists them as kept. A decided A/B whose losing arm (or superseded old path) is still in the code is an owed deletion: the deletion carries the four tombstone parts above.**
 
 > 3. `experiments/removed/<DEFINE>.patch`: the reverse of the deletion restricted to code files, so `git apply` restores the code.
+
+## 2026-11-22: fast is active again; concise outreach contract
+
+Superseded wording (preserved verbatim):
+
+- **Focus on `identical`; Apple `fast` investment is stopped (Andrew, 2026-10-22).** `deterministic` is retired. No
+  dedicated `fast` features, fixes, tuning, builds, validation or benchmark campaigns unless Andrew reopens it.
+  Existing `fast` code may stay opt-in, Apple only; keep historical records and the rejection tests for retired
+  mode values. Apple `identical` stays in the three-vendor contract. The
+  current `fast` implementation is not a baseline for the cost of identity. The paper covers `identical` only.
+
+   through the board tools only. A full-board run is `identical` on the three; `fast` is not rerun.
+
+- **A paused programme's arms are not unmeasured (Andrew, 2026-11-15).** The four-week clock does not run for a
+  programme Andrew has paused: while Apple `fast` investment is stopped, its opt-in arms and its never-run experiment
+  cards stay in the code, opt-in and default off, to be run when he reopens it. Deleting on a calendar rule is for
+  arms that could have been run and were not; nothing is classed as waste because its programme is paused.
+
+- Public docs state the contract in one sentence, verbatim: "In `identical` mode, Mojolearn returns the same bits on Apple,
+  NVIDIA and AMD GPUs." Every `numeric_mode` doc that lists `'fast'` says Apple only. Docs never offer `fast` on
+  NVIDIA, AMD or the CPU.
