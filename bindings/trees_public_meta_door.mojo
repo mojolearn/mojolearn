@@ -1914,21 +1914,20 @@ def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context
         _ = out  # keep the Python object alive through the native call above
         _ = Xa  # keep the Python object alive through the native call above
         return out
+    # THE MULTIOUTPUT SPLIT (lane bm-meta-2, 2026-11-22): the members'
+    # predictions side by side are VotingRegressor.transform's body, so this
+    # is that UNPACK / RUN (`_vote_run`, kind _VOTE_BLOCK; RUN
+    # xtrees/trees_meta_vote_run.mojo `vote_transform_run`): each member's
+    # held native state (its float32 predict, the GIL released) or its door's
+    # float32 block (`_out2d` of its internal predict, as before), placed at
+    # column j by the same glue scatter over the same rows. Before the split
+    # this loop asked each member through `_predict32`, made a new Array of
+    # its answer and placed it here (fb12-rows, 2026-11-17: the float32
+    # internal predict, never the public float64 widening): the same values
+    # in the same order, so no bits change.
     var out = _zeros(n * m, context)
-    var rows = _arange(xt, n, context)
-    # fb12-rows (2026-11-17): each member predicts through its plan's
-    # internal float32 operation (prep_estimator_predict_internal), as
-    # 0.8.55's `e.predict(Xa)` from inside the package did. The public
-    # `predict` op saw the user's frame above this door and returned
-    # scikit-learn's float64 widening for a linear member: a wide device
-    # epilogue, twice the download, a float64 output allocation, then
-    # `_out2d` cast it back to float32 (a second allocation and pass) per
-    # member per call. The widening is exact, so the placed values (and
-    # bits) are the same.
-    for j in range(m):  # driver-loop: over members
-        var blk = _out2d(_predict32(members[j], Xa, context), n, context)
-        _ = _place(xt, out, n, m, blk.view(), rows, j)
-        _ = blk^
+    _vote_run(model, Xa, _VOTE_BLOCK, False, False, 1, PythonObject(None), _xr(xt), trees_address(out), 0, m,
+              context)
     return trees_reshape(out, Python.tuple(n, m), context)
 
 
