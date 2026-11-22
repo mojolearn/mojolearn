@@ -30,7 +30,9 @@ from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvid
 from sequence.xseq_neural_run import XseqNeuralEntry
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.xcnn_common_door import xcnn_device_word, xcnn_builtins, xcnn_labels, xcnn_f32, xcnn_addr, xcnn_readonly
-from bindings.xcnn_common_door import xcnn_device_init, xcnn_device_inherit
+from bindings.xcnn_common_door import xcnn_device_init, xcnn_device_inherit, _xcnn_route
+from providers.python.device_route_boundary_door import DeviceRouteOwner
+from core.device_route import device_vendor_word
 from bindings.xseq_native_common_door import XseqStream, xseq_neural_provider
 from bindings.neural_labels_native_unpack import neural_encode_labels, neural_decode_labels
 from bindings.mode_metadata_native_door import _fields
@@ -230,6 +232,18 @@ def cnnclf_initialize(model: PythonObject, args: PythonObject, context: PythonOb
         raise Error("ValueError: betas must contain two scalars")
     py_setitem(fields, nk[].k_betas, Python.tuple(Float64(py=args[15][0]), Float64(py=args[15][1])))
     return PythonObject(None)
+
+
+def cnnclf_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`vendor_used()`: the vendor of the compiled image this classifier's
+    route runs on (`'cpu'` for device="cpu"), read from the route its next
+    operation uses (`_xcnn_route`: held, or resolved once and kept). Metadata
+    only; no input and no kernel."""
+    var held = _xcnn_route(model, _fields(model), context)
+    var native = held.downcast_value_ptr[DeviceRouteOwner]()
+    var word = device_vendor_word(native[].route.vendor)
+    _ = held  # the route owner stays alive until its vendor word is read
+    return PythonObject(word)
 
 
 def cnnclf_weights(model: PythonObject, context: PythonObject) raises -> PythonObject:
