@@ -75,8 +75,12 @@ comptime LAYER_EMBEDDING = 39
 comptime LAYER_ATTENTION = 40
 comptime LAYER_RECURRENT = 41
 comptime LAYER_SELECTIVE_SCAN = 42
+# lane neural-blocks-3 (2026-11-22): the Mamba-2 SSD core, the Mamba-3 trapezoid core, the LM head
+comptime LAYER_SSD_SCAN = 43
+comptime LAYER_TRAPEZOID_SCAN = 44
+comptime LAYER_LM_HEAD = 45
 comptime BLOCK_FIRST = 32
-comptime BLOCK_LAST = 42
+comptime BLOCK_LAST = 45
 
 #: block_init_bounds' marker for Mamba's S4D-real init of A_log: row d holds log(1), .., log(state)
 comptime BLOCK_INIT_S4D = Float32(-1.0e9)
