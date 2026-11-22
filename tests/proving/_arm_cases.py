@@ -166,8 +166,10 @@ def cvs_neural_and_pls():
 
 @case
 def cvs_lstm_regressor():
-    return {"scores": ms.cross_val_score(make("LSTMRegressor", hidden_size=4, max_epochs=2, random_state=0),
-                                         X3, Y3, cv=3)}
+    # cross_val_score takes a 2-D X ("X : array-like of shape (n_samples, n_features)", its docstring); the
+    # (n, T, F) sequences an LSTMRegressor reads are refused in words, the same on every arm.
+    return {"refusal": _error(lambda: ms.cross_val_score(
+        make("LSTMRegressor", hidden_size=4, max_epochs=2, random_state=0), X3, Y3, cv=3))}
 
 
 # ---------------------------------------------------------------- ma-callers: meta-estimators over members
