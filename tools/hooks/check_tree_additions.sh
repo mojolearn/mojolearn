@@ -29,6 +29,7 @@
 #   bench/results/release_verification/**  release tools
 #   bench/results/ARCHIVE_INDEX.md          record of removed evidence
 #   bench/results/r2-index.tsv              [tools/box_evidence_r2.sh]
+#   bench/results/CELLS_INDEX.tsv           record index the matrix and census read [tools/record_index.py]
 set -u
 local_sha=${1:?local sha}
 remote_sha=${2:-0000000000000000000000000000000000000000}
@@ -46,6 +47,7 @@ allowed() {
         bench/results/board_best_ever/*/*|bench/results/paper_compare/*/*) return 1 ;;
         bench/results/board_best_ever/*.json|bench/results/paper_compare/*) return 0 ;;
         bench/results/dataset_store/manifest.tsv|bench/results/ARCHIVE_INDEX.md|bench/results/r2-index.tsv) return 0 ;;
+        bench/results/CELLS_INDEX.tsv) return 0 ;;
         bench/results/*) return 1 ;;
         docs/handoffs/README.md) return 0 ;;
         docs/handoffs/*) return 1 ;;

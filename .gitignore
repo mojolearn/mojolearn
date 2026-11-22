@@ -190,6 +190,7 @@ box-out/
 !/bench/results/release_verification/**
 !/bench/results/ARCHIVE_INDEX.md
 !/bench/results/r2-index.tsv
+!/bench/results/CELLS_INDEX.tsv
 # handoffs live in ~/mojolearn-evidence/ (docs/handoffs/README.md says so)
 !/docs/handoffs/
 /docs/handoffs/*

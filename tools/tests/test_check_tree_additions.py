@@ -84,6 +84,8 @@ CASES = [
         "bench/results/release_evidence/0.8.67/a.json",
         "bench/results/release_verification/0.8.67/a.json",
         "bench/results/r2-index.tsv",
+        "bench/results/CELLS_INDEX.tsv",
+        "bench/results/identity_break/INDEX.tsv",
         "docs/plans/NEW_PLAN.md",
         "tools/new_tool.py",
     ], [], 0, []),
@@ -182,6 +184,7 @@ class TreeAdditions(unittest.TestCase):
             "bench/results/identity_break/a/b.log": True,
             "bench/results/release_evidence/a/b.json": False,
             "bench/results/r2-index.tsv": False,
+            "bench/results/CELLS_INDEX.tsv": False,
             "docs/handoffs/README.md": False,
             "docs/handoffs/H.md": True,
         }
