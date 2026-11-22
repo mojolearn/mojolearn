@@ -58,3 +58,25 @@ def test_proving_every_column_categorical_s_and_u_arrays():
 
     assert_same(fit_predict(S), fit_predict(U), "S vs U, every column categorical")
     assert_same(fit_predict(cells), fit_predict(U), "list rows vs U")
+
+
+def test_proving_cpu_ctr_predict_connects_the_host_owner_on_first_use():
+    # pv-lazy-connect: `import mojolearn` (and `mojolearn.ensemble`) no longer imports the CPU tree owner
+    # (`mojolearn._classical_host`); the gbdt door connects it once at the first device='cpu' CTR predict
+    # (bindings/trees_public_gbdt_door.mojo gbdt_host_tree_context). A fresh process, HostGBDT never imported.
+    import subprocess
+    import sys
+    script = (
+        "import sys, numpy as np, mojolearn, mojolearn.ensemble\n"
+        "assert 'mojolearn._classical_host' not in sys.modules, 'host surface imported at import'\n"
+        "X = np.array([['a', 'x'], ['b', 'y'], ['c', 'x'], ['a', 'z']] * 30)\n"
+        "y = np.array([0, 1, 1, 0] * 30, dtype=np.float32)\n"
+        "m = mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0, 1], device='cpu',\n"
+        "                               loss='Logloss', bootstrap_type='No', random_strength=0.0).fit(X, y)\n"
+        "first = m.predict(X)\n"
+        "assert 'mojolearn._classical_host' in sys.modules\n"
+        "assert np.array_equal(m.predict(X), first)\n"
+        "print('OK', first.shape)\n"
+    )
+    done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=600)
+    assert done.returncode == 0 and "OK" in done.stdout, done.stderr[-2000:]
