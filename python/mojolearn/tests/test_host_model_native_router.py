@@ -121,7 +121,9 @@ def test_public_forest_archive_routes_preserve_state_and_predictions(tmp_path, e
     direct = audit_native_call(forest.HostForest.from_file, path).assert_native()
     assert _state(vars(actual)) == _state(vars(expected)) == _state(vars(direct))
     queries = [[0.0, 1.0], [2.0, 3.0]]
-    assert _state(actual.predict(queries)) == _state(expected.predict(queries))
+    # predict is the forest's float32 for both families (lane predict-dtype); the oracle's ET float64 is narrowed exactly.
+    assert _state(actual.predict(queries)) == _state(np.asarray(expected.predict(queries)).astype("<f4")
+                                                     if not expected.is_classifier else expected.predict(queries))
 
 
 FLOAT_TEXT = ("format mojolearn-model 2\nfeatures 1 0\ntrees 1\nlosses 0\n"

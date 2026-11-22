@@ -7,6 +7,7 @@ import pytest
 from mojolearn import _forest_host as forest, _gbdt_host as gbdt
 from mojolearn._buffer import frombytes
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests.test_host_tree_native import _as_user_sees
 from mojolearn.tests._legacy_host_trees import LegacyHostForest, LegacyHostGBDT, parse_model_text as legacy_parse
 from mojolearn.tests.test_host_archive_native import _state
 from mojolearn.tests.test_host_model_native_router import GBDT_CASES, FLOAT_TEXT
@@ -26,7 +27,8 @@ def test_forest_constructor_keeps_exact_state_and_predictions(tmp_path, estimato
     expected = LegacyHostForest(**options)
     actual = audit_native_call(forest.HostForest, **options).assert_native()
     assert _state(vars(actual)) == _state(vars(expected))
-    assert _state(actual.predict(_queries("float32"))) == _state(expected.predict(_queries("float32")))
+    # predict is the forest's float32 for both families (lane predict-dtype); the oracle's ET float64 is narrowed exactly.
+    assert _state(actual.predict(_queries("float32"))) == _state(_as_user_sees(expected, expected.predict(_queries("float32"))))
 
 
 @pytest.mark.parametrize("labels", [[2, 7], [.5, 2.5], [False, True], ["left", "right"], [2**70, 2**70 + 1]])

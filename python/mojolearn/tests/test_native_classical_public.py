@@ -113,7 +113,7 @@ def test_fit_predict_score_and_checkpoint_are_native(cls, layout, monkeypatch, t
     first = tmp_path / "public-native.npz"
     clean(model.save, first)
     restored = clean(cls.load, first)
-    np.testing.assert_array_equal(clean(restored.predict, x).view("u8"), prediction.view("u8"))
+    np.testing.assert_array_equal(clean(restored.predict, x).view("u4"), prediction.view("u4"))
     again = io.BytesIO()
     clean(restored.save, again)
     assert again.getvalue() == first.read_bytes()
