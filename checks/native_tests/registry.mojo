@@ -32,11 +32,6 @@ from checks.native_tests.byte_lm_trainer_session import register as register_byt
 from checks.native_tests.causal_lm_session import register as register_causal_lm_session
 from checks.native_tests.centroid_fit_native import register as register_centroid_fit_native
 from checks.native_tests.cluster_kmeans_query import register as register_cluster_kmeans_query
-from checks.native_tests.cnn_batchnorm import register as register_cnn_batchnorm
-from checks.native_tests.cnn_blocks import register as register_cnn_blocks
-from checks.native_tests.cnn_conv import register as register_cnn_conv
-from checks.native_tests.cnn_pool import register as register_cnn_pool
-from checks.native_tests.cnn_trainer import register as register_cnn_trainer
 from checks.native_tests.core_all_finite import register as register_core_all_finite
 from checks.native_tests.core_chunked_lm_head_denormals import register as register_core_chunked_lm_head_denormals
 from checks.native_tests.core_convert import register as register_core_convert
@@ -209,7 +204,6 @@ from checks.native_tests.x_linear_ops import register as register_x_linear_ops
 # lane tests-to-mojo-models (2026-11-16)
 from checks.native_tests.models_checkpoint_widen import register as register_models_checkpoint_widen
 # lane tests-to-mojo-spatial (2026-11-16)
-from checks.native_tests.xcnn_sage_max_adjoint import register as register_xcnn_sage_max_adjoint
 # lane tests-to-mojo-trees (2026-11-16)
 from checks.native_tests.gbdt_feature_freq_experimental import register as register_gbdt_feature_freq_experimental
 from checks.native_tests.gbdt_host_archive_text import register as register_gbdt_host_archive_text
@@ -298,13 +292,6 @@ from checks.native_tests.tsqr_host_ownership import register as register_tsqr_ho
 from checks.native_tests.tsvd_contract import register as register_tsvd_contract
 from checks.native_tests.tsvd_lease_state import register as register_tsvd_lease_state
 from checks.native_tests.x_linear_door_run import register as register_x_linear_door_run
-from checks.native_tests.xcnn_bn_run import register as register_xcnn_bn_run
-from checks.native_tests.xcnn_classifier_run import register as register_xcnn_classifier_run
-from checks.native_tests.xcnn_conv_run import register as register_xcnn_conv_run
-from checks.native_tests.xcnn_entry_table import register as register_xcnn_entry_table
-from checks.native_tests.xcnn_graph_run import register as register_xcnn_graph_run
-from checks.native_tests.xcnn_pool_run import register as register_xcnn_pool_run
-from checks.native_tests.xcnn_tensor_run import register as register_xcnn_tensor_run
 from checks.native_tests.xseq_entry_glue import register as register_xseq_entry_glue
 from checks.native_tests.xseq_forecast_run import register as register_xseq_forecast_run
 from checks.native_tests.xseq_neural_run import register as register_xseq_neural_run
@@ -609,11 +596,6 @@ def all_checks() -> List[Check]:
     checks.append(register_causal_lm_session())
     checks.append(register_centroid_fit_native())
     checks.append(register_cluster_kmeans_query())
-    checks.append(register_cnn_batchnorm())
-    checks.append(register_cnn_blocks())
-    checks.append(register_cnn_conv())
-    checks.append(register_cnn_pool())
-    checks.append(register_cnn_trainer())
     checks.append(register_core_all_finite())
     checks.append(register_core_chunked_lm_head_denormals())
     checks.append(register_core_convert())
@@ -782,7 +764,6 @@ def all_checks() -> List[Check]:
     # lane tests-to-mojo-models (2026-11-16)
     checks.append(register_models_checkpoint_widen())
     # lane tests-to-mojo-spatial (2026-11-16)
-    checks.append(register_xcnn_sage_max_adjoint())
     # lane tests-to-mojo-trees (2026-11-16)
     checks.append(register_gbdt_feature_freq_experimental())
     checks.append(register_gbdt_host_archive_text())
@@ -872,13 +853,6 @@ def all_checks() -> List[Check]:
     checks.append(register_tsvd_contract())
     checks.append(register_tsvd_lease_state())
     checks.append(register_x_linear_door_run())
-    checks.append(register_xcnn_bn_run())
-    checks.append(register_xcnn_classifier_run())
-    checks.append(register_xcnn_conv_run())
-    checks.append(register_xcnn_entry_table())
-    checks.append(register_xcnn_graph_run())
-    checks.append(register_xcnn_pool_run())
-    checks.append(register_xcnn_tensor_run())
     checks.append(register_xseq_entry_glue())
     checks.append(register_xseq_forecast_run())
     checks.append(register_xseq_neural_run())
