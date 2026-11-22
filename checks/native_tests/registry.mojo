@@ -160,22 +160,11 @@ from checks.native_tests.svc_probability import register as register_svc_probabi
 from checks.native_tests.svr_native import register as register_svr_native
 from checks.native_tests.theta_state import register as register_theta_state
 from checks.native_tests.tokenizer_pretokenize_cuts import register as register_tokenizer_pretokenize_cuts
-from checks.native_tests.training_autograd_model import register as register_training_autograd_model
-from checks.native_tests.training_autograd_save_resume import register as register_training_autograd_save_resume
-from checks.native_tests.training_autograd_usability import register as register_training_autograd_usability
-from checks.native_tests.training_chunked_lm_head_door import register as register_training_chunked_lm_head_door
-from checks.native_tests.training_distributed_program import register as register_training_distributed_program
-from checks.native_tests.training_moe_backward_ownership import register as register_training_moe_backward_ownership
-from checks.native_tests.training_neural_inference import register as register_training_neural_inference
 from checks.native_tests.training_neural_rng_slices import register as register_training_neural_rng_slices
-from checks.native_tests.training_primitives import register as register_training_primitives
 from checks.native_tests.training_residual_dropout_mask import register as register_training_residual_dropout_mask
-from checks.native_tests.training_small_mlp import register as register_training_small_mlp
 from checks.native_tests.transformer_backward_packed import register as register_transformer_backward_packed
 from checks.native_tests.transformer_block_session import register as register_transformer_block_session
 from checks.native_tests.transformer_decode_door import register as register_transformer_decode_door
-from checks.native_tests.transformer_host_block import register as register_transformer_host_block
-from checks.native_tests.transformer_ops_program import register as register_transformer_ops_program
 from checks.native_tests.tsa_holtwinters_initialization import register as register_tsa_holtwinters_initialization
 from checks.native_tests.tsa_sequence_ets import register as register_tsa_sequence_ets
 from checks.native_tests.tsa_training_arima import register as register_tsa_training_arima
@@ -193,7 +182,6 @@ from checks.native_tests.gbdt_host_archive_text import register as register_gbdt
 # lane tests-to-mojo-neural (2026-11-15)
 from checks.native_tests.generator_draw import register as register_generator_draw
 from checks.native_tests.lm_corpus_prepare import register as register_lm_corpus_prepare
-from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 # lane checks-register (2026-11-16): the standalone main() checks no CI job ran, now registered
 from checks.native_tests.affinity_preference_plan import register as register_affinity_preference_plan
 from checks.native_tests.agglo_contract import register as register_agglo_contract
@@ -725,22 +713,11 @@ def all_checks() -> List[Check]:
     checks.append(register_svr_native())
     checks.append(register_theta_state())
     checks.append(register_tokenizer_pretokenize_cuts())
-    checks.append(register_training_autograd_model())
-    checks.append(register_training_autograd_save_resume())
-    checks.append(register_training_autograd_usability())
-    checks.append(register_training_chunked_lm_head_door())
-    checks.append(register_training_distributed_program())
-    checks.append(register_training_moe_backward_ownership())
-    checks.append(register_training_neural_inference())
     checks.append(register_training_neural_rng_slices())
-    checks.append(register_training_primitives())
     checks.append(register_training_residual_dropout_mask())
-    checks.append(register_training_small_mlp())
     checks.append(register_transformer_backward_packed())
     checks.append(register_transformer_block_session())
     checks.append(register_transformer_decode_door())
-    checks.append(register_transformer_host_block())
-    checks.append(register_transformer_ops_program())
     checks.append(register_tsa_holtwinters_initialization())
     checks.append(register_tsa_sequence_ets())
     checks.append(register_tsa_training_arima())
@@ -758,7 +735,6 @@ def all_checks() -> List[Check]:
     # lane tests-to-mojo-neural (2026-11-15)
     checks.append(register_generator_draw())
     checks.append(register_lm_corpus_prepare())
-    checks.append(register_training_small_mlp_relations())
     # lane checks-register (2026-11-16)
     checks.append(register_affinity_preference_plan())
     checks.append(register_agglo_contract())

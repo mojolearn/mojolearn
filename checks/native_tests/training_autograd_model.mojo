@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Sequential training over the autograd tape (moved from
 python/mojolearn/tests/test_autograd_model.py, lane tmig-training-2,
 2026-11-15), through the entries the Sequential door calls
@@ -56,7 +57,10 @@ from checks.native_tests.training_sequential_common import (
     L_PERMUTE, L_FLATTEN, L_CONV2D, L_MAXPOOL2D,
 )
 from checks.native_tests.training_check_common import same_words
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.training_check_common import require
 
 
 comptime AUTOGRAD_MODEL_CASES = 8
@@ -275,42 +279,22 @@ def run_autograd_model_case[E: Exec](mut ex: E, unit: Int) raises:
     _ = data^
 
 
-# ---- The host column ----
-# The eight independent cases run across host cores, each on its own HostExec
-# with a private failure slot.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(AUTOGRAD_MODEL_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
+# ---- The host and device columns ----
+# The host column: the eight independent cases run across host cores, each on its own HostExec. The device column:
+# the cases run in order on one DeviceExec: they share the one device and its queue, and each fit's kernels already
+# spread across the device.
+def test_autograd_model() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_case(unit: Int) raises:
             var ex = HostExec()
             run_autograd_model_case(ex, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, AUTOGRAD_MODEL_CASES)
-
-
-# ---- The device column ----
-# The cases run in order on one DeviceExec: they share the one device and its
-# queue, and each fit's kernels already spread across the device.
-def _run_gpu(mut report: Report) raises:
-    var ex = DeviceExec()
-    var cases = report.cases(AUTOGRAD_MODEL_CASES)
-    for unit in range(AUTOGRAD_MODEL_CASES):  # driver-loop: over cases on the one device
-        try:
+        check_cases("autograd_model", AUTOGRAD_MODEL_CASES, host_case)
+    else:
+        var ex = DeviceExec()
+        def device_case(unit: Int) raises {mut ex}:
             run_autograd_model_case(ex, unit)
-        except error:
-            cases.fail(unit, error)
+        check_cases_serial("autograd_model", AUTOGRAD_MODEL_CASES, device_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_autograd_model", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

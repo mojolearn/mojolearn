@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """SmallMLPTrainer's whole-step relations on its captured program (lane
 tests-to-mojo-neural, 2026-11-15; moved from
 python/mojolearn/tests/test_small_mlp_surface.py
@@ -46,10 +47,11 @@ from autograd.ops_api import OPS_HOST, OPS_DEVICE
 from sequence.exec_trait import Exec
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD
+from checks.native_tests.training_check_common import require
 
 
-comptime RELATION_FIXTURES = 3
 comptime IN = 8
 comptime HID = 16
 comptime OUT = 3
@@ -243,45 +245,32 @@ def steps_fixture[E: Exec & Movable & Deinitable, KIND: Int](var ex_a: E, var ex
 # `_STORE`, autograd/ops_api.mojo `ops_session_open`) are process lists
 # appended without a lock (training_small_mlp.mojo has the same note). The
 # work inside each fixture is the program's own parallel kernels.
-def _run_cpu(mut report: Report) raises:
+# ---- The host and device columns ----
+# The relation fixtures on the host column (HostExec) or the device column (DeviceExec), one after another (TestSuite
+# runs the tests in order; the note above says why they are ordered).
+
+
+def test_predict() raises:
+    comptime if CPU_COLUMN_BUILD:
+        predict_fixture[HostExec, OPS_HOST](HostExec())
+    else:
+        predict_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
+
+
+def test_apply() raises:
+    comptime if CPU_COLUMN_BUILD:
+        apply_fixture[HostExec, OPS_HOST](HostExec(), HostExec())
+    else:
+        apply_fixture[DeviceExec, OPS_DEVICE](DeviceExec(), DeviceExec())
+
+
+def test_steps() raises:
+    comptime if CPU_COLUMN_BUILD:
+        steps_fixture[HostExec, OPS_HOST](HostExec(), HostExec())
+    else:
+        steps_fixture[DeviceExec, OPS_DEVICE](DeviceExec(), DeviceExec())
+
+
+def main() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(RELATION_FIXTURES)
-    for unit in range(RELATION_FIXTURES):  # ordered: see the note above
-        try:
-            if unit == 0:
-                predict_fixture[HostExec, OPS_HOST](HostExec())
-            elif unit == 1:
-                apply_fixture[HostExec, OPS_HOST](HostExec(), HostExec())
-            else:
-                steps_fixture[HostExec, OPS_HOST](HostExec(), HostExec())
-        except error:
-            cases.fail(unit, error)
-
-
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(RELATION_FIXTURES)
-    for unit in range(RELATION_FIXTURES):  # driver-loop: over fixtures on the one device, ordered
-        try:
-            if unit == 0:
-                predict_fixture[DeviceExec, OPS_DEVICE](DeviceExec())
-            elif unit == 1:
-                apply_fixture[DeviceExec, OPS_DEVICE](DeviceExec(), DeviceExec())
-            else:
-                steps_fixture[DeviceExec, OPS_DEVICE](DeviceExec(), DeviceExec())
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_small_mlp_relations", cpu=True, gpu=True, serial="", run=run_cases)
+    TestSuite.discover_tests[__functions_in_module()]().run()
