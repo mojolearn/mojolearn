@@ -560,6 +560,12 @@ def host_archive_mixture(cls: PythonObject, arrays: PythonObject, path: PythonOb
     # once this state is restored (verify-0860-ptx-20261026/gmm-repro).
     py_setitem(fields, nk[].k__ext, PythonObject(None))
     host_archive_mode(arrays, fields, context)
+    # A loaded model runs this installation's device (`device` is a
+    # constructor parameter, not model state: `save` does not write it), as
+    # every other loader of this door writes it (b0c8580738). Without the
+    # field get_params refused ('constructor parameter is not stored under
+    # its own name: device').
+    py_setitem(fields, nk[].k_device, PythonObject(None))
     var weights = host_archive_vector(arrays, "weights", k, where, context)
     var means = host_archive_vector(arrays, "means", k * d, where, context)
     var covariance = host_archive_vector(arrays, "covariances", k * d * d, where, context)
