@@ -20,10 +20,10 @@ from providers.python.linear_metadata_boundary_door import linear_fitted_unpack
 from bindings.classical_attributes_door import _type_mro
 from bindings.mode_metadata_native_door import _class_fields
 from bindings.family_raw_attr_pack import family_raw_get_or
-from bindings.classical_labels_door import labels_cast
 from providers.python.classical_family_admission_pyapi_unpack import classical_family_admit
 from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry, _neural_descriptor_module_fields, _neural_descriptor_function_owner
-from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_fit_begin, estimator_fit_end, estimator_fit_complete, estimator_feature_check
+from bindings.native_array_view_pack import native_array_ndarray_view
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_fit_begin, estimator_fit_end, estimator_fit_complete, estimator_feature_check
 from providers.python.estimator_tabular_boundary_pyapi_unpack import _refusal
 from std.python._cpython import PyObjectPtr, GILReleased
 from glm.qn_door_run import QnDoorFitResult, qn_door_fit_run, qn_door_predict_run
@@ -38,7 +38,6 @@ from bindings.native_error_class import error_without_class
 from bindings.causal_exception_unpack import causal_borrowed_item, causal_set_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes_door import classical_connect_numpy
-from bindings.classical_arrays_door import classical_address, classical_typed
 from bindings.classical_validate_unpack import classical_check_x, classical_check_y, classical_estimator_name
 from bindings.classical_validate_run import classical_check_width
 from providers.python.linear_score_boundary_pack import classical_r2_score
@@ -313,9 +312,9 @@ def qn_public_operation(model: PythonObject, operation: Int, operation_name: Pyt
             estimator_fit_end(model, depth)
     if fitting:
         estimator_fit_complete(model, args[0], False, context)
-    if operation == QN_OPN_PREDICT and estimator_outside() and py_get(context, nk[].k_ndarray) is not None:
-        var wide = classical_typed(result.shape, "<f8", context)
-        labels_cast(Int(py=classical_address(result)), "<f4", Int(py=classical_address(wide)), "<f8", Int(py=result.size), context)
-        _ = result^
-        return wide
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the kernel's float32 values as a NumPy view, with no
+    # caller test and no float64 widening pass into a second buffer.
+    if operation == QN_OPN_PREDICT and py_get(context, nk[].k_ndarray) is not None:
+        return native_array_ndarray_view(result, context)
     return result
