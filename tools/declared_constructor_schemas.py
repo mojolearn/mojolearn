@@ -162,12 +162,6 @@ def _events(init, params, base=None):
     return tuple(events), None
 
 
-# Mixins whose `set_params` checks one keyword in compiled code and then calls
-# `super().set_params(**params)`: the class's setter is still the declared
-# assignment of its family base, so its constructor keeps its row.
-SETTER_MIXINS = ("_DeviceDoor",)
-
-
 def _candidates(index):
     for modname, basename in FAMILIES:
         mod = index.mod(modname)
@@ -178,8 +172,9 @@ def _candidates(index):
             if not target or target[0] != "class":
                 continue
             cls = target[1]
-            owner = next((c for c in index.mro(cls)
-                          if _defines(c, "set_params") and c.name not in SETTER_MIXINS), None)
+            # _DeviceDoor's set_params override is gone (2026-11-21): the declared
+            # setter checks `device` itself, so no mixin is skipped here.
+            owner = next((c for c in index.mro(cls) if _defines(c, "set_params")), None)
             if owner is not base or _defines(owner, "set_params") is not setter:
                 continue
             yield modname, name, cls

@@ -130,4 +130,5 @@ def test_field_order_matches_each_original_constructor_body():
     for cls,plan in ns['_CONTEXT']['plans'].items():
         function=next(n for n in originals[cls.__name__].body if isinstance(n,ast.FunctionDef) and n.name=='__init__')
         assert plan['order']==tuple(fields(function))
-        assert plan['order'][-1]=='numeric_mode'
+        # device= by the shared rule (2026-11-20): stored after numeric_mode.
+        assert plan['order'][-2:]==('numeric_mode','device')

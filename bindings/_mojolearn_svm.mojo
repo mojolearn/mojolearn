@@ -114,8 +114,10 @@ comptime _IF_RESIDENT_ROUTE = IDN_IF_RESIDENT or (
 # Lane restore-iforest-kde (IDN_IF_SCORES_F64, isolation_forest/impl/
 # isolation_forest.mojo): on the resident route `want` 3 and 4 are
 # score_samples and decision_function written as float64 at the score
-# address (the public dtype), so the door makes no cast pass. Advertised by
-# `iforest_scores_f64`; any other binary refuses them as before.
+# address (the public dtype), so the door makes no cast pass. Advertised in
+# the typed entry's IF_CAP_* bits (the `iforest_scores_f64` export, which
+# nothing called after a99d74bf57, deleted 2026-11-21); any other binary
+# refuses them as before.
 comptime _IF_WIDE_ROUTE = _IF_RESIDENT_ROUTE and IDN_IF_SCORES_F64
 comptime _IF_WANT_WIDE_BASE = 3
 # cgfin-c-svm: the epilogues, Platt, the shuffle and the row glue run on
@@ -1018,15 +1020,6 @@ def iforest_resident_binding() raises -> PythonObject:
     return PythonObject(0)
 
 
-def iforest_scores_f64_binding() raises -> PythonObject:
-    """1 when this binary's resident `iforest_run` takes `want` 3 / 4
-    (score_samples / decision_function written as float64, the public
-    dtype, by the device epilogue: IDN_IF_SCORES_F64); 0 otherwise."""
-    comptime if _IF_WIDE_ROUTE:
-        return PythonObject(1)
-    return PythonObject(0)
-
-
 def iforest_resident_release_binding(token: PythonObject) raises -> PythonObject:
     """Drop the resident forest `token` names (the Python estimator was
     refitted or collected). A token nobody holds is a no-op. Returns 0.
@@ -1099,7 +1092,6 @@ def build__mojolearn_svm() -> PythonObject:
         m.def_function[svr_fit_binding]("svr_fit")
         m.def_function[svr_predict_binding]("svr_predict")
         m.def_function[iforest_resident_binding]("iforest_resident")
-        m.def_function[iforest_scores_f64_binding]("iforest_scores_f64")
         m.def_function[iforest_resident_release_binding]("iforest_resident_release")
         m.def_function[iforest_device_scan_binding]("iforest_device_scan")
         m.def_function[iforest_device_finite_scan_binding]("iforest_device_finite_scan")

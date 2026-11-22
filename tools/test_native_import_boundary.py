@@ -28,7 +28,12 @@ def test_artifact_setup_passes_raw_values_to_one_native_owner():
     exec(compile(ast.Module(body=[node], type_ignores=[]), '<import boundary>', 'exec'), namespace)
     source_arg, shapes, mode = (object() for _ in range(3))
     assert namespace['import_model'](source_arg, shapes=shapes, numeric_mode=mode) == 'native'
-    assert seen == [(source_arg, None, shapes, mode, context)]
+    # c8e23db539: `device=` by the shared rule, handed to the one native call
+    # raw (checked there), followed by the reserved trailing slot.
+    assert seen == [(source_arg, None, shapes, mode, context, None, None)]
+    device = object()
+    namespace['import_model'](source_arg, shapes=shapes, numeric_mode=mode, device=device)
+    assert seen[-1] == (source_arg, None, shapes, mode, context, device, None)
     assert 's.close()' not in ast.get_source_segment(source, node)
     # Owner-authorized artifact-only API: no implicit export or serialization.
     assert '_export_torch' not in source

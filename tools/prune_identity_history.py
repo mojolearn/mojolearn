@@ -373,7 +373,13 @@ def apply(root, today):
         git(root, "rm", "-r", "-q", "--", *paths[i:i + 50])
     # The table reads only the rows of the record index (2026-11-21, lane tree-readers), and refuses a
     # listed file that is gone: retire the pruned directories' rows in the same staged change.
-    spec = importlib.util.spec_from_file_location("_prune_vref", root / "python/mojolearn/_verify_reference.py")
+    # The tree's own index reader; a tree without one (an older checkout, the
+    # test fixture) is read with this checkout's, as tools/retain_run_summary.py
+    # does. Loading a missing file failed the whole prune after `git rm`.
+    vref_source = root / "python/mojolearn/_verify_reference.py"
+    if not vref_source.is_file():
+        vref_source = Path(__file__).resolve().parents[1] / "python/mojolearn/_verify_reference.py"
+    spec = importlib.util.spec_from_file_location("_prune_vref", vref_source)
     vref = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(vref)
     if (root / vref.RECORD_INDEX).is_file():

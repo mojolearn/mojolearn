@@ -144,6 +144,8 @@ def run_sequence_cases():
     write(clone, "notes/run.json")
     git(clone, "add", "-A")
     git(clone, "commit", "-q", "-m", "notes")
+    # git mv does not create the destination directory (exit 128 without it).
+    os.makedirs(os.path.join(clone, "bench/results/moved"), exist_ok=True)
     git(clone, "mv", "notes/run.json", "bench/results/moved/run.json")
     git(clone, "commit", "-q", "-m", "move")
     code, err = check(clone, git(clone, "rev-parse", "HEAD"))

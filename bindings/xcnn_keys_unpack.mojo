@@ -24,7 +24,7 @@ comptime XCNN_OPN_DEV_FINALIZE = 11
 comptime XCNN_OPN_BLOCK_INIT = 12
 comptime XCNN_OPN_BLOCK_TRAIN = 13
 comptime XCNN_OPN_BLOCK_BACKWARD = 14
-comptime XCNN_OPN_BLOCK_PARAMETERS = 15
+comptime XCNN_OPN_BLOCK_PARAMETER_DESCRIPTORS = 15
 comptime XCNN_OPN_BLOCK_FIT = 16
 comptime XCNN_OPN_BLOCK_FORWARD = 17
 comptime XCNN_OPN_BLOCK_TRANSFORM = 18
@@ -615,7 +615,7 @@ def _xcnn_keys_fill(nk: UnsafePointer[XcnnKeys, MutUntrackedOrigin]) raises:
     py_op_add(ops, "block_init", XCNN_OPN_BLOCK_INIT)
     py_op_add(ops, "block_train", XCNN_OPN_BLOCK_TRAIN)
     py_op_add(ops, "block_backward", XCNN_OPN_BLOCK_BACKWARD)
-    py_op_add(ops, "block_parameter_descriptors", XCNN_OPN_BLOCK_PARAMETERS)
+    py_op_add(ops, "block_parameter_descriptors", XCNN_OPN_BLOCK_PARAMETER_DESCRIPTORS)
     py_op_add(ops, "block_fit", XCNN_OPN_BLOCK_FIT)
     py_op_add(ops, "block_forward", XCNN_OPN_BLOCK_FORWARD)
     py_op_add(ops, "block_transform", XCNN_OPN_BLOCK_TRANSFORM)

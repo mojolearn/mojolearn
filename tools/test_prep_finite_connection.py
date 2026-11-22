@@ -43,7 +43,9 @@ class PrepFiniteConnection(unittest.TestCase):
             pass
 
         class Scope:
-            pass
+            # The real _arena_io._Scope keeps its native owner in one slot
+            # (arena unit D); the bridges connect that slot's getter.
+            __slots__ = ("_owner",)
 
         class RFE:
             _parameters = ("estimator", "step")

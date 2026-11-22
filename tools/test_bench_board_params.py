@@ -180,6 +180,12 @@ def _matched():
         obj._p.update(min_data_in_leaf=1, max_leaves=64, grow_policy="Depthwise",
                       bootstrap_type="No", subsample=1.0, random_strength=0.0,
                       boosting_type="Plain")
+    # max_ctr_complexity is a GradientBoosting argument (2026-11-21) and is
+    # compared on every gbdt lane; CatBoost's read-back fills it (unset = 4).
+    # Set explicitly on both CTR-capable arms; XGBoost has no combinations,
+    # which matches ours only at 1.
+    for obj in (ours, fast, cat):
+        obj._p["max_ctr_complexity"] = 1
     return {"ours": ours, "ours-fast": fast, "catboost-cpu": cat, "xgboost-cpu": xgb}
 
 
@@ -346,7 +352,8 @@ def test_exception_table_names_lane_param_and_arm(monkeypatch):
     arms["xgboost-cpu"]._p["max_depth"] = 8
     monkeypatch.setattr(BP, "EXCEPTIONS", [("gbdt-depth*", "max_depth", "xgboost-*", "planted")])
     rep = BP.enforce("gbdt-depthwise", arms, stream=io.StringIO())
-    assert rep["verdict"] == "MATCHED" and rep["exceptions"][0]["param"] == "max_depth"
+    # the planted max_depth exception is reported (beside the max_ctr_complexity excuse for XGBoost)
+    assert rep["verdict"] == "MATCHED" and "max_depth" in {e["param"] for e in rep["exceptions"]}
     # the same exception does not cover another lane
     with pytest.raises(BP.ParamsRefused):
         BP.enforce("gbdt-lossguide", arms, stream=io.StringIO())

@@ -40,7 +40,11 @@ def _class(tree, name):
 def _check_mixin():
     """The real `CheckMixin` class statement, run as `mojolearn._mode` would run it."""
     node = _class(_tree(MODE), "CheckMixin")
-    namespace = {"__name__": "mojolearn._mode", "__package__": "mojolearn"}
+    # `_digest_declare` is _mode.py's import from _digest_fields: CheckMixin's
+    # __init_subclass__ enters each class in the digest tables. Supplied inert;
+    # the digest tables are not what this file holds.
+    namespace = {"__name__": "mojolearn._mode", "__package__": "mojolearn",
+                 "_digest_declare": lambda cls: None}
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(MODE), "exec"), namespace)
     return namespace["CheckMixin"]
 
@@ -229,13 +233,13 @@ def test_it_is_not_a_parameter_or_a_tag():
     assert "signature" in ast.unparse(getter) and "dir(" not in ast.unparse(getter)
     tags = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "sklearn_tags")
     assert "dir(" not in ast.unparse(tags) and "'check'" not in ast.unparse(tags)
-    method = next(n for n in ast.walk(_class(tree, "CheckMixin")) if isinstance(n, ast.FunctionDef))
+    method = next(n for n in ast.walk(_class(tree, "CheckMixin")) if isinstance(n, ast.FunctionDef) and n.name == "check")
     assert [a.arg for a in method.args.args] == ["self", "X"]
     assert [a.arg for a in method.args.kwonlyargs] == ["method", "fit"]
 
 
 def test_the_docstring_is_user_documentation():
-    method = next(n for n in ast.walk(_class(_tree(MODE), "CheckMixin")) if isinstance(n, ast.FunctionDef))
+    method = next(n for n in ast.walk(_class(_tree(MODE), "CheckMixin")) if isinstance(n, ast.FunctionDef) and n.name == "check")
     doc = " ".join(ast.get_docstring(method).split())
     for section in ("Parameters", "Returns", "Examples"):
         assert section in doc, section

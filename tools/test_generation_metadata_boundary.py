@@ -234,9 +234,15 @@ def test_snapshot_and_resume_use_the_owners():
     # owner word; snapshot copies state from the state owner's words; resume
     # copies the bytes into the Arrays it allocated.
     public = (ROOT / 'bindings/causal_lm_public_door.mojo').read_text()
-    assert 'var fingerprint: String' in OWNER
+    # fx-audit 21 (2026-11-21): a kept fingerprint word went stale after an
+    # in-place weight edit, so the owner keeps none; the fingerprint is the
+    # hash of the current weights at every snapshot and resume, on the one
+    # parallel digest walk.
+    assert 'var fingerprint: String' not in OWNER
     fingerprint = public.split('def _fingerprint(', 1)[1].split('def _fingerprint_hash(', 1)[0]
-    assert 'owner[].fingerprint = String(_fingerprint_hash(mods, model))' in fingerprint
+    assert 'return _fingerprint_hash(mods, model)' in fingerprint and '.fingerprint =' not in fingerprint
+    walk = public.split('def _fingerprint_hash(', 1)[1].split('\ndef ', 1)[0]
+    assert 'return PythonObject(_causal_digest_hex(mods, model))' in walk
     snapshot = public.split('def causal_lm_snapshot_binding(mut mods: NativeModules, stream: PythonObject, native: PythonObject)', 1)[1].split('def causal_lm_snapshot_binding(', 1)[0]
     assert '_state_owner_copy(state_owner[].layers[slot].buffers[index])' in snapshot
     resume = public.split('def causal_lm_resume_binding(mut mods', 1)[1].split('def causal_lm_resume_binding(', 1)[0]

@@ -81,8 +81,8 @@ comptime _TOKEN_SLOT = "trees_iforest_resident_v1"
 # TOMBSTONE: MOJOLEARN_IDN_IF_FIT_EXPORT (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-02-base; code recoverable at cfce0d30ce.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_IF_FIT_EXPORT.patch; record in docs/TOMBSTONES.md.
 # Lane restore-iforest-kde (history audit row 4): `want` + 3 asks a binary
-# whose `iforest_scores_f64` is 1 for the float64 scores (bindings/
-# _mojolearn_svm.mojo `_IF_WIDE_ROUTE`).
+# whose typed entry caps (if_entry_caps) carry the float64-scores bit
+# (bindings/_mojolearn_svm.mojo `_IF_WIDE_ROUTE`).
 comptime _WANT_WIDE_BASE = 3
 # Lane fix-iforest-save-device-forest (2026-11-13): the fitted forest itself,
 # as the compact host form (isolation_forest/forest_io.mojo): a tuple of five

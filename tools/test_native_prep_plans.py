@@ -68,6 +68,9 @@ def plans(monkeypatch):
     def connect_bindings(*names):
         for name in names:
             shared["family_binding_connections"][name] = {mode: ((name, mode),) for mode in ("identical", "fast")}
+            # The real bridge connects the CPU identical module of each name beside the device
+            # one (`family_binding_connections_cpu`: module or refusal text, read by the plans).
+            shared.setdefault("family_binding_connections_cpu", {})[name] = ((name, "cpu"),)
     bridge.connect_bindings = connect_bindings
     monkeypatch.setitem(sys.modules, bridge.__name__, bridge)
     package._native_family_bridge = bridge
@@ -185,7 +188,13 @@ def test_rfe_passes_fit_parameters_to_every_fit_without_python_attribute_hooks()
     source = (ROOT / "bindings/prep_select_native_door.mojo").read_text()
     assert source.count("y, fit_params, context)") == 2
     assert 'context, fit_params)' in source
-    assert 'len(fit_params) != 0' not in source
+    # The member route (member ABI, 2026-11-21) carries no fit parameters, so
+    # `_rfe_member` declines it when there are any and the estimator's own
+    # doors run with them (the two calls above). That route choice is the only
+    # place fit parameters are tested; no fit drops them.
+    member = source.split("def _rfe_member(", 1)[1].split("\ndef ", 1)[0]
+    assert source.count('len(fit_params) != 0') == member.count('len(fit_params) != 0') == 1
+    assert 'return member^' in member.split('len(fit_params) != 0', 1)[1].split('\n', 2)[1]
     assert 'attrgetter' not in source
     assert '_call(b.getattr, Python.tuple(est' not in source
     helper = plain("bindings/prep_native_estimator_door.mojo",
