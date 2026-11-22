@@ -1,3 +1,0 @@
-knn-clf: clean
-knn-clf: sabotage
-knn-clf: 9/9 controls; passed=True

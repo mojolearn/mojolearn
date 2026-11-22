@@ -1,3 +1,0 @@
-byte-lm-host-infer-threaded: clean
-byte-lm-host-infer-threaded: sabotage
-byte-lm-host-infer-threaded: 9/9 controls; passed=False

@@ -1,3 +1,0 @@
-knn-sqeuclidean: clean
-knn-sqeuclidean: sabotage
-knn-sqeuclidean: 9/9 controls; passed=True

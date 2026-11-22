@@ -1,3 +1,0 @@
-permutation-test: clean
-permutation-test: sabotage
-permutation-test: 9/9 controls; passed=True

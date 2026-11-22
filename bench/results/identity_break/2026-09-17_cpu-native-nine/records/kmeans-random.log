@@ -1,3 +1,0 @@
-kmeans-random: clean
-kmeans-random: sabotage
-kmeans-random: 9/9 controls; passed=True

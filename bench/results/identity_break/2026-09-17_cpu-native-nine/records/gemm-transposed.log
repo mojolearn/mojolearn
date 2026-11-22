@@ -1,3 +1,0 @@
-gemm-transposed: clean
-gemm-transposed: sabotage
-gemm-transposed: 9/9 controls; passed=True

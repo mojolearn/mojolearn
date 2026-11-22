@@ -1,3 +1,0 @@
-logistic-multiclass: clean
-logistic-multiclass: sabotage
-logistic-multiclass: 9/9 controls; passed=True

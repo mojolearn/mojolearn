@@ -1,3 +1,0 @@
-gbdt-categorical-ctr-tables: clean
-gbdt-categorical-ctr-tables: sabotage
-gbdt-categorical-ctr-tables: 9/9 controls; passed=True

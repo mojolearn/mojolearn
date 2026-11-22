@@ -1,3 +1,0 @@
-optim-sgd: clean
-optim-sgd: sabotage
-optim-sgd: 9/9 controls; passed=True

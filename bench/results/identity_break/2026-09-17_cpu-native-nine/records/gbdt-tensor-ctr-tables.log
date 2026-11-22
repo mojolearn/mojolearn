@@ -1,3 +1,0 @@
-gbdt-tensor-ctr-tables: clean
-gbdt-tensor-ctr-tables: sabotage
-gbdt-tensor-ctr-tables: 9/9 controls; passed=True

@@ -1,3 +1,0 @@
-spectral-precomputed: clean
-spectral-precomputed: sabotage
-spectral-precomputed: 9/9 controls; passed=True

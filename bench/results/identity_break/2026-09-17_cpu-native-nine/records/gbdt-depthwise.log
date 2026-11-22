@@ -1,3 +1,0 @@
-gbdt-depthwise: clean
-gbdt-depthwise: sabotage
-gbdt-depthwise: 9/9 controls; passed=True

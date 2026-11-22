@@ -1,3 +1,0 @@
-rf-reg-poisson: clean
-rf-reg-poisson: sabotage
-rf-reg-poisson: 9/9 controls; passed=True
