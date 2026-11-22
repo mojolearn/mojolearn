@@ -154,10 +154,11 @@ def _published_fixture(which: Int) raises:
             and not member.has(MEMBER_NEEDS_PREDICTOR), "member ABI: published " + name + " is a transformer")
     else:
         require(member.has(MEMBER_NEEDS_PREDICTOR), "member ABI: published " + name + " fits and predicts")
-    var classifier = which == 0 or which == 2
+    # x_linear (1) publishes RidgeClassifier (kind 9) since 01d51610db: its family mask has the classifier bit
+    var classifier = which == 0 or which == 1 or which == 2
     if classifier:
         require(member.can(MEMBER_CAN_CLASSIFIER), "member ABI: published " + name + " has classifier kinds")
-    if which == 1 or which >= 7:
+    if which >= 7:
         require(not member.can(MEMBER_CAN_CLASSIFIER), "member ABI: published " + name + " has no classifier kind")
     if which == 7:
         require(member.can(MEMBER_CAN_TRANSFORM), "member ABI: KMeans transforms")
