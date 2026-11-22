@@ -1209,4 +1209,9 @@ def test_portable_fmax() raises:
 
 
 def main() raises:
-    TestSuite.discover_tests[__functions_in_module()]().run()
+    # Tests listed by name, not discovered: `__functions_in_module()` instantiates every function of the
+    # module for the host, and this module's GPU kernels refuse the host target (the stdlib's
+    # `_get_intrinsic_name` constraint; cpc1 sm_89 cross-compile, 2026-11-22).
+    var suite = TestSuite()
+    suite.test[test_portable_fmax]()
+    suite^.run()
