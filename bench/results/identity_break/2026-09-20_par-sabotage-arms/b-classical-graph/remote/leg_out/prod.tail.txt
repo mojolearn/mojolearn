@@ -1,0 +1,30 @@
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-svm-svr/base: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7060, in _
+    par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 223, in fit_svm
+    result = pool.map([('svm_fit', estimator, (X, y))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-svm-svr/ties: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7060, in _
+    par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 223, in fit_svm
+    result = pool.map([('svm_fit', estimator, (X, y))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+wrote /root/leg_out/cpu-x86.json
+wrote /root/leg_out/cpu-x86.json.errors.txt (42 refusal(s), untruncated)

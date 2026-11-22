@@ -1,0 +1,53 @@
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=2766cdb438acb1b2af9bc734106d26808c099b8e
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=2766cdb438acb1b2af9bc734106d26808c099b8e
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| par-boosting-clf/base        | REFUSED    | REFUSED          | REFUSED          |
+| par-boosting-clf/ties        | REFUSED    | REFUSED          | REFUSED          |
+| par-boosting-pointwise/base  | REFUSED    | REFUSED          | REFUSED          |
+| par-boosting-pointwise/ties  | REFUSED    | REFUSED          | REFUSED          |
+| par-boosting-reg/base        | REFUSED    | REFUSED          | REFUSED          |
+| par-boosting-reg/ties        | REFUSED    | REFUSED          | REFUSED          |
+| par-boosting/base            | REFUSED    | REFUSED          | REFUSED          |
+| par-boosting/ties            | REFUSED    | REFUSED          | REFUSED          |
+| par-border-types/base        | REFUSED    | REFUSED          | REFUSED          |
+| par-border-types/ties        | REFUSED    | REFUSED          | REFUSED          |
+| par-cross-val/base           | REFUSED    | REFUSED          | REFUSED          |
+| par-cross-val/ties           | REFUSED    | REFUSED          | REFUSED          |
+| par-feature-freq/base        | REFUSED    | REFUSED          | REFUSED          |
+| par-feature-freq/ties        | REFUSED    | REFUSED          | REFUSED          |
+| par-forest-et-clf/base       | DIVERGENT  | parts differ: predict,proba; agree: - | 6567d13a392cede0 |
+| par-forest-et-clf/ties       | DIVERGENT  | parts differ: predict,proba; agree: - | 9fb4b8c97387e839 |
+| par-forest-pool/base         | REFUSED    | REFUSED          | REFUSED          |
+| par-forest-pool/ties         | REFUSED    | REFUSED          | REFUSED          |
+| par-forest-reg/base          | DIVERGENT  | parts differ: predict; agree: - | 51c47ab53a694b17 |
+| par-forest-reg/ties          | DIVERGENT  | parts differ: predict; agree: - | f2a18ba74e754306 |
+| par-iforest/base             | REFUSED    | REFUSED          | REFUSED          |
+| par-iforest/ties             | REFUSED    | REFUSED          | REFUSED          |
+| par-ordered-rmse/base        | REFUSED    | REFUSED          | REFUSED          |
+| par-ordered-rmse/ties        | REFUSED    | REFUSED          | REFUSED          |
+| par-ordered/base             | REFUSED    | REFUSED          | REFUSED          |
+| par-ordered/ties             | REFUSED    | REFUSED          | REFUSED          |
+
+summary: DIVERGENT=4, REFUSED=22
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-forest-et-clf/base       | infer  | DIVERGENT    | b728e73e5f84514c | 9e37c35d555d069f |
+| par-forest-et-clf/base       | model  | DIVERGENT    | 58a53490a62fba59 | ef841bd8520b9a5e |
+| par-forest-et-clf/base       | batch  | BATCH_MOVED  | 81b2634afb4f8a2b | BATCH_MOVED      |
+| par-forest-et-clf/ties       | infer  | DIVERGENT    | 7aa541bcca22b6fd | 343c9717bd7d8b25 |
+| par-forest-et-clf/ties       | model  | DIVERGENT    | e63de8292d8384e4 | 6d1407d50ff5be1e |
+| par-forest-et-clf/ties       | batch  | BATCH_MOVED  | 2296c44521d45082 | BATCH_MOVED      |
+| par-forest-reg/base          | infer  | DIVERGENT    | 16465c479f279614 | 8b43c2c7049ce3fa |
+| par-forest-reg/base          | model  | DIVERGENT    | ee1ec176625ae198 | f34a7fea573ff8cb |
+| par-forest-reg/base          | batch  | DIVERGENT    | f01eff208024fbd2 | 61b884c17056b9b1 |
+| par-forest-reg/ties          | infer  | DIVERGENT    | 9e088d6c6c1bf54b | a8869d0cf75822e0 |
+| par-forest-reg/ties          | model  | DIVERGENT    | a35ee93f7a000cbd | da8c9d8446c71bbb |
+| par-forest-reg/ties          | batch  | DIVERGENT    | cdda8ca2f47be0d0 | eb288fcf56a03cc9 |
+
+infer/model: 44 column cells not compared (no JSON here carries them; they predate the columns)
+summary (infer/model): DIVERGENT=8, NOT-COMPARED=44
+batch: 22 column cells not compared (no JSON here carries them; they predate the batch part)
+summary (batch): BATCH_MOVED=2, DIVERGENT=2, NOT-COMPARED=22
+summary (rlpair): 

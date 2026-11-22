@@ -1,0 +1,141 @@
+{
+ "cells": {
+  "par-gmm/hashed": {
+   "one_device_by_design": false,
+   "refusal": null,
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 7145,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 7228,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 7311,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 7368,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 7427,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "ca58723a7e87c9992d967622d9257a6d",
+         "f8cef31bef850962d9e8e2d5c09d6a25"
+        ],
+        "pid": 7508,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "native_sessions": 0,
+    "one_device_by_design": false,
+    "placement": "physical",
+    "pools": 6,
+    "workers": 6
+   }
+  }
+ },
+ "devices": [
+  0,
+  1
+ ],
+ "format": "mojolearn.par-witness-arm.v1",
+ "vendor": "cuda"
+}

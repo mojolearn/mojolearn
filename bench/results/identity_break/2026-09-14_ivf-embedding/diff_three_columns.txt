@@ -1,0 +1,83 @@
+| lane/fixture                 | verdict    | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       |
+|------------------------------|------------|------------------|------------------|------------------|
+| embedding/base               | IDENTICAL x3 | bcc23cf76ecd9bd0 | bcc23cf76ecd9bd0 | bcc23cf76ecd9bd0 |
+| embedding/denormal           | IDENTICAL x3 | 59595db92ff1929f | 59595db92ff1929f | 59595db92ff1929f |
+| embedding/denormal_ftz       | IDENTICAL x3 | 34cb2f8df00e959f | 34cb2f8df00e959f | 34cb2f8df00e959f |
+| embedding/dupes              | IDENTICAL x3 | 7dfca2bcb83ca2c2 | 7dfca2bcb83ca2c2 | 7dfca2bcb83ca2c2 |
+| embedding/hashed             | IDENTICAL x3 | fe5303d0bf6e8147 | fe5303d0bf6e8147 | fe5303d0bf6e8147 |
+| embedding/negative           | IDENTICAL x3 | b2593a24638e509d | b2593a24638e509d | b2593a24638e509d |
+| embedding/odd                | IDENTICAL x3 | bcc23cf76ecd9bd0 | bcc23cf76ecd9bd0 | bcc23cf76ecd9bd0 |
+| embedding/ties               | IDENTICAL x3 | 92011ef4bbaedb43 | 92011ef4bbaedb43 | 92011ef4bbaedb43 |
+| embedding/wide               | IDENTICAL x3 | ff761f415109a2ba | ff761f415109a2ba | ff761f415109a2ba |
+| ivf/base                     | IDENTICAL x3 | e14f27972422d4e0 | e14f27972422d4e0 | e14f27972422d4e0 |
+| ivf/denormal                 | IDENTICAL x3 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 |
+| ivf/denormal_ftz             | IDENTICAL x3 | dc905d6cb32046d8 | dc905d6cb32046d8 | dc905d6cb32046d8 |
+| ivf/dupes                    | IDENTICAL x3 | c9eaf39f6e83e625 | c9eaf39f6e83e625 | c9eaf39f6e83e625 |
+| ivf/hashed                   | IDENTICAL x3 | 6c061012dc979df5 | 6c061012dc979df5 | 6c061012dc979df5 |
+| ivf/negative                 | IDENTICAL x3 | 9a7f19689600453e | 9a7f19689600453e | 9a7f19689600453e |
+| ivf/odd                      | IDENTICAL x3 | 26b26d7e4be5c50a | 26b26d7e4be5c50a | 26b26d7e4be5c50a |
+| ivf/ties                     | IDENTICAL x3 | b9d8790b40b5a6ac | b9d8790b40b5a6ac | b9d8790b40b5a6ac |
+| ivf/wide                     | IDENTICAL x3 | 8ee39ab9ae510966 | 8ee39ab9ae510966 | 8ee39ab9ae510966 |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | apple-m4         | nvidia-nvidia-h100-80gb-hbm3-sm_90a | amd-gfx942       |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| embedding/base               | infer  | IDENTICAL x3 | 9532e67b65b07c0b | 9532e67b65b07c0b | 9532e67b65b07c0b |
+| embedding/base               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/base               | batch  | IDENTICAL x3 | aed4235f48398286 | aed4235f48398286 | aed4235f48398286 |
+| embedding/denormal           | infer  | IDENTICAL x3 | d0c81bcb36e8ac05 | d0c81bcb36e8ac05 | d0c81bcb36e8ac05 |
+| embedding/denormal           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/denormal           | batch  | IDENTICAL x3 | 1d46be5f79dc46ad | 1d46be5f79dc46ad | 1d46be5f79dc46ad |
+| embedding/denormal_ftz       | infer  | IDENTICAL x3 | 9ed8984c16e728bb | 9ed8984c16e728bb | 9ed8984c16e728bb |
+| embedding/denormal_ftz       | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/denormal_ftz       | batch  | IDENTICAL x3 | 15b6791b83727e32 | 15b6791b83727e32 | 15b6791b83727e32 |
+| embedding/dupes              | infer  | IDENTICAL x3 | 6097b151f828645e | 6097b151f828645e | 6097b151f828645e |
+| embedding/dupes              | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/dupes              | batch  | IDENTICAL x3 | 87cc2100c8487475 | 87cc2100c8487475 | 87cc2100c8487475 |
+| embedding/hashed             | infer  | IDENTICAL x3 | e69443c9c64a170e | e69443c9c64a170e | e69443c9c64a170e |
+| embedding/hashed             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/hashed             | batch  | IDENTICAL x3 | 607b839f338610b4 | 607b839f338610b4 | 607b839f338610b4 |
+| embedding/negative           | infer  | IDENTICAL x3 | 06de8cf62a5b291f | 06de8cf62a5b291f | 06de8cf62a5b291f |
+| embedding/negative           | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/negative           | batch  | IDENTICAL x3 | 6dc8528de4a26793 | 6dc8528de4a26793 | 6dc8528de4a26793 |
+| embedding/odd                | infer  | IDENTICAL x3 | 9532e67b65b07c0b | 9532e67b65b07c0b | 9532e67b65b07c0b |
+| embedding/odd                | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/odd                | batch  | IDENTICAL x3 | aed4235f48398286 | aed4235f48398286 | aed4235f48398286 |
+| embedding/ties               | infer  | IDENTICAL x3 | b2974b34e85e96d7 | b2974b34e85e96d7 | b2974b34e85e96d7 |
+| embedding/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/ties               | batch  | IDENTICAL x3 | b0d9ee4cb0d2cc65 | b0d9ee4cb0d2cc65 | b0d9ee4cb0d2cc65 |
+| embedding/wide               | infer  | IDENTICAL x3 | 3da637530f040675 | 3da637530f040675 | 3da637530f040675 |
+| embedding/wide               | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| embedding/wide               | batch  | IDENTICAL x3 | 7772d3b456315c74 | 7772d3b456315c74 | 7772d3b456315c74 |
+| ivf/base                     | infer  | IDENTICAL x3 | fd6eed35b1338d17 | fd6eed35b1338d17 | fd6eed35b1338d17 |
+| ivf/base                     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/base                     | batch  | IDENTICAL x3 | 6baf3cfbde509312 | 6baf3cfbde509312 | 6baf3cfbde509312 |
+| ivf/denormal                 | infer  | IDENTICAL x3 | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf |
+| ivf/denormal                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/denormal                 | batch  | IDENTICAL x3 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 |
+| ivf/denormal_ftz             | infer  | IDENTICAL x3 | 3ff4c07c575048cf | 3ff4c07c575048cf | 3ff4c07c575048cf |
+| ivf/denormal_ftz             | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/denormal_ftz             | batch  | IDENTICAL x3 | 45f49934c58d1518 | 45f49934c58d1518 | 45f49934c58d1518 |
+| ivf/dupes                    | infer  | IDENTICAL x3 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 | 4ae50eab359ba1e9 |
+| ivf/dupes                    | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/dupes                    | batch  | IDENTICAL x3 | 99ec531fb8ae409f | 99ec531fb8ae409f | 99ec531fb8ae409f |
+| ivf/hashed                   | infer  | IDENTICAL x3 | 49c22df302ee0334 | 49c22df302ee0334 | 49c22df302ee0334 |
+| ivf/hashed                   | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/hashed                   | batch  | IDENTICAL x3 | 648bf9fc3764372d | 648bf9fc3764372d | 648bf9fc3764372d |
+| ivf/negative                 | infer  | IDENTICAL x3 | 71333eccc89915b1 | 71333eccc89915b1 | 71333eccc89915b1 |
+| ivf/negative                 | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/negative                 | batch  | IDENTICAL x3 | 9786387eb7123b42 | 9786387eb7123b42 | 9786387eb7123b42 |
+| ivf/odd                      | infer  | IDENTICAL x3 | 1e0c2401db49a53d | 1e0c2401db49a53d | 1e0c2401db49a53d |
+| ivf/odd                      | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/odd                      | batch  | IDENTICAL x3 | 8149b10d16c8ebaa | 8149b10d16c8ebaa | 8149b10d16c8ebaa |
+| ivf/ties                     | infer  | IDENTICAL x3 | c62b1be91d40fc43 | c62b1be91d40fc43 | c62b1be91d40fc43 |
+| ivf/ties                     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/ties                     | batch  | IDENTICAL x3 | 166f61a6e1f346b8 | 166f61a6e1f346b8 | 166f61a6e1f346b8 |
+| ivf/wide                     | infer  | IDENTICAL x3 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 | 2bfe5d9bde8a2564 |
+| ivf/wide                     | model  | N/A          | n/a:no-save      | n/a:no-save      | n/a:no-save      |
+| ivf/wide                     | batch  | IDENTICAL x3 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 | 3e09f4c3db3c3e66 |
+
+summary (infer/model): IDENTICAL=18, N/A=18
+summary (batch): IDENTICAL=18
+require-columns 3 over ['embedding', 'ivf']: OK

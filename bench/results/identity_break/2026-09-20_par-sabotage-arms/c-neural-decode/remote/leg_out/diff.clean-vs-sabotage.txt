@@ -1,0 +1,43 @@
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=2766cdb438acb1b2af9bc734106d26808c099b8e
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=2766cdb438acb1b2af9bc734106d26808c099b8e
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| mamba1-decode-session/base   | REFUSED    | REFUSED          | REFUSED          |
+| mamba1-decode-session/ties   | REFUSED    | REFUSED          | REFUSED          |
+| par-byte-lm-model-pool/base  | REFUSED    | REFUSED          | REFUSED          |
+| par-byte-lm-model-pool/ties  | REFUSED    | REFUSED          | REFUSED          |
+| par-byte-lm-offload/base     | REFUSED    | REFUSED          | REFUSED          |
+| par-byte-lm-offload/ties     | REFUSED    | REFUSED          | REFUSED          |
+| par-byte-lm/base             | REFUSED    | REFUSED          | REFUSED          |
+| par-byte-lm/ties             | REFUSED    | REFUSED          | REFUSED          |
+| par-causal-lm/base           | REFUSED    | REFUSED          | REFUSED          |
+| par-causal-lm/ties           | REFUSED    | REFUSED          | REFUSED          |
+| par-forecast-arima/base      | ONE-COLUMN | a44b54d65768bf5e | REFUSED          |
+| par-forecast-arima/ties      | ONE-COLUMN | 8d68e00817197a31 | REFUSED          |
+| par-forecast-holtwinters/base | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | 7bf9c2cccc9035df |
+| par-forecast-holtwinters/ties | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | d99a77e850e0e5c4 |
+| transformer-decode-session/base | REFUSED    | REFUSED          | REFUSED          |
+| transformer-decode-session/ties | REFUSED    | REFUSED          | REFUSED          |
+
+summary: DIVERGENT=2, ONE-COLUMN=2, REFUSED=12
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-forecast-arima/base      | infer  | ONE-COLUMN   | 9f76be0396a666ca | REFUSED          |
+| par-forecast-arima/base      | model  | ONE-COLUMN   | 6ae822845884aedf | REFUSED          |
+| par-forecast-arima/base      | batch  | ONE-COLUMN   | ec97b45a1c88081b | REFUSED          |
+| par-forecast-arima/ties      | infer  | ONE-COLUMN   | e699bca0934688f0 | REFUSED          |
+| par-forecast-arima/ties      | model  | ONE-COLUMN   | a70bbb860b0f3fcf | REFUSED          |
+| par-forecast-arima/ties      | batch  | ONE-COLUMN   | f339cdfecd860934 | REFUSED          |
+| par-forecast-holtwinters/base | infer  | ONE-COLUMN   | 2ba6e3fe81256474 | REFUSED          |
+| par-forecast-holtwinters/base | model  | ONE-COLUMN   | 2b788f20f8d8c145 | REFUSED          |
+| par-forecast-holtwinters/base | batch  | BATCH_MOVED  | 77ca9a518446c250 | BATCH_MOVED      |
+| par-forecast-holtwinters/ties | infer  | ONE-COLUMN   | 9894a75e19343d02 | REFUSED          |
+| par-forecast-holtwinters/ties | model  | ONE-COLUMN   | dc2d6a661f911c91 | REFUSED          |
+| par-forecast-holtwinters/ties | batch  | BATCH_MOVED  | 60326d25dd4491b2 | BATCH_MOVED      |
+
+infer/model: 24 column cells not compared (no JSON here carries them; they predate the columns)
+summary (infer/model): NOT-COMPARED=24, ONE-COLUMN=8
+batch: 12 column cells not compared (no JSON here carries them; they predate the batch part)
+summary (batch): BATCH_MOVED=2, NOT-COMPARED=12, ONE-COLUMN=2
+summary (rlpair): 

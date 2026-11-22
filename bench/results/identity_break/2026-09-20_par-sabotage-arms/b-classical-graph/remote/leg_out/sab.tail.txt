@@ -1,0 +1,30 @@
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7100, in _
+    _same_bytes("ParallelQueries kneighbors distances", d, "plain distances", d0)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: ParallelQueries kneighbors distances and plain distances differ: 1312 bytes of 2048
+REFUSED par-ivf/base: ValueError: DistributedIVFIndex distances and plain IVFIndex distances differ: 1680 bytes of 2048
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7225, in _
+    _same_bytes("DistributedIVFIndex distances", d, "plain IVFIndex distances", d0)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: DistributedIVFIndex distances and plain IVFIndex distances differ: 1680 bytes of 2048
+REFUSED par-ivf/ties: ValueError: DistributedIVFIndex distances and plain IVFIndex distances differ: 689 bytes of 2048
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7225, in _
+    _same_bytes("DistributedIVFIndex distances", d, "plain IVFIndex distances", d0)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: DistributedIVFIndex distances and plain IVFIndex distances differ: 689 bytes of 2048
+wrote /root/leg_out/cpu-x86.sabotage.json
+wrote /root/leg_out/cpu-x86.sabotage.json.errors.txt (48 refusal(s), untruncated)

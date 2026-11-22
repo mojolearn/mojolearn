@@ -1,0 +1,1479 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-71-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9655p-96-core-processor",
+ "commit": "2766cdb438acb1b2af9bc734106d26808c099b8e",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  }
+ },
+ "cells": {
+  "par-kmeans/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5944, in _\n    par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 180, in fit_kmeans\n    result = pool.map([('kmeans_fit', params, (X, sample_weight))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.005208086222410202,
+    "stages": {
+     "repeat=1/train": 0.003546290099620819
+    }
+   }
+  },
+  "par-kmeans/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5944, in _\n    par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 180, in fit_kmeans\n    result = pool.map([('kmeans_fit', params, (X, sample_weight))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0008609779179096222,
+    "stages": {
+     "repeat=1/train": 0.00023758038878440857
+    }
+   }
+  },
+  "par-gram/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5954, in _\n    par = fit_gram_estimator(ml.Ridge(alpha=1.0), X, yr, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 105, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0007737763226032257,
+    "stages": {
+     "repeat=1/train": 0.00023097172379493713
+    }
+   }
+  },
+  "par-gram/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5954, in _\n    par = fit_gram_estimator(ml.Ridge(alpha=1.0), X, yr, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 105, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.000748954713344574,
+    "stages": {
+     "repeat=1/train": 0.00019431114196777344
+    }
+   }
+  },
+  "par-logistic/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver glm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5963, in _\n    par = fit_logistic(ml.LogisticRegression(max_iter=50), X, yc, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 20, in fit_logistic\n    result = pool.map([('glm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver glm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006341300904750824,
+    "stages": {
+     "repeat=1/train": 0.0001194588840007782
+    }
+   }
+  },
+  "par-logistic/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver glm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5963, in _\n    par = fit_logistic(ml.LogisticRegression(max_iter=50), X, yc, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 20, in fit_logistic\n    result = pool.map([('glm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver glm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005907230079174042,
+    "stages": {
+     "repeat=1/train": 0.00010203942656517029
+    }
+   }
+  },
+  "par-cd/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5972, in _\n    par = fit_coordinate_descent(ml.Lasso(alpha=0.01, max_iter=200), X, yr, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 201, in fit_coordinate_descent\n    result = pool.map([('solver_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005684755742549896,
+    "stages": {
+     "repeat=1/train": 9.717047214508057e-05
+    }
+   }
+  },
+  "par-cd/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5972, in _\n    par = fit_coordinate_descent(ml.Lasso(alpha=0.01, max_iter=200), X, yr, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 201, in fit_coordinate_descent\n    result = pool.map([('solver_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005636066198348999,
+    "stages": {
+     "repeat=1/train": 8.943304419517517e-05
+    }
+   }
+  },
+  "par-svm/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5982, in _\n    par = fit_svm(ml.SVC(**kw), X[:2000], yc[:2000], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 223, in fit_svm\n    result = pool.map([('svm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005834437906742096,
+    "stages": {
+     "repeat=1/train": 0.00011293962597846985
+    }
+   }
+  },
+  "par-svm/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5982, in _\n    par = fit_svm(ml.SVC(**kw), X[:2000], yc[:2000], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 223, in fit_svm\n    result = pool.map([('svm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005946718156337738,
+    "stages": {
+     "repeat=1/train": 0.0001278519630432129
+    }
+   }
+  },
+  "par-gp/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gp_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5994, in _\n    par = fit_gaussian_process(ml.GaussianProcessRegressor(kernel=k), X[:256, :4], yr[:256], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 255, in fit_gaussian_process\n    result = pool.map([('gp_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gp_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006712824106216431,
+    "stages": {
+     "repeat=1/train": 0.0001743324100971222
+    }
+   }
+  },
+  "par-gp/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gp_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 5994, in _\n    par = fit_gaussian_process(ml.GaussianProcessRegressor(kernel=k), X[:256, :4], yr[:256], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 255, in fit_gaussian_process\n    result = pool.map([('gp_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gp_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006318837404251099,
+    "stages": {
+     "repeat=1/train": 0.00014226138591766357
+    }
+   }
+  },
+  "par-dbscan/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver dbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6006, in _\n    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True), X[:6000, :4], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 295, in fit_dbscan\n    result = pool.map([('dbscan_fit', estimator, (X, sample_weight))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver dbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005813464522361755,
+    "stages": {
+     "repeat=1/train": 0.00010517984628677368
+    }
+   }
+  },
+  "par-dbscan/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver dbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6006, in _\n    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True), X[:6000, :4], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 295, in fit_dbscan\n    result = pool.map([('dbscan_fit', estimator, (X, sample_weight))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver dbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005711838603019714,
+    "stages": {
+     "repeat=1/train": 8.744746446609497e-05
+    }
+   }
+  },
+  "par-graph-agglomerative/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6399, in _\n    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4, prediction_data=True), A, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0015427656471729279,
+    "stages": {
+     "repeat=1/train": 0.000903785228729248
+    }
+   }
+  },
+  "par-graph-agglomerative/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6399, in _\n    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4, prediction_data=True), A, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.000675298273563385,
+    "stages": {
+     "repeat=1/train": 0.00019318237900733948
+    }
+   }
+  },
+  "par-graph-spectral/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6414, in _\n    par = fit_graph(ml.SpectralClustering(n_clusters=4, random_state=3), A, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006595142185688019,
+    "stages": {
+     "repeat=1/train": 0.00018477067351341248
+    }
+   }
+  },
+  "par-graph-spectral/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6414, in _\n    par = fit_graph(ml.SpectralClustering(n_clusters=4, random_state=3), A, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0009452365338802338,
+    "stages": {
+     "repeat=1/train": 0.00024878233671188354
+    }
+   }
+  },
+  "par-graph-umap/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6428, in _\n    par = fit_graph(ml.UMAP(**kw), A, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0007857233285903931,
+    "stages": {
+     "repeat=1/train": 0.00027343258261680603
+    }
+   }
+  },
+  "par-graph-umap/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6428, in _\n    par = fit_graph(ml.UMAP(**kw), A, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006981454789638519,
+    "stages": {
+     "repeat=1/train": 0.00019699335098266602
+    }
+   }
+  },
+  "par-gmm/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6768, in _\n    par = fit_gaussian_mixture(ml.GaussianMixture(**kw), X[:6000, :4], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 324, in fit_gaussian_mixture\n    result = pool.map([('gmm_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0012623891234397888,
+    "stages": {
+     "repeat=1/train": 0.00028585270047187805
+    }
+   }
+  },
+  "par-gmm/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6768, in _\n    par = fit_gaussian_mixture(ml.GaussianMixture(**kw), X[:6000, :4], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 324, in fit_gaussian_mixture\n    result = pool.map([('gmm_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006920546293258667,
+    "stages": {
+     "repeat=1/train": 0.00020791217684745789
+    }
+   }
+  },
+  "par-resample/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver resample yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6793, in _\n    b = pc.bootstrap(x, devices=dev, random_state=3, **kw)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 369, in bootstrap\n    return _resample_parallel('bootstrap', devices, dict(kwargs, data=data))\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 356, in _resample_parallel\n    return pool.map([('resample', None, (name, kwargs))])[0]\n           ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver resample yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006389059126377106,
+    "stages": {
+     "repeat=1/train": 0.00011286139488220215
+    }
+   }
+  },
+  "par-resample/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver resample yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6793, in _\n    b = pc.bootstrap(x, devices=dev, random_state=3, **kw)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 369, in bootstrap\n    return _resample_parallel('bootstrap', devices, dict(kwargs, data=data))\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 356, in _resample_parallel\n    return pool.map([('resample', None, (name, kwargs))])[0]\n           ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver resample yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.000614754855632782,
+    "stages": {
+     "repeat=1/train": 8.388236165046692e-05
+    }
+   }
+  },
+  "par-hdbscan/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6829, in _\n    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 404, in fit_hdbscan\n    result = pool.map([('hdbscan_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006424859166145325,
+    "stages": {
+     "repeat=1/train": 0.00017504021525382996
+    }
+   }
+  },
+  "par-hdbscan/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6829, in _\n    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 404, in fit_hdbscan\n    result = pool.map([('hdbscan_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006251111626625061,
+    "stages": {
+     "repeat=1/train": 0.00016744807362556458
+    }
+   }
+  },
+  "par-cholesky/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver cholesky_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6856, in _\n    par = fit_cholesky(ml.Cholesky(), A, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 430, in fit_cholesky\n    result = pool.map([('cholesky_fit', estimator, (A,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver cholesky_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0028104372322559357,
+    "stages": {
+     "repeat=1/train": 0.002278722822666168
+    }
+   }
+  },
+  "par-cholesky/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver cholesky_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6856, in _\n    par = fit_cholesky(ml.Cholesky(), A, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 430, in fit_cholesky\n    result = pool.map([('cholesky_fit', estimator, (A,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver cholesky_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.002316858619451523,
+    "stages": {
+     "repeat=1/train": 0.0017944127321243286
+    }
+   }
+  },
+  "par-kernel-ridge/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6878, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 483, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.000760544091463089,
+    "stages": {
+     "repeat=1/train": 0.00022605806589126587
+    }
+   }
+  },
+  "par-kernel-ridge/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6878, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 483, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0007237233221530914,
+    "stages": {
+     "repeat=1/train": 0.00020384788513183594
+    }
+   }
+  },
+  "par-nystroem/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6896, in _\n    par = fit_kernel_method(ml.Nystroem(**kw), X[:600, :4], devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 483, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006606318056583405,
+    "stages": {
+     "repeat=1/train": 0.00015733391046524048
+    }
+   }
+  },
+  "par-nystroem/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6896, in _\n    par = fit_kernel_method(ml.Nystroem(**kw), X[:600, :4], devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 483, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006180331110954285,
+    "stages": {
+     "repeat=1/train": 0.00014107301831245422
+    }
+   }
+  },
+  "par-rbf-sampler/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7ddfa0d92256da95",
+    "7ddfa0d92256da95"
+   ],
+   "parts": [
+    {
+     "weights": "25f5f36da6995eef",
+     "offset": "6f91043e1645bb3a",
+     "transform": "760e6bcbd85b4abb"
+    },
+    {
+     "weights": "25f5f36da6995eef",
+     "offset": "6f91043e1645bb3a",
+     "transform": "760e6bcbd85b4abb"
+    }
+   ],
+   "infer": [
+    "ded23e4c277b5697",
+    "ded23e4c277b5697"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d4b54301bf9a47f0",
+    "d4b54301bf9a47f0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ded23e4c277b5697",
+    "ded23e4c277b5697"
+   ],
+   "batch": [
+    "309d57b4d32c040a",
+    "309d57b4d32c040a"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.0153712965548038,
+    "stages": {
+     "repeat=1/train": 0.24850088730454445,
+     "repeat=1/infer-save-reload": 0.22979354858398438,
+     "repeat=1/batch": 0.03717669099569321,
+     "repeat=2/train": 0.23557474464178085,
+     "repeat=2/infer-save-reload": 0.22557185590267181,
+     "repeat=2/batch": 0.038289815187454224
+    }
+   }
+  },
+  "par-rbf-sampler/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "99aa0dcad513b6a1",
+    "99aa0dcad513b6a1"
+   ],
+   "parts": [
+    {
+     "weights": "25f5f36da6995eef",
+     "offset": "6f91043e1645bb3a",
+     "transform": "61607270fc12a6a9"
+    },
+    {
+     "weights": "25f5f36da6995eef",
+     "offset": "6f91043e1645bb3a",
+     "transform": "61607270fc12a6a9"
+    }
+   ],
+   "infer": [
+    "83ab2945ae2792a3",
+    "83ab2945ae2792a3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d4b54301bf9a47f0",
+    "d4b54301bf9a47f0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "83ab2945ae2792a3",
+    "83ab2945ae2792a3"
+   ],
+   "batch": [
+    "073106cb01a99748",
+    "073106cb01a99748"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.9975659549236298,
+    "stages": {
+     "repeat=1/train": 0.22976300865411758,
+     "repeat=1/infer-save-reload": 0.23224801570177078,
+     "repeat=1/batch": 0.03712829574942589,
+     "repeat=2/train": 0.23497343808412552,
+     "repeat=2/infer-save-reload": 0.22641532868146896,
+     "repeat=2/batch": 0.0366116538643837
+    }
+   }
+  },
+  "par-gram-ols/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7008, in _\n    par = fit_gram_estimator(ml.LinearRegression(), X, yr, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 105, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.000802554190158844,
+    "stages": {
+     "repeat=1/train": 0.00019148364663124084
+    }
+   }
+  },
+  "par-gram-ols/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7008, in _\n    par = fit_gram_estimator(ml.LinearRegression(), X, yr, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 105, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006830357015132904,
+    "stages": {
+     "repeat=1/train": 0.00015413016080856323
+    }
+   }
+  },
+  "par-gram-pca/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7020, in _\n    par = fit_gram_estimator(ml.PCA(n_components=4), X, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 105, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0007157176733016968,
+    "stages": {
+     "repeat=1/train": 0.00013824552297592163
+    }
+   }
+  },
+  "par-gram-pca/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7020, in _\n    par = fit_gram_estimator(ml.PCA(n_components=4), X, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 105, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006370916962623596,
+    "stages": {
+     "repeat=1/train": 0.00015310198068618774
+    }
+   }
+  },
+  "par-gram-tsvd/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7033, in _\n    par = fit_gram_estimator(ml.TruncatedSVD(n_components=4), X, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 105, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.000591762363910675,
+    "stages": {
+     "repeat=1/train": 0.0001270100474357605
+    }
+   }
+  },
+  "par-gram-tsvd/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7033, in _\n    par = fit_gram_estimator(ml.TruncatedSVD(n_components=4), X, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 105, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005729943513870239,
+    "stages": {
+     "repeat=1/train": 0.000111360102891922
+    }
+   }
+  },
+  "par-cd-elasticnet/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7046, in _\n    par = fit_coordinate_descent(ml.ElasticNet(**kw), X, yr, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 201, in fit_coordinate_descent\n    result = pool.map([('solver_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005297660827636719,
+    "stages": {
+     "repeat=1/train": 7.694214582443237e-05
+    }
+   }
+  },
+  "par-cd-elasticnet/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7046, in _\n    par = fit_coordinate_descent(ml.ElasticNet(**kw), X, yr, devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 201, in fit_coordinate_descent\n    result = pool.map([('solver_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005445107817649841,
+    "stages": {
+     "repeat=1/train": 7.349997758865356e-05
+    }
+   }
+  },
+  "par-svm-svr/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7060, in _\n    par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 223, in fit_svm\n    result = pool.map([('svm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005573257803916931,
+    "stages": {
+     "repeat=1/train": 9.893998503684998e-05
+    }
+   }
+  },
+  "par-svm-svr/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7060, in _\n    par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 223, in fit_svm\n    result = pool.map([('svm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 250, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005394630134105682,
+    "stages": {
+     "repeat=1/train": 8.881837129592896e-05
+    }
+   }
+  },
+  "par-queries-nn/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6869ae45e01fcb7a",
+    "6869ae45e01fcb7a"
+   ],
+   "parts": [
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50"
+    },
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50"
+    }
+   ],
+   "infer": [
+    "da53642fe53493ad",
+    "da53642fe53493ad"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2262556d652b5187",
+    "2262556d652b5187"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "da53642fe53493ad",
+    "da53642fe53493ad"
+   ],
+   "batch": [
+    "da944e45126bd8e0",
+    "da944e45126bd8e0"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.022948358207941,
+    "stages": {
+     "repeat=1/train": 0.11615492403507233,
+     "repeat=1/infer-save-reload": 0.2216900736093521,
+     "repeat=1/batch": 0.16480032727122307,
+     "repeat=2/train": 0.11862189322710037,
+     "repeat=2/infer-save-reload": 0.23001844063401222,
+     "repeat=2/batch": 0.1712908372282982
+    }
+   }
+  },
+  "par-queries-nn/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "23daf3a923d4c74f",
+    "23daf3a923d4c74f"
+   ],
+   "parts": [
+    {
+     "dist": "476b768ee48f2dfb",
+     "idx": "252b51e99f445029"
+    },
+    {
+     "dist": "476b768ee48f2dfb",
+     "idx": "252b51e99f445029"
+    }
+   ],
+   "infer": [
+    "234e9e649f45c983",
+    "234e9e649f45c983"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4049122e7b37a94e",
+    "4049122e7b37a94e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "234e9e649f45c983",
+    "234e9e649f45c983"
+   ],
+   "batch": [
+    "f6f06727f6f8caec",
+    "f6f06727f6f8caec"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1679481230676174,
+    "stages": {
+     "repeat=1/train": 0.13689447939395905,
+     "repeat=1/infer-save-reload": 0.24289987236261368,
+     "repeat=1/batch": 0.20276053249835968,
+     "repeat=2/train": 0.13966993615031242,
+     "repeat=2/infer-save-reload": 0.2367210015654564,
+     "repeat=2/batch": 0.20864417031407356
+    }
+   }
+  },
+  "par-ivf/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "82ac27da71d34ea9",
+    "82ac27da71d34ea9"
+   ],
+   "parts": [
+    {
+     "dist": "e48ee8a4655b5b3b",
+     "idx": "c60826edcafa9479",
+     "cand": "0230224a7da25e41",
+     "root_dist": "cdbf46f042cf7c81",
+     "root_idx": "3af05056f9ee6648",
+     "thin_dist": "dd9ce41f8d009de7",
+     "thin_idx": "ebaf7339ccbf2f80",
+     "thin_cand": "f27d25891589d047",
+     "flags": "b1e0e3b7b8fee07b"
+    },
+    {
+     "dist": "e48ee8a4655b5b3b",
+     "idx": "c60826edcafa9479",
+     "cand": "0230224a7da25e41",
+     "root_dist": "cdbf46f042cf7c81",
+     "root_idx": "3af05056f9ee6648",
+     "thin_dist": "dd9ce41f8d009de7",
+     "thin_idx": "ebaf7339ccbf2f80",
+     "thin_cand": "f27d25891589d047",
+     "flags": "b1e0e3b7b8fee07b"
+    }
+   ],
+   "infer": [
+    "fd6eed35b1338d17",
+    "fd6eed35b1338d17"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "dcfefe31adc21c6c",
+    "dcfefe31adc21c6c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fd6eed35b1338d17",
+    "fd6eed35b1338d17"
+   ],
+   "batch": [
+    "6baf3cfbde509312",
+    "6baf3cfbde509312"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 2.1019263938069344,
+    "stages": {
+     "repeat=1/train": 0.7838004641234875,
+     "repeat=1/infer-save-reload": 0.2175603248178959,
+     "repeat=1/batch": 0.04833100736141205,
+     "repeat=2/train": 0.7814310640096664,
+     "repeat=2/infer-save-reload": 0.22217701375484467,
+     "repeat=2/batch": 0.048184797167778015
+    }
+   }
+  },
+  "par-ivf/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1f1a8383ed41ed53",
+    "1f1a8383ed41ed53"
+   ],
+   "parts": [
+    {
+     "dist": "2761cbe1d5bfbfd6",
+     "idx": "1606657dce2a90aa",
+     "cand": "e790e7001ed8e18c",
+     "root_dist": "1a775b8392791bf1",
+     "root_idx": "433afb8e970006c6",
+     "thin_dist": "671ce458f18b5afe",
+     "thin_idx": "12e4282a6e57a111",
+     "thin_cand": "ae292d3ad949d264",
+     "flags": "b1e0e3b7b8fee07b"
+    },
+    {
+     "dist": "2761cbe1d5bfbfd6",
+     "idx": "1606657dce2a90aa",
+     "cand": "e790e7001ed8e18c",
+     "root_dist": "1a775b8392791bf1",
+     "root_idx": "433afb8e970006c6",
+     "thin_dist": "671ce458f18b5afe",
+     "thin_idx": "12e4282a6e57a111",
+     "thin_cand": "ae292d3ad949d264",
+     "flags": "b1e0e3b7b8fee07b"
+    }
+   ],
+   "infer": [
+    "c62b1be91d40fc43",
+    "c62b1be91d40fc43"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2254dcdb3f209c1d",
+    "2254dcdb3f209c1d"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c62b1be91d40fc43",
+    "c62b1be91d40fc43"
+   ],
+   "batch": [
+    "166f61a6e1f346b8",
+    "166f61a6e1f346b8"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.405697591602802,
+    "stages": {
+     "repeat=1/train": 1.8780803345143795,
+     "repeat=1/infer-save-reload": 0.22961709648370743,
+     "repeat=1/batch": 0.06988973915576935,
+     "repeat=2/train": 1.9185664728283882,
+     "repeat=2/infer-save-reload": 0.23879766464233398,
+     "repeat=2/batch": 0.07034038379788399
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "degenerate_lanes": [
+  "par-cd",
+  "par-cd-elasticnet",
+  "par-cholesky",
+  "par-dbscan",
+  "par-gmm",
+  "par-gp",
+  "par-gram",
+  "par-gram-ols",
+  "par-gram-pca",
+  "par-gram-tsvd",
+  "par-graph-agglomerative",
+  "par-graph-spectral",
+  "par-graph-umap",
+  "par-hdbscan",
+  "par-ivf",
+  "par-kernel-ridge",
+  "par-kmeans",
+  "par-logistic",
+  "par-nystroem",
+  "par-queries-nn",
+  "par-rbf-sampler",
+  "par-resample",
+  "par-svm",
+  "par-svm-svr"
+ ],
+ "degenerate_column": "cpu-host",
+ "host": {
+  "cpu_model": "AMD EPYC 9655P 96-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "67d236ec1b8adeb0b31f2e93e1f0b97bad0fa0452062fed356a3b998b0df3921",
+    "size": 399224,
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "b85f271ed20ce92b38131d2fa1dc28945d6d283657704081e4fde569d390cf93",
+    "size": 595624,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "636f5b42d90d988c994c391258875a3225991584e5fc9fc7fd1a11e2b2921dda",
+    "size": 981032,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "d0fd6ba4c06229e4e08c8f10eb6ceafd8a716b1276d6da73b061c520a96b4a1a",
+    "size": 207400,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_infer_host": {
+    "column": "cpu",
+    "sha256": "f9bf25888fe41e04095bc6b6f5ed26e9a8ece1e8a246f5cd8822fc426a0b5bc0",
+    "size": 183248,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "7b662d342a651b5c73de29c28c8d0046129580f264d22f4400adc01d27e60385",
+    "size": 721696,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "7e16e208f5838e24690fab4f88e4c23d18c4fb2fb8b2f42a8c243d51f790e4a0",
+    "size": 366992,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "bf9dde8ee947c6b1cc3a76084f9b21c214143e13cb15ad0bd90b8a66ad9f3512",
+    "size": 515192,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "1b3c902a8b4cdf7aa60c2e8f20cdaa514c0abdaf354709983c5d3b76a3d46f82",
+    "size": 1695960,
+    "sabotage": false
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "0bedf0ee53ea5f5e94d6d116c97766e46b979e1fefa209b9dbe5db9b8dd7a199",
+    "size": 488648,
+    "sabotage": false
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "c2202e24fd9847b9f98351862fb44c4d1579dbaaaac563b3b6b46cf8ed3af293",
+    "size": 321888,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "6fb93888252ddffbb9787732b571f36f8930126a8f1116344b5d6a112110c517",
+    "size": 460824,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_infer_host": {
+    "column": "cpu",
+    "sha256": "7aad7ed2c5d84c4a5fcb27d362d5abf21cf66fe7f3ed0b853783126454514a81",
+    "size": 302728,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "1bf9dfc7e78353a8f764eb3529680f31c8ba790b63195ab38e82f59d2c1fab83",
+    "size": 465696,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "5affa46534cbf39f5ad72d2ee1a1d9ea1e48059a7bb41c6d48c1421b64f80064",
+    "size": 281624,
+    "sabotage": false
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sha256": "c829b7fff301b181c7c51ab74629381f36b45dffb0cf6da04433cd118936c2a0",
+    "size": 375384,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "d3cf45e4d6adb26a15effeee97fe51b9ae47cf6321861bfd120a4dbe2678850f",
+    "size": 340288,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "8c94b4b31ea66864f3a1c8a55ffca6c6355d396a1e2b416858bf65feaed49444",
+    "size": 1262096,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "7350da0a9246aae1cd447ac808d62fa3450602372e45738839910dacfb8c943e",
+    "size": 872248,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "0250c0c26b5ae323700f03cee9ac077554e7defd574811d15a4de9a8172aeb2b",
+    "size": 453856,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "b39ad20861bf88d018a3a9a1ec583024856cda0d3cc7324a8ffd2bfa22b6780d",
+    "size": 263024,
+    "sabotage": false
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "6ab5606419a3350f99b89dd7bc2c65548f58f06f8e48ff4fac594590c8418e8e",
+    "size": 689040,
+    "sabotage": false
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sha256": "2d8875ab31e549cec5d6bab5b9e4ffa679bb78261e50e12aa9552ac7b3fc9605",
+    "size": 242480,
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "5924c355f721a27bd4768d135184c09c4aadeacbe8724454abfd682eca9086c6",
+    "size": 336552,
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "75f3cc7a41a9848b894e75bea145fe4e9dadc74f55c7c0f4f4fab57b6658666a",
+    "size": 560264,
+    "sabotage": false
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sha256": "dc1d7ee4618b4b825acf8eb16bdd0143dd76f97c1233d09c82f4a3a565cf6d5f",
+    "size": 281680,
+    "sabotage": false
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "c394795967e45ebd21bb5ddebc5b6849f102929dcd84014b657b4cc616585e28",
+    "size": 423720,
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "2917dd5c2b83e9458628696c6d17fbedc3a8451b2d1c9db9d349cf2cd64b5273",
+    "size": 484208,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "5a3af723a3a613ae16156d9ef5179c9ec825ccb038ab2fc315174cdea56c3faa",
+    "size": 445376,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "7ac95ea00f7fce695173dc48002d6db79ba0f7c9cdec552eabb321a678349927",
+    "size": 448032,
+    "sabotage": false
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sha256": "0cbf5fe29f64837bb29c3b11548ea96efd806bc223cb5788e2e6382b30b8120d",
+    "size": 563072,
+    "sabotage": false
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "4c12ef2110d2db9a0a64c03369f4db4335b5fad9eff416a861c6d3077e44d00b",
+    "size": 330784,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "328e0fae396ced75c18912801badaa121e1b63fd64c232dd62c4a560ec95eac0",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "par-cd,par-cd-elasticnet,par-cholesky,par-dbscan,par-gmm,par-gp,par-gram,par-gram-ols,par-gram-pca,par-gram-tsvd,par-graph-agglomerative,par-graph-spectral,par-graph-umap,par-hdbscan,par-ivf,par-kernel-ridge,par-kmeans,par-logistic,par-nystroem,par-queries-nn,par-rbf-sampler,par-resample,par-svm,par-svm-svr",
+   "skip": "",
+   "fixtures": "base,ties",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "11f49dc85060862fd6b0e622d8ebb3035d2d09fa55d81fdb589d1e1127ff6ea5",
+  "provenance": {
+   "commit": "2766cdb438acb1b2af9bc734106d26808c099b8e",
+   "mode": "identical",
+   "vendor": "cpu-amd-epyc-9655p-96-core-processor",
+   "platform": "Linux-6.8.0-71-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    }
+   }
+  }
+ }
+}

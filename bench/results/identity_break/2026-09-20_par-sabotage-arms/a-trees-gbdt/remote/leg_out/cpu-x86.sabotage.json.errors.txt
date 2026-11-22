@@ -1,0 +1,346 @@
+===== par-boosting-clf/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6983, in _
+    par = fit_boosting(_gbdt(ml.GradientBoostingClassifier, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-boosting-clf/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6983, in _
+    par = fit_boosting(_gbdt(ml.GradientBoostingClassifier, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-boosting-pointwise/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6505, in _
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-boosting-pointwise/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6505, in _
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-boosting-reg/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6997, in _
+    par = fit_boosting(_gbdt(ml.GradientBoostingRegressor, **kw), X, yr, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-boosting-reg/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6997, in _
+    par = fit_boosting(_gbdt(ml.GradientBoostingRegressor, **kw), X, yr, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-boosting/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5934, in _
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-boosting/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5934, in _
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-border-types/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6476, in _
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-border-types/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6476, in _
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-cross-val/base train =====
+NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7790, in _
+    scores = cross_val_score(est, X, yr, devices=dev, cv=3)
+  File "/root/mojolearn/python/mojolearn/parallel_model_selection.py", line 41, in cross_val_score
+    raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')
+NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
+
+===== par-cross-val/ties train =====
+NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7790, in _
+    scores = cross_val_score(est, X, yr, devices=dev, cv=3)
+  File "/root/mojolearn/python/mojolearn/parallel_model_selection.py", line 41, in cross_val_score
+    raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')
+NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
+
+===== par-feature-freq/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6490, in _
+    par = fit_feature_freq(ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7), Xc, yr,
+                           devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 170, in fit_feature_freq
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-feature-freq/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6490, in _
+    par = fit_feature_freq(ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7), Xc, yr,
+                           devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 170, in fit_feature_freq
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-forest-pool/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver forest_prepare yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6757, in _
+    pred, proba = pooled(m, X)
+                  ~~~~~~^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6754, in pooled
+    with ParallelForestPredictor(e, devices=_par_devices()) as pool:
+         ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 214, in __init__
+    metadata = self._pool.map([('forest_prepare', estimator, None)])[0]
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver forest_prepare yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-forest-pool/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver forest_prepare yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6757, in _
+    pred, proba = pooled(m, X)
+                  ~~~~~~^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6754, in pooled
+    with ParallelForestPredictor(e, devices=_par_devices()) as pool:
+         ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 214, in __init__
+    metadata = self._pool.map([('forest_prepare', estimator, None)])[0]
+               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver forest_prepare yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-iforest/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver iforest_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6727, in _
+    par = fit_isolation_forest(ml.IsolationForest(n_estimators=16, random_state=5), X, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 113, in fit_isolation_forest
+    result = pool.map([('iforest_fit', estimator, (X,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver iforest_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-iforest/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver iforest_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6727, in _
+    par = fit_isolation_forest(ml.IsolationForest(n_estimators=16, random_state=5), X, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 113, in fit_isolation_forest
+    result = pool.map([('iforest_fit', estimator, (X,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver iforest_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-ordered-rmse/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver ordered_rmse_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6444, in _
+    par = fit_ordered_rmse(ml.OrderedRMSE(n_estimators=20, max_depth=6), X, yr, permutation=perm,
+                           devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 149, in fit_ordered_rmse
+    result = pool.map([('ordered_rmse_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(permutation=permutation, sample_weight=sample_weight)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver ordered_rmse_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-ordered-rmse/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver ordered_rmse_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6444, in _
+    par = fit_ordered_rmse(ml.OrderedRMSE(n_estimators=20, max_depth=6), X, yr, permutation=perm,
+                           devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 149, in fit_ordered_rmse
+    result = pool.map([('ordered_rmse_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(permutation=permutation, sample_weight=sample_weight)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver ordered_rmse_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-ordered/base train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6459, in _
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+
+===== par-ordered/ties train =====
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6459, in _
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+

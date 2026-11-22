@@ -1,0 +1,30 @@
+        f"forecast_exponential_smoothing({FORECAST_HORIZON})",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})", e.forecast(FORECAST_HORIZON)))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 7224 bytes of 8192
+REFUSED par-forecast-holtwinters/ties: infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5724 bytes of 8192
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10530, in _probe_fit
+    infer = _h(*fit.probe(_public_est(name, fit.est)))
+                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6570, in <lambda>
+    lambda e: _same_bytes(
+              ~~~~~~~~~~~^
+        f"forecast_exponential_smoothing({FORECAST_HORIZON})",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})", e.forecast(FORECAST_HORIZON)))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5724 bytes of 8192
+BATCH_MOVED par-forecast-holtwinters/base: BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x40673f61 vs prefix 0x40269137
+BATCH_MOVED par-forecast-holtwinters/ties: BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x44a41bf9 vs prefix 0x44a3c66c
+wrote /root/leg_out/cpu-x86.sabotage.json
+wrote /root/leg_out/cpu-x86.sabotage.json.errors.txt (16 refusal(s), untruncated)
