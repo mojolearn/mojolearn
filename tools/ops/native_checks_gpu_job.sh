@@ -29,12 +29,12 @@ python3 -c 'import sys' 2>/dev/null || PY="pixi run python3"
 
 if [ "${1:-}" = "--one" ]; then
     # One check (run by xargs): rc, seconds, peak RSS and the first error lines into results/<check>.txt.
-    name=$2; RES=$3
+    name=$2; RES=$3; BIN=${4:?--one needs the binary path}
     log="$RES/logs/$name.log"; tm="$RES/time/$name.txt"; start=$(date +%s)
     if [ -x /usr/bin/time ]; then
-        /usr/bin/time -v -o "$tm" timeout -k 30 "${NC_TIMEOUT:-900}" pixi run "$RES/bin/run_gpu" "$name" > "$log" 2>&1
+        /usr/bin/time -v -o "$tm" timeout -k 30 "${NC_TIMEOUT:-900}" pixi run "$BIN" "$name" > "$log" 2>&1
     else
-        timeout -k 30 "${NC_TIMEOUT:-900}" pixi run "$RES/bin/run_gpu" "$name" > "$log" 2>&1
+        timeout -k 30 "${NC_TIMEOUT:-900}" pixi run "$BIN" "$name" > "$log" 2>&1
     fi
     rc=$?
     rss=$(awk -F': *' '/Maximum resident set size/ {print $2}' "$tm" 2>/dev/null)
@@ -76,16 +76,20 @@ $PY tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$RES/logs/ge
 # the allocation's cores and memory: tools/ops/box_cores_lib.sh (busy_sampler, busy_of, alloc_cores, alloc_mem_kb).
 . "$(dirname "$SELF")/box_cores_lib.sh"
 
-# The one compile: every registered device-column check in one binary.
-mkdir -p "$RES/bin"
+# The one compile: every registered device-column check in one binary. The binary is built OUTSIDE the results
+# dir (2026-11-21: the nvc-measure job persisted a 144 MB bin/run_gpu to R2 and the Mac; a job with only our own
+# arms keeps no binaries, AGENTS.md "What a measurement keeps"): tools/box_persist_run.sh tars only $RES.
+BIN_DIR=${NC_BIN_DIR:-$RES.work/bin}
+mkdir -p "$BIN_DIR"
+BIN="$BIN_DIR/run_gpu"
 say "building run_gpu ($n checks planned)"
 bsampler=$(busy_sampler "$RES/busy_cores_build.txt")
 bstart=$(date +%s)
 if [ -x /usr/bin/time ]; then
     /usr/bin/time -v -o "$RES/time/build-gpu.txt" pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . \
-        -o "$RES/bin/run_gpu" checks/native_tests/run_gpu.mojo > "$RES/logs/build-gpu.log" 2>&1
+        -o "$BIN" checks/native_tests/run_gpu.mojo > "$RES/logs/build-gpu.log" 2>&1
 else
-    pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . -o "$RES/bin/run_gpu" checks/native_tests/run_gpu.mojo \
+    pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . -o "$BIN" checks/native_tests/run_gpu.mojo \
         > "$RES/logs/build-gpu.log" 2>&1
 fi
 brc=$?
@@ -94,6 +98,9 @@ brss=$(awk -F': *' '/Maximum resident set size/ {print $2}' "$RES/time/build-gpu
 $PY tools/ops/native_checks_report.py result build-gpu --log "$RES/logs/build-gpu.log" --rc "$brc" \
     --seconds "$(( $(date +%s) - bstart ))" ${brss:+--maxrss-kb "$brss"} --out-dir "$RES/results"
 say "build rc=$brc in $(( $(date +%s) - bstart ))s"
+# The build log is kept whole (a failed build's full log is the record) but compressed: results/build-gpu.txt
+# already holds its first errors, and the raw log was 9 MB on 2026-11-21.
+gzip -9f "$RES/logs/build-gpu.log"
 
 # Cores of the allocation (cgroup quota, affinity), not the host's visible CPUs.
 cores=$(alloc_cores)
@@ -110,9 +117,9 @@ sampler=$(busy_sampler "$RES/busy_cores.txt")
 
 started=$(date +%s)
 if [ "$brc" -eq 0 ]; then
-    xargs -a "$RES/planned.txt" -P "$K" -I{} bash "$SELF" --one {} "$RES" > "$RES/progress.log" 2>&1
+    xargs -a "$RES/planned.txt" -P "$K" -I{} bash "$SELF" --one {} "$RES" "$BIN" > "$RES/progress.log" 2>&1
 else
-    say "build failed: no check runs (every planned check reads MISSING); first error in $RES/results/build-gpu.txt"
+    say "build failed: no check runs (every planned check reads MISSING); first error in $RES/results/build-gpu.txt, full log $RES/logs/build-gpu.log.gz"
 fi
 kill "$sampler" 2>/dev/null
 wall=$(( $(date +%s) - started ))

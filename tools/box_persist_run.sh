@@ -31,7 +31,10 @@
 #   UPLOADED name=00.tgz seq=3 label=periodic bytes=.. sha256=..   FAILED name=.. http=..   REJECTED (403: expired
 #   or wrong key)   EXPIRED (URLs past their expiry: nothing more is sent)   READBACK-OK|READBACK-MISMATCH
 # Excluded from every tarball: venv, venv-*, .venv, .pixi, *.whl, .cache, __pycache__, .mojo_cache,
-# node_modules, *.persist.json, persist.json, plus the json's "excludes". Nothing else is left out: the json's
+# node_modules, *.persist.json, persist.json, plus the json's "excludes", and every executable or shared-library
+# BINARY of 1 MiB or more (ELF or Mach-O magic; 2026-11-21: the nvc-measure job persisted a 144 MB bin/run_gpu; a
+# job keeps results, never binaries, AGENTS.md "What a measurement keeps"; each upload logs EXCLUDED-BINARIES;
+# PERSIST_KEEP_BINARIES=1 keeps them). Nothing else is left out: the json's
 # `pieces` (minted from --max-total-gb) bounds one upload; a results dir that needs more pieces logs OVER-BUDGET
 # and that upload fails (re-mint with `box_persist.py remint --tag <tag> --max-total-gb N`). No whole tarball is
 # ever staged on the box (2026-11-14: a 27 GB staging tarball could never leave the full 80 GB L40S pod).
@@ -130,10 +133,29 @@ gz_stream() {  # gzip stdin to stdout on every core when pigz is there (HARD RUL
 }
 sha_stdin() { if command -v sha256sum > /dev/null 2>&1; then sha256sum | cut -c1-64; else shasum -a 256 | cut -c1-64; fi; }
 
+# the results dir's binaries (ELF or Mach-O executables and shared libraries of 1 MiB or more) as tar exclude
+# patterns ("./<path>", the member names `tar -C "$RES" .` writes), one per line in $ST/binary-excludes. Only files
+# of 1 MiB or more have their first four bytes read, so a results dir of thousands of small files costs one find.
+binary_excludes() {
+    local f="$ST/binary-excludes" p m
+    : > "$f"
+    [ "${PERSIST_KEEP_BINARIES:-0}" = 1 ] && return 0
+    find "$RES" -type f -size +1023k 2> /dev/null | while IFS= read -r p; do
+        m=$(head -c 4 "$p" 2> /dev/null | od -An -tx1 | tr -d ' \n')
+        case "$m" in
+            7f454c46|cffaedfe|cefaedfe|feedfacf|feedface) printf './%s\n' "${p#"$RES"/}" >> "$f" ;;
+        esac
+    done
+    [ -s "$f" ] && plog "EXCLUDED-BINARIES count=$(wc -l < "$f" | tr -d ' ') first=$(head -n 1 "$f")"
+    return 0
+}
+
 tar_stream() {  # the results dir as one tar on stdout; rc 0 or 1 (GNU: files changed while read) is a tarball
     local ex=() p jb
     for p in $DEFAULT_EXCLUDES $EXTRA_EXCL; do ex+=("--exclude=$p"); done
     jb=$(basename "$JSON"); ex+=("--exclude=$jb")
+    binary_excludes
+    [ -s "$ST/binary-excludes" ] && ex+=(-X "$ST/binary-excludes")
     tar -cf - "${ex[@]}" -C "$RES" . 2>> "$ST/tar.err"
 }
 

@@ -431,8 +431,10 @@ class Plan:
         return NV_CAP_MIN
 
     def fetch(self, tag, dest, listing=False):
+        # --keep-tarball: adopt_landed() reads fetch-*/final.tgz again later (box_persist.py fetch otherwise
+        # drops the local tarball after extracting it)
         return [sys.executable, "tools/box_persist.py", "fetch", "--tag", tag, "--dest", str(dest)] + (
-            ["--list"] if listing else ["--extract"])
+            ["--list"] if listing else ["--extract", "--keep-tarball"])
 
     def status(self, job):
         return ["bash", self.wrapper, "status", job]

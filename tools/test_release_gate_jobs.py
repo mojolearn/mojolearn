@@ -57,7 +57,7 @@ def test_nvidia_job_goes_through_nvidia_central_submit_persisted(tmp_path):
     assert plan.upload(f"{indir}/gate.env") == ["bash", "tools/nvidia_central.sh", "sh", "release-gate",
                                                 f"cat > {indir}/gate.env"]
     assert plan.fetch("T", "/d") == [sys.executable, "tools/box_persist.py", "fetch", "--tag", "T", "--dest", "/d",
-                                     "--extract"]
+                                     "--extract", "--keep-tarball"]     # adopt_landed() reads fetch-*/final.tgz
     work = f"/root/results-release-gate/0.8.57/nvidia/stamp-release-light-v1/{tag}"
     assert plan.build == ["tools/gate_autograd_artifacts.py", "build", "--vendor", "nvidia", "--source-commit", COMMIT,
                           "--target", "sm_89", "--mojo", "/root/mojolearn-release-gate/.pixi/envs/default/bin/mojo",

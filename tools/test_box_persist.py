@@ -336,6 +336,35 @@ class TestRun(Base):
         for good in ("keep/real.txt", "artifacts/notes.txt", "sub/a.py", "persist.log", "command.log"):
             self.assertIn(good, names)
 
+    def test_binaries_are_not_kept(self):
+        # 2026-11-21: the nvc-measure job persisted its 144 MB bin/run_gpu. Executables and shared libraries of 1 MiB
+        # or more (ELF / Mach-O magic) leave every tarball; a large non-binary result and a small binary stay;
+        # PERSIST_KEEP_BINARIES=1 keeps them
+        big = 1100 * 1024
+        files = {"bin/run_gpu": b"\x7fELF" + b"\0" * big, "lib/x.so": b"\x7fELF" + b"\1" * big,
+                 "mac/tool": b"\xcf\xfa\xed\xfe" + b"\0" * big, "results/big.json": b"[" + b"0," * (big // 2) + b"0]",
+                 "small/elf": b"\x7fELF" + b"\0" * 100}
+        for keep in (False, True):
+            tag, js = self.stage()
+            res = os.path.join(self.w, "res-bin-%d" % keep)
+            for rel, body in files.items():
+                os.makedirs(os.path.dirname(os.path.join(res, rel)), exist_ok=True)
+                with open(os.path.join(res, rel), "wb") as fh:
+                    fh.write(body)
+            if keep:
+                self.env["PERSIST_KEEP_BINARIES"] = "1"
+            try:
+                rc, _, _ = self.runner(js, res, "true")
+            finally:
+                self.env.pop("PERSIST_KEEP_BINARIES", None)
+            self.assertEqual(rc, 0)
+            names = {n[2:] if n.startswith("./") else n for n in tar_names(self.whole(tag, "final.tgz"))}
+            for rel in ("results/big.json", "small/elf"):
+                self.assertIn(rel, names)
+            for rel in ("bin/run_gpu", "lib/x.so", "mac/tool"):
+                self.assertEqual(rel in names, keep, (rel, keep, sorted(names)))
+            self.assertEqual("EXCLUDED-BINARIES count=3" in self.plog(res), not keep)
+
     def test_streamed_in_pieces_one_on_disk(self):
         # a results dir larger than max_bytes leaves the box WHOLE, streamed in max_bytes pieces with at most one
         # piece on the box's disk at a time (2026-11-14: the staging tarball of a 27 GB results dir could never be
@@ -571,6 +600,16 @@ class TestFetch(Base):
         self.assertIn("VERIFIED 00.tgz", r.stdout)
         with open(os.path.join(dest, "final", "r.txt")) as fh:
             self.assertEqual(fh.read().strip(), "result")
+        # the extracted tarballs are not kept beside their trees (R2 keeps the verified objects) ...
+        self.assertIn("DROPPED", r.stdout)
+        self.assertFalse(os.path.exists(os.path.join(dest, "final.tgz")))
+        self.assertFalse(os.path.exists(os.path.join(dest, "00.tgz")))
+        # ... unless the caller reads the tarball itself (tools/ops/release_gate.py adopt_landed)
+        keep = os.path.join(self.w, "fetched-keep")
+        r = self.tool("fetch", "--tag", tag, "--dest", keep, "--extract", "--keep-tarball")
+        self.assertNotIn("DROPPED", r.stdout)
+        self.assertTrue(os.path.exists(os.path.join(keep, "final.tgz")))
+        self.assertTrue(os.path.exists(os.path.join(keep, "final", "r.txt")))
         r = self.tool("fetch", "--tag", tag, "--list")
         self.assertIn("LANDED final.tgz", r.stdout)
         self.assertNotIn("VERIFIED", r.stdout)

@@ -17,12 +17,15 @@ on any exit. The URLs expire (at most 7 days, the SigV4 limit).
         mint, then print a bash installer for the box on stdout: it writes box_persist_run.sh to
         <box-root>/bin/ and the json to <box-root>/jobs/<tag>/persist.json (0600) and prints
         BOX_PERSIST_STAGED <json path>. Pipe it to `ssh <box> bash -s`; nothing lands in any argv.
-  box_persist.py fetch --tag TAG [--date YYYY-MM-DD] [--dest DIR] [--all|--list] [--extract]
+  box_persist.py fetch --tag TAG [--date YYYY-MM-DD] [--dest DIR] [--all|--list] [--extract [--keep-tarball]]
         reads the job's manifest.json from R2 and every sha256 sidecar, prints what landed (LANDED name sha
         bytes), downloads final.tgz (else the newest slot; --all: every object) and verifies each against its
         sidecar (VERIFIED / VERIFY-FAILED, exit 1 on any failure). --list downloads nothing. An upload streamed
         in pieces (final.00.tgz, final.01.tgz, ...) is downloaded piece by piece, each verified, and concatenated
-        in order back into final.tgz.
+        in order back into final.tgz. --extract unpacks each verified tarball into <dest>/<name without .tgz>/ and
+        then deletes the local tarball (DROPPED line): it duplicates the extracted tree, and the verified object
+        stays in R2 (2026-11-21: a 35 MB final.tgz sat beside its own extraction; results are kept, archives of
+        what is already held are not). --keep-tarball keeps it, for a caller that reads the tarball itself.
   box_persist.py remint --tag TAG <mint options>
         re-mints the URLs of an existing job under the SAME tag, date and prefix (more pieces, a later expiry); the
         old json is kept as persist.json.prev-<utc>. `mint --force` does the same. Stage it on the box with
@@ -481,6 +484,9 @@ def fetch(a):
                 x = os.path.join(dest, n[:-4])
                 skipped = extract_tolerant(p, x)
                 print("EXTRACTED %s -> %s (%d skipped)" % (n, x, len(skipped)))
+                if not a.keep_tarball:
+                    os.unlink(p)
+                    print("DROPPED %s (extracted to %s; R2 keeps the verified object, sha256=%s)" % (p, x, sha))
         else:
             bad += 1
             print("VERIFY-FAILED %s http=%s sha256=%s want=%s" % (n, code, got, sha))
@@ -539,6 +545,8 @@ def main(argv=None):
     g.add_argument("--all", action="store_true")
     g.add_argument("--list", action="store_true")
     f.add_argument("--extract", action="store_true")
+    f.add_argument("--keep-tarball", action="store_true",
+                   help="with --extract: keep the downloaded tarball beside its extraction")
     o = sub.add_parser("opt-out")
     o.add_argument("--tool", required=True)
     o.add_argument("--detail", default="")

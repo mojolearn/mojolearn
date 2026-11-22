@@ -254,6 +254,21 @@ def test_gpu_job_uses_every_core_unless_memory_says_fewer(tmp_path):
     assert 'busy_sampler "$RES/busy_cores_build.txt"' in text and "BUSY build:" in text
 
 
+def test_gpu_job_keeps_results_not_binaries():
+    # 2026-11-21: the nvc-measure job persisted a 144 MB bin/run_gpu and a raw 9 MB build log. The binary is built
+    # outside the results dir (box_persist_run.sh tars only $RES); the build log is kept whole, gzipped, after its
+    # result row is written
+    text = (ROOT / "tools/ops/native_checks_gpu_job.sh").read_text()
+    assert "$RES/bin" not in text
+    assert 'BIN_DIR=${NC_BIN_DIR:-$RES.work/bin}' in text and 'BIN="$BIN_DIR/run_gpu"' in text
+    assert text.count('-o "$BIN"') == 2
+    assert 'pixi run "$BIN" "$name"' in text and 'BIN=${4:?' in text
+    assert '--one {} "$RES" "$BIN"' in text
+    row = text.index('native_checks_report.py result build-gpu --log "$RES/logs/build-gpu.log"')
+    gz = text.index('gzip -9f "$RES/logs/build-gpu.log"')
+    assert row < gz, "the build log is read for its result row before it is compressed"
+
+
 def test_prebuild_counts_a_parse_group_by_its_last_attempt():
     spec = importlib.util.spec_from_file_location("prebuild_check", ROOT / "tools/prebuild_check.py")
     pc = importlib.util.module_from_spec(spec)
