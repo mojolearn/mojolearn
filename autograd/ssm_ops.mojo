@@ -50,7 +50,8 @@ comptime OP_SSM_M1_FOLD = 4806
 comptime OP_SSM_M1_DALOG = 4807
 comptime OP_SSM_M1_DU = 4808
 comptime OP_SSM_S4D_INIT = 4809
-comptime OP_SSM_LAST = 4819
+# lane neural-blocks-3 (2026-11-22): 4820..4859 the Mamba-2 SSD core, 4860..4899 the Mamba-3 trapezoid core
+comptime OP_SSM_LAST = 4899
 
 
 def ssm_m1_states_supported(n: Int) -> Bool:

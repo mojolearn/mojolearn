@@ -35,6 +35,7 @@ from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF,
 
 # Tags clear of the import family (192..207) and the transformer primitives (208..211).
 comptime GRAPH_SELECTIVE_SCAN = 240
+# lane neural-blocks-3: 241 the Mamba-2 SSD core, 242 the Mamba-3 trapezoid core (layer codes 43, 44; lm_head 45)
 comptime SSM_TAG_FIRST = 240
 comptime SSM_TAG_LAST = 247
 
