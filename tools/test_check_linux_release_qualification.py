@@ -349,7 +349,7 @@ class ReleaseAdmissionTests(unittest.TestCase):
             out.mkdir()
             snapshot = {}
             for case in gate.surface.CORPUS_CASES:
-                corpus = root / 'verification/references/mamba' / case
+                corpus = root / 'checks/native_tests/fixtures/mamba' / case
                 corpus.mkdir(parents=True)
                 for name in ('x.f32', 'reference.f64'):
                     path = corpus / name
@@ -360,12 +360,12 @@ class ReleaseAdmissionTests(unittest.TestCase):
             gate.check_corpora(out, root)
             for case in gate.surface.CORPUS_CASES[1:]:
                 missing = {p: h for p, h in snapshot.items()
-                           if not p.startswith('verification/references/mamba/' + case + '/')}
+                           if not p.startswith('checks/native_tests/fixtures/mamba/' + case + '/')}
                 write_json(record, missing)
                 with self.subTest(case=case), self.assertRaises(ValueError):
                     gate.check_corpora(out, root)
             write_json(record, snapshot)
-            (root / 'verification/references/mamba/mamba3/m3_base_b2_l4_d32/reference.f64').write_bytes(b'changed')
+            (root / 'checks/native_tests/fixtures/mamba/mamba3/m3_base_b2_l4_d32/reference.f64').write_bytes(b'changed')
             with self.assertRaises(ValueError):
                 gate.check_corpora(out, root)
 

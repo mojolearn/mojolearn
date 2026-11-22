@@ -90,7 +90,7 @@ CASES = [
         "verification/records/identity/INDEX.tsv",
         "verification/README.md",
         "verification/records/identity/2026-11-21/cpu.identical.json",
-        "verification/references/mamba/case/manifest.json",
+        "checks/native_tests/fixtures/mamba/case/manifest.json",
         "docs/plans/NEW_PLAN.md",
         "tools/new_tool.py",
     ], [], 0, []),

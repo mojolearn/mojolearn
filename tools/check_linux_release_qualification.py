@@ -788,9 +788,9 @@ def check_corpora(directory, source_root):
     """Refuse legacy fingerprints which silently omitted nested Mamba fixtures."""
     snapshot = json.loads((directory / 'qualification-sources.json').read_text())
     for case in surface.CORPUS_CASES:
-        corpus = source_root / 'verification/references/mamba' / case
+        corpus = source_root / 'checks/native_tests/fixtures/mamba' / case
         require((corpus / 'x.f32').is_file(), 'Missing current Mamba corpus: ' + case)
-        prefix = 'verification/references/mamba/' + case + '/'
+        prefix = 'checks/native_tests/fixtures/mamba/' + case + '/'
         current = {p.relative_to(source_root).as_posix(): digest_file(p)
                    for p in corpus.rglob('*') if p.is_file()}
         recorded = {p: h for p, h in snapshot.items() if p.startswith(prefix)}

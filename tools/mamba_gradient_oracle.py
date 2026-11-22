@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Independent Mamba 1/2/3 whole-block gradient oracle.
 
-The forward functions come from ``verification/references/mamba/gen_corpus.py``: literal,
+The forward functions come from ``checks/native_tests/fixtures/mamba/gen_corpus.py``: literal,
 cited PyTorch transcriptions of the reference implementations.  This
 program differentiates their float64 block result with PyTorch autograd and
 then audits selected cells with central finite differences.  The latter is
@@ -32,7 +32,7 @@ import torch
 
 
 ROOT = Path(__file__).resolve().parents[1]
-GEN_PATH = ROOT / "verification" / "references" / "mamba" / "gen_corpus.py"
+GEN_PATH = ROOT / "checks" / "native_tests" / "fixtures" / "mamba" / "gen_corpus.py"
 PUBLIC_PREFILL_LEAVES = {
     "mamba1": (
         "x", "norm.weight", "in_proj.weight", "conv1d.weight",

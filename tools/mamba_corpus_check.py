@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Compare a driver's mamba-family stage dumps against the independent corpus.
 
-The corpus (`verification/references/mamba/`, see its README.md) carries a float64 per-stage
+The corpus (`checks/native_tests/fixtures/mamba/`, see its README.md) carries a float64 per-stage
 reference (`ref64/`) computed by somebody else's algorithm (state-spaces/mamba
 and, for Mamba-1/2, the HuggingFace spellings; gen_corpus.py cites every copy
 by line). This tool reads a directory of raw little-endian float32 stage
@@ -16,8 +16,8 @@ FAMILY-AGNOSTIC BY CONSTRUCTION (recorded 2026-09-01, closing the mamba2
 contract's "the tool's mamba2 support is a separate lane item" clause): the
 tool reads ONLY the case's own manifest.json (`stage_order`, per-stage
 `shape`/`ref64`/`ref32`) and never a family table, so the SAME tool serves
-`verification/references/mamba/<case>` (Mamba-1), `verification/references/mamba/mamba2/<case>` and
-`verification/references/mamba/mamba3/<case>` unchanged. The per-family pixi tasks are
+`checks/native_tests/fixtures/mamba/<case>` (Mamba-1), `checks/native_tests/fixtures/mamba/mamba2/<case>` and
+`checks/native_tests/fixtures/mamba/mamba3/<case>` unchanged. The per-family pixi tasks are
 `check-mamba-corpus`, `check-mamba2-corpus` and `check-mamba3-corpus`.
 
 Usage:
@@ -33,7 +33,7 @@ passes and at least one stage was compared.
 --self-test feeds the case's own ref32/ (plain torch float32 on a CPU)
 through the comparison and prints, per stage, the smallest rtol from a ladder
 at which torch FP32 passes with the given atol. That calibrates the default
-tolerance honestly; the numbers live in verification/references/mamba/README.md. ref32 is
+tolerance honestly; the numbers live in checks/native_tests/fixtures/mamba/README.md. ref32 is
 informative only, not a target.
 
 Only numpy is needed (the repo pixi envs have it); torch is not.

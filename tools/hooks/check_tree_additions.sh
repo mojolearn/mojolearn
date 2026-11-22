@@ -73,7 +73,7 @@ added=$(git log --format= --name-only --diff-filter=A --no-renames "$local_sha" 
             -- bench/results docs/handoffs "${buckets[@]}" 2>/dev/null | sort -u) || exit 2
 # verification/: additions only; rename detection over the trees records move from, so a `git mv` is not one
 moved_in=$(git log --format= --name-only --diff-filter=A -M "$local_sha" "${exclude[@]}" \
-            -- verification bench/results mamba/corpus 2>/dev/null | grep '^verification/' | sort -u) || true
+            -- verification bench/results 2>/dev/null | grep '^verification/' | sort -u) || true
 added=$(printf '%s\n%s\n' "$added" "$moved_in" | sed '/^$/d' | sort -u)
 [ -n "$added" ] || exit 0
 # only paths the pushed tree still holds (added then removed inside the push is fine)

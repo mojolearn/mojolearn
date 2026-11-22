@@ -40,7 +40,7 @@ not this lane's editable set -- so the raw commands are spelled:
         mamba/checks/mamba2_check.mojo refusal
 
     # gate (g)'s byte gate (corpus generated at f45fa796): every input
-    # tensor of all 17 cases byte-compared against this check's own
+    # tensor of the kept case (checks/native_tests/fixtures/mamba/mamba2/) byte-compared against this check's own
     # generator, binary-safe reads; missing / unreadable / wrong-size
     # each refuse under their OWN name, never a skip:
     tools/with_identical_mode.sh pixi run mojo run -I . \\
@@ -1826,10 +1826,14 @@ def main() raises:
         # walk every case, every input tensor, byte-compared; the FIRST
         # missing/unreadable/wrong-size/mismatching file refuses under its
         # own name.
-        for k in range(17):
-            gate_corpus(k)
+        # The fixtures folder keeps ONE case of this family (Andrew, 2026-11-25:
+        # checks/native_tests/fixtures/mamba/, the case the release and
+        # qualification tools use, m2_base_b2_l4_d32 = case 1); the other
+        # cases of the table are still generated and checked natively by the
+        # gates above, and any of them regenerates from gen_corpus.py.
+        gate_corpus(1)
         print(
-            "GATE (g) BYTE GATE PASS: all 17 cases' input tensors are"
+            "GATE (g) BYTE GATE PASS: the kept case's input tensors are"
             " byte-identical between the corpus files and this check's"
             " generator (two implementations of the hash spec agree)."
         )

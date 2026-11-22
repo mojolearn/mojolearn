@@ -20,7 +20,7 @@ def mamba_metadata(source, names):
     pure metadata functions require only math and these five literal constants.
     Keep their exact source bodies instead of maintaining a second shape table.
     """
-    path=source/'verification/references/mamba/gen_corpus.py'
+    path=source/'checks/native_tests/fixtures/mamba/gen_corpus.py'
     wanted={'fan_in_scale','m3_dims','m3_default_ranges','m3_shapes_for',
             'M3_EXPAND','M3_HEADDIM','M3_NGROUPS','M3_D_STATE','M3_ROPE'}
     selected=[]; found=set()

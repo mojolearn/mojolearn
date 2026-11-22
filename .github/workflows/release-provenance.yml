@@ -521,7 +521,7 @@ jobs:
           sys.path.insert(0, str(root / 'tools'))
           from verify_linux_surface_qualification import CORPUS_CASES
           for case in CORPUS_CASES:
-              prefix = 'verification/references/mamba/' + case
+              prefix = 'checks/native_tests/fixtures/mamba/' + case
               names = subprocess.check_output(['git', 'ls-tree', '-rz', '--name-only', 'HEAD', '--', prefix])
               for name in names.decode().split('\0'):
                   if not name:

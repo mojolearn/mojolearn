@@ -950,7 +950,7 @@ def check_torch_pow_association_is_owed() raises:
 
     WHAT WOULD SETTLE IT, for whoever lands the corpus: dump
     `_gelu_python` and `_gelu_tanh_python` from HuggingFace transformers at
-    d56c55b over a hashed float32 input spec, in the `mamba/corpus/` style,
+    d56c55b over a hashed float32 input spec, in the `checks/native_tests/fixtures/mamba/` style,
     compare the INPUTS bitwise first, and calibrate the per-case tolerance
     from the corpus's own `--self-test` (the `adv_gate_saturation` lesson).
     Then this function's two numbers become the discriminator: if the

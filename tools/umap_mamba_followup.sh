@@ -45,7 +45,7 @@ for mode in fast; do
 done
 # The independent corpus generator is shipped; fixture bytes are generated
 # on the remote host rather than silently borrowed from an unrelated build.
-if run corpus pixi run -e skgpu python verification/references/mamba/gen_corpus.py --family all; then
+if run corpus pixi run -e skgpu python checks/native_tests/fixtures/mamba/gen_corpus.py --family all; then
     if run build-mamba bash bindings/build_mamba.sh; then
         run mamba-api pixi run -e skgpu python python/mojolearn/tests/test_mamba_surface.py
     fi

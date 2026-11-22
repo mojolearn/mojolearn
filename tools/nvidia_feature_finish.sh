@@ -40,7 +40,7 @@ run vendor-wheels 300 "$PY" -m pip install --disable-pip-version-check --no-inpu
     numpy pytest einops catboost cupy-cuda12x cuml-cu12 --extra-index-url https://pypi.nvidia.com
 run vendor-freeze 30 "$PY" -m pip freeze
 run vendor-cuda 30 "$PY" -c 'import torch; assert torch.cuda.is_available() and not torch.version.hip; print(torch.__version__, torch.version.cuda)' || exit 1
-run mamba-corpus 240 "$PY" verification/references/mamba/gen_corpus.py
+run mamba-corpus 240 "$PY" checks/native_tests/fixtures/mamba/gen_corpus.py
 
 for mode in identical fast; do
     export MOJOLEARN_NUMERIC_MODE=$mode

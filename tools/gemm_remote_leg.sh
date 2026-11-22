@@ -1418,15 +1418,15 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
-LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl verification/references/mamba/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
+LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl checks/native_tests/fixtures/mamba/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
 # The certificate needs the Mamba implementation plus three small shared
 # numerical modules. The Python oracle imports the forward definitions from
-# verification/references/mamba/gen_corpus.py, but it constructs fixtures directly and reads
+# checks/native_tests/fixtures/mamba/gen_corpus.py, but it constructs fixtures directly and reads
 # none of the tracked corpus data. That data made the first paid source upload
 # larger than the work payload itself.
 # Keep this a git-archive pathspec so every shipped byte still comes from the
 # pinned commit; do not replace it with a working-tree tar.
-LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl verification/references/mamba/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
+LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl checks/native_tests/fixtures/mamba/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
 # Campaign 7 carries the complete release sources and verifier assets, not
 # only a Mamba certificate. Keep that payload bounded separately.
@@ -2303,7 +2303,7 @@ leg_archive_required() {
             echo "bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo tools/knn_layout_dispatch_price.sh pixi.toml pixi.lock"
             return
         fi
-        echo "tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh verification/references/mamba/gen_corpus.py checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
+        echo "tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/native_tests/fixtures/mamba/gen_corpus.py checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
         if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
             echo "tools/nvidia_campaign.sh tools/nvidia_feature_finish.sh tools/nvidia_feature_finish_validate.py tools/nvidia_serial_guard.py tools/nvidia_public_compare.py tools/speed_torch_seq.py transformer/checks/transformer_backward_check.mojo transformer/corpus/gen_corpus.py bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo"
         fi
@@ -4711,10 +4711,10 @@ leg_ship_and_run() {
     mkdir -p "$TMPD/archive"
     gzip -dc "$TMPD/src.tgz" | ( cd "$TMPD/archive" && tar xf - )
     if [ "$PAYLOAD" = "mamba" ] &&
-       find "$TMPD/archive/verification/references/mamba" -type f \
-           ! -path "$TMPD/archive/verification/references/mamba/gen_corpus.py" -print \
+       find "$TMPD/archive/checks/native_tests/fixtures/mamba" -type f \
+           ! -path "$TMPD/archive/checks/native_tests/fixtures/mamba/gen_corpus.py" -print \
            | grep -q .; then
-        leg_die "REFUSING TO SHIP CORPUS DATA: only verification/references/mamba/gen_corpus.py is a certificate dependency."
+        leg_die "REFUSING TO SHIP CORPUS DATA: only checks/native_tests/fixtures/mamba/gen_corpus.py is a certificate dependency."
     fi
     # A PIPELINE'S STATUS IS ITS LAST COMMAND'S, so neither `git archive` nor
     # the untar above can report a failure through `set -e`. Check the
@@ -4871,12 +4871,12 @@ RELEASE_SOURCE
         for _p in "$QUAL_PROOFS"/*.json; do
             leg_ssh "cat > /root/proofs/$(basename "$_p")" < "$_p" || leg_die "proof upload failed: $_p"
         done
-        # verification/references/mamba is excluded from the archive on purpose; the INSTALLED
+        # checks/native_tests/fixtures/mamba is excluded from the archive on purpose; the INSTALLED
         # jobs read it. Only the three CORPUS_CASES names, 4.6 MB not 63.
         _cases=$(python3 -c "import sys;sys.path.insert(0,'$PWD/tools');from verify_linux_surface_qualification import CORPUS_CASES;print(' '.join(CORPUS_CASES))")
         [ -n "$_cases" ] || leg_die "could not read CORPUS_CASES"
         # shellcheck disable=SC2086
-        ( cd "$PWD" && tar czf "$TMPD/corpus.tgz" $(for _c in $_cases; do echo "verification/references/mamba/$_c"; done) ) || leg_die "corpus tar failed"
+        ( cd "$PWD" && tar czf "$TMPD/corpus.tgz" $(for _c in $_cases; do echo "checks/native_tests/fixtures/mamba/$_c"; done) ) || leg_die "corpus tar failed"
         # transformer/corpus TOO (92 KB). The bounded mamba archive carries
         # transformer/corpus/gen_corpus.py but not the corpus itself, and the
         # installed transformer surface asserts the corpus landed -- it failed
@@ -4890,7 +4890,7 @@ RELEASE_SOURCE
         leg_ssh 'cat > /root/corpus.tgz' < "$TMPD/corpus.tgz" || leg_die "corpus upload failed"
         leg_ssh 'tar -xzf /root/corpus.tgz -C /root/mojolearn' || leg_die "corpus unpack failed"
         for _c in $_cases; do
-            leg_ssh "test -f /root/mojolearn/verification/references/mamba/$_c/x.f32" || leg_die "corpus case $_c did not land"
+            leg_ssh "test -f /root/mojolearn/checks/native_tests/fixtures/mamba/$_c/x.f32" || leg_die "corpus case $_c did not land"
         done
         leg_say "shipped wheel, $(ls "$QUAL_PROOFS"/*.json | wc -l | tr -d ' ') proofs and the corpora"
     fi
@@ -5955,7 +5955,7 @@ RELEASE_DRY_INVENTORY
                 else
                     rbad "G2a the release archive covers current native source" "$(cat "$TMPD/g2a.out")"
                 fi
-            elif [ -f "$TMPD/dryarch/verification/references/mamba/gen_corpus.py" ] &&
+            elif [ -f "$TMPD/dryarch/checks/native_tests/fixtures/mamba/gen_corpus.py" ] &&
                [ -f "$TMPD/dryarch/tools/with_build_lock.sh" ] &&
                [ -f "$TMPD/dryarch/checks/kernel_matrix.mojo" ]; then
                 rok "G2a the Mamba transitive dependencies are present"
@@ -5968,11 +5968,11 @@ RELEASE_DRY_INVENTORY
             if [ "$_archive_gzip_bytes" -gt "$LEG_MAMBA_ARCHIVE_MAX_BYTES" ]; then
                 rbad "G2b the Mamba source archive is bounded" \
                     "$_archive_gzip_bytes compressed bytes exceeds $LEG_MAMBA_ARCHIVE_MAX_BYTES; a broad path was likely added"
-            elif [ -d "$TMPD/dryarch/verification/references/mamba" ] && find "$TMPD/dryarch/verification/references/mamba" -type f \
-                    ! -path "$TMPD/dryarch/verification/references/mamba/gen_corpus.py" -print \
+            elif [ -d "$TMPD/dryarch/checks/native_tests/fixtures/mamba" ] && find "$TMPD/dryarch/checks/native_tests/fixtures/mamba" -type f \
+                    ! -path "$TMPD/dryarch/checks/native_tests/fixtures/mamba/gen_corpus.py" -print \
                     | grep -q .; then
                 rbad "G2b the Mamba source archive excludes corpus data" \
-                    "only verification/references/mamba/gen_corpus.py may be shipped for the oracle"
+                    "only checks/native_tests/fixtures/mamba/gen_corpus.py may be shipped for the oracle"
             else
                 rok "G2b the Mamba source archive is $_archive_gzip_bytes compressed bytes ($_archive_bytes tar) and ships no corpus data"
             fi

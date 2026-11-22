@@ -1415,7 +1415,7 @@ check-train-checkpoint = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . trainin
 # two orders tighter than that tool's 1e-5 default. Use base_b2_l4_d8, NOT the
 # smaller b1_l1 case: at L=1 token-major and channel-major are the same bytes,
 # so the smaller case cannot certify the reindexing at all.
-check-mamba-corpus = "python tools/mamba_corpus_check.py verification/references/mamba/base_b2_l4_d8 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-7 --atol 1e-6"
+check-mamba-corpus = "python tools/mamba_corpus_check.py checks/native_tests/fixtures/mamba/base_b2_l4_d8 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-7 --atol 1e-6"
 # The mamba2 and mamba3 corpus gates (contracts' section 8g;
 # tools/mamba_corpus_check.py is family-agnostic -- it reads each case's own
 # manifest.json/ref64, so the SAME tool serves all three families). Both use
@@ -1428,8 +1428,8 @@ check-mamba-corpus = "python tools/mamba_corpus_check.py verification/references
 # The mamba3 corpus FILES are RUN OWED too (gen_corpus.py --family mamba3);
 # until they exist this task refuses on the missing manifest, which is the
 # correct refusal, not a defect.
-check-mamba2-corpus = "python tools/mamba_corpus_check.py verification/references/mamba/mamba2/m2_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6"
-check-mamba3-corpus = "python tools/mamba_corpus_check.py verification/references/mamba/mamba3/m3_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6"
+check-mamba2-corpus = "python tools/mamba_corpus_check.py checks/native_tests/fixtures/mamba/mamba2/m2_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6"
+check-mamba3-corpus = "python tools/mamba_corpus_check.py checks/native_tests/fixtures/mamba/mamba3/m3_base_b2_l4_d32 $MOJOLEARN_MAMBA_CORPUS_DUMP --rtol 1e-5 --atol 1e-6"
 # arima: BUILT AND GATED. This comment read "SOURCE ONLY, never built, expected
 # to FAIL" from 2026-08-23 and was overtaken the next day, then by four E1 cards
 # on two vendors. The lane is bit-identical Apple <-> AMD MI325X as of 2026-08-28
@@ -1643,9 +1643,9 @@ sklearn-gpu = "python bench/bench_sklearn_gpu.py"
 # Independent Mamba forward corpora and whole-block gradient oracles. Corpus
 # tasks write only to a fresh temporary directory; refreshing committed binary
 # fixtures remains an explicit, reviewed operation.
-mamba-corpus-m1 = "work=$(mktemp -d); python verification/references/mamba/gen_corpus.py --family mamba1 --verify --out $work"
-mamba-corpus-m2 = "work=$(mktemp -d); python verification/references/mamba/gen_corpus.py --family mamba2 --verify --out $work"
-mamba-corpus-m3 = "work=$(mktemp -d); python verification/references/mamba/gen_corpus.py --family mamba3 --verify --out $work"
+mamba-corpus-m1 = "work=$(mktemp -d); python checks/native_tests/fixtures/mamba/gen_corpus.py --family mamba1 --verify --out $work"
+mamba-corpus-m2 = "work=$(mktemp -d); python checks/native_tests/fixtures/mamba/gen_corpus.py --family mamba2 --verify --out $work"
+mamba-corpus-m3 = "work=$(mktemp -d); python checks/native_tests/fixtures/mamba/gen_corpus.py --family mamba3 --verify --out $work"
 mamba-grad-m1 = "work=/tmp/mojolearn-mamba1-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba1 --out $work"
 mamba-grad-m1-public = "oracle=/tmp/mojolearn-mamba1-grad && actual=/tmp/mojolearn-mamba1-actual && mkdir -p $oracle $actual && find $oracle -maxdepth 1 -type f -delete && find $actual -maxdepth 1 -type f -delete && python tools/mamba_gradient_oracle.py --family mamba1 --out $oracle && MOJOLEARN_MAMBA_GRAD_DUMP=$actual tools/with_identical_mode.sh mojo run -I . mamba/checks/mamba_backward_device_tail_dump.mojo && python tools/mamba_gradient_oracle.py --compare $oracle $actual --require-public-prefill"
 mamba-grad-m2 = "work=/tmp/mojolearn-mamba2-grad; mkdir -p $work; find $work -maxdepth 1 -type f -delete; python tools/mamba_gradient_oracle.py --family mamba2 --out $work"

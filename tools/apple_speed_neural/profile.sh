@@ -38,7 +38,7 @@ export MOJOLEARN_NUMERIC_MODE=${MOJOLEARN_NUMERIC_MODE:-identical}
 # probe import it; the ours worker gets it from bench_board_neural itself).
 PYTHONPATH="$(pwd)/python${PYTHONPATH:+:$PYTHONPATH}"; export PYTHONPATH
 # The conductor runs in the skgpu env: the Mamba lanes' weights come from
-# verification/references/mamba/gen_corpus.py, which imports torch. The ours worker runs in
+# checks/native_tests/fixtures/mamba/gen_corpus.py, which imports torch. The ours worker runs in
 # the default env (the bindings' env); no torch arm is raced here.
 OURS_PY=$(pixi run -e default python -c 'import sys; print(sys.executable)')
 pixi install -e skgpu > "$OUT/skgpu.install.log" 2>&1 || echo "SKGPU-INSTALL FAILED"

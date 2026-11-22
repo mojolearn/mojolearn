@@ -890,7 +890,7 @@ Cited from elsewhere and never redefined: 258, 550, 741, 824, 826, 1473, 1477,
    `checks/numerics.mojo` is the canonical home and **four copies of one
    predicate have four chances to drift.**
 8. **`NOT_IMPLEMENTED.tsv` entries for `training/`.**
-9. **A corpus.** `verification/references/mamba` is the model, planted adversarial cases with
+9. **A corpus.** `checks/native_tests/fixtures/mamba` is the model, planted adversarial cases with
    names. This lane needs `adv_subnormal_square` (5.1), `adv_dead_unit_v`
    (3d), `adv_dampening_first_step` (5.4a), `adv_param_order_five` (3.3) and
    `adv_pow_step_1000` (4.1). **None exists**, which is why every clause is our

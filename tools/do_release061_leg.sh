@@ -217,7 +217,7 @@ api() { curl -s --max-time 20 -H "Authorization: Bearer $TOK" "$@"; }
 # SHIP THE COMMIT, NOT THE WORKING TREE: the whole tree at $COMMIT minus the
 # result, corpus and oracle data, which no native-inventory file lives under.
 log "archiving $COMMIT"
-git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!verification/records' ':!bench/evidence' ':!verification/references/mamba' ':!bench/oracle*' \
+git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!verification/records' ':!bench/evidence' ':!checks/native_tests/fixtures/mamba' ':!bench/oracle*' \
   | gzip > "$TMPD/src.tgz" || die "git archive failed"
 ARCHIVE_BYTES=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
 # The cap keeps the upload short on the home uplink. 0.8.14's archive was
@@ -459,13 +459,13 @@ if [ "$LEG_MODE" = qualify ]; then
   $SSH 'mkdir -p /root/proofs'
   scp -q $SSH_OPTS "$QUAL_PROOFS"/*.json "root@$IP:/root/proofs/" || { log "proof scp failed"; exit 6; }
   # THE CORPORA, WHICH THE BUILD ARCHIVE DELIBERATELY EXCLUDES. `git archive`
-  # drops verification/references/mamba because a build never reads it and it is 63 MB; the
+  # drops checks/native_tests/fixtures/mamba because a build never reads it and it is 63 MB; the
   # INSTALLED qualification does read it, and refused this leg's first run with
   # "Missing installed Mamba corpus: base_b2_l4_d8". Only the three cases
   # CORPUS_CASES names are shipped, 4.6 MB, not the whole directory.
   CORPUS_CASES=$(MOJOLEARN_QUIET=1 python3 -c "import sys;sys.path.insert(0,'$REPO/tools');from verify_linux_surface_qualification import CORPUS_CASES;print(' '.join(CORPUS_CASES))")
   [ -n "$CORPUS_CASES" ] || { log "could not read CORPUS_CASES"; exit 6; }
-  ( cd "$REPO" && tar czf "$TMPD/corpus.tgz" $(for c in $CORPUS_CASES; do echo "verification/references/mamba/$c"; done) ) \
+  ( cd "$REPO" && tar czf "$TMPD/corpus.tgz" $(for c in $CORPUS_CASES; do echo "checks/native_tests/fixtures/mamba/$c"; done) ) \
     || { log "corpus tar failed"; exit 6; }
   CORPUS_SHA=$(sha256_of "$TMPD/corpus.tgz")
   log "shipping the qualification corpora ($(wc -c < "$TMPD/corpus.tgz" | tr -d ' ') bytes, $(echo $CORPUS_CASES | wc -w | tr -d ' ') cases)"
@@ -474,7 +474,7 @@ if [ "$LEG_MODE" = qualify ]; then
   [ "$RCS" = "$CORPUS_SHA" ] || { log "corpus sha mismatch after transfer ($RCS)"; exit 6; }
   $SSH 'tar -xzf /root/corpus.tgz -C /root/mojolearn' || { log "corpus unpack failed"; exit 6; }
   for c in $CORPUS_CASES; do
-    $SSH "test -f /root/mojolearn/verification/references/mamba/$c/x.f32" || { log "corpus case $c did not land"; exit 6; }
+    $SSH "test -f /root/mojolearn/checks/native_tests/fixtures/mamba/$c/x.f32" || { log "corpus case $c did not land"; exit 6; }
   done
   echo "qualify_corpus_cases=$CORPUS_CASES" >> "$STATE"
   log "shipped wheel, $(ls "$QUAL_PROOFS"/*.json | wc -l | tr -d ' ') proofs and the corpora"

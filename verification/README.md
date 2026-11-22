@@ -11,8 +11,8 @@ for a reason. `bench/results/` holds boards and measurements only.
 | Recorded forest / GBDT host fixtures | `verification/records/forest_host/` | `tools/forest_host_gate.py`, `forest-host-gate.yml`, `cpu-identity-gate.yml` (`host_surface.FOREST_RECORDED_ROOT`) |
 | Column-shaped records outside the identity columns (CELLS_INDEX rows and their run directories) | `verification/records/cells/{verification_faults,small_training,verify_external}/` | `tools/verification_matrix.py`, `tools/part_set_census.py` (through `verification/records/CELLS_INDEX.tsv`), `test_verify_small.py` |
 | The dated release records up to 0.8.65 that documents still cite | `verification/records/release_verification/` | `tools/release_evidence_set.py provenance_history` (MOVED_DIR; older ones through git at LEGACY_DIR) |
-| Mamba reference inputs and outputs from the PyTorch references (not a training corpus; `gen_corpus.py` makes them) | `verification/references/mamba/` (Mamba-1 cases at the top, `mamba2/`, `mamba3/`) | `mamba/checks/mamba{,2,3}_check.mojo` and fixtures, `tools/mamba_corpus_check.py` (pixi `check-mamba*-corpus`), the installed-surface release gates (`verify_linux_surface_qualification.py`, `release_macos_installed_candidate.py`, `check_linux_release_qualification.py`, `release-provenance.yml`), `neural_fast_quality.py`, the Mamba package tests; export-ignored and left out of source bundles (except `gen_corpus.py`), as before. Not shipped in a wheel |
 | Native test fixtures | `checks/native_tests/fixtures/` (stays) | the native tests beside them own them |
+| The three Mamba reference cases a live reader opens, with their generator | `checks/native_tests/fixtures/mamba/` (`base_b2_l4_d8`, `mamba2/m2_base_b2_l4_d32`, `mamba3/m3_base_b2_l4_d32`, `gen_corpus.py`, README, the two family manifests) | the Mamba Mojo checks' byte gates, `tools/mamba_corpus_check.py`, the installed-surface release gates, the Mamba package tests; every other case regenerates with `python checks/native_tests/fixtures/mamba/gen_corpus.py --family <mamba1/mamba2/mamba3> --out <dir>` |
 
 Rules: a record is never edited or moved by hand except with `git mv` of a whole group, together with every reader,
 in one commit; the indexes move with their data and `python3 tools/record_index.py check` stays `listed_ok`, 0
@@ -27,7 +27,7 @@ and keeps the old spelling. Read it through this map:
 | Old path | New path | Moved |
 |---|---|---|
 | `bench/results/identity_break/` | `verification/records/identity/` (the shipped table cites records by `dir/file` under this root, so it is unchanged) | 2026-11-25, lane verify-home |
-| `mamba/corpus/` | `verification/references/mamba/` | 2026-11-25, lane verify-home |
+| `mamba/corpus/` | `checks/native_tests/fixtures/mamba/` (three of its 46 cases; the rest deleted, in git history and regenerable) | 2026-11-25, lane verify-home |
 | `bench/results/forest_host/` | `verification/records/forest_host/` | 2026-11-25, lane verify-home |
 | `bench/results/classical_host/` | `verification/records/classical_host/` | 2026-11-25, lane verify-home |
 | `bench/results/verification_faults/` | `verification/records/cells/verification_faults/` | 2026-11-25, lane verify-home |

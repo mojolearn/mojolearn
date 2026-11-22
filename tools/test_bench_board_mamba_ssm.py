@@ -101,7 +101,7 @@ def test_every_weight_maps_to_the_block_state_dict():
 
 
 def _corpus():
-    src = open(os.path.join(REPO, "verification", "references", "mamba", "gen_corpus.py")).read()
+    src = open(os.path.join(REPO, "checks", "native_tests", "fixtures", "mamba", "gen_corpus.py")).read()
     ns = {}
     for name in ("D_STATE", "D_CONV", "EXPAND", "EPS", "M2_D_STATE", "M2_D_CONV", "M2_EXPAND",
                  "M2_HEADDIM", "M2_NGROUPS", "M2_CHUNK", "M2_EPS", "M3_D_STATE", "M3_EXPAND",
@@ -162,7 +162,7 @@ def test_board_params_match_ours_and_refuse_a_difference(model):
 
 
 def test_install_pins_and_steps(tmp_path):
-    assert bb.MAMBA_SSM_COMMIT in open(os.path.join(REPO, "verification", "references", "mamba", "gen_corpus.py")).read()
+    assert bb.MAMBA_SSM_COMMIT in open(os.path.join(REPO, "checks", "native_tests", "fixtures", "mamba", "gen_corpus.py")).read()
     assert bb.mamba_ssm_install_steps("py", "apple") == []
     for vendor in ("nvidia", "amd"):
         (deps, e0), (build, e1) = bb.mamba_ssm_install_steps("py", vendor)

@@ -212,7 +212,7 @@ struct Mamba3Weights(Copyable, Movable):
 # ===========================================================================
 # The mamba3 tensor-name/id table, element rule `mojolearn.mamba.corpus.
 # hash.v1` unchanged, NEW names and ids (contract section 8g). Corpus file
-# names are `<name>.f32` inside `verification/references/mamba/mamba3/<case>/`.
+# names are `<name>.f32` inside `checks/native_tests/fixtures/mamba/mamba3/<case>/`.
 # ===========================================================================
 
 comptime M3_TID_X = 41  # x.f32                          [B, L, d_model]
@@ -514,8 +514,8 @@ def m3_case_init_v(k: Int) raises -> List[Float32]:
 
 def m3_corpus_dir(k: Int) raises -> String:
     """Where the corpus files for this case will live (the mamba2 family
-    layout, new directory): `verification/references/mamba/mamba3/<case>/<tensor>.f32` plus
+    layout, new directory): `checks/native_tests/fixtures/mamba/mamba3/<case>/<tensor>.f32` plus
     the reference dumps and manifest. The check that reads these REFUSES
     BY NAME while the directory does not exist -- generation is RUN OWED
     on the corpus side; a missing fixture is a refusal, never a skip."""
-    return String("verification/references/mamba/mamba3/") + String(m3_corpus_case(k).name)
+    return String("checks/native_tests/fixtures/mamba/mamba3/") + String(m3_corpus_case(k).name)

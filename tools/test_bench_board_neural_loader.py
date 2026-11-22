@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
 class MambaInputsWithoutTorch(unittest.TestCase):
     """0.8.66 AMD measurement smoke: the measured venv has no torch, and the Mamba lanes' input step imported
-    verification/references/mamba/gen_corpus.py (torch at module top), so no Mamba recipe reached its parameter probe."""
+    checks/native_tests/fixtures/mamba/gen_corpus.py (torch at module top), so no Mamba recipe reached its parameter probe."""
 
     def test_mamba_weight_spec_reads_the_corpus_metadata_without_torch(self):
         with patch.dict(sys.modules, {"torch": None, "torch.nn.functional": None}):

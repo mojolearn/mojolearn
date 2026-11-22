@@ -33,9 +33,9 @@ class RetainedCandidateTests(unittest.TestCase):
         git('init', '-q')
         git('config', 'user.email', 'fixture@example.invalid')
         git('config', 'user.name', 'Fixture')
-        (repo / '.gitattributes').write_text('/verification/references/mamba/** export-ignore\n')
+        (repo / '.gitattributes').write_text('/checks/native_tests/fixtures/mamba/** export-ignore\n')
         for case in CORPUS_CASES:
-            directory = repo / 'verification/references/mamba' / case
+            directory = repo / 'checks/native_tests/fixtures/mamba' / case
             directory.mkdir(parents=True)
             (directory / 'x.f32').write_bytes(b'frozen operand')
             (directory / 'ref.f64').write_bytes(b'frozen reference')
@@ -91,7 +91,7 @@ class RetainedCandidateTests(unittest.TestCase):
     def test_export_ignored_operands_restored_from_frozen_blobs(self):
         repo, commit, cases = self.corpus_repository()
         # A dirty checkout must not replace the frozen expectation.
-        (repo / 'verification/references/mamba' / cases[0] / 'x.f32').write_bytes(b'changed checkout')
+        (repo / 'checks/native_tests/fixtures/mamba' / cases[0] / 'x.f32').write_bytes(b'changed checkout')
         stage = self.root / 'stage'
         report = candidate.stage_smoke_corpora(repo, commit, stage)
         self.assertEqual(len(report['files']), 6)
@@ -105,13 +105,13 @@ class RetainedCandidateTests(unittest.TestCase):
         repo, commit, cases = self.corpus_repository()
         stage = self.root / 'stage'
         candidate.stage_smoke_corpora(repo, commit, stage)
-        (stage / 'verification/references/mamba' / cases[0] / 'x.f32').write_bytes(b'wrong')
+        (stage / 'checks/native_tests/fixtures/mamba' / cases[0] / 'x.f32').write_bytes(b'wrong')
         with self.assertRaisesRegex(ValueError, 'differs from frozen blob'):
             candidate.stage_smoke_corpora(repo, commit, stage)
 
     def test_absent_frozen_case_refused(self):
         repo, commit, cases = self.corpus_repository()
-        subprocess.run(['git', '-C', str(repo), 'rm', '-r', 'verification/references/mamba/' + cases[-1]],
+        subprocess.run(['git', '-C', str(repo), 'rm', '-r', 'checks/native_tests/fixtures/mamba/' + cases[-1]],
                        check=True, stdout=subprocess.DEVNULL)
         subprocess.run(['git', '-C', str(repo), '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'remove case'], check=True)
         missing = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD']).decode().strip()

@@ -34,7 +34,7 @@ PREFIX = 'mojolearn/' + LEG + '/'
 RUNPATH = '$ORIGIN/../.libs:$ORIGIN/../../.libs:$ORIGIN/../../../.libs'
 # The original workflow's source export, retained in source_recipe(). Unknown
 # changes to that export fail closed rather than rewriting a source-tree key.
-EXCLUDES = ':!bench/results :!verification/records :!verification/references/mamba :!bench/oracle_* :!bench/minentropy_oracle.txt'
+EXCLUDES = ':!bench/results :!verification/records :!checks/native_tests/fixtures/mamba :!bench/oracle_* :!bench/minentropy_oracle.txt'
 
 
 def require(ok, why):
@@ -51,7 +51,7 @@ def device_plan():
 
 
 def excluded(name):
-    return name.startswith(('bench/results/', 'verification/records/', 'verification/references/mamba/', 'bench/oracle_')) or name == 'bench/minentropy_oracle.txt'
+    return name.startswith(('bench/results/', 'verification/records/', 'checks/native_tests/fixtures/mamba/', 'bench/oracle_')) or name == 'bench/minentropy_oracle.txt'
 
 
 @contextmanager

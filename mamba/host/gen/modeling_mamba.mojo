@@ -618,7 +618,7 @@ def mamba_scratch(
 
 struct MambaDeviceWeights(Movable):
     """One block's parameters on the device, in the reference shapes
-    (`MambaWeights`'s table, which is `mamba/corpus/gen_corpus.py`'s
+    (`MambaWeights`'s table, which is `checks/native_tests/fixtures/mamba/gen_corpus.py`'s
     `shapes_for`, which is theirs). Row-major, contiguous, no padding.
 
     `use_bias` is False and `use_conv_bias` is True (the `MambaConfig`
