@@ -440,6 +440,10 @@ def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: Pyt
     py_setitem(fields, nk[].k_sparse, False)
     py_setitem(fields, nk[].k_plan, plan)
     py_setitem(fields, nk[].k_weight, weight)
+    # A loaded layer runs this installation's device, as Embedding's own
+    # loader writes it (18b3388fbd: `device` is a constructor parameter, not
+    # saved state); the host route left the field out.
+    py_setitem(fields, nk[].k_device, PythonObject(None))
     return model
 
 
