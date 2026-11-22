@@ -759,6 +759,14 @@ def _member_native(member: PythonObject, X: PythonObject, operation: Int, classi
         var plan = prep_estimator_plan(member, context)
         if plan is None or py_get(plan, "member") is None:
             return PythonObject(None)
+        # Only an exact mojolearn Array is served (its shape, dtype and order
+        # are native reads). A resident DeviceRows fold side goes to the
+        # member's door, which resolves it natively; reading its Python
+        # properties here ran Python inside CalibratedClassifierCV.fit
+        # (9b369cd34f made them properties; test_native_meta_public_boundary).
+        var nk = trees_keys()
+        if py_type(X) is not py_item(context, nk[].k_array_class):
+            return PythonObject(None)
         var n = _rows(X)
         var d = _cols(X)
         if n <= 0 or d <= 0 or String(py=X.dtype) != "<f4" or String(py=X.order) != "C":
@@ -2327,10 +2335,13 @@ def _calibrated_validate(model: PythonObject, context: PythonObject) raises:
 
 
 def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: PythonObject,
-                context: PythonObject) raises -> PythonObject:
+                context: PythonObject, rows: Int = -1) raises -> PythonObject:
     """`CalibratedClassifierCV._scores`: (n, c) float64 scores, c = 1 when
-    binary, else one column per class."""
-    var n = _rows(Xa)
+    binary, else one column per class. `rows`: the row count when the caller
+    knows it (a resident DeviceRows fold side, whose `shape` is a Python
+    property of `_arena_io.DeviceRows` since 9b369cd34f: reading it from here
+    ran Python inside the fit)."""
+    var n = rows if rows >= 0 else _rows(Xa)
     var nk = trees_keys()
     var k = len(_attr(model, nk[].k_classes_, Python.list()))
     var out: PythonObject
@@ -2593,7 +2604,7 @@ struct _CalUnits(Movable):
             self._enter()
             try:
                 var Xte = self.fold_side(te)
-                var scores = _cal_scores(self.model, self.xt, e, Xte, self.context)
+                var scores = _cal_scores(self.model, self.xt, e, Xte, self.context, Int(py=te.shape[0]))
                 if self.ensemble:
                     var cals = _fit_calibrators(self.model, self.xt, scores,
                                                 _gather_codes(self.xt, self.codes, te, self.context), self.context)
