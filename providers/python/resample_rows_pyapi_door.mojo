@@ -12,7 +12,11 @@ from bindings.classical_arrays_door import classical_is_array
 from bindings.classical_pandas_door import classical_admit_value
 from bindings.admitted_input_unpack import AdmittedTypedPin, admitted_typed_once, AdmittedBuf, admitted_dtype_admit, admitted_zeros, admitted_shape_tuple
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_entry
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_connect_once, neural_descriptor_entry, neural_descriptor_execute
+
+# ORDER MATCHES resample/resample_native.mojo (bindings/linalg_ops_resample_door.mojo RS_OP_*).
+comptime _RS_OP_RESAMPLE_INDICES = 4
+comptime _RS_OPERATIONS = 7
 from core.borrowed_buffer import BorrowedBufferLayout
 from core.resample_rows_gather import resample_gather_rows
 from core.host_parallel import host_parallelize
@@ -248,9 +252,13 @@ struct ResampleRows(Movable):
 
 def resample_rows_indices(binding: PythonObject, n: Int, count: Int, replace: Bool,
                           seed: PythonObject, context: PythonObject) raises -> AdmittedBuf:
+    # The binding's named `resample_indices` entry became operation 4 of its typed table
+    # (resample/resample_native.mojo; 067cc9c9bd); the table is connected once per process and binding.
     var indices = admitted_zeros([max(count, 0)], "<i4", context)
-    py_call(neural_descriptor_entry(binding, "resample_indices"), Python.list(indices.addr),
-            Python.list(n, count, 1 if replace else 0, seed))
+    var provider = neural_descriptor_connect_once(binding, "resample_native_api_v1", "mojolearn.resample.v1",
+                                                  _RS_OPERATIONS)
+    _ = neural_descriptor_execute(provider, _RS_OP_RESAMPLE_INDICES, [indices.addr],
+                                  [n, count, 1 if replace else 0, Int(py=seed)], List[Float64]())
     _ = indices
     return indices^
 
