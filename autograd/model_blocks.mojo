@@ -44,6 +44,11 @@ EXISTING backward rule; no kernel is written or edited here:
                                  parameter D (heads); its arithmetic is the Mamba-3
                                  decode step's bodies (autograd/kernels/
                                  mamba3_trapezoid_body.mojo)
+  45    lm_head (vocab)          graph_transformer_linear (the logits, h @ weight^T);   TransformerPrimitive
+                                 under the token_cross_entropy loss the fit stops      Rules; StepOpRules
+                                 before the layer and runs graph_lm_head_v2 (the fused  115 (lm_head_v2)
+                                 head + loss, no logits); weight (vocab, features)
+                                 (lane neural-blocks-3-lm, 2026-11-22)
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -69,6 +74,12 @@ from autograd.rankn_layout import rankn_narrow
 from autograd.rankn_fold import rankn_binary
 from autograd.ops import SUBTRACT
 from autograd.transformer_primitives import graph_rms_norm, graph_rotary
+# lm_head (lane neural-blocks-3-lm): the logits are the transformer projection op (the neural GEMM cell, the
+# cell the fused head's panels run); the token loss is the fused op's one recording
+from autograd.transformer_primitives import graph_transformer_linear
+from autograd.lm_head_v2_graph import graph_lm_head_v2
+from autograd.lm_head_v2_op import LM_HEAD_V2_TAG
+from autograd.rules_step_ops import StepOpRules
 from autograd.import_api import ImportRules, imp_unary, imp_binary, imp_where, imp_gather_nd
 from autograd.import_ops import IMP_SILU, IMP_GELU_ERF, IMP_GELU_TANH, IMP_SOFTPLUS, IMP_GT, IMP_GE, IMP_OR
 from autograd.rules_recurrent import RecurrentRules, RNN_LINEAR, RNN_LAYER, RNN_LAST_STEP, rnn_scan_op
@@ -255,6 +266,16 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         td.append(cur.d[0])
         td.append(vw)
         return rn_shape(td, name + " (TrapezoidScan)")
+    # lm_head (lane neural-blocks-3-lm)
+    if code == LAYER_LM_HEAD:
+        if cur.ndim != 1 and cur.ndim != 2:
+            raise Error(name + " (LMHead): the input must be (features,) or (length, features)")
+        if a0 < 2:
+            raise Error(name + " (LMHead): vocab must be at least 2")
+        var hd = rn_dims(cur)
+        hd[cur.ndim - 1] = a0
+        return rn_shape(hd, name + " (LMHead)")
+    # end lm_head
     raise Error(name + ": unknown layer code " + String(code))
 
 
@@ -298,6 +319,10 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         out.append(_x(xargs, i, 0))  # D (heads)
     elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
         out.append(_x(xargs, i, 0))        # D (heads)
+    # lm_head (lane neural-blocks-3-lm)
+    elif code == LAYER_LM_HEAD:
+        out.append(_x(xargs, i, 0) * cur.cols())  # weight (vocab, features)
+    # end lm_head
     return out^
 
 
@@ -325,6 +350,10 @@ def block_param_names(code: Int) -> List[String]:
         out.append(".A_log")
     elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
         out.append(".D")
+    # lm_head (lane neural-blocks-3-lm)
+    elif code == LAYER_LM_HEAD:
+        out.append(".weight")
+    # end lm_head
     return out^
 
 
@@ -375,6 +404,10 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         out.append(BLOCK_INIT_S4D)
     elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3): D = 1
         out.append(Float32(-2))
+    # lm_head (lane neural-blocks-3-lm): PyTorch's Linear init, uniform in [-1/sqrt(features), 1/sqrt(features)]
+    elif code == LAYER_LM_HEAD:
+        out.append(ftz(identical_div(Float32(1), identical_sqrt(Float32(cur.cols())))))
+    # end lm_head
     return out^
 
 
@@ -553,7 +586,27 @@ def block_forward[E: Exec](
         var tr = rankn_narrow(tape, ex, h, 2, tv + 2 * tk + 2 * a0, a0)
         var t_skip = _p(tape, ex, P, Gr, off, 1, a0, train)
         return graph_trapezoid_scan(tape, ex, v, k, q, dt, av, tr, t_skip, a0)
+    # lm_head (lane neural-blocks-3-lm): the logits (B,) + cur[:-1] + (vocab,), h @ weight^T
+    if code == LAYER_LM_HEAD:
+        var w = _p(tape, ex, P, Gr, off, a0, cur.cols(), train)
+        return graph_transformer_linear(tape, ex, h, w)
+    # end lm_head
     raise Error("model: unknown block code " + String(code))
+
+
+# lm_head (lane neural-blocks-3-lm)
+def block_lm_head_loss[E: Exec](
+    mut tape: Tape, mut ex: E, xargs: List[Int], i: Int, cur: ShapeN, P: FP, Gr: FP, off: Int,
+    hidden: Tensor, codes: Tensor, train: Bool,
+) raises -> Tensor:
+    """The token cross-entropy of lm_head layer i from its input `hidden` ((B,) + cur) against `codes` (one
+    class value per token, B * cur.rows() of them): the fused head-and-loss op (autograd/lm_head_v2_graph.mojo),
+    which never forms the logits; the mean over every token."""
+    var width = cur.cols()
+    var rows = tape.rows(hidden) * tape.cols(hidden) // width
+    var w = _p(tape, ex, P, Gr, off, _x(xargs, i, 0), width, train)
+    return graph_lm_head_v2(tape, ex, hidden, w, codes, rows, _x(xargs, i, 0), width)
+# end lm_head
 
 
 # ---------------------------------------------------------------- backward
@@ -573,6 +626,9 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
     def supports(self, tag: Int) -> Bool:
         if Self._recurrent(tag):
             return True
+        # lm_head (lane neural-blocks-3-lm): the fused head's tag, StepOpRules' own answers
+        if tag == LM_HEAD_V2_TAG:
+            return True
         if Self._ssm(tag):
             return SsmRules().supports(tag)
         return ImportRules().supports(tag)
@@ -580,6 +636,8 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if Self._recurrent(tag):
             return RecurrentRules().zeroed_destination(tag, saved, edge)
+        if tag == LM_HEAD_V2_TAG:
+            return StepOpRules(0).zeroed_destination(tag, saved, edge)
         if Self._ssm(tag):
             return SsmRules().zeroed_destination(tag, saved, edge)
         return ImportRules().zeroed_destination(tag, saved, edge)
@@ -587,6 +645,8 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
         if Self._recurrent(tag):
             return RecurrentRules().writes_total(tag, saved, edge)
+        if tag == LM_HEAD_V2_TAG:
+            return StepOpRules(0).writes_total(tag, saved, edge)
         if Self._ssm(tag):
             return SsmRules().writes_total(tag, saved, edge)
         return ImportRules().writes_total(tag, saved, edge)
@@ -597,6 +657,8 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
     ) raises:
         if Self._recurrent(tag):
             RecurrentRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+        elif tag == LM_HEAD_V2_TAG:
+            StepOpRules(0).apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif Self._ssm(tag):
             SsmRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         else:
@@ -642,6 +704,11 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
     elif code == LAYER_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
     elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
         out.append(_x(xargs, i, 0))
+    # lm_head (lane neural-blocks-3-lm): (vocab, features) in both layouts (PyTorch's Linear weight)
+    elif code == LAYER_LM_HEAD:
+        out.append(_x(xargs, i, 0))
+        out.append(cur.cols())
+    # end lm_head
     return out^
 
 
