@@ -62,7 +62,11 @@ struct MselHostStore(Defaultable, Movable):
         if self.nbytes[id] < need:
             raise Error(String("msel store: id ", id, " holds ", self.nbytes[id], " bytes, ", need, " read"))
 
-    def check(self, id: Int, need: Int) raises:
+    # `mut self` on every method that takes the lock and then reads a field
+    # (lane pv-race, 2026-11-22; core/forest_export_run.mojo, THE TABLE IS
+    # BEHIND A POINTER): an immutable `self` is a read-only argument the
+    # compiler may read once, before the lock, and keep.
+    def check(mut self, id: Int, need: Int) raises:
         var word = self._word()
         shared_slot_lock(word)
         try:

@@ -127,7 +127,11 @@ struct MselStore(Defaultable, Movable):
         if self.nbytes[id] < need:
             raise Error(String("msel store: id ", id, " holds ", self.nbytes[id], " bytes, ", need, " read"))
 
-    def check(self, id: Int, need: Int) raises:
+    # `mut self` on every method that takes the lock and then reads a field
+    # (lane pv-race, 2026-11-22; core/forest_export_run.mojo, THE TABLE IS
+    # BEHIND A POINTER): an immutable `self` is a read-only argument the
+    # compiler may read once, before the lock, and keep.
+    def check(mut self, id: Int, need: Int) raises:
         """Raises unless `id` is live and holds at least `need` bytes."""
         var word = self._word()
         shared_slot_lock(word)
@@ -136,7 +140,7 @@ struct MselStore(Defaultable, Movable):
         finally:
             shared_slot_unlock(word)
 
-    def address(self, id: Int, need: Int) raises -> Int:
+    def address(mut self, id: Int, need: Int) raises -> Int:
         """The device address of a live id holding at least `need` bytes,
         read under the lock (the kernels take it as a raw pointer)."""
         var word = self._word()
@@ -184,7 +188,7 @@ struct MselStore(Defaultable, Movable):
         enqueue_fill(ctx, buf, UInt8(0))
         return self._insert(buf^, n)
 
-    def read(self, ctx: DeviceContext, id: Int, dst_addr: Int, n: Int) raises:
+    def read(mut self, ctx: DeviceContext, id: Int, dst_addr: Int, n: Int) raises:
         """The id's first `n` bytes into host memory, after every launch
         queued before it; waits."""
         if n > 0:
@@ -474,7 +478,7 @@ def _msel_take_download(
 
 
 def device_take_rows(
-    ctx: DeviceContext, store: MselStore, src_id: Int, n_src: Int, row_bytes: Int,
+    ctx: DeviceContext, mut store: MselStore, src_id: Int, n_src: Int, row_bytes: Int,
     idx_id: Int, n_idx: Int, dst_addr: Int,
 ) raises -> Bool:
     """Rows `idx` (int64, the store's `idx_id`) of the `n_src` x `row_bytes`
@@ -546,7 +550,7 @@ def _scatter_kernel(
 
 
 def device_scatter_rows(
-    ctx: DeviceContext, store: MselStore, dst_id: Int, n_dst: Int, dst_code: Int,
+    ctx: DeviceContext, mut store: MselStore, dst_id: Int, n_dst: Int, dst_code: Int,
     src_addr: Int, src_code: Int, n_src: Int, width: Int, idx_id: Int,
 ) raises -> Bool:
     """Row r of the host `n_src` x `width` buffer at `src_addr` (dtype

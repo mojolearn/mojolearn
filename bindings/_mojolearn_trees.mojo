@@ -76,7 +76,7 @@ from extratrees.mojolearn_trees_run import (
 )
 from core.shared_slot import SharedSlot
 # V2 (lane fx-gil, 2026-11-25): the registry gained its lock word.
-comptime ET_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], ("MojolearnETFitExportIdenticalV3" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETFitExportFastV3"), 2]
+comptime ET_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], ("MojolearnETFitExportIdenticalV4" if GLOBAL_NUMERIC_MODE == 1 else "MojolearnETFitExportFastV4"), 3]
 
 
 # TOMBSTONE: the legacy-arm et fits, et_predict_gpu_parallel, trees_shap_pair_count, the forest comparison arms and probes (dead native entries: no live caller) deleted 2026-10-26 by f515bbcb9; code recoverable at a88745022.
