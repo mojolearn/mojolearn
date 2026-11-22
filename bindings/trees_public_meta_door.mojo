@@ -93,6 +93,7 @@ from bindings.member_set_door import (
 )
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
+    ovr_assemble_run,
 )
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
@@ -2360,46 +2361,97 @@ def _positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context: Pyth
     return _proba_positive(xt, e, Xa, context)
 
 
+def _ovr_door(member: PythonObject, decision: Bool, Xa: PythonObject, n: Int, keep: PythonObject,
+              context: PythonObject, answer: PythonObject) raises -> VoteMember:
+    """One OneVsRest member's float32 block from its own door (the path that
+    raises the estimator's own words): its decision column, else its
+    predict_proba block. `answer`: the Array its held native state already
+    wrote (`member_held_run`), else None and the door is called."""
+    if decision:
+        var given = answer if answer is not None else meta_member_call(member, "decision_function",
+                                                                       Python.tuple(Xa), context)
+        var blk = _out2d(_f32_array(given, 1, "score", context), n, context)
+        _ = py_call(keep.append, blk.array)
+        var out = VoteMember(blk.address, blk.cols, 0, 1.0)
+        _ = blk^
+        return out^
+    var p = _out2d(answer if answer is not None else meta_member_call(member, "predict_proba", Python.tuple(Xa),
+                                                                      context), n, context)
+    _ = py_call(keep.append, p.array)
+    var out = VoteMember(p.address, p.cols, 0, 1.0)
+    _ = p^
+    return out^
+
+
 def _ovr_fused(xt: PythonObject, members: PythonObject, Xa: PythonObject, n: Int, k: Int,
                decision: Bool, finish: Int, context: PythonObject) raises -> PythonObject:
-    """The k > 2 OneVsRest epilogue through `x_trees_ovr_assemble`: the
-    members' positive columns (`_positive` when `decision`, else
-    `_proba_positive`) widened into the scores and finished (normalized, or
-    the row argmax) as one device program with one readback (lane
-    perf-sweep-trees, 2026-11-05; before it a gather and a scatter, each with
-    its readbacks, per member). Same kernels and widening: no bit moves."""
-    var keep = List[PythonObject]()
+    """The k > 2 OneVsRest epilogue (THE OVR SPLIT, lane bm-meta-2,
+    2026-11-22). UNPACK: per member whether it scores by decision_function
+    (when `decision` and it has one) and its positive column, then its held
+    native state when its family serves the operation (`_member_open`; a kind
+    that must run with the GIL held answers here, as before), else its door's
+    block (`_ovr_door`). RUN: xtrees/trees_meta_vote_run.mojo
+    `ovr_assemble_run` (the native calls, then the one `x_trees_ovr_assemble`
+    program), the GIL released when a member is native. PACK: `out`,
+    allocated here. A native member that refuses is asked through its door
+    and RUN runs again (the fallback rule). Before the split this loop made
+    one Array per member answer: the same blocks, the same program."""
     var out = admitted_vector(n, "<i4", context) if finish == 2 else admitted_vector(n * k, "<f8", context)
-    var addrs: List[Int] = [trees_address(out)]
-    var ints: List[Int] = [n, k, finish]
-    var floats: List[Float64] = [Float64(n), Float64(k), Float64(finish)]
-    for j in range(len(members)):  # driver-loop: over members
-        var e = members[j]
-        var bc: Int
-        var at: Int
-        if decision and prep_estimator_has(e, "decision_function", context):
-            var score = _f32_array(_member_scores(e, "decision_function", Xa, context), 1, "score", context)
-            var blk = _out2d(score, n, context)
-            keep.append(blk.array)
-            addrs.append(blk.address)
-            bc = blk.cols
-            at = 0
-            _ = blk^
-        else:
-            var p = _out2d(_member_scores(e, "predict_proba", Xa, context), n, context)
-            at = _index_of_one(e, context)
-            keep.append(p.array)
-            addrs.append(p.address)
-            bc = p.cols
-            _ = p^
-        ints.append(bc)
-        floats.append(Float64(bc))
-        ints.append(at)
-        floats.append(Float64(at))
+    var got = _VoteUnpack()
+    var at = List[Int]()
+    var uses_decision = List[Bool]()
+    try:
+        for j in range(len(members)):  # driver-loop: over members (admission, once each)
+            var member = members[j]
+            var by_decision = decision and prep_estimator_has(member, "decision_function", context)
+            uses_decision.append(by_decision)
+            at.append(0 if by_decision else _index_of_one(member, context))
+            var operation = MEMBER_OP_DECISION if by_decision else MEMBER_OP_PREDICT_PROBA
+            var opened = _member_open(member, Xa, operation, True, context)
+            if opened.served and not opened.gil_free:
+                var answer = PythonObject(None)
+                try:
+                    answer = member_held_run(opened, trees_address(Xa), n, _cols(Xa), context)
+                finally:
+                    member_held_close(opened)
+                got.members.append(_ovr_door(member, by_decision, Xa, n, got.keep, context, answer))
+                continue
+            if opened.served:
+                got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
+                                              opened.dtype, 0, 1.0))
+                got.native += 1
+                got.opened.append(opened^)
+                continue
+            got.members.append(_ovr_door(member, by_decision, Xa, n, got.keep, context, PythonObject(None)))
+        for i in range(len(got.members)):  # driver-loop: over members (the native plans by address, now final)
+            if got.members[i].native:
+                got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+    except e:
+        _vote_close(got)
+        raise e^
+    var rows = VoteRows(trees_address(Xa), n, _cols(Xa))
     var glue = _xr(xt)
-    _ = xt_ovr_assemble(glue, addrs, ints, floats)
-    _ = out  # keep the Python object alive through the native call above
-    _ = keep  # keep the members' blocks alive through the native call above
+    var address = trees_address(out)
+    while True:  # driver-loop: over refusals (at most one round per native member)
+        var refused = VOTE_ALL_ANSWERED
+        try:
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = ovr_assemble_run(glue, rows, got.members, at, k, finish, address)
+            else:
+                refused = ovr_assemble_run(glue, rows, got.members, at, k, finish, address)
+        except e:
+            _vote_close(got)
+            raise e^
+        if refused == VOTE_ALL_ANSWERED:
+            break
+        got.members[refused] = _ovr_door(members[refused], uses_decision[refused], Xa, n, got.keep, context,
+                                         PythonObject(None))
+        got.native -= 1
+    _vote_close(got)
+    _ = Xa  # the rows are read through RUN
+    _ = got.keep  # the door blocks are read through RUN
+    _ = out
     return out
 
 

@@ -29,7 +29,7 @@ from core.member_abi import (
 from core.array_helpers_impl import fsum_f64
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_cols_many, xt_accumulate_onehot, xt_argmax_rows, xt_scale,
-    xt_scatter,
+    xt_scatter, xt_ovr_assemble,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -283,4 +283,35 @@ def vote_transform_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember]
             _ = xt_scatter(glue, out_words, blocks[j], order_at, n, width, n, members[j].cols, j)
     _ = keep^  # the native blocks are read through the scatters above
     _ = order^
+    return VOTE_ALL_ANSWERED
+
+
+def ovr_assemble_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], at: List[Int], k: Int,
+                     finish: Int, out_words: Int) raises -> Int:
+    """`OneVsRestClassifier` predict (`finish` 2: int32 row-argmax codes into
+    `out_words`) and predict_proba (`finish` 1: float64 n x k normalized
+    rows) for k > 2 (lane bm-meta-2, 2026-11-22): member j's positive column
+    `at[j]` of its float32 block (its decision column, or its probability
+    column of code 1; -1: a member that never saw code 1) widened into the
+    scores and finished by the glue's one `x_trees_ovr_assemble` program,
+    the op the door called before this split over the same blocks in the
+    same order: no bits change. Every member answers before anything is
+    written; a native member that refuses is returned by index."""
+    var n = rows.n
+    var keep = List[List[Float32]]()
+    var addrs = List[Int](capacity=len(members) + 1)
+    addrs.append(out_words)
+    var ints: List[Int] = [n, k, finish]
+    var floats: List[Float64] = [Float64(n), Float64(k), Float64(finish)]
+    for j in range(len(members)):  # driver-loop: over members (every member answers before anything is written)
+        var block = _member_f32(members[j], rows, keep)
+        if block == 0:
+            return j
+        addrs.append(block)
+        ints.append(members[j].cols)
+        floats.append(Float64(members[j].cols))
+        ints.append(at[j])
+        floats.append(Float64(at[j]))
+    _ = xt_ovr_assemble(glue, addrs, ints, floats)
+    _ = keep^  # the native blocks are read through the program above
     return VOTE_ALL_ANSWERED
