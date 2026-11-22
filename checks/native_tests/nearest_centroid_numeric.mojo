@@ -11,7 +11,7 @@ This wrapper obtains numerical/refusal evidence, never concurrency clearance.
 from std.testing import TestSuite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from checks.native_tests.nearest_centroid_descriptor_suite import fixture, empty_case
+from checks.native_tests.nearest_centroid_descriptor_cases import fixture, empty_case
 from x_neighbors.native_descriptor_device import xn_native_v1
 
 

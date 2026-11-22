@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Native allocation metadata: literal layouts, dtype widths and refusals.
 
 All 45 independent fixtures use the existing host pool. Huge dimensions only
 allocate short shape/stride lists; these tests never allocate their data span.
 No Python objects, callbacks, dtype objects or product allocation are needed.
 """
-from core.host_parallel import host_parallelize
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_array_layout import NativeArrayLayout, native_array_itemsize, native_array_code, native_matrix_shape
-from checks.native_tests.runner import Check, Column, Report
 
-comptime ARRAY_LAYOUT_FIXTURES = 45
 comptime _MAX = 9223372036854775807
 
 
@@ -211,45 +211,21 @@ def _layout_refusal(fixture_id: Int) raises:
     require(refused and message.find(expected) >= 0, "wrong/absent layout refusal: " + message)
 
 
-def run_fixture(fixture_id: Int) raises:
-    if fixture_id < 18:
-        _layout(fixture_id)
-    elif fixture_id < 27:
-        _dtype(fixture_id - 18)
-    elif fixture_id < 33:
-        _dtype_refusal(fixture_id - 27)
-    else:
-        _layout_refusal(fixture_id - 33)
+def test_layout() raises:
+    check_cases("layout", 18, _layout)
 
 
-def run_checks() raises:
-    var failures = List[Int](length=ARRAY_LAYOUT_FIXTURES, fill=0)
-    var fp = failures.unsafe_ptr()
-    def task(fixture_id: Int) {imm fp}:
-        try:
-            run_fixture(fixture_id)
-        except error:
-            print("FAIL native_array_layout fixture", fixture_id, String(error))
-            fp.unsafe_store(fixture_id, 1)
-    host_parallelize(task, ARRAY_LAYOUT_FIXTURES)
-    var failed = 0
-    for value in failures:
-        failed += value
-    require(failed == 0, "native_array_layout failed " + String(failed) + " fixtures")
-    print("PASS native_array_layout:", ARRAY_LAYOUT_FIXTURES, "native shape/stride/dtype/overflow fixtures, parallel")
+def test_dtype() raises:
+    check_cases("dtype", 9, _dtype)
 
 
-# Registered by lane checks-register (2026-11-16): it was a standalone main()
-# that no CI job ran. One process per check name in CI keeps any fresh-process
-# precondition.
-# Host column: the suite is host work (its fixtures run across host
-# cores inside run_checks; the check counts as one case).
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_dtype_refusal() raises:
+    check_cases("dtype_refusal", 6, _dtype_refusal)
 
 
-def register() -> Check:
-    return Check("native_array_layout_check", cpu=True, gpu=False, serial="", run=run_cases)
+def test_layout_refusal() raises:
+    check_cases("layout_refusal", 12, _layout_refusal)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

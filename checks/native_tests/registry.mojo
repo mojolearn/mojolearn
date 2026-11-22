@@ -111,7 +111,6 @@ from checks.native_tests.metrics_weighted_score import register as register_metr
 from checks.native_tests.mixture_gmm_sample import register as register_mixture_gmm_sample
 from checks.native_tests.nan_canon import register as register_nan_canon
 from checks.native_tests.mixture_native import register as register_mixture_native
-from checks.native_tests.nearest_centroid_native import register as register_nearest_centroid_native
 from checks.native_tests.neighbors_knn_metrics import register as register_neighbors_knn_metrics
 from checks.native_tests.neighbors_nearest_centroid_native_capability import register as register_neighbors_nearest_centroid_native_capability
 from checks.native_tests.neighbors_ops import register as register_neighbors_ops
@@ -178,7 +177,6 @@ from checks.native_tests.training_residual_dropout_mask import register as regis
 from checks.native_tests.training_small_mlp import register as register_training_small_mlp
 from checks.native_tests.transformer_backward_packed import register as register_transformer_backward_packed
 from checks.native_tests.transformer_block_session import register as register_transformer_block_session
-from checks.native_tests.transformer_decode_door import register as register_transformer_decode_door
 from checks.native_tests.transformer_host_block import register as register_transformer_host_block
 from checks.native_tests.transformer_ops_program import register as register_transformer_ops_program
 from checks.native_tests.tsa_holtwinters_initialization import register as register_tsa_holtwinters_initialization
@@ -199,7 +197,6 @@ from checks.native_tests.lm_corpus_prepare import register as register_lm_corpus
 from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 # lane checks-register (2026-11-16): the standalone main() checks no CI job ran, now registered
 from checks.native_tests.transport_frame import register as register_transport_frame
-from checks.native_tests.member_abi import register as register_member_abi
 from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
 from checks.native_tests.boundary_layout import register as register_boundary_layout
 from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
@@ -243,9 +240,6 @@ from checks.native_tests.logistic_query_width import register as register_logist
 from checks.native_tests.lr_schedule_check import register as register_lr_schedule_check
 from checks.native_tests.mani_tsne_run import register as register_mani_tsne_run
 from checks.native_tests.mani_umap_run import register as register_mani_umap_run
-from checks.native_tests.native_array_layout_check import register as register_native_array_layout_check
-from checks.native_tests.native_device_concurrency import register as register_native_device_concurrency
-from checks.native_tests.nearest_centroid_plan import register as register_nearest_centroid_plan
 from checks.native_tests.neighbors_ann_query_run import register as register_neighbors_ann_query_run
 from checks.native_tests.neighbors_ann_run import register as register_neighbors_ann_run
 from checks.native_tests.neighbors_graph_run import register as register_neighbors_graph_run
@@ -566,7 +560,6 @@ from checks.native_tests.xtrees_zero_cover_check import register as register_xtr
 from checks.native_tests.tsa_hw_route import register as register_tsa_hw_route
 from checks.native_tests.tsa_arima_route import register as register_tsa_arima_route
 from checks.native_tests.causal_owner import register as register_causal_owner
-from checks.native_tests.small_mlp_run import register as register_small_mlp_run
 
 def all_checks() -> List[Check]:
     var checks = List[Check]()
@@ -662,7 +655,6 @@ def all_checks() -> List[Check]:
     checks.append(register_mixture_gmm_sample())
     checks.append(register_mixture_native())
     checks.append(register_nan_canon())
-    checks.append(register_nearest_centroid_native())
     checks.append(register_neighbors_knn_metrics())
     checks.append(register_neighbors_nearest_centroid_native_capability())
     checks.append(register_neighbors_ops())
@@ -728,7 +720,6 @@ def all_checks() -> List[Check]:
     checks.append(register_training_small_mlp())
     checks.append(register_transformer_backward_packed())
     checks.append(register_transformer_block_session())
-    checks.append(register_transformer_decode_door())
     checks.append(register_transformer_host_block())
     checks.append(register_transformer_ops_program())
     checks.append(register_tsa_holtwinters_initialization())
@@ -749,7 +740,6 @@ def all_checks() -> List[Check]:
     checks.append(register_training_small_mlp_relations())
     # lane checks-register (2026-11-16)
     checks.append(register_transport_frame())
-    checks.append(register_member_abi())
     checks.append(register_base_helpers_entry())
     checks.append(register_boundary_layout())
     checks.append(register_byte_lm_entry())
@@ -793,9 +783,6 @@ def all_checks() -> List[Check]:
     checks.append(register_lr_schedule_check())
     checks.append(register_mani_tsne_run())
     checks.append(register_mani_umap_run())
-    checks.append(register_native_array_layout_check())
-    checks.append(register_native_device_concurrency())
-    checks.append(register_nearest_centroid_plan())
     checks.append(register_neighbors_ann_query_run())
     checks.append(register_neighbors_ann_run())
     checks.append(register_neighbors_graph_run())
@@ -1113,5 +1100,4 @@ def all_checks() -> List[Check]:
     checks.append(register_tsa_hw_route())
     checks.append(register_tsa_arima_route())
     checks.append(register_causal_owner())
-    checks.append(register_small_mlp_run())
     return checks^
