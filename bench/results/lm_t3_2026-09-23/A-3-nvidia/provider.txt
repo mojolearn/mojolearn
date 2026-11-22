@@ -1,2 +1,0 @@
-provider=runpod
-box_id=tymq1131yvbhoy

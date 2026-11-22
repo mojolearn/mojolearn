@@ -1,2 +1,0 @@
-provider=runpod
-box_id=v1p864wf56u3hc
