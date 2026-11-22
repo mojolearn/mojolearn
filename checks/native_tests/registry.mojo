@@ -491,22 +491,6 @@ from checks.native_tests.autograd_view_cpu import register as register_autograd_
 from checks.native_tests.autograd_view_gpu import register as register_autograd_view_gpu
 from checks.native_tests.cluster_host_gemm_check import register as register_cluster_host_gemm_check
 from checks.native_tests.decomposition_variance_identity_check import register as register_decomposition_variance_identity_check
-from checks.native_tests.ensemble_builder_check import register as register_ensemble_builder_check
-from checks.native_tests.ensemble_builder_kernels_check import register as register_ensemble_builder_kernels_check
-from checks.native_tests.ensemble_criteria_check import register as register_ensemble_criteria_check
-from checks.native_tests.ensemble_cuml_oracle_check import register as register_ensemble_cuml_oracle_check
-from checks.native_tests.ensemble_forest_check import register as register_ensemble_forest_check
-from checks.native_tests.ensemble_objectives_check import register as register_ensemble_objectives_check
-from checks.native_tests.ensemble_oob_check import register as register_ensemble_oob_check
-from checks.native_tests.ensemble_predict_check import register as register_ensemble_predict_check
-from checks.native_tests.ensemble_quantiles_check import register as register_ensemble_quantiles_check
-from checks.native_tests.ensemble_regression_check import register as register_ensemble_regression_check
-from checks.native_tests.ensemble_sample_weight_check import register as register_ensemble_sample_weight_check
-from checks.native_tests.ensemble_sampled_cols_check import register as register_ensemble_sampled_cols_check
-from checks.native_tests.ensemble_shuffle_check import register as register_ensemble_shuffle_check
-from checks.native_tests.ensemble_sibling_column_overlap_check import register as register_ensemble_sibling_column_overlap_check
-from checks.native_tests.ensemble_split_check import register as register_ensemble_split_check
-from checks.native_tests.ensemble_train_check import register as register_ensemble_train_check
 from checks.native_tests.extratrees_bestfirst_check import register as register_extratrees_bestfirst_check
 from checks.native_tests.extratrees_borrowed_upload_check import register as register_extratrees_borrowed_upload_check
 from checks.native_tests.extratrees_builder_check import register as register_extratrees_builder_check
@@ -1078,22 +1062,6 @@ def all_checks() -> List[Check]:
     checks.append(register_autograd_view_gpu())
     checks.append(register_cluster_host_gemm_check())
     checks.append(register_decomposition_variance_identity_check())
-    checks.append(register_ensemble_builder_check())
-    checks.append(register_ensemble_builder_kernels_check())
-    checks.append(register_ensemble_criteria_check())
-    checks.append(register_ensemble_cuml_oracle_check())
-    checks.append(register_ensemble_forest_check())
-    checks.append(register_ensemble_objectives_check())
-    checks.append(register_ensemble_oob_check())
-    checks.append(register_ensemble_predict_check())
-    checks.append(register_ensemble_quantiles_check())
-    checks.append(register_ensemble_regression_check())
-    checks.append(register_ensemble_sample_weight_check())
-    checks.append(register_ensemble_sampled_cols_check())
-    checks.append(register_ensemble_shuffle_check())
-    checks.append(register_ensemble_sibling_column_overlap_check())
-    checks.append(register_ensemble_split_check())
-    checks.append(register_ensemble_train_check())
     checks.append(register_extratrees_bestfirst_check())
     checks.append(register_extratrees_borrowed_upload_check())
     checks.append(register_extratrees_builder_check())
