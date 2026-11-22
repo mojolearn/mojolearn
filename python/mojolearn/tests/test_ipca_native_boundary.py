@@ -87,8 +87,13 @@ def test_ipca_replaced_descriptor_is_refused_without_python_call(operation, monk
     model = _model().fit(_data())
     scores = model.transform(_data())
     monkeypatch.setitem(_IPCA_CONTEXT["ipca_bindings"], "identical", forbidden)
+    # The model resolved its route once (the dw-decomp device-route lanes, 5c252f1573..9e49098bca):
+    # its operations never read the table again, so the replacement is not consulted and no
+    # Python runs. A model without a route resolves through the replaced entry and is refused.
+    getattr(model, operation)(scores if operation == "inverse_transform" else _data())
+    assert calls == []
     with pytest.raises(TypeError, match="compiled extension entry"):
-        getattr(model, operation)(scores if operation == "inverse_transform" else _data())
+        _model().fit(_data())
     assert calls == []
 
 

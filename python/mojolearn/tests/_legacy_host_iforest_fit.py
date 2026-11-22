@@ -187,7 +187,16 @@ def fit(model, X, y=None):
         vars(model).pop("_if_lifetime", None)
         model._x = x
         model.n_features_in_ = x.shape[1]
-        iforest(model, x[:1], 0, public=False)
+        # The frozen route called the kernel entry, which never read the
+        # fitting depth; the reference now calls the model's own method
+        # (a99d74bf57), which does. It sees an ordinary depth, and the
+        # caller's (possibly exotic) depth is put back unchanged.
+        depth_now = state["_mojolearn_fitting"]
+        state["_mojolearn_fitting"] = 1
+        try:
+            iforest(model, x[:1], 0, public=False)
+        finally:
+            state["_mojolearn_fitting"] = depth_now
     except Exception as error:
         if check is not None:
             _sk_validate.reraise(model, check, error)

@@ -67,12 +67,14 @@ def _poison(patch):
 
 
 @pytest.mark.parametrize("family", ["qwen2", "qwen3", "phi3", "byte_lm"])
-def test_parameters_returns_every_checkpoint_tensor_by_name(tmp_path, monkeypatch, family):
+def test_named_parameters_returns_every_checkpoint_tensor_by_name(tmp_path, monkeypatch, family):
     config, tensors = _parameter_fixture(family)
     _write_checkpoint(str(tmp_path), config, tensors)
     model = CausalLM.load(tmp_path, device=DEVICE, numeric_profile="fp32_v1")
     with monkeypatch.context() as patch:
         _poison(patch)
+        # parameters() is torch's iterator of arrays since 4304dc89be; the by-name
+        # mapping is dict(named_parameters()).
         parameters = dict(audit_native_call(model.named_parameters).assert_native())
     assert set(parameters) == set(tensors)
     assert None not in parameters

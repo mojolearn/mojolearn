@@ -270,6 +270,9 @@ def test_interrupted_wave_does_not_drain_hung_peers_and_reaps_children(tmp_path)
         import json, os, signal, sys, time
         from pathlib import Path
         from mojolearn._native_process import _native_process as call
+        def pool_mirror(pool):
+            # the handle's published mirror, read through the process door (59a451f4f9)
+            return call('mirror', (pool,))
         call('initialize', (sys.executable, os.environ._data, 'cpu'))
         pool = call('create', ((0, 1), False, 'native_transport_cancel_peer'))
         seen = []

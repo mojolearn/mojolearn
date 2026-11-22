@@ -7,6 +7,21 @@ from mojolearn.svm import LinearSVC
 __mojolearn_user_boundary__ = True
 
 
+def _scored_refused(model, source, labels, match):
+    """`model.score` refuses the replaced program metadata (`match`), except
+    where it never reads it: on a CPU-only install the estimator's score plan
+    runs on the CPU x_metrics entries its label scope names (d3453d7a3e,
+    e0d947fa3c), so the program context's tables are not looked up and the
+    score is the unreplaced one. No Python hook runs either way (the callers
+    assert their hooks saw no call)."""
+    from mojolearn import _backend
+    if _backend.vendor() == "cpu":
+        assert 0.0 <= float(model.score(source, labels)) <= 1.0
+        return
+    with pytest.raises(TypeError, match=match):
+        model.score(source, labels)
+
+
 @pytest.fixture
 def operation():
     from mojolearn import _expansion_metrics
@@ -45,8 +60,11 @@ def test_metrics_mapping_hooks_are_refused_before_lookup(operation, monkeypatch,
     else:
         context[level] = MappingHook()
     monkeypatch.setattr(module, "_PROG_CONTEXT", context)
-    with pytest.raises(TypeError, match="exact string-keyed dictionaries"):
-        model.score(source, labels)
+    if level == "context":
+        with pytest.raises(TypeError, match="exact string-keyed dictionaries"):
+            model.score(source, labels)
+    else:
+        _scored_refused(model, source, labels, "exact string-keyed dictionaries")
     assert calls == []
 
 
@@ -75,8 +93,11 @@ def test_metrics_colliding_key_hooks_are_refused_before_lookup(operation, monkey
     maps[level][KeyHook()] = None
     armed = True
     monkeypatch.setattr(module, "_PROG_CONTEXT", context)
-    with pytest.raises(TypeError, match="exact string-keyed dictionaries"):
-        model.score(source, labels)
+    if level == "context":
+        with pytest.raises(TypeError, match="exact string-keyed dictionaries"):
+            model.score(source, labels)
+    else:
+        _scored_refused(model, source, labels, "exact string-keyed dictionaries")
     assert calls == []
 
 
@@ -97,6 +118,5 @@ def test_metrics_diagnostic_string_hooks_are_refused(operation, monkeypatch, slo
         context["backend_fields"]["_DEFAULT_MODE"] = 0
         context[slot] = StringHook()
     monkeypatch.setattr(module, "_PROG_CONTEXT", context)
-    with pytest.raises(TypeError, match="requires a native string"):
-        model.score(source, labels)
+    _scored_refused(model, source, labels, "requires a native string")
     assert calls == []

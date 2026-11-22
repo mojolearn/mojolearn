@@ -208,9 +208,6 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
         py_setitem(fields, "_fit_X", x.array)
         py_setitem(fields, "_fit_cols", columns)
         py_setitem(fields, "_fit_all", total)
-        # Refit drops the scaled alphas of the previous fitted state; the
-        # first transform of this state computes them (`_kpca_scaled_alphas`).
-        py_setitem(fields, "_fit_alphas", PythonObject(None))
         py_setitem(fields, "n_features_in_", PythonObject(x.cols))
     finally:
         _ = prepared
@@ -253,28 +250,12 @@ struct KPCAScaledAlphas(Movable):
 
 
 def _kpca_scaled_alphas(model: PythonObject, fields: PythonObject, near: Int, context: PythonObject) raises -> KPCAScaledAlphas:
-    """Once per fitted state, as the KernelPCA member keeps them
-    (core/xneighbors_member.mojo `_kp_transform`): computed at the first
-    transform after a fit and kept in `_fit_alphas` = (eigenvectors_,
-    eigenvalues_, alphas, rows, kept). A hit is one field read and two
-    identity compares against the current fitted arrays; a refit (which
-    clears the field) or a rebound `eigenvectors_` / `eigenvalues_` recomputes
-    them with the same kernel and words. Before this, every `transform` call
-    re-admitted both arrays, allocated a rows x kept scratch and ran the alpha
-    kernel (the loop: each call of a transform loop, e.g. a pipeline's predict
-    per batch or per cross-validation fold's scoring)."""
-    var vectors_object = _attr(model, fields, "eigenvectors_")
-    var values_object = _attr(model, fields, "eigenvalues_")
-    var kept = py_get(fields, "_fit_alphas")
-    if not (kept is None):
-        var kept_vectors = kept[0]
-        var kept_values = kept[1]
-        if kept_vectors is vectors_object and kept_values is values_object:
-            var array = kept[2]
-            var rows = Int(py=kept[3])
-            var cols = Int(py=kept[4])
-            var address = _address(array) if rows * cols else 0
-            return KPCAScaledAlphas(array, address, rows, cols)
+    """The scaled alphas of the CURRENT `eigenvectors_` / `eigenvalues_`,
+    computed at every transform. They are public writable arrays: a cache
+    keyed on their identity (6a5eba1ce5, `_fit_alphas`) missed an in-place
+    write (`model.eigenvectors_ *= 2`) and answered with the old components,
+    so it is gone; the alpha kernel is rows x kept, below the query kernel's
+    query rows x fitted rows x features."""
     var alpha = _alpha_inputs(model, fields, context)
     var rows = alpha.vectors.rows
     var count = alpha.vectors.cols
@@ -285,8 +266,6 @@ def _kpca_scaled_alphas(model: PythonObject, fields: PythonObject, near: Int, co
         kpca_run_alpha(near, scaling)
     finally:
         _ = alpha
-    lifecycle_admit_fields(fields)
-    py_setitem(fields, "_fit_alphas", Python.tuple(vectors_object, values_object, array, PythonObject(rows), PythonObject(count)))
     return KPCAScaledAlphas(array, address, rows, count)
 
 

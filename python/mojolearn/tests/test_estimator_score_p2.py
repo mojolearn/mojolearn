@@ -137,7 +137,10 @@ def test_stacking_regressor_fit_transform_stacks_member_predictions():
         m.transform(X[:, :2])
 
 
-def test_stacking_regressor_fit_transform_refuses_parallel_jobs():
+def test_stacking_regressor_fit_transform_parallel_jobs_match_serial():
+    # n_jobs bounds the member fits since 69ce6498f4 (the refusal was removed).
     X, y = _reg_data()
-    with pytest.raises(NotImplementedError):
-        ml.StackingRegressor([("a", ml.DecisionTreeRegressor(max_depth=3))], n_jobs=2).fit_transform(X, y)
+    members = lambda: [("a", ml.DecisionTreeRegressor(max_depth=3))]
+    np.testing.assert_array_equal(
+        np.asarray(ml.StackingRegressor(members(), n_jobs=2).fit_transform(X, y)),
+        np.asarray(ml.StackingRegressor(members()).fit_transform(X, y)))

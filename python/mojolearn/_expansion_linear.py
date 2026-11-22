@@ -51,18 +51,6 @@ LINK_IDENTITY, LINK_EXP, LINK_SIGMOID = 0, 1, 2
 _ROWS_SGD_PROBA, _ROWS_LRCV_PROBA, _ROWS_HUBER_OUT = 2, 3, 4
 
 
-def _device_set_params(base):
-    # glue: class-definition time. `set_params` of a class of this module: a
-    # `device` among the keywords is checked in compiled code where it is
-    # given, before any field changes, and the estimator's route is dropped
-    # (bindings/x_linear_route_unpack.mojo); then the class's own setter.
-    def set_params(self, **params):
-        if "device" in params:
-            _XL_CALL(self, "device_admit", (params["device"],), _XL_CONTEXT)
-        return base.set_params(self, **params)
-
-    set_params.__doc__ = base.set_params.__doc__
-    return set_params
 
 
 class _LinearClassifierMixin(NativeParamsSetter):
@@ -71,7 +59,6 @@ class _LinearClassifierMixin(NativeParamsSetter):
     # Runs on both devices: every public operation calls through the
     # estimator's own route (bindings/x_linear_route_unpack.mojo).
     _mojolearn_device = True
-    set_params = _device_set_params(NativeParamsSetter)
     _estimator_type = "classifier"
 
     def decision_function(self, X):
@@ -139,7 +126,6 @@ class _LinearRegressorMixin(NativeParamsSetter):
     # One-call native public methods: x_linear_native owns the lifecycle.
     _mojolearn_native_public = True
     _mojolearn_device = True
-    set_params = _device_set_params(NativeParamsSetter)
     _estimator_type = "regressor"
     _link = LINK_IDENTITY
 
