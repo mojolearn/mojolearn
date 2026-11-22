@@ -47,7 +47,7 @@ from core.msel_device_run import _mdx_f32_ptr, _mdx_u32_ptr, kmeans_fit_fold_run
 # the resident tests' fault injection; the close / release failure order is
 # checked natively (checks/native_tests/arena_state_suite.mojo).
 def msel_live_binding() raises -> PythonObject:
-    return PythonObject(msel_store()[].live)
+    return PythonObject(msel_store()[].live_count())
 
 
 # Lane a6: the device-X entries of family and classical estimators live in
