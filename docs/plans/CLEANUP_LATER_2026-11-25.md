@@ -45,8 +45,14 @@ project of its own. None blocks the next release except the last, which happens 
 
 ## Smaller leftovers
 
-- 5 tool tests fail because the generated member boundary door imports every family's door (build partitions and
-  per-hunk lane selection are lost): `test_lane_select.py` (3), `test_runtime_partition_closures.py` (2).
+- The member boundary door imports every family's door, so build partitions and per-hunk lane selection are lost
+  (3 tool tests red: `test_lane_select.py::test_a_hunk_inside_one_mojo_def_selects_only_the_lanes_reaching_it`,
+  `test_runtime_partition_closures.py` x2). Design done (Fable, 2026-11-25:
+  `~/mojolearn-evidence/briefs-20261121/member-door-partitions-RESULT.md`): 39 families get a published boundary
+  slot in the existing entry table, resolved once per caller image. Decide first: xdecomp's Isomap/MDS/LLE kinds
+  (second entry from runtime_manifold, or move to the MANIFOLD family); add a native check that admits one kind
+  per family (a missing slot must not fall back silently); read how a pending Python error crosses images.
+  Build-time precision only: no product behaviour or measured row depends on it.
 - 6 tests of `test_model_portability_evidence` read 19 logs an earlier cleanup deleted from a reviewed record.
 - The tools check on the CPU box uses about 7 of 32 cores: its test files are not split across the box.
 - Fixture archives (`tools/fixture_packs.py`): after regenerating a case, run `pack`; runners call `unpack`.
