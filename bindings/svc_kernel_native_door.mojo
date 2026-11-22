@@ -30,11 +30,9 @@
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_type, py_get, py_fields, py_item
-from bindings.classical_arrays_door import classical_address, classical_typed
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.gp_svm_records_door import gpsvm_no_fit_callbacks
 from bindings.classical_exceptions_door import classical_require_fitted
-from bindings.classical_labels_door import labels_cast
 from bindings.native_array_view_pack import native_array_ndarray_view
 from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from std.python._cpython import GILReleased
@@ -256,17 +254,16 @@ def svc_kernel_operation(model: PythonObject, operation: Int, args: PythonObject
     # A nested set_params may have replaced the dictionary's contents.
     fields = py_fields(model)
     svc_connection_publish(fields, connection, context)
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the kernel's float32 regression values (or the decoded
+    # labels) as a NumPy view, with no caller test and no float64 widening
+    # pass into a second buffer. The other public results keep the caller test.
+    var predicting = operation == SVC_OPN_FAMILY_SVC_SVC_PREDICT or operation == SVC_OPN_FAMILY_SVC_SVR_PREDICT
     if (operation == SVC_OPN_FAMILY_SVC_SVC_SCORE or operation == SVC_OPN_FAMILY_SVC_SVR_SCORE
-            or not estimator_outside() or py_get(context, nk[].k_ndarray) is None
-            or py_type(result) is not py_item(context, nk[].k_array_class)):
+            or py_get(context, nk[].k_ndarray) is None
+            or py_type(result) is not py_item(context, nk[].k_array_class)
+            or (not predicting and not estimator_outside())):
         return result
-    if operation == SVC_OPN_FAMILY_SVC_SVR_PREDICT:
-        # scikit-learn's regression predictions are float64: widened exactly.
-        var wide = classical_typed(result.shape, "<f8", context)
-        labels_cast(Int(py=classical_address(result)), "<f4", Int(py=classical_address(wide)), "<f8",
-                    Int(py=result.size), context)
-        _ = result^
-        return wide
     return native_array_ndarray_view(result, context)
 
 

@@ -14,9 +14,8 @@ model trained on a GPU infers the GPU groves engine's bits on a CPU. A groves
 archive saved under a numeric mode other than `identical` is refused by name,
 because this binding computes IDENTICAL bits only. `predict` and
 `predict_proba` return exactly what the GPU classes return for the same file.
-RF probabilities float32, ET probabilities and regression float64, RF
-regression float64 to a caller outside the package and float32 inside it
-(the estimator's own rule, `estimator_outside`), class labels through `_labels.decode_labels`.
+RF probabilities float32, RF and ET regression float32, ET probabilities
+float64, class labels through `_labels.decode_labels`.
 
 This module holds no arithmetic. What it promises is what the gate measured:
 tools/forest_host_gate.py compares the host predictions of a recorded model
@@ -97,7 +96,7 @@ class HostForest:
     runs the inference engine the file names ('sequential' or
     'parallel_groves') and returns what the GPU estimator returns for the
     same file: random forest probabilities as float32, extra-trees
-    probabilities and every regression value as float64. The model
+    probabilities as float64, every regression value as float32. The model
     arrays are used exactly as saved, never cast; a file whose tree arrays
     are inconsistent raises `ValueError`.
 
@@ -206,7 +205,8 @@ class HostForest:
 
         For a classifier, the class with the highest probability (first
         maximum winning) mapped through `classes_`. For a regressor, the mean
-        of the trees' predictions, as float64.
+        of the trees' predictions, as float32 (a NumPy array when NumPy is
+        installed), as the estimator's own `predict` returns it.
         """
         return _native_host_archive(self, _OP.host_tree_predict, (X,), _ARCHIVE_CONTEXT)
 

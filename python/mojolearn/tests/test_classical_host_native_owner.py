@@ -70,7 +70,7 @@ def test_native_host_load_cpu_predict_score_hash_and_save_match_existing_contrac
     old = host_cls.load(io.BytesIO(archive))
     x = np.random.default_rng(208).normal(size=(13, 3)).astype("f4")
     y = np.linspace(-1, 1, len(x), dtype="f4")
-    expected_prediction = np.asarray(old.predict(x), dtype="f4").astype("f8")
+    expected_prediction = np.asarray(old.predict(x), dtype="f4")
     expected_score = np.float64(old.score(x, y))
     expected_hash = old.model_sha256()
     expected_saved = io.BytesIO()
@@ -96,8 +96,9 @@ def test_native_host_load_cpu_predict_score_hash_and_save_match_existing_contrac
         output = io.BytesIO()
         clean(audit_native_call(native_save, native, output))
     assert type(native) is host_cls
-    assert result.dtype == np.dtype("f8")
-    np.testing.assert_array_equal(result.view("u8"), expected_prediction.view("u8"))
+    # predict: the kernel's float32 for every caller (lane predict-dtype, 2026-11-22).
+    assert result.dtype == np.dtype("f4")
+    np.testing.assert_array_equal(result.view("u4"), expected_prediction.view("u4"))
     np.testing.assert_allclose(result, x.astype("f8") @ np.asarray(native.coef_, dtype="f8") + 0.25, rtol=3e-6, atol=3e-7)
     assert np.float64(score).view("u8") == expected_score.view("u8")
     assert digest == expected_hash

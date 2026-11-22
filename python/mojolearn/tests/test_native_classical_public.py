@@ -101,18 +101,19 @@ def test_fit_predict_score_and_checkpoint_are_native(cls, layout, monkeypatch, t
     assert type(clean(getattr, model, "intercept_")) is float
     assert clean(getattr, model, "n_features_in_") == 3
     prediction = clean(model.predict, x)
-    assert type(prediction) is np.ndarray and prediction.dtype == np.dtype("f8")
-    # mojolearn's own callers keep the float32 words the kernels produced
+    # One result for every caller (lane predict-dtype, 2026-11-22): the
+    # kernel's float32 words as a NumPy array, inside the package too.
+    assert type(prediction) is np.ndarray and prediction.dtype == np.dtype("f4")
     internal = model.predict.__func__  # the one-call shell
     narrow = eval("predict(model, x)", {"__name__": "mojolearn._probe", "predict": internal, "model": model, "x": x})
-    assert narrow.dtype == np.float32
-    np.testing.assert_array_equal(prediction, narrow.astype("f8"))
+    assert type(narrow) is np.ndarray and narrow.dtype == np.float32
+    np.testing.assert_array_equal(prediction.view("u4"), narrow.view("u4"))
     score = clean(model.score, x, y)
     assert type(score) is float and score > .99
     first = tmp_path / "public-native.npz"
     clean(model.save, first)
     restored = clean(cls.load, first)
-    np.testing.assert_array_equal(clean(restored.predict, x).view("u8"), prediction.view("u8"))
+    np.testing.assert_array_equal(clean(restored.predict, x).view("u4"), prediction.view("u4"))
     again = io.BytesIO()
     clean(restored.save, again)
     assert again.getvalue() == first.read_bytes()
@@ -133,7 +134,7 @@ def test_host_model_load_predict_digest_and_roundtrip_keep_cpu_route(ordinary, h
     assert clean(loaded.numeric_mode_used) == "identical"
     routed = mojolearn.host_model(path)
     assert type(routed) is host and routed.estimator == ordinary.__name__
-    np.testing.assert_array_equal(clean(routed.predict, x).view("u8"), clean(loaded.predict, x).view("u8"))
+    np.testing.assert_array_equal(clean(routed.predict, x).view("u4"), clean(loaded.predict, x).view("u4"))
     import hashlib
     assert clean(loaded.model_sha256) == hashlib.sha256(np.asarray(model.coef_).tobytes()).hexdigest()
     saved = io.BytesIO()

@@ -20,8 +20,10 @@ def _require(ok: Bool, message: String) raises:
         raise Error(message)
 
 
-def _request[WIDE: Bool](fault: Int) raises:
-    comptime DT = DType.float64 if WIDE else DType.float32
+def _request[F64: Bool](fault: Int) raises:
+    # F64: the caller's buffers are float64 words (the request only borrows
+    # addresses; predict itself writes float32 words for every caller).
+    comptime DT = DType.float64 if F64 else DType.float32
     var coef: List[Scalar[DT]] = [1.25, -2.5, 3.5]
     var x = List[Scalar[DT]](length=6, fill=1.0)
     var dst = List[Scalar[DT]](length=2, fill=-99.0)
@@ -62,8 +64,8 @@ def _request[WIDE: Bool](fault: Int) raises:
     var refused = False
     try:
         var request = linear_state_predict_request(snapshot, Int(x.unsafe_ptr()), Int(dst.unsafe_ptr()),
-            rows, cols, WIDE, "native fixture")
-        _require(request.rows == 2 and request.cols == 3 and request.wide == WIDE, "prediction dimensions/dtype")
+            rows, cols, "native fixture")
+        _require(request.rows == 2 and request.cols == 3, "prediction dimensions")
         _require(request.x == Int(x.unsafe_ptr()) and request.dst == Int(dst.unsafe_ptr()), "prediction borrows caller IO")
         _require(request.coef == Int(coef.unsafe_ptr()), "prediction borrows coefficients")
         _require(request.intercept == 1.0000000000009095, "native state preserves Float64 intercept")

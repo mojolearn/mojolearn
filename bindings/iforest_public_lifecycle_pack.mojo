@@ -149,7 +149,7 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
         else:
             classical_check_width(columns, Int(py=fields["n_features_in_"]), name)
             estimator_feature_check(model, fields, source, context)
-    var outside = estimator_outside()
+    var outside = method == "predict" or estimator_outside()
     var depth = estimator_fit_begin(fields) if fitting else 0
     var result = PythonObject(None)
     # A cast X was tested in its cast pass: the fit skips its second scan
@@ -189,6 +189,8 @@ def iforest_public_operation(model: PythonObject, operation: String, args: Pytho
     # returned as they are.
     if outside and (method == "score_samples" or method == "decision_function") and result is not None:
         result = admit_family_f64(result, "scores", context)
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the labels as a NumPy view, with no caller test.
     if py_type(result) is context["array_class"]:
         if outside and py_get(context, "ndarray") is not None:
             return native_array_ndarray_view(result, context)

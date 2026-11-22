@@ -8,11 +8,10 @@ from bindings.classical_labels_run import _native_code
 
 
 def parallel_result_widens(kind: String, method: String) -> Bool:
-    """True where the public driver answers float64: a regressor's `predict`
-    and an outlier detector's `decision_function` / `score_samples`. `kind`
-    is "" for a driver that names no estimator kind."""
-    if kind == "regressor":
-        return method == "predict"
+    """True where the public driver answers float64: an outlier detector's
+    `decision_function` / `score_samples`. A regressor's `predict` keeps the
+    kernel's float32 values (lane predict-dtype, 2026-11-22). `kind` is ""
+    for a driver that names no estimator kind."""
     if kind == "outlier_detector":
         return method == "decision_function" or method == "score_samples"
     return False

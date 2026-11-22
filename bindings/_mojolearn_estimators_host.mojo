@@ -842,7 +842,7 @@ def ols_predict_binding(
     var cp = f32_ptr(_index(coef_addr))
     var dst = f32_ptr(_index(out_addr))
     var request = LinearPredictRequest(Int(xp), Int(cp), Int(dst),
-        _index(params[0]), _index(params[1]), Float64(py=params[2]), False)
+        _index(params[0]), _index(params[1]), Float64(py=params[2]))
     with GILReleased(Python()):
         _ = linear_predict_host(request)
     return PythonObject(0)

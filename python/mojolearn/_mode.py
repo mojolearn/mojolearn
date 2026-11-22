@@ -407,10 +407,9 @@ def _public_result(est, name, out):
     With NumPy loaded (it always is under scikit-learn), an `Array` result
     becomes a `numpy.ndarray` view of the same memory, so the result
     supports everything scikit-learn and its users do with one (fancy
-    indexing, `sum(axis=...)`, comparisons, `round`, `dtype.kind`). A
-    regressor's `predict` is float64, scikit-learn's dtype for regression
-    predictions. Without NumPy loaded the `Array` is returned unchanged
-    (the NumPy-free contract)."""
+    indexing, `sum(axis=...)`, comparisons, `round`, `dtype.kind`). Without
+    NumPy loaded the `Array` is returned unchanged (the NumPy-free
+    contract). `predict` keeps the kernel's dtype (`_predict_output`)."""
     np = sys.modules.get("numpy")
     if np is None:
         return out
@@ -419,25 +418,27 @@ def _public_result(est, name, out):
     # Array: this wrapper runs inside `_needs_fit`'s guard, so the guard's
     # own `after_call` only ever sees the NumPy view made below.
     out = _sk_validate.after_call(est, name, out)
-    if (name == "predict" and type(out) is _Array and out.dtype == "<f4"
-            and getattr(est, "_estimator_type", None) == "regressor"):
-        # The float64 regression output is widened by the native Array cast
-        # (exact), before the NumPy view: no NumPy pass in Python.
-        out = out.astype("<f8")
-    out = _ndarray(out, np)
-    if (name == "predict" and type(out) is np.ndarray and out.dtype.kind == "f"
-            and out.dtype.itemsize < 8 and getattr(est, "_estimator_type", None) == "regressor"):
-        out = out.astype(np.float64)
-    return out
+    return _ndarray(out, np)
 
 
 def _public_output(method, name):
-    @functools.wraps(method)
-    def public(self, *args, **kwargs):
-        out = method(self, *args, **kwargs)
-        if _caller_outside(sys._getframe(1)):
-            return _public_result(self, name, out)
-        return out
+    if name == "predict":
+        # predict has one result for every caller (Andrew, 2026-11-22, lane
+        # predict-dtype): the kernel's dtype as a NumPy view when NumPy is
+        # loaded, with no caller test and no float64 widening of a
+        # regressor's float32 values.
+        @functools.wraps(method)
+        def public(self, *args, **kwargs):
+            out = method(self, *args, **kwargs)
+            np = sys.modules.get("numpy")
+            return out if np is None else _ndarray(out, np)
+    else:
+        @functools.wraps(method)
+        def public(self, *args, **kwargs):
+            out = method(self, *args, **kwargs)
+            if _caller_outside(sys._getframe(1)):
+                return _public_result(self, name, out)
+            return out
 
     public._mojolearn_public_out = True
     return public

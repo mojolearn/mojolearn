@@ -1355,7 +1355,7 @@ def cfb_spectral_operation(model: PythonObject, operation: Int, args: PythonObje
                 classical_check_width(columns, Int(py=width), name)
             estimator_feature_check(model, fields, source, context)
     var initial_depth = estimator_fit_begin(fields) if fitting else 0
-    var outside = estimator_outside()
+    var outside = not public_prediction and estimator_outside()
     var result = PythonObject(None)
     try:
         result = _cfb_spectral_algorithm_operation(model, operation, args, context, supplied_binding, prepared)
@@ -1369,7 +1369,9 @@ def cfb_spectral_operation(model: PythonObject, operation: Int, args: PythonObje
         if not py_contains(fields, nk[].k_n_features_in_):
             py_setitem(fields, nk[].k_n_features_in_, PythonObject(columns))
         estimator_fit_complete(model, source, False, context)
-    if (outside and (fitting or public_prediction)
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the labels as a NumPy view, with no caller test.
+    if (((outside and fitting) or public_prediction)
             and py_type(result) is py_item(context, nk[].k_array_class) and py_get(context, nk[].k_ndarray) is not None):
         return native_array_ndarray_view(result, context)
     return result

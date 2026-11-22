@@ -25,8 +25,6 @@ from bindings.trees_public_forest_door import (
     forest_ordered_resident_auto,
 )
 from bindings.trees_public_score_door import forest_score_public
-from bindings.trees_public_inputs_door import trees_address, trees_cast
-from bindings.admitted_input_unpack import admitted_array
 from bindings.trees_public_auxiliary_door import forest_auxiliary, forest_shape
 from bindings.trees_public_state_pack import forest_restore_state, tree_is_fitted
 from bindings.trees_side_records_unpack import trees_admit_parameters, trees_finite_mark, trees_finite_clear
@@ -165,7 +163,7 @@ def forest_public_operation(model: PythonObject, operation: Int, opname: String,
         else:
             raise Error("unknown native public forest operation " + opname)
         _ = matrix^
-        return _public_result(result, operation == TREES_OPN_TREES_PUBLIC_FOREST_PREDICT, classifier, context)
+        return _public_result(result, operation == TREES_OPN_TREES_PUBLIC_FOREST_PREDICT, context)
     var rows = admitted.rows
     if fitting:
         var y = args[1]
@@ -233,14 +231,14 @@ def _forest_fit_restore(model: PythonObject, depth: Int) raises:
         _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
 
 
-def _public_result(var result: PythonObject, predict: Bool, classifier: Bool,
-                   context: PythonObject) raises -> PythonObject:
+def _public_result(result: PythonObject, predict: Bool, context: PythonObject) raises -> PythonObject:
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the kernel's own dtype (float32 for a forest regressor,
+    # the label dtype for a classifier) as a NumPy view when NumPy is loaded.
+    # The caller test and the float64 widening pass it guarded are gone from
+    # predict: the widening was an exact copy into a second buffer twice the
+    # size, for the same values. predict_proba keeps the caller test.
     var nk = trees_keys()
-    if classical_is_array(result, context) and py_get(context, nk[].k_ndarray) is not None and _outside():
-        if predict and not classifier and String(result.dtype) == "<f4":
-            var wide = admitted_array(result.shape, "<f8", context)
-            trees_cast(trees_address(result), "<f4", trees_address(wide), "<f8", Int(py=result.size), context)
-            _ = result
-            result = wide
+    if classical_is_array(result, context) and py_get(context, nk[].k_ndarray) is not None and (predict or _outside()):
         return sequential_input(result, context)
     return result

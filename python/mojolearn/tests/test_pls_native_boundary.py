@@ -27,7 +27,8 @@ def test_pls_target_shape_dtype_and_original_storage(name, target_kind):
     model.fit(x, target)
     prediction = np.asarray(model.predict(x))
     assert prediction.shape == ((8, 1) if target_kind == "column" else (8,))
-    assert prediction.dtype == np.float64
+    # predict returns the kernel's float32 values to every caller (lane predict-dtype, 2026-11-22).
+    assert prediction.dtype == np.float32
     assert np.isfinite(prediction).all()
     np.testing.assert_array_equal(x, original_x)
     np.testing.assert_array_equal(np.asarray(target), original_y)
@@ -86,7 +87,7 @@ def test_pls_public_lifecycle_and_output_dtypes(name):
     assert "_mojolearn_fitting" not in vars(model)
     assert vars(model)["n_features_in_"] == 3
     prediction = model.predict(x)
-    assert type(prediction) is np.ndarray and prediction.dtype == np.float64
+    assert type(prediction) is np.ndarray and prediction.dtype == np.float32
     with pytest.raises(ValueError, match="expecting 3 features"):
         model.predict(x[:, :2])
     with pytest.raises(ValueError, match="Expected 2D array"):
