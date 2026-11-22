@@ -88,7 +88,7 @@ from bindings.causal_operation_owner_door import causal_model_capture, causal_mo
 from bindings.causal_operation_owner_door import CausalLease, causal_model_lease, causal_lease_publish, causal_lease_mirror
 from core.causal_owner import (
     causal_lease_load, causal_lease_take, causal_lease_release, causal_lease_expose,
-    CAUSAL_LEASE_TAKEN, CAUSAL_LEASE_REFUSED, CAUSAL_LEASE_EXPOSED, CAUSAL_LEASE_REFUSAL,
+    CAUSAL_LEASE_TAKEN, CAUSAL_LEASE_EXPOSED,
 )
 from core.shared_slot import SharedSlot
 from core.causal_lm_entry_table import (
@@ -1777,8 +1777,10 @@ def _resident_forward(mut mods: NativeModules, words: CausalModelWords, model: P
     # The lease (lane causal-lease): a read that holds it keeps it; every
     # other forward takes the LIVE word here, in one compare-and-set, as the
     # last step before the sessions are touched. Nothing between the take
-    # and the `try` below can raise. A forward that finds another holder is
-    # refused at this moment; an exposed model runs on private sessions.
+    # and the `try` below can raise. A forward that loses (another holder
+    # has the kept sessions, or the model is exposed) holds no lease: it
+    # opens private sessions, proceeds, and closes them at the end; it never
+    # reads or writes the kept ones (orchestrator decision, 2026-11-25).
     var lease_held = PythonObject(None)
     if held:
         lease_held = read_plan.value().resident_lease
@@ -1787,10 +1789,7 @@ def _resident_forward(mut mods: NativeModules, words: CausalModelWords, model: P
     var lease = lease_held.downcast_value_ptr[CausalLease]()
     var persist = held
     if not held:
-        var taken = causal_lease_take(lease[].live)
-        if taken == CAUSAL_LEASE_REFUSED:
-            raise Error(CAUSAL_LEASE_REFUSAL)
-        persist = taken == CAUSAL_LEASE_TAKEN
+        persist = causal_lease_take(lease[].live) == CAUSAL_LEASE_TAKEN
     var retain = persist and Bool(read_plan) and read_plan.value().resident_reuse
     var kept = PythonObject(None)
     if persist and not held:
@@ -2671,11 +2670,8 @@ def causal_lm_resident_binding(mut mods: NativeModules, model: PythonObject, val
     var sessions = PythonObject(None)
     # The take: one compare-and-set on the live word, the last step before
     # the sessions are touched (nothing between it and the `try` raises). A
-    # second holder is refused here, in words.
-    var taken = causal_lease_take(lease[].live)
-    if taken == CAUSAL_LEASE_REFUSED:
-        raise Error(CAUSAL_LEASE_REFUSAL)
-    var persist = taken == CAUSAL_LEASE_TAKEN
+    # call that loses holds no lease: private sessions, closed at the end.
+    var persist = causal_lease_take(lease[].live) == CAUSAL_LEASE_TAKEN
     var kept = PythonObject(None)
     if persist:
         kept = lease[].kept

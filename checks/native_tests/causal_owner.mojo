@@ -25,8 +25,7 @@ from core.causal_owner import (
     CAUSAL_STATE_K, CAUSAL_STATE_V, CAUSAL_STATE_CONV, CAUSAL_STATE_AFFINE_B, CAUSAL_STATE_XBC,
     CAUSAL_STATE_DTRAW, CAUSAL_STATE_BUFFERS,
     CausalLeaseWord, causal_lease_load, causal_lease_take, causal_lease_release, causal_lease_expose,
-    CAUSAL_LEASE_BUSY, CAUSAL_LEASE_EXPOSED, CAUSAL_LEASE_TAKEN, CAUSAL_LEASE_REFUSED, CAUSAL_LEASE_PRIVATE,
-    CAUSAL_LEASE_REFUSAL,
+    CAUSAL_LEASE_BUSY, CAUSAL_LEASE_EXPOSED, CAUSAL_LEASE_TAKEN, CAUSAL_LEASE_HELD, CAUSAL_LEASE_PRIVATE,
 )
 from core.host_parallel import host_parallelize
 from std.atomic import Atomic, Ordering
@@ -189,13 +188,12 @@ def run_lease_checks() raises:
     # The rule, one holder at a time.
     var storage = List[Int64](length=4, fill=0)
     var word = CausalLeaseWord(unsafe_from_address=Int(storage.unsafe_ptr()))
-    require(CAUSAL_LEASE_REFUSAL == "transformer decode session: busy", "the refusal is the native session's own words")
     require(causal_lease_load(word) == 0, "a new lease is free")
     require(causal_lease_take(word) == CAUSAL_LEASE_TAKEN, "a free lease is taken")
     require(causal_lease_load(word) == CAUSAL_LEASE_BUSY, "taken is busy")
-    require(causal_lease_take(word) == CAUSAL_LEASE_REFUSED, "a second holder is refused")
-    require(causal_lease_take(word) == CAUSAL_LEASE_REFUSED, "and refused again: a refusal changes nothing")
-    require(causal_lease_load(word) == CAUSAL_LEASE_BUSY, "a refusal leaves the word")
+    require(causal_lease_take(word) == CAUSAL_LEASE_HELD, "a second caller does not get the kept sessions (it runs private)")
+    require(causal_lease_take(word) == CAUSAL_LEASE_HELD, "nor a third: losing changes nothing")
+    require(causal_lease_load(word) == CAUSAL_LEASE_BUSY, "a loser leaves the word to its holder")
     require(not causal_lease_release(word), "released, not exposed")
     require(causal_lease_load(word) == 0, "free again")
     require(causal_lease_take(word) == CAUSAL_LEASE_TAKEN, "taken after a release")
@@ -218,8 +216,9 @@ def run_lease_checks() raises:
     require(causal_lease_load(second) == (CAUSAL_LEASE_BUSY | CAUSAL_LEASE_EXPOSED), "held for the drop")
     require(causal_lease_release(second), "then released, exposed")
     # The test-and-set under contention: slot 2 is the lease, slot 3 counts
-    # the holders inside it. Every task takes or is refused; a taker that
-    # ever finds another holder inside records it.
+    # the holders inside it. Every task wins the kept sessions or loses
+    # (and would run private); a winner that ever finds another holder
+    # inside records it.
     var lease = word + 2
     var inside = word + 3
     var taken = List[Int64](length=_LEASE_TASKS, fill=0)
@@ -241,7 +240,7 @@ def run_lease_checks() raises:
                 if Atomic[Int64].fetch_add(inside, Int64(-1)) != 1:
                     bad += 1
                 _ = causal_lease_release(lease)
-            elif verdict == CAUSAL_LEASE_REFUSED:
+            elif verdict == CAUSAL_LEASE_HELD:
                 lost += 1
             else:
                 bad += 1
@@ -255,7 +254,7 @@ def run_lease_checks() raises:
         require(broken[task] == 0, "two holders were inside the lease together")
         total += taken[task] + refused[task]
         holders += taken[task]
-    require(total == Int64(_LEASE_TASKS * _LEASE_ROUNDS), "every attempt was taken or refused")
+    require(total == Int64(_LEASE_TASKS * _LEASE_ROUNDS), "every attempt won the lease or lost it")
     require(holders > 0, "the lease was taken")
     require(causal_lease_load(lease) == 0, "free after the last release")
     require(causal_lease_load(inside) == 0, "nobody left inside")

@@ -209,8 +209,8 @@ struct CausalLease(Movable, Writable):
 
     The rule is the word's (core/causal_owner.mojo `causal_lease_take`,
     `causal_lease_release`, `causal_lease_expose`): one compare-and-set
-    takes it, a second caller is refused in words at that moment, an exposed
-    model keeps nothing. No reader tests a copy taken at operation entry.
+    takes it; a caller that loses runs on a private session set of its own
+    and never touches the kept one; an exposed model keeps nothing. No reader tests a copy taken at operation entry.
 
     `kept` is read and written only by the caller that holds the word busy
     (and with the GIL held, as every Python reference is): None, or the

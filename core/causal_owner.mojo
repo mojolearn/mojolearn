@@ -260,20 +260,19 @@ def causal_state_buffer_address(buffer: CausalBufferWords, expected: List[Int], 
 #   CAUSAL_LEASE_EXPOSED  `parameters()` handed the live arrays out
 #                         (monotonic for the lease's life): nothing is kept
 #                         any more, every call opens and closes its own.
-# The rule: taking the lease is one compare-and-set (free -> busy). A caller
-# that finds it busy is refused with CAUSAL_LEASE_REFUSAL, the words the
-# native decode session itself gives a second holder; it never takes, loads
-# or closes the kept sessions. A caller that finds it exposed runs on a
-# private session set of its own and holds no lease. No lock is held across
-# a forward: the word is the whole test-and-set.
+# The rule: taking the lease is one compare-and-set (free -> busy). The
+# caller that wins uses the model's kept sessions. A caller that loses
+# (another holder has them, or the model is exposed) holds no lease: it
+# opens a private session set of its own, proceeds, and closes it when
+# done; it never takes, loads, closes or republishes the kept sessions.
+# Two threads generating on one model both work. No lock is held across a
+# forward: the word is the whole test-and-set.
 comptime CAUSAL_LEASE_BUSY = 1
 comptime CAUSAL_LEASE_EXPOSED = 2
 
 comptime CAUSAL_LEASE_TAKEN = 0
-comptime CAUSAL_LEASE_REFUSED = 1
+comptime CAUSAL_LEASE_HELD = 1
 comptime CAUSAL_LEASE_PRIVATE = 2
-
-comptime CAUSAL_LEASE_REFUSAL = "transformer decode session: busy"
 
 comptime CausalLeaseWord = MutPointer[Int64, MutUntrackedOrigin]
 
@@ -287,9 +286,9 @@ def causal_lease_load(word: CausalLeaseWord) -> Int:
 def causal_lease_take(word: CausalLeaseWord) -> Int:
     """The test-and-set: CAUSAL_LEASE_TAKEN when this caller now holds the
     kept sessions (the word went free -> busy in one step),
-    CAUSAL_LEASE_PRIVATE when the model is exposed (no lease is held; the
-    caller opens its own sessions), CAUSAL_LEASE_REFUSED when another holder
-    has it."""
+    CAUSAL_LEASE_PRIVATE when the model is exposed and CAUSAL_LEASE_HELD
+    when another holder has it: in both this caller holds no lease and runs
+    on private sessions of its own."""
     var expected = Int64(0)
     if Atomic.compare_exchange[
         success_ordering=Ordering.SEQUENTIAL,
@@ -297,10 +296,10 @@ def causal_lease_take(word: CausalLeaseWord) -> Int:
     ](word, expected, Int64(CAUSAL_LEASE_BUSY)):
         return CAUSAL_LEASE_TAKEN
     # Exposure is monotonic, so a word seen exposed stays exposed; a word
-    # seen busy and not exposed is a refusal whatever happens next.
+    # seen busy and not exposed was another holder's at the test.
     if (causal_lease_load(word) & CAUSAL_LEASE_EXPOSED) != 0:
         return CAUSAL_LEASE_PRIVATE
-    return CAUSAL_LEASE_REFUSED
+    return CAUSAL_LEASE_HELD
 
 
 def causal_lease_release(word: CausalLeaseWord) -> Bool:
