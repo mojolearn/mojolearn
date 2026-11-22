@@ -18,24 +18,27 @@ def test_route_connections_are_import_time_and_cover_both_families():
     calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Attribute) and n.func.attr == "connect_bindings"]
     assert len(calls) == 1
+    # `_mojolearn_metrics`: UMAP's image, from the estimator's binding route.
     assert {ast.literal_eval(arg) for arg in calls[0].args} == {
-        "_mojolearn_x_decomp", "_mojolearn_x_ann", "_mojolearn_estimators"}
+        "_mojolearn_x_decomp", "_mojolearn_x_ann", "_mojolearn_estimators", "_mojolearn_metrics"}
 
 
 def test_native_manifold_selects_fitted_and_default_modes():
     source = _source("bindings/mani_decomp_native_door.mojo")
     selection = source.split("def _mani_arguments(", 1)[1].split("def mani_decomp_operation(", 1)[0]
-    assert 'estimator_binding_mode(requested, "_mojolearn_x_decomp", context)' in selection
-    assert 'estimator_binding_mode(settings.default_mode, "_mojolearn_x_decomp", context)' in selection
-    assert 'args = _mani_arguments(settings, args, context)' in source
+    # The images are the estimator's own route (device= by the shared rule): one
+    # held route per mode object, so device="cpu" beside a GPU set runs the CPU image.
+    assert 'estimator_binding_routed(model, requested, "_mojolearn_x_decomp", context)' in selection
+    assert 'estimator_binding_routed(model, settings.default_mode, "_mojolearn_x_decomp", context)' in selection
+    assert 'args = _mani_arguments(model, settings, args, context)' in source
     assert 'var requested = settings.mode' in selection
     assert '.hasattr' not in source.split("def _mani_check(", 1)[1].split("def _mani_seed(", 1)[0]
 
 
 def test_native_tsne_resolves_both_optional_binding_slots():
     source = _source("bindings/mani_tsne_native_unpack.mojo")
-    assert 'estimator_binding_mode(settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]' in source
-    assert 'estimator_binding_mode(settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]' in source
+    assert 'estimator_binding_routed(model, settings.mode, "_mojolearn_x_ann", context) if args[0] is None else args[0]' in source
+    assert 'estimator_binding_routed(model, settings.mode, "_mojolearn_estimators", context) if args[1] is None else args[1]' in source
     # The PCA start calls the typed decomposition entry table (core.decomp_entry_table_pca), not a
     # by-name optional entry of the estimators binding.
     assert 'pca_ops_entry(decomp_pca_ops_key(estimators))' in source
