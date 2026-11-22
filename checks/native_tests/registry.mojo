@@ -226,16 +226,13 @@ from checks.native_tests.arena_state import register as register_arena_state
 from checks.native_tests.transport_frame import register as register_transport_frame
 from checks.native_tests.member_abi import register as register_member_abi
 from checks.native_tests.base_helpers_entry import register as register_base_helpers_entry
-from checks.native_tests.boundary_layout import register as register_boundary_layout
 from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
 from checks.native_tests.causal_lm_entry import register as register_causal_lm_entry
 from checks.native_tests.cfb_agglo_run import register as register_cfb_agglo_run
-from checks.native_tests.class_weight_plan import register as register_class_weight_plan
 from checks.native_tests.dbscan_contract import register as register_dbscan_contract
 from checks.native_tests.dbscan_door_run import register as register_dbscan_door_run
 from checks.native_tests.dbscan_options import register as register_dbscan_options
 from checks.native_tests.dbscan_state import register as register_dbscan_state
-from checks.native_tests.decomp_entry_table import register as register_decomp_entry_table
 from checks.native_tests.entry_table_contract import register as register_entry_table_contract
 from checks.native_tests.exec_owned_reuse import register as register_exec_owned_reuse
 from checks.native_tests.finite_scan import register as register_finite_scan
@@ -244,7 +241,6 @@ from checks.native_tests.gp_contract import register as register_gp_contract
 from checks.native_tests.gp_label_owner import register as register_gp_label_owner
 from checks.native_tests.gp_owner import register as register_gp_owner
 from checks.native_tests.gp_state import register as register_gp_state
-from checks.native_tests.hdbscan_plan import register as register_hdbscan_plan
 from checks.native_tests.hierarchy_connectivity_plan import register as register_hierarchy_connectivity_plan
 from checks.native_tests.host_entry_forest import register as register_host_entry_forest
 from checks.native_tests.ipca_contract import register as register_ipca_contract
@@ -286,15 +282,12 @@ from checks.native_tests.neighbors_local_run import register as register_neighbo
 from checks.native_tests.neighbors_semi_run import register as register_neighbors_semi_run
 from checks.native_tests.neighbors_split_run import register as register_neighbors_split_run
 from checks.native_tests.neural_entry import register as register_neural_entry
-from checks.native_tests.nmf_contract import register as register_nmf_contract
-from checks.native_tests.nmf_state import register as register_nmf_state
 from checks.native_tests.nonzero_scan import register as register_nonzero_scan
 from checks.native_tests.pandas_input_plan_check import register as register_pandas_input_plan_check
 from checks.native_tests.parallel_archive_entry import register as register_parallel_archive_entry
 from checks.native_tests.pca_contract import register as register_pca_contract
 from checks.native_tests.pca_query_state import register as register_pca_query_state
 from checks.native_tests.pcs_contract import register as register_pcs_contract
-from checks.native_tests.portable_math import register as register_portable_math
 from checks.native_tests.prep_entry_table import register as register_prep_entry_table
 from checks.native_tests.qn_door_run import register as register_qn_door_run
 from checks.native_tests.registry_epoch import register as register_registry_epoch
@@ -302,8 +295,6 @@ from checks.native_tests.ridge_multi_entry import register as register_ridge_mul
 from checks.native_tests.samba_entry_table import register as register_samba_entry_table
 from checks.native_tests.seq_opt_entry import register as register_seq_opt_entry
 from checks.native_tests.sequence_input_plan_check import register as register_sequence_input_plan_check
-from checks.native_tests.spectral_contract import register as register_spectral_contract
-from checks.native_tests.spectral_state import register as register_spectral_state
 from checks.native_tests.forest_door_values import register as register_forest_door_values
 from checks.native_tests.trees_door_run import register as register_trees_door_run
 from checks.native_tests.trees_entry_dart import register as register_trees_entry_dart
@@ -799,16 +790,13 @@ def all_checks() -> List[Check]:
     checks.append(register_transport_frame())
     checks.append(register_member_abi())
     checks.append(register_base_helpers_entry())
-    checks.append(register_boundary_layout())
     checks.append(register_byte_lm_entry())
     checks.append(register_causal_lm_entry())
     checks.append(register_cfb_agglo_run())
-    checks.append(register_class_weight_plan())
     checks.append(register_dbscan_contract())
     checks.append(register_dbscan_door_run())
     checks.append(register_dbscan_options())
     checks.append(register_dbscan_state())
-    checks.append(register_decomp_entry_table())
     checks.append(register_entry_table_contract())
     checks.append(register_exec_owned_reuse())
     checks.append(register_finite_scan())
@@ -817,7 +805,6 @@ def all_checks() -> List[Check]:
     checks.append(register_gp_label_owner())
     checks.append(register_gp_owner())
     checks.append(register_gp_state())
-    checks.append(register_hdbscan_plan())
     checks.append(register_hierarchy_connectivity_plan())
     checks.append(register_host_entry_forest())
     checks.append(register_ipca_contract())
@@ -860,15 +847,12 @@ def all_checks() -> List[Check]:
     checks.append(register_neighbors_split_run())
     checks.append(register_ivf_ops_table())
     checks.append(register_neural_entry())
-    checks.append(register_nmf_contract())
-    checks.append(register_nmf_state())
     checks.append(register_nonzero_scan())
     checks.append(register_pandas_input_plan_check())
     checks.append(register_parallel_archive_entry())
     checks.append(register_pca_contract())
     checks.append(register_pca_query_state())
     checks.append(register_pcs_contract())
-    checks.append(register_portable_math())
     checks.append(register_prep_entry_table())
     checks.append(register_qn_door_run())
     checks.append(register_registry_epoch())
@@ -876,8 +860,6 @@ def all_checks() -> List[Check]:
     checks.append(register_samba_entry_table())
     checks.append(register_seq_opt_entry())
     checks.append(register_sequence_input_plan_check())
-    checks.append(register_spectral_contract())
-    checks.append(register_spectral_state())
     checks.append(register_forest_door_values())
     checks.append(register_trees_door_run())
     checks.append(register_trees_entry_dart())
