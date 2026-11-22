@@ -133,6 +133,10 @@ from mamba.impl.modeling.modeling_mamba import (
     _refuse_nonfinite_named_host,
     residual_add_kernel,
 )
+# one body per operation (lane neural-blocks-3, 2026-11-22): the kernels below call these thread bodies
+from autograd.kernels.mamba2_ssd_body import (
+    m2_skip_cell,
+)
 
 
 def _grid(n: Int) -> Int:
@@ -900,31 +904,8 @@ def m2_skip_kernel(
     nh_in: Int32,
     cd_in: Int32,
 ):
-    var b = Int(b_in)
-    var l = Int(l_in)
-    var q0 = Int(q0_in)
-    var nh = Int(nh_in)
-    var cd = Int(cd_in)
-    var t_work = q0 + l
     var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if cell >= b * l * nh * M2_HEADDIM:
-        return
-    var bb = cell // (l * nh * M2_HEADDIM)
-    var rem = cell - bb * l * nh * M2_HEADDIM
-    var li = rem // (nh * M2_HEADDIM)
-    var rem2 = rem - li * nh * M2_HEADDIM
-    var hh = rem2 // M2_HEADDIM
-    var p = rem2 - hh * M2_HEADDIM
-    var xv = ftz(
-        silu_out.unsafe_load((bb * l + li) * cd + hh * M2_HEADDIM + p)
-    )
-    var prod = ftz(identical_mul(xv, ftz(d_skip.unsafe_load(hh))))
-    var y = ftz(
-        y_work.unsafe_load(
-            (((bb * t_work) + (q0 + li)) * nh + hh) * M2_HEADDIM + p
-        )
-    )
-    skip_out.unsafe_store(cell, ftz(y + prod))
+    m2_skip_cell(cell, skip_out, y_work, silu_out, d_skip, b_in, l_in, q0_in, nh_in, cd_in)
 
 
 # ===========================================================================

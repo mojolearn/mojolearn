@@ -42,6 +42,10 @@ from autograd.kernels.mamba2_proj import (
 )
 from mamba.checks.mamba2_fixture import Mamba2Dims
 from mamba.impl.modeling.modeling_mamba import mamba_scratch
+# one body per operation (lane neural-blocks-3, 2026-11-22): the kernels below call these thread bodies
+from autograd.kernels.mamba2_ssd_body import (
+    mamba2_d_skip_backward_cell,
+)
 # TOMBSTONE: MOJOLEARN_IDN_MAMBA_BWD_FOLDS (unmeasured opt-in arm, EXP:2271 PENDING) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at 52ec70d943.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_BWD_FOLDS.patch; record in docs/TOMBSTONES.md.
 # (Sweep 2026-11-15: MOJOLEARN_IDN_MAMBA_BWD_FOLDS (lane/expdel2-23-neural) was False: its v2 norm backward
@@ -195,26 +199,8 @@ def mamba2_d_skip_backward_kernel(
     One thread owns a token/head and folds p ascending for the per-token dD
     product. The later token reduction is the existing GEMM-v1 route.
     """
-    var cells = Int(cells_in)
-    var width = Int(width_in)
-    var conv_width = Int(conv_width_in)
-    var p_dim = Int(head_dim_in)
     var th = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if th >= cells:
-        return
-    var t = th // (width // p_dim)
-    var h = th % (width // p_dim)
-    var acc = Float32(0.0)
-    for p in range(p_dim):
-        var cell = t * width + h * p_dim + p
-        var ds = ftz(d_skip.unsafe_load(cell))
-        var xv = ftz(xbc.unsafe_load(t * conv_width + h * p_dim + p))
-        d_scan.unsafe_store(cell, ds)
-        d_x_from_d.unsafe_store(
-            cell, ftz(identical_mul(ds, ftz(d_weight.unsafe_load(h))))
-        )
-        acc = ftz(identical_mul_add(ds, xv, acc))
-    d_d_product.unsafe_store(th, acc)
+    mamba2_d_skip_backward_cell(th, d_scan, d_x_from_d, d_d_product, d_skip, xbc, d_weight, cells_in, width_in, conv_width_in, head_dim_in)
 
 
 struct Mamba2BackwardTail(Movable):
