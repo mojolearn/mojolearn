@@ -275,8 +275,14 @@ def index_identity(root, paths):
     spec.loader.exec_module(v)
     base = root / 'bench/results/identity_break'
     named = {Path(p).resolve() for p in paths}
+    # "Another identity record" is a column-shaped file the index would list
+    # (`index_row` is not None). A retained column's own JSON companions (its
+    # launch receipt, written beside it first) are not records: counting them
+    # refused every first retention into a checkout with no index
+    # (tools/test_retain_run_summary.py, cpc1-0022).
     others = (q for q in base.rglob('*.json')
-              if q.resolve() not in named and not any(x.startswith('.admission-preview-') for x in q.parts))
+              if q.resolve() not in named and not any(x.startswith('.admission-preview-') for x in q.parts)
+              and v.index_row(str(root), str(q)) is not None)
     create = not (root / v.RECORD_INDEX).exists() and next(others, None) is None
     return v.add_to_index(str(root), [str(p) for p in paths], create=create)
 
