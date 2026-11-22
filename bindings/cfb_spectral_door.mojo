@@ -1296,6 +1296,15 @@ def _cfb_spectral_algorithm_operation(model: PythonObject, operation: Int, args:
     raise Error("RuntimeError: unknown spectral operation code " + String(operation))
 
 
+def cfb_spectral_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`vendor_used()` of SpectralClustering and SpectralEmbedding: the
+    vendor word of the x_decomp image the estimator's binding route names
+    (`cpu` for a `device="cpu"` estimator beside a GPU set), the route every
+    fit of these classes takes (`_routes`). Metadata, no input, in no loop."""
+    var decomp = _routed(model, "decomp", "_mojolearn_x_decomp", PythonObject(None), context)
+    return py_call(decomp.x_decomp_vendor)
+
+
 def cfb_spectral_operation(model: PythonObject, operation: Int, args: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     # `operation` is the leaf code of bindings/operation_names_cfb.mojo

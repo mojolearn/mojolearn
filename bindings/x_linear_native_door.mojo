@@ -27,7 +27,7 @@
 # RUN per cv split): bindings/x_linear_cv_unpack.mojo says why.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr, GILReleased
-from bindings.x_linear_route_unpack import XLinearOps, xl_route, xl_route_host, xl_device_admit, xl_route_drop
+from bindings.x_linear_route_unpack import XLinearOps, xl_route, xl_route_host, xl_device_admit, xl_route_drop, xl_route_vendor_used
 from bindings.x_linear_common_unpack import _b, _truth, _name, _xl_scope, xl_intercept_words
 from x_linear.door_run import xl_cd_fit_run, xl_cd_predict_run
 from bindings.x_linear_cd_unpack import xl_cd_fit_unpack, xl_cd_predict_unpack, xl_cd_host_prediction_unpack
@@ -120,6 +120,7 @@ from bindings.x_linear_keys_unpack import (
     X_LINEAR_OPN_LRCV_PREDICT_PROBA, X_LINEAR_OPN_ONE_CLASS_DECISION_FUNCTION, X_LINEAR_OPN_ONE_CLASS_PREDICT,
     X_LINEAR_OPN_ONE_CLASS_SCORE_SAMPLES, X_LINEAR_OPN_REGRESSOR_PREDICT, X_LINEAR_OPN_REGRESSOR_PREDICT_SCORE,
     X_LINEAR_OPN_REGRESSOR_SCORE, X_LINEAR_OPN_DEVICE_ADMIT, X_LINEAR_OPN_SGD_PREDICT_PROBA,
+    X_LINEAR_OPN_CD_VENDOR_USED,
 )
 from bindings.py_keys import py_op_code
 from bindings.py_balanced import py_item
@@ -936,6 +937,12 @@ def _xl_public_operation(model: PythonObject, operation: Int, name: PythonObject
         xl_device_admit(model, args[0], context)
         xl_route_drop(model)
         return PythonObject(None)
+    if operation == X_LINEAR_OPN_CD_VENDOR_USED:
+        # Lasso / ElasticNet `vendor_used()`: metadata, no input and no
+        # lifecycle step. An explicit host class runs the CPU image.
+        if _xl_host_only(model):
+            return PythonObject("cpu")
+        return xl_route_vendor_used(model, py_fields(model), context, True)
     var method = _xl_method(operation)
     if method == _XL_M_NONE:
         raise Error("unknown native x_linear operation " + String(py=name))

@@ -131,8 +131,15 @@ def prep_route_vendor_used(model: PythonObject, context: PythonObject) raises ->
     or None for an image built before the read-back. The image is the one
     of the numeric mode the estimator was fitted in, else of the process
     mode. A metadata operation, in no loop."""
-    var run = prep_route_context(model, context)
-    var str_type = context["prep_builtins"].str
+    return prep_context_vendor_used(model, prep_route_context(model, context), context["prep_builtins"].str)
+
+
+def prep_context_vendor_used(model: PythonObject, run: PythonObject, str_type: PythonObject) raises -> PythonObject:
+    """`vendor_used()` read from `run`, the operation context the estimator's
+    device route already selected (the owner door's, or the stateless door's
+    `stateless_route_context`): the vendor word its x_prep image reports, for
+    the mode the estimator was fitted in, else the process mode. `str_type`
+    is the admitted builtins `str`. A metadata operation, in no loop."""
     var mode = py_get(py_fields(model), "numeric_mode_")
     if mode is None:
         mode = run["backend_fields"]["_DEFAULT_MODE"]

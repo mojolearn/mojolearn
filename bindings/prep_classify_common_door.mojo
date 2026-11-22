@@ -22,7 +22,7 @@ from bindings.classical_labels_door import ClassicalLabels, classical_encode_lab
 from bindings.prep_classify_prog_door import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
 from bindings.prep_classify_prog_run import cls_col_stats, cls_class_stats, cls_nb_counts, ClsDaMode
 from bindings.sequential_admission_door import _one_of
-from bindings.prep_entry_cache_unpack import prep_entry_word
+from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.prep_keys_unpack import prep_keys
 from bindings.py_balanced import py_item
 
@@ -101,6 +101,35 @@ def cls_requested_mode(fields: PythonObject, context: PythonObject) raises -> Py
         raise Error("ValueError: numeric_mode must be fast, identical or None")
     answer_mode_object(mode, mode_word, MODE_FAMILY_PREP)
     return mode
+
+
+def cls_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`vendor_used()` of the naive Bayes and discriminant-analysis
+    classifiers: the vendor word the x_prep image of `context` (the context
+    of the estimator's device route, `scaler_route_context`) reports, for
+    the mode the estimator was fitted in, else its `numeric_mode`, else the
+    process mode; None for an image built before the read-back. Metadata,
+    in no loop."""
+    var nk = prep_keys()
+    var b = cls_builtins()
+    var fields = py_fields(model)
+    var mode = py_get(fields, "numeric_mode_")
+    if mode is None:
+        mode = py_get(fields, nk[].k_numeric_mode)
+    if mode is None:
+        mode = cls_mode(context)
+    if py_type(mode) is not b.str:
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    mode = py_call(py_call(mode.strip).lower)
+    var entries = py_get(py_item(context, nk[].k_cls_bindings), mode)
+    if entries is None:
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    if py_type(entries) is b.str:
+        raise Error("ImportError: " + String(entries))
+    var text = prep_entry_text(entries, "x_prep_vendor")
+    if text.byte_length() == 0:
+        return PythonObject(None)
+    return PythonObject(text)
 
 
 def cls_entry(mode: PythonObject, name: String, context: PythonObject) raises -> PythonObject:

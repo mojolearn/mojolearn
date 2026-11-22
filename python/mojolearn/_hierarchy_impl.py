@@ -245,6 +245,17 @@ class AgglomerativeClustering(ParamsMixin):
         self.compute_distances = compute_distances
         self.prediction_data = prediction_data
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _NATIVE(self, "family_cfb_agglo_vendor_used", (), _NATIVE_CONTEXT)
+
     @native_method
     def fit(self, X, y=None):
         """Build the merge tree of `X` and cut it into clusters.

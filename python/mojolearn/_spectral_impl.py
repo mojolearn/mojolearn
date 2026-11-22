@@ -305,6 +305,17 @@ class SpectralClustering(ParamsMixin):
     #: the affinity='nearest_neighbors', prediction_data=True form.
     _mojolearn_member = (30, 0)
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _NATIVE(self, "family_cfb_spectral_vendor_used", (), _NATIVE_CONTEXT)
+
     def fit(self, X, y=None):
         """Cluster ``X``.
 
@@ -619,6 +630,17 @@ class SpectralEmbedding(ParamsMixin):
         go to private attributes, which the fit reads
         (bindings/cfb_spectral_door.mojo)."""
         return _NATIVE(self, "family_cfb_se_validate", (), _NATIVE_CONTEXT)
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _NATIVE(self, "family_cfb_spectral_vendor_used", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Compute the embedding of ``X``.

@@ -1043,6 +1043,17 @@ class _Classifier(_PrepBase):
     #: keeps to that; a user covariance_estimator takes host rows.
     _mojolearn_device_rows = True
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _CLS_CALL(self, "vendor_used", (), _CLS_CONTEXT)
+
     def predict(self, X):
         """Predict the class of each row.
 
@@ -1757,6 +1768,17 @@ class QuantileTransformer(_PrepBase):
         self.copy = copy
         self.device = device
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _STATELESS_CALL(self, "vendor_used", (), _STATELESS_CONTEXT)
+
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
@@ -1829,6 +1851,17 @@ class PowerTransformer(_PrepBase):
         self.copy = copy
         self.device = device
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _STATELESS_CALL(self, "vendor_used", (), _STATELESS_CONTEXT)
+
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
@@ -1880,6 +1913,17 @@ class Normalizer(_PrepBase):
         self.norm = norm
         self.copy = copy
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _STATELESS_CALL(self, "vendor_used", (), _STATELESS_CONTEXT)
 
     @_native_robust_method
     def fit(self, X, y=None):
@@ -1957,6 +2001,17 @@ class PolynomialFeatures(_PrepBase):
         self.include_bias = include_bias
         self.order = order
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _STATELESS_CALL(self, "vendor_used", (), _STATELESS_CONTEXT)
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -2121,6 +2176,17 @@ class Binarizer(_PrepBase):
         self.threshold = threshold
         self.copy = copy
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _STATELESS_CALL(self, "vendor_used", (), _STATELESS_CONTEXT)
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
@@ -2587,6 +2653,17 @@ class VarianceThreshold(_SelectorMixin):
     def __init__(self, threshold=0.0, device=None):
         self.threshold = threshold
         self.device = device
+
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the compiled
+            binary the estimator uses.
+        """
+        return _STATELESS_CALL(self, "vendor_used", (), _STATELESS_CONTEXT)
 
     def fit(self, X, y=None):
         return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)

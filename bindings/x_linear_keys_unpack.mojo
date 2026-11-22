@@ -51,6 +51,9 @@ comptime X_LINEAR_OPN_CD_SCORE = 35
 # given (a constructor, `set_params`) and the estimator's route dropped.
 comptime X_LINEAR_OPN_REGRESSOR_SCORE = 36
 comptime X_LINEAR_OPN_DEVICE_ADMIT = 37
+# "cd_vendor_used": `vendor_used()` of Lasso / ElasticNet, the vendor word of
+# the solver image their route holds (metadata, no input, no lifecycle step).
+comptime X_LINEAR_OPN_CD_VENDOR_USED = 38
 
 
 struct XLinearKeys(Defaultable, Movable):
@@ -444,6 +447,7 @@ def _x_linear_keys_fill(nk: UnsafePointer[XLinearKeys, MutUntrackedOrigin]) rais
     py_op_add(ops, "cd_score", X_LINEAR_OPN_CD_SCORE)
     py_op_add(ops, "regressor_score", X_LINEAR_OPN_REGRESSOR_SCORE)
     py_op_add(ops, "device_admit", X_LINEAR_OPN_DEVICE_ADMIT)
+    py_op_add(ops, "cd_vendor_used", X_LINEAR_OPN_CD_VENDOR_USED)
     nk[].ops = ops
     nk[].ready = True
 
