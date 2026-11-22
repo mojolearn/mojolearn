@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual NMF graphs and mathematical oracles, without reproducing a solver.
 
 The 6x3 input, rank two, three iterations and seed seven are the original
@@ -6,13 +7,16 @@ public boundary fixture. CD/MU and all five initialization modes are kept.
 Float64 matrix multiplication and the defining beta-divergence equations
 check the resulting factors; no fitted native output supplies a reference.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.math import isfinite, log, sqrt
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.nmf_native_api import NMFNativeDriver, NMFFitRequest, NMFInverseRequest
 from core.nmf_native_state import NMFScratch
 from x_decomp.nmf import NmfArgs
-from checks.native_tests.pca_native import guards, unchanged, close_values, PCA_TEST_GUARD
+from checks.native_tests.pca_native_helpers import guards, unchanged, close_values, PCA_TEST_GUARD, require
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.nmf_native_provider import nmf_native_v1
 from x_decomp.host import HostExec
@@ -22,7 +26,8 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from x_decomp.decomp_owner_dev import DevDecomp
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime NMF_NATIVE_FIXTURES = 20
@@ -241,44 +246,33 @@ def fixture(driver: NMFNativeDriver, unit: Int, host: Bool) raises:
         _ = h_output^
 
 
-# ---- The host column (was nmf_native_cpu_suite.mojo) ----
-# Independent host NMF graphs execute through the host worker pool.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(NMF_NATIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(NMFNativeDriver(nmf_native_v1[HostExec, NoRDev, False, HostDecomp]), unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, NMF_NATIVE_FIXTURES)
-
-
-# ---- The device column (was nmf_native_gpu_suite.mojo) ----
-# One physical GPU executes NMF graphs in order over its shared contexts.
+# Host column: Independent host NMF graphs execute through the host worker pool.
+# Device column: One physical GPU executes NMF graphs in order over its shared contexts.
 #
 # GPU jobs cannot overlap these shared DeviceContext submissions; kernels and
 # independent oracle cells remain parallel. This suite does not test concurrent
 # GPU submissions and makes no claim that the recorded context race is fixed.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(NMF_NATIVE_FIXTURES)
-    for unit in range(NMF_NATIVE_FIXTURES):
-        try:
-            fixture(NMFNativeDriver(nmf_native_v1[DevExec, DevRDev, True, DevDecomp]), unit, False)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(NMFNativeDriver(nmf_native_v1[HostExec, NoRDev, False, HostDecomp]), unit, True)
 
 
-def register() -> Check:
-    return Check("nmf_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_nmf_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("nmf_native", NMF_NATIVE_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(NMF_NATIVE_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture(NMFNativeDriver(nmf_native_v1[DevExec, DevRDev, True, DevDecomp]), unit, False)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("nmf_native: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

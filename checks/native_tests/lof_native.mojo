@@ -1,20 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual LOF provider graphs with independent mathematical references.
 
 Original 60x5/25x5 seeded inputs are preserved. Saved Float64 NumPy full-sort
 references use the mathematical density/LOF definitions. Three 4x2 cases also
 use hand-derived rational distances/densities/scores across all routes.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.neighbors_native_driver import XnDriver
 from core.lof_plan import LofPlan, LofLabelsPlan, lof_offset, lof_f32_address
-from checks.native_tests.pca_native import unchanged
+from checks.native_tests.pca_native_helpers import unchanged, require
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_neighbors.native_descriptor_host import xn_native_v1
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime LOF_NATIVE_FIXTURES = 20
@@ -228,45 +233,34 @@ def fixture(driver: XnDriver, unit: Int) raises:
         finite_case(driver, unit - 17)
 
 
-# ---- The host column (was lof_native_cpu_suite.mojo) ----
-# Independent actual host LOF graphs run across the host worker pool.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(LOF_NATIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(XnDriver(xn_native_v1), unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, LOF_NATIVE_FIXTURES)
-
-
-# ---- The device column (was lof_native_gpu_suite.mojo) ----
-# Same LOF numerical graphs, ordered on the one physical GPU.
+# Host column: Independent actual host LOF graphs run across the host worker pool.
+# Device column: Same LOF numerical graphs, ordered on the one physical GPU.
 #
 # Only one GPU job runs at a time. Each graph submits through shared native
 # DeviceContexts, so graphs execute in order; existing kernels and independent
 # oracle cells remain parallel. This obtains numerical/refusal evidence only.
 # The separately recorded concurrent shared-context failure remains unresolved.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(LOF_NATIVE_FIXTURES)
-    for unit in range(LOF_NATIVE_FIXTURES):
-        try:
-            fixture(XnDriver(xn_native_v1_gpu), unit)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(XnDriver(xn_native_v1), unit)
 
 
-def register() -> Check:
-    return Check("lof_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_lof_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("lof_native", LOF_NATIVE_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(LOF_NATIVE_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture(XnDriver(xn_native_v1_gpu), unit)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("lof_native: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

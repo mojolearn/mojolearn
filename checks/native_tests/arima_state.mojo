@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native ARIMA fitted-state checks and exact dyadic prediction expectations.
 
 Original MLE/maxiter5/order111 and order100+one-regressor settings are retained
@@ -7,6 +8,9 @@ conditional-mean/random-walk equations, with zero MA coefficient in the111
 closed forms. Fitted-case resident/per-call equality is ownership parity, not
 an independent numerical oracle. No Python runtime or old hashes are used.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
@@ -18,7 +22,13 @@ from arima.resident_state import (
     arima_resident_release,
     arima_predict_resident,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime ARIMA_STATE_FIXTURES = 8
@@ -270,8 +280,7 @@ def per_call[K: ArimaCalls](state: ArimaState, future: ArimaWords, target: Arima
     _ = target
 
 
-# ---- The host column (was arima_state_cpu_suite.mojo) ----
-# Importable native CPU ARIMA state suite; private state per parallel fixture.
+# Host column: Importable native CPU ARIMA state suite; private state per parallel fixture.
 struct HostArima(ArimaCalls):
     @staticmethod
     def fit(state: ArimaState) raises -> Int:
@@ -323,18 +332,7 @@ def fixture(fixture_id: Int) raises:
     _ = state
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(ARIMA_STATE_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            fixture(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, ARIMA_STATE_FIXTURES)
-
-
-# ---- The device column (was arima_state_gpu_suite.mojo) ----
-# Importable ARIMA resident owner suite; ordered shared GPU context submission.
+# Device column: Importable ARIMA resident owner suite; ordered shared GPU context submission.
 struct DeviceArima(ArimaCalls):
     @staticmethod
     def fit(state: ArimaState) raises -> Int:
@@ -357,88 +355,92 @@ struct DeviceArima(ArimaCalls):
 
 
 def fixture_gpu(fixture_id: Int) raises:
-    var state = prepare_state[DeviceArima](fixture_id)
-    var saved_y = state.y.words.copy()
-    var saved_exog = state.exog.words.copy()
-    var saved_params = state.params.words.copy()
-    var count_before = arima_resident_count()
-    var handle = arima_resident_prepare(f32_ptr(state.y.address()), state.exog_address(), f32_ptr(state.params.address()),
-        state.batch, state.n, 1, state.d, state.q, 0, 0, 0, 0, state.k, state.exog_count)
-    var expected = List[ArimaWords]()
-    try:
-        require(arima_resident_count() == count_before + 1, "ARIMA prepare did not acquire exactly one owner")
-        for query_id in range(ARIMA_STATE_QUERIES):  # Dependent queries over one resident snapshot.
-            var bounds = query(state, query_id)
-            var future = future_words(state, bounds[1])
-            var saved_future = future.words.copy()
-            var result = ArimaWords(state.batch * (bounds[1] - bounds[0]))
-            per_call[DeviceArima](state, future, result, bounds[0], bounds[1], bounds[2])
-            var resident = ArimaWords(result.count)
-            var written = arima_predict_resident(handle, future.address() if future.count else 0, f32_ptr(resident.address()),
-                bounds[0], bounds[1] - bounds[0] if bounds[2] else bounds[1], bounds[2], "arima_forecast" if bounds[2] else "arima_predict")
-            require(written == result.count, "resident ARIMA query count")
-            same_words(resident, result.words, "resident/per-call ARIMA fitted-state parity")
-            same_words(state.y, saved_y, "GPU ARIMA changed observations")
-            same_words(state.exog, saved_exog, "GPU ARIMA changed fitted regressors")
-            same_words(state.params, saved_params, "GPU ARIMA changed fitted parameters")
-            same_words(future, saved_future, "GPU ARIMA changed future regressors")
-            require(arima_resident_count() == count_before + 1, "changing horizon allocated another ARIMA owner")
-            expected.append(result^)
-            _ = resident
-            _ = future
-        # Resident state owns its upload; mutating caller buffers cannot change
-        # any later answer, including the fitted regressor and parameter owners.
-        state.y.fill(-99)
-        state.exog.fill(-98)
-        state.params.fill(-97)
-        for query_id in range(ARIMA_STATE_QUERIES):
-            var bounds = query(state, query_id)
-            var future = future_words(state, bounds[1])
-            var result = ArimaWords(expected[query_id].count)
-            require(arima_predict_resident(handle, future.address() if future.count else 0, f32_ptr(result.address()),
-                bounds[0], bounds[1] - bounds[0] if bounds[2] else bounds[1], bounds[2], "arima_predict") == result.count,
-                "retained ARIMA query count after source mutation")
-            same_words(result, expected[query_id].words, "resident ARIMA borrowed mutated caller state")
-            _ = result
-            _ = future
-        state.guards()
-    finally:
-        arima_resident_release(handle)
-    arima_resident_release(handle)
-    require(arima_resident_count() == count_before, "ARIMA owner release/double release leaked state")
-    var target = ArimaWords(state.batch * 3)
-    var untouched = target.words.copy()
-    var refused = False
-    try:
-        _ = arima_predict_resident(handle, 0, f32_ptr(target.address()), 0, 3, False, "arima_predict")
-    except error:
-        refused = True
-        require(String(error) == "unknown or released resident ARIMA handle", "released ARIMA refusal changed")
-    require(refused, "released ARIMA owner remained queryable")
-    same_words(target, untouched, "released ARIMA query wrote output")
-    _ = state
-    _ = target
-    _ = expected
-
-
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(ARIMA_STATE_FIXTURES)
-    for fixture_id in range(ARIMA_STATE_FIXTURES):
+    # Device column only. TestSuite discovery compiles every function of the module, so the host column build
+    # must not instantiate this body's device contexts (the registry's run_cpu never referenced it).
+    comptime if CPU_COLUMN_BUILD:
+        raise Error("fixture_gpu: device column only")
+    else:
+        var state = prepare_state[DeviceArima](fixture_id)
+        var saved_y = state.y.words.copy()
+        var saved_exog = state.exog.words.copy()
+        var saved_params = state.params.words.copy()
+        var count_before = arima_resident_count()
+        var handle = arima_resident_prepare(f32_ptr(state.y.address()), state.exog_address(), f32_ptr(state.params.address()),
+            state.batch, state.n, 1, state.d, state.q, 0, 0, 0, 0, state.k, state.exog_count)
+        var expected = List[ArimaWords]()
         try:
-            fixture_gpu(fixture_id)
+            require(arima_resident_count() == count_before + 1, "ARIMA prepare did not acquire exactly one owner")
+            for query_id in range(ARIMA_STATE_QUERIES):  # Dependent queries over one resident snapshot.
+                var bounds = query(state, query_id)
+                var future = future_words(state, bounds[1])
+                var saved_future = future.words.copy()
+                var result = ArimaWords(state.batch * (bounds[1] - bounds[0]))
+                per_call[DeviceArima](state, future, result, bounds[0], bounds[1], bounds[2])
+                var resident = ArimaWords(result.count)
+                var written = arima_predict_resident(handle, future.address() if future.count else 0, f32_ptr(resident.address()),
+                    bounds[0], bounds[1] - bounds[0] if bounds[2] else bounds[1], bounds[2], "arima_forecast" if bounds[2] else "arima_predict")
+                require(written == result.count, "resident ARIMA query count")
+                same_words(resident, result.words, "resident/per-call ARIMA fitted-state parity")
+                same_words(state.y, saved_y, "GPU ARIMA changed observations")
+                same_words(state.exog, saved_exog, "GPU ARIMA changed fitted regressors")
+                same_words(state.params, saved_params, "GPU ARIMA changed fitted parameters")
+                same_words(future, saved_future, "GPU ARIMA changed future regressors")
+                require(arima_resident_count() == count_before + 1, "changing horizon allocated another ARIMA owner")
+                expected.append(result^)
+                _ = resident
+                _ = future
+            # Resident state owns its upload; mutating caller buffers cannot change
+            # any later answer, including the fitted regressor and parameter owners.
+            state.y.fill(-99)
+            state.exog.fill(-98)
+            state.params.fill(-97)
+            for query_id in range(ARIMA_STATE_QUERIES):
+                var bounds = query(state, query_id)
+                var future = future_words(state, bounds[1])
+                var result = ArimaWords(expected[query_id].count)
+                require(arima_predict_resident(handle, future.address() if future.count else 0, f32_ptr(result.address()),
+                    bounds[0], bounds[1] - bounds[0] if bounds[2] else bounds[1], bounds[2], "arima_predict") == result.count,
+                    "retained ARIMA query count after source mutation")
+                same_words(result, expected[query_id].words, "resident ARIMA borrowed mutated caller state")
+                _ = result
+                _ = future
+            state.guards()
+        finally:
+            arima_resident_release(handle)
+        arima_resident_release(handle)
+        require(arima_resident_count() == count_before, "ARIMA owner release/double release leaked state")
+        var target = ArimaWords(state.batch * 3)
+        var untouched = target.words.copy()
+        var refused = False
+        try:
+            _ = arima_predict_resident(handle, 0, f32_ptr(target.address()), 0, 3, False, "arima_predict")
         except error:
-            cases.fail(fixture_id, error)
+            refused = True
+            require(String(error) == "unknown or released resident ARIMA handle", "released ARIMA refusal changed")
+        require(refused, "released ARIMA owner remained queryable")
+        same_words(target, untouched, "released ARIMA query wrote output")
+        _ = state
+        _ = target
+        _ = expected
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(fixture_id: Int) raises:
+    fixture(fixture_id)
 
 
-def register() -> Check:
-    return Check("arima_state", cpu=True, gpu=True, serial="", run=run_cases)
+def test_arima_state() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("arima_state", ARIMA_STATE_FIXTURES, _host_fixture)
+    else:
+        var failures = String("")
+        for fixture_id in range(ARIMA_STATE_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture_gpu(fixture_id)
+            except error:
+                failures += "\n      row " + String(fixture_id) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("arima_state: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

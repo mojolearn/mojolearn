@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual typed Agglomerative graphs and independent mathematical references.
 
 Single linkage uses a saved Float64 minimax closure, independent of an MST.
@@ -6,6 +7,9 @@ Ward references recompute centroids; average/complete use original pairwise
 distances. Trees are checked by leaf-pair cophenetic relations and partitions,
 allowing valid tied merge orientation/order and label-number permutations.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.math import isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -25,7 +29,7 @@ from core.agglo_native_api import (
     agglo_resident_query,
 )
 from checks.native_tests.agglo_native_profiles import AggloCase, profile, query_count, query_name, query_rows
-from checks.native_tests.pca_native import unchanged
+from checks.native_tests.pca_native_helpers import unchanged, require
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neighbors_native_driver import XnDriver
 from core.dbscan_native_host import DBSCANHostKernels
@@ -37,7 +41,8 @@ from hierarchy.solver_descriptor_device import hierarchy_solver_device_v1
 from hierarchy.cluster_descriptor_device import hierarchy_cluster_device_v1
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime AGGLO_NATIVE_FIXTURES = 9
@@ -373,50 +378,39 @@ def fixture(solver: AggloSolverDriver, cluster: AggloClusterDriver, zero: AggloZ
             _ = scalars^
 
 
-# ---- The host column (was agglo_native_cpu_suite.mojo) ----
-# Independent Agglomerative numerical graphs run across host cores.
+# Host column: Independent Agglomerative numerical graphs run across host cores.
 #
 # Existing kernels and independent oracle cells remain parallel. Ordered GPU
 # execution does not clear the separately recorded shared-context submission bug.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(AGGLO_NATIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(AggloSolverDriver(hierarchy_solver_host_v1), AggloClusterDriver(hierarchy_cluster_host_v1),
-                AggloZeroRowsDriver(XnDriver(xn_native_v1)), DBSCANNativeDriver(dbscan_native_v1[DBSCANHostKernels]),
-                unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, AGGLO_NATIVE_FIXTURES)
-
-
-# ---- The device column (was agglo_native_gpu_suite.mojo) ----
-# Agglomerative graphs run one at a time on one physical GPU/shared contexts.
+# Device column: Agglomerative graphs run one at a time on one physical GPU/shared contexts.
 #
 # Existing kernels and independent oracle cells remain parallel. Ordered GPU
 # execution does not clear the separately recorded shared-context submission bug.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(AGGLO_NATIVE_FIXTURES)
-    for unit in range(AGGLO_NATIVE_FIXTURES):
-        try:
-            fixture(AggloSolverDriver(hierarchy_solver_device_v1), AggloClusterDriver(hierarchy_cluster_device_v1),
-                AggloZeroRowsDriver(XnDriver(xn_native_v1_gpu)), DBSCANNativeDriver(dbscan_native_v1[DBSCANDeviceKernels]),
-                unit, False)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(AggloSolverDriver(hierarchy_solver_host_v1), AggloClusterDriver(hierarchy_cluster_host_v1),
+        AggloZeroRowsDriver(XnDriver(xn_native_v1)), DBSCANNativeDriver(dbscan_native_v1[DBSCANHostKernels]),
+        unit, True)
 
 
-def register() -> Check:
-    return Check("agglo_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_agglo_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("agglo_native", AGGLO_NATIVE_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(AGGLO_NATIVE_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture(AggloSolverDriver(hierarchy_solver_device_v1), AggloClusterDriver(hierarchy_cluster_device_v1),
+                    AggloZeroRowsDriver(XnDriver(xn_native_v1_gpu)), DBSCANNativeDriver(dbscan_native_v1[DBSCANDeviceKernels]),
+                    unit, False)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("agglo_native: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

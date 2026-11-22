@@ -1,21 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The PCA owned-fit table (core/decomp_entry_table_pca.mojo), the one entry
 the TSNE owner's 'pca' start (bindings/mani_tsne_native.mojo) calls, with
 expectations known by construction (all variance on the first feature, a
 non-finite X), not by another call into the implementation. No Python
 objects.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.entry_table import entry_table_same_call
 from core.native_descriptor_call import native_descriptor_call
 from core.neighbors_entry_table import NeighborsEntryKey, neighbors_vendor_word
 from core.decomp_entry_table_pca import PCA_OP_FIT_OWNED, pca_ops_publish, pca_ops_entry, pca_fit_owned_call
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.host_parallel import host_parallelize
 from decomposition.pca_ops_entry_host import pca_ops_host_v1, PCA_OPS_HOST_API
 from checks.vendor import COMPILED_VENDOR
 from decomposition.pca_ops_entry_device import pca_ops_device_v1, PCA_OPS_DEVICE_API
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime PCA_OWNED_CASES = 3
@@ -139,51 +148,40 @@ def check_pca_table(key: NeighborsEntryKey, publisher: Int, entry: NativeDescrip
     require(other, "pca table: the other tier's unpublished slot did not refuse")
 
 
-# ---- The host column (was pca_owned_ops_cpu_suite.mojo) ----
-# The CPU column of the PCA owned-fit table: the table round trip first
+# Host column: The CPU column of the PCA owned-fit table: the table round trip first
 # (ordered metadata), then the independent entry cases on the existing host
 # pool.
-def _run_cpu(mut report: Report) raises:
-    var mode = Int(GLOBAL_NUMERIC_MODE)
-    var api = PCA_OPS_HOST_API.get_or_create_ptr()
-    check_pca_table(NeighborsEntryKey(mode, 0), Int(api[].entries.unsafe_ptr()), pca_ops_host_v1)
-    var total = PCA_OWNED_CASES
-    var cases = report.cases(total)
-    def task(case_id: Int) {imm cases}:
-        try:
-            run_case(pca_ops_host_v1, case_id)
-        except error:
-            cases.fail(case_id, error)
-    report.parallel(task, total)
-
-
-# ---- The device column (was pca_owned_ops_gpu_suite.mojo) ----
-# The device column of the PCA owned-fit table. The entry shares the
+# Device column: The device column of the PCA owned-fit table. The entry shares the
 # estimators binding's device context, so the cases submit in order; the
 # kernels keep their native parallelism (no concurrency claim).
-def _run_gpu(mut report: Report) raises:
-    var mode = Int(GLOBAL_NUMERIC_MODE)
-    var vendor = neighbors_vendor_word(COMPILED_VENDOR)
-    require(vendor > 0, "pca_owned_ops_gpu: this build has no GPU vendor")
-    var api = PCA_OPS_DEVICE_API.get_or_create_ptr()
-    check_pca_table(NeighborsEntryKey(mode, vendor), Int(api[].entries.unsafe_ptr()), pca_ops_device_v1)
-    var cases = report.cases(PCA_OWNED_CASES)
-    for case_id in range(PCA_OWNED_CASES):  # driver-loop: over the ordered device cases
-        try:
-            run_case(pca_ops_device_v1, case_id)
-        except error:
-            cases.fail(case_id, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(case_id: Int) raises:
+    run_case(pca_ops_host_v1, case_id)
 
 
-def register() -> Check:
-    return Check("pca_owned_ops", cpu=True, gpu=True, serial="", run=run_cases)
+def test_pca_owned_ops() raises:
+    comptime if CPU_COLUMN_BUILD:
+        var mode = Int(GLOBAL_NUMERIC_MODE)
+        var api = PCA_OPS_HOST_API.get_or_create_ptr()
+        check_pca_table(NeighborsEntryKey(mode, 0), Int(api[].entries.unsafe_ptr()), pca_ops_host_v1)
+        var total = PCA_OWNED_CASES
+        check_cases("pca_owned_ops", total, _host_fixture)
+    else:
+        var mode = Int(GLOBAL_NUMERIC_MODE)
+        var vendor = neighbors_vendor_word(COMPILED_VENDOR)
+        require(vendor > 0, "pca_owned_ops_gpu: this build has no GPU vendor")
+        var api = PCA_OPS_DEVICE_API.get_or_create_ptr()
+        check_pca_table(NeighborsEntryKey(mode, vendor), Int(api[].entries.unsafe_ptr()), pca_ops_device_v1)
+        var failures = String("")
+        for case_id in range(PCA_OWNED_CASES):  # driver-loop: over fixtures, in order
+            try:
+                run_case(pca_ops_device_v1, case_id)
+            except error:
+                failures += "\n      row " + String(case_id) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("pca_owned_ops: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original 48 KDE profiles through typed native providers and independent refs.
 
 Inputs, kernel/metric/weight matrix, bandwidth and two retained-query passes
 are unchanged. Mathematical references use the existing KDE correctness bound;
 they are not outputs of either the legacy controller or the product oracle.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.math import isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -20,11 +24,12 @@ from core.kde_native_api import (
     kde_native_v1,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from checks.native_tests.pca_native import guards, unchanged, PCA_TEST_GUARD
+from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD, require
 from core.kde_native_host import KDEHostKernels
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.kde_native_device import KDEDeviceKernels
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime KDE_NATIVE_FIXTURES = 48
@@ -209,43 +214,32 @@ def fixture(driver: KDENativeDriver, unit: Int, host: Bool) raises:
             _ = status
 
 
-# ---- The host column (was kde_native_cpu_suite.mojo) ----
-# Independent typed host KDE profiles run across host cores.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(KDE_NATIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(KDENativeDriver(kde_native_v1[KDEHostKernels]), unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, KDE_NATIVE_FIXTURES)
-
-
-# ---- The device column (was kde_native_gpu_suite.mojo) ----
-# Typed KDE graphs run one at a time on one physical GPU/shared contexts.
+# Host column: Independent typed host KDE profiles run across host cores.
+# Device column: Typed KDE graphs run one at a time on one physical GPU/shared contexts.
 #
 # Existing kernels and independent oracle cells stay parallel. This ordered
 # numerical suite does not clear recorded shared-context concurrency failures.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(KDE_NATIVE_FIXTURES)
-    for unit in range(KDE_NATIVE_FIXTURES):
-        try:
-            fixture(KDENativeDriver(kde_native_v1[KDEDeviceKernels]), unit, False)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(KDENativeDriver(kde_native_v1[KDEHostKernels]), unit, True)
 
 
-def register() -> Check:
-    return Check("kde_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_kde_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("kde_native", KDE_NATIVE_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(KDE_NATIVE_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture(KDENativeDriver(kde_native_v1[KDEDeviceKernels]), unit, False)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("kde_native: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
