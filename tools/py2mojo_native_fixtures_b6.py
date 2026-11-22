@@ -9,6 +9,8 @@ every array the original test built (same seed, draw order and dtype), every ref
                                                 (python/mojolearn/tests/test_linalg_decompositions.py)
     checks/native_tests/fixtures/pca_random/    pca_native.mojo `test_pca_randomized_options`
                                                 (python/mojolearn/tests/test_pca_exact_native_owner.py)
+    checks/native_tests/fixtures/xn_svgp/       neighbors_svgp.mojo `test_svgp`
+                                                (python/mojolearn/tests/test_x_neighbors_sanity.py)
     checks/native_tests/fixtures/xn_louvain/    x_neighbors_graph_check.mojo `test_louvain`
                                                 (python/mojolearn/tests/test_x_neighbors_sanity.py)
 
@@ -126,7 +128,46 @@ def louvain():
             _put("xn_louvain", "q-ref.f64", [q_ref], np.float64)]
 
 
-SETS = (linalg_inputs, linalg_eigh, linalg_qr, linalg_svd, pca_random, louvain)
+def _xn_data(n=200, d=6, seed=0):
+    # test_x_neighbors_sanity.py::_data
+    rng = np.random.default_rng(seed)
+    X = rng.standard_normal((n, d)).astype(np.float32)
+    X[:5] *= 6.0
+    return X
+
+
+def svgp():
+    # test_x_neighbors_sanity.py::test_svgp: the float64 closed form of the original, line for line
+    X = _xn_data(150, 3)
+    y = np.sin(X[:, 0]) + 0.1 * X[:, 1]
+    Z = X[::10]
+    kv, ls, nv = 1.5, 1.2, 0.2
+    X64, Z64, y64 = X.astype(np.float64), Z.astype(np.float64), y.astype(np.float64)
+
+    def k(a, b):
+        d = ((a[:, None, :] - b[None, :, :]) ** 2).sum(-1)
+        return kv * np.exp(-d / (2 * ls * ls))
+    Kuu = k(Z64, Z64) + 1e-6 * np.eye(len(Z64))
+    Kuf = k(Z64, X64)
+    S = Kuu + Kuf @ Kuf.T / nv
+    alpha = np.linalg.solve(S, Kuf @ y64) / nv
+    Xs = _xn_data(20, 3, seed=9).astype(np.float64)
+    Ksu = k(Xs, Z64)
+    mean = Ksu @ alpha
+    var = kv - np.einsum("ij,jk,ik->i", Ksu, np.linalg.inv(Kuu) - np.linalg.inv(S), Ksu)
+    n = len(X64)
+    Qff = Kuf.T @ np.linalg.solve(Kuu, Kuf)
+    C = Qff + nv * np.eye(n)
+    _, logdet = np.linalg.slogdet(C)
+    elbo = (-0.5 * n * np.log(2 * np.pi) - 0.5 * logdet - 0.5 * y64 @ np.linalg.solve(C, y64)
+            - 0.5 / nv * (n * kv - np.trace(Qff)))
+    return [_put("xn_svgp", "x.f32", X, np.float32), _put("xn_svgp", "y.f32", y, np.float32),
+            _put("xn_svgp", "z.f32", Z, np.float32), _put("xn_svgp", "q.f32", Xs.astype(np.float32), np.float32),
+            _put("xn_svgp", "mean.f64", mean, np.float64), _put("xn_svgp", "var.f64", var, np.float64),
+            _put("xn_svgp", "elbo.f64", [elbo], np.float64)]
+
+
+SETS = (linalg_inputs, linalg_eigh, linalg_qr, linalg_svd, pca_random, louvain, svgp)
 
 
 def _run(index):
