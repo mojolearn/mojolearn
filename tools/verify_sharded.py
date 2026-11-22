@@ -122,7 +122,9 @@ def main(argv=None):
     if args.plan:
         return 0
 
-    out = pathlib.Path(args.out or (ROOT / "bench" / "results" / "verify_sharded"
+    # Run output never lands in the repo (2026-11-21 tree clean-up; the pre-push check refuses new
+    # bench/results files): the default is the evidence folder, which the box persist uploads to R2.
+    out = pathlib.Path(args.out or (pathlib.Path.home() / "mojolearn-evidence" / "verify-sharded"
                                     / time.strftime("%Y-%m-%d_%H%M%S")))
     out.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")

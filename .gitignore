@@ -170,3 +170,29 @@ EXPERIMENTS.md
 
 # box job results (tools/box_persist_run.sh default DIR; persisted to R2 from the box)
 box-out/
+
+# RUN OUTPUT STAYS OUT OF THE TREE (2026-11-21 tree clean-up). New files under bench/results/ belong in
+# ~/mojolearn-evidence/ and R2 (tools/box_persist_run.sh), except the live boards and the records the tools
+# below write on purpose. The same allowlist is enforced on push by tools/hooks/check_tree_additions.sh;
+# keep the two lists together. Tracked files are unaffected (ignore rules only stop new files).
+/bench/results/**
+!/bench/results/**/
+!/bench/results/bench_board/**
+!/bench/results/board_best_ever/*.json
+!/bench/results/board-archive/**
+!/bench/results/opponent-archive/**
+!/bench/results/paper_compare/*
+!/bench/results/dataset_store/manifest.tsv
+!/bench/results/identity_break/**
+/bench/results/identity_break/**/*.log
+!/bench/results/reference_admissions/**
+!/bench/results/release_evidence/**
+!/bench/results/release_verification/**
+!/bench/results/ARCHIVE_INDEX.md
+!/bench/results/r2-index.tsv
+# handoffs live in ~/mojolearn-evidence/ (docs/handoffs/README.md says so)
+!/docs/handoffs/
+/docs/handoffs/*
+!/docs/handoffs/README.md
+# tools/retain_run_summary.py stream summaries for measurements (untracked, rebuilt by the tool)
+/docs/measurements/latest/auto/

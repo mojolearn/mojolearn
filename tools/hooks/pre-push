@@ -13,6 +13,11 @@
 # providers/, experiments/, bench/ and tests/ imports Python (an import grep,
 # not a count gate).
 #
+# Tree additions (2026-11-21): tools/hooks/check_tree_additions.sh, from the pushed tree, refuses new
+# files under bench/results/ outside the live boards and tool-written records, new *.log there, and new
+# docs/handoffs/ files: run output belongs in ~/mojolearn-evidence/ and R2 (it replaces the retired daily
+# evidence-trim workflow, which deleted evidence after the fact).
+#
 # Owner 2026-11-10: the source-graph runtime fence is retired. It classified
 # admitted host input preparation as GPU computation. Runtime restrictions
 # remain; source reachability/counts cannot certify them.
@@ -111,6 +116,18 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
         status=$?
         rm -f "$pyfree"
         [ $status -eq 0 ] || { echo "pre-push: REFUSED by tools/python_free_dirs.sh: a kernel directory, RUN module or non-boundary binding imports Python" >&2; exit 4; }
+    fi
+
+    # Run output stays out of the tree (2026-11-21): new files under bench/results/ outside the allowlist,
+    # new *.log there and new docs/handoffs/ files are refused; they belong in ~/mojolearn-evidence/ and R2.
+    # Judges only paths ADDED by commits not yet on the remote, with the pushed tree's own script.
+    if git cat-file -e "$local_sha:tools/hooks/check_tree_additions.sh" 2>/dev/null; then
+        additions=$(mktemp "${TMPDIR:-/tmp}/tree-additions.XXXXXX") || exit 4
+        git show "$local_sha:tools/hooks/check_tree_additions.sh" >"$additions" || { rm -f "$additions"; exit 4; }
+        bash "$additions" "$local_sha" "$remote_sha" "$1"
+        status=$?
+        rm -f "$additions"
+        [ $status -eq 0 ] || { echo "pre-push: REFUSED by tools/hooks/check_tree_additions.sh (run output and handoffs belong in ~/mojolearn-evidence/ and R2)" >&2; exit 4; }
     fi
 
 done
