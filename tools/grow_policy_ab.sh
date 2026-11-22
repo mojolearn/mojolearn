@@ -24,7 +24,7 @@
 #   MOJOLEARN_GP_ROWS      training rows (default 1000000, floor 1000000)
 set -u
 
-OUT="${MOJOLEARN_GP_OUT:-bench/results/grow_policy_ab/$(date +%Y-%m-%d_%H%M%S)}"
+OUT="${MOJOLEARN_GP_OUT:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/grow_policy_ab/$(date +%Y-%m-%d_%H%M%S)}"
 DEFINES="${MOJOLEARN_GP_DEFINES:-MOJOLEARN_2044_FAST_NO_RIDX_ONLY MOJOLEARN_2045_FAST_NO_QUANT_HIST}"
 LANES="${MOJOLEARN_GP_LANES:-gbdt-lossguide gbdt-depthwise}"
 ROWS="${MOJOLEARN_GP_ROWS:-1000000}"
