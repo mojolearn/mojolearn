@@ -257,6 +257,20 @@ finds in the same round; a wave without that audit does not merge.
 
 ## 3. Measurement
 
+### What a win is: speed at the same or similar quality (Andrew, 2026-11-22)
+
+- "Wins", "faster" and "the fastest" always mean faster WITH QUALITY THE SAME OR SIMILAR. Speed bought with a
+  material loss of quality is not a win, in any mode, on any vendor, for any change: a kernel, a default, a dtype, a
+  solver, an iteration count, a tolerance, a precision.
+- Every speed comparison therefore carries its quality beside the time, for both arms: the metric the estimator is
+  judged on (accuracy, R2, loss, residual, recall), and where the change touches numerics, the largest difference in
+  the outputs. A timing reported without its quality is not a result. "Similar" is within the noise of that metric on
+  that row; a drop outside it is a regression, to be fixed or the change dropped.
+- A change that returns the same values in another container or dtype (no value changes) states that as its quality
+  evidence: outputs compared equal, value by value.
+- Never trade a large amount of quality for speed and call it an improvement; never report a speedup whose quality
+  cost has not been measured.
+
 - Our CPU is never raced or timed (Andrew, 2026-10-02). The CPU is for verification digests, CPU-only installs and
   inference. Race and measure tools default to our GPU arm only.
 - Opponents are scored once, stored, and run only by an explicit opponent job. No opponent re-score.
