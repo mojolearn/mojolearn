@@ -252,11 +252,8 @@ def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     var known = List[Float32](length=query_rows, fill=0)
     _fill(query, known, query_rows, cols, intercept, ridge, cid, 91)
     var narrow = List[Float32](length=query_rows + 2, fill=-999)
-    var wide = List[Float64](length=query_rows + 2, fill=-999)
     _ = linear_predict_run(api.predict, LinearPredictRequest(Int(query.unsafe_ptr()), ca,
-        Int(narrow.unsafe_ptr()) + 4, query_rows, cols, result.intercept, False))
-    _ = linear_predict_run(api.predict, LinearPredictRequest(Int(query.unsafe_ptr()), ca,
-        Int(wide.unsafe_ptr()) + 8, query_rows, cols, result.intercept, True))
+        Int(narrow.unsafe_ptr()) + 4, query_rows, cols, result.intercept))
     for row in range(query_rows):
         var wanted = Float64(known[row])
         if ridge:
@@ -264,13 +261,12 @@ def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
             for col in range(cols):
                 wanted += Float64(query[row * cols + col]) * oracle[col]
         close(Float64(narrow[row + 1]), wanted, 3e-4 if ridge else 5e-4, 3e-5 if ridge else 3e-4, "native fit/predict solution")
-        close(wide[row + 1], wanted, 3e-4 if ridge else 5e-4, 3e-5 if ridge else 3e-4, "wide native fit/predict solution")
-    require(narrow[0] == -999 and narrow[query_rows + 1] == -999 and wide[0] == -999 and wide[query_rows + 1] == -999, "prediction escaped output spans")
+    require(narrow[0] == -999 and narrow[query_rows + 1] == -999, "prediction escaped output spans")
     # Fit-derived predictions on training data also retain the original
     # numerical check. Held-out points above prevent training-only overfit.
     var training = List[Float32](length=rows, fill=0)
     _ = linear_predict_run(api.predict, LinearPredictRequest(Int(x.unsafe_ptr()), ca,
-        Int(training.unsafe_ptr()), rows, cols, result.intercept, False))
+        Int(training.unsafe_ptr()), rows, cols, result.intercept))
     for row in range(rows):
         var wanted = Float64(y[row])
         if ridge:
@@ -308,7 +304,6 @@ def _fit_fixture(api: LinearTestAPI, fixture_id: Int) raises:
     _ = weights
     _ = query
     _ = narrow
-    _ = wide
     _ = training
 
 

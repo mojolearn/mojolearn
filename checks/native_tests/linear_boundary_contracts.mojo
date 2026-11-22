@@ -31,7 +31,7 @@ def _require(ok: Bool, message: String) raises:
 def _prediction_spans(fault: Int) raises:
     var source = List[Float64](length=12, fill=1.0)
     var a: List[Int] = [Int(source.unsafe_ptr()), Int(source.unsafe_ptr() + 6), Int(source.unsafe_ptr() + 9)]
-    var p: List[Int] = [2, 3, 1]
+    var p: List[Int] = [2, 3, 0]
     var f: List[Float64] = [-2.5]
     var result = List[Int](length=1, fill=0)
     var operation = 0
@@ -64,7 +64,7 @@ def _prediction_spans(fault: Int) raises:
     try:
         var request = linear_predict_request_from_spans(operation, aa, na, pp, np, ff, nf, rr)
         _require(request.x == a[0] and request.coef == a[1] and request.dst == a[2], "prediction buffer order")
-        _require(request.rows == 2 and request.cols == 3 and request.wide, "prediction shape/dtype")
+        _require(request.rows == 2 and request.cols == 3 and request.test_x == False, "prediction shape/flags")
         _require(request.intercept == -2.5, "prediction intercept precision")
     except problem:
         _require(String(problem).find("linear prediction ABI:") >= 0, "unexpected prediction refusal")

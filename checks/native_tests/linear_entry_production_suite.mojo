@@ -8,7 +8,7 @@ entries, and an unresolved route's entry refuses instead of calling anything.
 
 Run in a fresh standalone process: the initial missing-table assertion and
 publication are ordered because they share one production table. After that,
-independent narrow/wide lifetime graphs use the full native host worker pool.
+independent lifetime graphs (one per worker) use the full native host worker pool.
 No Python module, synthetic dispatcher or production call counter participates.
 """
 from checks.numerics import GLOBAL_NUMERIC_MODE
@@ -97,7 +97,7 @@ def missing_before_publication() raises:
             var early = linear_route_resolve(DEVICE_CPU, LinearEntryKey(GLOBAL_NUMERIC_MODE, 0),
                 0, GLOBAL_NUMERIC_MODE, False)
             _ = linear_lease_predict(early.second.call, lease,
-                Int(source.unsafe_ptr()), Int(destination.unsafe_ptr()), 1, 3, False, String("Ridge"))
+                Int(source.unsafe_ptr()), Int(destination.unsafe_ptr()), 1, 3, String("Ridge"))
         except problem:
             require(String(problem).find("not published") >= 0, "wrong missing production table refusal")
             refused = True
@@ -108,7 +108,7 @@ def missing_before_publication() raises:
         refused = False
         try:
             _ = linear_lease_predict(unresolved.second.call, lease,
-                Int(source.unsafe_ptr()), Int(destination.unsafe_ptr()), 1, 3, False, String("Ridge"))
+                Int(source.unsafe_ptr()), Int(destination.unsafe_ptr()), 1, 3, String("Ridge"))
         except problem:
             require(String(problem).find("not resolved") >= 0, "wrong unresolved route refusal")
             refused = True
@@ -121,15 +121,14 @@ def missing_before_publication() raises:
         _ = destination
 
 
-def fixture(wide: Bool) raises:
+def fixture() raises:
     # These explicit native owners remain alive through both snapshots and
     # release. LinearModelState itself owns descriptors, not their buffers.
     var coefficients: List[Float32] = [2, -1, 3]
     var replacement: List[Float32] = [4, 5, 6]
     var source: List[Float32] = [1, 2, 1, 2, 0, -1]
     var narrow = List[Float32](length=2, fill=-37)
-    var wider = List[Float64](length=2, fill=-37)
-    var destination = Int(wider.unsafe_ptr()) if wide else Int(narrow.unsafe_ptr())
+    var destination = Int(narrow.unsafe_ptr())
     # Each fixture resolves its own route, as each estimator does: concurrent
     # resolutions of one published table give the same entries.
     var route = linear_route_resolve(DEVICE_CPU, LinearEntryKey(GLOBAL_NUMERIC_MODE, 0),
@@ -151,17 +150,15 @@ def fixture(wide: Bool) raises:
         var original = LINEAR_STATES.acquire(handle)
         LINEAR_STATES.replace(handle, model_state(Int(replacement.unsafe_ptr())))
         var current = LINEAR_STATES.acquire(handle)
-        _ = linear_lease_predict(entry, current, Int(source.unsafe_ptr()), destination, 2, 3, wide, String("Ridge"))
-        require((wider[0] == 20.25 and wider[1] == 2.25) if wide else
-            (narrow[0] == Float32(20.25) and narrow[1] == Float32(2.25)),
+        _ = linear_lease_predict(entry, current, Int(source.unsafe_ptr()), destination, 2, 3, String("Ridge"))
+        require(narrow[0] == Float32(20.25) and narrow[1] == Float32(2.25),
             "production handle/table prediction did not use replacement coefficients")
         LINEAR_STATES.release(handle)
         released = True
         # Releasing/refitting the registry entry must not change an acquired
         # old snapshot; the original buffer is still explicitly pinned here.
-        _ = linear_lease_predict(entry, original, Int(source.unsafe_ptr()), destination, 2, 3, wide, String("Ridge"))
-        require((wider[0] == 3.25 and wider[1] == 1.25) if wide else
-            (narrow[0] == Float32(3.25) and narrow[1] == Float32(1.25)),
+        _ = linear_lease_predict(entry, original, Int(source.unsafe_ptr()), destination, 2, 3, String("Ridge"))
+        require(narrow[0] == Float32(3.25) and narrow[1] == Float32(1.25),
             "production lease lost its original prediction after refit/release")
         var refused = False
         try:
@@ -178,7 +175,6 @@ def fixture(wide: Bool) raises:
         _ = replacement
         _ = source
         _ = narrow
-        _ = wider
 
 
 def run_checks() raises:
@@ -195,7 +191,7 @@ def run_checks() raises:
     var flags = failures.unsafe_ptr()
     def task(unit: Int) {imm flags}:
         try:
-            fixture(unit == 1)
+            fixture()
         except problem:
             flags[unit] = 1
             print("FAIL production linear composition", unit, String(problem))
