@@ -40,7 +40,9 @@ def test_public_constructor_retains_parameter_reference_identity(name):
     cls = getattr(linear, name)
     # Parameter admission belongs to fit; constructors have always stored
     # ordinary references without coercion or callbacks.
-    values = {key: object() for key in inspect.signature(cls).parameters}
+    # `device` is the one parameter admitted at construction (an unknown device is refused
+    # before any field is written, as on every family; 498417d392), so it keeps its default.
+    values = {key: object() for key in inspect.signature(cls).parameters if key != "device"}
     model = clean(cls, **values)
     assert all(vars(model)[key] is value for key, value in values.items())
 

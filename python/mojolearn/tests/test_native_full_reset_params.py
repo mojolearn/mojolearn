@@ -56,7 +56,9 @@ def _values(cls):
     parameters = inspect.signature(cls).parameters
     if cls.__name__ == 'UMAP':
         return {name: p.default for name, p in parameters.items()}, ('n_neighbors', 7)
-    values = {name: object() for name in parameters}
+    # `device` is admitted at construction (an unknown device is refused before any field is
+    # written), so it keeps its default; every other parameter is an opaque reference.
+    values = {name: (p.default if name == 'device' else object()) for name, p in parameters.items()}
     return values, (next(iter(values)), object())
 
 

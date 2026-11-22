@@ -2440,7 +2440,7 @@ FAMILIES = (
             "scale_gamma_limbs", "py2mojo_linear_flags", "svc_ovo_layout",
             "svc_dual_gemv",
             # lane perf-trees-misc (2026-11-05): the resident host forest
-            "iforest_resident", "iforest_resident_release",
+            "iforest_resident_release",
             # lane fix-iforest-save-device-forest (2026-11-13): the saved forest out and in;
             # round 4 of lane ma-pub-trees (2026-11-21) moved both onto IF_OP_EXPORT /
             # IF_OP_FOREST_RUN of the native iforest entry (core/iforest_entry.mojo).

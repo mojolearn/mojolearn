@@ -109,7 +109,7 @@ def test_parallel_causal_lm_parameters_refused_after_close(tmp_path):
     split = pc.checked(pc.mod.ParallelCausalLM.load, root, layer_devices=pc.owners(),
                        numeric_profile="fp32_v1")
     try:
-        params = pc.checked(split.parameters)
+        params = dict(pc.checked(split.named_parameters))
         assert params and all(np.asarray(v).size for v in params.values())
     finally:
         pc.checked(split.close)

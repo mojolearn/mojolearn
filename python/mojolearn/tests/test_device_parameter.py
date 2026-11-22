@@ -80,7 +80,8 @@ def _package_classes():
         found.add(cls)
         todo.extend(type.__subclasses__(cls))
     return sorted((cls for cls in found
-                   if cls.__module__.startswith("mojolearn.") and not cls.__module__.startswith("mojolearn.tests")),
+                   if getattr(cls, "__module__", "").startswith("mojolearn.")
+                   and not cls.__module__.startswith("mojolearn.tests")),
                   key=lambda cls: cls.__module__ + "." + cls.__qualname__)
 
 
