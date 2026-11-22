@@ -118,7 +118,7 @@ def test_mismatched_inputs_or_source_cannot_be_compared(harness, field):
 
 def test_retained_native_pilot_matches_and_catches_estimator_fault():
     root = Path(__file__).resolve().parents[3]
-    evidence = root / 'bench/results/small_training/2026-09-18-apple-m4/provenance-v2'
+    evidence = root / 'verification/records/cells/small_training/2026-09-18-apple-m4/provenance-v2'
     if not evidence.is_dir():
         pytest.skip('source capture evidence is not installed in wheels')
     read = lambda name: json.loads((evidence / name).read_text())

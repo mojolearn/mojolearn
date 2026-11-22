@@ -85,7 +85,6 @@ CASES = [
         "bench/results/identity_break/retained/abc/cpu.identical.json",
         "bench/results/reference_admissions/0.8.67/a.json",
         "bench/results/release_evidence/0.8.67/a.json",
-        "bench/results/release_verification/0.8.67/a.json",
         "bench/results/r2-index.tsv",
         "bench/results/CELLS_INDEX.tsv",
         "bench/results/identity_break/INDEX.tsv",

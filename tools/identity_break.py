@@ -3097,7 +3097,7 @@ def _ragged(result):
     # np.asarray(container) does not"), never by iterating or converting
     # the container: an outsider's numpy 2.4.4 with the 0.8.5 wheel raised
     # "setting an array element with a sequence" on six fixtures under the
-    # iterating spelling (2026-09-14, bench/results/verify_external/).
+    # iterating spelling (2026-09-14, verification/records/cells/verify_external/).
     n = len(idx)
     rows_i = [np.asarray(idx[i]).reshape(-1).astype(np.int64) for i in range(n)]
     rows_d = [np.asarray(dists[i], dtype=np.float32).reshape(-1) for i in range(n)]

@@ -52,6 +52,8 @@ ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE_DIR = "bench/results/release_evidence"
 #: the dated per-release records written up to 0.8.65; removed from the tree 2026-11-06, read through git only
 LEGACY_DIR = "bench/results/release_verification"
+#: where the three that documents still point at live since 2026-11-25 (lane verify-home; verification/README.md)
+MOVED_DIR = "verification/records/release_verification"
 SCHEMA = "mojolearn.release-evidence.v1"
 #: the release tag the record step puts on the commit holding the set
 TAG_FORMAT = "v{version}"
@@ -1331,7 +1333,8 @@ def provenance_history(root, revision, limit=200):
     """[(version, source_commit)] of every release-provenance.json reachable at REVISION, read THROUGH GIT (never
     the working tree): the current set at REVISION and its earlier versions (each release overwrote it), then the
     dated records releases up to 0.8.65 committed under LEGACY_DIR (removed from the tree 2026-11-06; read from
-    the last commit that held them)."""
+    the last commit that held them; the ones still in the tree are under MOVED_DIR since 2026-11-25, and the
+    move commit reads as a deletion under LEGACY_DIR, so its parent is read too)."""
     def git(*args):
         p = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
         return p.stdout if p.returncode == 0 else ""
@@ -1358,7 +1361,7 @@ def provenance_history(root, revision, limit=200):
     points = [revision] + [c + "^" for c in git("log", "--diff-filter=D", "--format=%H", revision, "--",
                                                  LEGACY_DIR + "/").split()]
     for at in points:
-        for p in git("ls-tree", "-r", "--name-only", at, LEGACY_DIR + "/").splitlines():
+        for p in git("ls-tree", "-r", "--name-only", at, LEGACY_DIR + "/", MOVED_DIR + "/").splitlines():
             if p.endswith("/release-provenance.json"):
                 take(git("show", "%s:%s" % (at, p)))
     return out
