@@ -49,7 +49,9 @@ def test_skip_drop_matches_exact_counter_comparison():
 def test_the_native_fit_uses_it_and_python_computes_no_threshold():
     text = DOOR.read_text()
     assert re.search(r'^from xtrees\.trees_boost_run import \([^)]*\b_dart_thr\b', text, re.M)
-    assert 'var skip_thr = _dart_thr(Float64(py=_float(fields["skip_drop"])))' in text
+    # The fit's words are one typed DartWords record now (UNPACK reads them
+    # once); the threshold is still computed natively from skip_drop there.
+    assert 'skip_thr=_dart_thr(Float64(py=_float(fields["skip_drop"])))' in text
     classes = {node.name: node for node in ast.parse(PY.read_text()).body if isinstance(node, ast.ClassDef)}
     for name in ('DARTRegressor', 'DARTClassifier'):
         assert any(isinstance(b, ast.Name) and b.id == '_DARTBase' for b in classes[name].bases)
