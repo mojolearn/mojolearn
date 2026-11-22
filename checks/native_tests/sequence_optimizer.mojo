@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Direct typed optimizers checked against independent Float64 equations.
 
 Migrates the five elementwise families from test_x_sequence_optim.py, keeping
@@ -13,7 +14,9 @@ from sequence.recurrent import OptConfig, OptState, opt_step
 from sequence.ops import OPT_RMSPROP, OPT_ADAGRAD, OPT_LION, OPT_ADAMAX, OPT_NADAM
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime SEQUENCE_OPTIMIZER_FIXTURES = 10
@@ -173,44 +176,41 @@ def run_sequence_optimizer_fixture[E: Exec](mut ex: E, fixture_id: Int) raises:
                 "sequence optimizer fixture " + String(fixture_id) + " plane " + String(plane) + " cell " + String(index))
 
 
-# ---- The host column entry (was sequence_optimizer_cpu.mojo) ----
-# Typed sequence optimizer checks; independent host fixtures run in parallel.
-#
-# Each reference cell uses the host pool; six optimizer steps are dependent.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(SEQUENCE_OPTIMIZER_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var ex = HostExec()
-            run_sequence_optimizer_fixture(ex, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, SEQUENCE_OPTIMIZER_FIXTURES)
+def _host_fixture(fixture_id: Int) raises:
+    var ex = HostExec()
+    run_sequence_optimizer_fixture(ex, fixture_id)
 
 
-# ---- The device column entry (was sequence_optimizer_gpu.mojo) ----
-# Typed sequence optimizer checks; GPU shared-context submission is ordered.
-#
-# DeviceExec shares sequence_ctx/pool. Kernels and independent oracle cells remain parallel. This does not prove concurrent GPU session ownership.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(SEQUENCE_OPTIMIZER_FIXTURES)
-    for fixture_id in range(SEQUENCE_OPTIMIZER_FIXTURES):
-        try:
-            var ex = DeviceExec()
-            run_sequence_optimizer_fixture(ex, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _device_fixture(fixture_id: Int) raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var ex = DeviceExec()
+        run_sequence_optimizer_fixture(ex, fixture_id)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _cpu_cases() raises:
+    check_cases("sequence_optimizer", SEQUENCE_OPTIMIZER_FIXTURES, _host_fixture)
 
 
-def register() -> Check:
-    return Check("sequence_optimizer", cpu=True, gpu=True, serial="", run=run_cases)
+def _gpu_cases() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        var failed = String("")
+        var count = 0
+        for fixture_id in range(SEQUENCE_OPTIMIZER_FIXTURES):  # driver-loop: over the fixtures on the one device
+            try:
+                _device_fixture(fixture_id)
+            except error:
+                count += 1
+                failed += "\n      sequence_optimizer row " + String(fixture_id) + ": " + String(error)
+        if count > 0:
+            raise Error("sequence_optimizer: " + String(count) + " of " + String(SEQUENCE_OPTIMIZER_FIXTURES) + " cases failed" + failed)
+
+
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

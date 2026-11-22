@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Holt-Winters `initialization_method`: the estimated initial states
 (ported from python/mojolearn/tests/test_holtwinters_initialization.py
 `test_estimated_is_the_default_and_refits_to_the_same_bits` and
@@ -33,7 +34,8 @@ from core.hostptr import f32_ptr, i32_ptr
 from core.mojolearn_tsa_host_impl import holtwinters_fit_host_into
 from holtwinters.host.hw_predict import hw_forecast_from_state_ptr
 from holtwinters.impl.internal.hw_estimate import HW_INIT_ESTIMATED, HW_INIT_HEURISTIC
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 
 #: REFIT: 2 seasonal types x (estimated, estimated again, heuristic)
@@ -193,36 +195,16 @@ def check_units(records: List[Float32], planes: List[Int]) raises:
         _ = y^
 
 
-# ---- The host column (was tsa_holtwinters_initialization_cpu_suite.mojo) ----
-# Holt-Winters estimated initialization on the host fit body.
-#
-# The ten fits are independent units and run across host cores, each into
-# its own record; the cross-unit comparisons follow. The fit is the host
-# reference body only (the device estimate is checked against it in
-# hw_check), so there is no GPU column, as in the original, which fitted
-# under the reference training context.
-def _run_cpu(mut report: Report) raises:
+def test_fits_then_records() raises:
     var records = List[Float32](length=HW_INIT_UNITS * HW_RECORD, fill=Float32(0))
     var planes = List[Int](length=HW_INIT_UNITS, fill=0)
-    var cases = report.cases(HW_INIT_UNITS)
     var pp = planes.unsafe_ptr()
     var base = Int(records.unsafe_ptr())
-    def task(unit: Int) {imm cases, imm pp, imm base}:
-        try:
-            pp.unsafe_store(unit, fit_unit(unit, f32_ptr(base + 4 * unit * HW_RECORD)))
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, HW_INIT_UNITS)
+    def unit_fit(unit: Int) raises {imm pp, imm base}:
+        pp.unsafe_store(unit, fit_unit(unit, f32_ptr(base + 4 * unit * HW_RECORD)))
+    check_cases("tsa_holtwinters_initialization", HW_INIT_UNITS, unit_fit)
     check_units(records, planes)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("tsa_holtwinters_initialization", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

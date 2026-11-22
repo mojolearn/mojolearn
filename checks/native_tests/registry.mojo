@@ -20,10 +20,6 @@ from checks.native_tests.ann_cagra_filtered import register as register_ann_cagr
 from checks.native_tests.ann_ivf_surface import register as register_ann_ivf_surface
 from checks.native_tests.ann_ivfpq_host_filter import register as register_ann_ivfpq_host_filter
 from checks.native_tests.ann_ops import register as register_ann_ops
-from checks.native_tests.byte_lm_host_column import register as register_byte_lm_host_column
-from checks.native_tests.byte_lm_models_loader_f16 import register as register_byte_lm_models_loader_f16
-from checks.native_tests.byte_lm_parallel_byte_native import register as register_byte_lm_parallel_byte_native
-from checks.native_tests.byte_lm_trainer_session import register as register_byte_lm_trainer_session
 from checks.native_tests.core_all_finite import register as register_core_all_finite
 from checks.native_tests.core_chunked_lm_head_denormals import register as register_core_chunked_lm_head_denormals
 from checks.native_tests.core_convert import register as register_core_convert
@@ -48,11 +44,6 @@ from checks.native_tests.core_verifier_gap_methods import register as register_c
 from checks.native_tests.core_vjp_rank import register as register_core_vjp_rank
 from checks.native_tests.decomp_holtwinters_inference import register as register_decomp_holtwinters_inference
 from checks.native_tests.decomp_ne2_g_decomp_entries import register as register_decomp_ne2_g_decomp_entries
-from checks.native_tests.gbdt_ova_link import register as register_gbdt_ova_link
-from checks.native_tests.gbdt_public_fits import register as register_gbdt_public_fits
-from checks.native_tests.gbdt_resident_ns_predict import register as register_gbdt_resident_ns_predict
-from checks.native_tests.gbdt_shape_sweep import register as register_gbdt_shape_sweep
-from checks.native_tests.gbdt_tree_metadata import register as register_gbdt_tree_metadata
 # TOMBSTONE: MOJOLEARN_DECOMP_FAST_MATRIX_UNITS, MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS (NOISE, A/B abf2) deleted 2026-11-20 by
 # lane/fx-verdicts6 with their check family_matrix_units; code recoverable at 06d1e8ff34.
 # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_MATRIX_UNITS.patch (the check is in that patch)
@@ -73,12 +64,6 @@ from checks.native_tests.mamba_decode_n_tokens import register as register_mamba
 from checks.native_tests.mamba_decode_sessions import register as register_mamba_decode_sessions
 from checks.native_tests.mamba3_prefill_session import register as register_mamba3_prefill_session
 from checks.native_tests.mamba3_prefix_step import register as register_mamba3_prefix_step
-from checks.native_tests.mani_decomp_repeat import register as register_mani_decomp_repeat
-from checks.native_tests.metrics_selection_host_p2 import register as register_metrics_selection_host_p2
-from checks.native_tests.metrics_smallfam_public import register as register_metrics_smallfam_public
-from checks.native_tests.metrics_weighted_score import register as register_metrics_weighted_score
-from checks.native_tests.mixture_gmm_sample import register as register_mixture_gmm_sample
-from checks.native_tests.mixture_native import register as register_mixture_native
 from checks.native_tests.ocsvm_native import register as register_ocsvm_native
 from checks.native_tests.oob_exact_sum import register as register_oob_exact_sum
 from checks.native_tests.ops_grad_identity import register as register_ops_grad_identity
@@ -99,15 +84,11 @@ from checks.native_tests.runner import Check
 from checks.native_tests.sequence_croston import register as register_sequence_croston
 from checks.native_tests.sequence_moe import register as register_sequence_moe
 from checks.native_tests.sequence_norm import register as register_sequence_norm
-from checks.native_tests.sequence_optimizer import register as register_sequence_optimizer
 from checks.native_tests.sequence_rnn import register as register_sequence_rnn
 from checks.native_tests.sequence_samba_surface import register as register_sequence_samba_surface
 from checks.native_tests.sequence_stl import register as register_sequence_stl
 from checks.native_tests.sequence_theta import register as register_sequence_theta
-from checks.native_tests.sequence_theta_variants import register as register_sequence_theta_variants
 from checks.native_tests.sequence_var import register as register_sequence_var
-from checks.native_tests.solver_estimators_ops import register as register_solver_estimators_ops
-from checks.native_tests.solver_qn_objectives import register as register_solver_qn_objectives
 from checks.native_tests.spectral_assignment import register as register_spectral_assignment
 from checks.native_tests.spectral_dense import register as register_spectral_dense
 from checks.native_tests.spectral_native import register as register_spectral_native
@@ -123,30 +104,18 @@ from checks.native_tests.training_chunked_lm_head_door import register as regist
 from checks.native_tests.training_distributed_program import register as register_training_distributed_program
 from checks.native_tests.training_moe_backward_ownership import register as register_training_moe_backward_ownership
 from checks.native_tests.training_neural_inference import register as register_training_neural_inference
-from checks.native_tests.training_neural_rng_slices import register as register_training_neural_rng_slices
 from checks.native_tests.training_primitives import register as register_training_primitives
-from checks.native_tests.training_residual_dropout_mask import register as register_training_residual_dropout_mask
 from checks.native_tests.training_small_mlp import register as register_training_small_mlp
-from checks.native_tests.transformer_block_session import register as register_transformer_block_session
 from checks.native_tests.transformer_host_block import register as register_transformer_host_block
 from checks.native_tests.transformer_ops_program import register as register_transformer_ops_program
-from checks.native_tests.tsa_holtwinters_initialization import register as register_tsa_holtwinters_initialization
-from checks.native_tests.tsa_sequence_ets import register as register_tsa_sequence_ets
-from checks.native_tests.tsa_training_arima import register as register_tsa_training_arima
 from checks.native_tests.tsvd_native import register as register_tsvd_native
-from checks.native_tests.umap_ops import register as register_umap_ops
 # lane tests-to-mojo-models (2026-11-16)
-from checks.native_tests.models_checkpoint_widen import register as register_models_checkpoint_widen
 # lane tests-to-mojo-spatial (2026-11-16)
 # lane tests-to-mojo-trees (2026-11-16)
-from checks.native_tests.gbdt_feature_freq_experimental import register as register_gbdt_feature_freq_experimental
-from checks.native_tests.gbdt_host_archive_text import register as register_gbdt_host_archive_text
 # lane tests-to-mojo-neural (2026-11-15)
-from checks.native_tests.lm_corpus_prepare import register as register_lm_corpus_prepare
 from checks.native_tests.training_small_mlp_relations import register as register_training_small_mlp_relations
 # lane checks-register (2026-11-16): the standalone main() checks no CI job ran, now registered
 from checks.native_tests.boundary_layout import register as register_boundary_layout
-from checks.native_tests.byte_lm_entry import register as register_byte_lm_entry
 from checks.native_tests.class_weight_plan import register as register_class_weight_plan
 from checks.native_tests.decomp_entry_table import register as register_decomp_entry_table
 from checks.native_tests.gp_contract import register as register_gp_contract
@@ -156,21 +125,16 @@ from checks.native_tests.gp_state import register as register_gp_state
 from checks.native_tests.hdbscan_plan import register as register_hdbscan_plan
 from checks.native_tests.kde_contract import register as register_kde_contract
 from checks.native_tests.kde_state import register as register_kde_state
-from checks.native_tests.label_score_keys_stress import register as register_label_score_keys_stress
-from checks.native_tests.lof_plan_contract import register as register_lof_plan_contract
 from checks.native_tests.logistic_config import register as register_logistic_config
 from checks.native_tests.logistic_contracts import register as register_logistic_contracts
 from checks.native_tests.logistic_model_state import register as register_logistic_model_state
 from checks.native_tests.logistic_query_width import register as register_logistic_query_width
-from checks.native_tests.mani_tsne_run import register as register_mani_tsne_run
-from checks.native_tests.mani_umap_run import register as register_mani_umap_run
 from checks.native_tests.nmf_contract import register as register_nmf_contract
 from checks.native_tests.nmf_state import register as register_nmf_state
 from checks.native_tests.nonzero_scan import register as register_nonzero_scan
 from checks.native_tests.portable_math import register as register_portable_math
 from checks.native_tests.samba_entry_table import register as register_samba_entry_table
 from checks.native_tests.seq_opt_entry import register as register_seq_opt_entry
-from checks.native_tests.sequence_input_plan_check import register as register_sequence_input_plan_check
 from checks.native_tests.spectral_contract import register as register_spectral_contract
 from checks.native_tests.spectral_state import register as register_spectral_state
 from checks.native_tests.tsqr_host_ownership import register as register_tsqr_host_ownership
@@ -354,11 +318,6 @@ from checks.native_tests.ensemble_shuffle_check import register as register_ense
 from checks.native_tests.ensemble_sibling_column_overlap_check import register as register_ensemble_sibling_column_overlap_check
 from checks.native_tests.ensemble_split_check import register as register_ensemble_split_check
 from checks.native_tests.ensemble_train_check import register as register_ensemble_train_check
-from checks.native_tests.gbdt_host_binarize_identical import register as register_gbdt_host_binarize_identical
-from checks.native_tests.gbdt_tree_ctr_host_check import register as register_gbdt_tree_ctr_host_check
-from checks.native_tests.gbdt_ordered_ctr_host_check import register as register_gbdt_ordered_ctr_host_check
-from checks.native_tests.gbdt_host_device_cat import register as register_gbdt_host_device_cat
-from checks.native_tests.gbdt_ordered_doc_id_check import register as register_gbdt_ordered_doc_id_check
 from checks.native_tests.hdbscan_sparse_mr_check import register as register_hdbscan_sparse_mr_check
 from checks.native_tests.ivf_ivf_large_k_check import register as register_ivf_ivf_large_k_check
 from checks.native_tests.ivf_ops_table import register as register_ivf_ops_table
@@ -367,18 +326,8 @@ from checks.native_tests.mamba_mamba3_increment_tile_check import register as re
 from checks.native_tests.mamba_mamba3_refusal_check import register as register_mamba_mamba3_refusal_check
 from checks.native_tests.mamba_mamba3_s17_tail_tree_check import register as register_mamba_mamba3_s17_tail_tree_check
 from checks.native_tests.mamba_mamba3_yintra_tile_check import register as register_mamba_mamba3_yintra_tile_check
-from checks.native_tests.metrics_host_binary_ranking_check import register as register_metrics_host_binary_ranking_check
-from checks.native_tests.metrics_host_rand_score_check import register as register_metrics_host_rand_score_check
-from checks.native_tests.training_byte_lm_block_copy_check import register as register_training_byte_lm_block_copy_check
-from checks.native_tests.training_chunked_lm_head_check import register as register_training_chunked_lm_head_check
-from checks.native_tests.training_chunked_lm_head_device_check import register as register_training_chunked_lm_head_device_check
-from checks.native_tests.training_dbscan_parallel_check import register as register_training_dbscan_parallel_check
-from checks.native_tests.training_maximize_check import register as register_training_maximize_check
-from checks.native_tests.transformer_attention_zdot_routing_check import register as register_transformer_attention_zdot_routing_check
 from checks.native_tests.xtrees_glue_check import register as register_xtrees_glue_check
 from checks.native_tests.xtrees_zero_cover_check import register as register_xtrees_zero_cover_check
-from checks.native_tests.tsa_hw_route import register as register_tsa_hw_route
-from checks.native_tests.tsa_arima_route import register as register_tsa_arima_route
 
 def all_checks() -> List[Check]:
     var checks = List[Check]()
@@ -386,10 +335,6 @@ def all_checks() -> List[Check]:
     checks.append(register_ann_ivf_surface())
     checks.append(register_ann_ivfpq_host_filter())
     checks.append(register_ann_ops())
-    checks.append(register_byte_lm_host_column())
-    checks.append(register_byte_lm_models_loader_f16())
-    checks.append(register_byte_lm_parallel_byte_native())
-    checks.append(register_byte_lm_trainer_session())
     checks.append(register_core_all_finite())
     checks.append(register_core_chunked_lm_head_denormals())
     checks.append(register_core_convert())
@@ -414,11 +359,6 @@ def all_checks() -> List[Check]:
     checks.append(register_core_vjp_rank())
     checks.append(register_decomp_holtwinters_inference())
     checks.append(register_decomp_ne2_g_decomp_entries())
-    checks.append(register_gbdt_ova_link())
-    checks.append(register_gbdt_public_fits())
-    checks.append(register_gbdt_resident_ns_predict())
-    checks.append(register_gbdt_shape_sweep())
-    checks.append(register_gbdt_tree_metadata())
     checks.append(register_gp_entry_table())
     checks.append(register_gp_native())
     checks.append(register_gp_normalization())
@@ -436,12 +376,6 @@ def all_checks() -> List[Check]:
     checks.append(register_mamba_decode_sessions())
     checks.append(register_mamba3_prefill_session())
     checks.append(register_mamba3_prefix_step())
-    checks.append(register_mani_decomp_repeat())
-    checks.append(register_metrics_selection_host_p2())
-    checks.append(register_metrics_smallfam_public())
-    checks.append(register_metrics_weighted_score())
-    checks.append(register_mixture_gmm_sample())
-    checks.append(register_mixture_native())
     checks.append(register_ocsvm_native())
     checks.append(register_oob_exact_sum())
     checks.append(register_ops_grad_identity())
@@ -461,15 +395,11 @@ def all_checks() -> List[Check]:
     checks.append(register_sequence_croston())
     checks.append(register_sequence_moe())
     checks.append(register_sequence_norm())
-    checks.append(register_sequence_optimizer())
     checks.append(register_sequence_rnn())
     checks.append(register_sequence_samba_surface())
     checks.append(register_sequence_stl())
     checks.append(register_sequence_theta())
-    checks.append(register_sequence_theta_variants())
     checks.append(register_sequence_var())
-    checks.append(register_solver_estimators_ops())
-    checks.append(register_solver_qn_objectives())
     checks.append(register_spectral_assignment())
     checks.append(register_spectral_dense())
     checks.append(register_spectral_native())
@@ -485,30 +415,18 @@ def all_checks() -> List[Check]:
     checks.append(register_training_distributed_program())
     checks.append(register_training_moe_backward_ownership())
     checks.append(register_training_neural_inference())
-    checks.append(register_training_neural_rng_slices())
     checks.append(register_training_primitives())
-    checks.append(register_training_residual_dropout_mask())
     checks.append(register_training_small_mlp())
-    checks.append(register_transformer_block_session())
     checks.append(register_transformer_host_block())
     checks.append(register_transformer_ops_program())
-    checks.append(register_tsa_holtwinters_initialization())
-    checks.append(register_tsa_sequence_ets())
-    checks.append(register_tsa_training_arima())
     checks.append(register_tsvd_native())
-    checks.append(register_umap_ops())
     # lane tests-to-mojo-models (2026-11-16)
-    checks.append(register_models_checkpoint_widen())
     # lane tests-to-mojo-spatial (2026-11-16)
     # lane tests-to-mojo-trees (2026-11-16)
-    checks.append(register_gbdt_feature_freq_experimental())
-    checks.append(register_gbdt_host_archive_text())
     # lane tests-to-mojo-neural (2026-11-15)
-    checks.append(register_lm_corpus_prepare())
     checks.append(register_training_small_mlp_relations())
     # lane checks-register (2026-11-16)
     checks.append(register_boundary_layout())
-    checks.append(register_byte_lm_entry())
     checks.append(register_class_weight_plan())
     checks.append(register_decomp_entry_table())
     checks.append(register_gp_contract())
@@ -518,14 +436,10 @@ def all_checks() -> List[Check]:
     checks.append(register_hdbscan_plan())
     checks.append(register_kde_contract())
     checks.append(register_kde_state())
-    checks.append(register_label_score_keys_stress())
-    checks.append(register_lof_plan_contract())
     checks.append(register_logistic_config())
     checks.append(register_logistic_contracts())
     checks.append(register_logistic_model_state())
     checks.append(register_logistic_query_width())
-    checks.append(register_mani_tsne_run())
-    checks.append(register_mani_umap_run())
     checks.append(register_ivf_ops_table())
     checks.append(register_nmf_contract())
     checks.append(register_nmf_state())
@@ -533,7 +447,6 @@ def all_checks() -> List[Check]:
     checks.append(register_portable_math())
     checks.append(register_samba_entry_table())
     checks.append(register_seq_opt_entry())
-    checks.append(register_sequence_input_plan_check())
     checks.append(register_spectral_contract())
     checks.append(register_spectral_state())
     checks.append(register_tsqr_host_ownership())
@@ -714,11 +627,6 @@ def all_checks() -> List[Check]:
     checks.append(register_ensemble_sibling_column_overlap_check())
     checks.append(register_ensemble_split_check())
     checks.append(register_ensemble_train_check())
-    checks.append(register_gbdt_host_binarize_identical())
-    checks.append(register_gbdt_tree_ctr_host_check())
-    checks.append(register_gbdt_ordered_ctr_host_check())
-    checks.append(register_gbdt_host_device_cat())
-    checks.append(register_gbdt_ordered_doc_id_check())
     checks.append(register_hdbscan_sparse_mr_check())
     checks.append(register_ivf_ivf_large_k_check())
     checks.append(register_kde_reused_workspace_check())
@@ -726,16 +634,6 @@ def all_checks() -> List[Check]:
     checks.append(register_mamba_mamba3_refusal_check())
     checks.append(register_mamba_mamba3_s17_tail_tree_check())
     checks.append(register_mamba_mamba3_yintra_tile_check())
-    checks.append(register_metrics_host_binary_ranking_check())
-    checks.append(register_metrics_host_rand_score_check())
-    checks.append(register_training_byte_lm_block_copy_check())
-    checks.append(register_training_chunked_lm_head_check())
-    checks.append(register_training_chunked_lm_head_device_check())
-    checks.append(register_training_dbscan_parallel_check())
-    checks.append(register_training_maximize_check())
-    checks.append(register_transformer_attention_zdot_routing_check())
     checks.append(register_xtrees_glue_check())
     checks.append(register_xtrees_zero_cover_check())
-    checks.append(register_tsa_hw_route())
-    checks.append(register_tsa_arima_route())
     return checks^
