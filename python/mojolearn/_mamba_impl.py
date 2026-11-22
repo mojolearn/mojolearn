@@ -451,6 +451,18 @@ class Mamba1Block(_MambaBase, _native_constructor=True):
         return _native_neural_bridge.RUNTIME.neural_block_init(
             self, weights, "mamba1", (device, numeric_mode), _native_neural_bridge.CONTEXT)
 
+    # Pickle (and deepcopy) carry the constructor parameters (`get_params`:
+    # the weights dictionary, `numeric_mode`, `device`) and the copy is
+    # built again by the native constructor, which admits the weights and
+    # resolves the route of its `device`. The block holds no trained state
+    # of its own beyond them; its native owners (descriptor provider caches,
+    # the run lock, the session) are this process's and are never pickled.
+    def __getstate__(self):
+        return self.get_params()
+
+    def __setstate__(self, state):
+        type(self).__init__(self, **state)
+
     def allocate_state(self, batch_size):
         """Return a zero `Mamba1State` for `batch_size` sequences.
 
@@ -741,6 +753,18 @@ class Mamba2Block(_MambaBase, _native_constructor=True):
     def __init__(self, weights, *, dt_limit=(0.0, float("inf")), numeric_mode=None, device=None):
         return _native_neural_bridge.RUNTIME.neural_block_init(
             self, weights, "mamba2", (device, numeric_mode, dt_limit), _native_neural_bridge.CONTEXT)
+
+    # Pickle (and deepcopy) carry the constructor parameters (`get_params`:
+    # the weights dictionary, `numeric_mode`, `device`, `dt_limit`) and the copy is
+    # built again by the native constructor, which admits the weights and
+    # resolves the route of its `device`. The block holds no trained state
+    # of its own beyond them; its native owners (descriptor provider caches,
+    # the run lock, the session) are this process's and are never pickled.
+    def __getstate__(self):
+        return self.get_params()
+
+    def __setstate__(self, state):
+        type(self).__init__(self, **state)
 
     def allocate_state(self, batch_size):
         """Return a zero `Mamba2State` for `batch_size` sequences.
