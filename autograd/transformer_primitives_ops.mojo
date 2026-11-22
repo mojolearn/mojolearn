@@ -4,6 +4,7 @@
 from sequence.ops import Args, FP
 from autograd.ops import op_ag_softmax_fwd, op_ag_softmax_vjp
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_div, identical_rsqrt, identical_sin, identical_cos
+from core.rms_norm_body import rms_sq_step, rms_rstd, rms_scale
 from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (fixed 32-lane norm fold; EXP:2246 PENDING, opt-in arm never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 085ef605b2.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.expdel2-25-neural.patch.
@@ -54,16 +55,14 @@ def _rms(row: Int, a: Args):
         acc = nfl_dot(xs, xs, base, base, d)
     else:
         for j in range(d):  # device-loop: pinned ascending fused sum of squares
-            var x = ftz(a.p0.unsafe_load(base + j))
-            acc = ftz(identical_mul_add(x, x, acc))
+            acc = rms_sq_step(ftz(a.p0.unsafe_load(base + j)), acc)
     comptime if NN24_NORM_LANES8:
         var values = a.p0.unsafe_origin_cast[MutAnyOrigin]()
         acc = norm_profile_dot[NN24_LANES](values, values, base, base, d)
-    var rstd = ftz(identical_rsqrt(ftz(ftz(identical_div(acc, Float32(d))) + a.f0)))
+    var rstd = rms_rstd(acc, d, a.f0)
     a.p3.unsafe_store(row, rstd)
     for j in range(d):  # device-loop: two separate rounded products per feature
-        var inner = ftz(identical_mul(ftz(a.p0.unsafe_load(base + j)), rstd))
-        a.p2.unsafe_store(base + j, ftz(identical_mul(ftz(a.p1.unsafe_load(j)), inner)))
+        a.p2.unsafe_store(base + j, rms_scale(a.p0.unsafe_load(base + j), rstd, a.p1.unsafe_load(j)))
 
 
 def _rms_dx(row: Int, a: Args):

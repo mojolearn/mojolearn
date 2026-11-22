@@ -167,6 +167,7 @@ launches. FAST makes no identity claim (contract section 8's last sentence).
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.rms_norm_body import rms_sq_step, rms_rstd, rms_scale
 from autograd.kernels.mamba1_scan_body import m1_a_from_a_log
 from core.step_phase import step_count_sync
 from std.memory import bitcast
@@ -960,12 +961,10 @@ def mamba_rms_norm_kernel(
     comptime if SAB_S1_FOLD_DESCENDING:
         for jj in range(dm):
             var jd = dm - 1 - jj
-            var xd = ftz(x.unsafe_load(t * dm + jd))
-            acc = ftz(identical_mul_add(xd, xd, acc))
+            acc = rms_sq_step(ftz(x.unsafe_load(t * dm + jd)), acc)
     else:
         for j in range(dm):
-            var xj = ftz(x.unsafe_load(t * dm + j))
-            acc = ftz(identical_mul_add(xj, xj, acc))
+            acc = rms_sq_step(ftz(x.unsafe_load(t * dm + j)), acc)
 
     comptime if SAB_BATCHINV_NORM_CHUNK_FROM_M:
         # SABOTAGE, and it is ADDITIVE rather than a third branch of the
@@ -1001,16 +1000,12 @@ def mamba_rms_norm_kernel(
     # (DEVIATION 741) and NEVER the hardware rsqrt intrinsic (DEVIATION 746
     # RECORDED Metal's intrinsic as correctly rounded where the reference's
     # spelling is not -- being righter than the reference is not the goal).
-    var mean = ftz(identical_div(acc, Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
+    var rstd = rms_rstd(acc, dm, RMS_EPS)  # RMSNorm's one body (core/rms_norm_body.mojo)
 
     # S3 and S4, both PRODUCT: `hidden * rstd` then `weight * hidden`, each
     # its own rounding, neither contractible into a neighboring add.
     for j in range(dm):
-        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
-        out_buf.unsafe_store(
-            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-        )
+        out_buf.unsafe_store(t * dm + j, rms_scale(x.unsafe_load(t * dm + j), rstd, weight.unsafe_load(j)))
 
 
 def mamba_rms_lane_kernel(
@@ -1032,8 +1027,7 @@ def mamba_rms_lane_kernel(
     var acc = Float32(0.0)
     var j = lane
     while j < dm:
-        var xj = ftz(x.unsafe_load(t * dm + j))
-        acc = ftz(identical_mul_add(xj, xj, acc))
+        acc = rms_sq_step(ftz(x.unsafe_load(t * dm + j)), acc)
         j += MAMBA_RMS_LANES
     part.unsafe_store(cell, acc)
 
@@ -1072,12 +1066,8 @@ def mamba_rms_out_kernel(
         return
     var t = cell // dm
     var j = cell - t * dm
-    var mean = ftz(identical_div(sumsq.unsafe_load(t), Float32(dm)))
-    var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
-    var inner = ftz(identical_mul(ftz(x.unsafe_load(cell)), rstd))
-    out_buf.unsafe_store(
-        cell, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
-    )
+    var rstd = rms_rstd(sumsq.unsafe_load(t), dm, RMS_EPS)
+    out_buf.unsafe_store(cell, rms_scale(x.unsafe_load(cell), rstd, weight.unsafe_load(j)))
 
 
 def mamba_rms_norm(
