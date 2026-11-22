@@ -2032,7 +2032,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return not kept, kept
 
     def ledger_on(self):
-        """Whether the reuse machinery runs at all (Andrew 2026-11-07, docs/plans/PERFORMANCE_THEN_ONE_VERIFICATION.md:
+        """Whether the reuse machinery runs at all (Andrew 2026-11-07, plan PERFORMANCE_THEN_ONE_VERIFICATION (git history):
         every release runs everything once; reuse of old evidence is an opt-in bonus, never the default).
 
         With --identity-on-wheels and without --reuse-unchanged the release runs every lane, unit and check, so
@@ -5375,7 +5375,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
         return done
 
     def launch_gate_job(self, vendor, run_id, work, output):
-        # plan item 4 (docs/plans/POST_0863_RELEASE_TOOLING.md): one persisted box job per vendor through the
+        # plan item 4 (plan POST_0863_RELEASE_TOOLING (git history)): one persisted box job per vendor through the
         # supported wrappers (tools/nvidia_central.sh submit, tools/do_amd_steward.sh run) that builds the eight
         # autograd executables on the box and runs the gate there; nothing outside this repository
         cmd = [PY, "tools/ops/release_gate.py", vendor, self.version, "--source-commit", self.commit,

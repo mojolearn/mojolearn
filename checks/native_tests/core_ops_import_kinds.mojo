@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The elementwise operations of imported models in the session
-(docs/plans/MODEL_IMPORT.md section 3.3), moved from test_ops_import_kinds.py
+(plan MODEL_IMPORT (git history) section 3.3), moved from test_ops_import_kinds.py
 (2026-11-14): values against independent float64 formulas (exactly where the
 operation rounds nothing), gradients against float64 closed forms or central
 differences, small odd non-board shapes. Every fixture runs on two

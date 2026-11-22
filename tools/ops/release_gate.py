@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """tools/ops/release_gate.py -- the NVIDIA/AMD release gate as ONE persisted box job,
-through the supported job wrappers (plan item 4 of docs/plans/POST_0863_RELEASE_TOOLING.md).
+through the supported job wrappers (plan item 4 of plan POST_0863_RELEASE_TOOLING (git history)).
 
     python3 tools/ops/release_gate.py nvidia|amd VERSION --source-commit SHA --source-tree DIR \\
         --out DIR --state FILE --candidate-wheel W [--candidate-wheel W ...] \\

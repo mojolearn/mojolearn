@@ -50,7 +50,7 @@ from bindings.native_operation_codes import (
 def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """A cooperative multi-GPU driver as one native call
     (lane/native-parallel-driver-20261024,
-    docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md): args (driver, devices,
+    plan NATIVE_PARALLEL_DRIVER_20261024 (git history)): args (driver, devices,
     owner operation, owner args, owner entry, owner context, plan bindings).
     The driver's shell made its type and mode refusals and resolved the
     plain method's entry, context and bindings. Here: the devices and route
@@ -87,7 +87,7 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
             # this driver. A recursion through the dispatcher (first three
             # functions, then two) stopped the Mojo compiler with no CPU use
             # and no diagnostic on _mojolearn_runtime_classical_host (lesson
-            # 7 of docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md section 4).
+            # 7 of plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history) section 4).
             # Same steps: no driver spec in bindings/parallel_plan_specs.mojo
             # admits `family_par_run` as its owner, so the owner is never the
             # driver itself.

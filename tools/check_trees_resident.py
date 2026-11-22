@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The tree family's resident fitted state: kept, read-only, replaced, released.
 
-Lane ne1-a-trees (2026-11-06; docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md
+Lane ne1-a-trees (2026-11-06; plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)
 workstream A). A fitted forest keeps its prepared snapshot (the device copy,
 or the host column's strict trees) in the tree door's native resident table
 (bindings/trees_resident_table_run.mojo), keyed by the model's identity and

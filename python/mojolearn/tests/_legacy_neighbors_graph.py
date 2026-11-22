@@ -115,7 +115,7 @@ def pagerank_fit(self, A, y=None):
     binary = self.weight is None or self.weight is False
     csr = _csr_graph_of(A)
     if csr is not None:
-        # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.2):
+        # lane gap-graph (2026-10-08, plan gaps-2026-10-08 (git history) 5.2):
         # a scipy.sparse matrix or an (indptr, indices, n) tuple goes to
         # the device as it is (`xn_pr_csr`): the column lists are built
         # by one sort on the device, the vectors the caller left to the
@@ -229,7 +229,7 @@ def connected_components(A, directed=True, connection="weak", return_labels=True
         lab = _p2m_iota(est, n)
         # TOMBSTONE: MOJOLEARN_CC_FAST_OFF (removed) deleted 2026-10-08 by 2851a6627; code recoverable at 2851a6627^.
         # Restore: git apply experiments/removed/MOJOLEARN_CC_FAST_OFF.patch; record in docs/TOMBSTONES.md.
-        # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.3): the
+        # lane gap-graph (2026-10-08, plan gaps-2026-10-08 (git history) 5.3): the
         # GPU binding on every vendor and tier runs the batched rounds and
         # compacts the labels itself in order of first appearance
         # (`_cc_relabel`'s integers; lane/apple-fast-graph's CC_FAST
@@ -348,7 +348,7 @@ def louvain_fit(self, A, y=None):
         raise ValueError("max_level must be a positive integer or None")
     csr = _csr_graph_of(A)
     if csr is not None:
-        # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.1):
+        # lane gap-graph (2026-10-08, plan gaps-2026-10-08 (git history) 5.1):
         # a scipy.sparse matrix or an (indptr, indices, n) tuple goes to
         # the device as it is (`xn_louvain_csr`): the graph slot is
         # filled from the lists, the symmetry, column-order and no-edge

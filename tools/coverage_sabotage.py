@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The release audit's fault-injection arms (lane verify-coverage-audit, 2026-10-21).
 
-docs/plans/VERIFY_COVERAGE_20261021.md lists the kernel definitions that are
+plan VERIFY_COVERAGE_20261021 (git history) lists the kernel definitions that are
 new or changed since the last release and that no existing sabotage arm
 reached. Each arm here is a source patch in `<area>/sabotage/` (never `<area>/checks/`, which would shadow the top-level `checks` package) that
 injects one VALUE fault into the changed definition (a float output one ulp

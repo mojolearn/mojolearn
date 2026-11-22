@@ -60,4 +60,4 @@ orchestrator's existing parallel test controller. The retired
 `MOJOLEARN_RUN_PCA_WHITEN_GPU` opt-in is no longer needed for numerical fixtures.
 Native compile/runtime and retained installed-wheel tests remain pending in
 this migration; source review is not runtime, performance or cross-vendor
-qualification. See `docs/plans/native_test_migration/pca-whitening-handoff.txt`.
+qualification. See plan native_test_migration/pca-whitening-handoff (git history).

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # GCNConv and SAGEConv backward on the tape (lane x9-moe-gcn-rules, 2026-11-09; plan row X9,
-# docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md). The resident form of both layers (the GPU binding,
+# plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history)). The resident form of both layers (the GPU binding,
 # bindings/xcnn_graph_native.mojo `_gcn_backward_dev` / `_sage_backward_dev`) records its forward here and runs
 # one backward in ONE native call (`x_cnn_gcn_backward_t` / `x_cnn_sage_backward_t`); the door's hand chain of
 # four to nine entry crossings is deleted (TOMBSTONE in the door). Lane m1-followups-misc: the host form (every

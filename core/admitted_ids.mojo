@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The one host read of admitted integer ids and labels (no Python import).
 
-Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.3, lane A3
+Plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.3, lane A3
 (a3-admit-decomp-prep-metrics, 2026-11-08): `admit_ids`. Every public door
 that turns a caller's integer labels or ids (classification metric labels,
 approximate-neighbor candidate ids) into int64 or int32 words reads these;

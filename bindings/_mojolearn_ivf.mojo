@@ -152,7 +152,7 @@ def ivf_flat_index_prepare_binding(addrs: PythonObject, params: PythonObject) ra
 
 
 # ===========================================================================
-# THE RESIDENT BUILD (lane gap-ivf, 2026-10-08, docs/plans/gaps-2026-10-08.md
+# THE RESIDENT BUILD (lane gap-ivf, 2026-10-08, plan gaps-2026-10-08 (git history)
 # section 6 item 1). `IVFIndex.fit` builds and KEEPS the index on the device:
 # the list vectors and the device CSR never cross to numpy inside the fit, and
 # the first search does not re-admit and re-upload them. The four small arrays

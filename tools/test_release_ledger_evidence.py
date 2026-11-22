@@ -1,4 +1,4 @@
-"""Post-0.8.63 release tooling, plan items 1 and 2 (docs/plans/POST_0863_RELEASE_TOOLING.md).
+"""Post-0.8.63 release tooling, plan items 1 and 2 (plan POST_0863_RELEASE_TOOLING (git history)).
 
 A Python/data-only refreeze launches no build and no cross-compile; a finished
 leg's begun compile runs are recorded from its own output; one gate predicate

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE THREAD-SCOPED DEVICE PLAN (lane/native-parallel-driver-20261024;
-docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md).
+plan NATIVE_PARALLEL_DRIVER_20261024 (git history)).
 
 A multi-GPU driver used to run its estimator in a worker process whose
 visibility mask (`CUDA_VISIBLE_DEVICES` / `ROCR_VISIBLE_DEVICES` /
@@ -35,7 +35,7 @@ slot's devices, so the slot data needs no lock. Entering the same plan again
 on one thread (the driver binds it in each binding it reaches) adds a level;
 a different plan on the same thread is refused by name. No floating-point value is read or written here.
 
-THE RULE (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md): only binding
+THE RULE (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)): only binding
 entries (a family's public native entry) read the thread-scoped plan, once,
 with `device_plan_current(<family setting name>)`. Everything below the entry
 takes the resulting `DevicePlan` value as an argument and calls no
@@ -166,7 +166,7 @@ struct _DevicePlanTable(Defaultable, Movable):
     # perf3-cluster-gp-gate). Integer flags only.
     var used: List[Int64]
     # THE ENVIRONMENT, READ ONCE PER PROCESS (lane envgate-classical-deviceplan,
-    # docs/plans/ENV_GATES_2026-11-15.md). env_state[i]: 0 until word i was
+    # plan ENV_GATES_2026-11-15 (git history)). env_state[i]: 0 until word i was
     # read, then 1 (unset or empty), 2 (a canonical integer, in env_value[i])
     # or 3 (other text: parsed again only on that error path). Words 0..16
     # are the `MOJOLEARN_<FAMILY>_DEVICE_COUNT` settings in DEVICE_PLAN_* bit
@@ -461,7 +461,7 @@ def device_plan_setting(name: String, default: String = "") raises -> String:
     Before (lane envgate-classical-deviceplan): `getenv(name, default)` on
     every call, i.e. per fit, per predict and per kernel-method transform of
     every family entry. The variables are USER-SETTINGs of the process
-    (docs/plans/ENV_GATES_2026-11-15.md): a worker or tool sets them in the
+    (plan ENV_GATES_2026-11-15 (git history)): a worker or tool sets them in the
     environment of the process it starts. A check that changes the device
     count inside one process binds a plan (`device_plan_enter`) instead. An
     empty value counts as unset."""

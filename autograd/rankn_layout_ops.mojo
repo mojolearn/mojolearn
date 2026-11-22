@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# THE RANK-N LAYOUT KERNEL (lane ag-rankn-layout, docs/plans/AUTOGRAD_RANKN.md
+# THE RANK-N LAYOUT KERNEL (lane ag-rankn-layout, plan AUTOGRAD_RANKN (git history)
 # sections 2.5 and 2.6): one strided slab copy that serves concat (forward:
 # each operand into its slab of the output; backward: each slab of the
 # upstream gradient into its operand's gradient) and narrow / split

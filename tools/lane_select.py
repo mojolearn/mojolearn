@@ -2573,7 +2573,7 @@ _CACHES.append(_SYMBOL_KEY)
 
 # --------------------------------------------- operation-string dispatchers
 # THE DISPATCHER'S OPERATIONS PER LANE (lane identity-attribution, 2026-10-31,
-# docs/plans/POST_0863_RELEASE_TOOLING.md item 3). The classical owner's one
+# plan POST_0863_RELEASE_TOOLING (git history) item 3). The classical owner's one
 # compiled entry, `classical_native_call` (bindings/classical_native_pack.mojo,
 # served by `_mojolearn_runtime_classical_host` through HOST_IMPORT_ALIASES on
 # every install), selects what it runs from a runtime string:

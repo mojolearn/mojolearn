@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The greedy SymmetricTree searcher's post-tree gates on the device (lane
-t3-gbdt-greedy-on-device-loop, 2026-11-09; docs/plans/EXECUTOR_T1_TREE_OPS.md
+t3-gbdt-greedy-on-device-loop, 2026-11-09; plan EXECUTOR_T1_TREE_OPS (git history)
 section 8, tree op TREE_OP_GREEDY_SEARCH).
 
 `run_tree_layout_traced` grows every level blind and records each level's

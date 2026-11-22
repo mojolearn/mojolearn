@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # THE BATCHED MATRIX PRODUCT ON THE TAPE (lane ag-rankn-bmm,
-# docs/plans/AUTOGRAD_RANKN.md section 2.3).
+# plan AUTOGRAD_RANKN (git history) section 2.3).
 #
 # rankn_matmul(tape, ex, x, y): x [..., M, K] @ y [..., K, N], the leading
 # (batch) axes broadcast NumPy's way (equal, or 1; a missing axis is 1),

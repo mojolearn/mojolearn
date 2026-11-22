@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """CNNClassifier fit and predict on the program executor (lane
-x8-cnn-on-executor, docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X8).
+x8-cnn-on-executor, plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) row X8).
 
 The classifier's whole fit is ONE captured program trained by `Program.fit`
 (autograd/program_runtime.mojo `train_program_control`) in an inference

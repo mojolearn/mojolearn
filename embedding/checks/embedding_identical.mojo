@@ -291,7 +291,7 @@ comptime NN49_EMB_VECTOR4 = (
 )
 
 
-# lane gap-neural-io (2026-10-08, plan docs/plans/gaps-2026-10-08.md Section
+# lane gap-neural-io (2026-10-08, plan plan gaps-2026-10-08 (git history) Section
 # 4): THE UNIQUE-ROWS FOLD. The touched-rows launch above fires only when
 # T < V (it launches T * d threads); with T >= V (the board's T = V =
 # 32,768) the fold is `emb_backward_kernel` over all V * d cells, though a

@@ -6,7 +6,7 @@
 # bindings/py_trees_resident.mojo, keyed by the same handle word; this table
 # holds only words and the native release entry of each snapshot.
 #
-# Rules (plan docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md section A; unchanged
+# Rules (plan plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history) section A; unchanged
 # by the split):
 # - Key: (model key, generation, kind), plus the validity words the snapshot
 #   was built for (dims, mode, aggregation) and the IDENTITY words of the

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The oblivious searcher's post-tree gate walk on the device (lane
-t1-tree-builder-ops, 2026-11-08; docs/plans/EXECUTOR_T1_TREE_OPS.md, tree op
+t1-tree-builder-ops, 2026-11-08; plan EXECUTOR_T1_TREE_OPS (git history), tree op
 TREE_OP_GATE_WALK).
 
 The doc-parallel searcher (`oblivious_tree_doc_parallel_structure_searcher`)

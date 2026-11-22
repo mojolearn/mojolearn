@@ -449,7 +449,7 @@ def plan_quantizer_scale(
 
 struct IvfFlatBuildDevice(Movable):
     """The device side a RESIDENT build leaves behind (lane gap-ivf,
-    2026-10-08, docs/plans/gaps-2026-10-08.md section 6 item 1): the coarse
+    2026-10-08, plan gaps-2026-10-08 (git history) section 6 item 1): the coarse
     centroids, their squared norms, the permuted list vectors and the device
     CSR pair, the buffers `ivf_flat_search.mojo::IvfFlatDevice` holds. Before,
     `IVFIndex.fit` downloaded the n_rows x dim list data into numpy and the

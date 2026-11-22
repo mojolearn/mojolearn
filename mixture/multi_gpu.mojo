@@ -42,7 +42,7 @@ from mixture.checks.gmm_sabotage import GMM_SAB_NONE
 
 def gmm_device_plan() raises -> DevicePlan:
     """The GaussianMixture family's device plan, read once at a family entry
-    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Its `setting` is what
     `device_plan_setting("MOJOLEARN_GMM_DEVICE_COUNT")` returned, so
     `gmm_device_count` parses the same text as before."""
     return device_plan_current("MOJOLEARN_GMM_DEVICE_COUNT", "")

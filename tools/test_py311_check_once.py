@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """The CPython 3.10 / 3.11 check-once path, exercised on an installed wheel.
 
-Lane ne2-i-j (2026-11-07, docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md
+Lane ne2-i-j (2026-11-07, plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)
 section 2I): on 3.10 and 3.11 the native records key on the objects' own
 version tags (bindings/py_version_tags.mojo) instead of 3.12's watchers. This
 job runs, in a 3.11 interpreter with the wheel installed, one estimator per

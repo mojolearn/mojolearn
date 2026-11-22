@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # Compile root of the executor's linear-algebra step ops (lane
-# n7-device-linalg-ops, docs/plans/EXECUTOR_N7_OPS.md) until the family lanes
+# n7-device-linalg-ops, plan EXECUTOR_N7_OPS (git history)) until the family lanes
 # N8-N10 consume them: every op and host twin instantiated once, on a tiny
 # problem, so `mojo build checks/executor_n7_ops_compile.mojo` type-checks
 # every kernel for the target. Running it enqueues 4 x 4 problems and prints

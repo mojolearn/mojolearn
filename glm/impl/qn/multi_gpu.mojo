@@ -64,7 +64,7 @@ struct GradientColumnShard(Movable):
 
 def glm_device_plan() raises -> DevicePlan:
     """The GLM family's device plan, read once at a family entry
-    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Its `setting` is what
     `device_plan_setting("MOJOLEARN_GLM_DEVICE_COUNT")` returned, so
     `gradient_columns` tests the same text as before."""
     return device_plan_current("MOJOLEARN_GLM_DEVICE_COUNT", "")

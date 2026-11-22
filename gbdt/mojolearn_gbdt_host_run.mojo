@@ -1497,7 +1497,7 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         # gbdt/host/gbdt_oracle_ctr.mojo, every permutation
         # Full CPU binding compiled at 2d5c5081a83e, 2026-10-28:
         # x86-64-v3/O0, 32 jobs, exit 0. Runtime/identity are pending.
-        # Receipt: docs/plans/gbdt-cpu-ctr-eval-20261028-compile.json.
+        # Receipt: plan gbdt-cpu-ctr-eval-20261028-compile (git history).
         # The owner expands eval rows with its final learn-only tables
         # and reuses the existing held-out boost/detector/shrink arm.
         var ev = _gbdt_host_eval_arm(

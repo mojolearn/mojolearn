@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Shared admission for the native multi-GPU driver doors
 (lane/native-parallel-driver-20261024,
-docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md).
+plan NATIVE_PARALLEL_DRIVER_20261024 (git history)).
 
 A cooperative driver used to pickle its estimator to ONE worker process
 whose visibility mask held the selected devices. Its door now validates the

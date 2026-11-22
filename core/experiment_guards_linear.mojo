@@ -123,7 +123,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_ROWMAJOR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CD_FAST_ROWMAJOR_OFF"](), "removed 2026-11-15 (lane/expdel-03-linear): CD_FAST_ROWMAJOR_OFF (FAST+Apple rollback of the CD grid Gram to the transposed, centered design) is gone; the row-major tiles are the FAST+Apple path (lasso istella 264 -> 149 ms with GRID_GRAM, KEPT 0ae9c28cd); code recoverable at 7d40f892a7"
     # Lane expdel2-06-base (2026-11-15): the C13-C28 classical arms with no recorded A/B and the _OFF rollbacks of measured
-    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md).
+    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history)).
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C13_LOGCV_WEIGHTS"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C13_LOGCV_WEIGHTS (Linear (weighted LogisticRegressionCV fold weight sums, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 337c096a5b; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C14_GROUP_RHS.patch
@@ -164,15 +164,15 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C02_LINEAR_PAIR"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C02_LINEAR_PAIR (Linear (OLS / Ridge independent C02 linear sums, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at c95b22c391; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C05_OLS_PHASE.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C05_OLS_PHASE"](), "removed 2026-11-15 (lane/expdel2-07-base): CLASSICAL_C05_OLS_PHASE (Linear (invocation-owned OLS covariance / inverse phase storage, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at eb67cbe21f; see docs/TOMBSTONES.md"
-    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_MULTIOUT_RIDGE_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): MULTIOUT_RIDGE_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 7866bd9303; restore: experiments/removed/MOJOLEARN_MULTIOUT_RIDGE_OFF.patch"
-    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CHOL_FAST_DEVIO_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): CHOL_FAST_DEVIO_OFF (unmeasured old path beside the FAST Apple and IDENTICAL default) is gone; the default is kept; code at 70d6bad292; restore: experiments/removed/MOJOLEARN_CHOL_FAST_DEVIO_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch
     comptime assert not is_defined["MOJOLEARN_CHOL_HOST_SCALAR"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): CHOL_HOST_SCALAR (unmeasured opt-in before arm) is gone; the default is kept; code at 61bd06b986; restore: experiments/removed/MOJOLEARN_CHOL_HOST_SCALAR.patch"
-    # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_L05: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CD_FAST_GRAM_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): CD_FAST_GRAM_OFF (old path, no A/B recorded) is gone; the default is kept; code at d75e2fbb7a; restore: experiments/removed/MOJOLEARN_CD_FAST_GRAM_OFF.patch"
@@ -226,7 +226,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_RIDGE_NO_U_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): RIDGE_NO_U_OFF (old path of a one-vendor promotion) is gone; the default is kept; code at 620c4ce37c; restore: experiments/removed/MOJOLEARN_RIDGE_NO_U_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_RIDGE_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): RIDGE_RESIDENT_OFF (old path of a one-vendor promotion) is gone; the default is kept; code at 3fcdcb78f6; restore: experiments/removed/MOJOLEARN_RIDGE_RESIDENT_OFF.patch"
-    # Lane expdel2-22-linear (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-22-linear (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_P01: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_P02: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_P03: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
@@ -291,7 +291,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): X_PREP_CLASS_COV_GRID_OFF (old path) is gone; the default is kept; code at 518d83d2b0; restore: experiments/removed/MOJOLEARN_X_PREP_CLASS_COV_GRID_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X_PREP_POOL_ARENA_OFF"](), "removed 2026-11-15 (lane/expdel2-22-linear): X_PREP_POOL_ARENA_OFF (old path) is gone; the default is kept; code at cc8e7c0dfd; restore: experiments/removed/MOJOLEARN_X_PREP_POOL_ARENA_OFF.patch"
-    # Lane expdel2-21-linear (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-21-linear (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_L01: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_L02: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_L03: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)

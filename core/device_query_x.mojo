@@ -3,7 +3,7 @@
 """The query X of a device kernel entry: uploaded from host words or
 gathered out of a model-selection fold, with the finite status words read
 back with the entry's result (lane a7a-device-x-svm-gp-krr, 2026-11-09;
-plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 steps 3-4).
+plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.2 steps 3-4).
 
 The SVM, Gaussian-process and KernelRidge query entries each uploaded X and
 then tested it with a synchronising first-non-finite scan and their own

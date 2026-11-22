@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Release-gate coverage of the byte-LM parallel trainers and their fold
-helpers changed since 0.8.55 (docs/plans/TEST_COVERAGE_20261021.md).
+helpers changed since 0.8.55 (plan TEST_COVERAGE_20261021 (git history)).
 
 Real path: the split step (shard_gradient + ordered_fold + apply_gradient)
 and the device fold (fold_reset, shard_gradient_fold, fold_add, fold_export)

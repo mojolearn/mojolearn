@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE HOST COLUMN of the research profile `mojolearn.identical.gemm.fp32.v2-int`
-(prototype, lane/gemm-int-slices, 2026-10-28; `docs/plans/GEMM_INT_SLICES.md`).
+(prototype, lane/gemm-int-slices, 2026-10-28; plan GEMM_INT_SLICES (git history)).
 
 The answer every device plan of `gemm/int_slices.mojo` must equal bit for
 bit. It reaches the integers by a DIFFERENT route from the device plans (codes

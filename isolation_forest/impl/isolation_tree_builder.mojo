@@ -170,7 +170,7 @@ from checks.numerics import (
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C47_IF_LIVE_TASKS.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dc94980d4a.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #7 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #7 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime IF_C48_FUSED_PARTITION = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_C48_IF_PARTITION"]()
 comptime IF_WORK_PLANES = 3 if IF_C48_FUSED_PARTITION else 2
 comptime IF_FAST_ROWMAJOR = (
@@ -717,7 +717,7 @@ def _block_stable_partition(
     each side in its previous order; returns the split position."""
     # TOMBSTONE: MOJOLEARN_TREES_C48_IF_PARTITION (opt-in arm, no A/B recorded) deleted 2026-11-15 by lane/expdel2-46-trees; code recoverable at dc94980d4a.
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_C48_IF_PARTITION.patch; record in docs/TOMBSTONES.md.
-    # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #7 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+    # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #7 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
     comptime if IF_C48_FUSED_PARTITION:
         # temp holds n local output indices and n signed destinations. Each
         # row's flag and global child prefix are produced once. Child metadata

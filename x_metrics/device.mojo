@@ -19,7 +19,7 @@ from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
 
 #: x_metrics program profile: `-D MOJOLEARN_XMETRICS_PROFILE` builds drain and
 #: print per stage; default builds compile it out. Before (lane
-#: envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md): a
+#: envgate-classical-deviceplan, plan ENV_GATES_2026-11-15 (git history)): a
 #: getenv per program run.
 comptime XMETRICS_PROFILE_ON = is_defined["MOJOLEARN_XMETRICS_PROFILE"]()
 

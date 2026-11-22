@@ -7,7 +7,7 @@ from transformer.experiments.norm_profile import (
 )
 from max.gpu import block_dim, block_idx, thread_idx
 # RESTORED 2026-11-15 by lane/restore-run-arms-neural: MOJOLEARN_IDN_NORM_FIXED_LANES arms and helpers (RUN #6 of
-# docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), reverse of the sweep 5d0bda260a.
+# plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)), reverse of the sweep 5d0bda260a.
 from transformer.experiments.norm_fixed_lanes import (
     IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total,
     norm_row_threads,

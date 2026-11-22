@@ -62,7 +62,7 @@ def gemm_native(
         raise Error("gemm: m, n and k must each be at most 2^30")
     # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
-    # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md.
+    # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history).
     # lane/gemm-int-slices (2026-10-28): the HOST COLUMN of the research
     # profile fp32.v2-int behind -D MOJOLEARN_IDN_GEMM_INT_SLICES (default
     # OFF; off, this block compiles to nothing and the CPU column is fp32.v1).

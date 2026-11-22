@@ -271,7 +271,7 @@ def _check_configuration() -> Bool:
     comptime assert not (is_defined["MOJOLEARN_AFN_MLP_FUSED_STEP"]() or is_defined["MOJOLEARN_AFN_MLP_RESIDENT"]() or is_defined["MOJOLEARN_AFN_MLP_MULTISTEP"]() or is_defined["MOJOLEARN_AFN_MLP_ALL"]()), "removed 2026-11-09 (lane/x2-small-mlp-on-executor, plan row X2): SmallMLPTrainer runs as one captured program on the executor (autograd/small_mlp_program.mojo); the Apple FAST fused step and resident session (merged-unmeasured opt-ins) are deleted with the hand step; drop the define. Restore with experiments/removed/MOJOLEARN_X2_SMALL_MLP_HAND_ROUTES.patch"
     # TOMBSTONE restored 2026-11-09 by lane/r1-restore-measured-winners: MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF is live again (autograd/small_mlp_op.mojo SMALL_MLP_GEMM_LEAF128: the small_mlp op's GEMMs take the incumbent identical_gemm_into); no refusal. MOJOLEARN_SMALL_MLP_GENERIC_OPS (the generic-ops A/B arm) needs none either.
     # ---- end lane x2-small-mlp-on-executor
-    # ---- lane x3-mlp-rnn-predict-on-tape (2026-11-08, docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md X3 and 5.6): one
+    # ---- lane x3-mlp-rnn-predict-on-tape (2026-11-08, plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) X3 and 5.6): one
     # path per decision in the MLP and recurrent trainers (docs/TOMBSTONES.md, docs/apple-fast/EXPERIMENTS.md).
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
@@ -347,7 +347,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"](), "removed 2026-11-15 (lane/expdel2-01-base): MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL (the NVIDIA opt-out of the per-call transformer_forward_fresh export) is gone; NVIDIA IDENTICAL builds always export it (NVIDIA's full public A/B gate admitted it); restore: experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL.patch"
     # MOJOLEARN_SAMBA_WEIGHT_EPOCH_GLOBAL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
-    # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # MOJOLEARN_IDN_MAMBA3_FORWARD_DOOR_OLD: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch
     comptime assert not is_defined["MOJOLEARN_STEP_GLUE_TRIAL"](), "removed 2026-11-15 (lane/expdel2-04-base): STEP_GLUE_TRIAL (opt-in arm, Byte LM step glue (trial build); no A/B recorded for the opt-in arm (rule a, 'NEVER RUN, PENDING MEASUREMENT')) is gone; the default stays; code recoverable at 6027e14ec1; restore: experiments/removed/MOJOLEARN_STEP_GLUE_TRIAL.patch"
@@ -363,12 +363,12 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_MEASURE_I07_LIFETIME.patch
     comptime assert not is_defined["MOJOLEARN_MEASURE_I07_LIFETIME"](), "removed 2026-11-15 (lane/expdel2-07-base): MEASURE_I07_LIFETIME (Neural (I07 retained-estash lifetime timing arm of the attention driver)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 6ada715def; see docs/TOMBSTONES.md"
     # MOJOLEARN_TRAIN_LIVE_STATUS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
-    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_PROGRAM_RUN_ENTRY: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_SESSION_CALL_DESCRIPTOR: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_ADMISSION: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_TRANSFORMER_DECODE_PER_TOKEN_DOOR: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
-    # Lane expdel2-23-neural (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-23-neural (2026-11-15): unmeasured arms and old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFN_MAMBA3_BWD_ARENA: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_MAMBA3_BWD_CHUNK: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_SAMBA_ALL: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
@@ -421,7 +421,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch
     comptime assert not is_defined["MOJOLEARN_NN50_OWNED_RUNS"](), "removed 2026-11-15 (lane/expdel2-23-neural): NN50_OWNED_RUNS (arm) is gone; the default path is the only one; code at 4f9d2d5288; restore: experiments/removed/MOJOLEARN_NN50_OWNED_RUNS.patch"
     # MOJOLEARN_TRANSFORMER_GENERIC_PREFILL: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
-    # Lane expdel2-26-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-26-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch
     comptime assert not is_defined["MOJOLEARN_IDN_M1_SCAN"](), "removed 2026-11-15 (lane/expdel2-26-neural): IDN_M1_SCAN (unmeasured opt-in arms) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_IDN_M1_SCAN.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_CB_LOWER_OFF.patch
@@ -476,7 +476,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_MAMBA3_TILED_YINTRA"](), "removed 2026-11-15 (lane/expdel2-26-neural): MAMBA3_TILED_YINTRA (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_MAMBA3_TILED_YINTRA.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch
     comptime assert not is_defined["MOJOLEARN_NN35_CONV_PAIR"](), "removed 2026-11-15 (lane/expdel2-26-neural): NN35_CONV_PAIR (unmeasured opt-in arm) is gone; the default is kept; code at 5fc464dce4; restore: experiments/removed/MOJOLEARN_NN35_CONV_PAIR.patch"
-    # Lane expdel2-25-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-25-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFN_GEMM2_ALL: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_GEMM2_BIGTILE: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_GEMM2_DBUF: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
@@ -500,7 +500,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_EMB_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-25-neural): EMB_RESIDENT_OFF (old path beside the default) is gone; the default is kept; code at 63a7445f96; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_GEMM_FAST_RAGGED_K_OFF.patch
     comptime assert not is_defined["MOJOLEARN_GEMM_FAST_RAGGED_K_OFF"](), "removed 2026-11-15 (lane/expdel2-25-neural): GEMM_FAST_RAGGED_K_OFF (old path beside the default) is gone; the default is kept; code at 02da0a0217; see docs/TOMBSTONES.md"
-    # MOJOLEARN_IDN_GEMM_INT_SLICES: refusal removed 2026-11-15 (restored; RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_IDN_GEMM_INT_SLICES: refusal removed 2026-11-15 (restored; RUN #2 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history), see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_CHAINS.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NEURAL_CHAINS"](), "removed 2026-11-15 (lane/expdel2-25-neural): IDN_NEURAL_CHAINS (unmeasured opt-in arm) is gone; the default is kept; code at a9109164e5; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NEURAL_GEMM_EPILOGUE.patch
@@ -519,7 +519,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_INT_SLICES_FORCE_FLAT"](), "removed 2026-11-15 (lane/expdel2-25-neural): INT_SLICES_FORCE_FLAT (unmeasured opt-in arm) is gone; the default is kept; code at e62e7376e0; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_NI07_GROUPED_PROJECTIONS.patch
     comptime assert not is_defined["MOJOLEARN_NI07_GROUPED_PROJECTIONS"](), "removed 2026-11-15 (lane/expdel2-25-neural): NI07_GROUPED_PROJECTIONS (unmeasured opt-in arm) is gone; the default is kept; code at e862759b5c; see docs/TOMBSTONES.md"
-    # Lane expdel2-24-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-24-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # MOJOLEARN_AFN_LMGRAD_ALL: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_LM_WGRAD_SPLIT: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN26_LM_WGRAD_SPLIT: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
@@ -567,10 +567,10 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_IDN_MLP_GEMM_LEAF128_OFF: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_ROW_COOP_OFF"](), "removed 2026-11-15 (lane/expdel2-24-neural): IDN_ROW_COOP_OFF (old path, Neural (autograd softmax-family rows); no A/B recorded) is gone; the default is kept; code recoverable at 5d81d356e0; restore: experiments/removed/MOJOLEARN_IDN_ROW_COOP_OFF.patch"
-    # MOJOLEARN_IDN_SEQ_TILED_PREDICT: refusal removed 2026-11-15 (restored; RUN #4 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_IDN_SEQ_TILED_PREDICT: refusal removed 2026-11-15 (restored; RUN #4 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history), see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_SMALL_MLP_GENERIC_OPS: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-24-neural
-    # Lane expdel2-30-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-30-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFN26_LOSS_BLOCK128: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN26_LOSS_BLOCK512: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN26_LOSS_FUSED: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
@@ -613,7 +613,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SEQ_RNN_SCAN_OFF"](), "removed 2026-11-15 (lane/expdel2-30-neural): SEQ_RNN_SCAN_OFF (unmeasured force arm) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_SEQ_RNN_SCAN_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_THETA_REG_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_THETA_REG_OFF"](), "removed 2026-11-15 (lane/expdel2-30-neural): SEQ_THETA_REG_OFF (unmeasured old path) is gone; the default is kept; code at e39daf79ad; restore: experiments/removed/MOJOLEARN_SEQ_THETA_REG_OFF.patch"
-    # Lane expdel2-27-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-27-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # MOJOLEARN_AFN_EPI_ALL: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_MAMBA1_CHUNKSCAN: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_MAMBA1_FUSE_IN: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
@@ -646,7 +646,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_MAMBA_ARENA_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_MAMBA_ARENA_OFF (unmeasured old path beside the IDENTICAL arena default) is gone; the default stays; code recoverable at e437e599e6; restore: experiments/removed/MOJOLEARN_IDN_MAMBA_ARENA_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF"](), "removed 2026-11-15 (lane/expdel2-27-neural): IDN_MAMBA_GEMM_WS_OFF (unmeasured old path beside the retained GEMM workspace default) is gone; the default stays; code recoverable at 23341493ec; restore: experiments/removed/MOJOLEARN_IDN_MAMBA_GEMM_WS_OFF.patch"
-    # MOJOLEARN_IDN_SSD_OCCUPANCY: refusal removed 2026-11-15 (restored; RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_IDN_SSD_OCCUPANCY: refusal removed 2026-11-15 (restored; RUN #5 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history), see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch
     comptime assert not is_defined["MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER"](), "removed 2026-11-15 (lane/expdel2-27-neural): MAMBA3_LEGACY_CALLER_TRANSFER (unmeasured old path: host-buffer staging of Mamba-3 transfers) is gone; the default stays; code recoverable at d57cf5cdab; restore: experiments/removed/MOJOLEARN_MAMBA3_LEGACY_CALLER_TRANSFER.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_DIRECT_TRANSFER.patch
@@ -657,7 +657,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_NN40_OWNED_WEIGHTS"](), "removed 2026-11-15 (lane/expdel2-27-neural): NN40_OWNED_WEIGHTS (unmeasured opt-in arm: owned Mamba-3 weight snapshots) is gone; the default stays; code recoverable at 8584e42dde; restore: experiments/removed/MOJOLEARN_NN40_OWNED_WEIGHTS.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch
     comptime assert not is_defined["MOJOLEARN_NN40_WS_HEADROOM"](), "removed 2026-11-15 (lane/expdel2-27-neural): NN40_WS_HEADROOM (unmeasured opt-in arm: GEMM workspace grow-ahead headroom) is gone; the default stays; code recoverable at 340d379a3c; restore: experiments/removed/MOJOLEARN_NN40_WS_HEADROOM.patch"
-    # Lane expdel2-28-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-28-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_CNN_PREDICT_PROGRAM_COPY: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch
     comptime assert not is_defined["MOJOLEARN_IDN_AF_COL_CHUNK_FOLD"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_AF_COL_CHUNK_FOLD (unmeasured opt-in arm) is gone; the default is kept; code at ab421749bb; restore: experiments/removed/MOJOLEARN_IDN_AF_COL_CHUNK_FOLD.patch"
@@ -681,7 +681,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_SEQ_WGRAD_BLOCKED_OFF (unmeasured old path) is gone; the default is kept; code at 105cf60fa6; restore: experiments/removed/MOJOLEARN_IDN_SEQ_WGRAD_BLOCKED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_FAST_PIPE_CH"](), "removed 2026-11-15 (lane/expdel2-28-neural): SEQ_FAST_PIPE_CH (unmeasured opt-in knob) is gone; the default is kept; code at c5730b729c; restore: experiments/removed/MOJOLEARN_SEQ_FAST_PIPE_CH.patch"
-    # Lane expdel2-32-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-32-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # MOJOLEARN_AFN_SAMBA_ARENA: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_SAMBA_DEVICE_ADMIT: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_SAMBA_EMB_ATOMIC: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
@@ -703,7 +703,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2"](), "removed 2026-11-15 (lane/expdel2-32-neural): IDN_CHUNKED_LM_HEAD_V2 (opt-in arm, record read: never measured) is gone; the default path is the only one; code recoverable at 311b50e05c; restore: experiments/removed/MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch
     comptime assert not is_defined["MOJOLEARN_IDN_LM_VIEWS"](), "removed 2026-11-15 (lane/expdel2-32-neural): IDN_LM_VIEWS (opt-in arm, no record) is gone; the default path is the only one; code recoverable at 311b50e05c; restore: experiments/removed/MOJOLEARN_IDN_LM_VIEWS.patch"
-    # MOJOLEARN_IDN_NORM_FIXED_LANES: refusal removed 2026-11-15 (restored; RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_IDN_NORM_FIXED_LANES: refusal removed 2026-11-15 (restored; RUN #6 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history), see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF"](), "removed 2026-11-15 (lane/expdel2-32-neural): IDN_OPT_CLIP_BATCHED_OFF (old path, no record) is gone; the default is kept; code recoverable at 25599a616f; restore: experiments/removed/MOJOLEARN_IDN_OPT_CLIP_BATCHED_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_OPT_GATE_SCAN_OFF.patch
@@ -738,7 +738,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_NN63_CANONICAL_SHARD_MERGE"](), "removed 2026-11-15 (lane/expdel2-32-neural): NN63_CANONICAL_SHARD_MERGE (opt-in arm, no record) is gone; the default path is the only one; code recoverable at 5f27699bee; restore: experiments/removed/MOJOLEARN_NN63_CANONICAL_SHARD_MERGE.patch"
     # MOJOLEARN_SAMBA_PROGRAM_FORWARD: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-32-neural
-    # Lane expdel2-31-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-31-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # MOJOLEARN_AFN_LM_ALL: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_LM_NOSYNC: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN26_LM_NOSYNC: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
@@ -788,7 +788,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch
     comptime assert not is_defined["MOJOLEARN_OPT_TRUST_INPUTS"](), "removed 2026-11-15 (lane/expdel2-31-neural): OPT_TRUST_INPUTS (opt-in arm, Neural (optimizer input refusal scans); no A/B recorded) is gone; the default path is the only one; code recoverable at 943c1ff5fe; restore: experiments/removed/MOJOLEARN_OPT_TRUST_INPUTS.patch"
     # ---- end lane expdel2-31-neural
-    # Lane expdel2-29-neural (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-29-neural (2026-11-15): unmeasured arms and old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch
     comptime assert not is_defined["MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1"](), "removed 2026-11-15 (lane/expdel2-29-neural): AUTOGRAD_GEMM_DISPATCH_V1 (old path) is gone; the default is kept; code at 8747cf5fa2; restore: experiments/removed/MOJOLEARN_AUTOGRAD_GEMM_DISPATCH_V1.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_MLP_UNFUSED.patch
@@ -866,7 +866,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TSA2_STL_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): TSA2_STL_OFF (old path) is gone; the default is kept; code at eb3180868d; restore: experiments/removed/MOJOLEARN_TSA2_STL_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TSA2_VAR_OFF"](), "removed 2026-11-15 (lane/expdel2-29-neural): TSA2_VAR_OFF (old path) is gone; the default is kept; code at b23d7039b8; restore: experiments/removed/MOJOLEARN_TSA2_VAR_OFF.patch"
-    # Lane expdel2-33-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-33-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFN_ATTN_ALL: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_ATTN_NORM_SG: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFN_ATTN_ROPE_CACHE: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
@@ -890,7 +890,7 @@ def _check_configuration() -> Bool:
     # MOJOLEARN_AFN26_CNN_COLS_ONCE: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.patch
     comptime assert not is_defined["MOJOLEARN_BN_FOLD_BLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-33-neural): BN_FOLD_BLOCK_OFF (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_BN_FOLD_BLOCK_OFF.patch"
-    # MOJOLEARN_IDN_ATTN_FOLD_V2: refusal removed 2026-11-15 (restored; RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md, see docs/TOMBSTONES.md Restored table)
+    # MOJOLEARN_IDN_ATTN_FOLD_V2: refusal removed 2026-11-15 (restored; RUN #3 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history), see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM.patch
     comptime assert not is_defined["MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM"](), "removed 2026-11-15 (lane/expdel2-33-neural): DISABLE_RESIDUAL2_NEXT_NORM (unmeasured opt-in arm) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_FUSE_RESIDUAL1_NORM2.patch
@@ -905,7 +905,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"](), "removed 2026-11-15 (lane/expdel2-33-neural): TRANSFORMER_LEGACY_CALLER_TRANSFER (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY.patch
     comptime assert not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"](), "removed 2026-11-15 (lane/expdel2-33-neural): TRANSFORMER_LEGACY_WEIGHT_COPY (unmeasured old path) is gone; the default is kept; code at c3d1c7865f; restore: experiments/removed/MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY.patch"
-    # Lane expdel2-36-neural-series-linear (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-36-neural-series-linear (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_CONV_RELU.patch
     comptime assert not is_defined["MOJOLEARN_IDN_CNN_CONV_RELU"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): IDN_CNN_CONV_RELU (opt-in arm, no A/B recorded, Neural (CNN conv + bias + ReLU fusion arms 1/2)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_CNN_CONV_RELU.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN46_GATHER_BOUNDS.patch
@@ -941,7 +941,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): IDN_GCN_LOOPS_DEV_OFF (old path, no A/B recorded, Neural (GCN self loops on the device)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_GCN_LOOPS_DEV_OFF.patch"
     # ---- end lane expdel2-36-neural-series-linear
-    # Lane expdel2-35-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-35-neural (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ADAPT_M_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_ADAPT_M_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): IDN_ADAPT_M_OFF (old path, Neural (x_cnn adaptive pooling device entries); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_IDN_ADAPT_M_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GRAPH_M_OFF.patch
@@ -1001,7 +1001,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF"](), "removed 2026-11-15 (lane/expdel2-35-neural): XCNN_RES_NEW_NOZERO_OFF (old path, Neural (x_cnn unfilled resident outputs); no A/B recorded) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_XCNN_RES_NEW_NOZERO_OFF.patch"
     # MOJOLEARN_XCNN_TILED_ROWS: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # ---- end lane expdel2-35-neural
-    # Lane expdel2-34-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-34-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_ATTN_AMMA_ADMIT: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_ATTN_APPLE_ERECOMP: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_ATTN_APPLE_ESTASH_FORCE_DENY.patch
@@ -1066,7 +1066,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_ATTN_TILE_ORDER"](), "removed 2026-11-15 (lane/expdel2-34-neural): IDN_ATTN_TILE_ORDER (unmeasured grid arms) is gone; the default is kept; code at 85e5bc6d2e; restore: experiments/removed/MOJOLEARN_IDN_ATTN_TILE_ORDER.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch
     comptime assert not is_defined["MOJOLEARN_NN18_DENSE_TILE_CONTROL"](), "removed 2026-11-15 (lane/expdel2-34-neural): NN18_DENSE_TILE_CONTROL (unmeasured opt-in arm) is gone; the default is kept; code at 3e8269e098; restore: experiments/removed/MOJOLEARN_NN18_DENSE_TILE_CONTROL.patch"
-    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_LEAF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_GEMM_LEAF (opt-in arm, Neural (build-wide GEMM leaf arms 1-3); no A/B recorded) is gone; the default path is the only one; code recoverable at 27caa1d5fe; restore: experiments/removed/MOJOLEARN_IDN_GEMM_LEAF.patch"
     # ---- end lane expdel2-37-series

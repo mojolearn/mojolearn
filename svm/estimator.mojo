@@ -233,7 +233,7 @@ def svc_fit_host(
         + " nochange_steps=" + String(nochange_steps)
     )
     # The family's native entry reads the calling thread's device plan ONCE
-    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    # and passes the value down (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var trace = SmoTrace()
     var model = svc_fit(ctx, x, labels, n_rows, n_cols, param, kp, card, trace, plan=plan)
@@ -318,7 +318,7 @@ def svc_fit_host_borrowed(
         + " nochange_steps=" + String(nochange_steps)
     )
     # The family's native entry reads the calling thread's device plan ONCE
-    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    # and passes the value down (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var trace = SmoTrace()
     var status = List[Int32]()
@@ -429,7 +429,7 @@ def svc_predict_host(
         + " buffer_mib=" + String(buffer_size_mib)
     )
     # The family's native entry reads the calling thread's device plan ONCE
-    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    # and passes the value down (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var out = svc_predict(
         ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, predict_class, card,
@@ -623,7 +623,7 @@ def svr_fit_host_borrowed(
         + " nochange_steps=" + String(nochange_steps)
     )
     # The family's native entry reads the calling thread's device plan ONCE
-    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    # and passes the value down (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var trace = SmoTrace()
     var status = List[Int32]()
@@ -735,7 +735,7 @@ def svr_predict_host(
         + " buffer_mib=" + String(buffer_size_mib)
     )
     # The family's native entry reads the calling thread's device plan ONCE
-    # and passes the value down (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    # and passes the value down (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
     var plan = device_plan_current("MOJOLEARN_SVM_DEVICE_COUNT")
     var out = svr_predict(
         ctx, model, x, n_rows, n_cols, kp, buffer_size_mib, card, plan

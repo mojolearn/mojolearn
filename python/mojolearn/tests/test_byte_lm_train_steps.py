@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """`train_steps` and the ragged greedy pick against the per-step entries.
 
-Plan docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md section 2C, "Proof": run
+Plan plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history) section 2C, "Proof": run
 steps through the session entry and through the old per-step entry and
 compare the loss words. Runs on whatever byte LM binding the install has
 (GPU, or the host column on a CPU-only install); skipped without one.

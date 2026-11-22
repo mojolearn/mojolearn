@@ -55,7 +55,7 @@ def _np():
 
 
 def _binding(numeric_mode=None):
-    # KEPT (docs/plans/VERIFY_DECOUPLE_2026-11-15.md): verify-model's own
+    # KEPT (plan VERIFY_DECOUPLE_2026-11-15 (git history)): verify-model's own
     # native entries (verify_digest, verify_fill, verify_file_sha256,
     # verify_model_info) live in the x_sequence binding; this is the one
     # place verify resolves them, so no product API exposes them.

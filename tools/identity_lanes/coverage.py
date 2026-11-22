@@ -8,7 +8,7 @@
 # format"). Their qualification is the installed-wheel smoke on each vendor
 # (tools/adapter_wheel_smoke.py, run by the release gate).
 #
-# docs/plans/VERIFY_COVERAGE_20261021.md lists every native entry and public
+# plan VERIFY_COVERAGE_20261021 (git history) lists every native entry and public
 # method that is new or changed since the last published release, with the
 # verifier lanes that reach it (tools/verify_coverage_audit.py). Each lane in
 # this file reaches one group the audit found no lane for, through the public
@@ -506,7 +506,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 # ================================================================ lane verify-coverage-owed (2026-10-21)
 # The rows the audit left owed to the migration lanes, closed after they
-# landed (docs/plans/VERIFY_COVERAGE_20261021.md, "Owed").
+# landed (plan VERIFY_COVERAGE_20261021 (git history), "Owed").
 
 # ---------------------------------------------------------------- Mamba-2 and Mamba-3 resident decode sessions
 
@@ -890,7 +890,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 # ---------------------------------------------------------------- lane verify-gaps-20261022: the audit's GAP rows
 #
-# docs/plans/VERIFY_COVERAGE_20261022.md: native entries and public methods
+# plan VERIFY_COVERAGE_20261022 (git history): native entries and public methods
 # new or changed since the last release that no lane reached. Each lane below
 # reaches one group through the public door a user calls; they read OWED until
 # a release record admits them.

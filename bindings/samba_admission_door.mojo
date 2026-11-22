@@ -381,7 +381,7 @@ def _samba_remember(value: PythonObject, admission: PythonObject, nk: UnsafePoin
 # four-layer shape), `names`, `shapes`, `offsets`, the optimizer and the
 # generator. A forward reads none of those. Measured: samba-forward/bytes
 # NVIDIA 4.60 ms (0.8.55, no door) -> 10.58 (0.8.66) -> 10.54 ms (candidate
-# 4c2340386abc), AMD 6.10 -> 9.43 -> 8.36 (docs/plans/REGRESSIONS_0866_VS_0855.md
+# 4c2340386abc), AMD 6.10 -> 9.43 -> 8.36 (plan REGRESSIONS_0866_VS_0855 (git history)
 # C4: "something in the door is rebuilt per call"). Each field read below is
 # admitted by the same per-field rule as the full walk (_samba_admit_field);
 # the record classes' descriptor guards run first as before. A field the

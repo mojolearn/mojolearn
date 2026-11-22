@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # RANK-N BROADCASTS, AXIS REDUCTIONS AND MAX (lane ag-rankn-fold,
-# docs/plans/AUTOGRAD_RANKN.md 2.1, 2.2): the element bodies of the rank-N
+# plan AUTOGRAD_RANKN (git history) 2.1, 2.2): the element bodies of the rank-N
 # binary ops with a middle-axis broadcast, the axis-set sums and means, and
 # the order-free max. Shared by HostExec and DeviceExec through
 # sequence/dispatch.mojo, so the host column and every GPU run the same

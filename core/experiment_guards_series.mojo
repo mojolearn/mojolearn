@@ -61,7 +61,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C59_TRIAL_STATE"](), "removed 2026-11-15 (lane/expdel2-07-base): C59_TRIAL_STATE (Time series (ARIMA trial state reuse, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 7935a1db35; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_C60_LAG4.patch
     comptime assert not is_defined["MOJOLEARN_C60_LAG4"](), "removed 2026-11-15 (lane/expdel2-07-base): C60_LAG4 (Time series (shared detrended observations across lag tasks, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at ad78b8054f; see docs/TOMBSTONES.md"
-    # Lane expdel2-28-neural (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-28-neural (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_ETS_TEAM_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ETS_TEAM_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): ETS_TEAM_OFF (old path of the FAST Apple default) is gone; the default is kept; code at 8d47995bad; restore: experiments/removed/MOJOLEARN_ETS_TEAM_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ETS_TEAM_OFF.patch
@@ -70,7 +70,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_NM_SPEC_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): IDN_NM_SPEC_OFF (old path beside the measured default) is gone; the default is kept; code at 33ca37483e; restore: experiments/removed/MOJOLEARN_IDN_NM_SPEC_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_SEQ_CROSTON_REG_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SEQ_CROSTON_REG_OFF"](), "removed 2026-11-15 (lane/expdel2-28-neural): SEQ_CROSTON_REG_OFF (old path of the FAST Apple default) is gone; the default is kept; code at a2b075952e; restore: experiments/removed/MOJOLEARN_SEQ_CROSTON_REG_OFF.patch"
-    # Lane expdel2-36-neural-series-linear (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-36-neural-series-linear (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_SELECT_D_OFF.patch
     comptime assert not is_defined["MOJOLEARN_SELECT_D_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): SELECT_D_OFF (old path beside a recorded default, Series (AutoARIMA select_d FAST+Apple device rounds)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_SELECT_D_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SELECT_D_OFF.patch
@@ -83,7 +83,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_TSA_FAST_KPSS_PACK_OFF.patch
     comptime assert not is_defined["MOJOLEARN_TSA_FAST_KPSS_PACK_OFF"](), "removed 2026-11-15 (lane/expdel2-36-neural-series-linear): TSA_FAST_KPSS_PACK_OFF (old path beside a recorded default, Series (KPSS packed one-launch FAST+Apple)) is gone; the default path is the only one; code recoverable at 145be10898; restore: experiments/removed/MOJOLEARN_TSA_FAST_KPSS_PACK_OFF.patch"
     # ---- end lane expdel2-36-neural-series-linear
-    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_P10: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_P12: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_P14: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
@@ -146,7 +146,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_X0_FAST_LS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X0_FAST_LS_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): X0_FAST_LS_OFF (old path, Time series (ARIMA start-point LS, Apple FAST); no A/B recorded) is gone; the default is kept; code recoverable at 8c2c6d7d01; restore: experiments/removed/MOJOLEARN_X0_FAST_LS_OFF.patch"
     # ---- end lane expdel2-37-series
-    # Lane expdel2-47-promote (2026-11-15): old paths deleted and ARIMA_FAST_SEARCH_REUSE promoted (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-47-promote (2026-11-15): old paths deleted and ARIMA_FAST_SEARCH_REUSE promoted (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # Promoted: the old positive define is refused; -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF restores the refit path.
     comptime assert not is_defined["MOJOLEARN_ARIMA_FAST_SEARCH_REUSE"](), "promoted 2026-11-15 (lane/expdel2-47-promote): AutoARIMA search-fit reuse is the FAST + Apple default (M3 rab16-arimareuse: synthetic 18229.7 -> 13688.1 ms, taxi-hourly 16386.5 -> 9872.2 ms, forecast_rmse identical; IDENTICAL unchanged); drop -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE, -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF restores the refit"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_ARIMA_IC_DEVICE_OFF.patch

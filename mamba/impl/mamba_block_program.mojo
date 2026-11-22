@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Mamba-1, Mamba-2 and Mamba-3 blocks as one executor program each (lane
-x5-mamba-on-executor, 2026-11-09; docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
-row X5, the API note docs/plans/EXECUTOR_X1_API.md).
+x5-mamba-on-executor, 2026-11-09; plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history)
+row X5, the API note plan EXECUTOR_X1_API (git history)).
 
 `MambaBlockProgram` is one inference `OpsSession` on the device holding
 

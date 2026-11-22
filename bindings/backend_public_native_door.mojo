@@ -126,7 +126,7 @@ def _vendor(fields: PythonObject, context: PythonObject, mode: PythonObject) rai
 # ---- runtime_report (lane verify-runtime-report, 2026-11-15) ----------------
 # mojolearn.runtime_report(): the one read-only "what am I running" report the
 # shipped verify modules read instead of product internals. The field contract
-# is docs/plans/VERIFY_DECOUPLE_2026-11-15.md "API". Its own call, never on a
+# is plan VERIFY_DECOUPLE_2026-11-15 (git history) "API". Its own call, never on a
 # product call path: it loads no binding, enters no Python loader and no
 # Python-level function (posix.listdir/getcwd and C methods of str, list and
 # tuple are the only callees), and reads the selection made at import.

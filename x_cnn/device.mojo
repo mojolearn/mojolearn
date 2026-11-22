@@ -398,7 +398,7 @@ def direct_conv_kernel(x: FP, w: FP, bias: FP, cols: FP, yconv: FP, p: IP, rows_
 
 
 # NI12, THE IMPLICIT CONVOLUTION (lane gap-gemm-layers, 2026-10-08; plan
-# docs/plans/gaps-2026-10-08.md section 8). `y2 = cols . W^T` under profile
+# plan gaps-2026-10-08 (git history) section 8). `y2 = cols . W^T` under profile
 # mojolearn.identical.gemm.fp32.v1 WITHOUT the cols matrix: the A tile is
 # gathered from x by the im2col index arithmetic (`im2col_val`'s word, the
 # same +0.0 for a padded tap, flushed as loaded), so the N*OH*OW x C*KH*KW

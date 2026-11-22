@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The intermediate graph every model reader fills and the lowering reads
-(docs/plans/MODEL_IMPORT.md section 7), and the static shape resolution.
+(plan MODEL_IMPORT (git history) section 7), and the static shape resolution.
 
 The vocabulary is ONNX's: op names, attribute names, NCHW images and
 ``[out, in]`` Gemm weights. ``resolve`` turns the inputs' resolved shapes

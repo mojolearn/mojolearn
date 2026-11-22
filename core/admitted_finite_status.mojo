@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The finite status word of an admitted input, tested where the kernel
 entry already holds its words (lane a5-admit-core-followup, 2026-11-08; plan
-docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 3;
-docs/plans/REGRESSIONS_0866_VS_0855.md row R1).
+plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.2 step 3;
+plan REGRESSIONS_0866_VS_0855 (git history) row R1).
 
 `admit_x(..., defer_finite=True)` (bindings/admitted_input_unpack.mojo) borrows a
 float32 C-order X with NO host pass over it and returns `finite = False`:

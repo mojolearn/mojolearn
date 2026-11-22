@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Release-gate coverage of mojolearn.models and captured-program options
-changed since 0.8.55 (docs/plans/TEST_COVERAGE_20261021.md): safetensors
+changed since 0.8.55 (plan TEST_COVERAGE_20261021 (git history)): safetensors
 file and checkpoint metadata, TensorInfo admission, tokenizer pattern names,
 generation stream reads, a parallel model after close and the Huber option
 of Program.fit. Real calls first, then poisoned inputs refused by name.

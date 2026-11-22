@@ -58,7 +58,7 @@ def _member_table(member: PythonObject, cols: Int, context: PythonObject) raises
         # recursion stays inside `_member_table` (the walk never calls back):
         # a recursion through the tuple-returning walk is the shape that
         # stopped the Mojo compiler with no diagnostic (lesson 7,
-        # docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md section 4).
+        # plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history) section 4).
         return _member_table(found[2], cols, context)
     if Bool(py=found[1]) and records_stampable(member):
         _ = records_stamped_put(RECORDS_TREES, member, _TABLE_STAMP, ContentRecord(),

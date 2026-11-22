@@ -2,7 +2,7 @@
 """Fresh optimizer state reads zeros (lane unfilled-storage-audit, 2026-11-15).
 
 Optimizer moments are STATE: a step reads them before it writes them, so a
-fresh owner must hold zeros (docs/plans/UNFILLED_STORAGE_AUDIT_2026-11-15.md).
+fresh owner must hold zeros (plan UNFILLED_STORAGE_AUDIT_2026-11-15 (git history)).
 The Python-side array.array state (`new_zeros` in
 bindings/optimizer_public_door.mojo) lives in a boundary file a native check
 may not import; this check covers the native state owner the step uses, the

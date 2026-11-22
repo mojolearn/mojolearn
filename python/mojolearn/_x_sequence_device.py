@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Resident float32 tensors of the sequence binding (lane gap-neural-io,
-2026-10-08; plan docs/plans/gaps-2026-10-08.md Section 4).
+2026-10-08; plan plan gaps-2026-10-08 (git history) Section 4).
 
 `to_device(array)` uploads once and returns a `SequenceDeviceTensor` (a
 `sequence/seq_tensor.mojo` handle on the GPU binding's shared context). The

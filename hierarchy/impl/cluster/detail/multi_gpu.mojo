@@ -11,7 +11,7 @@ from neighbors.checks.pinned_distance_tile import pinned_distance_tile_kernel, p
 
 def hierarchy_device_plan() raises -> DevicePlan:
     """The hierarchy family's device plan, read once at a family entry
-    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Its `setting` is what
     `device_plan_setting("MOJOLEARN_HIERARCHY_DEVICE_COUNT", "1")` returned,
     so `hierarchy_device_count` parses the same text as before."""
     return device_plan_current("MOJOLEARN_HIERARCHY_DEVICE_COUNT", "1")

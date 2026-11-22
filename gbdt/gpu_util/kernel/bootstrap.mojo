@@ -318,7 +318,7 @@ def bootstrap_gated_kernel[bootstrap_type: Int](
     stat_count_in: Int32,
 ):
     """`bootstrap_kernel` behind the executor gate (lane t1-tree-builder-ops,
-    docs/plans/EXECUTOR_T1_TREE_OPS.md): while word 0 of `gate` is 0 the
+    plan EXECUTOR_T1_TREE_OPS (git history)): while word 0 of `gate` is 0 the
     body runs unchanged (same draws, same seed write-back, same partials);
     once the loop is done nothing is written, so the carried seeds stay as
     the stopping round left them. Every thread reads the same word before

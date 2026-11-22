@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The ONNX model reader in Mojo: the .onnx file (and its external data
-beside it) into the import graph the lowering reads (docs/plans/MODEL_IMPORT.md
+beside it) into the import graph the lowering reads (plan MODEL_IMPORT (git history)
 section 7), the same graph `importers/onnx.py` built in Python before.
 
 Step 1 of the native import boundary. `onnx_read(path)` reads and checks the

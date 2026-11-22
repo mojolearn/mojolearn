@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn
 """A MEASUREMENT BUILD: WHEELS BUILT FROM ONE COMMIT TO MEASURE THEM, NEVER A RELEASE CANDIDATE (lane
-candidate-build, 2026-11-09; docs/plans/PRE_0867_MEASUREMENT.md; AGENTS.md "Fix everything before a release":
+candidate-build, 2026-11-09; plan PRE_0867_MEASUREMENT (git history); AGENTS.md "Fix everything before a release":
 it never touches main, tags or PyPI, and no release happens until everything is fixed and measured clean). The
 subcommand keeps the name `candidate`.
 

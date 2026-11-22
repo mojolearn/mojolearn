@@ -74,7 +74,7 @@
 #            the board plans (tools/paper_compare.py ids-all), our arm only, smoke in the same parallel shards, one
 #            timed board, each prior wheel smoked (with the candidate) and timed on the same races (all-prior), compare against the
 #            on-box priors with the paper recipes and every row's best time ever (--best-ever) as reference; see the
-#            board-all block below and docs/plans/PRE_0867_MEASUREMENT.md "Full-board NVIDIA screen"
+#            board-all block below and plan PRE_0867_MEASUREMENT (git history) "Full-board NVIDIA screen"
 #   targeted (PC_PARTS=targeted, PC_ROWS=<rows file>; Andrew 2026-11-17) instead of the above: only the listed rows
 #            (tools/ops/targeted_rows.py), candidate and 0.8.55 interleaved by chunk, the staged B arms on their own
 #            rows with their base back to back, the full board's compare for those rows; see the targeted block below
@@ -89,7 +89,7 @@
 # submit reruns install, which only re-checks an existing venv; a finished prior smoke is not rerun).
 #
 # It runs under tools/box_persist_run.sh (results to R2 from the box), launched by the supported wrappers
-# (tools/ops/measure_candidate.py prints the exact lines; docs/plans/PRE_0867_MEASUREMENT.md):
+# (tools/ops/measure_candidate.py prints the exact lines; plan PRE_0867_MEASUREMENT (git history)):
 #   tools/nvidia_central.sh submit <lane> --cap 240 --results box-out/<tag> --env PC_WHEEL_DIR=... \
 #       --env PC_SOURCE_COMMIT=... tools/ops/paper_compare_job.sh
 #   tools/do_amd_steward.sh run <tag> box-out/<tag> 'PC_WHEEL_DIR=... PC_SOURCE_COMMIT=... bash tools/ops/paper_compare_job.sh'

@@ -809,7 +809,7 @@ def embedding_backward_released(
 
 
 # ---- device I/O (lane gap-neural-io, 2026-10-08) ----------------------------------
-# Plan docs/plans/gaps-2026-10-08.md Section 4. The board's cell (V = 32,768,
+# Plan plan gaps-2026-10-08 (git history) Section 4. The board's cell (V = 32,768,
 # d = 1,024, T = 32,768) moved ~400 MB over the bus per forward + backward:
 # y down (134 MB), dy up (134 MB), the dense dW down (134 MB), into fresh
 # host arrays page-faulted per call, against torch's kernel-only clock on

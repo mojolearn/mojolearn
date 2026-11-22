@@ -7,7 +7,7 @@
     python3 tools/check_admitted_call.py FILE...      # these files only
     python3 tools/check_admitted_call.py --baseline   # print current counts (to shrink DEBT)
 
-THE RULE (plan docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md, workstream E).
+THE RULE (plan plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history), workstream E).
 A public call admits its modules, binding, model fields and inputs once, in
 its door, into one `AdmittedCall` (bindings/admitted_call_door.mojo) passed by
 reference to every helper. A helper that calls `native_loaded_module(`,

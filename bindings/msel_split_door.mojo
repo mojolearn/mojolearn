@@ -250,7 +250,7 @@ def msel_sabotage() -> Bool:
     """`_sabotage_requested()`: both MOJOLEARN_FOLD_ORDER_SABOTAGE and
     MOJOLEARN_HOST_ALLOW_SABOTAGE set to 1 in the process environment, read
     once per process (lane envgate-classical-deviceplan,
-    docs/plans/ENV_GATES_2026-11-15.md; before: two getenv per split, cv and
+    plan ENV_GATES_2026-11-15 (git history); before: two getenv per split, cv and
     search call). The verify tools set both for the process they start
     (pixi `check-cross-val-folds-oracle-sabotage`, tools/identity_break.py)."""
     try:

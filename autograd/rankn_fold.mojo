@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Rank-N broadcasting binary ops, axis-set reductions, max and softmax along
-# any axis on the tape (lane ag-rankn-fold, docs/plans/AUTOGRAD_RANKN.md 2.1,
+# any axis on the tape (lane ag-rankn-fold, plan AUTOGRAD_RANKN (git history) 2.1,
 # 2.2, 2.7). Every entry routes to the existing 2-D method whenever that
 # method computes the same mathematics (rank 2, a same-shape or
 # trailing-dims broadcast, a last / leading / trailing-block / all-axes

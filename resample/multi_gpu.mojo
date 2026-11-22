@@ -8,7 +8,7 @@ there takes a `DevicePlan` value from its binding entry (which reads the
 thread-scoped plan once) and calls one dispatcher here per stage. A plan
 whose count resolves to one device runs the single-device path unchanged:
 the same condition, the same call, the same arguments in the same order as
-before the move (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+before the move (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
 
 Owner layout (unchanged by the move): contiguous global replicate ranges
 (bootstrap, permutation) or whole `PINNED_SUM_W` chunks (Monte Carlo) run on

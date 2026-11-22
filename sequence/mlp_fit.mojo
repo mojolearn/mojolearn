@@ -77,7 +77,7 @@ from core.nan_canon import NAN_CANON_ON, nan_canon_f32
 # with the same 48 check digests (autograd/checks/mlp_cases_digests.tsv).
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by c3b7dc42e6; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch
-# Lane x3-mlp-rnn-predict-on-tape (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md X3): mlp_predict runs
+# Lane x3-mlp-rnn-predict-on-tape (plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) X3): mlp_predict runs
 # mlp_forward_autograd on a tape in inference mode (what -D MOJOLEARN_AUTOGRAD_PREDICT selected); the hand
 # mlp_forward (gemm_epi EPI_BIAS_ACT a layer on the one-thread OP_GEMM_EPI, + OP_SOFTMAX) and the hand
 # mlp_predict over it are deleted. The fused tape node issues EPI_BIAS_ACT on the tiled GEMM, op_gemm's chain

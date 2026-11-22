@@ -378,7 +378,7 @@ OWN_DRIVERS = {
     "louvain": ("graph_dev", "graph_host",
                 [("a", "fin", "n * n"), ("labels", "iout", "n"), ("info", "fout", "2"),
                  ("n", "int"), ("max_level", "int"), ("resolution", "float"), ("threshold", "float")]),
-    # lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.1/5.2): the
+    # lane gap-graph (2026-10-08, plan gaps-2026-10-08 (git history) 5.1/5.2): the
     # CSR entries. `vals` is read only when has_vals (a length-1 dummy
     # otherwise); x / p / dw only when their uniform flag is 0.
     "pr_csr": ("graph_dev", "graph_host",

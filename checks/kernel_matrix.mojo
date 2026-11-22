@@ -1375,7 +1375,7 @@ def knn_distance_register_tile_for[column: Int, identical: Bool]() -> Bool:
 
 
 def knn_nvidia_schedule_column(column: Int) -> Bool:
-    """K1 (lane fg-knn-nb, 2026-10-09, docs/plans/flagship-gaps-20261009/read_knn_nb.md):
+    """K1 (lane fg-knn-nb, 2026-10-09, plan flagship-gaps-20261009/read_knn_nb (git history)):
     the columns that take NVIDIA's measured IDENTICAL k-NN SCHEDULING rows
     (query tile 4096 with the radix scratch shrink, the resident derived
     cache, the specialized common-k selector, the warp-bound guard, the

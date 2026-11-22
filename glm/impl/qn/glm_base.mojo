@@ -1829,7 +1829,7 @@ struct GLMWithData(Movable):
     var gnorm_raw: Float32
     var last_pen: Float32
     # The GLM device plan, read once where the fit builds its objective and
-    # passed to `linear_bwd` (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+    # passed to `linear_bwd` (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
     var dplan: DevicePlan
 
     def __init__(

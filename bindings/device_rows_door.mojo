@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # The DeviceRows entry of the shared estimator doors (lane ne1-b-door; plan
-# docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md workstream B, first release).
+# plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history) workstream B, first release).
 #
 # Model selection hands a fold's X to an estimator as `_arena_io.DeviceRows`
 # (base Array plus int64 row indices; the rows are gathered on the device out

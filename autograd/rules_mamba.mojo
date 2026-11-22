@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Mamba-1 / Mamba-2 block-stack backward on the tape, and the block step op's
-# VJP. docs/plans/AUTOGRAD_API.md (c) 3. "Hand path" below names the launch walk
+# VJP. plan AUTOGRAD_API (git history) (c) 3. "Hand path" below names the launch walk
 # these rules reproduce, launch for launch; the device copy of that walk was
 # deleted (lane del-mamba, 2026-10-19; docs/TOMBSTONES.md) and is back as the
 # step op's default VJP (`mamba{1,2}_step_backward_hand`, lane
@@ -921,7 +921,7 @@ def _m1_record_backward(
 
 # ================================================================== the block step op's rules
 # Lane x56d-mamba-samba-train-and-host (2026-11-09; plan row X5, the API note
-# docs/plans/EXECUTOR_X1_API.md section 2 "Training through a step op"): a
+# plan EXECUTOR_X1_API (git history) section 2 "Training through a step op"): a
 # RECORDED run of OPS_M1_STEP / OPS_M2_STEP / OPS_M3_STEP is the zero-state
 # prefill through the step op with its L-token stages kept in the pair's
 # resident entry (autograd/block_step_ops.mojo `mamba_step_train_run`), and

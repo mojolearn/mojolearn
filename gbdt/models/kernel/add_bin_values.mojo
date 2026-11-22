@@ -390,7 +390,7 @@ def compute_bins_gated_kernel(
     out_bins: MutPointer[UInt32, MutAnyOrigin],
 ):
     """Tree op TREE_OP_LEAF_BINS (lane t1-tree-builder-ops,
-    docs/plans/EXECUTOR_T1_TREE_OPS.md): `compute_bins_kernel` unchanged,
+    plan EXECUTOR_T1_TREE_OPS (git history)): `compute_bins_kernel` unchanged,
     with the depth read from a device word (the gate walk's structure
     record) and nothing written once word 0 of `gate` is set. Every thread
     reads the same two words first, so the early return is block-uniform."""

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The MoE expert products on the identical GEMM (lane gap-gemm-layers,
-2026-10-08; plan docs/plans/gaps-2026-10-08.md section 8): THE HOST TWIN
+2026-10-08; plan plan gaps-2026-10-08 (git history) section 8): THE HOST TWIN
 AND THE SWITCH. HOST-SAFE (no device construct): `sequence/moe.mojo`'s items
 import this file, `sequence/moe_grouped.mojo` holds the device side.
 

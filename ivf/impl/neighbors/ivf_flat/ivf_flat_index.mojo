@@ -87,7 +87,7 @@ comptime IVF_DEFAULT_N_PROBES = 20
 """`ivf_flat.hpp:30,32,34,78`, unchanged."""
 
 
-#: lane gap-ivf (2026-10-08, docs/plans/gaps-2026-10-08.md section 6 item 2):
+#: lane gap-ivf (2026-10-08, plan gaps-2026-10-08 (git history) section 6 item 2):
 #: THE COARSE QUANTIZER TRAINS ON A FIXED-STRIDE SUBSAMPLE, IDENTICAL on every
 #: column (NVIDIA, AMD, Apple and the host restatement in ivf/host/ivf_host.mojo)
 #: and FAST off Apple; FAST on Apple keeps its measured seeded sample

@@ -928,7 +928,7 @@ def gbdt_ctr_host_prelude(
     # Compiled 2026-10-28 at 2d5c5081a83e: full CPU GBDT host binding,
     # Mojo 1.0.0 (ed45d567), x86-64-v3, O0, 32 allocated CPUs/jobs, exit 0.
     # Runtime and identity remain pending; this is compilation evidence.
-    # Receipt: docs/plans/gbdt-cpu-ctr-eval-20261028-compile.json.
+    # Receipt: plan gbdt-cpu-ctr-eval-20261028-compile (git history).
     # Match `train`'s eval prelude: use final learn-only CTR statistics,
     # not the ordered training columns or an eval-pool target histogram.
     # `expand_raw_columns` is the same host helper the GPU path calls; its

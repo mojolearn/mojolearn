@@ -2,7 +2,7 @@
 """What the sharded drivers send their workers, checked through the results.
 
 Lane ne2-i-j (2026-11-07, plan rows N450-N452 of
-docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md):
+plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)):
 
 * `fit_forest` sends a classifier's labels as int32 codes plus one class
   table (not one Python object per row); the joined forest must publish the

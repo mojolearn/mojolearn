@@ -86,7 +86,7 @@ from std.time import perf_counter_ns
 
 #: Stage timers: `-D MOJOLEARN_STAGE_TIMES` builds print stage walls; default
 #: builds compile them out. Before (lane envgate-classical-deviceplan,
-#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per fit / call.
+#: plan ENV_GATES_2026-11-15 (git history)): a getenv per fit / call.
 comptime STAGE_TIMES_ON = is_defined["MOJOLEARN_STAGE_TIMES"]()
 
 

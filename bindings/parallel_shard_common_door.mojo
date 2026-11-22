@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The shared parts of the native Python-sharded multi-GPU drivers
 (lane/native-parallel-driver-20261024,
-docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md, "kind B").
+plan NATIVE_PARALLEL_DRIVER_20261024 (git history), "kind B").
 
 These drivers cut their work into logical shards (`*_per_shard` rows,
 columns, series, trees or classes), run each shard's plain native owner in a

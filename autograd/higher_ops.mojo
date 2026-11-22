@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # HIGHER-ORDER GRADIENTS: THE NEW NODE KINDS AND ELEMENT BODIES (lane
-# ag-ho-core, docs/plans/AUTOGRAD_HIGHER_ORDER.md sections 1.2-1.3).
+# ag-ho-core, plan AUTOGRAD_HIGHER_ORDER (git history) sections 1.2-1.3).
 #
 # backward_recorded (autograd/higher.mojo) writes every VJP as recorded tape
 # operations. Two of those operations are new node kinds whose own VJPs

@@ -177,7 +177,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C62_SAME_COMPONENT_SKIP"](), "removed 2026-11-15 (lane/expdel2-05-base): C62_SAME_COMPONENT_SKIP (opt-in HDBSCAN same-component tile skip, never measured) is gone; the incumbent tiled search is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_C53_CENTER4.patch
     comptime assert not is_defined["MOJOLEARN_C53_CENTER4"](), "removed 2026-11-15 (lane/expdel2-07-base): C53_CENTER4 (Mixture (GMM / BGMM centered-component staging, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at f76fba175b; see docs/TOMBSTONES.md"
-    # Lane expdel2-09-base (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-09-base (2026-11-15): unmeasured arms deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_KPCA_RESIDENT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KPCA_RESIDENT_OFF"](), "removed 2026-11-15 (lane/expdel2-09-base): KPCA_RESIDENT_OFF (old path) is gone; the default is kept; code at 8c0f2452a2; restore: experiments/removed/MOJOLEARN_KPCA_RESIDENT_OFF.patch"
     # MOJOLEARN_AFCL_G03: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
@@ -252,7 +252,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_2L_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): XN_FAST_CLS2_OCSVM_2L_OFF (old path; default kept: three launches per SMO iteration on FAST + Apple) is gone; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XN_FAST_CLS2_OCSVM_CHUNK256_OFF"](), "removed 2026-11-15 (lane/expdel2-10-cluster): XN_FAST_CLS2_OCSVM_CHUNK256_OFF (old path; default kept: 64 SMO iterations between two stop-flag reads on FAST + Apple) is gone; see docs/TOMBSTONES.md"
-    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-08-base (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF"](), "removed 2026-11-15 (lane/expdel2-08-base): IDN_DBSCAN_ADJ_BITMAP_OFF (old path of the PROMOTED IDENTICAL default) is gone; the default is kept; code at 6c9e7778e6; restore: experiments/removed/MOJOLEARN_IDN_DBSCAN_ADJ_BITMAP_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_EPS_TILE_OFF.patch
@@ -336,7 +336,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_SMR_TILED_OFF"](), "removed 2026-11-15 (lane/expdel2-11-cluster): SMR_TILED_OFF (old path beside the default, hdbscan) is gone; the default path is the only one"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SL_SPARSE_MST.patch (its row knob)
     comptime assert not is_defined["MOJOLEARN_IDN_SL_SPARSE_MIN_ROWS"](), "removed 2026-11-15 (lane/expdel2-11-cluster): IDN_SL_SPARSE_MIN_ROWS was the row knob of the deleted IDN_SL_SPARSE_MST arm"
-    # Lane expdel2-12-cluster (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-12-cluster (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_G01: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_G02: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_KNN_FAST_QUERY_GROUP4.patch
@@ -403,7 +403,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_LEGACY_SHAPE_KNN_BOARD"](), "removed 2026-11-15 (lane/expdel2-12-cluster): LEGACY_SHAPE_KNN_BOARD (old path, Brute-force kNN large-request rule) is gone; the default stays; code recoverable at 147979bdbf; restore: experiments/removed/MOJOLEARN_LEGACY_SHAPE_KNN_BOARD.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KNN_SCRATCH_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-12-cluster): KNN_SCRATCH_POOL_OFF (old path, kNN resident scratch pool) is gone; the default stays; code recoverable at 465cb20ca0; restore: experiments/removed/MOJOLEARN_KNN_SCRATCH_POOL_OFF.patch"
-    # Lane expdel2-14-cluster (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-14-cluster (2026-11-15): unmeasured arms and old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_ANN3_PREPARE_OFF"](), "removed 2026-11-15 (lane/expdel2-14-cluster): ANN3_PREPARE_OFF (old path) is gone; the default is kept; code at c089be9c4a; restore: experiments/removed/MOJOLEARN_ANN3_PREPARE_OFF.patch"
     # MOJOLEARN_ANN3_PQ_SEED: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
@@ -469,7 +469,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF"](), "removed 2026-11-15 (lane/expdel2-14-cluster): OPTICS_FAST_DEVICE_ORDER_OFF (old path) is gone; the default is kept; code at ad83b86093; restore: experiments/removed/MOJOLEARN_OPTICS_FAST_DEVICE_ORDER_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF"](), "removed 2026-11-15 (lane/expdel2-14-cluster): IDN_BGMM_MOMENTS_POOL_OFF (old path) is gone; the default is kept; code at 0fd51e8785; restore: experiments/removed/MOJOLEARN_IDN_BGMM_MOMENTS_POOL_OFF.patch"
-    # Lane expdel2-13-cluster (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-13-cluster (2026-11-15): unmeasured arms deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): IDN_SPECTRAL_LABELS_DEVICE_OFF (old path, no A/B recorded) is gone; the default is kept; code at d51b4bf33f; restore: experiments/removed/MOJOLEARN_IDN_SPECTRAL_LABELS_DEVICE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SPECTRAL_GRAPH_DEVICE_OFF.patch
@@ -529,7 +529,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_KNN_WIDE_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): KNN_WIDE_OFF (old path, no A/B recorded) is gone; the default is kept; code at 7778cba4e1; restore: experiments/removed/MOJOLEARN_KNN_WIDE_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF"](), "removed 2026-11-15 (lane/expdel2-13-cluster): IDN_TSNE_KNN_TILE_SELECT_OFF (old path of a promoted default) is gone; the default is kept; code at 7e06e9c43e; restore: experiments/removed/MOJOLEARN_IDN_TSNE_KNN_TILE_SELECT_OFF.patch"
-    # Lane expdel2-15-cluster (2026-11-15): unmeasured arms, never-run cards and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-15-cluster (2026-11-15): unmeasured arms, never-run cards and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_G07: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_G12: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_CLUSTER_FAST_STOP_GROUP8.patch
@@ -586,7 +586,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): X_CLUSTER_FAST_MINIBATCH_GENERAL_OFF (old path: Restored the unit-weight, tol <= 0 gate in front of the FAST Apple device steps) is gone; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF.patch
     comptime assert not is_defined["MOJOLEARN_X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF"](), "removed 2026-11-15 (lane/expdel2-15-cluster): X_CLUSTER_FAST_W2_MBK_SUMCMP_OFF (old path: Rollback of the compacted center sum to the full 256-row chunk walk per feature (`_mbf_sum_kernel`)) is gone; see docs/TOMBSTONES.md"
-    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-37-series (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_METRIC_EPI_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_METRIC_EPI_OFF"](), "removed 2026-11-15 (lane/expdel2-37-series): IDN_METRIC_EPI_OFF (old path, Metrics (soft-f64 device epilogues, IDENTICAL); no A/B recorded) is gone; the default is kept; code recoverable at 2c25872643; restore: experiments/removed/MOJOLEARN_IDN_METRIC_EPI_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SIL_NO_WAIT_OFF.patch

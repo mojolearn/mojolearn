@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # MoE block backward on the tape (lane ag-moe-backward, 2026-10-19;
-# the tape plan's path 5, now docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md).
+# the tape plan's path 5, now plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history)).
 # The kernels are autograd/kernels/moe.mojo.
 #
 # NEW CAPABILITY, NEW BITS: there is no hand MoE backward, so the tape owns

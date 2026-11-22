@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # ARBITRARY-RANK SHAPES FOR THE TAPE (lane ag-rankn-core, 2026-10-20;
-# docs/plans/AUTOGRAD_RANKN.md sections 1.1, 1.2 and 1.4).
+# plan AUTOGRAD_RANKN (git history) sections 1.1, 1.2 and 1.4).
 #
 # A tape tensor's storage stays one flat row-major float32 buffer. Its rank-N
 # shape is metadata: Tape keeps one ShapeN per node beside _nodes, and every
@@ -271,10 +271,10 @@ def rn_desc_view(mut words: List[Int], s: ShapeN, strides: Array[Int, RN_MAX_RAN
 
 # ---------------------------------------------------------------- tape kinds and tags
 # PERMUTE_N: the tape node kind of a permute view (below CUSTOM, beside
-# TRANSPOSE 20 and RESHAPE 21; 37 is free: docs/plans/AUTOGRAD_HIGHER_ORDER.md
+# TRANSPOSE 20 and RESHAPE 21; 37 is free: plan AUTOGRAD_HIGHER_ORDER (git history)
 # takes 32 and 33). Recorded pending; see RN_VIEW_MARK.
 comptime PERMUTE_N = 37
-# Custom tag blocks of the rank-N lanes (docs/plans/AUTOGRAD_RANKN.md
+# Custom tag blocks of the rank-N lanes (plan AUTOGRAD_RANKN (git history)
 # section 7): 128..135 core, 136..151 fold, 152..159 bmm, 160..175 layout,
 # 176..191 conv. A custom node of these tags may be a pending strided view.
 comptime RN_TAG_FIRST = 128

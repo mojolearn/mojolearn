@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared helpers of the training-family checks ported from the Python tests
-(lane tmig-training, 2026-11-14; docs/plans/TEST_MIGRATION_2026-11-14.md).
+(lane tmig-training, 2026-11-14; plan TEST_MIGRATION_2026-11-14 (git history)).
 
 No `main()`: importable by every `training_*_cases` / `*_suite` module.
 `all_close` is NumPy's `assert_allclose` rule, |actual - desired| <=

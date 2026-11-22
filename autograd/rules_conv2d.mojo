@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # The backward rules of the tape's rank-4 conv2d and pools (lane
-# ag-rankn-conv, docs/plans/AUTOGRAD_RANKN.md section 2.8). The forwards are
+# ag-rankn-conv, plan AUTOGRAD_RANKN (git history) section 2.8). The forwards are
 # autograd/rankn_conv.mojo; the kernels autograd/rankn_conv_ops.mojo.
 #
 # Custom tags 176..191 are this lane's block (RN_CONV2D 176, RN_MAXPOOL2D

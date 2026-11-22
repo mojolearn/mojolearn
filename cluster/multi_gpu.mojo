@@ -51,7 +51,7 @@ struct AssignmentShard(Movable):
 
 def kmeans_device_plan() raises -> DevicePlan:
     """The KMeans family's device plan, read once at a family entry
-    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Its `setting` is what
     `device_plan_setting("MOJOLEARN_KMEANS_DEVICE_COUNT")` returned, so
     `assignment_device_count` parses the same text as before."""
     return device_plan_current("MOJOLEARN_KMEANS_DEVICE_COUNT", "")

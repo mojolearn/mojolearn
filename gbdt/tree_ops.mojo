@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The tree-builder op table of the executor (lane t1-tree-builder-ops,
-2026-11-08; docs/plans/EXECUTOR_T1_TREE_OPS.md, plan
-docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4 rows "GBDT rounds"
+2026-11-08; plan EXECUTOR_T1_TREE_OPS (git history), plan
+plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 4 rows "GBDT rounds"
 and "RandomForest / ExtraTrees / DecisionTree levels").
 
 A boosting round becomes one `LoopStep` of `autograd/program_loop_device.mojo`
-built from these ops, in the order of docs/plans/EXECUTOR_T1_TREE_OPS.md
+built from these ops, in the order of plan EXECUTOR_T1_TREE_OPS (git history)
 section 3. Each op is a typed enqueue-only
 function in the module that owns its kernel (the op body IS the existing
 kernel, so the words do not change); this table is the one registry of what
@@ -37,7 +37,7 @@ comptime TREE_OP_OD_STEP = 8
 # lane t1b-tree-leaf-and-node-ops (2026-11-09): the leaf estimate and its
 # rerun snapshot (GBDT), and the forest level loop's batches and finish
 # (RandomForest / DecisionTree, ExtraTrees). Codes are table rows, not the
-# round's order: docs/plans/EXECUTOR_T1_TREE_OPS.md section 3 is the order.
+# round's order: plan EXECUTOR_T1_TREE_OPS (git history) section 3 is the order.
 comptime TREE_OP_LEAF_ESTIMATE = 9
 comptime TREE_OP_SEED_SNAPSHOT = 10
 comptime TREE_OP_FOREST_BATCHES = 11

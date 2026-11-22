@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The Samba stack as ONE executor program (lane x6-samba-on-executor,
-2026-11-09; docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X6, the API
-note docs/plans/EXECUTOR_X1_API.md, owed row N094).
+2026-11-09; plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) row X6, the API
+note plan EXECUTOR_X1_API (git history), owed row N094).
 
 `SambaStackProgram` is one inference `OpsSession` on the device holding
 

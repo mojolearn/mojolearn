@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Canonical gradient accumulation order (docs/plans/NATIVE_AUTOGRAD.md,
+# Canonical gradient accumulation order (plan NATIVE_AUTOGRAD (git history),
 # "Accumulation order"). One leaf x (1 x 4) feeds 3 to 5 consumers recorded
 # in several orders; the consumers are then summed by a chain of adds and a
 # backward_from runs with a fixed seed. Every consumer's contribution to dx

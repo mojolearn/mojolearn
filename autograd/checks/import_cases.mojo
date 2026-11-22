@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Lane ag-import-kernels (docs/plans/MODEL_IMPORT.md 3.3): checks of the
+# Lane ag-import-kernels (plan MODEL_IMPORT (git history) 3.3): checks of the
 # import elementwise family on any executor (HostExec, Metal, NVIDIA, AMD).
 # Each case prints one `IMPORT <kind> <case> digest <d>` line; the digests
 # must be equal on every executor. Every kind runs once forward and once

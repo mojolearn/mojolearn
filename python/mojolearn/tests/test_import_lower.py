@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The lowering of imported models (docs/plans/MODEL_IMPORT.md lane 2): the
+"""The lowering of imported models (plan MODEL_IMPORT (git history) lane 2): the
 Python boundary of the imported program.
 
 Each shared fixture of tests/_onnx_fixture.py (written without ``onnx`` or

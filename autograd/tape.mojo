@@ -39,13 +39,13 @@ from autograd.embedding_ops import (
     embedding_refuse_ids, embedding_forward_into, embedding_plan, embedding_perm_words, embedding_backward_into,
 )
 from std.memory import bitcast
-# lane ag-rankn-core: rank-N shapes and views (docs/plans/AUTOGRAD_RANKN.md)
+# lane ag-rankn-core: rank-N shapes and views (plan AUTOGRAD_RANKN (git history))
 from autograd.rankn import (
     ShapeN, RN_MAX_RANK, PERMUTE_N, RN_TAG_FIRST, RN_TAG_END, RN_VIEW_MARK, rn_check, rn_collapse,
     rn_desc_view, rn_normalize_axis,
 )
 from autograd.rankn_ops import rn_copy_strided
-# lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the node kinds
+# lane ag-ho-core (H1, plan AUTOGRAD_HIGHER_ORDER (git history)): the node kinds
 # the recorded backward adds, whose VJPs the first-order backward runs
 from autograd.higher_ops import EXPAND, CLAMP, OP_HO_CLAMP_VJP
 
@@ -611,7 +611,7 @@ struct Tape(Movable):
         """Refuse caller storage [p, p + n) that overlaps a recorded
         tensor's gradient storage, or (values=True) its value storage.
 
-        The ALIASING RULE (docs/plans/NATIVE_AUTOGRAD.md): between record
+        The ALIASING RULE (plan NATIVE_AUTOGRAD (git history)): between record
         and backward, storage the tape has seen is read-only except through
         tape operations. A host scan over the recorded nodes (graph
         structure, never data); inference mode records no gradients and
@@ -1100,7 +1100,7 @@ struct Tape(Movable):
     def cols(self, x: Tensor) raises -> Int:
         return self._nodes[self._check(x)].cols
 
-    # ---- rank-N shapes and views (lane ag-rankn-core, docs/plans/AUTOGRAD_RANKN.md 1.1-1.4) ----
+    # ---- rank-N shapes and views (lane ag-rankn-core, plan AUTOGRAD_RANKN (git history) 1.1-1.4) ----
     # Storage is one flat row-major buffer per tensor; the shape is metadata
     # (_shapes). rows(x) and cols(x) stay the matrix view. Nothing here
     # changes a word an existing operation writes: the existing methods only
@@ -2574,7 +2574,7 @@ struct Tape(Movable):
             else:
                 _copy(ex, self._nodes[root].grad, seed, self._nodes[root].rows * self._nodes[root].cols)
         touched[root] = True
-        # ACCUMULATION ORDER (docs/plans/NATIVE_AUTOGRAD.md, "Accumulation
+        # ACCUMULATION ORDER (plan NATIVE_AUTOGRAD (git history), "Accumulation
         # order"): contributions to a gradient are applied in decreasing
         # consumer index, the inputs of one consumer in increasing edge
         # order; the first is written, later ones added. last_node/last_edge

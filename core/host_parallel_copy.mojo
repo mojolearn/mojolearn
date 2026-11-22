@@ -8,7 +8,7 @@ grain floor of `core/host_predict_threads.mojo`. The copied bytes do not
 depend on the split: every task writes only its own disjoint block, and a
 copy has no arithmetic, so no bit can move.
 
-Why (docs/plans/REGRESSIONS_0866_VS_0855.md, cause C3): the owned copies
+Why (plan REGRESSIONS_0866_VS_0855 (git history), cause C3): the owned copies
 of a caller's X at kNN fit (`bindings/family_common.mojo`
 `family_owned_snapshot`, 176 MB on istella, knn fit 8.5x) and IsolationForest
 fit (`bindings/trees_public_iforest.mojo`, 1.8 GB, iforest fit 39.6x with C1)

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The NVIDIA/AMD release gate as one persisted box job (tools/ops/release_gate.py, plan item 4 of
-docs/plans/POST_0863_RELEASE_TOOLING.md): the exact wrapper commands per vendor, the exact command
+plan POST_0863_RELEASE_TOOLING (git history)): the exact wrapper commands per vendor, the exact command
 release.py run_gate builds, and a recorded gate-smoke.json judged by release.py exactly as before.
 Offline: every wrapper call is faked; nothing is rented, ssh'd or compiled."""
 import hashlib

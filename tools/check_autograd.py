@@ -26,7 +26,7 @@ def higher_expect():
     if first[:2] != ['#', 'HIGHER_EXPECT']:
         raise RuntimeError(f'{HIGHER_SUITE} has no HIGHER_EXPECT line (regenerate it)')
     return {k: int(v) for k, v in (field.split('=') for field in first[2:])}
-# The rank-N lanes' checks (docs/plans/AUTOGRAD_RANKN.md section 6): each
+# The rank-N lanes' checks (plan AUTOGRAD_RANKN (git history) section 6): each
 # prints `RANKN <lane> <case> digest <d>` lines and PASS, and raises on a
 # failed comparison. The orchestrator diffs the RANKN lines of CPU, Metal,
 # NVIDIA and AMD; here the local CPU and GPU lines must agree.
@@ -237,7 +237,7 @@ def main():
                                               'results': len(a), 'mismatches': mismatches})
                 if mismatches:
                     raise RuntimeError(f'local CPU/GPU rankn {lane} digests differ: {mismatches[:4]}')
-        # The model-import elementwise family (docs/plans/MODEL_IMPORT.md 3.3): autograd/checks/import_{cpu,gpu}.mojo
+        # The model-import elementwise family (plan MODEL_IMPORT (git history) 3.3): autograd/checks/import_{cpu,gpu}.mojo
         # print `IMPORT <kind> <case> digest <d>` lines and `PASS import cases N ...`; the local CPU and GPU lines
         # must agree, and the orchestrator diffs the kept files across CPU, Metal, NVIDIA and AMD.
         import_logs = {}

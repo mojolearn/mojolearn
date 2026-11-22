@@ -33,7 +33,7 @@ never from a hand-kept list:
                   symbol closure names the public class.
 
     python3 tools/verify_coverage_audit.py --base fc8d425fb --json ~/mojolearn-evidence/verify-coverage-20261021/audit.json
-    python3 tools/verify_coverage_audit.py --from-json <audit.json> --markdown docs/plans/VERIFY_COVERAGE_20261021.md
+    python3 tools/verify_coverage_audit.py --from-json <audit.json> --markdown plan VERIFY_COVERAGE_20261021 (git history)
 
 Out of scope by design: the Torch and MAX adapters (adapters/, python/mojolearn/adapters/, the
 wheels' _adapters/) are the SAME API in another format: front-ends over the kernels the Python API
@@ -2338,7 +2338,7 @@ SABOTAGE_NA_ENTRIES = {
 }
 
 # lane verify-coverage-20261024, after the arms' run on 9b04b92c5 (decisions in
-# docs/plans/VERIFY_COVERAGE_20261024.md, "Arm decisions")
+# plan VERIFY_COVERAGE_20261024 (git history), "Arm decisions")
 _RESAMPLE_OFF = ("compiled out of identical builds: RESAMPLE_GPU_GATHER is the fast tier or the opt-in "
                  "MOJOLEARN_CLASSICAL_C11_DRAW_GATHER, RESAMPLE_FAST_GATHER_NARROW the fast tier; in identical "
                  "the entry returns its not-taken flag (coverage-resample-gather MISSED on 9b04b92c5 for that reason)")

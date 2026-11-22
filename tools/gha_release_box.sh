@@ -43,7 +43,7 @@
 # SOURCE's own tools/release_host_build.py build (no overlay: the producer
 # refuses tools from outside the frozen checkout) with the default pixi env
 # and the pinned patchelf 0.17.2, as the 0.8.58 box did
-# (docs/plans/RETAINED_DEVICE_HOST_COMPOSITION_20261025.md), into
+# (plan RETAINED_DEVICE_HOST_COMPOSITION_20261025 (git history)), into
 # /root/leg_out/host-build.
 #
 # THE CACHE WITHOUT R2. GHA_PRUNE_HOT=1 (no map_url: actions/cache restored

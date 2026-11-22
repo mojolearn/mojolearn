@@ -37,7 +37,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_KM_FAST_RBF_STAGED_OFF"](), "removed 2026-11-15 (lane/expdel-06-base-cluster-kernel): KM_FAST_RBF_STAGED_OFF (FAST+Apple rollback of the RBFSampler projection to one raw host-pointer copy) is gone; the staged download is the path wherever KM_FAST_RBF_RESIDENT is (rbf-sampler istella 77.6 -> 57.1 ms, w2-w3kf-rbf-q PASS); restore: experiments/removed/MOJOLEARN_KM_FAST_RBF_STAGED_OFF.patch"
     # Lane expdel2-06-base (2026-11-15): the C13-C28 classical arms with no recorded A/B and the _OFF rollbacks of measured
-    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md).
+    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history)).
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C20_PAIR_LOAD.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C20_PAIR_LOAD"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C20_PAIR_LOAD (Kernel (SVM working-set row + norm gather, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 911bf993d5; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C21_EXTREMA.patch
@@ -56,10 +56,10 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_GPC_OVR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPC_OVR_OFF (Kernel / GP (GaussianProcessClassifier one-vs-rest rollback to per-class binding calls, IDENTICAL old path)) was old path, no A/B recorded; the batched one-vs-rest default kept; the default is the only path; code recoverable at abe1b14d9d; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_GPR_PTR_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_GPR_PTR_OFF"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_GPR_PTR_OFF (Kernel / GP (GaussianProcessRegressor rollback to host-list gpr_fit / gpr_predict, IDENTICAL old path)) was old path, no A/B recorded; the resident pointer default kept; the default is the only path; code recoverable at b2a4adf292; see docs/TOMBSTONES.md"
-    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch
     comptime assert not is_defined["MOJOLEARN_IDN_CHOL_OPS_FIT"](), "removed 2026-11-17 (lane/fb12-loser-arms): IDN_CHOL_OPS_FIT (decided B arm, the executor Cholesky ops for KernelRidge / GPR / GPC / GP optimizer / GMM / MinCovDet fits; L40S ba08dac006 14 cells B 0.91-1.10x, same speed) is gone; the default path is the only one; code recoverable at 2203db7094; restore: experiments/removed/MOJOLEARN_IDN_CHOL_OPS_FIT.fb12-loser-arms.patch"
-    # Lane expdel2-19-kernel (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-19-kernel (2026-11-15): unmeasured arms and old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_L11: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_AFCL_G13: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_FAMILY_CTX_PER_CALL.patch
@@ -121,7 +121,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_NYS_FIT_PTR_IN_OFF (old path) is gone; the default is kept; code at 1c49bdcfcc; restore: experiments/removed/MOJOLEARN_IDN_NYS_FIT_PTR_IN_OFF.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_NYS_DEV_BASIS_OFF"](), "removed 2026-11-15 (lane/expdel2-19-kernel): IDN_NYS_DEV_BASIS_OFF (old path) is gone; the default is kept; code at 91606051a7; restore: experiments/removed/MOJOLEARN_IDN_NYS_DEV_BASIS_OFF.patch"
-    # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-20-linear (2026-11-15): unmeasured arms deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_L06: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch
     comptime assert not is_defined["MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF"](), "removed 2026-11-15 (lane/expdel2-20-linear): IDN_SVC_ONE_BLOCK_OFF (old path of the promoted default) is gone; the default is kept; code at ed4cab202e; restore: experiments/removed/MOJOLEARN_IDN_SVC_ONE_BLOCK_OFF.patch"

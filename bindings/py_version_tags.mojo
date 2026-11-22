@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Change stamps for dictionaries and classes on CPython 3.10 and 3.11.
 
-Lane ne2-i-j (2026-11-07; docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md
+Lane ne2-i-j (2026-11-07; plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)
 section 2I). The "check once" records (native_class_admission
 `class_record` / `dict_keys_admitted`, the module-connection stamp and the
 model generation word of py_model_records, all through

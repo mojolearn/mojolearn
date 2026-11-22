@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # THE ONE ADMISSION PATH, rank-N members: the sequence, time-series and
 # neural doors (TSA, forecast, embedding, xcnn, xseq_neural, the byte-LM
-# trainers). Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section
+# trainers). Plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section
 # 3.3 row A4 (lane a4-admit-sequence-tsa-neural, 2026-11-08); the rank 0-2
 # X / y / sample_weight doors are bindings/admitted_input_unpack.mojo (lane A0).
 #

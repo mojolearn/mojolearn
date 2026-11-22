@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The Python lowering of an import graph onto session operations: the TEST
-ORACLE of autograd/import_lower.mojo (docs/plans/MODEL_IMPORT.md section 7,
+ORACLE of autograd/import_lower.mojo (plan MODEL_IMPORT (git history) section 7,
 step 2). It is the lowering importers/_lower.py ran before the lowering moved
 to Mojo, kept unchanged so tests/test_import_lower_native.py can assert the
 Mojo-lowered program equals it word for word; ``import_model`` below is the

@@ -27,7 +27,7 @@ reading before changing:
 
 from checks.numerics import GLOBAL_NUMERIC_MODE as _KP_MODE, NUMERIC_IDENTICAL as _KP_IDENTICAL
 
-#: lane gap-ivf (2026-10-08, plan docs/plans/gaps-2026-10-08.md section 6 item 3):
+#: lane gap-ivf (2026-10-08, plan plan gaps-2026-10-08 (git history) section 6 item 3):
 #: the lazy convergence read (`KMEANS_LAZY_SHIFT`, cluster/impl/detail/kmeans.mojo)
 #: in IDENTICAL on EVERY column, the device columns (NVIDIA, AMD, Apple) and the
 #: host restatement (`cluster/host/kmeans_oracle.mojo::host_fit_main`) together,

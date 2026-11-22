@@ -177,7 +177,7 @@ Lane post-split-host-groups, on main at bc4ecd4518. Static, like sections 1 to 5
 `_mojolearn_native_classical_host` took 8,163 s and `_mojolearn_native_tokenizer_host` 8,119 s (0.8.65: 4,282 and
 4,214 s), then `_mojolearn_native_x_host` 2,540 s; every other host group took 54 to 1,005 s. The Mac builds its
 groups four at a time, heaviest first, so the wheel cannot finish before its longest group. Each of the two was one
-member after section 4, and the native entry point program (docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md) had
+member after section 4, and the native entry point program (plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)) had
 added most of its code to them. The same two members compiled alone, one worker, in 1,020 s (5.93 GiB peak) and
 1,131 s (5.08 GiB) on the same Mac that day (development cache, `~/.cache/mojolearn-development/peaks/`): the
 release's 8x comes from four such compiles paging together on 16 GiB (plan section 4, lesson 11).

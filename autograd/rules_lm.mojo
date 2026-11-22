@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Language-model trainer backward on the tape (the byte LM's only backward
-# path). docs/plans/AUTOGRAD_API.md section (c) item 4.
+# path). plan AUTOGRAD_API (git history) section (c) item 4.
 #
 # RESTORED 2026-11-13 (lane restore-byte-lm-hand-step) from 5b5490960d with the
 # byte LM's hand step, the default step again (AGENTS.md "A measured winner is

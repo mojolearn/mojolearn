@@ -434,7 +434,7 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
 # ---------------------------------------------------------------------------
 # The multi-GPU drivers parallel_classical.fit_kernel_method and
 # apply_kernel_method, one native call each (lane/native-parallel-driver-
-# 20261024, docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md). They used to send
+# 20261024, plan NATIVE_PARALLEL_DRIVER_20261024 (git history)). They used to send
 # the estimator by pickle to ONE cooperative worker process whose visibility
 # mask held the selected devices and whose MOJOLEARN_SVM_DEVICE_COUNT and
 # MOJOLEARN_CHOLESKY_DEVICE_COUNT held their number. Here the caller's thread

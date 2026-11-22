@@ -88,7 +88,7 @@ def _check_configuration() -> Bool:
     # Lane i17-decide-nbr-lin-prep (2026-10-11), removed: A/B on main b2657cc89, one run per arm, NV L40S nv2 / AMD MI325X (docs/TOMBSTONES.md,
     # docs/apple-fast/EXPERIMENTS.md, experiments/removed/*.patch).
     comptime assert not is_defined["MOJOLEARN_IDN_GEMM_NV_MICROTILE"](), "removed 2026-10-11 (lane/i17-decide-nbr-lin-prep, c38d7bc89): IDN_GEMM_NV_MICROTILE (NVIDIA packed GEMM at K window 32) was SLOWER: neural:gemm gaussian NV 48.5 -> 55.9 ms (1.15x, v0050); code at c38d7bc89^, patch experiments/removed/MOJOLEARN_IDN_GEMM_NV_MICROTILE.patch"
-    # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md, docs/TOMBSTONES.md).
+    # Lane expdel2-04-base (2026-11-15): unmeasured arms and old paths deleted under "An unmeasured arm is deleted" (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history), docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_2711_GRAM_STRIDED_DEAD.patch
     comptime assert not is_defined["MOJOLEARN_2711_GRAM_STRIDED_DEAD"](), "removed 2026-11-15 (lane/expdel2-04-base): 2711_GRAM_STRIDED_DEAD (opt-in arm, Decomposition (split-K Gram, IDENTICAL); no A/B recorded for the opt-in arm (rule a)) is gone; the default stays; code recoverable at 7b75b0819e; restore: experiments/removed/MOJOLEARN_2711_GRAM_STRIDED_DEAD.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_537_GEMM_IDENT_SWAP.patch

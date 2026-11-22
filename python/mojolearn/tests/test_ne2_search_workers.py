@@ -2,7 +2,7 @@
 """Search, splitter, scorer and fixed-owner records of lane ne2-b-search-workers.
 
 Rows N056, N066, N067, N069, N070, N074, N086 of
-docs/plans/native_entry_points_after_0866/owed.tsv. The bits of every split,
+plan native_entry_points_after_0866/owed (git history). The bits of every split,
 permutation and score are the identity lanes' (`x-metrics-splitters`,
 `x-metrics-permutation-test-score`, `x-metrics-search`, `cross-val`); these
 tests check the contracts the changes rely on: determinism, the split

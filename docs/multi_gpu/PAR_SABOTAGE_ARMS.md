@@ -57,7 +57,7 @@ parts)`, which `_run_reference` catches and hashes.
 | `MOJOLEARN_HIERARCHY_PARALLEL_SABOTAGE` (existed) | `hierarchy/impl/cluster/detail/multi_gpu.mojo` | `par-hdbscan` |
 | `MOJOLEARN_RESAMPLE_PARALLEL_SABOTAGE` (existed) | `resample/estimator.mojo` | `par-resample` |
 
-Native drivers (2026-10-24, docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md).
+Native drivers (2026-10-24, plan NATIVE_PARALLEL_DRIVER_20261024 (git history)).
 `fit_kernel_method` and `apply_kernel_method` no longer start a cooperative
 worker: one native call binds a thread-scoped device plan
 (`core/device_plan.mojo`) around the plain owners. The `MOJOLEARN_SVM_` and

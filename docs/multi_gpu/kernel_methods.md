@@ -20,7 +20,7 @@ The drivers are one native call each (`family_km_par_fit` /
 `family_km_par_apply`, `bindings/kernel_methods_native.mojo`): in the caller's
 process they bind the selected devices to the calling thread (rank r on
 `devices[r]`, the root on `devices[0]`) and run the estimator's own `fit`,
-`predict` and `transform` (docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md):
+`predict` and `transform` (plan NATIVE_PARALLEL_DRIVER_20261024 (git history)):
 
 - KernelRidge fit: kernel rows as above; the ridge on the root; the
   factorization with whole trailing-update rows and the multi-target solve

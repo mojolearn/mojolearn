@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """AdaBoost's boosting rounds on the device (lane n5-prophet-adaboost-loops,
-2026-11-09; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4,
+2026-11-09; plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 4,
 row "AdaBoost").
 
 A forest data session (`bindings/_mojolearn_rf.mojo`, `RfDataSession`) keeps

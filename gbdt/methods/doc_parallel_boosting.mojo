@@ -1257,7 +1257,7 @@ def finish_deferred_estimation(
 
 # ===========================================================================
 # Tree op TREE_OP_LEAF_ESTIMATE (lane t1b-tree-leaf-and-node-ops, 2026-11-09;
-# docs/plans/EXECUTOR_T1_TREE_OPS.md section 2 and 5): `_estimate_and_apply`'s
+# plan EXECUTOR_T1_TREE_OPS (git history) section 2 and 5): `_estimate_and_apply`'s
 # single-dimensional device walk for ONE (partition, cursor) as an
 # enqueue-only op. What it removes from the round, against the call above:
 #   - the host pack of `leaf_offsets` / `sizes` and the two uploads
@@ -2671,7 +2671,7 @@ def _launch_querywise_pointwise_target(
 
 # ===========================================================================
 # lane t2-trees-on-executor (2026-11-09): THE BOOSTING ROUND ON THE EXECUTOR.
-# docs/plans/EXECUTOR_T1_TREE_OPS.md section 3. The pointwise SymmetricTree
+# plan EXECUTOR_T1_TREE_OPS (git history) section 3. The pointwise SymmetricTree
 # round (`use_pointwise_searcher`, the doc-parallel searcher) is one
 # `LoopStep` of `autograd/program_loop_device.mojo`'s `bounded_device_loop`
 # over the tree ops of `gbdt/tree_ops.mojo`: gradients, seed snapshot,

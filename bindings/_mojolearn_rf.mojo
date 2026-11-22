@@ -539,7 +539,7 @@ def _rf_fit_weighted_session_native(params: ForestFitArgs) raises -> Int:
 
 # ------------------------------------------------------------ AdaBoost --
 # Lane n5-prophet-adaboost-loops (2026-11-09; plan
-# docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 4, row "AdaBoost").
+# plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 4, row "AdaBoost").
 # The ensemble's boosting state stays on the device for the whole fit
 # (ensemble/ada_rounds.mojo): one call per round fits the member on the
 # session's X from the resident weights, predicts the training X on the

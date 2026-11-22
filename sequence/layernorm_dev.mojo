@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """LAYERNORM ON RESIDENT TENSORS (lane gap-neural-io, 2026-10-08; plan
-docs/plans/gaps-2026-10-08.md Section 4; device binding only).
+plan gaps-2026-10-08 (git history) Section 4; device binding only).
 
 `layer_norm_py` uploads x (and dy) and downloads y (or dx) on every call:
 at the board's 67 MB activations a forward + backward fit moved five such

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Meta-estimator members, fit loops and per-permutation folds on the native
 path (lane ne2-b-members, rows N049 N055 N061 N064 N071-N076 N080-N085 of
-docs/plans/native_entry_points_after_0866/owed.tsv). Small inputs; every
+plan native_entry_points_after_0866/owed (git history)). Small inputs; every
 expected value comes from the library's own public calls on the same data,
 so each check is a contract between two public routes, not a timing."""
 import numpy as np

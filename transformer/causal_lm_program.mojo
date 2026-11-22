@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """`CausalLM.generate` as ONE `Program.decode` over ONE operation session
 (lane x45c-causal-generate-program-decode, 2026-11-09; plan
-docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4 "CausalLM.generate as
-Program.decode", API docs/plans/EXECUTOR_X1_API.md section 4).
+plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) row X4 "CausalLM.generate as
+Program.decode", API plan EXECUTOR_X1_API (git history) section 4).
 
 `CausalLMProgram` is one inference `OpsSession` on the device holding
 

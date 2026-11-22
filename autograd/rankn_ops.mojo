@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # THE RANK-N VIEW COPY (lane ag-rankn-core, 2026-10-20;
-# docs/plans/AUTOGRAD_RANKN.md sections 1.3 and 2.4).
+# plan AUTOGRAD_RANKN (git history) sections 1.3 and 2.4).
 #
 # OP_RN_COPY_STRIDED writes a dense row-major output from a strided read of
 # a source: a permute (or a narrow) materialised for a dense reader, and a

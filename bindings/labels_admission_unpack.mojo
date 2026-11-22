@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # The label, target and X refusals the Python shells `_labels` and
 # `_sk_validate` still made in Python (lane py-admission, 2026-11-14, plan
-# docs/plans/PYTHON_REMAINING_2026-11-14.md section 3, lane `py-admission`).
+# plan PYTHON_REMAINING_2026-11-14 (git history) section 3, lane `py-admission`).
 # Each is one operation of the compiled label entry `labels_native_call`
 # (bindings/labels_native_entry_pack.mojo); the Python side is the one call
 # that hands its arguments over.

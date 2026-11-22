@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Typed pandas storage reads moved word for word from bindings/classical_pandas.mojo.
 
-Lane a5-admit-core-followup (2026-11-08; docs/plans/REGRESSIONS_0866_VS_0855.md
+Lane a5-admit-core-followup (2026-11-08; plan REGRESSIONS_0866_VS_0855 (git history)
 row R4): a native-order item is ONE typed load (`admitted_raw_word`), not a
 byte assembly, and the column cast and the mask check run in contiguous row
 tasks across the host's cores (core/host_predict_threads.mojo grain floor:

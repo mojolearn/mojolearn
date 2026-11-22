@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # The query X of a Gaussian-process predict (lane a7a-device-x-svm-gp-krr,
-# 2026-11-09; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section
+# 2026-11-09; plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section
 # 3.2 steps 3-4).
 #
 #   gp_query(source, est, context, entry_tests) -> GpQuery

@@ -309,7 +309,7 @@ comptime _DK_RESIDENT_SLOT = "decomp_resident_operands_v1"
 # Device-resident fitted operands of the decomposition owners (lane
 # perf2-pca-decomp; shared with IncrementalPCA, AlternatingLeastSquares and
 # the random projections by lane ne1-a-decomp-resident, workstream A of
-# docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md). One prepared-registry
+# plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)). One prepared-registry
 # record per model (`_DK_RESIDENT_SLOT`, outside its __dict__, dropped with
 # the model by the native_prepared_owner weakref): a dict, operand name ->
 #   (source, alloc entry, free entry, rows, cols, pool id, capsule,

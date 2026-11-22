@@ -22,7 +22,7 @@ struct ShardCounters(Defaultable, Movable):
     #: `shard_run_stored` calls made by this process (its store tokens)
     var stored_calls: Int
     #: THE NEGATIVE CONTROLS' SWITCHES (lane envgate-classical-deviceplan,
-    #: docs/plans/ENV_GATES_2026-11-15.md). Before, `shard_read_shift` read
+    #: plan ENV_GATES_2026-11-15 (git history)). Before, `shard_read_shift` read
     #: MOJOLEARN_PAR_DRIVER_SABOTAGE and MOJOLEARN_HOST_ALLOW_SABOTAGE with
     #: two getenv per shard, and `shard_map` read MOJOLEARN_HOST_ALLOW_SABOTAGE
     #: and MOJOLEARN_PAR_TRANSPORT_FAULT per numerical batch.

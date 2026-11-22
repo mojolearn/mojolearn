@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # THE ONE ADMISSION PATH for X, y and sample_weight (plan
-# docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2, lane A0
+# plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.2, lane A0
 # consol-a0-admission, 2026-11-08).
 #
 #   admit_x(mut call, source, est, context, position, admitted) -> AdmittedX

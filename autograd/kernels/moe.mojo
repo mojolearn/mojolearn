@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The MoE block's training forward and its vector-Jacobian products
 (lane ag-moe-backward, 2026-10-19; the tape plan's path 5, now
-docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md). HOST-SAFE:
+plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history)). HOST-SAFE:
 every body below is an element function `(t, Args)` that HostExec and
 DeviceExec both run through `sequence/dispatch.mojo` (codes 2902..2914),
 so the host column and every GPU column compute the same words by

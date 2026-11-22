@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Transformer decoder-layer backward on the tape (the bindings' only backward since
-# 2026-10-19). docs/plans/AUTOGRAD_API.md section (c) item 2.
+# 2026-10-19). plan AUTOGRAD_API (git history) section (c) item 2.
 #
 # ---------------------------------------------------------------- launch inventory
 # The hand path (autograd/kernels/transformer.mojo::

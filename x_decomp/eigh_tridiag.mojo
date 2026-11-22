@@ -108,7 +108,7 @@ from x_decomp.eigh_tridiag_cells import (
 # TOMBSTONE: MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF (unmeasured old path beside the FAST Apple default, EXP:931 M3 43765.6 -> 700.3 ms) deleted 2026-11-15 by lane/expdel2-16-decomposition; code recoverable at 15bbecfc2b.
 # Restore: git apply experiments/removed/MOJOLEARN_EIGH_FAST_TRIDIAG_PANELS_OFF.patch; record in docs/TOMBSTONES.md.
 comptime EIGH_FAST_TRIDIAG = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and TARGET_HAS_APPLE_GPU
-#: lane gap-linalg (2026-10-08; docs/plans/gaps-2026-10-08.md section 3.1):
+#: lane gap-linalg (2026-10-08; plan gaps-2026-10-08 (git history) section 3.1):
 #: the same algorithm promoted to IDENTICAL on NVIDIA and AMD. Default on
 #: since 2026-10-11 (see below). What makes it identical:
 #:   1. every product that meets an add, every division and every sqrt in

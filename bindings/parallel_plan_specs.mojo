@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The cooperative multi-GPU drivers `family_par_run` serves
-(bindings/family_native.mojo; docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md):
+(bindings/family_native.mojo; plan NATIVE_PARALLEL_DRIVER_20261024 (git history)):
 for each driver, the plain owner operations it may run, the owner families
 its old worker's environment enabled (core/device_plan.mojo bits) and the
 refusal for a binding built without the plan entries (the old worker's

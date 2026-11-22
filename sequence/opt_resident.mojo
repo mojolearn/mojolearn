@@ -789,7 +789,7 @@ def adafactor_resident_step(handle: Int, addrs: List[Int], ip: List[Int],
 
 
 # ---- device-parameter steps (lane gap-neural-io, 2026-10-08) -----------------------
-# Plan docs/plans/gaps-2026-10-08.md Section 4: the board's torch columns time
+# Plan plan gaps-2026-10-08 (git history) Section 4: the board's torch columns time
 # ten `opt.step()` calls on a parameter and gradients already on the device;
 # every resident step above still moved P and G up and P down (3 x 67 MB at
 # 16,777,216 floats, ~15-25 ms) around ~1 ms of launches. The `_dev` forms

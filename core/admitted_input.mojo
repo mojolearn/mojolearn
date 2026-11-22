@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The one host cast and check of admitted input words (no Python import).
 
-Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2, lane A0
+Plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.2, lane A0
 (consol-a0-admission, 2026-11-08). Every public door that turns a caller's
 X, y or sample_weight into float32 (or float64) words reaches these through
 `bindings/admitted_input_unpack.mojo` (`admit_x`, `admit_y`, `admit_weights`); no

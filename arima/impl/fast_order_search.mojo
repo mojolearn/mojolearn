@@ -115,7 +115,7 @@ comptime ORDER_TPB = 128
 #: plain fit's device kernel (`arima_ic_kernel` via `arima_ic_from_loglike`) over the adopted log-likelihood; still opt-in pending the M3 A/B.
 #: The bundle with GROUPS/D_CONCURRENT (rab16-arimaall, both deleted) was slower than this
 #: alone, so only this one is on.
-#: PROMOTED 2026-11-15 (lane/expdel2-47-promote, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md "PROMOTE"):
+#: PROMOTED 2026-11-15 (lane/expdel2-47-promote, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) "PROMOTE"):
 #: the default on its measured column only, FAST + Apple GPU; rollback -D MOJOLEARN_ARIMA_FAST_SEARCH_REUSE_OFF.
 #: A/B rab16-arimareuse (M3 Ultra, afc_ab_def, full board size, 1 run per arm, 2026-10-05; EXPERIMENTS.md
 #: ARIMA_FAST_SEARCH_REUSE row, KEEP): autoarima synthetic 18229.7 -> 13688.1 ms (0.751x), taxi-hourly

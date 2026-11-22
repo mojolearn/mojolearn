@@ -271,7 +271,7 @@ from transformer.experiments.norm_profile import (
     NN24_NORM_LANES8, NN24_LANES, _sum, _square, norm_profile_dot,
 )
 # RESTORED 2026-11-15 by lane/restore-run-arms-neural: MOJOLEARN_IDN_NORM_FIXED_LANES arms and helpers (RUN #6 of
-# docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md), reverse of the sweep 5d0bda260a.
+# plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)), reverse of the sweep 5d0bda260a.
 from transformer.experiments.norm_fixed_lanes import (
     IDN_NORM_FIXED_LANES, NFL_LANES, nfl_cell, nfl_cell_dot, nfl_cell_total, nfl_dot,
     nfl_square, nfl_sum, norm_row_threads,
@@ -3789,7 +3789,7 @@ def attn_context_kernel(
 
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_FOLD_V2 (DELETE-ARM: no A/B recorded) deleted 2026-11-15 by lane/expdel2-33-neural: attn_denom_v2_kernel, attn_context_v2_kernel and their launch arms; code recoverable at c3d1c7865f.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_FOLD_V2.patch
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)
 # (transformer-forward, lm-forward, lm-train-step; NVIDIA L40S A/B owed). Restored from the reverse of the deletion
 # commits b76ae8bbc3, a5a10b1930 and the sweep a803ea45ba, not from the patch (the patch also carries the Apple FAST
 # forward arms deleted between c3d1c7865f and a5a10b1930, which stay deleted).

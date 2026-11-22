@@ -112,7 +112,7 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch
     comptime assert not is_defined["MOJOLEARN_XD_FAST_GRP_FUSED_OFF"](), "removed 2026-11-15 (lane/expdel-02-decomposition-series): XD_FAST_GRP_FUSED_OFF (FAST+Apple rollback to the two-wait DEVSCAN random projection fit with separate rand and scale launches) is gone; the one-call one-synchronize fit is the FAST+Apple path (gaussian-rp taxi 3.4 -> 2.1 ms, sparse-rp taxi -10.7%, istella -8.5%, distortion identical); restore: experiments/removed/MOJOLEARN_XD_FAST_GRP_FUSED_OFF.patch"
     # Lane expdel2-06-base (2026-11-15): the C13-C28 classical arms with no recorded A/B and the _OFF rollbacks of measured
-    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md).
+    # IDENTICAL defaults read by experiments/classical_identical_ideas/linear_controls.mojo (plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history)).
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C23_MCD.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_C23_MCD"](), "removed 2026-11-15 (lane/expdel2-06-base): CLASSICAL_C23_MCD (Decomposition (MinCovDet centered Gram row-parallel, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 4ab2967a7e; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_C24_PANEL8.patch
@@ -147,7 +147,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_C57_CANDIDATE_STATE"](), "removed 2026-11-15 (lane/expdel2-07-base): C57_CANDIDATE_STATE (Decomposition (MinCovDet candidate mean retained for its covariance, IDENTICAL)) was unmeasured opt-in arm; the opt-in arm is gone and the default path is unchanged; code recoverable at 5bb9e1659f; see docs/TOMBSTONES.md"
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_REUSE.patch
     comptime assert not is_defined["MOJOLEARN_IDN_TSQR_REUSE"](), "removed 2026-11-15 (lane/expdel2-07-base): IDN_TSQR_REUSE (Decomposition (TSQR immutable-factor reuse across RHS calls, I22)) was opt-in arm; component screening only (I22 source5b), never a full-operation A/B; the opt-in arm is gone and the default path is unchanged; code recoverable at c336036020; see docs/TOMBSTONES.md"
-    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-16-decomposition (2026-11-15): unmeasured arms and superseded old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # MOJOLEARN_AFCL_L10: refusal removed 2026-11-15 (restored; Apple fast opt-in arm, default off, lane/restore-apple-fast-neural; see docs/TOMBSTONES.md Restored table)
     # MOJOLEARN_XD_FAST_SVD_ONE_BLOCK: refusal removed 2026-11-15 (restored; owed B arm, see docs/TOMBSTONES.md Restored table)
     # Restore: git apply experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_MMA_OFF.patch
@@ -188,7 +188,7 @@ def _check_configuration() -> Bool:
     comptime assert not is_defined["MOJOLEARN_IDN_EIGH_BLOCK_ON"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): IDN_EIGH_BLOCK_ON (unmeasured opt-in arm) is gone; the default is kept; code at 2d8c673dc0; restore: experiments/removed/MOJOLEARN_IDN_EIGH_BLOCK_ON.patch"
     # Restore: git apply experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch
     comptime assert not is_defined["MOJOLEARN_PCA_RR_EIGH_OFF"](), "removed 2026-11-15 (lane/expdel2-16-decomposition): PCA_RR_EIGH_OFF (unmeasured old path) is gone; the default is kept; code at 5972d75b59; restore: experiments/removed/MOJOLEARN_PCA_RR_EIGH_OFF.patch"
-    # Lane expdel2-18-decomposition (2026-11-15): unmeasured arms and old paths deleted, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md (docs/TOMBSTONES.md).
+    # Lane expdel2-18-decomposition (2026-11-15): unmeasured arms and old paths deleted, plan EXPERIMENT_DELETIONS_V2_2026-11-15 (git history) (docs/TOMBSTONES.md).
     # Restore: git apply experiments/removed/MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF.patch
     comptime assert not is_defined["MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF"](), "removed 2026-11-15 (lane/expdel2-18-decomposition): CLASSICAL_RSVD_TSQR_ORTHO_OFF (old path) is gone; the default is kept; code at 77c81ac782; restore: experiments/removed/MOJOLEARN_CLASSICAL_RSVD_TSQR_ORTHO_OFF.patch"
     # MOJOLEARN_DECOMP_FAST_TSQR_GRID: refusal removed 2026-11-15 (restored by lane/restore-apple-fast-classical: Apple fast paused, not abandoned; opt-in, default off; see docs/TOMBSTONES.md Restored table)

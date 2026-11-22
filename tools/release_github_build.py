@@ -52,7 +52,7 @@ on the cpu box (tools/release_linux_build.sh exports them to the box).
 
 THE HOST PRODUCER. `host` in the workflow's `sets` adds one job that runs the
 SOURCE's tools/release_host_build.py build (the retained-composition host
-producer, docs/plans/RETAINED_DEVICE_HOST_COMPOSITION_20261025.md) in the same
+producer, plan RETAINED_DEVICE_HOST_COMPOSITION_20261025 (git history)) in the same
 image at /root/mojolearn from a git checkout of the commit, its donor runtime
 build either this run's first assembled device set or a retained device leg
 the Mac uploads to R2 and passes as ONE presigned GET (`host_donor_url`, read

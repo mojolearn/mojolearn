@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # THE RANK-4 CONVOLUTION AND POOLING KERNELS OF THE TAPE (lane ag-rankn-conv,
-# docs/plans/AUTOGRAD_RANKN.md section 2.8). One `seq_kernel` body a code,
+# plan AUTOGRAD_RANKN (git history) section 2.8). One `seq_kernel` body a code,
 # shared by HostExec and DeviceExec through sequence/dispatch.mojo, so the
 # host column and every GPU run the same bodies.
 #

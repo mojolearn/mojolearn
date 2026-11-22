@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The lowering of an import graph onto session operations, in Mojo
-(docs/plans/MODEL_IMPORT.md section 7, step 2 of the native import boundary).
+(plan MODEL_IMPORT (git history) section 7, step 2 of the native import boundary).
 
 `onnx_import(handle, session, names, flat, addrs, source)` takes a graph read
 by autograd/import_reader.mojo and an

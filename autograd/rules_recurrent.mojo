@@ -736,7 +736,7 @@ struct AutogradRnnStep(RnnStep):
 
 
 # ------------------------------------------------------------------ predict
-# Lane x3-mlp-rnn-predict-on-tape (docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md X3): prediction runs the
+# Lane x3-mlp-rnn-predict-on-tape (plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) X3): prediction runs the
 # trainer's recorded forward (rnn_forward_autograd) on a tape in inference mode.
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
 # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_PREDICT.patch

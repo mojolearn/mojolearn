@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A model-selection fold's X gathered on the device for a kernel entry
 (lane a6-device-x-family-classical, 2026-11-09; plan
-docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 4 and the
+plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.2 step 4 and the
 cross-validation row of section 4).
 
 Cross-validation keeps X and every fold's row indices resident in model

@@ -61,7 +61,7 @@ def _psum(p: FP, n: Int) -> Float32:
 
 
 # ------------------------------------------------------------------ IDENTICAL blocked norms
-#: lane hr-adafactor (2026-10-02, docs/plans/HOST_ROUTE_REMOVAL.md): under
+#: lane hr-adafactor (2026-10-02, plan HOST_ROUTE_REMOVAL (git history)): under
 #: IDENTICAL a whole-tensor sum of squares of more than AF_NORM_BLOCK values
 #: is THE BLOCKED ORDER (Andrew's approved fold contract of Oct 1, the one
 #: x_linear's row folds take): the tensor is cut into fixed blocks of

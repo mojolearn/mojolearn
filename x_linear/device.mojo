@@ -1796,8 +1796,8 @@ def _sgd_chunk() -> Int:
         return SGD_CHUNK_DEFAULT
 
 # ------------------------------------------------ the SGD epochs on the executor's device loop
-# Lane n3b-sgd-on-program-fit (2026-11-09; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row
-# "SGD / Perceptron / PA", docs/plans/EXECUTOR_X1_API.md section 5). The three SGD drivers (minibatch,
+# Lane n3b-sgd-on-program-fit (2026-11-09; plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) row
+# "SGD / Perceptron / PA", plan EXECUTOR_X1_API (git history) section 5). The three SGD drivers (minibatch,
 # one-vs-rest minibatch, per-sample) ran their epochs as host loops that drained the stream and read the
 # stop words home after EVERY epoch. Each epoch is now one step of the executor's bounded device loop
 # (autograd/program_loop_device.mojo `bounded_device_loop`, the loop Program.fit's epochs run on since

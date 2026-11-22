@@ -179,7 +179,7 @@ comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_ID_DEFER_COPY.patch; record in docs/TOMBSTONES.md.
 # TOMBSTONE: MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 7be6f0b80e.
 # Restore: git apply experiments/removed/MOJOLEARN_GBDT_IDENTICAL_SPLIT_COPY.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/restore-run-arms-trees: MOJOLEARN_GBDT_ID_DEFER_COPY, RUN #8 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S). Its MOJOLEARN_IDN_ALL_OFF companion term is not restored (that define stays deleted).
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: MOJOLEARN_GBDT_ID_DEFER_COPY, RUN #8 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S). Its MOJOLEARN_IDN_ALL_OFF companion term is not restored (that define stays deleted).
 comptime DEFER_HIST_COPY_1903 = (
     not SPLIT_COST_IDENTICAL
     or TARGET_HAS_APPLE_GPU
@@ -2023,7 +2023,7 @@ def fit_non_symmetric_tree[
     var hist_cells_per_leaf = layout.hist_cells
     # TOMBSTONE: MOJOLEARN_TREES_LG_LEVEL_ROUNDS (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 97d33c09d6.
     # Restore: git apply experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
-    # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #1 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+    # RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #1 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
     # Lane S3 `MOJOLEARN_TREES_LG_LEVEL_ROUNDS` (IDENTICAL, default off).
     # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — NOT MEASURED.
     # When the leaf budget cannot bind (`options.max_leaves >= 1 <<

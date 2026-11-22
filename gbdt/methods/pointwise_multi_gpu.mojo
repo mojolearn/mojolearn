@@ -15,7 +15,7 @@ shards (`gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo`), which
 is the partition the other `gbdt_fit` lanes take. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 
-THE GBDT DISPATCHERS (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Every
+THE GBDT DISPATCHERS (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Every
 multi-device decision of the GBDT family lives here and takes a `DevicePlan`
 value that the binding entry read once; nothing below the entry reads the
 thread plan. `gbdt_hist_dispatch` (greedy searcher) and

@@ -109,11 +109,11 @@ comptime H8_MIN_DOCS = H8_LANE * H8_UNROLL * H8_LOAD * (H8_BLOCK // H8_LANE)
 # NOT COMPILED -- NOT TESTED -- IDENTITY NOT VERIFIED -- NOT MEASURED.
 # TOMBSTONE: MOJOLEARN_TREES_HIST_PACKED_GH (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at 02e2a7dbe7.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_PACKED_GH.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #10 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #10 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime H8_PACKED = HIST_PACKED_GH and TARGET_COLUMN != COLUMN_APPLE
 # TOMBSTONE: MOJOLEARN_TREES_HIST_WARP_AGG (DELETE-ARM, opt-in, no A/B recorded, rule a; non-owner fold to False) deleted 2026-11-15 by lane/expdel2-43-trees; code recoverable at fdbf0a0b1b.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_HIST_WARP_AGG.expdel2-43-trees.patch; record in docs/TOMBSTONES.md.
-# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #9 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #9 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime H8_WAVE_AGG = HIST_WARP_AGG and TARGET_COLUMN != COLUMN_APPLE
 #: the 64-bit atomic needs the (stat 0, stat 1) pair 8-byte aligned; cells are
 #: `(bin << 3) + (f << 1) + stat`, so the pair starts on an even cell and the

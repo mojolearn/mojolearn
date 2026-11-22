@@ -237,7 +237,7 @@ def kmeans_shift_threshold(tol: Float64) -> Float32:
 
 #: k-means stage timer: `-D MOJOLEARN_KMEANS_STAGES` builds synchronize and
 #: print each stage; default builds compile it out. Before (lane
-#: envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md): a
+#: envgate-classical-deviceplan, plan ENV_GATES_2026-11-15 (git history)): a
 #: getenv per fit and per scalable k-means++ init.
 comptime KMEANS_STAGES_ON = is_defined["MOJOLEARN_KMEANS_STAGES"]()
 

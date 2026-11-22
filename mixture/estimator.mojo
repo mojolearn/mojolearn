@@ -1288,7 +1288,7 @@ def gaussian_mixture_fit(
     """`GaussianMixture(...).fit(X)`, host in and host out, one shot.
 
     `labels_address` non-zero (`fit_predict`, row N401 of
-    docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md): the address of n int32
+    plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)): the address of n int32
     words that receive `predict(X)` of the fitted model, computed on the
     device buffers the fit already holds (X, means, precision Cholesky, log
     determinants, weights) by exactly `gaussian_mixture_predict`'s steps:

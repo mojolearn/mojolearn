@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The identical GEMM on STRIDED sub-blocks with an ACCUMULATE epilogue
-(lane gap-linalg, 2026-10-08; docs/plans/gaps-2026-10-08.md section 2).
+(lane gap-linalg, 2026-10-08; plan gaps-2026-10-08 (git history) section 2).
 
 `identical_gemm_into` (gemm/checks/gemm_identical.mojo) takes contiguous
 row-major operands and writes a contiguous product. The blocked dense

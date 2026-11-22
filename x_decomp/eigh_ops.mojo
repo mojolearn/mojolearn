@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device eigh as executor step ops (lane n7-device-linalg-ops,
-2026-11-08; docs/plans/EXECUTOR_N7_OPS.md). The host twins are in
+2026-11-08; plan EXECUTOR_N7_OPS (git history)). The host twins are in
 x_decomp/eigh_ops_host.mojo.
 
 Two ops, one algorithm each on every column (NVIDIA, AMD, Apple, the host):

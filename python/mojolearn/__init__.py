@@ -175,7 +175,7 @@ _LAZY_NAMES = {
     "LanguageModelHostTrainer": "._byte_lm_host",
     "neural_inference": None,
     # The operation session (`mojolearn.ops`, autograd/ops_api.mojo) and model
-    # import (docs/plans/MODEL_IMPORT.md): the package imports without NumPy.
+    # import (plan MODEL_IMPORT (git history)): the package imports without NumPy.
     "ops": None,
     "importers": None,
     "import_model": ".importers",

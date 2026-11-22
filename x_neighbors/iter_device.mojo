@@ -389,7 +389,7 @@ def op_nan_cells(x: Int, cells: Int, colmiss: Int, info: Int, n: Int, d: Int, co
 def op_cc_iterate_csr(indptr: Int, indices: Int, lab: Int, info: Int, n: Int, nnz: Int) raises:
     """lane/neural-pass69: `op_cc_iterate` from a CSR adjacency (indptr n + 1,
     indices nnz), no dense matrix: hooking and pointer jumping on the device.
-    Lane gap-graph (2026-10-08, docs/plans/gaps-2026-10-08.md 5.3): the
+    Lane gap-graph (2026-10-08, plan gaps-2026-10-08 (git history) 5.3): the
     batched rounds with the relabel on the device (`_cc_csr_batched`, the
     Apple FAST path of lane/apple-fast-graph) on every vendor and tier.
     info is int32 x 2: the round count and n_components + 1."""
@@ -1506,7 +1506,7 @@ def knn_impute_split_kernel(
 
 # ============================================================================
 # KNNImputer: ONE DISTANCE PASS PER QUERY ROW (lane gap-small-members,
-# 2026-10-08, plan docs/plans/gaps-2026-10-08.md section 11). The cell
+# 2026-10-08, plan plan gaps-2026-10-08 (git history) section 11). The cell
 # kernels above recompute the row-to-donor distance once per MISSING CELL:
 # a row with three missing cells scans the m fit rows x d features three
 # times, one thread at a time (one-thread-per-cell, 2,331 ms on the L40S

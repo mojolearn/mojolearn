@@ -68,7 +68,7 @@ comptime TS_TPB = TS_P * TS_NB
 #: tree combine is O(n^3) cells in one threadgroup)
 comptime TS_MAX_N = 512
 
-# lane gap-tsqr (2026-10-08, docs/plans/gaps-2026-10-08.md section 7), IDENTICAL
+# lane gap-tsqr (2026-10-08, plan gaps-2026-10-08 (git history) section 7), IDENTICAL
 # only; a FAST build keeps the per-panel forms. Both switches change bits, on
 # every vendor and in the host replay together.
 #

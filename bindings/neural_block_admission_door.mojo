@@ -346,7 +346,7 @@ def neural_model_weights(mut mods: NativeModules, values: PythonObject, context:
     return result
 
 
-# THE ONE NEURAL INPUT DOOR (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+# THE ONE NEURAL INPUT DOOR (plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history)
 # section 3.3 row A4, lane a4-admit-sequence-tsa-neural, 2026-11-08): every
 # float32 tensor a neural block, model or session operation admits goes
 # through `admit_block_f32` with the USE that decides borrow versus copy.

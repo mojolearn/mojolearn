@@ -8,7 +8,7 @@ affine), forward and backward, on the GPU (`sequence/layernorm.mojo`).
 `rms_norm_forward` / `rms_norm_backward`; `LayerNorm` holds the weight and
 bias and keeps their gradients after `backward`.
 
-Device I/O (lane gap-neural-io, 2026-10-08, plan docs/plans/gaps-2026-10-08.md
+Device I/O (lane gap-neural-io, 2026-10-08, plan plan gaps-2026-10-08 (git history)
 Section 4): an x made by `mojolearn._x_sequence_device.to_device` stays on
 the device: the forward returns y as a `SequenceDeviceTensor`, the backward
 reads dy there (a host dy is uploaded once) and returns dx as one; only the

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # RECORDED VJPS OF THE FUSED NODE KINDS (lane ag-ho-fused, H2 of
-# docs/plans/AUTOGRAD_HIGHER_ORDER.md section 1.2). backward_recorded
+# plan AUTOGRAD_HIGHER_ORDER (git history) section 1.2). backward_recorded
 # (autograd/higher.mojo, lane H1) calls lower_fused_vjp for every active
 # LINEAR, LOSS_ELEM, LOSS_REDUCED, LOSS_CE, LOSS_SCE, DROPOUT and EMBEDDING
 # node and each edge whose parent requires a gradient. The result is a

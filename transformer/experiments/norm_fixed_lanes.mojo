@@ -49,7 +49,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ALL_OFF.expdel2-32-neural.patch
 # (Sweep 2026-11-15: IDN_NORM_FIXED_LANES = False and the cell helpers nfl_cell, nfl_cell_total, nfl_cell_dot removed with
 # every reader's dead arm in transformer/impl/llama/modeling_llama.mojo and autograd/kernels/transformer.mojo.)
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)
 # (transformer-forward, lm-forward, lm-train-step; NVIDIA L40S A/B owed): the switch, the cell helpers and every reader's
 # arm are back (reverse of fce9f4413c, f192693134, 0bbe4a511b, 6ce75b82de and the sweep 5d0bda260a). The IDN_ALL_OFF
 # term stays deleted. The S1 arm in transformer/experiments/attention_schedules.mojo (640121d63a) is not restored: that

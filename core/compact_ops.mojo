@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Stream compaction with a device-side count as an executor step op (lane
-n7-device-linalg-ops, 2026-11-08; docs/plans/EXECUTOR_N7_OPS.md). Host twin:
+n7-device-linalg-ops, 2026-11-08; plan EXECUTOR_N7_OPS (git history)). Host twin:
 core/compact_ops_host.mojo.
 
 `cub::DeviceSelect::Flagged`, ORDER-PRESERVING: out[k] is the k-th flagged

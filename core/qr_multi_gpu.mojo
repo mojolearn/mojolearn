@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The TSQR panel split over a `DevicePlan` (multi-GPU encapsulation,
-2026-11-03, docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+2026-11-03, plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
 
 `qr_parallel_panels` moved here from `core/householder_qr.mojo` unchanged
 except that it takes the plan value instead of reading the thread plan.

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device SVD and QR as executor step ops (lane n9b-device-svd-qr,
 2026-11-09), next to the N7 ops (x_decomp/eigh_ops.mojo;
-docs/plans/EXECUTOR_N7_OPS.md keeps the contract: enqueue only, the caller's
+plan EXECUTOR_N7_OPS (git history) keeps the contract: enqueue only, the caller's
 outputs written only while the gate is open, a status word for a solve that
 can fail on the device).
 

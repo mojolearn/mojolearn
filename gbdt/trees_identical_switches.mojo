@@ -165,7 +165,7 @@ comptime ORD_STD_GRIDFOLD = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_TREES_LG_LEVEL_ROUNDS (DELETE-ARM, opt-in, no A/B recorded, rule a) deleted 2026-11-15 by lane/expdel2-45-trees; code recoverable at ce4ab6287e.
 # Restore: git apply experiments/removed/MOJOLEARN_TREES_LG_LEVEL_ROUNDS.patch
 # (Sweep 2026-11-15: the unread constant LG_LEVEL_ROUNDS was removed.)
-# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #1 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md (opt-in, default off; A/B owed on NVIDIA L40S).
+# RESTORED 2026-11-15 by lane/restore-run-arms-trees: RUN #1 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history) (opt-in, default off; A/B owed on NVIDIA L40S).
 comptime LG_LEVEL_ROUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_TREES_LG_LEVEL_ROUNDS"]()
 
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
@@ -177,7 +177,7 @@ comptime LG_LEVEL_ROUNDS = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defin
 
 # ======== lane fg-gbdt-ordered (2026-10-09): the Ordered fold-arm overhead ========
 # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-# Plan: docs/plans/flagship-gaps-20261009/read_gbdt_ordered.md, ideas F, C, A, E.
+# Plan: plan flagship-gaps-20261009/read_gbdt_ordered (git history), ideas F, C, A, E.
 # Target: the fold arm's per-tree overhead over the plain tree (taxi 35 ms/tree
 # against CatBoost's 25 ms). Every switch below is IDENTICAL-only; FAST builds
 # keep their own (Apple ORD_ALL / ORDERED_BATCH_EST) paths untouched.

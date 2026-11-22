@@ -2,7 +2,7 @@
 """Test-side helpers for switches that are build defines, not environment reads.
 
 A product route is chosen by a `-D MOJOLEARN_<NAME>` define at build time
-(docs/plans/ENV_GATES_2026-11-15.md), so one installed wheel holds one arm.
+(plan ENV_GATES_2026-11-15 (git history)), so one installed wheel holds one arm.
 A test of a non-default arm runs only against a wheel built with that arm,
 and a comparison between two arms crosses two runs (two wheels):
 

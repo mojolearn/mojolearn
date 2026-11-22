@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # The family doors' face of THE ONE ADMISSION PATH (plan
-# docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.3 row A2, lane
+# plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.3 row A2, lane
 # a2-admit-family, 2026-11-08): clustering, neighbors, SVM, GP, mixture,
 # kernel methods, manifold, model selection and parallel_shard admit their
 # arrays here, on bindings/admitted_input_unpack.mojo's AdmittedX and the A0 core

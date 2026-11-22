@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The ONNX reader and the import graph (docs/plans/MODEL_IMPORT.md lane 1).
+"""The ONNX reader and the import graph (plan MODEL_IMPORT (git history) lane 1).
 
 No ``onnx`` and no ``torch``: every model is written by
 tests/_onnx_fixture.py, and read by the Mojo reader through the x_sequence

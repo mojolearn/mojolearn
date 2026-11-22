@@ -416,7 +416,7 @@ def knn_release(model: PythonObject) raises:
 
 # ------------------------------------------------------------------ finite
 #
-# Lane a7b-device-x-neighbors (plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md
+# Lane a7b-device-x-neighbors (plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history)
 # section 3.2 step 3): the k-NN doors admit a borrowed float32 X with NO host
 # scan (`defer_finite`). The GPU entries test the words they upload anyway and
 # return the status word: the fitted index behind `knn_index_prepare`'s one

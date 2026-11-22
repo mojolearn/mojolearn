@@ -148,7 +148,7 @@ def _u32_ptr(addr: Int) raises -> MutPointer[UInt32, MutUntrackedOrigin]:
 
 def _gbdt_device_plan() raises -> DevicePlan:
     """THE GBDT FAMILY'S DEVICE PLAN, read ONCE here at the binding entry
-    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Nothing below the
+    (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Nothing below the
     entry reads the thread plan; the value travels down to the dispatchers in
     `gbdt/methods/pointwise_multi_gpu.mojo`, which parse `plan.setting` as
     the old in-kernel reads did and open `plan.device(rank)` per shard."""

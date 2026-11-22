@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """GENERATION OPS of the operation session (lane x45c-causal-generate-program-decode,
-2026-11-09; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4,
-API note docs/plans/EXECUTOR_X1_API.md section 4).
+2026-11-09; plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) row X4,
+API note plan EXECUTOR_X1_API (git history) section 4).
 
 Two session operation codes make a language model's token pick a node of a
 captured decode body, so `CausalLM.generate` is ONE `Program.decode` over ONE

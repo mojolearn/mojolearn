@@ -145,7 +145,7 @@ from max.gpu import block_dim, block_idx, thread_idx
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_DBSCAN_COSINE_DEVICE_OFF.patch; record in docs/TOMBSTONES.md.
 #: DBSCAN phase timer: `-D MOJOLEARN_DBSCAN_PHASES` builds print the phase
 #: times; default builds compile the timer out. Before (lane
-#: envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md): a
+#: envgate-classical-deviceplan, plan ENV_GATES_2026-11-15 (git history)): a
 #: getenv per fit.
 comptime DBSCAN_PHASES_ON = is_defined["MOJOLEARN_DBSCAN_PHASES"]()
 

@@ -144,9 +144,9 @@ def identical_gemm_host(
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         # TOMBSTONE: MOJOLEARN_IDN_GEMM_INT_SLICES (research profile fp32.v2-int dispatch hook; EXP:2263 pending, never measured) deleted 2026-11-15 by lane/expdel2-25-neural; code recoverable at 41a649b03c.
         # Restore: git apply experiments/removed/MOJOLEARN_IDN_GEMM_INT_SLICES.patch; record in docs/TOMBSTONES.md.
-        # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md.
+        # RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #2 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history).
         # lane/gemm-int-slices (2026-10-28): THE DISPATCH HOOK of the research
-        # profile fp32.v2-int (gemm/int_slices.mojo, docs/plans/GEMM_INT_SLICES.md)
+        # profile fp32.v2-int (gemm/int_slices.mojo, plan GEMM_INT_SLICES (git history))
         # behind -D MOJOLEARN_IDN_GEMM_INT_SLICES, default OFF; off, this block
         # compiles to nothing and the lines below are fp32.v1 as before. Admission
         # is the exactness bound on k only (no shape rule). The CPU column's

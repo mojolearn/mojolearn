@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Fits and block forwards never change the caller's float32 buffer.
 
-0.8.66 regressions C3 and C5 (docs/plans/REGRESSIONS_0866_VS_0855.md): a
+0.8.66 regressions C3 and C5 (plan REGRESSIONS_0866_VS_0855 (git history)): a
 k-NN fit keeps a caller's float32 C matrix by reference (as scikit-learn
 does) and never freezes or writes it; IsolationForest borrows it too on a
 binary that keeps the forest resident (as 0.8.55 did) and keeps its own copy

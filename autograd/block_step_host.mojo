@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The HOST ARM of the block step ops (lane x7b-step-ops-host-arm, 2026-11-09;
-docs/plans/EXECUTOR_X1_API.md section 2).
+plan EXECUTOR_X1_API (git history) section 2).
 
 A host session (`OpsSession[HostExec]`) runs OPS_M1_STEP, OPS_M2_STEP,
 OPS_M3_STEP and OPS_ATTN_STEP through the host block bodies over the SAME

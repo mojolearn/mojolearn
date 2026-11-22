@@ -405,7 +405,7 @@ def host_f32_copy(dst: HostF32Ptr, src: HostF32Ptr, n: Int):
 
 #: `-D MOJOLEARN_HOST_BLOCK_TIMING` builds time the host block oracles.
 #: Before (lane envgate-classical-deviceplan,
-#: docs/plans/ENV_GATES_2026-11-15.md): a getenv per oracle call.
+#: plan ENV_GATES_2026-11-15 (git history)): a getenv per oracle call.
 comptime HOST_BLOCK_TIMING_ON = is_defined["MOJOLEARN_HOST_BLOCK_TIMING"]()
 
 

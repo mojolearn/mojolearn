@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """RESIDENT SEQUENCE TENSORS: float32 arrays that live on the shared
 sequence context (`sequence_ctx`) between binding calls (lane
-gap-neural-io, 2026-10-08; plan docs/plans/gaps-2026-10-08.md Section 4;
+gap-neural-io, 2026-10-08; plan plan gaps-2026-10-08 (git history) Section 4;
 device binding only).
 
 The board's torch columns for the optimizer and LayerNorm lanes are

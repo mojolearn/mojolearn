@@ -14,7 +14,7 @@ initialize HSA runtime", or the next HIP fat binary registration aborts in
 instance of the library being copies").
 
 Modular exposes no supported setting for the HIP library path (2026-10-26; the
-ask is docs/plans/MODULAR_ASK_AMD_HIP_RUNTIME.md), so this module does the two
+ask is plan MODULAR_ASK_AMD_HIP_RUNTIME (git history)), so this module does the two
 things a process can do on its own, before the first device use:
 
 * No HIP runtime loaded yet (mojolearn imported before torch): load, by the

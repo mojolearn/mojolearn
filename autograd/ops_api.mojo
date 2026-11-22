@@ -38,7 +38,7 @@ learning rate alone, so a parameter stepped here gets the words
 Sequential.fit's one flat launch gives it (sequence/recurrent.mojo
 opt_step: the same OP_OPT arguments, opt_scalars word for word).
 
-Higher order (lane ag-ho-session, docs/plans/AUTOGRAD_HIGHER_ORDER.md
+Higher order (lane ag-ho-session, plan AUTOGRAD_HIGHER_ORDER (git history)
 section 5): `backward_graph` records the backward pass itself
 (autograd/higher.mojo backward_scalar_recorded), so `grad_handle` returns a
 gradient as a session tensor that later operations and a second backward
@@ -94,7 +94,7 @@ from autograd.optimizer_requests import (
     ops_optimizer_request, ops_optimizer_restore_request,
 )
 from autograd.model import SCHED_CONSTANT, SCHED_STEP, SCHED_EXPONENTIAL, epoch_lr
-# Rank-N tensors (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md): the
+# Rank-N tensors (lane ag-rankn-python, plan AUTOGRAD_RANKN (git history)): the
 # core's shape metadata and views, the fold / bmm / layout / conv lanes'
 # entries, and the shared glue (autograd/rankn_api.mojo).
 from autograd.rankn import RN_MAX_RANK, ShapeN, rn_normalize_axis
@@ -230,7 +230,7 @@ comptime OPS_MAXPOOL2D = 45      # [kernel, stride]
 comptime OPS_AVGPOOL2D = 46      # [kernel, stride]
 # 47 stays reserved (the rank-N plan held it for an argmax result; argmax is
 # OPS_ARGMAX 72 of the import family below).
-# The import family (lane ag-import-kernels, docs/plans/MODEL_IMPORT.md 3.3;
+# The import family (lane ag-import-kernels, plan MODEL_IMPORT (git history) 3.3;
 # 47 stays reserved). Unary maps keep x's shape; the binary kinds, where and
 # the comparisons broadcast as NumPy does.
 comptime OPS_ERF = 48
@@ -974,7 +974,7 @@ struct OpsSession[E: Exec & Movable & Deinitable](Movable):
                 self.tape.clear_gradient(leaf)
 
     # ------------------------------------------------------------ higher order
-    # Lane ag-ho-session (docs/plans/AUTOGRAD_HIGHER_ORDER.md section 5, H3):
+    # Lane ag-ho-session (plan AUTOGRAD_HIGHER_ORDER (git history) section 5, H3):
     # the session surface of the recorded backward (autograd/higher.mojo,
     # lane H1). A recorded backward expresses every gradient through tape
     # operations, so a gradient is a session tensor that later operations

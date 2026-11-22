@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The native owner of the Python-sharded multi-GPU drivers
 (lane/native-parallel-driver-20261024,
-docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md, "kind B"):
+plan NATIVE_PARALLEL_DRIVER_20261024 (git history), "kind B"):
 `parallel_classical.transform_rbf_sampler`, `parallel_preprocessing.fit_scaler`
 and `transform_scaler`, `parallel_gaussian_process.fit_gaussian_process_classifier`
 and `predict_gaussian_process_classifier`, and

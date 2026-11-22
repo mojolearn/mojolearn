@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """BLOCK STEP OPS of the operation session (lane x1-executor-state-and-step-ops,
-2026-11-08; docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md 2.1, the API note
-docs/plans/EXECUTOR_X1_API.md).
+2026-11-08; plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) 2.1, the API note
+plan EXECUTOR_X1_API (git history)).
 
 Four session operation codes run one block of a recurrent or attention model
 over tokens, as ONE node of a session or a captured program:

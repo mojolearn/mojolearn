@@ -29,7 +29,7 @@ from neighbors.impl.detail.knn_brute_force import (
 
 def neighbors_device_plan() raises -> DevicePlan:
     """The neighbors family's device plan, read once at a family entry
-    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Its `setting` is what
     `device_plan_setting("MOJOLEARN_NEIGHBORS_DEVICE_COUNT", "1")` returned,
     so `knn_device_count` parses the same text as before."""
     return device_plan_current("MOJOLEARN_NEIGHBORS_DEVICE_COUNT", "1")

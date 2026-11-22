@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """The elementwise operations of imported models in mojolearn.ops.Session
-(docs/plans/MODEL_IMPORT.md section 3.3), the Python side: the refusals. The
+(plan MODEL_IMPORT (git history) section 3.3), the Python side: the refusals. The
 values and gradients (erf, gelu, softplus, silu, leaky relu, elu, hard
 sigmoid and swish, clip, abs, floor, ceil, round, sin, cos, sign,
 reciprocal, pow, minimum, maximum, where, the comparisons and logical

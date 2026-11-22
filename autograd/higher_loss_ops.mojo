@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # THE ONE-HOT CONSTANT OF THE RECORDED LOSS VJPS (lane ag-ho-fused, H2 of
-# docs/plans/AUTOGRAD_HIGHER_ORDER.md). backward_recorded lowers the
+# plan AUTOGRAD_HIGHER_ORDER (git history)). backward_recorded lowers the
 # cross-entropy VJPs (LOSS_CE, LOSS_SCE) to recorded tape operations,
 # (softmax(logits) - onehot(codes)) * g, and the one-hot matrix of the class
 # codes is the one value no tape operation computes. It is a constant (no

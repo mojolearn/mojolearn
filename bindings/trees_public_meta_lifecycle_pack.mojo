@@ -6,7 +6,7 @@
 # and directed it to Daybreak access. This interruption did not establish a
 # Mojo defect: the observed problems were our inherited Python decorators
 # and ClassLabels handling. The root agent continued the supported API repair.
-# See docs/plans/NATIVE_SCREENING_AND_FALLBACKS_20261025.md. Andrew authorizes
+# See plan NATIVE_SCREENING_AND_FALLBACKS_20261025 (git history). Andrew authorizes
 # documented Python fallbacks if needed; this implementation introduces none
 # and still requires integrated compilation and public-runtime validation.
 from std.python import Python, PythonObject

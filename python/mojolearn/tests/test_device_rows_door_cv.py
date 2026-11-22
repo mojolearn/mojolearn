@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """cross_val_score through the DeviceRows door equals the host path, bit for bit.
 
-Lane ne1-b-door (plan docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md workstream
+Lane ne1-b-door (plan plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history) workstream
 B, first release). Model selection hands a fold's X to an estimator as
 `_arena_io.DeviceRows` when the estimator's plan says `device_rows`; the
 shared doors (`bindings/device_rows_door.mojo`, used by `classical_check_x`,

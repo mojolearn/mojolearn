@@ -6,7 +6,7 @@ Built with `-D MOJOLEARN_ANN_STAGES`, `mark` synchronizes the context and prints
 `ANN-STAGE <driver> <stage> <ms>` to stdout, so one speed run shows where a
 driver's wall time goes. Without the define (the default), `mark` compiles
 to nothing: no sync, no print, no clock read, no bit or schedule change.
-Before (lane envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md)
+Before (lane envgate-classical-deviceplan, plan ENV_GATES_2026-11-15 (git history))
 this was a `getenv` per timer construction, i.e. per driver call."""
 from std.sys import is_defined
 from std.time import perf_counter_ns

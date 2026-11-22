@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The one host finiteness scan of admitted float32 words (lane
-fix-c1-c2-parallel-finite, 2026-11-08; docs/plans/REGRESSIONS_0866_VS_0855.md
+fix-c1-c2-parallel-finite, 2026-11-08; plan REGRESSIONS_0866_VS_0855 (git history)
 causes C1 and C2).
 
 Every public door that refuses NaN/infinity in float32 input reads one of

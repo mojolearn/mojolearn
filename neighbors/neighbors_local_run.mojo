@@ -114,7 +114,7 @@ def nc_check_priors_size(size: Int, classes: Int) raises:
 
 #: NearestCentroid split ops (the three separate ops instead of the fused
 #: fit): off by default. B arm `-D MOJOLEARN_NC_SPLIT_OPS`. Before (lane
-#: envgate-classical-deviceplan, docs/plans/ENV_GATES_2026-11-15.md): the
+#: envgate-classical-deviceplan, plan ENV_GATES_2026-11-15 (git history)): the
 #: run-time MOJOLEARN_NC_SPLIT_OPS=1, a getenv per fit; never A/B-timed:
 #: RUN OWED (owed-pre0867.json "nc-split-ops", docs/apple-fast/EXPERIMENTS.md).
 comptime NC_SPLIT_OPS = is_defined["MOJOLEARN_NC_SPLIT_OPS"]()

@@ -14,7 +14,7 @@ to the define rather than to the second device. Owed a two-device column
 (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
 
 THE PLAN VALUE (multi-GPU encapsulation, 2026-11-03,
-docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Every Gram owner path takes a
+plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Every Gram owner path takes a
 `DevicePlan`; nothing below this file reads the thread plan. The split-K shard
 path (`gram_splitk_parallel`, formerly `core/gram_splitk.mojo` `_gram_parallel`)
 lives here, behind `gram_splitk_launch_dispatch` /

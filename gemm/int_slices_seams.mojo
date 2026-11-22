@@ -3,7 +3,7 @@
 """THE SEAMS OF THE RESEARCH PROFILE `mojolearn.identical.gemm.fp32.v2-int`
 (prototype, lane/gemm-int-slices, 2026-10-28; switch `-D MOJOLEARN_IDN_GEMM_INT_SLICES`).
 
-PROTOTYPE, NOT A SHIPPED PROFILE. The contract is `docs/plans/GEMM_INT_SLICES.md`.
+PROTOTYPE, NOT A SHIPPED PROFILE. The contract is plan GEMM_INT_SLICES (git history).
 Device plans: `gemm/int_slices.mojo`. Host column: `gemm/host/gemm_int_slices_oracle.mojo`.
 Gate: `gemm/checks/gemm_int_slices_check.mojo`.
 

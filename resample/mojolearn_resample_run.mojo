@@ -28,7 +28,7 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
 
 def _resample_entry_plan() raises -> DevicePlan:
     """The device plan of one resample call, read ONCE here at the entry
-    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md); everything below takes
+    (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)); everything below takes
     the value. Its `setting` is the resample family's own, exactly what
     `resample/estimator.mojo` read before the move: the plan's size while a
     plan driving the RESAMPLE family is bound to this thread, else

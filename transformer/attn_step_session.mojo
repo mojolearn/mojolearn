@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Every GPU transformer block runtime on the attention step op (lanes
 x4-transformer-on-executor and x4b-transformer-block-and-generate,
-2026-11-09; plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md row X4,
-API docs/plans/EXECUTOR_X1_API.md).
+2026-11-09; plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) row X4,
+API plan EXECUTOR_X1_API (git history)).
 
 A block's weights are ONE packed executor buffer (`block_weight_sizes`
 order, each piece at a `block_slot` boundary), its key and value caches ONE

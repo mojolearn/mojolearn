@@ -109,7 +109,7 @@ from transformer.checks.transformer_oracle import RopeTable, refuse_nonfinite
 # TOMBSTONE: MOJOLEARN_IDN_NORM_FIXED_LANES (opt-in arm, EXP:2246 PENDING, never run; owner elsewhere) folded to False
 # 2026-11-15 by lane/expdel2-31-neural (the serial S1 fold stays); code recoverable at 3393bec2de.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_NORM_FIXED_LANES.expdel2-31-neural.patch
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md.
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #6 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history).
 from transformer.experiments.norm_fixed_lanes import IDN_NORM_FIXED_LANES, nfl_dot
 # TOMBSTONE: MOJOLEARN_IDN_ATTN_SOFTMAX=2 (slower) deleted 2026-10-10 by c1bf9d832; code recoverable at ca25d9321.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_ATTN_SOFTMAX-arm2.patch

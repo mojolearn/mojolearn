@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Python boundary of `mojolearn.runtime_report()` (docs/plans/VERIFY_DECOUPLE_2026-11-15.md "API").
+"""Python boundary of `mojolearn.runtime_report()` (plan VERIFY_DECOUPLE_2026-11-15 (git history) "API").
 
 One native call: the returned object is a plain dict with the documented
 fields, it agrees with the public metadata calls, it loads no binding, it

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Device-resident fitted components of TruncatedSVD (lane
 ne1-a-decomp-resident, workstream A of
-docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md; row N351).
+plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history); row N351).
 
 `TruncatedSVD.transform` and `inverse_transform` uploaded the fitted
 `components_` (n_components x n_features) with X on every call

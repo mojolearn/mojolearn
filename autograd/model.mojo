@@ -2,7 +2,7 @@
 """A user-defined model, trained through the tape from a flat description.
 
 Python assembles the description (an integer program and a float table,
-docs/plans/AUTOGRAD_API.md "Model description"); `parse_model` validates it
+plan AUTOGRAD_API (git history) "Model description"); `parse_model` validates it
 once per call and `model_fit` / `model_predict` interpret it. Each batch
 records the forward graph on the tape, differentiates the loss and runs one
 optimizer step; every number is computed by executor launches (parallel, with
@@ -30,7 +30,7 @@ from autograd.data import gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
 from core.cast_in import CAST_KIND_SIGNED, CastIn
 from autograd.cast_ops import gather_labels_device, upload_cast, validation_codes
-# Description version 2 (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md
+# Description version 2 (lane ag-rankn-python, plan AUTOGRAD_RANKN (git history)
 # section 5): per-sample input shapes of any rank and the shape layers.
 from autograd.rankn import RN_MAX_RANK, ShapeN
 from autograd.rankn_conv import rankn_conv2d, rankn_max_pool2d, rankn_avg_pool2d
@@ -88,7 +88,7 @@ comptime HAS_DROPOUT = True
 # TOMBSTONE: MOJOLEARN_IDN_SEQ_TILED_PREDICT (whole-set predict chunk, opt-in arm, A/B never run) deleted 2026-11-15
 # by lane/expdel2-24-neural with PREDICT_WHOLE_SET_BYTES and _predict_split_same; code recoverable at d19ca4f0c2.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SEQ_TILED_PREDICT.patch
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #4 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #4 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)
 # (sequential-predict, NVIDIA L40S A/B owed). The MOJOLEARN_IDN_ALL_OFF term is not restored (that define stays deleted).
 comptime SEQ_TILED_PREDICT = is_defined["MOJOLEARN_IDN_SEQ_TILED_PREDICT"]()
 comptime PREDICT_WHOLE_SET_BYTES = 1 << 30

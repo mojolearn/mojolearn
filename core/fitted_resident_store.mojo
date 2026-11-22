@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Device-resident fitted arrays, keyed by a lease (lane ne1-a-gp-svm,
-workstream A of docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md).
+workstream A of plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)).
 
 One store struct and its functions, shared by every family that keeps
 fitted float32 arrays on the device between predict calls (the Gaussian

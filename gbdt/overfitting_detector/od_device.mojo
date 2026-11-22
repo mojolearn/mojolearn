@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The overfitting detector on the device (lane t1-tree-builder-ops,
-2026-11-08; docs/plans/EXECUTOR_T1_TREE_OPS.md, tree op TREE_OP_OD_STEP).
+2026-11-08; plan EXECUTOR_T1_TREE_OPS (git history), tree op TREE_OP_OD_STEP).
 
 `OverfittingDetector.add_error` + `is_need_stop`
 (gbdt/overfitting_detector/overfitting_detector.mojo) as the boosting loop's

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The blocked TSQR of `x_decomp/tsqr_device.mojo` over a `DevicePlan`
-(lane ne2-i-j, 2026-11-07; docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md
-section 2J, docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+(lane ne2-i-j, 2026-11-07; plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history)
+section 2J, plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
 
 WHY. `LinearRegression` in IDENTICAL fits by the centered TSQR
 (`DevExec.ols_tsqr_factor`), which read no plan: under

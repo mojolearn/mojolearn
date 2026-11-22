@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn
 """tools/ops/measure_candidate.py -- put a CANDIDATE build's wheels on a measurement box and print the one submit
-line of tools/ops/paper_compare_job.sh (lane measure-prep, 2026-11-09; docs/plans/PRE_0867_MEASUREMENT.md).
+line of tools/ops/paper_compare_job.sh (lane measure-prep, 2026-11-09; plan PRE_0867_MEASUREMENT (git history)).
 
     python3 tools/ops/measure_candidate.py stage nvidia|amd --version V --source-commit SHA [--wheel-dir DIR]
         [--lane LANE] [--tree DIR] [--b-arm NAME=DIR@SHA ...] [--tag TAG] [--parts PARTS] [--dry-run]

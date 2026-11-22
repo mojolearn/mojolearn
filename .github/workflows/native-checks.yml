@@ -3,7 +3,7 @@ name: Native checks
 # The native Mojo checks (checks/native_tests/, one shared runner: runner.mojo, registry.mojo, run_cpu.mojo) compiled
 # and run on the free GitHub Linux runners. The integration compile (tools/release.py candidate) builds the bindings
 # only, never the checks; the orchestrator dispatches this after each integration merge
-# (docs/plans/TEST_MIGRATION_2026-11-14.md). GPU checks run on the rented L40S pod with
+# (plan TEST_MIGRATION_2026-11-14 (git history)). GPU checks run on the rented L40S pod with
 # tools/ops/native_checks_gpu_job.sh.
 #
 # plan: list the registered checks of the column matching `filter` from the source (registry.mojo and each check's

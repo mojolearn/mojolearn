@@ -2697,7 +2697,7 @@ _MODE_CHECKED = {}
 def plan_bindings(names):
     """The identical GPU bindings among `names` this install has, for a
     multi-GPU driver's device plan (core/device_plan.mojo,
-    docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md): the driver binds its
+    plan NATIVE_PARALLEL_DRIVER_20261024 (git history)): the driver binds its
     devices in each binding its plain owner may reach. A binding this
     install lacks is skipped (its owner is not reached either); on a
     CPU-only install the driver refuses before any binding is used, so the

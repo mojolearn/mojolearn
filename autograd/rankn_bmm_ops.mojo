@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# THE BATCHED MATRIX PRODUCT (lane ag-rankn-bmm, docs/plans/AUTOGRAD_RANKN.md
+# THE BATCHED MATRIX PRODUCT (lane ag-rankn-bmm, plan AUTOGRAD_RANKN (git history)
 # section 2.3). One body, OP_RN_BMM, serves the forward and both VJPs of
 # autograd/rankn_bmm.mojo's rankn_matmul: one thread per output word, the
 # operands read in place through strides (a permuted or transposed operand

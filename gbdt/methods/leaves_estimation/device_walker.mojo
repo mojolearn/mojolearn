@@ -765,7 +765,7 @@ def device_walk_enqueue_speculative(
 
 
 #: Tree op TREE_OP_LEAF_ESTIMATE's status code (lane t1b-tree-leaf-and-node-ops,
-#: docs/plans/EXECUTOR_T1_TREE_OPS.md section 5): the walk's first
+#: plan EXECUTOR_T1_TREE_OPS (git history) section 5): the walk's first
 #: `iterations` line-search evaluations accepted nothing, so the walker's
 #: never-accepted tail (`iteration < 100`, `descent_helpers.cpp:179`, one
 #: drain per evaluation) owns this round. A code of its own range, so it is
@@ -815,7 +815,7 @@ def device_walk_enqueue_bounded(
     data-dependent loop length left is that tail's: a device-side loop
     whose trip count is a device word needs a conditional launch the
     toolchain does not offer (recorded as an ask for Modular in
-    docs/plans/EXECUTOR_T1_TREE_OPS.md), so it is not emulated here with
+    plan EXECUTOR_T1_TREE_OPS (git history)), so it is not emulated here with
     up to 100 gated evaluations per round."""
     var finished = device_walk_begin(ctx, oracle, w, iterations)
     if not finished:

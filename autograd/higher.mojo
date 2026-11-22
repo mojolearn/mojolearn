@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # HIGHER-ORDER GRADIENTS: THE RECORDED BACKWARD (lane ag-ho-core, H1 of
-# docs/plans/AUTOGRAD_HIGHER_ORDER.md).
+# plan AUTOGRAD_HIGHER_ORDER (git history)).
 #
 # backward_recorded walks the graph exactly as the first-order
 # Tape._backward does (the active ancestors of the root, reverse creation
@@ -186,7 +186,7 @@ def _layer_norm_vjp[E: Exec](
 def lower_vjp[E: Exec](mut tape: Tape, mut ex: E, i: Int, upstream: Tensor, edge: Int) raises -> Tensor:
     """The VJP of node i into its input `edge` for the upstream gradient
     tensor `upstream` (node i's shape), as recorded tape operations: a
-    tensor of the input's shape (docs/plans/AUTOGRAD_HIGHER_ORDER.md 1.2).
+    tensor of the input's shape (plan AUTOGRAD_HIGHER_ORDER (git history) 1.2).
     The fused kinds go to lower_fused_vjp; custom rules are refused."""
     var n = tape._nodes[i]
     var op = n.op

@@ -69,7 +69,7 @@ def coarse_kernel(count: Int32, q0: Int32, queries: F32P, dim: Int32, centers: F
         cd.unsafe_store(e, pq_coarse_dist(queries, (Int(q0) + lq) * Int(dim), centers, l, Int(dim)))
 
 
-# lane gap-small-members (2026-10-08, plan docs/plans/gaps-2026-10-08.md
+# lane gap-small-members (2026-10-08, plan plan gaps-2026-10-08 (git history)
 # section 11): the coarse step as a tiled distance block. `coarse_kernel`
 # gives each (query, list) thread its own pass over both rows from device
 # memory (220 features on istella: every center row read once per query,

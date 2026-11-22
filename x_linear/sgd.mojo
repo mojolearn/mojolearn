@@ -1016,7 +1016,7 @@ comptime SGD_OC_IDN_MB_DEFAULT = (
 # Quality: the live test of 0.8.50/0.8.51 (Apple M4, raw breast_cancer, 569
 # rows, 3-fold cv accuracy) had 'auto' at 32 steps trail per-sample updates
 # and scikit-learn (SGDClassifier 0.687 vs 0.807 vs 0.849); a float64 model
-# of `sgd_mb_one` (lane notes, docs/plans/SGD_QUALITY_2026-10-17.md) puts the
+# of `sgd_mb_one` (lane notes, plan SGD_QUALITY_2026-10-17 (git history)) puts the
 # loss on the step count on unscaled data at every size (synthetic 10k rows,
 # features scaled up to 1000x, summed step: hinge accuracy 0.75 at 32 steps, 0.79 at 128,
 # 0.86 at 512, 0.87 per-sample, scikit-learn 0.89; SGDRegressor on raw

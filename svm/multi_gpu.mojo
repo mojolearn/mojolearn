@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Row-sharded SVM kernel matrices over a `DevicePlan`
-(docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md).
+(plan MULTI_GPU_ENCAPSULATION_20261103 (git history)).
 
 `kernel_matrix_dispatch(plan, ...)` is the one SVM kernel-matrix entry above
 the single-device `kernel_op` (svm/impl/distance/kernel_matrices.mojo). With

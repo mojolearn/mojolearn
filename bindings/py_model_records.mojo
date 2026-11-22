@@ -2,7 +2,7 @@
 """One native record table per object: model identity, generation word, family slots (door side).
 
 Every per-model record of the native doors lives here (plan
-docs/plans/NATIVE_ENTRY_POINTS_AFTER_0866.md, workstream E; lessons 8 and 9):
+plan NATIVE_ENTRY_POINTS_AFTER_0866 (git history), workstream E; lessons 8 and 9):
 one weak side table keyed by object identity, outside the object's
 `__dict__`, with one generation word per object and one slot per family. It
 replaces the separate registries of `native_prepared_owner`,

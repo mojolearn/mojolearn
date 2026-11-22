@@ -11199,7 +11199,7 @@ def fused_backward_launch_estash_report(
 # (Sweep 2026-11-15: the fused v2 key-axis fold (fused_attn_v2_leaf_kernel, fused_attn_v2_combine_kernel,
 # _launch_fwd_v2, _attn_v2_rows) and the four ATTN_FOLD_V2 arms of this file removed: MOJOLEARN_IDN_ATTN_FOLD_V2 is
 # deleted (lane/expdel2-33-neural) and ATTN_FOLD_V2 is False on every build.)
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #3 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)
 # brings the fused v2 fold back (reverse of a803ea45ba, the ATTN_FOLD_V2 parts only; the estash recompute stub that
 # commit's context carried stays deleted).
 def fused_backward_launch_erecomp_report(

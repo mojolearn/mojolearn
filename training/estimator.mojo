@@ -439,7 +439,7 @@ def _scratch(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType
 # MOJOLEARN_OPT_POOL / MOJOLEARN_OPT_STAGE / MOJOLEARN_OPT_PIPE forced either
 # side at run time, MOJOLEARN_OPT_PIPE_FLOATS set the chunk. Now each is a
 # build constant holding the same per-column default (ROUTE-OK,
-# docs/plans/ENV_GATES_2026-11-15.md); the other side is a -D arm:
+# plan ENV_GATES_2026-11-15 (git history)); the other side is a -D arm:
 #   -D MOJOLEARN_OPT_POOL / -D MOJOLEARN_OPT_POOL_OFF    force pooled buffers on / off
 #   -D MOJOLEARN_OPT_STAGE / -D MOJOLEARN_OPT_STAGE_OFF  force the staged download on / off
 #   -D MOJOLEARN_OPT_PIPE / -D MOJOLEARN_OPT_PIPE_OFF    force the pipelined transport on / off

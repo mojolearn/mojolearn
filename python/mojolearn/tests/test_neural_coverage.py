@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Release-gate coverage of neural and sequence endpoints changed since
-0.8.55 (docs/plans/TEST_COVERAGE_20261021.md): SambaStack gradients and
+0.8.55 (plan TEST_COVERAGE_20261021 (git history)): SambaStack gradients and
 checkpoints, SambaInference, TSNE through the one-call PCA, Sequential
 layers, and the integer counts of CausalLM and its blocks. Real calls first,
 then poisoned inputs that the native boundary refuses by name. Tiny models,

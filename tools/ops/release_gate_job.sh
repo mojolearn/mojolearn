@@ -1,6 +1,6 @@
 #!/bin/bash
 # tools/ops/release_gate_job.sh -- ONE NVIDIA/AMD release gate job on the box (plan item 4 of
-# docs/plans/POST_0863_RELEASE_TOOLING.md). tools/ops/release_gate.py uploads this file verbatim beside
+# plan POST_0863_RELEASE_TOOLING (git history)). tools/ops/release_gate.py uploads this file verbatim beside
 # its gate.env and launches it through the supported wrappers, which run it under
 # tools/box_persist_run.sh (results to R2 from the box):
 #   tools/nvidia_central.sh submit release-gate --cap 180 --results <res> <in>/release_gate_job.sh

@@ -776,7 +776,7 @@ patchelf 0.17.2, its runtime donor this run's first assembled set or a
 retained `<leg>/release-build/build` (`run --host-donor DIR`: the Mac uploads
 it to R2 and passes one presigned GET plus its sha256). Its artifact
 `host-build` is what `tools/retained_release_composition.py --host-build`
-takes; the job adds the host compile's swap like a shard (`docs/plans/RETAINED_DEVICE_HOST_COMPOSITION_20261025.md`).
+takes; the job adds the host compile's swap like a shard (plan RETAINED_DEVICE_HOST_COMPOSITION_20261025 (git history)).
 
 **The cache without R2.** With no `map_url` (`run --no-bincache`) each shard
 restores its hot directory from `actions/cache` (key

@@ -1,5 +1,5 @@
 """PageRank and Louvain as parallel items in a fixed order (lane hr-graph,
-2026-10-02, docs/plans/HOST_ROUTE_REMOVAL.md).
+2026-10-02, plan HOST_ROUTE_REMOVAL (git history)).
 
 Every stage is an item `t` of a launch; the device runs the items as threads
 (x_neighbors/graph_dev.mojo), the host column runs the SAME items in
@@ -33,7 +33,7 @@ in ascending id (equal gains: the smallest id). Its k_i,in per community
 is the fold of its edges to that community in ascending column order
 (an in-thread heap sort of (community, column) keys). The community
 totals are FIXED-POINT INTEGERS updated incrementally (lane gap-graph,
-2026-10-08, docs/plans/gaps-2026-10-08.md 5.1): every degree is quantized
+2026-10-08, plan gaps-2026-10-08 (git history) 5.1): every degree is quantized
 once to an int64 at a power-of-two scale chosen from 2m (`_lv_shift`), a
 community's total is the int64 sum of its members' quantized degrees held
 as two int32 words, and after a colour's moves each mover adds +dq to its

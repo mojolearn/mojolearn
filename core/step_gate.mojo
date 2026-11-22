@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The gate shared by the executor's linear-algebra step ops (lane
-n7-device-linalg-ops, 2026-11-08; docs/plans/EXECUTOR_N7_OPS.md).
+n7-device-linalg-ops, 2026-11-08; plan EXECUTOR_N7_OPS (git history)).
 
 A step op of a bounded device loop (`autograd/program_loop_device.mojo`)
 enqueues its kernels on the loop's stream and must leave every buffer it

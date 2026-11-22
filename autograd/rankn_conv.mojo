@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # conv2d, max_pool2d and avg_pool2d on the tape's rank-4 tensors (lane
-# ag-rankn-conv, docs/plans/AUTOGRAD_RANKN.md section 2.8). NCHW, x_cnn's
+# ag-rankn-conv, plan AUTOGRAD_RANKN (git history) section 2.8). NCHW, x_cnn's
 # layout: x [N, C, H, W], weight [OC, C, KH, KW], bias [OC].
 #
 # Each op is a CUSTOM node (autograd/rules_conv2d.mojo Conv2dRules, tags

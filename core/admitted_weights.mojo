@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The weight status pass of admitted sample weights (no Python import).
 
-Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 5,
+Plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.2 step 5,
 lane A2 admit-family (2026-11-08). `bindings/admitted_family.mojo`
 `admit_family_weights` reaches these; they replace the serial walks of
 core/family_weights_impl.mojo (deleted with this lane).

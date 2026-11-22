@@ -4392,7 +4392,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-query-rmse-pointwise": "unwatched",
     # lane/verify-coverage-audit (2026-10-21): lanes for endpoints new or changed
     # since the last release that no lane reached
-    # (docs/plans/VERIFY_COVERAGE_20261021.md); no release record yet.
+    # (plan VERIFY_COVERAGE_20261021 (git history)); no release record yet.
     "gp-lml-theta": "unwatched",
     "cross-vendor-fold": "unwatched",
     "transformer-decode-load-state": "unwatched",

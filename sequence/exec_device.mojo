@@ -1048,7 +1048,7 @@ struct DeviceExec(Exec, Movable):
         # The autograd family (OP_AG_FIRST..OP_AG_LAST, autograd/ops.mojo) runs
         # here like every other code: qualified 2026-10-18 with the 97-case
         # gradient suite giving the same digests on Metal, NVIDIA L40S and AMD
-        # MI325X (docs/plans/NATIVE_AUTOGRAD.md, "GPU status").
+        # MI325X (plan NATIVE_AUTOGRAD (git history), "GPU status").
         # lane ag-pass6-host (idea G): twelve comparisons, no List literal per
         # launch; the List walk runs only on the refusal, to name the value.
         if _args_i32_out(a):

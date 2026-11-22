@@ -261,7 +261,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.fused_level import (
 
 # ================= DEVIATION 3110 (scheduling only) =================
 # THE SYMMETRIC LEVEL IN FEWER LAUNCHES AND THE TREE IN ONE DRAIN (lane
-# hr-gbdt-small, docs/plans/HOST_ROUTE_REMOVAL.md). A small pool was launch
+# hr-gbdt-small, plan HOST_ROUTE_REMOVAL (git history)). A small pool was launch
 # and sync bound on the GPU (Apple M4, 320 to 20,000 rows: 4 to 5 ms a Plain
 # tree), which is what the deleted small-pool host route papered over. Per
 # planned level the unfused schedule launches
@@ -5802,7 +5802,7 @@ def run_tree_layout_traced[
     dynamic_fold_counts: List[Int] = List[Int](),
     dynamic_one_hot: List[Bool] = List[Bool](),
     # lane t3-gbdt-greedy-on-device-loop: tree op TREE_OP_GREEDY_SEARCH
-    # (docs/plans/EXECUTOR_T1_TREE_OPS.md section 8). True: the level loop,
+    # (plan EXECUTOR_T1_TREE_OPS (git history) section 8). True: the level loop,
     # then the gates, the rollback and the coverage check ON THE DEVICE
     # (`greedy_gate_and_tail`) into `structure_out` / `words_out`; nothing
     # is read back and nothing drains; returns an empty list and leaves

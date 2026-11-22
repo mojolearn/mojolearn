@@ -4921,7 +4921,7 @@ def _build_graph(lane, arm, D):
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
         # lane/neural-pass69 (2026-10-01) for components, lane gap-graph
-        # (2026-10-08, docs/plans/gaps-2026-10-08.md 5.1/5.2) for pagerank
+        # (2026-10-08, plan gaps-2026-10-08 (git history) 5.1/5.2) for pagerank
         # and louvain: the sparse graph, as the opponents receive it (scipy's
         # csgraph, networkx and cuGraph read the CSR); the (indptr, indices,
         # n) tuple is PageRank's and Louvain's CSR entry too (`knn_graph`

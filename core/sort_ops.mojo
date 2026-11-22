@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The device sort as an executor step op (lane n7-device-linalg-ops,
-2026-11-08; docs/plans/EXECUTOR_N7_OPS.md). Host twin: core/sort_ops_host.mojo.
+2026-11-08; plan EXECUTOR_N7_OPS (git history)). Host twin: core/sort_ops_host.mojo.
 
 `sort_op_f32` returns the ORDER of n float32 keys: order[r] = the input
 index of the r-th key. The order is the unique stable order of the keys'

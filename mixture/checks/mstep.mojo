@@ -2075,7 +2075,7 @@ def gmm_precision_cholesky(
 # THE PRECISION CHOLESKY AS A STEP OP (lane n1-gmm-bgmm-loops, 2026-11-09)
 # ===========================================================================
 #
-# The fit's precision Cholesky, enqueue only (docs/plans/EXECUTOR_N7_OPS.md
+# The fit's precision Cholesky, enqueue only (plan EXECUTOR_N7_OPS (git history)
 # "The contract every op keeps"): the pivot of every component lands in a
 # device word, `gmm_first_fail_kernel` turns them into the step's status
 # (the first failing component ascending and its LAPACK info, the decision

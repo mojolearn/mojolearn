@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# RANK-N LAYOUT OPS (lane ag-rankn-layout, docs/plans/AUTOGRAD_RANKN.md
+# RANK-N LAYOUT OPS (lane ag-rankn-layout, plan AUTOGRAD_RANKN (git history)
 # sections 2.5 and 2.6): concat, narrow, split and take along any axis of a
 # tape tensor, and RankNLayoutRules, the backward of the two custom tags.
 #

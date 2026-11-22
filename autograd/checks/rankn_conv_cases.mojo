@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Lane ag-rankn-conv (docs/plans/AUTOGRAD_RANKN.md section 2.8): checks of
+# Lane ag-rankn-conv (plan AUTOGRAD_RANKN (git history) section 2.8): checks of
 # the tape's rank-4 conv2d, max_pool2d and avg_pool2d on any executor
 # (HostExec, Metal, NVIDIA, AMD).
 #   conv2d: x [2, 3, 9, 11], weight [4, 3, 3, 3], bias [4]; stride 1 and 2,

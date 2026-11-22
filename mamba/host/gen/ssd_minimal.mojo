@@ -713,7 +713,7 @@ comptime M2_CS_IC = 32
 # kernels) deleted 2026-11-15 by lane/expdel2-27-neural; code recoverable at 44ec9b2ec9.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_SSD_OCCUPANCY.patch
 # (Sweep 2026-11-15: the unread IDN_SSD_OCCUPANCY = False constant removed.)
-# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #5 of docs/plans/DELETED_ARMS_WORTH_RUNNING_2026-11-15.md
+# RESTORED 2026-11-15 by lane/restore-run-arms-neural: RUN #5 of plan DELETED_ARMS_WORTH_RUNNING_2026-11-15 (git history)
 # (mamba2-forward, NVIDIA L40S A/B owed). The MOJOLEARN_IDN_ALL_OFF term is not restored (that define stays deleted).
 # ===========================================================================
 # lane nv-occupancy (2026-10-28, idea 8 of neural-perf-ideas-20261028):

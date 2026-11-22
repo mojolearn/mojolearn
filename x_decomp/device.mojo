@@ -210,7 +210,7 @@ comptime PJ_SYNC_ROUNDS = 512
 comptime IDN_XD_SWEEP = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime IDN_XD_NO_WAIT = IDN_XD_SWEEP and TARGET_COLUMN != COLUMN_APPLE
 comptime XD_NO_FLAG = Int32(2147483647)
-# lane gap-tsqr (2026-10-08, docs/plans/gaps-2026-10-08.md section 7, item 4),
+# lane gap-tsqr (2026-10-08, plan gaps-2026-10-08 (git history) section 7, item 4),
 # IDENTICAL: svd's round-robin Jacobi enqueues XD_SVD_GROUP sweeps between
 # two convergence readbacks (each sweep its own flag slice and its own
 # lowest-flag word), not one sweep per wait: at n = 220 a sweep is 219

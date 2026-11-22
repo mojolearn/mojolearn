@@ -26,7 +26,7 @@
 # BOX_BINCACHE=0 compiles every group. `--plan` prints, per group, `hit (...)`
 # or `compile: <reason>` (tools/bincache.py explain) and builds nothing.
 #
-# Then the owed GPU evidence (2026-10-21, docs/plans/BOX_JOBS_20261021.md), each
+# Then the owed GPU evidence (2026-10-21, plan BOX_JOBS_20261021 (git history)), each
 # a function guarded by what the box has, each step `st`-logged, none aborting
 # the chain. BOX_JOBS (empty by default) explicitly picks them:
 #   dist      physical multi-GPU checks, only with 2+ GPUs on the box
@@ -323,7 +323,7 @@ job_dist() {
   st "DIST done: $(awk -F'\t' '$2==0{p++} $2!=0{f++} END{printf "pass=%d fail=%d", p, f}' $D/status.tsv)"
 }
 
-# 2. Captured-graph optimizer A/B (docs/plans/GRAPH_OPTIMIZER_RUNNER_20261020.md): the saved full workloads,
+# 2. Captured-graph optimizer A/B (plan GRAPH_OPTIMIZER_RUNNER_20261020 (git history)): the saved full workloads,
 # baseline (optimize=False) vs candidate (optimize=True), ONE scored run per arm, from an installed copy of
 # the package (the runner refuses a checkout path). A workload the Mac staged under /root/stage/graph-opt/
 # <name>/ (the other vendor's retained bytes) is used as is, so `compare` sees the same workload on both.

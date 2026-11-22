@@ -2,8 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host gather of a model-selection fold's rows, with the finite test
 in the same pass (lane a5-admit-core-followup, 2026-11-08; plan
-docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 4;
-docs/plans/REGRESSIONS_0866_VS_0855.md row R13).
+plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.2 step 4;
+plan REGRESSIONS_0866_VS_0855 (git history) row R13).
 
 A `_arena_io.DeviceRows` fold is rows `indices` (int64) of a float32 C-order
 base that model selection holds on the host (and resident on the device).

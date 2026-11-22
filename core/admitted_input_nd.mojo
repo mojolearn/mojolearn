@@ -4,7 +4,7 @@
 rank-N member of the admission path of
 `core/admitted_input.mojo`.
 
-Plan docs/plans/EXECUTOR_CONSOLIDATION_AND_CLEANUP.md section 3.2 step 2
+Plan plan EXECUTOR_CONSOLIDATION_AND_CLEANUP (git history) section 3.2 step 2
 ("`family_cast_rows_finite`'s shape generalised to N-d strides, so
 `xseq_cast_nd` folds in"), lane A4 a4-admit-sequence-tsa-neural, 2026-11-08.
 

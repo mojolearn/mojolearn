@@ -143,7 +143,7 @@ ENTRIES = (
      "what": "CausalLM.load + greedy generate of a tiny byte-LM checkpoint (the causal-lm-generate board lanes)"},
     {"name": "sequential-predict-smoke", "probe": "predict",
      "what": "a tiny Sequential predict_proba inside the board's memory pass (the sequential-predict board lane)"},
-    # 2026-10-19 (lane ag-ho-checks): higher-order gradients, docs/plans/AUTOGRAD_HIGHER_ORDER.md section 6
+    # 2026-10-19 (lane ag-ho-checks): higher-order gradients, plan AUTOGRAD_HIGHER_ORDER (git history) section 6
     {"name": "autograd-higher", "source": "autograd/checks/higher_gpu.mojo",
      "what": "the higher-order gradient suite (create_graph) on the vendor's GPU, HIGHER_DIGEST lines"},
     {"name": "autograd-import-ops", "source": "autograd/checks/import_gpu.mojo",
@@ -158,7 +158,7 @@ ENTRIES = (
     # captured program, covered by the public SmallMLPTrainer tests and the `mlp` identity lane.
     {"name": "autograd-samba-tape", "source": "training/checks/samba_tape_step_check.mojo",
      "what": "Samba whole-stack tape backward, loss, gradients and updated parameter digests"},
-    # 2026-10-20 (lane ag-import-docs): model import, docs/plans/MODEL_IMPORT.md
+    # 2026-10-20 (lane ag-import-docs): model import, plan MODEL_IMPORT (git history)
     {"name": "import-model-smoke", "probe": "import",
      "what": "mojolearn.import_model of a tiny ONNX file written in process, then one Program.run"},
     # 2026-10-20 (lane ag-torch-twins; 2026-10-22 two-step): a torch module through ONNX; RUN or SKIPPED, never silent

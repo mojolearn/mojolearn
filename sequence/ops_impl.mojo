@@ -796,7 +796,7 @@ def _fast_norms() -> Bool:
     return GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
 
 
-#: lane hr-adafactor (2026-10-02, docs/plans/HOST_ROUTE_REMOVAL.md): under
+#: lane hr-adafactor (2026-10-02, plan HOST_ROUTE_REMOVAL (git history)): under
 #: IDENTICAL, Adafactor's two whole-tensor norms of more than AF_NORM_BLOCK
 #: values are the blocked order on the device (sequence/adafactor.mojo):
 #: block partials, one GPU thread per block, then the partials added

@@ -135,7 +135,7 @@ struct _PassRules(BackwardRules):
 
 
 def run_alias_checks[E: Exec](mut ex: E) raises:
-    """Aliasing and mutation refusals (docs/plans/NATIVE_AUTOGRAD.md,
+    """Aliasing and mutation refusals (plan NATIVE_AUTOGRAD (git history),
     "Aliasing and mutation"): overlapping caller storage, a seed over
     another gradient, backward after mark_mutated or a failed
     assert_unchanged are refused; the seed-in-place case is accepted."""

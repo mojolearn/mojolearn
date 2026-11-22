@@ -181,16 +181,16 @@ from autograd.rankn_ops import OP_RNC_FIRST, OP_RNC_LAST, apply_rankn_core
 # >>> lane ag-rankn-fold: rank-N broadcasts, axis reductions, max (4200..4219)
 from autograd.rankn_fold_ops import OP_RNF_FIRST, OP_RNF_LAST, apply_rankn_fold
 # <<< lane ag-rankn-fold
-# lane ag-rankn-bmm: the batched matrix product (docs/plans/AUTOGRAD_RANKN.md 2.3)
+# lane ag-rankn-bmm: the batched matrix product (plan AUTOGRAD_RANKN (git history) 2.3)
 from autograd.rankn_bmm_ops import OP_RNB_FIRST, OP_RNB_LAST, apply_rn_bmm
 # rank-N layout (lane ag-rankn-layout): the slab copy family, 4400..4409
 from autograd.rankn_layout_ops import OP_RNL_FIRST, OP_RNL_LAST, apply_rankn_layout
 # ---- lane ag-rankn-conv (AUTOGRAD_RANKN.md 2.8): rank-4 conv2d and pools, 4500..4519
 from autograd.rankn_conv_ops import OP_RNV_FIRST, OP_RNV_LAST, apply_rankn_conv
-# ---- lane ag-import-kernels (docs/plans/MODEL_IMPORT.md 3.3): the import elementwise family, 4600..4619
+# ---- lane ag-import-kernels (plan MODEL_IMPORT (git history) 3.3): the import elementwise family, 4600..4619
 from autograd.import_ops import OP_IMP_FIRST, OP_IMP_LAST, apply_import
 # ---- end lane ag-import-kernels
-# lane ag-ho-core (H1, docs/plans/AUTOGRAD_HIGHER_ORDER.md): the higher-order bodies
+# lane ag-ho-core (H1, plan AUTOGRAD_HIGHER_ORDER (git history)): the higher-order bodies
 from autograd.higher_ops import OP_HO_FIRST, OP_HO_LAST, apply_higher
 from autograd.transformer_primitives_ops import OP_TFP_FIRST, OP_TFP_LAST, apply_transformer_primitive
 # lane fix-d3-executor-loops: the program loop's control ops (autograd/program_loop.mojo), 1800..1809
@@ -411,7 +411,7 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_CAST_FIRST or OP_CELL_BWD_SCAN > OP_CAST_LAST
     ), "cast opcode collides with recurrent scan"
     # ---- lane ag-rankn-core: the rank-N view copy (autograd/rankn_ops.mojo
-    # OP_RNC_*, 4100..4109; docs/plans/AUTOGRAD_RANKN.md section 7), above the
+    # OP_RNC_*, 4100..4109; plan AUTOGRAD_RANKN (git history) section 7), above the
     # cast family and the higher-order plan's 3600..3619.
     comptime assert OP_RNC_FIRST <= OP_RNC_LAST, "rank-N core opcode range is empty"
     comptime assert OP_RNC_FIRST > OP_CAST_LAST and OP_RNC_FIRST > OP_EMB_LAST and OP_RNC_FIRST > OP_MOEB_LAST and OP_RNC_FIRST > OP_AGH_LAST and OP_RNC_FIRST > OP_AGS_LAST and OP_RNC_FIRST > OP_ROW_LAST and OP_RNC_FIRST > OP_GK_LAST and OP_RNC_FIRST > OP_AGC_LAST, "rank-N core opcodes overlap a lower family"
@@ -422,7 +422,7 @@ def apply[OP: Int](t: Int, a: Args):
     ), "rank-N core opcode collides with recurrent scan"
     # ---- end lane ag-rankn-core
     # >>> lane ag-rankn-fold: the rank-N broadcast / reduction / max family
-    # (autograd/rankn_fold_ops.mojo OP_RNF_*, 4200..4219; docs/plans/AUTOGRAD_RANKN.md 7)
+    # (autograd/rankn_fold_ops.mojo OP_RNF_*, 4200..4219; plan AUTOGRAD_RANKN (git history) 7)
     comptime assert OP_RNF_FIRST <= OP_RNF_LAST, "rank-N fold opcode range is empty"
     comptime assert OP_RNF_FIRST > OP_CAST_LAST and OP_RNF_FIRST > OP_EMB_LAST and OP_RNF_FIRST > OP_MOEB_LAST and OP_RNF_FIRST > OP_AGH_LAST and OP_RNF_FIRST > OP_AGS_LAST and OP_RNF_FIRST > OP_ROW_LAST and OP_RNF_FIRST > OP_GK_LAST and OP_RNF_FIRST > OP_AGC_LAST, "rank-N fold opcodes overlap a lower family"
     comptime assert OP_RNF_FIRST > OP_AG_LAST and OP_RNF_FIRST > OP_AGD_LAST and OP_RNF_FIRST > OP_AGO_LAST and OP_RNF_FIRST > OP_LS_LAST and OP_RNF_FIRST > OP_AGM_LAST and OP_RNF_FIRST > OP_AGK_LAST and OP_RNF_FIRST > OP_P1_LAST and OP_RNF_FIRST > OP_AGF_LAST and OP_RNF_FIRST > OP_MLP_LB_LAST, "rank-N fold opcodes overlap an autograd family"
@@ -439,7 +439,7 @@ def apply[OP: Int](t: Int, a: Args):
         OP_CELL_BWD_SCAN < OP_RNB_FIRST or OP_CELL_BWD_SCAN > OP_RNB_LAST
     ), "rank-N bmm opcode collides with recurrent scan"
     # ---- rank-N layout (lane ag-rankn-layout; autograd/rankn_layout_ops.mojo
-    # OP_RNL_*, 4400..4409, docs/plans/AUTOGRAD_RANKN.md section 7) ----
+    # OP_RNL_*, 4400..4409, plan AUTOGRAD_RANKN (git history) section 7) ----
     comptime assert OP_RNL_FIRST <= OP_RNL_LAST, "rank-N layout opcode range is empty"
     comptime assert OP_RNL_FIRST > OP_CAST_LAST and OP_RNL_FIRST > OP_EMB_LAST and OP_RNL_FIRST > OP_MOEB_LAST and OP_RNL_FIRST > OP_AGH_LAST and OP_RNL_FIRST > OP_AGS_LAST and OP_RNL_FIRST > OP_ROW_LAST and OP_RNL_FIRST > OP_GK_LAST and OP_RNL_FIRST > OP_AGC_LAST, "rank-N layout opcodes overlap a lower family"
     comptime assert OP_RNL_FIRST > OP_AG_LAST and OP_RNL_FIRST > OP_AGD_LAST and OP_RNL_FIRST > OP_AGO_LAST and OP_RNL_FIRST > OP_LS_LAST and OP_RNL_FIRST > OP_AGM_LAST and OP_RNL_FIRST > OP_AGK_LAST and OP_RNL_FIRST > OP_P1_LAST and OP_RNL_FIRST > OP_AGF_LAST and OP_RNL_FIRST > OP_MLP_LB_LAST, "rank-N layout opcodes overlap an autograd family"

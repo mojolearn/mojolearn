@@ -1,9 +1,9 @@
 # The optimizer's device plan, read ONCE per process and passed down as a
-# value (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md, target 5). This is
+# value (plan MULTI_GPU_ENCAPSULATION_20261103 (git history), target 5). This is
 # the only runtime reader of MOJOLEARN_OPTIMIZER_DEVICE_COUNT: the samba
 # bindings, the public optimizer entries, the parallel MLP admission and the
 # native dispatch tables all take their plan or setting here. USER-SETTING
-# (docs/plans/ENV_GATES_2026-11-15.md): until 2026-11-15 it was an
+# (plan ENV_GATES_2026-11-15 (git history)): until 2026-11-15 it was an
 # environment read at every native optimizer entry (per step / clip /
 # accumulate); now the first entry of the process reads it into a typed
 # process slot and every later entry reads the slot (lane

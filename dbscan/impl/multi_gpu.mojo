@@ -32,7 +32,7 @@ from neighbors.impl.ball_cover.common import RBC_METRIC_DEFAULT
 
 def dbscan_device_plan() raises -> DevicePlan:
     """The DBSCAN family's device plan, read once at a family entry
-    (docs/plans/MULTI_GPU_ENCAPSULATION_20261103.md). Its `setting` is what
+    (plan MULTI_GPU_ENCAPSULATION_20261103 (git history)). Its `setting` is what
     `device_plan_setting("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1")` returned, so
     `_devices` parses the same text as before."""
     return device_plan_current("MOJOLEARN_DBSCAN_DEVICE_COUNT", "1")

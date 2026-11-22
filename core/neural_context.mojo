@@ -54,7 +54,7 @@ tools/devctx_lifetime_proof.sh). Rules for a caller:
   * Multi-GPU drivers (`DeviceContext(device_id=rank)`) are not on this slot.
 
 THE DEVICE PLAN'S ROOT (lane/native-parallel-driver-20261024,
-docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md). A native multi-GPU driver
+plan NATIVE_PARALLEL_DRIVER_20261024 (git history)). A native multi-GPU driver
 binds the selected devices to the calling thread (core/device_plan.mojo);
 its first device is the root, which the old cooperative worker reached as
 its device 0 through the visibility mask. While a plan whose root is not
