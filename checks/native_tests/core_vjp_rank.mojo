@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """First-derivative ranks of the session's vjp, moved from
 test_vjp_rank_native.py (2026-11-14).
 
@@ -14,12 +15,13 @@ the session's recovery after it, stay in the Python test.
 """
 from autograd.ops_api import OpsSession
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, values, scale
-from checks.native_tests.core_ops_common import exact, dims3, dims4, opi
-from core.host_parallel import host_parallelize
+from checks.native_tests.ops_higher_common import tensor, values, scale
+from checks.native_tests.core_ops_common import exact, dims3, dims4, opi, require
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
 
 
 comptime CORE_VJP_RANK_FIXTURES = 3
@@ -84,39 +86,29 @@ def run_core_vjp_rank_fixture[E: Exec & Movable & Deinitable](
     exact(values(s, d[1], dims3(1, 1, 2)), want_db, "db sums the broadcast axes")
 
 
-# ---- The host column (was core_vjp_rank_cpu_suite.mojo) ----
-# First-derivative ranks of the session's vjp: each fixture on its own two host sessions, the fixtures run
-# across host cores with a private failure slot each.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_VJP_RANK_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var record = True
-            var s = OpsSession[HostExec](HostExec(), record)
-            var again = OpsSession[HostExec](HostExec(), record)
-            try:
-                run_core_vjp_rank_fixture(s, again, fixture_id)
-            except error:
-                s.close()
-                again.close()
-                raise error
-            s.close()
-            again.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, CORE_VJP_RANK_FIXTURES)
+def _host_fixture(fixture_id: Int) raises:
+    var record = True
+    var s = OpsSession[HostExec](HostExec(), record)
+    var again = OpsSession[HostExec](HostExec(), record)
+    try:
+        run_core_vjp_rank_fixture(s, again, fixture_id)
+    except error:
+        s.close()
+        again.close()
+        raise error
+    s.close()
+    again.close()
 
 
-# ---- The device column (was core_vjp_rank_gpu_suite.mojo) ----
-# First-derivative ranks of the session's vjp on the device, in order.
-#
-# DeviceExec shares sequence_ctx() and its pool, so independent concurrent
-# sessions would race that context's ownership (as in ops_higher_gpu); the
-# fixtures run one after another and each kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_VJP_RANK_FIXTURES)
-    for fixture_id in range(CORE_VJP_RANK_FIXTURES):
-        try:
+# The host column: each fixture on its own two host sessions, the fixtures across host cores. The device column:
+# DeviceExec shares sequence_ctx() and its pool, so independent concurrent sessions would race that context's
+# ownership (as in ops_higher's device column); the fixtures run one after another and each kernel keeps its own
+# parallelism.
+def test_vjp_rank() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("vjp_rank", CORE_VJP_RANK_FIXTURES, _host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var record = True
             var s = OpsSession[DeviceExec](DeviceExec(), record)
             var again = OpsSession[DeviceExec](DeviceExec(), record)
@@ -128,19 +120,8 @@ def _run_gpu(mut report: Report) raises:
                 raise error
             s.close()
             again.close()
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("vjp_rank", CORE_VJP_RANK_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_vjp_rank", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

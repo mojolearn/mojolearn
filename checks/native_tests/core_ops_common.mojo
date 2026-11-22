@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Shared helpers of the tmig-core-2 session checks (core_ops_*,
 core_vjp_rank, core_ops_layernorm_view, core_ops_program,
-core_ops_import_kinds). The session helpers are ops_higher_cases' (tensor,
+core_ops_import_kinds). The session helpers are ops_higher_common's (tensor,
 op1, op2, total, scale, values, gradient, same_words); this module adds the
 seeded data the moved tests drew from NumPy, regenerated natively, the
 remaining op spellings of `mojolearn.ops.Session` and the comparisons.
@@ -17,7 +17,11 @@ from std.memory import bitcast
 from autograd.ops_api import OpsSession
 from autograd.rankn import ShapeN
 from sequence.exec_trait import Exec
-from checks.native_tests.runner import require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 def _mix(x: UInt64) -> UInt64:

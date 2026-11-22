@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The transformer primitives of the native ops session (autograd/ops_api.mojo
 OPS_RMS_NORM, OPS_ROTARY, OPS_TRANSFORMER_LINEAR, OPS_TRANSFORMER_SOFTMAX,
 autograd/transformer_primitives.mojo), moved from
@@ -33,12 +34,14 @@ the Python test.
 from std.math import cos, exp, log, max, sin, sqrt
 from std.memory import bitcast, unsafe_memcpy
 from autograd.ops_api import OpsSession
-from checks.native_tests.ops_higher import gradient, op1, op2, tensor, total, values
+from checks.native_tests.ops_higher_common import gradient, op1, op2, tensor, total, values
 from sequence.exec_trait import Exec
-from core.host_parallel import host_parallelize
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.ops_higher_common import require
 
 
 comptime TRANSFORMER_OPS_PROGRAM_FIXTURES = 6
@@ -304,13 +307,14 @@ def run_transformer_ops_program_fixture[E: Exec & Movable & Deinitable](mut s: O
         raise Error("transformer_ops_program: no fixture " + String(fixture_id))
 
 
-# ---- The host column (was transformer_ops_program_cpu_suite.mojo) ----
-# The transformer-primitive session fixtures, each on its own recording host
-# session, run across host cores.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(TRANSFORMER_OPS_PROGRAM_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
+# ---- The host and device columns ----
+# The transformer-primitive session fixtures, each on its own recording session. The host column: across host
+# cores. The device column: DeviceExec shares sequence_ctx() and its pool, so independent concurrent sessions would
+# race that context's ownership (as in ops_higher's device column); the fixtures run one after another and each
+# kernel keeps its own parallelism.
+def test_transformer_ops_program() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
             var s = OpsSession[HostExec](HostExec(), True)
             try:
                 run_transformer_ops_program_fixture(s, fixture_id)
@@ -318,21 +322,9 @@ def _run_cpu(mut report: Report) raises:
                 s.close()
                 raise error
             s.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, TRANSFORMER_OPS_PROGRAM_FIXTURES)
-
-
-# ---- The device column (was transformer_ops_program_gpu_suite.mojo) ----
-# The transformer-primitive session fixtures on the device, in order.
-#
-# DeviceExec shares sequence_ctx() and its pool, so independent concurrent
-# sessions would race that context's ownership (as in ops_higher_gpu); the
-# fixtures run one after another and each kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(TRANSFORMER_OPS_PROGRAM_FIXTURES)
-    for fixture_id in range(TRANSFORMER_OPS_PROGRAM_FIXTURES):
-        try:
+        check_cases("transformer_ops_program", TRANSFORMER_OPS_PROGRAM_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var s = OpsSession[DeviceExec](DeviceExec(), True)
             try:
                 run_transformer_ops_program_fixture(s, fixture_id)
@@ -340,19 +332,8 @@ def _run_gpu(mut report: Report) raises:
                 s.close()
                 raise error
             s.close()
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("transformer_ops_program", TRANSFORMER_OPS_PROGRAM_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("transformer_ops_program", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

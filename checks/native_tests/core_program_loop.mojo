@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Program.while_loop as the executor's bounded loop, moved from
 test_program_loop.py (2026-11-14), through the typed entries the public door
 calls (autograd/program_control.mojo control_prepare / control_run, with the
@@ -23,11 +24,13 @@ from autograd.program_io import ProgramInput
 from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, op2, total, same_words
+from checks.native_tests.ops_higher_common import tensor, op2, total, same_words
 from checks.native_tests.core_ops_common import dims2, opi
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.core_ops_common import require
 
 
 comptime CORE_PROGRAM_LOOP_FIXTURES = 10
@@ -125,8 +128,8 @@ def run_core_program_loop_fixture[E: Exec & Movable & Deinitable, KIND: Int](sid
     same_words(r.outputs[0].data, six, "iteration register: x = 0 + 1 + 2 + 3")
 
 
-# ---- The host column (was core_program_loop_cpu_suite.mojo) ----
-# The bounded program loop on host sessions.
+# ---- The host and device columns ----
+# The bounded program loop on host sessions (host column) or device sessions (device column).
 #
 # Serial by nature: control_prepare/control_run reach a session through the
 # process-wide session table (autograd/ops_api.mojo _OPS_SESSIONS), whose
@@ -134,10 +137,9 @@ def run_core_program_loop_fixture[E: Exec & Movable & Deinitable, KIND: Int](sid
 # host tasks would race on that table. The fixtures are tiny (1 x 1 and 1 x 2
 # states, at most 10 iterations) and run one after another, each on its own
 # session.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CORE_PROGRAM_LOOP_FIXTURES)
-    for fixture_id in range(CORE_PROGRAM_LOOP_FIXTURES):
-        try:
+def test_program_loop() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(fixture_id: Int) raises:
             var sid = ops_session_open[HostExec, OPS_HOST](HostExec(), False)
             try:
                 run_core_program_loop_fixture[HostExec, OPS_HOST](sid, fixture_id)
@@ -145,23 +147,9 @@ def _run_cpu(mut report: Report) raises:
                 ops_session_close[HostExec, OPS_HOST](sid)
                 raise error
             ops_session_close[HostExec, OPS_HOST](sid)
-        except error:
-            cases.fail(fixture_id, error)
-
-
-# ---- The device column (was core_program_loop_gpu_suite.mojo) ----
-# The bounded program loop on device sessions.
-#
-# Serial by nature: control_prepare/control_run reach a session through the
-# process-wide session table (autograd/ops_api.mojo _OPS_SESSIONS), whose
-# open/close append to and pop from unlocked lists, so concurrent sessions from
-# host tasks would race on that table. The fixtures are tiny (1 x 1 and 1 x 2
-# states, at most 10 iterations) and run one after another, each on its own
-# session.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CORE_PROGRAM_LOOP_FIXTURES)
-    for fixture_id in range(CORE_PROGRAM_LOOP_FIXTURES):
-        try:
+        check_cases_serial("program_loop", CORE_PROGRAM_LOOP_FIXTURES, host_fixture)
+    else:
+        def device_fixture(fixture_id: Int) raises:
             var sid = ops_session_open[DeviceExec, OPS_DEVICE](DeviceExec(), False)
             try:
                 run_core_program_loop_fixture[DeviceExec, OPS_DEVICE](sid, fixture_id)
@@ -169,19 +157,8 @@ def _run_gpu(mut report: Report) raises:
                 ops_session_close[DeviceExec, OPS_DEVICE](sid)
                 raise error
             ops_session_close[DeviceExec, OPS_DEVICE](sid)
-        except error:
-            cases.fail(fixture_id, error)
+        check_cases_serial("program_loop", CORE_PROGRAM_LOOP_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_program_loop", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Forward and backward of the public session ops, device words against host
 words, at shapes that reach the tuned routes.
 
@@ -61,9 +62,11 @@ from core.hostptr import f32_ptr
 from sequence.exec_trait import Exec
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.ops_higher import tensor, gradient
+from checks.native_tests.ops_higher_common import tensor, gradient
 from checks.native_tests.core_ops_common import uniform
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_serial import check_cases_serial
+from checks.native_tests.core_ops_common import require
 
 
 comptime OGI_MATMUL = 8
@@ -708,22 +711,10 @@ def _compare(which: Int) raises:
                             + " on the host (bits)")
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(OGI_CASES)
-    for which in range(OGI_CASES):  # driver-loop: over the op cases; the device sessions share one queue
-        try:
-            _compare(which)
-        except error:
-            cases.fail(which, error)
+# The device column only: the op cases in order, the device sessions share one queue.
+def test_grad_identity() raises:
+    check_cases_serial("grad_identity", OGI_CASES, _compare)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ops_grad_identity", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

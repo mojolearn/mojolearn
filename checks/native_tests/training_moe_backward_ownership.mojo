@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The MoE backward keeps every output buffer until its writer finishes
 (moved from python/mojolearn/tests/test_moe_backward_ownership.py, lane
 tmig-training-2, 2026-11-15), through the entry every binding calls,
@@ -26,7 +27,10 @@ from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from checks.native_tests.sequence_port_common import u01, normal
 from checks.native_tests.training_check_common import same_words
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.training_check_common import require
 
 
 comptime MOE_OWNER_CASES = 2
@@ -143,42 +147,22 @@ def run_moe_owner_case[E: Exec](mut ex: E, unit: Int) raises:
     _ = dy^
 
 
-# ---- The host column ----
-# The two row counts run across host cores, each on its own HostExec with a
-# private failure slot.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(MOE_OWNER_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
+# ---- The host and device columns ----
+# The host column: the two row counts run across host cores, each on its own HostExec. The device column: the two
+# row counts run in order on one DeviceExec: they share the one device and its queue, and each backward's kernels
+# already spread across the device.
+def test_moe_backward_ownership() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_case(unit: Int) raises:
             var ex = HostExec()
             run_moe_owner_case(ex, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, MOE_OWNER_CASES)
-
-
-# ---- The device column ----
-# The two row counts run in order on one DeviceExec: they share the one device
-# and its queue, and each backward's kernels already spread across the device.
-def _run_gpu(mut report: Report) raises:
-    var ex = DeviceExec()
-    var cases = report.cases(MOE_OWNER_CASES)
-    for unit in range(MOE_OWNER_CASES):  # driver-loop: over cases on the one device
-        try:
+        check_cases("moe_owner", MOE_OWNER_CASES, host_case)
+    else:
+        var ex = DeviceExec()
+        def device_case(unit: Int) raises {mut ex}:
             run_moe_owner_case(ex, unit)
-        except error:
-            cases.fail(unit, error)
+        check_cases_serial("moe_owner", MOE_OWNER_CASES, device_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_moe_backward_ownership", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

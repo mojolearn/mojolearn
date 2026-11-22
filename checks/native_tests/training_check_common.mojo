@@ -79,3 +79,11 @@ def to_f64(values: List[Float32]) -> List[Float64]:
     for i in range(len(values)):  # small-loop(check widening): fixture-sized, no product work
         result.append(Float64(values[i]))
     return result^
+
+
+def lcg_fill(mut values: List[Float32], mut seed: UInt64, lo: Float32, hi: Float32):
+    """A fixed 64-bit LCG fill (transformer_host_block, training_neural_inference): a fixture, not data work."""
+    for i in range(len(values)):  # small-loop(fixture: a few thousand test values)
+        seed = seed * 6364136223846793005 + 1442695040888963407
+        var unit = Float32(Int((seed >> 40) & 0xFFFFFF)) / Float32(16777216.0)
+        values[i] = lo + (hi - lo) * unit

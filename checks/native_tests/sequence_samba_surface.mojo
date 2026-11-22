@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The Samba training surface's schedules and position-keyed random stream
 (ported from python/mojolearn/tests/test_samba_surface.py: the numerical
 halves of `arm_schedule` and `arm_rng`).
@@ -41,7 +42,10 @@ from core.mojolearn_training_host_impl import neural_rng_host_into
 from sequence.lr_table import LrSpec, lr_spec_value, LR_ONE_BASED
 from training.optimizer_schedule_plan import optimizer_warmup_schedule
 from checks.native_tests.sequence_port_common import u01, same_bits
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, count_failures, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.sequence_port_common import require
+from checks.native_tests.sequence_port_common import count_failures
 
 
 comptime SAMBA_SURFACE_FIXTURES = 6
@@ -221,29 +225,12 @@ def run_samba_surface_fixture(unit: Int) raises:
         stream_fixture(unit)
 
 
-# ---- The host column (was sequence_samba_surface_cpu_suite.mojo) ----
-# Samba surface schedules and random stream: the independent fixtures run
-# across host cores with a private failure slot each. Host only: a schedule
-# value is host scalar code on every column, and the stream is checked
-# through the training host image's entry (the device kernel evaluates the
-# same per-element functions of core/philox_neural.mojo).
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(SAMBA_SURFACE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_samba_surface_fixture(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, SAMBA_SURFACE_FIXTURES)
+# The host column only: the independent fixtures run across host cores. Host only: a schedule value is host scalar
+# code on every column, and the stream is checked through the training host image's entry (the device kernel
+# evaluates the same per-element functions of core/philox_neural.mojo).
+def test_samba_surface() raises:
+    check_cases("samba_surface", SAMBA_SURFACE_FIXTURES, run_samba_surface_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("sequence_samba_surface", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

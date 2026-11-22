@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Save, load and resume for Sequential and the operation session (moved
 from python/mojolearn/tests/test_autograd_save_resume.py, lane
 tmig-training-2, 2026-11-15), through the entries the doors call:
@@ -48,12 +49,16 @@ from autograd.model import (
     LOSS_MSE, LOSS_CROSS_ENTROPY, LOSS_HUBER, TARGET_DENSE, TARGET_CODES, OUT_RAW, OUT_SOFTMAX, OUT_ARGMAX,
 )
 from checks.native_tests.core_ops_common import normal, dims2
-from checks.native_tests.ops_higher import tensor, op2, linear, loss, total, values, gradient
+from checks.native_tests.ops_higher_common import tensor, op2, linear, loss, total, values, gradient
 from checks.native_tests.training_sequential_common import (
     SeqModel, codes_as_words, L_RELU, L_TANH, L_SIGMOID, L_LAYER_NORM,
 )
 from checks.native_tests.training_check_common import same_words
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require, read_fixture_bytes
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.training_check_common import require
+from checks.native_tests.runner import read_fixture_bytes
 
 
 comptime SEQ_CASES = 7
@@ -349,54 +354,33 @@ def run_session_case[E: Exec & Movable & Deinitable, KIND: Int](column: String, 
     ops_session_close[E, KIND](c)
 
 
-# ---- The host column ----
-# The seven Sequential cases run across host cores (private executors and
-# files); the two session cases then run in order (the unlocked process-wide
-# session table, autograd/ops_api.mojo _OPS_SESSIONS).
-def _run_cpu(mut report: Report) raises:
-    var seq = report.cases(SEQ_CASES)
-    def task(unit: Int) {imm seq}:
-        try:
+# ---- The host and device columns ----
+# The host column: the seven Sequential cases run across host cores (private executors and files); the two session
+# cases run in order (the unlocked process-wide session table, autograd/ops_api.mojo _OPS_SESSIONS). The device
+# column: every case runs in order on the one device. TestSuite runs the two tests in this order.
+def test_sequential_save_resume() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_case(unit: Int) raises:
             var ex = HostExec()
             run_sequential_case(ex, "cpu", unit)
-        except error:
-            seq.fail(unit, error)
-    report.parallel(task, SEQ_CASES)
-    var sess = report.cases(SESSION_CASES)
-    for unit in range(SESSION_CASES):  # driver-loop: over session cases (unlocked session table)
-        try:
-            run_session_case[HostExec, OPS_HOST]("cpu", unit)
-        except error:
-            sess.fail(unit, error)
-
-
-# ---- The device column ----
-# Every which runs in order on the one device.
-def _run_gpu(mut report: Report) raises:
-    var ex = DeviceExec()
-    var seq = report.cases(SEQ_CASES)
-    for unit in range(SEQ_CASES):  # driver-loop: over cases on the one device
-        try:
+        check_cases("sequential", SEQ_CASES, host_case)
+    else:
+        var ex = DeviceExec()
+        def device_case(unit: Int) raises {mut ex}:
             run_sequential_case(ex, "gpu", unit)
-        except error:
-            seq.fail(unit, error)
-    var sess = report.cases(SESSION_CASES)
-    for unit in range(SESSION_CASES):  # driver-loop: over session cases on the one device
-        try:
+        check_cases_serial("sequential", SEQ_CASES, device_case)
+
+
+def test_session_save_resume() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_case(unit: Int) raises:
+            run_session_case[HostExec, OPS_HOST]("cpu", unit)
+        check_cases_serial("session", SESSION_CASES, host_case)
+    else:
+        def device_case(unit: Int) raises:
             run_session_case[DeviceExec, OPS_DEVICE]("gpu", unit)
-        except error:
-            sess.fail(unit, error)
+        check_cases_serial("session", SESSION_CASES, device_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_autograd_save_resume", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

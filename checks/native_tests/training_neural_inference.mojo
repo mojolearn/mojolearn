@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Public CPU neural inference on the host column (moved from
 python/mojolearn/tests/test_neural_inference.py, lane tmig-training-2,
 2026-11-15), through the typed RUN entries `_mojolearn_neural_host` calls
@@ -29,13 +30,13 @@ refusals by name, the reference-path comparison and the binding's export
 list stay in the Python test.
 """
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.mojolearn_neural_host_run import mlp_forward_logits_run, transformer_forward_fresh_run
 from core.mojolearn_neural_host_impl import _run_forward
 from transformer.block_options import BlockOptions
-from checks.native_tests.transformer_host_block import _fill
-from checks.native_tests.training_check_common import same_words
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from checks.native_tests.training_check_common import lcg_fill, same_words
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.training_check_common import require
 
 
 comptime NEURAL_INFERENCE_CASES = 6
@@ -89,7 +90,7 @@ struct _Block(Movable):
         for i in range(len(sizes)):  # small-loop(nine weight slots)
             var piece = List[Float32](length=sizes[i], fill=Float32(1.0))
             if i >= 2:  # the two layernorm weights are ones
-                _fill(piece, seed, Float32(-0.125), Float32(0.125))
+                lcg_fill(piece, seed, Float32(-0.125), Float32(0.125))
             self.w.append(piece^)
         self.window = window
 
@@ -170,7 +171,7 @@ def run_neural_inference_case(unit: Int) raises:
         var w = _mlp_weights()
         var x = List[Float32](length=64 * 8, fill=0)
         var seed: UInt64 = 0
-        _fill(x, seed, Float32(-2.0), Float32(2.0))
+        lcg_fill(x, seed, Float32(-2.0), Float32(2.0))
         var got = _logits(w, x, 0, 64)
         for k in range(4):  # small-loop(4: single rows)
             var i = 0 if k == 0 else (1 if k == 1 else (7 if k == 2 else 63))
@@ -182,7 +183,7 @@ def run_neural_inference_case(unit: Int) raises:
         var blk = _Block(0 if unit == 1 else 8)
         var x = List[Float32](length=4 * 16 * _DM, fill=0)
         var seed: UInt64 = 5
-        _fill(x, seed, Float32(-2.0), Float32(2.0))
+        lcg_fill(x, seed, Float32(-2.0), Float32(2.0))
         var y = blk.forward(x, 4, 16)
         for i in range(4):  # small-loop(4: batch rows)
             require(same_words(blk.forward(_rows(x, 16, i, 1, 0, 16), 1, 16), _rows(y, 16, i, 1, 0, 16)),
@@ -193,7 +194,7 @@ def run_neural_inference_case(unit: Int) raises:
         return
     var x = List[Float32](length=2 * 12 * _DM, fill=0)
     var seed: UInt64 = 23 if unit <= 4 else 3
-    _fill(x, seed, Float32(-2.0), Float32(2.0))
+    lcg_fill(x, seed, Float32(-2.0), Float32(2.0))
     if unit <= 4:
         var blk = _Block(0 if unit == 3 else 8)
         var bad = _decode_mismatch(blk, x, 2, 12, -1)
@@ -219,27 +220,10 @@ def run_neural_inference_case(unit: Int) raises:
 
 
 # ---- The host column ----
-# The six independent cases run across host cores, each with a private
-# failure slot (the RUN entries hold no shared state).
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(NEURAL_INFERENCE_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_neural_inference_case(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, NEURAL_INFERENCE_CASES)
+# The host column only: the six independent cases run across host cores (the RUN entries hold no shared state).
+def test_neural_inference() raises:
+    check_cases("neural_inference", NEURAL_INFERENCE_CASES, run_neural_inference_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            report.abort(Error("training_neural_inference is a host-column check"))
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_neural_inference", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
