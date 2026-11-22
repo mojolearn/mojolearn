@@ -860,7 +860,7 @@ def _capabilities(classifier: Bool, importances: Bool, weights: Bool, notices: B
     # loops of 100 fits; 0 of 12 on 5c252f1573; n_jobs=1 never). The race is not found yet
     # (~/mojolearn-evidence/briefs-20261121/sr-other-work/meta-crash/). The six kinds run serial
     # under the GIL, as at 5c252f1573, until the race is found and the bit is earned again.
-    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT
+    var mask = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT | MEMBER_CAN_EXPORT | MEMBER_CAN_IMPORT | MEMBER_GIL_FREE
     if notices:
         mask |= MEMBER_CAN_NOTICES
     if weights:
