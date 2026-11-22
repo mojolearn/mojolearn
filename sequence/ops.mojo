@@ -593,13 +593,23 @@ def op_cell_fwd(t: Int, a: Args):
     """One time step of the cell for element t = b*H + u.
     p0 GX [B, G*H] (input projection + b_ih), p1 GH [B, G*H] (h @ W_hh^T +
     b_hh), p2 ACT out [B, G*H], p3 h_prev, p4 c_prev, p5 h out, p6 c out;
-    i0 cell, i2 H."""
+    i0 cell, i2 H.
+    Sequence lengths (i9 = 1; lane seq-blocks-2): p10 holds the batch rows'
+    lengths (float32 words, exact below 2^24) and i8 the step; a row whose
+    length is at most the step is past its end, and the step copies its
+    h_prev (and c_prev) to h out (c out): its padded steps never enter the
+    state, so h_T is the state at the row's own last valid step."""
     var cell = a.i0
     var H = a.i2
     var G = gates_of(cell)
     var b = t // H
     var u = t - b * H
     var row = b * G * H
+    if a.i9 != 0 and Float32(a.i8) >= ld(a.p10, b):
+        st(a.p5, t, ld(a.p3, t))
+        if cell == CELL_LSTM:
+            st(a.p6, t, ld(a.p4, t))
+        return
     if cell == CELL_RNN_TANH:
         var h = tanh_(add(ld(a.p0, row + u), ld(a.p1, row + u)))
         st(a.p2, row + u, h)
@@ -639,7 +649,13 @@ def op_cell_bwd(t: Int, a: Args):
     """The step's backward for element t = b*H + u.
     p0 ACT [B, G*H], p1 GH [B, G*H], p2 h_prev, p3 c_prev, p4 c_t,
     p5 dh (recurrent, in), p6 dHout[t] (from above, in), p7 dc (in/out),
-    p8 dGX out, p9 dGH out, p10 dh_direct out; i0 cell, i2 H."""
+    p8 dGX out, p9 dGH out, p10 dh_direct out; i0 cell, i2 H.
+    Sequence lengths (i9 = 1; launched as OP_CELL_BWD only, never through
+    op_cell_bwd_h, whose p11 is W_hh): p11 holds the batch rows' lengths
+    and i8 the step. A step past a row's end is the identity of the forward
+    (h_out = h_prev, c_out = c_prev): its gate gradients are zero, so it adds
+    nothing to any weight or bias gradient, and the whole dh it received goes
+    to the earlier step as the direct part; dc passes through unchanged."""
     var cell = a.i0
     var H = a.i2
     var G = gates_of(cell)
@@ -647,6 +663,12 @@ def op_cell_bwd(t: Int, a: Args):
     var u = t - b * H
     var row = b * G * H
     var dh = add(ld(a.p5, t), ld(a.p6, t))
+    if a.i9 != 0 and Float32(a.i8) >= ld(a.p11, b):
+        for g in range(G):
+            st(a.p8, row + g * H + u, Float32(0.0))
+            st(a.p9, row + g * H + u, Float32(0.0))
+        st(a.p10, t, dh)
+        return
     if cell == CELL_RNN_TANH:
         var h = ld(a.p0, row + u)
         var da = mul(dh, sub(Float32(1.0), mul(h, h)))
@@ -754,7 +776,11 @@ def op_cell_bwd_h(t: Int, a: Args):
 
 def op_gather_seq(t: Int, a: Args):
     """out[s, b, d] = X[idx[i3 + b], s, d]: batch-first rows to time-major.
-    i0 T, i1 B, i2 D."""
+    i0 T, i1 B, i2 D.
+    Sequence lengths (i4 = 1; lane seq-blocks-2): p3 holds every row's
+    length (float32 words, in the rows' own order); a step at or past the
+    row's length stores +0.0, so the values in padded steps never reach a
+    product (not even 0 * inf in a weight gradient)."""
     var T = a.i0
     var B = a.i1
     var D = a.i2
@@ -763,6 +789,9 @@ def op_gather_seq(t: Int, a: Args):
     var b = rem // D
     var d = rem - b * D
     var row = Int(a.p1.unsafe_load(a.i3 + b))
+    if a.i4 != 0 and Float32(s) >= ld(a.p3, row):
+        a.p2.unsafe_store(t, Float32(0.0))
+        return
     a.p2.unsafe_store(t, ld(a.p0, (row * T + s) * D + d))
 
 

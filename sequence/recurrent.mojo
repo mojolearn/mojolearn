@@ -217,7 +217,11 @@ def fill[E: Exec](mut ex: E, p: FP, n: Int, v: Float32) raises:
     ex.launch[OP_FILL](a, n)
 
 
-def gather_seq[E: Exec](mut ex: E, X: FP, idx: FP, dst: FP, T: Int, B: Int, D: Int, off: Int) raises:
+def gather_seq[E: Exec](
+    mut ex: E, X: FP, idx: FP, dst: FP, T: Int, B: Int, D: Int, off: Int, lengths: Optional[FP] = None,
+) raises:
+    """With `lengths` (every row's length, the rows' own order) the steps at
+    or past a row's length are stored as +0.0 (op_gather_seq)."""
     var a = Args()
     a.p0 = X
     a.p1 = idx
@@ -226,6 +230,9 @@ def gather_seq[E: Exec](mut ex: E, X: FP, idx: FP, dst: FP, T: Int, B: Int, D: I
     a.i1 = B
     a.i2 = D
     a.i3 = off
+    if lengths:
+        a.p3 = lengths.value()
+        a.i4 = 1
     ex.launch[OP_GATHER_SEQ](a, T * B * D)
 
 
@@ -263,6 +270,12 @@ struct Work(Movable):
     var dy: FP
     var one: FP
     var wsplit: FP
+    #: sequence lengths (lane seq-blocks-2): `lens` holds the current batch's
+    #: row lengths (float32, B words) when `has_lens`; the layers then run the
+    #: per-step chain with the length mask (sequence/ops.mojo op_cell_fwd /
+    #: op_cell_bwd). Without lengths `lens` is a placeholder nothing reads.
+    var lens: FP
+    var has_lens: Bool
 
     def __init__(out self, gx: FP, gh: FP, act: FP, hall: FP, call: FP, dgh: FP, dh: FP, dhn: FP, dc: FP,
                  one: FP, wsplit: FP):
@@ -292,8 +305,12 @@ struct Work(Movable):
         self.dy = one
         self.one = one
         self.wsplit = wsplit
+        self.lens = one
+        self.has_lens = False
 
-    def __init__[E: Exec](out self, mut ex: E, net: Net, T: Int, B: Int, train: Bool) raises:
+    def __init__[E: Exec](
+        out self, mut ex: E, net: Net, T: Int, B: Int, train: Bool, has_lens: Bool = False,
+    ) raises:
         var GH = net.G() * net.H
         var H = net.H
         self.gx = List[FP]()
@@ -331,6 +348,8 @@ struct Work(Movable):
             # unread placeholders (the unblocked weight gradient takes no ones or split scratch)
             self.one = ex.alloc(1)
             self.wsplit = self.one
+        self.has_lens = has_lens
+        self.lens = ex.alloc(B) if has_lens else self.one
 
 
 # TOMBSTONE: MOJOLEARN_AUTOGRAD_PREDICT (folded in: the tape forward is the one predict path) deleted 2026-11-08 by 9a9a8e3148; code recoverable at c3b7dc42e6^.
@@ -477,6 +496,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     X: FP, Y: FP, N: Int, T: Int,
     epochs: Int, bs: Int, shuffle: Bool, seed: UInt64,
     Pio: FP, losses: FP, lrs: FP, cfg: OptConfig, init_acc: Float32,
+    lengths: Optional[FP] = None,
 ) raises:
     """`epochs * ceil(N / bs)` optimizer steps; step k of epoch e trains on
     the samples order_e[j bs : j bs + B] (j = k mod per, B = min(bs, N - j
@@ -487,7 +507,12 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     a new shuffle order on every column together (host column: the same
     ops on the host executor). Pio holds the starting parameters and
     receives the trained ones; losses[k] is the mean loss of step k before
-    its update."""
+    its update.
+    `lengths` (lane seq-blocks-2): N row lengths (float32 words, each in
+    [1, T], admitted by the caller), carried through the batching: every
+    step gathers its rows' lengths with their sequences; a row's padded
+    steps enter neither its state, the loss nor the gradient, and the head
+    reads its state at its own last valid step. Without it nothing changes."""
     var np_ = net.n_params()
     var ycols = net.O if task == TASK_MSE else 1
     var per = (N + bs - 1) // bs
@@ -497,6 +522,12 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     ex.upload(dX, X, N * T * net.D)
     var dY = ex.alloc(N * ycols)
     ex.upload(dY, Y, N * ycols)
+    var has_lens = Bool(lengths)
+    var dL = ex.alloc(N if has_lens else 1)
+    var dL_opt = Optional[FP](None)
+    if has_lens:
+        ex.upload(dL, lengths.value(), N)
+        dL_opt = Optional[FP](dL)
     var dord = ex.alloc(N)
     var P = ex.alloc(np_)
     ex.upload(P, Pio, np_)
@@ -513,7 +544,7 @@ def rnn_fit[E: Exec, //, S: RnnStep](
     if init_acc != Float32(0.0):
         fill(ex, s2, np_, init_acc)
     var dloss = ex.alloc(n_steps)
-    var w = Work(ex, net, T, bmax, True)
+    var w = Work(ex, net, T, bmax, True, has_lens)
     # TOMBSTONE: MOJOLEARN_AUTOGRAD_LOSS (rnn_fit: promoted, the blocked fold replaces the serial OP_SUM) deleted 2026-11-08 by dbab55bea7; code recoverable at c3b7dc42e6^.
     # Restore: git apply experiments/removed/MOJOLEARN_AUTOGRAD_LOSS.patch
     var loss_ws = loss_scratch(ex, bmax * net.O)
@@ -527,7 +558,9 @@ def rnn_fit[E: Exec, //, S: RnnStep](
             ag_epoch_order(ex, shuffle, seed, k // per, N, dord)
         var off = j * bs
         var B = min(bs, N - off)
-        gather_seq(ex, dX, dord, w.xb, T, B, net.D, off)
+        gather_seq(ex, dX, dord, w.xb, T, B, net.D, off, dL_opt)
+        if has_lens:
+            gather_rows(ex, dL, dord, w.lens, B, 1, off)
         step.forward_head(ex, net, P, Gr, w.xb, T, B, w)
         if task == TASK_MSE:
             gather_rows(ex, dY, dord, w.yb, B, net.O, off)

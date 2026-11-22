@@ -115,15 +115,16 @@ def _xseq_execute(model: PythonObject, operation: Int, owner: Int, name: PythonO
                   context: PythonObject) raises -> PythonObject:
     var result: PythonObject
     if operation == XSEQ_OPN_RNN_SCORE or operation == XSEQ_OPN_MLP_SCORE:
-        # predict, then R^2 against y, in this one call
-        var predict_args = Python.tuple(args[0])
+        # predict, then R^2 against y, in this one call; the recurrent score's fourth word is its
+        # sequence lengths (lane seq-blocks-2), handed to the prediction
+        var predict_args = Python.tuple(args[0]) if len(args) < 4 else Python.tuple(args[0], args[3])
         var prediction = (xseq_rnn(model, XSEQ_OPN_RNN_PREDICT, predict_args, context) if operation == XSEQ_OPN_RNN_SCORE
                           else xseq_mlp(model, XSEQ_OPN_MLP_PREDICT, predict_args, context))
         result = xseq_regressor_score(model, prediction, args, context)
     elif operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE or operation == XSEQ_OPN_MLP_CLASSIFIER_SCORE:
         # `ClassifierScoreMixin.score`: predict, then the accuracy of it
-        # against y, in this one call
-        var predict_args = Python.tuple(args[0])
+        # against y, in this one call (the recurrent score's lengths as above)
+        var predict_args = Python.tuple(args[0]) if len(args) < 4 else Python.tuple(args[0], args[3])
         var prediction = (xseq_rnn(model, XSEQ_OPN_RNN_PREDICT, predict_args, context) if operation == XSEQ_OPN_RNN_CLASSIFIER_SCORE
                           else xseq_mlp(model, XSEQ_OPN_MLP_PREDICT, predict_args, context))
         result = xseq_classifier_score(model, prediction, args, context)

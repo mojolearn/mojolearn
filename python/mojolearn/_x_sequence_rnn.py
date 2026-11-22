@@ -74,10 +74,12 @@ class _RecurrentBase(ParamsMixin):
         """Load the named recurrent and head parameter arrays; return this model."""
         return _XSEQ(self, "rnn_load_state_dict", (state,), _XSEQ_CONTEXT)
 
-    def hidden_sequence(self, X):
+    def hidden_sequence(self, X, lengths=None):
         """The top layer's hidden states h_1..h_T, (n_samples, n_timesteps,
-        hidden_size): `nn.LSTM(..., batch_first=True)(X)[0]`."""
-        return _XSEQ(self, "rnn_hidden_sequence", (X,), _XSEQ_CONTEXT)
+        hidden_size): `nn.LSTM(..., batch_first=True)(X)[0]`. With
+        ``lengths``, a sequence's steps past its length repeat its last
+        valid state."""
+        return _XSEQ(self, "rnn_hidden_sequence", (X, lengths), _XSEQ_CONTEXT)
 
     def vendor_used(self):
         """The backend this estimator runs on.
@@ -96,13 +98,56 @@ class _RecurrentRegressor(_RecurrentBase):
     _estimator_type = "regressor"
     _TASK = 0
 
-    def fit(self, X, y):
-        return _XSEQ(self, "rnn_fit", (X, y), _XSEQ_CONTEXT)
+    def fit(self, X, y, lengths=None):
+        """Train the network on sequences ``X`` and targets ``y``.
 
-    def predict(self, X):
-        return _XSEQ(self, "rnn_predict", (X,), _XSEQ_CONTEXT)
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_timesteps, n_features)
+            Training sequences; shorter sequences are padded to n_timesteps.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            Targets.
+        lengths : array-like of shape (n_samples,), default None
+            Each sequence's number of valid steps, from 1 to n_timesteps.
+            Steps past a sequence's length are padding: they never enter
+            its state, and the output is read at its own last valid step.
 
-    def score(self, X, y, sample_weight=None):
+        Returns
+        -------
+        self
+
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from mojolearn import GRURegressor
+        >>> X = np.random.rand(64, 12, 2).astype(np.float32)
+        >>> lengths = np.random.randint(4, 13, size=64)
+        >>> y = X[np.arange(64), lengths - 1, 0]
+        >>> model = GRURegressor(hidden_size=16).fit(X, y, lengths=lengths)
+        >>> model.predict(X, lengths=lengths).shape
+        (64,)
+        """
+        return _XSEQ(self, "rnn_fit", (X, y, lengths), _XSEQ_CONTEXT)
+
+    def predict(self, X, lengths=None):
+        """Predicted targets for sequences ``X``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_timesteps, n_features)
+            Sequences.
+        lengths : array-like of shape (n_samples,), default None
+            Each sequence's number of valid steps, from 1 to n_timesteps.
+            Steps past a sequence's length are padding: they never enter
+            its state, and the output is read at its own last valid step.
+
+        Returns
+        -------
+        ndarray of shape (n_samples,) or (n_samples, n_outputs)
+        """
+        return _XSEQ(self, "rnn_predict", (X, lengths), _XSEQ_CONTEXT)
+
+    def score(self, X, y, sample_weight=None, lengths=None):
         """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
 
         Parameters
@@ -113,13 +158,17 @@ class _RecurrentRegressor(_RecurrentBase):
             True targets.
         sample_weight : array-like of shape (n_samples,), default None
             Sample weights.
+        lengths : array-like of shape (n_samples,), default None
+            Each sequence's number of valid steps, from 1 to n_timesteps.
+            Steps past a sequence's length are padding: they never enter
+            its state, and the output is read at its own last valid step.
 
         Returns
         -------
         float
             R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
         """
-        return _XSEQ(self, "rnn_score", (X, y, sample_weight), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_score", (X, y, sample_weight, lengths), _XSEQ_CONTEXT)
 
 
 class _RecurrentClassifier(_RecurrentBase):
@@ -127,16 +176,66 @@ class _RecurrentClassifier(_RecurrentBase):
     _estimator_type = "classifier"
     _TASK = 1
 
-    def fit(self, X, y):
-        return _XSEQ(self, "rnn_fit", (X, y), _XSEQ_CONTEXT)
+    def fit(self, X, y, lengths=None):
+        """Train the network on sequences ``X`` and labels ``y``.
 
-    def predict_proba(self, X):
-        return _XSEQ(self, "rnn_predict_proba", (X,), _XSEQ_CONTEXT)
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_timesteps, n_features)
+            Training sequences; shorter sequences are padded to n_timesteps.
+        y : array-like of shape (n_samples,)
+            Class labels.
+        lengths : array-like of shape (n_samples,), default None
+            Each sequence's number of valid steps, from 1 to n_timesteps.
+            Steps past a sequence's length are padding: they never enter
+            its state, and the output is read at its own last valid step.
 
-    def predict(self, X):
-        return _XSEQ(self, "rnn_predict", (X,), _XSEQ_CONTEXT)
+        Returns
+        -------
+        self
 
-    def score(self, X, y, sample_weight=None):
+        Examples
+        --------
+        >>> import numpy as np
+        >>> from mojolearn import LSTMClassifier
+        >>> X = np.random.rand(64, 12, 2).astype(np.float32)
+        >>> lengths = np.random.randint(4, 13, size=64)
+        >>> y = (X[np.arange(64), lengths - 1, 0] > 0.5).astype(np.int64)
+        >>> model = LSTMClassifier(hidden_size=16).fit(X, y, lengths=lengths)
+        >>> model.predict(X, lengths=lengths).shape
+        (64,)
+        """
+        return _XSEQ(self, "rnn_fit", (X, y, lengths), _XSEQ_CONTEXT)
+
+    def predict_proba(self, X, lengths=None):
+        """Class probabilities for sequences ``X``, shape (n_samples, n_classes).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_timesteps, n_features)
+            Sequences.
+        lengths : array-like of shape (n_samples,), default None
+            Each sequence's number of valid steps, from 1 to n_timesteps.
+            Steps past a sequence's length are padding: they never enter
+            its state, and the output is read at its own last valid step.
+        """
+        return _XSEQ(self, "rnn_predict_proba", (X, lengths), _XSEQ_CONTEXT)
+
+    def predict(self, X, lengths=None):
+        """Predicted class labels for sequences ``X``, shape (n_samples,).
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_timesteps, n_features)
+            Sequences.
+        lengths : array-like of shape (n_samples,), default None
+            Each sequence's number of valid steps, from 1 to n_timesteps.
+            Steps past a sequence's length are padding: they never enter
+            its state, and the output is read at its own last valid step.
+        """
+        return _XSEQ(self, "rnn_predict", (X, lengths), _XSEQ_CONTEXT)
+
+    def score(self, X, y, sample_weight=None, lengths=None):
         """Mean accuracy of ``predict(X)`` against ``y``.
 
         Parameters
@@ -147,6 +246,10 @@ class _RecurrentClassifier(_RecurrentBase):
             True labels.
         sample_weight : array-like of shape (n_samples,), default None
             Sample weights.
+        lengths : array-like of shape (n_samples,), default None
+            Each sequence's number of valid steps, from 1 to n_timesteps.
+            Steps past a sequence's length are padding: they never enter
+            its state, and the output is read at its own last valid step.
 
         Returns
         -------
@@ -154,7 +257,7 @@ class _RecurrentClassifier(_RecurrentBase):
             Fraction of samples predicted correctly (weighted when
             ``sample_weight`` is given).
         """
-        return _XSEQ(self, "rnn_classifier_score", (X, y, sample_weight), _XSEQ_CONTEXT)
+        return _XSEQ(self, "rnn_classifier_score", (X, y, sample_weight, lengths), _XSEQ_CONTEXT)
 
 
 class LSTMRegressor(_RecurrentRegressor):
