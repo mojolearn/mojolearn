@@ -13,9 +13,14 @@ text (the text its former Python entry raised). No Python participates.
 The cases are independent units: on the host column they run across the
 native host worker pool; on a device column they run one after another,
 because every case launches on the process's one device context.
+Then three cases against scikit-learn (lane py2mojo-C, 2026-11-22, from
+test_x_trees_sanity.py): the 103-row stratified and plain folds and the
+400-row Platt and isotonic fits (see `sklearn_case`).
 Run in a fresh process (the first check needs an unpublished table).
 """
 from std.testing import TestSuite
+from checks.native_tests.tsa_metrics_fixture_words import fixture_i32
+from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from checks.native_tests.testsuite_cases import check_cases
 from core.entry_table import entry_ref_same
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN
@@ -529,6 +534,75 @@ def run_case(unit: Int) raises:
         _ = res
 
 
+# ---- test_x_trees_sanity.py (lane py2mojo-C, 2026-11-22): `test_stacking_folds_match_sklearn` and the raw-binding
+# arm of `test_calibration`, against scikit-learn's folds, `_sigmoid_calibration` and IsotonicRegression stored by
+# `tools/py2mojo_native_fixtures_b3.py` in `fixtures/trees_glue/`. The CalibratedClassifierCV log-loss arm stays in
+# Python (a composition over PythonObject members in bindings/trees_public_meta_door.mojo).
+comptime GLUE_DIR = "checks/native_tests/fixtures/trees_glue/"
+comptime TREES_GLUE_SKLEARN_CASES = 3
+
+
+def sklearn_case(unit: Int) raises:
+    var k = xt_ref(_key())
+    if unit <= 1:
+        # unit 0: StratifiedKFold(5) over 4 classes; unit 1: KFold(4); 103 rows
+        var n = 103
+        var splits = 5 if unit == 0 else 4
+        var name = String("strat") if unit == 0 else String("kfold")
+        var codes = fixture_i32(GLUE_DIR + "folds-codes.i32", n)
+        var want_sizes = fixture_i32(GLUE_DIR + "folds-" + name + "-sizes.i32", splits)
+        var want_rows = fixture_i32(GLUE_DIR + "folds-" + name + "-rows.i32", n)
+        var rows = List[Int32](length=splits * n, fill=Int32(-1))
+        var counts = List[Int32](length=splits + 1, fill=Int32(-1))
+        var status = xt_device_folds(k, _i32(codes), _i32(rows), _i32(counts), n, splits, 4 if unit == 0 else 0)
+        require(status == 0, name + " folds status " + String(status))
+        var at = 0
+        for f in range(splits):  # small-loop(oracle: the folds)
+            require(counts[f] == want_sizes[f], name + " fold " + String(f) + " size " + String(counts[f])
+                + ", scikit-learn " + String(want_sizes[f]))
+            var cnt = Int(counts[f])
+            for j in range(cnt):  # small-loop(oracle: one fold's test rows)
+                var got = rows[f * n + (n - cnt) + j]
+                require(got == want_rows[at + j], name + " fold " + String(f) + " test row " + String(j) + " is "
+                    + String(got) + ", scikit-learn " + String(want_rows[at + j]))
+            at += cnt
+        _ = codes^
+        _ = rows^
+        _ = counts^
+        return
+    # unit 2: x_trees_platt_fit, x_trees_isotonic_fit and the isotonic predict over 400 rows
+    var n = 400
+    var f = fixture_f64(GLUE_DIR + "cal-f.f64", n)
+    var y = fixture_i32(GLUE_DIR + "cal-y.i32", n)
+    var want_ab = fixture_f64(GLUE_DIR + "cal-ab.f64", 2)
+    var ab: List[Float64] = [0.0, 0.0]
+    _ = xt_platt_fit(k, _f64(f), _i32(y), _f64(ab), n)
+    for j in range(2):  # small-loop(oracle: a and b)
+        require(abs(ab[j] - want_ab[j]) <= 1e-4 + 1e-3 * abs(want_ab[j]), "platt " + ("a" if j == 0 else "b") + " "
+            + String(ab[j]) + ", scikit-learn " + String(want_ab[j]))
+    var y64 = List[Float64](length=n, fill=0.0)
+    for i in range(n):  # small-loop(y.astype(float64))
+        y64[i] = Float64(y[i])
+    var kx = List[Float64](length=n, fill=0.0)
+    var ky = List[Float64](length=n, fill=0.0)
+    var m = xt_isotonic_fit(k, _f64(f), _f64(y64), _f64(kx), _f64(ky), n)
+    var t = fixture_f64(GLUE_DIR + "cal-t.f64", 97)
+    var want = fixture_f64(GLUE_DIR + "cal-iso.f64", 97)
+    var res = List[Float64](length=97, fill=-9.0)
+    # `x_trees_isotonic_predict` is the strided predict at stride 1, offset 0 (xtrees/ops.mojo isotonic_predict)
+    _ = xt_isotonic_predict_strided(k, _f64(kx), _f64(ky), _f64(t), _f64(res), m, 97, 97, 1, 0, 97, 1, 0)
+    for i in range(97):  # small-loop(oracle: the 97 grid points)
+        require(abs(res[i] - want[i]) <= 1e-12, "isotonic predict at " + String(t[i]) + ": " + String(res[i])
+            + ", scikit-learn " + String(want[i]))
+    _ = f^
+    _ = y^
+    _ = y64^
+    _ = kx^
+    _ = ky^
+    _ = t^
+    _ = res^
+
+
 def test_unpublished_then_published_operations() raises:
     """One test, in this order: the first call needs the glue table unpublished (TestSuite may run any test
     alone)."""
@@ -550,6 +624,11 @@ def test_unpublished_then_published_operations() raises:
                 text += "\n      case row " + String(unit) + ": " + String(problem)
         if failed:
             raise Error("case: " + String(failed) + " of " + String(TREES_GLUE_CASES) + " cases failed" + text)
+    comptime if TARGET_COLUMN == COLUMN_CPU:
+        check_cases("sklearn", TREES_GLUE_SKLEARN_CASES, sklearn_case)
+    else:
+        for unit in range(TREES_GLUE_SKLEARN_CASES):  # driver-loop: device cases share one device context
+            sklearn_case(unit)
 
 
 def main() raises:
