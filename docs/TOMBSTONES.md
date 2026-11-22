@@ -1,5 +1,7 @@
 # Tombstones: every deleted experiment
 
+> **Where the patches live now (Andrew, 2026-11-25):** outside the repo, in `~/mojolearn-evidence/experiments-removed/<name>.patch` (listed with bytes, sha256 and git blob in `experiments/tombstones/removed_patches.tsv`; git history before 2026-11-25 holds them too). The `experiments/removed/` links below are their historical paths.
+
 > **PERMANENT RECORD (Andrew, 2026-10-28): entries, their patches under experiments/removed/ and the inline TOMBSTONE markers are never deleted, rewritten or squashed; deletions of experiments are only ever ADDED here.**
 
 > **Fence:** `tools/hooks/pre-push` runs `tools/tests/test_tombstones_preserved.py` on every pushed branch and on main. It refuses a push that removes or rewrites an index row, a section heading, a patch under `experiments/removed/` or an inline TOMBSTONE marker present at the merge-base with main, an index row without its section, patch or marker, or an index with fewer rows than `experiments/tombstones/index_count.txt` (raise that number when you add rows). Run it locally with `python3 tools/tests/test_tombstones_preserved.py`.

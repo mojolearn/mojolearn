@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """The tombstone record is permanent (Andrew, 2026-10-28).
 
-docs/TOMBSTONES.md entries, their patches under experiments/removed/ and the inline tombstone
+docs/TOMBSTONES.md entries, their restore patches and the inline tombstone
 markers in the code are never deleted, rewritten or squashed; deletions of experiments are
 only ever added. This test is the fence for that rule (tools/hooks/pre-push runs it on every
 pushed branch). Plain unittest, reads text files only, imports nothing from the product.
 
 For every row of the TOMBSTONES.md index it checks:
   (a) the section the row links to exists;
-  (b) every patch the row links to exists under experiments/removed/ (rows whose code never
+  (b) every patch the row links to is listed in experiments/tombstones/removed_patches.tsv
+      (name, bytes, sha256, git blob). The patches themselves live OUTSIDE the repo
+      (Andrew, 2026-11-25) in ~/mojolearn-evidence/experiments-removed/ (override:
+      MOJOLEARN_EXPERIMENTS_REMOVED); when that directory is present, each listed patch there
+      must match its size and sha256. The links keep their historical experiments/removed/
+      spelling (rows whose code never
       reached main say "lane only" or "no code" and link no patch; their section must name
       the branch@sha or say why there is no code, or be listed in experiments/tombstones/GAPS.md);
   (c) at least one inline tombstone marker (a '#' comment starting with TOMBSTONE: and naming
@@ -17,8 +22,8 @@ For every row of the TOMBSTONES.md index it checks:
       (entries that predate the 2026-10-10 inline rule, or recorded gaps; that file only shrinks).
 It also checks that the index never has fewer rows than experiments/tombstones/index_count.txt
 (the committed number only goes up), and, against the merge-base with main, that every index
-row, section heading, patch file and inline marker define of the base is still present
-unchanged, that index_count.txt did not go down and that the allowlist did not grow.
+row, section heading, patch (a file under experiments/removed/ in an older base, or a manifest
+row) and inline marker define of the base is still present unchanged (same git blob), that index_count.txt did not go down and that the allowlist did not grow.
 
 Usage:
   python3 tools/tests/test_tombstones_preserved.py                 # the working tree
@@ -26,6 +31,7 @@ Usage:
   ... [--base <sha> | --base none]   default base: merge-base with origin/main (or main)
 """
 import argparse
+import hashlib
 import os
 import re
 import subprocess
@@ -39,6 +45,28 @@ COUNT_FILE = 'experiments/tombstones/index_count.txt'
 ALLOW_FILE = 'experiments/tombstones/pre_rule_entries.tsv'
 GAPS_FILE = 'experiments/tombstones/GAPS.md'
 SELF = 'tools/tests/test_tombstones_preserved.py'
+PATCH_MANIFEST = 'experiments/tombstones/removed_patches.tsv'
+PATCH_HOME = Path(os.environ.get('MOJOLEARN_EXPERIMENTS_REMOVED')
+                  or os.path.expanduser('~/mojolearn-evidence/experiments-removed'))
+
+
+def read_patch_manifest(text):
+    """name -> (bytes, sha256, git blob) of the out-of-repo restore patches."""
+    rows = {}
+    for line in (text or '').splitlines():
+        if not line or line.startswith('#') or line.startswith('name\t'):
+            continue
+        name, size, sha, blob = line.split('\t')
+        rows[name] = (int(size), sha, blob)
+    return rows
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for block in iter(lambda: f.read(1 << 20), b''):
+            h.update(block)
+    return h.hexdigest()
 MARKER_GLOBS = ['*.mojo', '*.py', '*.pyi', '*.sh']
 # a '#' comment whose text starts with the marker word (kept split so this file never matches itself)
 MARKER_WORD = 'TOMB' + 'STONE:'
@@ -359,6 +387,7 @@ class TombstonesPreserved(unittest.TestCase):
         cls.marker_text = '\n'.join(rest for _, rest in cls.markers)
         cls.allow = read_allowlist(cls.tree.read(ALLOW_FILE))
         cls.gaps = set(re.findall(r'^\| `([^`]+)` \|', cls.tree.read(GAPS_FILE) or '', re.M))
+        cls.patches = read_patch_manifest(cls.tree.read(PATCH_MANIFEST))
 
     def test_index_has_rows(self):
         self.assertGreater(len(self.rows), 0, 'no index rows parsed from %s' % DOC)
@@ -389,9 +418,22 @@ class TombstonesPreserved(unittest.TestCase):
         for r in self.rows:
             cells = split_row(r)
             for p in row_patches(cells[4]):
-                if not self.tree.exists(p):
+                if p[len(REMOVED) + 1:] not in self.patches:
                     missing.append('%s (row %s)' % (p, row_key(cells[0])))
-        self.assertEqual(missing, [], 'index rows whose patch file is missing under %s' % REMOVED)
+        self.assertEqual(missing, [], 'index rows whose patch is not listed in %s' % PATCH_MANIFEST)
+
+    def test_b_patch_copies_match(self):
+        """Where the out-of-repo patch directory is present, every listed patch is there, unchanged."""
+        if not PATCH_HOME.is_dir():
+            raise unittest.SkipTest('%s is not on this machine' % PATCH_HOME)
+        bad = []
+        for name, (size, sha, _) in sorted(self.patches.items()):
+            f = PATCH_HOME / name
+            if not f.is_file():
+                bad.append('%s missing' % name)
+            elif f.stat().st_size != size or _sha256(f) != sha:
+                bad.append('%s differs from the manifest' % name)
+        self.assertEqual(bad, [], 'restore patches in %s' % PATCH_HOME)
 
     def test_b_unpatched_rows_say_where_the_code_is(self):
         """A row with no patch must name the recoverable branch@sha / sha, or say there was no code."""
@@ -494,11 +536,25 @@ class TombstonesKeptSinceBase(unittest.TestCase):
         self.assertEqual(gone, [], 'section headings of base %s removed or renamed' % self.base.sha)
 
     def test_base_patches_kept_byte_identical(self):
+        # A base may still hold the patches in the tree (before 2026-11-25) or list them in the manifest; either
+        # way each must survive in this tree (in the tree or as a manifest row) with the same git blob.
         base_files = self.base.files_under(REMOVED)
         base_ids = self.base.blob_ids(base_files)
         head_ids = self.tree.blob_ids(base_files)
-        gone = [p for p in base_files if p not in head_ids]
-        changed = [p for p in base_files if p in head_ids and head_ids[p] != base_ids.get(p)]
+        head_rows = read_patch_manifest(self.tree.read(PATCH_MANIFEST))
+        gone, changed = [], []
+        for p in base_files:
+            row = head_rows.get(p[len(REMOVED) + 1:])
+            got = head_ids.get(p) or (row[2] if row else None)
+            if got is None:
+                gone.append(p)
+            elif got != base_ids.get(p):
+                changed.append(p)
+        for name, row in sorted(read_patch_manifest(self.base.read(PATCH_MANIFEST)).items()):
+            if name not in head_rows:
+                gone.append(name)
+            elif head_rows[name] != row:
+                changed.append(name)
         self.assertEqual(gone, [], 'patches of base %s deleted' % self.base.sha)
         self.assertEqual(changed, [], 'patches of base %s rewritten' % self.base.sha)
 

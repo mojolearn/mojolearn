@@ -58,7 +58,7 @@ KINDS = (
                 "python/mojolearn/_native*.py", "python/mojolearn/__init__.py")),
     ("packaging", ("packaging/*", "python/pyproject.toml", "python/setup.py", "python/MANIFEST.in")),
     ("tooling", ("tools/*", "bench/*", ".github/*", "tests/*", "*/tests/*", "*/test_*.py", "test_*.py",
-                 "experiments/removed/*")),
+                 "experiments/tombstones/*")),
     ("native", ("*.mojo", "bindings/*")),
     ("python", ("python/mojolearn/*",)),
 )

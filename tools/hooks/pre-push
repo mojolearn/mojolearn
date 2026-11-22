@@ -23,8 +23,8 @@
 # remain; source reachability/counts cannot certify them.
 #
 # The tombstone fence (2026-10-28): tools/tests/test_tombstones_preserved.py --tree, when the
-# pushed tree has it, refuses a push whose docs/TOMBSTONES.md index row, section, patch under
-# experiments/removed/ or inline TOMBSTONE marker is missing, or that removes or rewrites any of
+# pushed tree has it, refuses a push whose docs/TOMBSTONES.md index row, section, restore patch (listed in
+# experiments/tombstones/removed_patches.tsv; the files live in ~/mojolearn-evidence/experiments-removed/) or inline TOMBSTONE marker is missing, or that removes or rewrites any of
 # them against the merge-base with main (the record is permanent, Andrew 2026-10-28). Both modes
 # judge against the merge-base; removing the test file itself is refused too.
 #
