@@ -22,7 +22,7 @@ which validates, encodes labels, assigns CV folds (integers) and unpacks the
 flat float32 result. NumPy-free (NUMPY_FREE_CONTRACT.md).
 """
 from . import _backend
-from ._mode import NumericModeMixin, available_if, _OBJECT_GET
+from ._mode import NumericModeMixin, available_if
 from ._native_params_setter import NativeParamsSetter
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
@@ -63,24 +63,6 @@ def _device_set_params(base):
 
     set_params.__doc__ = base.set_params.__doc__
     return set_params
-
-
-def _device_constructor(orig):
-    # glue: class-definition time. The constructors of this module only store
-    # their arguments (the native field plans build the same fields without
-    # running them); a `device` that is given, and a constructor run again on
-    # a live estimator, is checked in compiled code before any field changes.
-    # The default None on a new instance calls nothing.
-    import functools
-
-    @functools.wraps(orig)
-    def __init__(self, *args, **kwargs):
-        device = kwargs.get("device")
-        if device is not None or "device" in _OBJECT_GET(self, "__dict__"):
-            _XL_CALL(self, "device_admit", (device,), _XL_CONTEXT)
-        orig(self, *args, **kwargs)
-
-    return __init__
 
 
 class _LinearClassifierMixin(NativeParamsSetter):
@@ -2694,7 +2676,6 @@ from . import _native_x_linear_bridge  # noqa: E402
 _XL_CALL, _XL_CONTEXT = _native_x_linear_bridge.connect({
     "sgd_clf_loss": _SGD_CLF_LOSS, "sgd_reg_loss": _SGD_REG_LOSS, "sgd_penalty": _SGD_PENALTY,
     "sgd_lr": _SGD_LR, "sgd_sum_losses": _SGD_SUM_LOSSES})
-for _cls in vars().copy().values():  # glue: class-definition time, the 19 field-only classes of the two mixins
-    if isinstance(_cls, type) and _cls.__module__ == __name__ and issubclass(_cls, NativeParamsSetter) and "__init__" in _cls.__dict__:
-        _cls.__init__ = _device_constructor(_cls.__dict__["__init__"])
-del _cls
+# A `device` given to one of the 19 field-only constructors is checked by
+# their compiled constructor (bindings/linear_constructor_native_pack.mojo,
+# installed over these classes by _native_linear_constructors.install).

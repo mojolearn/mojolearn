@@ -17,6 +17,7 @@ from bindings.params_setter_native_door import _release_admit
 from bindings.params_metadata_native_door import _connected_plan, _resolved
 from bindings.classical_attributes_door import classical_connect_numpy
 from bindings.optimizer_public_words_unpack import optimizer_python_error, PYTHON_ERROR_PENDING
+from providers.python.device_route_boundary_door import device_admit, device_route_clear
 
 
 def _constructor_plan(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -144,6 +145,21 @@ def _initialize(model: PythonObject, positional: PythonObject, keywords: PythonO
             if not py_contains(defaults, name):
                 raise Error("TypeError: " + label + "() missing required argument '" + String(name) + "'")
             py_setitem(values, name, defaults[name])
+    if py_contains(names, "device"):
+        # `device` of the nineteen classes (dw-xlinear 9d21d857fe gave it to
+        # them): an unknown value and 'gpu' on a CPU-only installation are
+        # refused in the shared words before any field is written, and a
+        # constructor run again on a live estimator drops its route. Every
+        # class of this door runs on both devices, so 'cpu' is accepted (as
+        # bindings/x_linear_route_unpack.mojo `xl_device_admit`). The Python
+        # wrapper that did this (_expansion_linear `_device_constructor`) was
+        # replaced by this door's install and never ran; it is deleted. The
+        # default None on a new instance is two dictionary reads.
+        var device = values["device"]
+        if device is not None or py_contains(fields, "device"):
+            var cpu_only = py_get(context["backend_fields"], "_CPU_ONLY") is not None
+            device_admit(device, 0 if cpu_only else 1, b)
+            device_route_clear(model)
     var write_mode = True
     if values["numeric_mode"] is None:
         if py_contains(fields, "numeric_mode"):
@@ -188,6 +204,8 @@ def linear_constructor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
             return optimizer_python_error(error)
+        if String(error).startswith("ValueError:"):
+            return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if String(error).startswith("AttributeError:"):

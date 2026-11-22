@@ -7,6 +7,9 @@ _ENTRY = _binding()._module.linear_constructor_native_call
 if type(_ENTRY) is not BuiltinFunctionType:
     raise TypeError('linear constructors require a compiled native entry')
 _CONTEXT = dict(plans={}, missing=object(), ready=False)
+# The compiled device check of the nineteen constructors (each names `device`).
+from ._device_table import connect_context as _connect_device_context
+_connect_device_context(_CONTEXT)
 # The vetted classes of _expansion_linear, connected when that family loads
 # (lane lazy-family-import, 2026-11-12): `collect()` fills `_CLASSES`.
 _CLASSES = ()
