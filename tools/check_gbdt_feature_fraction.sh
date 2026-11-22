@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 if [ "${MOJOLEARN_BUILD_LOCK_HELD:-0}" != 1 ]; then
     exec tools/with_build_lock.sh sh "$0" "$@"
 fi
-out=${1:-bench/results/feature_fraction_local}
+out=${1:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/feature_fraction_local}
 mkdir -p "$out"
 MOJOLEARN_PYTHON=${MOJOLEARN_PYTHON:-"$PWD/checks/pipeline_python.sh"}
 export MOJOLEARN_PYTHON
