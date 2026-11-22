@@ -32,6 +32,8 @@ from gbdt.host.gbdt_host_entries_impl import (
 )
 from gbdt.host.gbdt_oracle_eval import GbdtHostEval, gbdt_eval_want_best_model
 from gbdt.host.gbdt_oracle import (
+    GBDT_BOOST_LOGLOSS,
+    GBDT_BOOST_RMSE,
     GBDT_BOOT_BAYESIAN,
     GBDT_BOOT_BERNOULLI,
     GBDT_BOOT_POISSON,
@@ -75,7 +77,6 @@ from gbdt.host.gbdt_oracle_multiclass import (
 from gbdt.host.gbdt_oracle_rmse import (
     GbdtRmseHostFit,
     _rmse_starting_approx,
-    gbdt_rmse_host_fit,
     gbdt_rmse_host_model_text,
     gbdt_text_with_bias,
 )
@@ -161,10 +162,10 @@ def _refuse(what: String) raises:
         " only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise"
         " and multiclass losses, Depthwise with Logloss and Cosine,"
         " Lossguide with Logloss and NewtonL2 or NewtonCosine; no sample"
-        " weights and no CTR categoricals anywhere; an eval set and the"
+        " weights outside Logloss; an eval set and the"
         " overfitting detector on SymmetricTree with Logloss and on the"
-        " Ordered and pointwise-searcher arms only; one-hot categorical"
-        " columns under SymmetricTree with Logloss), see"
+        " Ordered and pointwise-searcher arms only; one-hot and CTR"
+        " categorical columns under SymmetricTree with Logloss or RMSE), see"
         " gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it"
     )
 
@@ -1076,12 +1077,12 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
     var lossguide_knobs = grow_code == GBDT_HOST_GROW_LOSSGUIDE and loss == String("Logloss")
     # the symmetric Logloss, RMSE and multiclass fits' stochastic arm, CatBoost's GPU
     # defaults (Bayesian bootstrap, random_strength 1):
-    # gbdt_oracle.mojo::gbdt_host_fit and gbdt_oracle_rmse.mojo::
-    # gbdt_rmse_host_fit; numeric columns only, as the one-hot arm is
-    # measured without it
+    # gbdt_oracle.mojo::gbdt_host_boost, which the numeric, one-hot and CTR
+    # arms all run (lane pv-gbdt-cpu-cat, 2026-11-22: categorical columns
+    # no longer refuse it; the multiclass arm refuses them below)
     var symmetric_stochastic = (
         grow_code == 0 and (loss == String("Logloss") or is_rmse or is_multi)
-        and not is_pointwise and n_flags == 0
+        and not is_pointwise
     )
     # the non-symmetric driver's stochastic arm, Logloss and RMSE:
     # gbdt_oracle_depthwise.mojo::gbdt_host_fit_non_symmetric reads the
@@ -1154,8 +1155,8 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             "class_weights takes 2 entries for loss 'Logloss', got "
             + String(n_class_weights)
         )
-    if n_flags != 0 and (is_rmse or grow_code != 0 or is_pointwise or is_multi):
-        _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss")
+    if n_flags != 0 and (grow_code != 0 or is_pointwise or is_multi):
+        _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss or RMSE")
     # the HELD-OUT arm (lane/close-no-cpu-path-gbdt, 2026-09-20): their
     # `testCursor`, held-out curve, overfitting detector and
     # `ShrinkToBestIteration`, restated in gbdt/host/gbdt_oracle_eval.mojo
@@ -1419,6 +1420,16 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         row_weights = gbdt_host_binary_row_weights(
             y, n_rows, class_weights, read_f32(weights_address, n_weights)
         )
+    # the symmetric loop's objective and starting constant
+    # (gbdt_oracle.mojo::gbdt_host_boost): RMSE's
+    # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:1597-1600`),
+    # unset True, written as the model's `bias`; Logloss starts at zero
+    var boost_objective: Int = GBDT_BOOST_LOGLOSS
+    if is_rmse:
+        boost_objective = GBDT_BOOST_RMSE
+    var boost_start = Float64(0.0)
+    if is_rmse and grow_code == 0 and boost_from_average != 0:
+        boost_start = _rmse_starting_approx(y, n_rows)
     if is_multi:
         # gbdt/host/gbdt_oracle_multiclass.mojo
         var multi_objective = GBDT_OBJ_MULTICLASS_OVA
@@ -1479,17 +1490,22 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         best_iteration = pw_model.best_iteration
         stopped_early = pw_model.stopped_early
         text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_model^, pw_start))
-    elif is_rmse and grow_code == 0:
-        # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
-        # 1597-1600`): unset is True for RMSE
-        var fit = gbdt_rmse_host_fit(
-            x, y, n_rows, n_features, p, boost_from_average != 0,
+    elif is_rmse and grow_code == 0 and len(flags) == 0:
+        # the numeric RMSE fit: the one symmetric loop at GBDT_BOOST_RMSE
+        # (gbdt_oracle.mojo::gbdt_host_boost; the twin loop
+        # gbdt_rmse_host_fit is deleted, lane pv-gbdt-cpu-cat)
+        var r = gbdt_host_fit_eval(
+            x, y, n_rows, n_features, p, List[Bool](),
             sym_boot_kind, sym_boot_param, random_strength,
+            GbdtHostEval.none(), List[Float32](), GBDT_BOOST_RMSE,
+            boost_start,
         )
-        text = gbdt_rmse_host_model_text(fit)
-        losses = fit.model.losses.copy()
-        best_iteration = fit.model.best_iteration
-        stopped_early = fit.model.stopped_early
+        losses = r.model.losses.copy()
+        best_iteration = r.model.best_iteration
+        stopped_early = r.model.stopped_early
+        text = gbdt_text_with_bias(
+            gbdt_host_model_text(r.model), len(r.model.losses), boost_start
+        )
     elif grow_code == 0 and len(flags) != 0 and gbdt_has_ctr_columns(
         gbdt_ctr_column_kinds(flags, x, n_rows, n_features)
     ):
@@ -1508,8 +1524,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         var ctr_fit = gbdt_ctr_host_fit(
             x, y, n_rows, n_features, p, flags, permutation_count,
             ctr_permutation_id, ev^, max_ctr_complexity,
+            sym_boot_kind, sym_boot_param, random_strength, boost_objective,
+            boost_start,
         )
-        text = gbdt_ctr_host_model_text(ctr_fit)
+        # the `bias` record a seeded RMSE fit adds (absent at zero bits)
+        text = gbdt_text_with_bias(
+            gbdt_ctr_host_model_text(ctr_fit),
+            len(ctr_fit.fit.model.losses), boost_start,
+        )
         losses = ctr_fit.fit.model.losses.copy()
         best_iteration = ctr_fit.fit.eval.best_iteration
         stopped_early = ctr_fit.fit.eval.stopped_early
@@ -1530,10 +1552,14 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             use_best_model, best_model_min_trees,
         )
         var r = gbdt_host_fit_eval(
-            x, y, n_rows, n_features, p, one_hot, -1, Float32(1.0),
-            Float32(0.0), ev^,
+            x, y, n_rows, n_features, p, one_hot, sym_boot_kind,
+            sym_boot_param, random_strength, ev^, List[Float32](),
+            boost_objective, boost_start,
         )
-        text = gbdt_host_model_text_one_hot(r.model, one_hot)
+        text = gbdt_text_with_bias(
+            gbdt_host_model_text_one_hot(r.model, one_hot),
+            len(r.model.losses), boost_start,
+        )
         losses = r.model.losses.copy()
         best_iteration = r.eval.best_iteration
         stopped_early = r.eval.stopped_early

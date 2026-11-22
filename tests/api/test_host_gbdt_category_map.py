@@ -10,12 +10,6 @@ form, with unseen values and None, and refuses in the same words. The
 tree-CTR (max_ctr_complexity 2) and Ordered CTR models carry their tables in
 the model text, which the host predict expands. Small fits only (a few
 trees, CPU); nothing here is a measurement.
-
-The Plain fits use the categorical arm the CPU gbdt binding trains
-(SymmetricTree, Logloss, no bootstrap, no score noise:
-gbdt/mojolearn_gbdt_host_run.mojo refuses bootstrap_type and cat_features
-outside SymmetricTree with Logloss by name); the Ordered CTR fit keeps its
-defaults, which the CPU Ordered arm trains.
 """
 import pickle
 
@@ -27,7 +21,6 @@ mojolearn = pytest.importorskip("mojolearn")
 N = 240
 CATS = ["red", "green", "blue", "teal"]
 MANY = ["c%02d" % i for i in range(40)]
-CPU_CTR = {"loss": "Logloss", "bootstrap_type": "No", "random_strength": 0.0}
 
 
 def _data(cats=CATS):
@@ -46,8 +39,8 @@ def _rows(cat, num):
 @pytest.fixture(scope="module")
 def saved(tmp_path_factory):
     cat, _, num, y = _data()
-    model = mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0], device="cpu", **CPU_CTR)
-    model.fit(_rows(cat, num), (y > 1.5).astype(np.float32))
+    model = mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0], device="cpu")
+    model.fit(_rows(cat, num), y)
     path = str(tmp_path_factory.mktemp("hostgbdt") / "cat.npz")
     model.save(path)
     return model, path
@@ -150,7 +143,7 @@ def test_model_without_a_map_unchanged(tmp_path):
 def test_logloss_proba_matches(tmp_path):
     cat, _, num, y = _data()
     yb = (y > 1.5).astype(np.float32)
-    model = mojolearn.GradientBoosting(n_estimators=6, max_depth=3, cat_features=[0], device="cpu", **CPU_CTR)
+    model = mojolearn.GradientBoosting(loss="Logloss", n_estimators=6, max_depth=3, cat_features=[0], device="cpu")
     model.fit(_rows(cat, num), yb)
     path = str(tmp_path / "logloss.npz")
     model.save(path)
@@ -160,7 +153,7 @@ def test_logloss_proba_matches(tmp_path):
 
 
 @pytest.mark.parametrize("options", [
-    {"max_ctr_complexity": 2, "boosting_type": "Plain", **CPU_CTR},
+    {"max_ctr_complexity": 2, "boosting_type": "Plain"},
     {"boosting_type": "Ordered"},
 ])
 def test_ctr_models_match(tmp_path, options):
@@ -169,7 +162,7 @@ def test_ctr_models_match(tmp_path, options):
     cat, cat2, num, y = _data(MANY)
     X = [[cat[i], cat2[i], float(num[i])] for i in range(N)]
     model = mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0, 1], device="cpu", **options)
-    model.fit(X, (y > 1.5).astype(np.float32) if options.get("loss") == "Logloss" else y)
+    model.fit(X, y)
     assert "ctr_" in model.model_, "the fit is meant to build CTR columns (40 categories)"
     path = str(tmp_path / "ctr.npz")
     model.save(path)

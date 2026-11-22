@@ -52,8 +52,7 @@ def test_proving_every_column_categorical_s_and_u_arrays():
     import mojolearn
 
     def fit_predict(X):
-        model = mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0, 1], device="cpu",
-                                           **_cats.CPU_CTR)
+        model = mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0, 1], device="cpu")
         return model.fit(X, y).predict(X)
 
     assert_same(fit_predict(S), fit_predict(U), "S vs U, every column categorical")

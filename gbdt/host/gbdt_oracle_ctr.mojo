@@ -130,6 +130,7 @@ from gbdt.gpu_data.compressed_index_builder import (
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import HostF32Ptr, HostU32Ptr, host_predict_chunk
 from gbdt.host.gbdt_oracle import (
+    GBDT_BOOST_LOGLOSS,
     GbdtHostFitWithEval,
     GbdtHostGrid,
     GbdtHostModel,
@@ -970,6 +971,11 @@ def gbdt_ctr_host_fit(
     ctr_estimation_permutation_id: Int,
     eval: GbdtHostEval = GbdtHostEval.none(),
     max_ctr_complexity: Int = 1,
+    bootstrap_kind: Int = -1,
+    bootstrap_param: Float32 = Float32(1.0),
+    random_strength: Float32 = Float32(0.0),
+    objective: Int = GBDT_BOOST_LOGLOSS,
+    starting_approx: Float64 = 0.0,
 ) raises -> GbdtCtrHostFit:
     """`train` with categorical columns on the covered configuration (see
     the module docstring for what that is and what mirrors what).
@@ -986,7 +992,14 @@ def gbdt_ctr_host_fit(
     The columns, grids, tables and per-permutation indexes are
     `gbdt_ctr_host_prelude`'s (which also checks the sizes of the learn
     arguments); this function is the Plain boosting loop over them and the
-    model's tree-CTR tail."""
+    model's tree-CTR tail.
+
+    `bootstrap_kind`, `bootstrap_param`, `random_strength`, `objective`
+    and `starting_approx` are `gbdt_host_boost`'s (lane pv-gbdt-cpu-cat,
+    2026-11-22): the stochastic arm and RMSE reach the categorical columns
+    as they reach the device's, through the one loop. The CTR columns do
+    not read the loss (`TCatFeatureParams.default()` and the target grid
+    are the same for every loss, `gbdt/train.mojo`)."""
     if eval.n_rows < 0:
         raise Error("eval_set row count must not be negative")
     if eval.has_test():
@@ -1015,7 +1028,8 @@ def gbdt_ctr_host_fit(
     var tree_on = len(tree_state) > 0
     var fit = gbdt_host_boost(
         cindexes, est_perm, y, n_rows, n_columns, grid^, shape.layout, params,
-        -1, Float32(1.0), Float32(0.0), eval, test_cindex, tree_state,
+        bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
+        tree_state, List[Float32](), objective, starting_approx,
     )
 
     # TREE CTRS: the model's columns are the base columns followed by one
