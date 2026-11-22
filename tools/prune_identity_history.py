@@ -371,6 +371,17 @@ def apply(root, today):
     paths = [r[0] for r in prune]
     for i in range(0, len(paths), 50):
         git(root, "rm", "-r", "-q", "--", *paths[i:i + 50])
+    # The table reads only the rows of the record index (2026-11-21, lane tree-readers), and refuses a
+    # listed file that is gone: retire the pruned directories' rows in the same staged change.
+    spec = importlib.util.spec_from_file_location("_prune_vref", root / "python/mojolearn/_verify_reference.py")
+    vref = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(vref)
+    if (root / vref.RECORD_INDEX).is_file():
+        listed = vref.read_index(str(root), vref.RECORD_INDEX, verify=False)
+        keep = [row for rel, row in listed if not any(rel.startswith(p + "/") for p in paths)]
+        vref.write_index(str(root), vref.RECORD_INDEX, keep, vref.index_header(str(root), vref.RECORD_INDEX))
+        git(root, "add", "--", vref.RECORD_INDEX)
+        print(f"retired {len(listed) - len(keep)} row(s) of {vref.RECORD_INDEX}")
     docs = root / REL_DOCS_TSV
     existing = docs.read_text().splitlines() if docs.is_file() else []
     if not existing:

@@ -264,7 +264,7 @@ def repository_inputs(root, incoming, preview_dir=None):
     tree and removes it on exit. Ordinary admission keeps immutable copies.
     """
     from retain_run_summary import (read_bytes, immutable_bytes, retain_identity, destination,
-                                    identity_companions, MAX_IDENTITY_BYTES)
+                                    identity_companions, index_identity, MAX_IDENTITY_BYTES)
     root = Path(root).resolve()
     base = root / 'bench/results/identity_break'
     if preview_dir is not None:
@@ -298,6 +298,11 @@ def repository_inputs(root, incoming, preview_dir=None):
         for companion in companions:
             immutable_bytes(match.with_name(companion['name']), companion['raw'], limit=MAX_IDENTITY_BYTES)
         resolved.append(match)
+    if preview_dir is None:
+        # The table reads only indexed records (bench/results/identity_break/INDEX.tsv): a reused
+        # repository copy that predates the index gets its row here, or the admission's own
+        # `--records <identity_break>` would silently leave it out.
+        index_identity(root, resolved)
     return resolved
 
 

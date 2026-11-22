@@ -6,6 +6,18 @@ the shipped default are under `2026-09-13_three-columns/` (its README names
 the boxes and the commits). The older files at this level predate the infer
 and model columns and diff on the train column only.
 
+## Which files are inputs: `INDEX.tsv` (2026-11-21)
+
+The verify reference table (`python -m mojolearn verify --all --emit-reference`), the
+verification matrix, the part-set census and the identity reuse planner read ONLY the files
+`INDEX.tsv` lists (path, sha256, device class, vendor, commit); nothing walks this directory.
+A listed file that is missing or changed is refused; an unlisted file is ignored. The
+admission (`tools/admit_identity_columns.sh`, through `retain_run_summary.retain_identity`)
+adds the row of every record it retains. A record committed by hand needs
+`python3 tools/record_index.py add <file>`; `python3 tools/record_index.py check` lists
+column-shaped files no index names. Column-shaped files elsewhere under `bench/results` that
+the matrix and the census read are in `bench/results/CELLS_INDEX.tsv`.
+
 ## The infer column on the lanes that have no held-out rows (2026-09-14)
 
 The newest three-vendor record is `2026-09-14_46-lanes/` (414 train and 459

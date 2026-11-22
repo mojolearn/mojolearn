@@ -53,7 +53,6 @@ THE BAR THIS SETS FOR A RECORD RUN: nine parts or it is not a record.
 """
 import argparse
 import collections
-import glob
 import importlib.util
 import json
 import os
@@ -97,7 +96,9 @@ def census(root=ROOT):
         return have
 
     cols = []
-    for path in sorted(glob.glob(os.path.join(root, "bench/results/**/*.json"), recursive=True)):
+    # The record indexes, never a glob of the tree (2026-11-21, lane
+    # tree-readers; tools/record_index.py): the same files the glob took.
+    for path in vr.indexed_cells_paths(root):
         try:
             with open(path) as fh:
                 j = json.load(fh)
