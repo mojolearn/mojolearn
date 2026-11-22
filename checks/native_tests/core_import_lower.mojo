@@ -56,8 +56,7 @@ from checks.native_tests.core_ops_common import normal, unit_value, allclose, ex
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
-from checks.native_tests.runner import fixture_path, read_fixture_bytes
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require, fixture_path, read_fixture_bytes
 
 
 comptime CORE_IMPORT_LOWER_FIXTURES = 6

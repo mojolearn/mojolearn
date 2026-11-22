@@ -1,16 +1,17 @@
 name: Native checks
 
-# The native Mojo checks (checks/native_tests/, one shared runner: runner.mojo, registry.mojo, run_cpu.mojo) compiled
+# The native Mojo checks (TestSuite files: checks/native_tests/<name>.mojo and checks/<name>.mojo whose second line is
+# `# native-check: <columns>`, docs/plans/TESTSUITE_CONVERSION.md) compiled
 # and run on the free GitHub Linux runners. The integration compile (tools/release.py candidate) builds the bindings
 # only, never the checks; the orchestrator dispatches this after each integration merge
 # (plan TEST_MIGRATION_2026-11-14 (git history)). GPU checks run on the rented L40S pod with
 # tools/ops/native_checks_gpu_job.sh.
 #
-# plan: list the registered checks of the column matching `filter` from the source (registry.mojo and each check's
-# register(); tools/ops/native_checks_report.py plan) and deal them into ceil(checks/25) shards (cap 20) by a stable
-# hash. build: ONE compile of the column's main (`mojo build` of run_cpu.mojo with -D MOJOLEARN_COLUMN_CPU=1) for
-# every check; a failed build is the row build-<column> and every planned check reads MISSING. check: each shard
-# runs the prebuilt binary once per check name (`run_cpu <name>`, one process per check so a crash stays in its row)
+# plan: list the checks of the column matching `filter` from the source (each file's marker;
+# tools/ops/native_checks_report.py plan) and deal them into ceil(checks/25) shards (cap 20) by a stable
+# hash. build: the column's files compiled as group programs (tools/ops/native_testsuite.sh build, lane ts-build
+# 2026-11-22); a file that fails to compile is its own red row. check: each shard
+# runs each check's binary once (`bin/ts/<name>`, one process per check so a crash stays in its row)
 # with a per-check timeout, keeps going after a failure and writes results/<name>.txt plus logs/<name>.log.
 # summary: merges every shard into SUMMARY.md and fails the run when any check failed or never reported.
 #

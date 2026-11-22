@@ -25,10 +25,9 @@
 # (--target-triple arm64-apple-macosx11.0): no Apple machine at all; whether the compiler accepts that is what
 # `suite=apple-parse` of native-checks.yml was written to find out. Either way this is parse, type check and
 # elaboration only: no AIR, no metallib, no link, nothing run.
-#   build         IN_COLUMN; writes NC_OUT (default out)/{results,logs} and NC_BIN (default bin)/run_<column>, and
-#                 NC_BIN/ts/<name> for every TestSuite check file of the column (tools/ops/native_testsuite.sh)
-#   shard         TASKS (check names), IN_TIMEOUT, IN_COLUMN; runs NC_BIN/run_<column> once per name into NC_OUT (a
-#                 TestSuite check runs NC_BIN/ts/<name> instead)
+#   build         IN_COLUMN; writes NC_OUT (default out)/{results,logs} and NC_BIN (default bin)/ts/<name> for every
+#                 TestSuite check file of the column (tools/ops/native_testsuite.sh build: group programs)
+#   shard         TASKS (check names), IN_TIMEOUT, IN_COLUMN; runs NC_BIN/ts/<name> once per name into NC_OUT
 #   summary       SOURCE_SHA; MERGED (default merged) holds results/ and planned.txt -> SUMMARY.md, REPORT.txt
 #   verdict       DEVICE_MATRIX, RETRY_MATRIX; PARSE_DIR (default parse) holds device-parse[-retry]-<KEY>/result-<KEY>.txt;
 #                 prints the device groups' table; exit 1 when a group's last attempt did not pass
@@ -246,37 +245,17 @@ step_build() {
     set +e -u
     local out=${NC_OUT:-out} bindir=${NC_BIN:-bin}
     mkdir -p "$out/results" "$out/logs" "$bindir"
-    defines="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
-    [ "$IN_COLUMN" = cpu ] && defines="$defines -D MOJOLEARN_COLUMN_CPU=1"
-    # the device column counts fitted uploads for resident_second_call (core/resident_upload_count.mojo)
-    [ "$IN_COLUMN" = cpu ] || defines="$defines -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1"
-    # The wheel's Linux x86-64 baseline (bindings/build_mamba.sh TARGET_FLAGS). Without it `mojo build`
-    # targets the build runner's own chip, and the shards that land on an older runner trap on its first
-    # instruction: at 6906a59111 (run 43722561124) shards 0 and 4 SIGILLed on all 49 of their checks (rc 132,
-    # 0-1 s, same main+0x7b06) while the other four shards passed every check.
-    target="--target-cpu x86-64-v3 --target-features +avx,+avx2,+bmi,+bmi2,+cx16,+f16c,+fma,+lzcnt,+movbe,+popcnt,+sahf,+sse3,+sse4.1,+sse4.2,+ssse3,+xsave"
-    [ "$(uname -m)" = x86_64 ] || target=""
     pixi run mojo --version > "$out/compiler-version.log" 2>&1
     start=$(date +%s)
-    # The gitignored generated modules (the archive Unicode table the archive_* checks import, the tokenizer
-    # table), written exactly as the binding builds write them (bindings/merged_build.sh).
-    python3 tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$out/logs/generated-sources.log" 2>&1
+    # Every native check is a TestSuite file (docs/plans/TESTSUITE_CONVERSION.md; the registry and its one
+    # run_<column> program are gone, lane ts-build 2026-11-22): tools/ops/native_testsuite.sh build compiles the
+    # column's files as group programs and prepares what they need itself (generated sources, fixture packs, the
+    # column's defines, the wheel's x86-64-v3 baseline: without it the shards that land on an older runner trapped on
+    # their first instruction, run 43722561124). A file that fails to compile is its own red row; this row is red
+    # only when the build could not start (rc 2).
+    bash tools/ops/native_testsuite.sh build "$IN_COLUMN" "$bindir" "$out" > "$out/logs/build-$IN_COLUMN.log" 2>&1
     rc=$?
-    if [ "$rc" = 0 ]; then
-        # The TestSuite check files (tools/ops/native_testsuite.sh, lane ts-pilot 2026-11-22): one binary per file,
-        # compiled at once on the cores the one compile of run_<column> leaves idle (it holds about 3 of 32), each
-        # file's failure in its own result row. The registry's checks stay in run_<column> until they are converted.
-        NC_DEFINES="$defines" NC_TARGET="$target" bash tools/ops/native_testsuite.sh build "$IN_COLUMN" "$bindir" "$out" \
-            > "$out/logs/build-testsuite-$IN_COLUMN.log" 2>&1 &
-        tspid=$!
-        pixi run mojo build $defines $target -I . -o "$bindir/run_$IN_COLUMN" "checks/native_tests/run_$IN_COLUMN.mojo" \
-            > "$out/logs/build-$IN_COLUMN.log" 2>&1
-        rc=$?
-        wait "$tspid"
-        tail -n 1 "$out/logs/build-testsuite-$IN_COLUMN.log"
-    else
-        cp "$out/logs/generated-sources.log" "$out/logs/build-$IN_COLUMN.log"
-    fi
+    tail -n 1 "$out/logs/build-$IN_COLUMN.log"
     python3 tools/ops/native_checks_report.py result "build-$IN_COLUMN" --log "$out/logs/build-$IN_COLUMN.log" \
         --rc "$rc" --seconds "$(( $(date +%s) - start ))" --out-dir "$out/results"
     echo "build rc=$rc"
@@ -289,21 +268,10 @@ step_shard() {
     mkdir -p "$out/results" "$out/logs"
     # fixture cases are tracked as one archive each (tools/fixture_packs.py): recreate their directories
     if [ -f tools/fixture_packs.py ]; then python3 tools/fixture_packs.py unpack > /dev/null; fi
-    bin="$bindir/run_$IN_COLUMN"
-    case "$bin" in /*) ;; *) bin="./$bin" ;; esac
-    chmod +x "$bin"
     for name in $TASKS; do
-        # a TestSuite check file runs its own binary (tools/ops/native_testsuite.sh run writes its result)
-        if bash tools/ops/native_testsuite.sh is "$name"; then
-            IN_TIMEOUT="${IN_TIMEOUT:-900}" bash tools/ops/native_testsuite.sh run "$IN_COLUMN" "$bindir" "$out" "$name"
-            continue
-        fi
-        start=$(date +%s)
-        timeout -k 30 "${IN_TIMEOUT:-900}" pixi run "$bin" "$name" > "$out/logs/$name.log" 2>&1
-        rc=$?
-        python3 tools/ops/native_checks_report.py result "$name" --log "$out/logs/$name.log" --rc "$rc" \
-            --seconds "$(( $(date +%s) - start ))" --out-dir "$out/results"
-        echo "$name rc=$rc"
+        # each check is a TestSuite file with its own binary (tools/ops/native_testsuite.sh run writes its result,
+        # a red MISSING-binary row for a name that is not one)
+        IN_TIMEOUT="${IN_TIMEOUT:-900}" bash tools/ops/native_testsuite.sh run "$IN_COLUMN" "$bindir" "$out" "$name"
     done
     exit 0
 }

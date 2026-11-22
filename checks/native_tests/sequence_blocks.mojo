@@ -39,7 +39,7 @@ from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from checks.native_tests.core_ops_common import normal
 from checks.native_tests.training_sequential_common import SeqModel, codes_as_words, L_RELU, L_RESIDUAL, L_FLATTEN, L_LINEAR
-from checks.native_tests.runner import CPU_COLUMN_BUILD
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD
 
 
 comptime L_CONV1D = 15

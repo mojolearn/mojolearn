@@ -1,7 +1,8 @@
 #!/bin/bash
-# GPU native checks on the rented L40S pod: ONE build of checks/native_tests/run_gpu.mojo (every registered check of
-# the device column), then the binary once per check name matching NC_FILTER (default every check), with a per-check
-# timeout. The CPU column runs on the free GitHub runners (.github/workflows/native-checks.yml); both write the same
+# GPU native checks on the rented L40S pod: the device column's TestSuite check files built as group programs
+# (tools/ops/native_testsuite.sh build, lane ts-build 2026-11-22; the registry and its one run_gpu program are gone),
+# then each check file matching NC_FILTER (default every check) as its own process, with a per-check timeout. The CPU
+# column runs on the free GitHub runners (.github/workflows/native-checks.yml) and the CPU box; both write the same
 # results/<check>.txt through tools/ops/native_checks_report.py result, read by its summary and report.
 #
 # Launch (results persist to R2 from the pod through tools/box_persist_run.sh):
@@ -10,15 +11,13 @@
 #   [--env NC_TIMEOUT=900] [--env NC_JOBS=K] [--env NC_EXPECT_COMMIT=<sha>]  (refuse a tree synced from another commit)
 # Read:  tools/box_persist.py fetch --tag <tag>; python3 tools/ops/native_checks_report.py report <dir>
 #
-# Parallel plan (AGENTS.md hard rules on parallelism): the build is one `mojo build` (the compiler's own threads use
-# the cores; it is the one serial stage and is timed and its peak RSS recorded as the row build-gpu). The checks are
-# independent processes of the prebuilt binary, run K at once with xargs -P; each check splits its own host work
-# across the cores, and the device parts share the one GPU. K = min(cgroup cores, memory available x 0.8 / the
-# largest check's peak RSS (NC_CHECK_PEAK_MB, default 2048: the largest of 269 checks was 1.64 GB on 2026-11-18)),
-# unless NC_JOBS. The build's RSS is not a check's: it is left out of that figure (lane fx-pod-job, 2026-11-18: the
-# old K = cores/4 had no memory reason, and the summary divided by the build's 43 GB). Each check runs under
-# /usr/bin/time -v; SUMMARY.md states the peak RSS of the largest check, the memory available, the K memory alone
-# would allow, and the busy cores of total of the build and of the checks (cgroup CPU time, else /proc/stat).
+# Parallel plan (AGENTS.md hard rules on parallelism): the build is G group compiles at once (G = min(cgroup cores,
+# memory / one group's peak), native_testsuite.sh build), timed with its peak RSS as the row build-gpu. The checks are
+# independent processes, run K at once with xargs -P; each check splits its own host work across the cores, and the
+# device parts share the one GPU. K = min(cgroup cores, memory available x 0.8 / the largest check's peak RSS
+# (NC_CHECK_PEAK_MB, default 2048: the largest of 269 checks was 1.64 GB on 2026-11-18)), unless NC_JOBS. Each check
+# runs under /usr/bin/time -v; SUMMARY.md states the peak RSS of the largest check, the memory available, the K memory
+# alone would allow, and the busy cores of total of the build and of the checks (cgroup CPU time, else /proc/stat).
 #
 # Exit status: 0 when every check passed, 1 when any failed or timed out (rc 124) or the build failed, 2 on a setup
 # failure.
@@ -28,24 +27,11 @@ PY=python3
 python3 -c 'import sys' 2>/dev/null || PY="pixi run python3"
 
 if [ "${1:-}" = "--one" ]; then
-    # One check (run by xargs): rc, seconds, peak RSS and the first error lines into results/<check>.txt.
-    name=$2; RES=$3; BIN=${4:?--one needs the binary path}
-    # a TestSuite check file runs its own binary, built beside run_gpu (tools/ops/native_testsuite.sh)
-    if bash tools/ops/native_testsuite.sh is "$name"; then
-        IN_TIMEOUT="${NC_TIMEOUT:-900}" bash tools/ops/native_testsuite.sh run gpu "$(dirname "$BIN")" "$RES" "$name"
-        exit 0
-    fi
-    log="$RES/logs/$name.log"; tm="$RES/time/$name.txt"; start=$(date +%s)
-    if [ -x /usr/bin/time ]; then
-        /usr/bin/time -v -o "$tm" timeout -k 30 "${NC_TIMEOUT:-900}" pixi run "$BIN" "$name" > "$log" 2>&1
-    else
-        timeout -k 30 "${NC_TIMEOUT:-900}" pixi run "$BIN" "$name" > "$log" 2>&1
-    fi
-    rc=$?
-    rss=$(awk -F': *' '/Maximum resident set size/ {print $2}' "$tm" 2>/dev/null)
-    $PY tools/ops/native_checks_report.py result "$name" --log "$log" --rc "$rc" \
-        --seconds "$(( $(date +%s) - start ))" ${rss:+--maxrss-kb "$rss"} --out-dir "$RES/results"
-    echo "[$(date +%H:%M:%S)] $name rc=$rc"
+    # One check (run by xargs): its TestSuite binary, rc, seconds and the first error lines into results/<check>.txt
+    # (tools/ops/native_testsuite.sh run, which also localises a crash to the test).
+    name=$2; RES=$3; BIN_DIR=${4:?--one needs the build directory}
+    IN_TIMEOUT="${NC_TIMEOUT:-900}" bash tools/ops/native_testsuite.sh run gpu "$BIN_DIR" "$RES" "$name"
+    echo "[$(date +%H:%M:%S)] $name done"
     exit 0
 fi
 
@@ -99,37 +85,23 @@ $PY tools/generated_sources.py prepare --repo "$PWD" < /dev/null > "$RES/logs/ge
 # the allocation's cores and memory: tools/ops/box_cores_lib.sh (busy_sampler, busy_of, alloc_cores, alloc_mem_kb).
 . "$(dirname "$SELF")/box_cores_lib.sh"
 
-# The one compile: every registered device-column check in one binary. The binary is built OUTSIDE the results
-# dir (2026-11-21: the nvc-measure job persisted a 144 MB bin/run_gpu to R2 and the Mac; a job with only our own
-# arms keeps no binaries, AGENTS.md "What a measurement keeps"): tools/box_persist_run.sh tars only $RES.
+# The build: the device column's TestSuite files as group programs. The binaries are built OUTSIDE the results dir
+# (2026-11-21: the nvc-measure job persisted a 144 MB bin/run_gpu to R2 and the Mac; a job with only our own arms keeps
+# no binaries, AGENTS.md "What a measurement keeps"): tools/box_persist_run.sh tars only $RES.
 BIN_DIR=${NC_BIN_DIR:-$RES.work/bin}
 mkdir -p "$BIN_DIR"
-BIN="$BIN_DIR/run_gpu"
-say "building run_gpu ($n checks planned)"
+say "building the device column ($n checks planned)"
 bsampler=$(busy_sampler "$RES/busy_cores_build.txt")
 bstart=$(date +%s)
-# the TestSuite check files of the device column, as group programs (tools/ops/native_testsuite.sh build: its own
-# defines, target, generated sources and fixtures), beside the one compile (lane ts-pilot; grouped, lane ts-build)
-IN_FILTER="$FILTER" bash tools/ops/native_testsuite.sh build gpu "$BIN_DIR" "$RES" > "$RES/logs/build-testsuite-gpu.log" 2>&1 &
-tspid=$!
-if [ -x /usr/bin/time ]; then
-    /usr/bin/time -v -o "$RES/time/build-gpu.txt" pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . \
-        -o "$BIN" checks/native_tests/run_gpu.mojo > "$RES/logs/build-gpu.log" 2>&1
-else
-    pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . -o "$BIN" checks/native_tests/run_gpu.mojo \
-        > "$RES/logs/build-gpu.log" 2>&1
-fi
+IN_FILTER="$FILTER" bash tools/ops/native_testsuite.sh build gpu "$BIN_DIR" "$RES" > "$RES/logs/build-gpu.log" 2>&1
 brc=$?
-wait "$tspid"
-say "$(tail -n 1 "$RES/logs/build-testsuite-gpu.log")"
+say "$(tail -n 1 "$RES/logs/build-gpu.log")"
 kill "$bsampler" 2>/dev/null
-brss=$(awk -F': *' '/Maximum resident set size/ {print $2}' "$RES/time/build-gpu.txt" 2>/dev/null)
+# the largest single compile's peak RSS (a group program's), from the build's /usr/bin/time records
+brss=$(cat "$RES"/logs/build-ts-*.log.time 2>/dev/null | awk -F': *' '/Maximum resident set size/ {if ($2>m) m=$2} END {if (m) print m}')
 $PY tools/ops/native_checks_report.py result build-gpu --log "$RES/logs/build-gpu.log" --rc "$brc" \
     --seconds "$(( $(date +%s) - bstart ))" ${brss:+--maxrss-kb "$brss"} --out-dir "$RES/results"
 say "build rc=$brc in $(( $(date +%s) - bstart ))s"
-# The build log is kept whole (a failed build's full log is the record) but compressed: results/build-gpu.txt
-# already holds its first errors, and the raw log was 9 MB on 2026-11-21.
-gzip -9f "$RES/logs/build-gpu.log"
 
 # Cores of the allocation (cgroup quota, affinity), not the host's visible CPUs.
 cores=$(alloc_cores)
@@ -146,14 +118,14 @@ sampler=$(busy_sampler "$RES/busy_cores.txt")
 
 started=$(date +%s)
 if [ "$brc" -eq 0 ]; then
-    xargs -a "$RES/planned.txt" -P "$K" -I{} bash "$SELF" --one {} "$RES" "$BIN" > "$RES/progress.log" 2>&1
+    xargs -a "$RES/planned.txt" -P "$K" -I{} bash "$SELF" --one {} "$RES" "$BIN_DIR" > "$RES/progress.log" 2>&1
 else
-    say "build failed: no check runs (every planned check reads MISSING); first error in $RES/results/build-gpu.txt, full log $RES/logs/build-gpu.log.gz"
+    say "build could not start: no check runs (every planned check reads MISSING); $RES/results/build-gpu.txt, full log $RES/logs/build-gpu.log"
 fi
 kill "$sampler" 2>/dev/null
 wall=$(( $(date +%s) - started ))
 
-# the checks only: results/build-gpu.txt holds the build's RSS (43 GB on 2026-11-18), not a check's
+# the checks only: results/build-gpu.txt holds the build's RSS, not a check's
 checkfiles=(); for f in "$RES"/results/*.txt; do [ "$(basename "$f")" = build-gpu.txt ] || checkfiles+=("$f"); done
 peak_kb=0
 [ "${#checkfiles[@]}" -gt 0 ] && peak_kb=$(awk -F': *' '/^maxrss_kb/ {if ($2>m) m=$2} END {print m+0}' "${checkfiles[@]}")
@@ -165,7 +137,7 @@ say "BUSY build: $bbusy of $cores cores; checks: $busy of $cores cores"
     echo "source: $SOURCE ($SOURCE_NOTE) compiler: $(head -n 1 "$RES/compiler-version.log")"
     echo "filter: $FILTER; checks: $n; build rc $brc; wall: ${wall}s; timeout per check: ${NC_TIMEOUT:-900}s"
     echo "parallel: K=$K concurrent checks on $cores cores (K = min(cores, memory / ${NC_CHECK_PEAK_MB:-2048} MB) unless NC_JOBS); busy cores of $cores: checks $busy, build $bbusy"
-    if [ -n "${brss:-}" ]; then echo "build: peak RSS $(( brss / 1024 )) MB (the one serial stage; not a check's)"
+    if [ -n "${brss:-}" ]; then echo "build: largest compile's peak RSS $(( brss / 1024 )) MB (a group program; not a check's)"
     else echo "build: peak RSS not recorded"; fi
     if [ "$peak_kb" -gt 0 ]; then
         echo "peak RSS of the largest check: $(( peak_kb / 1024 )) MB; memory available $(( mem_kb / 1024 )) MB;" \

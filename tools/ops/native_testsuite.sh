@@ -1,7 +1,7 @@
 #!/bin/bash
 # tools/ops/native_testsuite.sh build|run -- THE TESTSUITE CHECK FILES of checks/native_tests/ (lane ts-pilot,
 # 2026-11-22; docs/plans/TESTSUITE_CONVERSION.md). A file whose second line is `# native-check: <columns>` is one check:
-# its `test_*` functions run by the standard library's TestSuite from its own main(). No wrapper, no registry row.
+# its `test_*` functions run by the standard library's TestSuite from its own main(). No wrapper and no registry.
 # Run with the checkout under test as the working directory (as tools/ops/native_checks_steps.sh is).
 #
 #   build <column> <bindir> <outdir>   compile every TestSuite file of the column, GROUPED (lane ts-build, 2026-11-22;
@@ -25,8 +25,10 @@
 #                                      the device column's MOJOLEARN_RESIDENT_UPLOAD_COUNT=1) and the wheel's x86-64-v3
 #                                      target (NC_TARGET, default that baseline on x86_64; set empty for none).
 #                                      Exit 0 even when a file failed (its own row is red); 2 on a setup failure.
-#   one <column> <name>                build that one file alone (the build step's defines and target) and run it, its
-#                                      output on stdout; exit = the binary's (tools/e1_bootstrap.sh phases 0-1)
+#   one <column> [-D DEFINE ...] <name> ...
+#                                      build each named file alone (the build step's defines and target, plus the given
+#                                      defines) and run it, its output on stdout; exit 0 when every one passed (the
+#                                      pixi tasks check-native-cpu / check-native-gpu, the e1 scripts)
 #   run <column> <bindir> <outdir> <name>
 #                                      run one TestSuite check as one process (timeout IN_TIMEOUT, default 900 s) and
 #                                      write <outdir>/results/<name>.txt from its Summary line. A CRASH (signal, no
@@ -157,21 +159,26 @@ build)
         done
     done < <(grep '^group ' "$gen/plan.txt")
     failed=$(awk '{print $1}' "$list" | while read -r x; do [ -x "$bindir/ts/$x" ] || printf '%s ' "$x"; done)
-    regrouped=$(awk '{print $2}' "$out/logs/testsuite-regroup-$column.txt" | wc -l)
-    echo "testsuite: $n files built in $(( $(date +%s) - start ))s ($ng groups, $ns planned singles, $regrouped files of failed groups rebuilt alone); failed to compile: ${failed:-none}"
-    exit 0 ;;
-one)
-    column=${2:?one <column> <name>}; name=${3:?}
-    src=""
-    for f in "checks/native_tests/$name.mojo" "checks/$name.mojo"; do [ -f "$f" ] && src=$f && break; done
-    [ -n "$src" ] || { echo "no TestSuite file named $name"; exit 2; }
+    column=${2:?one <column> [-D DEFINE ...] <name> [<name> ...]}; shift 2
+    extra=""; names=()
+    while [ $# -gt 0 ]; do
+        case "$1" in -D) extra="$extra -D ${2:?-D needs a define}"; shift 2 ;; *) names+=("$1"); shift ;; esac
+    done
+    [ "${#names[@]}" -gt 0 ] || { echo "one: name at least one TestSuite file"; exit 2; }
     work=${NC_ONE_DIR:-build/native-one}; mkdir -p "$work"
     prepare "$work" || exit 2
     column_flags "$column"
-    pixi run mojo build $TS_DEFINES $TS_TARGET -I . -o "$work/$name" "$src" > "$work/build-$name.log" 2>&1 \
-        || { echo "$name: compile failed ($work/build-$name.log)"; grep -m 5 -A 6 'error' "$work/build-$name.log"; exit 1; }
-    pixi run "$work/$name"
-    exit $? ;;
+    worst=0
+    for name in "${names[@]}"; do
+        src=""
+        for f in "checks/native_tests/$name.mojo" "checks/$name.mojo"; do [ -f "$f" ] && src=$f && break; done
+        [ -n "$src" ] || { echo "no TestSuite file named $name"; worst=2; continue; }
+        if ! pixi run mojo build $TS_DEFINES $extra $TS_TARGET -I . -o "$work/$name" "$src" > "$work/build-$name.log" 2>&1; then
+            echo "$name: compile failed ($work/build-$name.log)"; grep -m 5 -A 6 'error' "$work/build-$name.log"; worst=1; continue
+        fi
+        pixi run "$work/$name" || worst=1
+    done
+    exit "$worst" ;;
 run)
     column=${2:?run <column> <bindir> <outdir> <name>}; bindir=${3:?}; out=${4:?}; name=${5:?}
     mkdir -p "$out/results" "$out/logs"
@@ -191,8 +198,14 @@ run)
     fi
     limit=${IN_TIMEOUT:-900}
     start=$(date +%s)
-    timeout -k 30 "$limit" pixi run "$bin" > "$log" 2>&1
+    # under /usr/bin/time when the box has it: the check's peak RSS goes into its result (the GPU job's K and summary)
+    if [ -x /usr/bin/time ]; then
+        /usr/bin/time -v -o "$log.time" timeout -k 30 "$limit" pixi run "$bin" > "$log" 2>&1
+    else
+        timeout -k 30 "$limit" pixi run "$bin" > "$log" 2>&1
+    fi
     rc=$?
+    rss=$(awk -F': *' '/Maximum resident set size/ {print $2}' "$log.time" 2> /dev/null); rm -f "$log.time"
     if [ "$rc" -ne 0 ] && [ "$rc" -ne 124 ] && ! grep -qE '^Summary \[' "$log"; then
         # a crash before the summary: name the test that crashes alone
         echo "--- crash localisation (rc $rc, no TestSuite summary): each test alone with --only ---" >> "$log"
@@ -213,7 +226,7 @@ run)
         grep -q '^CRASHED' "$log" || echo "CRASHED (rc $rc) with every test passing alone: an order dependence between tests" >> "$log"
     fi
     $PY tools/ops/native_checks_report.py result "$name" --log "$log" --rc "$rc" \
-        --seconds "$(( $(date +%s) - start ))" --out-dir "$out/results"
+        --seconds "$(( $(date +%s) - start ))" ${rss:+--maxrss-kb "$rss"} --out-dir "$out/results"
     echo "$name rc=$rc"
     exit 0 ;;
 *)

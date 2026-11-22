@@ -23,7 +23,7 @@ fixture fill and the word compare of at most a few hundred thousand values.
 from max.gpu.host import DeviceContext
 
 from checks.native_tests.kit import download, upload_host_into
-from checks.native_tests.runner import require
+from checks.native_tests.testsuite_cases import require
 from dbscan.impl.brute_edge_free import bef_eps_kernel, bef_words
 from dbscan.impl.brute_eps_filter import (
     dbf_band_scale,

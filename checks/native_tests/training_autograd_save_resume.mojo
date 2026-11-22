@@ -55,8 +55,7 @@ from checks.native_tests.training_sequential_common import (
 )
 from checks.native_tests.training_check_common import same_words
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require
-from checks.native_tests.runner import read_fixture_bytes
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, check_cases_serial, require, read_fixture_bytes
 
 
 comptime SEQ_CASES = 7

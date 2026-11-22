@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The transfer kit's own check (`checks/native_tests/kit.mojo`).
 
 Device column: every dtype the checks move goes up and comes back bit for
@@ -22,6 +23,7 @@ got and the word it wanted (`pixi run check-kit-planted-gpu` and
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 
@@ -30,7 +32,7 @@ from checks.native_tests.kit import (
     download_undrained_keep, download_whole_into, same_words, upload, upload_address, upload_buffer_into,
     upload_host, upload_host_into, upload_into, upload_into_undrained_keep, upload_whole_into, word_hex,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD, check_cases, check_cases_serial, require
 
 
 comptime KIT_WORDS = 1031
@@ -273,18 +275,6 @@ def _gpu_case(ctx: DeviceContext, which: Int) raises:
         _buffer_forms(ctx)
 
 
-def _run_gpu(mut report: Report) raises:
-    var ctx = DeviceContext()
-    comptime if KIT_PLANT:
-        print("PLANT    KIT_ROUNDTRIP_PLANT is set: device case 0 MUST fail with at 3, got and want")
-    var cases = report.cases(KIT_GPU_CASES)
-    for which in range(KIT_GPU_CASES):  # driver-loop: over the kit's transfer cases, one device queue
-        try:
-            _gpu_case(ctx, which)
-        except error:
-            cases.fail(which, error)
-
-
 def _refusal(got: List[Float32], want: List[Float32]) -> String:
     """The message `same_words` refuses with, or empty when it accepts."""
     try:
@@ -351,27 +341,25 @@ def _cpu_case(which: Int) raises:
         require(word_hex[DType.uint64](longs, 0) == "0x0123456789abcdef", "word_hex of a 64-bit word")
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime if KIT_PLANT:
-        print("PLANT    KIT_ROUNDTRIP_PLANT is set: host case 0 MUST fail with at 3, got and want")
-    var cases = report.cases(KIT_CPU_CASES)
-    def task(which: Int) {imm cases}:
-        try:
-            _cpu_case(which)
-        except error:
-            cases.fail(which, error)
-    report.parallel(task, KIT_CPU_CASES)
+def test_kit_roundtrip() raises:
+    """The column's cases: the device transfers in order on the one device queue, the host comparisons across the
+    cores."""
+    comptime if CPU_COLUMN_BUILD:
+        comptime if KIT_PLANT:
+            print("PLANT    KIT_ROUNDTRIP_PLANT is set: host case 0 MUST fail with at 3, got and want")
+        check_cases("kit_roundtrip host", KIT_CPU_CASES, _cpu_case)
+    else:
+        var ctx = DeviceContext()
+        comptime if KIT_PLANT:
+            print("PLANT    KIT_ROUNDTRIP_PLANT is set: device case 0 MUST fail with at 3, got and want")
+        def device_case(which: Int) raises {imm ctx}:
+            _gpu_case(ctx, which)
+        check_cases_serial("kit_roundtrip device", KIT_GPU_CASES, device_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("kit_roundtrip", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # Tests listed by name, not discovered: discovery elaborates every function of the module for the host column,
+    # and the device helpers here are the device column's (docs/plans/TESTSUITE_CONVERSION.md, the two-column rule).
+    var suite = TestSuite()
+    suite.test[test_kit_roundtrip]()
+    suite^.run()

@@ -43,18 +43,17 @@ check-forest-resident-layouts = "bash tools/check_forest_resident_layouts.sh"
 # DEVIATION 2560/2561: enqueue_fill equals enqueue_memset and a host oracle
 # byte for byte (154 fills), once per side of the 2560 switch (rule 8).
 check-device-zero = "mojo run -I . core/device_zero_check.mojo"
-# The native checks (checks/native_tests/runner.mojo): one compile per column runs every registered
-# check; pass names to run some (`pixi run check-native-cpu spectral_prediction gbdt_public_fits`),
-# `--list` for the names. The CI builds each main once and runs one check per process.
-check-native-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -I . checks/native_tests/run_cpu.mojo"
-check-native-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . checks/native_tests/run_gpu.mojo"
-# The registered checks that decide an opt-in arm, built with the arm's define (lane fx-missing-checks,
-# 2026-11-19). Each is the default build's check by name: the host words, the oracle and the device follow the define.
-check-nan-canon-off-cpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 -I . checks/native_tests/run_cpu.mojo nan_canon"
-check-nan-canon-off-gpu = "python3 tools/generated_sources.py prepare --repo . && mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 -I . checks/native_tests/run_gpu.mojo nan_canon"
-# The two device-loop checks build one binary per route define, so they stay outside the registry.
-# Every other standalone check is registered (lane checks-register, 2026-11-16): run one with
-# `pixi run check-native-cpu <name>` (or check-native-gpu).
+# The native checks are TestSuite files (docs/plans/TESTSUITE_CONVERSION.md): name the ones to build and run
+# (`pixi run check-native-cpu spectral_prediction gbdt_public_fits`); each builds alone with the column's defines.
+# Every check of a column: tools/ops/native_checks_steps.sh build + shard (the CI and the CPU box; group programs).
+check-native-cpu = "bash tools/ops/native_testsuite.sh one cpu"
+check-native-gpu = "bash tools/ops/native_testsuite.sh one gpu"
+# The checks that decide an opt-in arm, built with the arm's define (lane fx-missing-checks,
+# 2026-11-19). Each is the default build's check file: the host words, the oracle and the device follow the define.
+check-nan-canon-off-cpu = "bash tools/ops/native_testsuite.sh one cpu -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 nan_canon"
+check-nan-canon-off-gpu = "bash tools/ops/native_testsuite.sh one gpu -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF=1 nan_canon"
+# The two device-loop checks build one binary per route define, so they have their own tasks. Run any
+# other check with `pixi run check-native-cpu <name>` (or check-native-gpu).
 check-native-rf-device-loop-early-exit-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_IDN_RF_DEVICE_LOOP_EARLY_EXIT=1 -I . checks/native_tests/rf_device_loop_early_exit_gpu.mojo"
 check-native-et-device-loop-early-exit-gpu = "bash checks/native_tests/et_device_loop_early_exit_gpu.sh"
 # Lane tmig-lm-1 (2026-11-14): byte LM and embedding tests moved from Python.
@@ -238,8 +237,8 @@ check-fixture-rng = "python3 tools/fixture_rng_census.py --self-test && python3 
 # The same gate with the planted variant standing in for splitmix64: MUST fail.
 check-fixture-rng-planted = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D FIXTURE_RNG_PLANT=1 -I . checks/fixture_rng_gate.mojo"
 # The transfer kit's own check with a planted word: both MUST fail (case 0, "at 3", got and want in hex).
-check-kit-planted-cpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU=1 -D KIT_ROUNDTRIP_PLANT=1 -I . checks/native_tests/run_cpu.mojo kit_roundtrip"
-check-kit-planted-gpu = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D KIT_ROUNDTRIP_PLANT=1 -I . checks/native_tests/run_gpu.mojo kit_roundtrip"
+check-kit-planted-cpu = "bash tools/ops/native_testsuite.sh one cpu -D KIT_ROUNDTRIP_PLANT=1 kit_roundtrip"
+check-kit-planted-gpu = "bash tools/ops/native_testsuite.sh one gpu -D KIT_ROUNDTRIP_PLANT=1 kit_roundtrip"
 check-min-child-hessian = "sh tools/check_min_child_hessian.sh"
 # CHANGED 2026-08-22: the check module is a library; `checks/vendor_main.mojo` is its
 # driver and always was. It also takes `--transpose` and exits 1 on a WRONG

@@ -29,7 +29,7 @@ from sequence.exec_trait import Exec
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from checks.native_tests.training_sequential_common import SeqModel, L_LINEAR, L_FLATTEN, L_PERMUTE
-from checks.native_tests.runner import CPU_COLUMN_BUILD
+from checks.native_tests.testsuite_cases import CPU_COLUMN_BUILD
 
 comptime L_CONV1D = 15
 comptime L_BRANCH = 19

@@ -20,18 +20,16 @@ def _write(d: Path, task: str, rc: int, error: str = "", rss: int | None = None)
     (d / f"{task}.txt").write_text(head + "--- first error ---\n" + error)
 
 
-def _registry(root: Path, checks: dict[str, tuple[bool, bool]]) -> None:
+def _suites(root: Path, checks: dict[str, tuple[bool, bool]]) -> None:
     nt = root / "checks/native_tests"
     nt.mkdir(parents=True, exist_ok=True)
-    lines = [f"from checks.native_tests.{n} import register as register_{n}" for n in checks]
-    (nt / "registry.mojo").write_text("\n".join(lines) + "\nfrom checks.native_tests.runner import Check\n")
     for n, (cpu, gpu) in checks.items():
-        (nt / f"{n}.mojo").write_text(
-            f'def register() -> Check:\n    return Check("{n}", cpu={cpu}, gpu={gpu}, serial="", run=run_cases)\n')
+        cols = " ".join(c for c, on in (("cpu", cpu), ("gpu", gpu)) if on)
+        (nt / f"{n}.mojo").write_text(f"# SPDX-License-Identifier: Apache-2.0\n# native-check: {cols}\n")
 
 
-def test_select_and_list_from_registry(tmp_path, capsys):
-    _registry(tmp_path, {"a_both": (True, True), "b_host": (True, False), "c_device": (False, True)})
+def test_select_and_list(tmp_path, capsys):
+    _suites(tmp_path, {"a_both": (True, True), "b_host": (True, False), "c_device": (False, True)})
     checks = ncr.load_checks(tmp_path)
     assert checks == {"a_both": (True, True), "b_host": (True, False), "c_device": (False, True)}
     assert ncr.column_names(checks, "cpu") == ["a_both", "b_host"]
@@ -41,39 +39,26 @@ def test_select_and_list_from_registry(tmp_path, capsys):
     assert capsys.readouterr().out.split() == ["b_host"]
 
 
-def test_repo_registry_matches_check_files():
+def test_repo_checks_are_testsuite_files():
+    # lane ts-build (2026-11-22): every check is a TestSuite file; the registry, its runner and the two mains are gone
     checks = ncr.load_checks(ROOT)
     assert len(ncr.column_names(checks, "cpu")) > 0
     assert len(ncr.column_names(checks, "gpu")) > 0
+    assert checks == ncr.testsuite_checks(ROOT)
     nt = ROOT / "checks/native_tests"
-    modules = ncr._REGISTERED.findall((nt / "registry.mojo").read_text())
-    registered = {m.removeprefix("native_tests.") for m in modules}
-    # every module with a register() is in the registry (checks/native_tests/ and the standalone checks at the top
-    # of checks/), and each check is one file named after itself
-    with_register = {p.stem for d in (nt, ROOT / "checks") for p in d.glob("*.mojo")
-                     if "def register() -> Check:" in p.read_text()}
-    assert with_register == registered
-    assert len(modules) == len(registered)
-    # the TestSuite check files (second line `# native-check: <columns>`) carry no register() and no registry row
-    suites = set(ncr.testsuite_checks(ROOT))
-    assert not suites & registered
-    assert set(checks) == registered | suites
-    # the five-file scaffolding is gone for every registered check
-    for name in registered:
-        for suffix in ("_cases", "_cpu_suite", "_gpu_suite", "_cpu", "_gpu"):
-            assert not (nt / f"{name}{suffix}.mojo").exists(), f"{name}{suffix}.mojo"
-    # the two mains import only the registry and the runner
-    for col in ("cpu", "gpu"):
-        imports = [ln for ln in (nt / f"run_{col}.mojo").read_text().splitlines() if ln.startswith(("from ", "import "))]
-        assert all("native_tests.registry" in ln or "native_tests.runner" in ln for ln in imports), imports
+    for gone in ("registry", "runner", "run_cpu", "run_gpu", "testsuite_serial"):
+        assert not (nt / f"{gone}.mojo").exists(), f"{gone}.mojo"
+    with_register = [p.name for d in (nt, ROOT / "checks") for p in d.glob("*.mojo")
+                     if "def register() -> Check:" in p.read_text()]
+    assert with_register == []
 
 
 def test_pixi_has_two_column_tasks_and_no_per_check_tasks():
     import tomllib
 
     tasks = tomllib.loads((ROOT / "pixi.toml").read_text())["tasks"]
-    assert "run_cpu.mojo" in tasks["check-native-cpu"] and "-D MOJOLEARN_COLUMN_CPU=1" in tasks["check-native-cpu"]
-    assert "run_gpu.mojo" in tasks["check-native-gpu"] and "MOJOLEARN_COLUMN_CPU" not in tasks["check-native-gpu"]
+    assert tasks["check-native-cpu"] == "bash tools/ops/native_testsuite.sh one cpu"
+    assert tasks["check-native-gpu"] == "bash tools/ops/native_testsuite.sh one gpu"
     names = ncr.load_checks(ROOT)
     per_check = [t for t in tasks if t.startswith("check-native-") and t.endswith(("-cpu", "-gpu"))
                  and t.removeprefix("check-native-")[:-4].replace("-", "_") in names]
@@ -98,7 +83,7 @@ def test_shard_cap_and_empty():
 
 
 def test_plan_matrix_json(tmp_path, capsys):
-    _registry(tmp_path, {f"t{i}": (True, i % 2 == 0) for i in range(60)})
+    _suites(tmp_path, {f"t{i}": (True, i % 2 == 0) for i in range(60)})
     planned = tmp_path / "planned.txt"
     assert ncr.main(["plan", "--root", str(tmp_path), "--tasks-out", str(planned)]) == 0
     plan = json.loads(capsys.readouterr().out)
@@ -110,29 +95,23 @@ def test_plan_matrix_json(tmp_path, capsys):
 
 
 def test_testsuite_files_are_checks_by_their_marker(tmp_path, capsys):
-    _registry(tmp_path, {"old_host": (True, False)})
     nt = tmp_path / "checks/native_tests"
+    nt.mkdir(parents=True)
     (nt / "ts_both.mojo").write_text("# SPDX-License-Identifier: Apache-2.0\n# native-check: cpu gpu\ndef main(): pass\n")
     (nt / "ts_host.mojo").write_text("# SPDX-License-Identifier: Apache-2.0\n# native-check: cpu\n")
     (nt / "helper.mojo").write_text("# SPDX-License-Identifier: Apache-2.0\n# native-check is not on this line\n")
     (nt / "late.mojo").write_text("# SPDX\n\n# native-check: cpu\n")  # only the second line marks a check
     checks = ncr.load_checks(tmp_path)
-    assert checks == {"old_host": (True, False), "ts_both": (True, True), "ts_host": (True, False)}
+    assert checks == {"ts_both": (True, True), "ts_host": (True, False)}
     assert ncr.main(["testsuite", "--root", str(tmp_path), "--column", "gpu"]) == 0
     assert capsys.readouterr().out.split() == ["ts_both", "checks/native_tests/ts_both.mojo"]
-    (nt / "old_host.mojo").write_text("# SPDX\n# native-check: cpu\n" + (nt / "old_host.mojo").read_text())
-    try:
-        ncr.load_checks(tmp_path)
-        raise AssertionError("a name both a TestSuite file and a registry row was accepted")
-    except ValueError as e:
-        assert "both" in str(e)
 
 
 def test_testsuite_files_at_the_top_of_checks(tmp_path, capsys):
     # lane ts-b9 (2026-11-22): the standalone checks at the top of checks/ are TestSuite files in place
-    _registry(tmp_path, {"old_host": (True, False)})
+    (tmp_path / "checks/native_tests").mkdir(parents=True)
     (tmp_path / "checks/top_gpu.mojo").write_text("# SPDX-License-Identifier: Apache-2.0\n# native-check: gpu\n")
-    assert ncr.load_checks(tmp_path) == {"old_host": (True, False), "top_gpu": (False, True)}
+    assert ncr.load_checks(tmp_path) == {"top_gpu": (False, True)}
     assert ncr.main(["testsuite", "--root", str(tmp_path), "--column", "gpu"]) == 0
     assert capsys.readouterr().out.split() == ["top_gpu", "checks/top_gpu.mojo"]
     (tmp_path / "checks/native_tests/top_gpu.mojo").write_text("# SPDX\n# native-check: cpu\n")
@@ -161,15 +140,8 @@ def test_result_writer_reads_the_testsuite_summary_and_a_crash(tmp_path):
     assert c["cases"] is None and c["rc"] == 139 and c["first_error"].startswith("CRASHED test_segv")
 
 
-def test_result_writer_reads_the_check_line(tmp_path):
-    log = tmp_path / "x.log"
-    log.write_text("RUN spectral column=cpu\nFAIL case 3 boom\nCHECK spectral column=cpu cases=6 failed=1 skipped=0 41ms\n"
-                   "CHECKS 1 column=cpu failed=1\n")
+def test_result_writer_reads_a_compile_error(tmp_path):
     out = tmp_path / "results"
-    assert ncr.main(["result", "spectral", "--log", str(log), "--rc", "1", "--seconds", "3", "--out-dir", str(out)]) == 0
-    r = ncr.parse_result(out / "spectral.txt")
-    assert r["task"] == "spectral" and r["rc"] == 1 and r["cases"] == 6 and r["failed_cases"] == 1
-    assert r["skipped"] == 0 and r["first_error"] == "FAIL case 3 boom"
     blog = tmp_path / "b.log"
     blog.write_text("x\ncheck.mojo:4:5: error: 'case' cannot be used as a function name\n")
     assert ncr.main(["result", "build-cpu", "--log", str(blog), "--rc", "1", "--seconds", "9", "--out-dir", str(out),
@@ -310,19 +282,15 @@ def test_gpu_job_uses_every_core_unless_memory_says_fewer(tmp_path):
 
 
 def test_gpu_job_keeps_results_not_binaries():
-    # 2026-11-21: the nvc-measure job persisted a 144 MB bin/run_gpu and a raw 9 MB build log. The binary is built
-    # outside the results dir (box_persist_run.sh tars only $RES); the build log is kept whole, gzipped, after its
-    # result row is written
+    # 2026-11-21: the nvc-measure job persisted a 144 MB bin/run_gpu to R2. The binaries are built outside the results
+    # dir (box_persist_run.sh tars only $RES); since lane ts-build they are the TestSuite group programs
     text = (ROOT / "tools/ops/native_checks_gpu_job.sh").read_text()
     assert "$RES/bin" not in text
-    assert 'BIN_DIR=${NC_BIN_DIR:-$RES.work/bin}' in text and 'BIN="$BIN_DIR/run_gpu"' in text
-    assert text.count('-o "$BIN"') == 2
-    assert 'pixi run "$BIN" "$name"' in text and 'BIN=${4:?' in text
-    assert '--one {} "$RES" "$BIN"' in text
+    assert 'BIN_DIR=${NC_BIN_DIR:-$RES.work/bin}' in text and "run_gpu.mojo" not in text
+    assert 'native_testsuite.sh build gpu "$BIN_DIR" "$RES"' in text
+    assert '--one {} "$RES" "$BIN_DIR"' in text and 'native_testsuite.sh run gpu "$BIN_DIR" "$RES" "$name"' in text
     row = text.index('native_checks_report.py result build-gpu --log "$RES/logs/build-gpu.log"')
-    gz = text.index('gzip -9f "$RES/logs/build-gpu.log"')
-    assert row < gz, "the build log is read for its result row before it is compressed"
-
+    assert text.index('native_testsuite.sh build gpu') < row
 
 def test_prebuild_counts_a_parse_group_by_its_last_attempt():
     spec = importlib.util.spec_from_file_location("prebuild_check", ROOT / "tools/prebuild_check.py")

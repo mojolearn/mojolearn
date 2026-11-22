@@ -22,13 +22,12 @@ words in `checks/native_tests/fixtures/sequence_garch_arch/` by
 `tools/py2mojo_native_fixtures_b8.py`.
 """
 from std.testing import TestSuite
-from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require
+from checks.native_tests.testsuite_cases import check_cases, CPU_COLUMN_BUILD, require, read_f32_file
 from sequence.exec import Exec, HostExec
 from sequence.ops_impl import garch_impl
 from sequence.exec_device import DeviceExec
 from std.sys.compile import is_defined
 # The stored-vector reader stays the runner's until the shared TestSuite helpers carry it.
-from checks.native_tests.runner import read_f32_file
 from checks.native_tests.py2mojo_fixture_words import fixture_f64
 
 

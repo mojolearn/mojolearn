@@ -72,12 +72,11 @@ discovery (`TestSuite.discover_tests[__functions_in_module()]`) elaborates EVERY
    there (`checks/division_check.mojo`). The grouped build does the same for every file in its generated copies.
 3. A column-specific test is `comptime if` inside it or `suite.skip[...]()` in `main()`; the column is the build
    define, never a runtime argument.
-- `tools/ops/native_checks_steps.sh build` runs it beside the one `run_<column>` compile (the cores that compile leaves
-  idle); `shard` runs a TestSuite check's own binary. `tools/ops/native_checks_gpu_job.sh` does the same on the L40S.
+- `tools/ops/native_checks_steps.sh build` runs it (the column's whole build); `shard` runs each check's binary.
+  `tools/ops/native_checks_gpu_job.sh` does the same on the L40S.
 - `tools/ops/native_checks_report.py`: a TestSuite check is a file whose SECOND line is `# native-check: cpu`,
   `# native-check: gpu` or `# native-check: cpu gpu`; `list`/`plan` include it, `testsuite` lists them, `result`
-  reads `Summary [ s ] N tests run: P passed , F failed , S skipped` into cases / failed_cases / skipped. A name that is
-  both a TestSuite file and a registry row is refused.
+  reads `Summary [ s ] N tests run: P passed , F failed , S skipped` into cases / failed_cases / skipped.
 
 The box job (`tools/ops/cpu_box_checks_job.sh`) and the GitHub workflow read the steps script from their OWN tools
 tree (the box's lane tree, the workflow's commit), so a TestSuite check runs there once that tree holds this change
@@ -197,15 +196,16 @@ file list per batch: `~/mojolearn-evidence/ts-pilot/batches.txt`.
 | 8 | 61 | 10,543 | byte (6), gbdt (12), label (2), lm (1), lof (2), mani (5), metrics (5), mixture (2), models (1), sequence (5), solver (2), training (7), transformer (2), tsa (8), umap (1) |
 | 9 | 135 | - | the registered modules at the top of `checks/` (`checks.<name>`): they stay where other checks import them; each gets the marker in place and the runner learns `checks/*.mojo` |
 
-## What the runner still needs once the last registered check is converted
+## The old runner is gone (lane ts-build, 2026-11-22)
 
-- Delete `checks/native_tests/registry.mojo`, `runner.mojo`, `run_cpu.mojo`, `run_gpu.mojo`, the `run_<column>`
-  compile in `native_checks_steps.sh build` and `native_checks_gpu_job.sh`, the fallback branch of `shard` and of
-  `--one`, the registry half of `native_checks_report.load_checks` (`_REGISTERED`, `_CHECK`, `_CHECK_LINE`), and the
-  pixi tasks `check-native-cpu` / `check-native-gpu` (replace with one task that builds and runs named files).
-- The box job's `build-cpu` unit becomes the TestSuite build alone: its memory estimate should be the sum of the
-  concurrent compiles (today `native_testsuite.sh build` sizes its workers from MemAvailable at its start, outside the
-  box's shared memory ledger: fine beside the 19 GB compile, to move into the ledger when it is the only build).
-- The compile-define checks with their own pixi tasks (`check-kit-planted-cpu`, `check-border-types-sabotage`, the
-  per-route-define builds named in `registry.mojo`'s docstring) build their TestSuite file with their define.
-- `tools/test_native_checks_ci.py`: drop the registry assertions.
+Batch 1 (lane ts-b1) converted the last registered checks but `kit_roundtrip`, which lane ts-build converted; then
+it deleted `checks/native_tests/registry.mojo`, `runner.mojo`, `run_cpu.mojo` and `run_gpu.mojo`, the `run_<column>`
+compile of `native_checks_steps.sh build` and `native_checks_gpu_job.sh`, the registry fallback of `shard` and of
+`--one`, the registry half of `native_checks_report.load_checks` (`_REGISTERED`, `_CHECK`, `_CHECK_LINE`) and the
+tool tests' registry assertions. `pixi run check-native-cpu <name> ...` (and `-gpu`) now builds and runs the named
+TestSuite files (`native_testsuite.sh one`); the define tasks (`check-kit-planted-*`, `check-nan-canon-off-*`) pass
+their define the same way. The box job's `build-cpu` row is the TestSuite build alone.
+
+Still open: the box job sizes the build from `MemAvailable` at its start (`native_testsuite.sh build`), outside the
+box's shared memory ledger; with the 19 GB `run_cpu` compile gone it should reserve the group compiles' measured peak
+in that ledger.

@@ -22,6 +22,7 @@ as one process, one check per file. This module adds:
 - `check_cases_serial(label, n, body)`: the same table in order on the calling thread, for cases that share the one
   device context and its pool (a check that had a `serial` reason).
 - `require(ok, message)`: raise `message` when `ok` is false (the plain assertion every suite used).
+- `FIXTURE_ROOT`, `fixture_path(family, name)` and `read_fixture_bytes(path)`: the stored fixtures' directory and bytes.
 - `fixture_words`, `fixture_f32`, `fixture_i32` (a stored little-endian 32-bit vector of `count` words, the extent
   checked) and `read_f32_file`, `read_i32_file` (the same, its length taken from the file).
 
@@ -238,3 +239,20 @@ def read_f32_file(path: String) raises -> List[Float32]:
 def read_i32_file(path: String) raises -> List[Int32]:
     """A stored little-endian int32 vector, its length taken from the file."""
     return fixture_i32(path, -1)
+
+
+# The stored fixtures, relative to the repository root (where the checks run).
+comptime FIXTURE_ROOT = "checks/native_tests/fixtures"
+
+
+def fixture_path(family: String, name: String) -> String:
+    """`checks/native_tests/fixtures/<family>/<name>`."""
+    return String(FIXTURE_ROOT) + "/" + family + "/" + name
+
+
+def read_fixture_bytes(path: String) raises -> List[UInt8]:
+    """The bytes of a stored fixture."""
+    var f = open(path, "r")
+    var bytes = f.read_bytes()
+    f.close()
+    return bytes^

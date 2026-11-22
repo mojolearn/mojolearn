@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
-"""Native Mojo checks (checks/native_tests/, one shared runner): list, plan, shard, summarize and report.
+"""Native Mojo checks (TestSuite files): list, plan, shard, summarize and report.
 
-The unit of work is a check NAME: a TestSuite file (below) or a row of `checks/native_tests/registry.mojo`.
-
-TESTSUITE FILES (lane ts-pilot, 2026-11-22; docs/plans/TESTSUITE_CONVERSION.md). A file
-`checks/native_tests/<name>.mojo` whose second line is `# native-check: cpu`, `# native-check: gpu` or
-`# native-check: cpu gpu` is a check named `<name>` on those columns: `test_*` functions run by the standard
-library's `TestSuite` from the file's own `main()`. It is compiled to its own binary (`tools/ops/native_testsuite.sh
-build`) and run as one process (`native_testsuite.sh run`); its `Summary [ s ] N tests run: P passed , F failed , S
-skipped` line gives the result file's cases, failed_cases and skipped. No wrapper file and no registry row. The rest of
-this paragraph is the OLD path, for the checks not yet converted: Each check is one file `<name>.mojo`
-whose `register()` returns `Check("<name>", cpu=..., gpu=..., ...)`; the names and their columns are read from the
-source here (no compile), the same list the compiled mains print with `--list`. One compile per column
-(`run_cpu.mojo` with `-D MOJOLEARN_COLUMN_CPU=1`, `run_gpu.mojo`) builds every check; the runners then start the
-binary once per check name, so one crashing check never hides the others.
+The unit of work is a check NAME: a TestSuite file (lane ts-pilot, 2026-11-22; docs/plans/TESTSUITE_CONVERSION.md).
+A file `checks/native_tests/<name>.mojo` (or, for the older standalone checks other checks import, `checks/<name>.mojo`)
+whose second line is `# native-check: cpu`, `# native-check: gpu` or `# native-check: cpu gpu` is a check named
+`<name>` on those columns: `test_*` functions run by the standard library's `TestSuite` from the file's own `main()`.
+The names and columns are read from the sources here (no compile). `tools/ops/native_testsuite.sh build` compiles a
+column's files as group programs, `run` runs one file as one process, so one crashing check never hides the others;
+its `Summary [ s ] N tests run: P passed , F failed , S skipped` line gives the result file's cases, failed_cases and
+skipped. (The registry, its runner and the one `run_<column>` program are gone, lane ts-build 2026-11-22.)
 
 One module serves both runners of the checks, so a results directory from either source reads the same way:
 
 - `.github/workflows/native-checks.yml` (CPU column on the free GitHub Linux runners): `plan` lists the matching
-  checks and deals them into shards; one job builds `run_cpu` once; each shard job runs its checks with that binary
+  checks and deals them into shards; one job builds the column's programs once; each shard job runs its checks
   and writes `results/<check>.txt`; the merge job runs `summary`, which writes SUMMARY.md and exits non-zero when
   any check failed or never reported (a failed build is the row `build-<column>`).
-- `tools/ops/native_checks_gpu_job.sh` (GPU column on the rented L40S pod): builds `run_gpu` once, `list` gives the
+- `tools/ops/native_checks_gpu_job.sh` (GPU column on the rented L40S pod): builds the column's programs once, `list` gives the
   names, the job writes the same `results/<check>.txt` files, and `summary` writes SUMMARY.md.
 
 `report <results-dir>` prints the failing checks grouped by their first error message, so one compile-fix lane gets
@@ -58,7 +53,6 @@ from pathlib import Path
 # A shard runs prebuilt checks (no compile per check), so it takes more of them than when each check compiled.
 TASKS_PER_SHARD = 25
 MAX_SHARDS = 20
-REGISTRY = "checks/native_tests/registry.mojo"
 COLUMNS = ("cpu", "gpu")
 TIMEOUT_RC = 124  # GNU timeout's status when the per-task limit fired
 _ERROR_HEADER = "--- first error ---"
@@ -66,11 +60,6 @@ _ERROR_LINE = re.compile(r"\berror:\s*(.*)")
 # Normalizes a message for grouping: paths with line/column, hex addresses and numbers vary between sites of one error.
 _LOCATION = re.compile(r"(?:[\w./-]+\.(?:mojo|🔥|py|c|h|cpp)):\d+(?::\d+)?")
 _NUMBER = re.compile(r"\b0x[0-9a-fA-F]+\b|\b\d+\b")
-# A check module is `checks.native_tests.<name>` or, for the older standalone checks at the top of checks/,
-# `checks.<name>` (registered in place: other checks import them from there).
-_REGISTERED = re.compile(r"^from checks\.((?:native_tests\.)?\w+) import register\b", re.M)
-_CHECK = re.compile(r'Check\(\s*"([\w.-]+)"\s*,\s*cpu=(True|False)\s*,\s*gpu=(True|False)')
-_CHECK_LINE = re.compile(r"^CHECK (\S+) column=(\w+) cases=(\d+) failed=(\d+) skipped=(\d+)", re.M)
 # The TestSuite summary (std.testing, Mojo 1.2.0): `Summary [ 0.010 ] 3 tests run: 2 passed , 1 failed , 0 skipped`
 _SUITE_LINE = re.compile(r"^Summary \[ *[\d.]+ *\] (\d+) tests run: (\d+) passed , (\d+) failed , (\d+) skipped", re.M)
 # TestSuite check files live in checks/native_tests/ and, for the older standalone checks other checks import from
@@ -102,20 +91,8 @@ def testsuite_checks(root: Path) -> dict[str, tuple[bool, bool]]:
 
 
 def load_checks(root: Path) -> dict[str, tuple[bool, bool]]:
-    """{name: (cpu, gpu)} of every check: the TestSuite files and every check `registry.mojo` imports (read from
-    each module's `register()`). A name in both is refused."""
-    root = Path(root)
-    checks: dict[str, tuple[bool, bool]] = testsuite_checks(root)
-    suites = set(checks)
-    for module in _REGISTERED.findall((root / REGISTRY).read_text()):
-        path = Path("checks") / (module.replace(".", "/") + ".mojo")
-        m = _CHECK.search((root / path).read_text())
-        if not m:
-            raise ValueError(f"{path}: no Check(\"<name>\", cpu=.., gpu=..) in register()")
-        if m.group(1) in suites:
-            raise ValueError(f"{m.group(1)}: both a TestSuite file and a registry row")
-        checks[m.group(1)] = (m.group(2) == "True", m.group(3) == "True")
-    return checks
+    """{name: (cpu, gpu)} of every check: the TestSuite files."""
+    return testsuite_checks(Path(root))
 
 
 def column_names(checks: dict[str, tuple[bool, bool]], column: str) -> list[str]:
@@ -155,11 +132,8 @@ def matrix(shards: list[list[str]]) -> dict:
 
 
 def check_line(log_text: str) -> dict:
-    """The runner's `CHECK ...` line, or a TestSuite file's `Summary ...` line, as {cases, failed_cases, skipped}
-    (empty when the check never reported: a crash before the summary)."""
-    m = _CHECK_LINE.search(log_text)
-    if m:
-        return {"cases": int(m.group(3)), "failed_cases": int(m.group(4)), "skipped": int(m.group(5))}
+    """A TestSuite file's `Summary ...` line as {cases, failed_cases, skipped} (empty when the check never reported:
+    a crash before the summary)."""
     m = _SUITE_LINE.search(log_text)
     if m:
         return {"cases": int(m.group(1)), "failed_cases": int(m.group(3)), "skipped": int(m.group(4))}
@@ -354,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     for name in ("list", "plan", "testsuite"):
         s = sub.add_parser(name)
-        s.add_argument("--root", default=".", help="repository root (holds checks/native_tests/registry.mojo)")
+        s.add_argument("--root", default=".", help="repository root (holds checks/native_tests/)")
         s.add_argument("--column", default="cpu", choices=COLUMNS)
         s.add_argument("--filter", default="*", help="comma separated globs over check names")
         if name == "plan":

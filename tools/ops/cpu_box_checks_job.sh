@@ -4,7 +4,7 @@
 # 2026-11-19; Andrew: "why are we waiting on things? we use runpod?": a GitHub run waited 40 minutes for runners).
 #
 #   suite parse   every release host group and `identical` device group parsed and elaborated (host-parse, device-parse)
-#         native  the CPU column's native checks: one build of run_cpu, then every check
+#         native  the CPU column's native checks: one build of the column's TestSuite group programs, then every check
 #         tools   tools/run_tool_tests.sh, every tool test file
 #         all     the three
 # The sha and suite also come from CPU_CHECK_SHA / CPU_CHECK_SUITE (tools/cpu_central.sh check passes them as --env);
