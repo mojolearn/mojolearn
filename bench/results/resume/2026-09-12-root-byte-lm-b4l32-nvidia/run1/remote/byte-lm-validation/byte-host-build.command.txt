@@ -1,1 +1,0 @@
-python3 tools/nvidia_serial_guard.py --seconds 600 -- env -u MOJOLEARN_GPU_ARCHS sh bindings/build_byte_lm_host.sh 

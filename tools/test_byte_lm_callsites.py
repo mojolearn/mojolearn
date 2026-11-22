@@ -30,7 +30,6 @@ FILES = (
     'tools/byte_lm_gradient_oracle.py',
     'tools/byte_lm_state_compare.py',
     'tools/byte_lm_validation_admit.py',
-    'tools/byte_lm_cpu_train_gate.py',
     'tools/byte_lm_shape.py',
 )
 
