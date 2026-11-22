@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# native-check: cpu
+# native-check: cpu gpu
 """The host GBDT model-text reader behind `mojolearn._gbdt_host.parse_model_text`,
 on the literal texts of test_gbdt_host_modes.py
 `test_ctr_and_tensor_ctr_records_without_tables_refuse` (lane

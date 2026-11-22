@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# native-check: cpu
+# native-check: cpu gpu
 """The tree inspection records behind `GradientBoosting.get_tree_leaf_counts`
 and `get_leaf_values`, on the literal model texts of test_gbdt_tree_metadata.py
 (moved from its `test_tree_values_recover_bits_and_preserve_leaf_dimension_order`,
