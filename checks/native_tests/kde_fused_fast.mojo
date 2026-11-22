@@ -83,17 +83,17 @@ def _trace_path() -> String:
 def scores(handle: Int, mut query: List[Float32], n_query: Int, d: Int, bandwidth: Float32, kernel: String,
            metric: String, staged: Bool) raises -> List[Float32]:
     """`score_samples` through the resident handle; `staged` records a trace, which selects the staged arm."""
-    var out = List[Float32](length=n_query, fill=Float32(0))
+    var dst = List[Float32](length=n_query, fill=Float32(0))
     _ = setenv(TRACE_ENV, _trace_path() if staged else String(""), True)
     try:
         _ = kde_score_samples_resident(handle, f32_ptr(Int(query.unsafe_ptr())), n_query, d, bandwidth, kernel,
-                                       metric, f32_ptr(Int(out.unsafe_ptr())))
+                                       metric, f32_ptr(Int(dst.unsafe_ptr())))
     except problem:
         _ = setenv(TRACE_ENV, "", True)
         raise problem^
     _ = setenv(TRACE_ENV, "", True)
     _ = query.unsafe_ptr()  # the query words stay alive past the call
-    return out^
+    return dst^
 
 
 def fit(mut train: List[Float32], n_train: Int, d: Int, bandwidth: Float32, kernel: String, metric: String,
