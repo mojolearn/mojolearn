@@ -56,7 +56,7 @@ cd "$(dirname "$0")/.."
 
 COLUMNS="${MOJOLEARN_COLUMNS:-APPLE NVIDIA AMD}"
 ARMS="${MOJOLEARN_LINALG_ARMS:-gram nt gemv}"
-OUT="${MOJOLEARN_COLUMN_OUT:-bench/results/linalg_column_invariance/$(date +%Y-%m-%d_%H%M%S)}"
+OUT="${MOJOLEARN_COLUMN_OUT:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/linalg_column_invariance/$(date +%Y-%m-%d_%H%M%S)}"
 REPEATS="${MOJOLEARN_REPEATS:-2}"
 mkdir -p "$OUT"
 
