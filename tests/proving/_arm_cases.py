@@ -143,8 +143,8 @@ def grid_ridge_and_logistic():
 @case
 def cvs_member_fallback_families():
     out = {}
-    out["pca"] = ms.cross_val_score(make("PCA", n_components=2), X, None)
-    out["kmeans"] = ms.cross_val_score(make("KMeans", n_clusters=3, random_state=0), X, None)
+    # PCA and KMeans are not here: cross_val_score takes 1-D targets y and, with scoring=None, an estimator that has
+    # `score` (its docstring); mojolearn's PCA and KMeans define no score.
     out["logistic"] = ms.cross_val_score(make("LogisticRegression"), X, C)
     out["knn"] = ms.cross_val_score(make("KNeighborsClassifier"), X, C)
     out["nearest_centroid"] = ms.cross_val_score(make("NearestCentroid"), X, C)
