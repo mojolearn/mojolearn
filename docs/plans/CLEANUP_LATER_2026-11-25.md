@@ -56,3 +56,17 @@ project of its own. None blocks the next release except the last, which happens 
 - 6 tests of `test_model_portability_evidence` read 19 logs an earlier cleanup deleted from a reviewed record.
 - The tools check on the CPU box uses about 7 of 32 cores: its test files are not split across the box.
 - Fixture archives (`tools/fixture_packs.py`): after regenerating a case, run `pack`; runners call `unpack`.
+
+## 5. The Mojo test harness (Andrew, 2026-11-22: "add to the plan"; first step of section 1)
+
+Do not wait for Modular's test tooling. One small harness in the repo, a few hundred lines:
+
+- a case table (name, function, parameters), so one suite covers a family by data, not by file;
+- one registry that launches every suite, which removes the 247 wrapper files under `checks/native_tests`
+  (each only calls its suite's `run_checks()`);
+- one process per check, across all cores (the native runner already does this);
+- one summary format the box tools read.
+
+When: right after the proving run is green on the integration build, in the same change as the wrapper cut. Proof:
+the same check names as before, full native run green on the CPU box and the L40S. Then the 164 numeric Python
+tests move into tables (section 1), each Python test deleted only after its Mojo suite is green.
