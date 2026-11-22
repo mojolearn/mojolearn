@@ -180,6 +180,12 @@ def _matched():
         obj._p.update(min_data_in_leaf=1, max_leaves=64, grow_policy="Depthwise",
                       bootstrap_type="No", subsample=1.0, random_strength=0.0,
                       boosting_type="Plain")
+    # max_ctr_complexity is a GradientBoosting argument (2026-11-21) and is
+    # compared on every gbdt lane; CatBoost's read-back fills it (unset = 4).
+    # Set explicitly on both CTR-capable arms; XGBoost has no combinations,
+    # which matches ours only at 1.
+    for obj in (ours, fast, cat):
+        obj._p["max_ctr_complexity"] = 1
     return {"ours": ours, "ours-fast": fast, "catboost-cpu": cat, "xgboost-cpu": xgb}
 
 
