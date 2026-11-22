@@ -158,17 +158,18 @@ def fixture(index: Int) raises:
 # keep their own parallelism and the word comparisons run across host cores.
 # A CPU-only column has one route and nothing to compare, so this suite is GPU only.
 def _device_fixtures_in_order() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var failed = 0
-    for index in range(LINALG_DECOMPOSITIONS_FIXTURES):  # one device: the fixtures in order
-        try:
-            fixture(index)
-        except error:
-            failed += 1
-            print("FAIL linalg_decompositions fixture", index, String(error))
-    if failed:
-        raise Error("linalg decompositions failed " + String(failed) + " of " + String(LINALG_DECOMPOSITIONS_FIXTURES)
-                    + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failed = 0
+        for index in range(LINALG_DECOMPOSITIONS_FIXTURES):  # one device: the fixtures in order
+            try:
+                fixture(index)
+            except error:
+                failed += 1
+                print("FAIL linalg_decompositions fixture", index, String(error))
+        if failed:
+            raise Error("linalg decompositions failed " + String(failed) + " of " + String(LINALG_DECOMPOSITIONS_FIXTURES)
+                        + " fixtures")
 
 
 def test_fixtures() raises:

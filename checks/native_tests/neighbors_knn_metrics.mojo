@@ -57,58 +57,59 @@ def normal_rows(seed: Int, count: Int) -> List[Float32]:
 
 
 def _inner_product_against_float64() raises:
-    comptime N = 200
-    comptime D = 7
-    comptime Q = 20
-    comptime K = 5
-    var x = normal_rows(6, N * D)
-    var distances = List[Float32](length=Q * K, fill=-9.0)
-    var ids = List[UInt32](length=Q * K, fill=UInt32(0xFFFFFFFF))
-    var ctx = DeviceContext()
-    var xa = Int(x.unsafe_ptr())
-    _ = knn_search(ctx, f32_ptr(xa), N, f32_ptr(xa), Q, D, K, f32_ptr(Int(distances.unsafe_ptr())),
-        u32_ptr(Int(ids.unsafe_ptr())), True, DEFAULT_QUERY_TILE, KNN_METHOD_AUTO, DIST_INNER_PRODUCT, Float32(2.0), True)
-    # FP64 oracle: per query, the K largest products, ties by lower index.
-    var ref_ids = List[Int](length=Q * K, fill=-1)
-    var ref_dots = List[Float64](length=Q * K, fill=0)
-    var rp = ref_ids.unsafe_ptr()
-    var dp = ref_dots.unsafe_ptr()
-    var xp = x.unsafe_ptr()
-    def oracle(row: Int) {imm rp, imm dp, imm xp}:
-        var dots = List[Float64](length=N, fill=0)
-        for j in range(N):
-            var s = Float64(0)
-            for f in range(D):
-                s += Float64(xp[row * D + f]) * Float64(xp[j * D + f])
-            dots[j] = s
-        for slot in range(K):
-            var best = -1
+    comptime if not CPU_COLUMN_BUILD:
+        comptime N = 200
+        comptime D = 7
+        comptime Q = 20
+        comptime K = 5
+        var x = normal_rows(6, N * D)
+        var distances = List[Float32](length=Q * K, fill=-9.0)
+        var ids = List[UInt32](length=Q * K, fill=UInt32(0xFFFFFFFF))
+        var ctx = DeviceContext()
+        var xa = Int(x.unsafe_ptr())
+        _ = knn_search(ctx, f32_ptr(xa), N, f32_ptr(xa), Q, D, K, f32_ptr(Int(distances.unsafe_ptr())),
+            u32_ptr(Int(ids.unsafe_ptr())), True, DEFAULT_QUERY_TILE, KNN_METHOD_AUTO, DIST_INNER_PRODUCT, Float32(2.0), True)
+        # FP64 oracle: per query, the K largest products, ties by lower index.
+        var ref_ids = List[Int](length=Q * K, fill=-1)
+        var ref_dots = List[Float64](length=Q * K, fill=0)
+        var rp = ref_ids.unsafe_ptr()
+        var dp = ref_dots.unsafe_ptr()
+        var xp = x.unsafe_ptr()
+        def oracle(row: Int) {imm rp, imm dp, imm xp}:
+            var dots = List[Float64](length=N, fill=0)
             for j in range(N):
-                var taken = False
-                for t in range(slot):
-                    if rp[row * K + t] == j:
-                        taken = True
-                if not taken and (best < 0 or dots[j] > dots[best]):
-                    best = j
-            rp[row * K + slot] = best
-            dp[row * K + slot] = dots[best]
-    host_parallelize(oracle, Q)
-    var same = 0
-    var far = 0
-    for c in range(Q * K):
-        same += Int(Int(ids[c]) == ref_ids[c])
-        var want = ref_dots[c]
-        if abs(Float64(distances[c]) - want) > 1e-4 + 1e-4 * abs(want):
-            far += 1
-    require(Float64(same) >= 0.97 * Float64(Q * K), "inner product: only " + String(same) + " of "
-        + String(Q * K) + " ids are the largest float64 products")
-    require(far == 0, "inner product: " + String(far) + " returned products differ from the float64 products")
-    _ = x^
-    _ = distances^
-    _ = ids^
-    _ = ref_ids^
-    _ = ref_dots^
-    print("PASS neighbors_knn_metrics_gpu: inner_product k-NN against the float64 products")
+                var s = Float64(0)
+                for f in range(D):
+                    s += Float64(xp[row * D + f]) * Float64(xp[j * D + f])
+                dots[j] = s
+            for slot in range(K):
+                var best = -1
+                for j in range(N):
+                    var taken = False
+                    for t in range(slot):
+                        if rp[row * K + t] == j:
+                            taken = True
+                    if not taken and (best < 0 or dots[j] > dots[best]):
+                        best = j
+                rp[row * K + slot] = best
+                dp[row * K + slot] = dots[best]
+        host_parallelize(oracle, Q)
+        var same = 0
+        var far = 0
+        for c in range(Q * K):
+            same += Int(Int(ids[c]) == ref_ids[c])
+            var want = ref_dots[c]
+            if abs(Float64(distances[c]) - want) > 1e-4 + 1e-4 * abs(want):
+                far += 1
+        require(Float64(same) >= 0.97 * Float64(Q * K), "inner product: only " + String(same) + " of "
+            + String(Q * K) + " ids are the largest float64 products")
+        require(far == 0, "inner product: " + String(far) + " returned products differ from the float64 products")
+        _ = x^
+        _ = distances^
+        _ = ids^
+        _ = ref_ids^
+        _ = ref_dots^
+        print("PASS neighbors_knn_metrics_gpu: inner_product k-NN against the float64 products")
 
 
 def test_inner_product_against_float64() raises:

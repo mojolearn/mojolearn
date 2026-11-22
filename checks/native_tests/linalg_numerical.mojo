@@ -207,8 +207,9 @@ struct HostLinalgNumerical(LinalgNumericalCalls):
 
 
 def _host_fixture(index: Int) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    fixture[HostLinalgNumerical](index)
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        fixture[HostLinalgNumerical](index)
 
 
 # ---- The device column (was linalg_numerical_gpu_suite.mojo) ----
@@ -233,16 +234,17 @@ struct DeviceLinalgNumerical(LinalgNumericalCalls):
 
 
 def _device_fixtures_in_order() raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var failed = 0
-    for index in range(LINALG_NUMERICAL_FIXTURES):  # shared device contexts: graph submissions in order
-        try:
-            fixture[DeviceLinalgNumerical](index)
-        except error:
-            failed += 1
-            print("FAIL linalg_numerical gpu fixture", index, String(error))
-    if failed:
-        raise Error("linalg numerical GPU failed " + String(failed) + " of " + String(LINALG_NUMERICAL_FIXTURES) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failed = 0
+        for index in range(LINALG_NUMERICAL_FIXTURES):  # shared device contexts: graph submissions in order
+            try:
+                fixture[DeviceLinalgNumerical](index)
+            except error:
+                failed += 1
+                print("FAIL linalg_numerical gpu fixture", index, String(error))
+        if failed:
+            raise Error("linalg numerical GPU failed " + String(failed) + " of " + String(LINALG_NUMERICAL_FIXTURES) + " fixtures")
 
 
 def test_fixtures() raises:

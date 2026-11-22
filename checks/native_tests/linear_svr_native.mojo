@@ -131,20 +131,22 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
 
 # ---- The host column (was linear_svr_native_cpu_suite.mojo) ----
 def _host_fixture(unit: Int) raises:
-    fixture(LinearSvcDriver(linear_svc_host_v1), unit)
+    comptime if CPU_COLUMN_BUILD:
+        fixture(LinearSvcDriver(linear_svc_host_v1), unit)
 
 
 # ---- The device column (was linear_svr_native_gpu_suite.mojo) ----
 def _device_fixtures_in_order() raises:
-    var failed = 0
-    for unit in range(LINEAR_SVR_NATIVE_CASES):  # one shared device context: the fixtures in order
-        try:
-            fixture(LinearSvcDriver(linear_svc_device_v1), unit)
-        except error:
-            failed += 1
-            print("FAIL linear_svr_native gpu fixture", unit, String(error))
-    if failed:
-        raise Error("linear_svr_native GPU failed " + String(failed) + " of " + String(LINEAR_SVR_NATIVE_CASES) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = 0
+        for unit in range(LINEAR_SVR_NATIVE_CASES):  # one shared device context: the fixtures in order
+            try:
+                fixture(LinearSvcDriver(linear_svc_device_v1), unit)
+            except error:
+                failed += 1
+                print("FAIL linear_svr_native gpu fixture", unit, String(error))
+        if failed:
+            raise Error("linear_svr_native GPU failed " + String(failed) + " of " + String(LINEAR_SVR_NATIVE_CASES) + " fixtures")
 
 
 def test_fixtures() raises:

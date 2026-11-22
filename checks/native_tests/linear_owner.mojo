@@ -367,10 +367,11 @@ def run_linear_fixture(api: LinearTestAPI, fixture_id: Int) raises:
 # ---- The host column (was linear_owner_cpu_suite.mojo) ----
 # Independent native CPU linear fits/scores use the existing host pool.
 def _host_fixture(fixture_id: Int) raises:
-    var api = LinearTestAPI(linear_fit_host_v1, ridge_fit_host_v1,
-        linear_predict_host_v1, x_decomp_host_v1, metrics_program_host_v1)
-    require(api.vendor == 0, "CPU fixture connected a device descriptor")
-    run_linear_fixture(api, fixture_id)
+    comptime if CPU_COLUMN_BUILD:
+        var api = LinearTestAPI(linear_fit_host_v1, ridge_fit_host_v1,
+            linear_predict_host_v1, x_decomp_host_v1, metrics_program_host_v1)
+        require(api.vendor == 0, "CPU fixture connected a device descriptor")
+        run_linear_fixture(api, fixture_id)
 
 
 # ---- The device column (was linear_owner_gpu_suite.mojo) ----
@@ -380,18 +381,19 @@ def _host_fixture(fixture_id: Int) raises:
 # fixture graphs submit in order. Source preparation uses host_parallelize and
 # product kernels retain their native parallelism; no concurrency claim.
 def _device_fixtures_in_order() raises:
-    var api = LinearTestAPI(linear_fit_device_v1, ridge_fit_device_v1,
-        linear_predict_device_v1, x_decomp_device_v1, metrics_program_device_v1)
-    require(api.vendor != 0, "GPU fixture connected a host descriptor")
-    var failed = 0
-    for fixture_id in range(LINEAR_OWNER_FIXTURES):  # one shared device context: the fixtures in order
-        try:
-            run_linear_fixture(api, fixture_id)
-        except error:
-            failed += 1
-            print("FAIL linear_owner gpu fixture", fixture_id, String(error))
-    if failed:
-        raise Error("linear_owner GPU failed " + String(failed) + " of " + String(LINEAR_OWNER_FIXTURES) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        var api = LinearTestAPI(linear_fit_device_v1, ridge_fit_device_v1,
+            linear_predict_device_v1, x_decomp_device_v1, metrics_program_device_v1)
+        require(api.vendor != 0, "GPU fixture connected a host descriptor")
+        var failed = 0
+        for fixture_id in range(LINEAR_OWNER_FIXTURES):  # one shared device context: the fixtures in order
+            try:
+                run_linear_fixture(api, fixture_id)
+            except error:
+                failed += 1
+                print("FAIL linear_owner gpu fixture", fixture_id, String(error))
+        if failed:
+            raise Error("linear_owner GPU failed " + String(failed) + " of " + String(LINEAR_OWNER_FIXTURES) + " fixtures")
 
 
 def test_fixtures() raises:

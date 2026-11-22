@@ -115,8 +115,9 @@ comptime KMEANS_CPU_FIXTURES = 6
 
 
 def _host_fixture(unit: Int) raises:
-    comptime assert TARGET_COLUMN == COLUMN_CPU
-    fixture(KMeansNativeDriver(kmeans_host_native_v1), unit)
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert TARGET_COLUMN == COLUMN_CPU
+        fixture(KMeansNativeDriver(kmeans_host_native_v1), unit)
 
 
 # ---- The device column (was kmeans_native_gpu_suite.mojo) ----
@@ -125,16 +126,17 @@ comptime KMEANS_GPU_FIXTURES = 9
 
 
 def _device_fixtures_in_order() raises:
-    comptime assert TARGET_COLUMN != COLUMN_CPU
-    var failed = 0
-    for unit in range(KMEANS_GPU_FIXTURES):  # one shared device context, in order
-        try:
-            fixture(KMeansNativeDriver(kmeans_device_native_v1), unit)
-        except error:
-            failed += 1
-            print("FAIL kmeans_native gpu fixture", unit, String(error))
-    if failed:
-        raise Error("native KMeans GPU failed " + String(failed) + " of " + String(KMEANS_GPU_FIXTURES) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        comptime assert TARGET_COLUMN != COLUMN_CPU
+        var failed = 0
+        for unit in range(KMEANS_GPU_FIXTURES):  # one shared device context, in order
+            try:
+                fixture(KMeansNativeDriver(kmeans_device_native_v1), unit)
+            except error:
+                failed += 1
+                print("FAIL kmeans_native gpu fixture", unit, String(error))
+        if failed:
+            raise Error("native KMeans GPU failed " + String(failed) + " of " + String(KMEANS_GPU_FIXTURES) + " fixtures")
 
 
 def test_fixtures() raises:

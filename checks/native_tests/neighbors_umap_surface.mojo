@@ -281,7 +281,8 @@ def fixture(entry: NativeDescriptorCall, unit: Int) raises:
 # ---- The host column (was neighbors_umap_surface_cpu_suite.mojo) ----
 # UMAP fit/transform numerics on the CPU column; independent fixtures run across host workers.
 def _host_fixture(unit: Int) raises:
-    fixture(umap_ops_host_v1, unit)
+    comptime if CPU_COLUMN_BUILD:
+        fixture(umap_ops_host_v1, unit)
 
 
 # ---- The device column (was neighbors_umap_surface_gpu_suite.mojo) ----
@@ -291,15 +292,16 @@ def _host_fixture(unit: Int) raises:
 # in order (as `umap_ops_gpu_suite.mojo` does); the kernels keep their native
 # parallelism.
 def _device_fixtures_in_order() raises:
-    var failed = 0
-    for unit in range(UMAP_SURFACE_FIXTURES):  # one shared device context: the fixtures in order
-        try:
-            fixture(umap_ops_device_v1, unit)
-        except error:
-            failed += 1
-            print("FAIL neighbors_umap_surface gpu fixture", unit, String(error))
-    if failed:
-        raise Error("neighbors_umap_surface GPU failed " + String(failed) + " of " + String(UMAP_SURFACE_FIXTURES) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = 0
+        for unit in range(UMAP_SURFACE_FIXTURES):  # one shared device context: the fixtures in order
+            try:
+                fixture(umap_ops_device_v1, unit)
+            except error:
+                failed += 1
+                print("FAIL neighbors_umap_surface gpu fixture", unit, String(error))
+        if failed:
+            raise Error("neighbors_umap_surface GPU failed " + String(failed) + " of " + String(UMAP_SURFACE_FIXTURES) + " fixtures")
 
 
 def test_fixtures() raises:

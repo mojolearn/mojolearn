@@ -152,21 +152,23 @@ def fixture(driver: CentroidFitDriver, unit: Int) raises:
 
 
 def _host_fixture(unit: Int) raises:
-    fixture(CentroidFitDriver(cluster_centroid_fit_host_v1), unit)
+    comptime if CPU_COLUMN_BUILD:
+        fixture(CentroidFitDriver(cluster_centroid_fit_host_v1), unit)
 
 
 # ---- The device column (was centroid_fit_native_gpu_suite.mojo) ----
 # Ordered numerical GPU coverage; shared-context concurrency remains parked.
 def _device_fixtures_in_order() raises:
-    var failed = 0
-    for unit in range(CENTROID_FIT_NATIVE_FIXTURES):  # numerical-only shared device context; no concurrency qualification
-        try:
-            fixture(CentroidFitDriver(cluster_centroid_fit_device_v1), unit)
-        except problem:
-            failed += 1
-            print("FAIL centroid_fit_native_gpu fixture", unit, String(problem))
-    if failed:
-        raise Error("centroid fit GPU failed " + String(failed) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = 0
+        for unit in range(CENTROID_FIT_NATIVE_FIXTURES):  # numerical-only shared device context; no concurrency qualification
+            try:
+                fixture(CentroidFitDriver(cluster_centroid_fit_device_v1), unit)
+            except problem:
+                failed += 1
+                print("FAIL centroid_fit_native_gpu fixture", unit, String(problem))
+        if failed:
+            raise Error("centroid fit GPU failed " + String(failed) + " fixtures")
 
 
 def test_fixtures() raises:

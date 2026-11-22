@@ -358,17 +358,18 @@ def run_ops_optimizer_fixture[E: Exec & Movable & Deinitable](mut s: OpsSession[
 #
 # Rows and parameter cells in the independent oracle use the host pool.
 def _host_fixture(fixture_id: Int) raises:
-    var s = OpsSession[HostExec](HostExec(), True)
-    var restored = OpsSession[HostExec](HostExec(), fixture_id != 9)
-    var model_ex = HostExec()
-    try:
-        run_ops_optimizer_fixture(s, restored, model_ex, fixture_id)
-    except error:
+    comptime if CPU_COLUMN_BUILD:
+        var s = OpsSession[HostExec](HostExec(), True)
+        var restored = OpsSession[HostExec](HostExec(), fixture_id != 9)
+        var model_ex = HostExec()
+        try:
+            run_ops_optimizer_fixture(s, restored, model_ex, fixture_id)
+        except error:
+            restored.close()
+            s.close()
+            raise error
         restored.close()
         s.close()
-        raise error
-    restored.close()
-    s.close()
 
 
 # ---- The device column entry (was ops_optimizer_gpu.mojo) ----
@@ -376,29 +377,31 @@ def _host_fixture(fixture_id: Int) raises:
 #
 # DeviceExec shares sequence_ctx() and its pool. GPU tensor work uses the existing parallel kernels; ordered fixtures do not prove concurrent-session safety. Use the smallest existing GPU host.
 def _device_fixture(fixture_id: Int) raises:
-    var s = OpsSession[DeviceExec](DeviceExec(), True)
-    var restored = OpsSession[DeviceExec](DeviceExec(), fixture_id != 9)
-    var model_ex = DeviceExec()
-    try:
-        run_ops_optimizer_fixture(s, restored, model_ex, fixture_id)
-    except error:
+    comptime if not CPU_COLUMN_BUILD:
+        var s = OpsSession[DeviceExec](DeviceExec(), True)
+        var restored = OpsSession[DeviceExec](DeviceExec(), fixture_id != 9)
+        var model_ex = DeviceExec()
+        try:
+            run_ops_optimizer_fixture(s, restored, model_ex, fixture_id)
+        except error:
+            restored.close()
+            s.close()
+            raise error
         restored.close()
         s.close()
-        raise error
-    restored.close()
-    s.close()
 
 
 def _device_fixtures_in_order() raises:
-    var failed = 0
-    for fixture_id in range(OPS_OPTIMIZER_FIXTURES):  # shared device context: the fixtures in order
-        try:
-            _device_fixture(fixture_id)
-        except error:
-            failed += 1
-            print("FAIL ops_optimizer gpu fixture", fixture_id, String(error))
-    if failed:
-        raise Error("ops_optimizer GPU failed " + String(failed) + " of " + String(OPS_OPTIMIZER_FIXTURES) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = 0
+        for fixture_id in range(OPS_OPTIMIZER_FIXTURES):  # shared device context: the fixtures in order
+            try:
+                _device_fixture(fixture_id)
+            except error:
+                failed += 1
+                print("FAIL ops_optimizer gpu fixture", fixture_id, String(error))
+        if failed:
+            raise Error("ops_optimizer GPU failed " + String(failed) + " of " + String(OPS_OPTIMIZER_FIXTURES) + " fixtures")
 
 
 def test_fixtures() raises:

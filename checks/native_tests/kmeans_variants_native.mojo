@@ -170,7 +170,8 @@ def fixture(driver: KMeansVariantsDriver, unit: Int) raises:
 
 
 def _host_fixture(unit: Int) raises:
-    fixture(KMeansVariantsDriver(kmeans_variants_host_v1), unit)
+    comptime if CPU_COLUMN_BUILD:
+        fixture(KMeansVariantsDriver(kmeans_variants_host_v1), unit)
 
 
 # ---- The device column (was kmeans_variants_native_gpu_suite.mojo) ----
@@ -180,16 +181,17 @@ def _host_fixture(unit: Int) raises:
 # exercises existing numerical routes only; product operations remain
 # unchanged and parallel. The host column runs its fixtures across the host cores.
 def _device_fixtures_in_order() raises:
-    var driver = KMeansVariantsDriver(kmeans_variants_device_v1)
-    var failed = 0
-    for unit in range(KMEANS_VARIANTS_NATIVE_CPU_FIXTURES):  # one shared device context; no concurrency qualification
-        try:
-            fixture(driver, unit)
-        except problem:
-            failed += 1
-            print("FAIL kmeans_variants_native_gpu fixture", unit, String(problem))
-    if failed:
-        raise Error("native KMeans variants GPU failed " + String(failed) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        var driver = KMeansVariantsDriver(kmeans_variants_device_v1)
+        var failed = 0
+        for unit in range(KMEANS_VARIANTS_NATIVE_CPU_FIXTURES):  # one shared device context; no concurrency qualification
+            try:
+                fixture(driver, unit)
+            except problem:
+                failed += 1
+                print("FAIL kmeans_variants_native_gpu fixture", unit, String(problem))
+        if failed:
+            raise Error("native KMeans variants GPU failed " + String(failed) + " fixtures")
 
 
 def test_fixtures() raises:

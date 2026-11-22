@@ -263,16 +263,18 @@ def check_neighbors_table(key: NeighborsEntryKey, publisher: Int, entry: NativeD
 # first (ordered metadata), then the independent entry cases on the existing
 # host pool.
 def _host_table() raises:
-    var mode = Int(GLOBAL_NUMERIC_MODE)
-    var api = NEIGHBORS_OPS_HOST_API.get_or_create_ptr()
-    check_neighbors_table(NeighborsEntryKey(mode, 0), Int(api[].entries.unsafe_ptr()), neighbors_ops_host_v1)
+    comptime if CPU_COLUMN_BUILD:
+        var mode = Int(GLOBAL_NUMERIC_MODE)
+        var api = NEIGHBORS_OPS_HOST_API.get_or_create_ptr()
+        check_neighbors_table(NeighborsEntryKey(mode, 0), Int(api[].entries.unsafe_ptr()), neighbors_ops_host_v1)
 
 
 def _host_case(case_id: Int) raises:
-    if case_id < NEIGHBORS_SHARED_CASES:
-        run_shared_case(neighbors_ops_host_v1, case_id)
-    else:
-        case_host_refuses_resident(neighbors_ops_host_v1)
+    comptime if CPU_COLUMN_BUILD:
+        if case_id < NEIGHBORS_SHARED_CASES:
+            run_shared_case(neighbors_ops_host_v1, case_id)
+        else:
+            case_host_refuses_resident(neighbors_ops_host_v1)
 
 
 # ---- The device column (was neighbors_ops_gpu_suite.mojo) ----
@@ -281,26 +283,27 @@ def _host_case(case_id: Int) raises:
 # submit in order; the kernels keep their native parallelism (no concurrency
 # claim).
 def _device_cases_in_order() raises:
-    var mode = Int(GLOBAL_NUMERIC_MODE)
-    var vendor = neighbors_vendor_word(COMPILED_VENDOR)
-    require(vendor > 0, "neighbors_ops_gpu: this build has no GPU vendor")
-    var api = NEIGHBORS_OPS_DEVICE_API.get_or_create_ptr()
-    check_neighbors_table(NeighborsEntryKey(mode, vendor), Int(api[].entries.unsafe_ptr()), neighbors_ops_device_v1)
-    var failed = 0
-    for case_id in range(NEIGHBORS_SHARED_CASES):  # driver-loop: over the ordered device cases
-        try:
-            run_shared_case(neighbors_ops_device_v1, case_id)
-        except error:
-            print("FAIL neighbors_ops_gpu shared case", case_id, String(error))
-            failed += 1
-    for case_id in range(NEIGHBORS_DEVICE_CASES):  # driver-loop: over the ordered device cases
-        try:
-            run_device_case(neighbors_ops_device_v1, case_id)
-        except error:
-            print("FAIL neighbors_ops_gpu device case", case_id, String(error))
-            failed += 1
-    require(failed == 0, "neighbors_ops_gpu failed " + String(failed) + " cases")
-    print("PASS neighbors_ops_gpu:", NEIGHBORS_SHARED_CASES + NEIGHBORS_DEVICE_CASES, "native neighbors table cases")
+    comptime if not CPU_COLUMN_BUILD:
+        var mode = Int(GLOBAL_NUMERIC_MODE)
+        var vendor = neighbors_vendor_word(COMPILED_VENDOR)
+        require(vendor > 0, "neighbors_ops_gpu: this build has no GPU vendor")
+        var api = NEIGHBORS_OPS_DEVICE_API.get_or_create_ptr()
+        check_neighbors_table(NeighborsEntryKey(mode, vendor), Int(api[].entries.unsafe_ptr()), neighbors_ops_device_v1)
+        var failed = 0
+        for case_id in range(NEIGHBORS_SHARED_CASES):  # driver-loop: over the ordered device cases
+            try:
+                run_shared_case(neighbors_ops_device_v1, case_id)
+            except error:
+                print("FAIL neighbors_ops_gpu shared case", case_id, String(error))
+                failed += 1
+        for case_id in range(NEIGHBORS_DEVICE_CASES):  # driver-loop: over the ordered device cases
+            try:
+                run_device_case(neighbors_ops_device_v1, case_id)
+            except error:
+                print("FAIL neighbors_ops_gpu device case", case_id, String(error))
+                failed += 1
+        require(failed == 0, "neighbors_ops_gpu failed " + String(failed) + " cases")
+        print("PASS neighbors_ops_gpu:", NEIGHBORS_SHARED_CASES + NEIGHBORS_DEVICE_CASES, "native neighbors table cases")
 
 
 def test_table_then_cases() raises:

@@ -130,7 +130,8 @@ def fixture(entry: NativeDescriptorCall, unit: Int) raises:
 # ---- The host column (was neighbors_nearest_centroid_native_capability_cpu_suite.mojo) ----
 # NearestCentroid softmax-capability fixtures; independent fixtures run across host workers.
 def _host_fixture(unit: Int) raises:
-    fixture(xn_native_v1, unit)
+    comptime if CPU_COLUMN_BUILD:
+        fixture(xn_native_v1, unit)
 
 
 # ---- The device column (was neighbors_nearest_centroid_native_capability_gpu_suite.mojo) ----
@@ -140,15 +141,16 @@ def _host_fixture(unit: Int) raises:
 # submitted in order (as `nearest_centroid_numeric_gpu_suite.mojo` does); the
 # kernels keep their own parallelism.
 def _device_fixtures_in_order() raises:
-    var failed = 0
-    for unit in range(NC_CAPABILITY_FIXTURES):  # one shared device context: the fixtures in order
-        try:
-            fixture(xn_native_v1_gpu, unit)
-        except error:
-            failed += 1
-            print("FAIL neighbors_nearest_centroid_native_capability gpu fixture", unit, String(error))
-    if failed:
-        raise Error("neighbors_nearest_centroid_native_capability GPU failed " + String(failed) + " of " + String(NC_CAPABILITY_FIXTURES) + " fixtures")
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = 0
+        for unit in range(NC_CAPABILITY_FIXTURES):  # one shared device context: the fixtures in order
+            try:
+                fixture(xn_native_v1_gpu, unit)
+            except error:
+                failed += 1
+                print("FAIL neighbors_nearest_centroid_native_capability gpu fixture", unit, String(error))
+        if failed:
+            raise Error("neighbors_nearest_centroid_native_capability GPU failed " + String(failed) + " of " + String(NC_CAPABILITY_FIXTURES) + " fixtures")
 
 
 def test_fixtures() raises:
