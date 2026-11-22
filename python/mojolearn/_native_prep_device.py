@@ -6,6 +6,22 @@
 _FAST_ON_CPU = "device='cpu' runs in identical mode only; numeric_mode='fast' is for Apple GPUs"
 
 
+#: The keys a scaler's CPU context holds its own values for; every other key
+#: is its source context's (bindings/scaler_route_unpack.mojo
+#: `_scaler_cpu_sync` copies them again when the source changed).
+_CPU_OVERRIDES = ("vendor", "scaler_bindings", "prep_cpu_context")
+
+
+def _record_source_size(cpu, context):
+    # glue: once, at the CPU load: the size of the source context this CPU
+    # context was copied at. A source that later gains keys also REPLACES
+    # values in the same step (the NumPy type tuples `native_value_types`,
+    # `scalar_types`, ... grow when NumPy connects at the first construction),
+    # so the CPU context is copied again from its source, overrides kept.
+    if type(cpu) is dict:
+        cpu["prep_cpu_source_size"] = len(context)
+
+
 def connect_cpu_device(context, cpu_entries):
     """Register the CPU context of `device="cpu"` beside the scaler's own
     connected context: built at the first device="cpu" admission beside a
@@ -50,10 +66,11 @@ def _load_cpu_device(context, cpu_entries):
         # source, so a key the source gains later is seen by the size alone
         # (bindings/scaler_route_unpack.mojo `_scaler_cpu_sync`).
         cpu.update(vendor="cpu", scaler_bindings={"identical": entries, "fast": _FAST_ON_CPU},
-                   prep_cpu_context=None)
+                   prep_cpu_context=None, prep_cpu_overrides=_CPU_OVERRIDES)
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
         cpu = type(error).__name__ + ": " + str(error)
     context["prep_cpu_context"] = cpu
+    _record_source_size(cpu, context)
 
 
 def connect_cpu_context(context, overrides):
@@ -89,10 +106,12 @@ def _load_cpu_context(context, overrides):
         if any(key not in context for key in replaced):  # glue: fixed override names, checked once at import
             raise TypeError("a CPU context may only replace keys of its source context")
         cpu = dict(context)
-        cpu.update(replaced, prep_cpu_context=None)
+        cpu.update(replaced, prep_cpu_context=None,
+                   prep_cpu_overrides=tuple(replaced) + ("prep_cpu_context",))  # glue: fixed override names, once
     except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, OSError) as error:
         cpu = type(error).__name__ + ": " + str(error)
     context["prep_cpu_context"] = cpu
+    _record_source_size(cpu, context)
 
 
 def cpu_prog_context(prog_context, load, family="x_prep"):
