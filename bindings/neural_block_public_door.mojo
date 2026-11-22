@@ -52,7 +52,7 @@ from providers.python.generation_metadata_pyapi_door import causal_layer_route
 from core.device_route import DEVICE_CPU, DEVICE_GPU, device_name, device_route_plan, device_cpu_absent
 from providers.python.device_route_boundary_door import (
     DeviceRouteOwner, device_unpack, device_route_keep,
-    device_route_stale, device_owner_current, device_route_record,
+    device_route_stale, device_owner_current, device_route_record, device_cpu_connect_late,
 )
 from core.neural_entry_table import (
     NeuralEntryKey, neural_entry_vendor, neural_entry_call, neural_ref,
@@ -1314,16 +1314,21 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
     if mode_text != "identical" and mode_text != "fast":
         raise Error("NotImplementedError: neural backward requires identical or fast mode")
     answer_mode_word(mode_text, MODE_FAMILY_NEURAL)
-    var key = PythonObject(String(py=fields["_native_route"]) + ":" + mode_text)
+    var route_text = String(py=fields["_native_route"])
+    var key = PythonObject(route_text + ":" + mode_text)
     var selected = py_get(context["training_bindings"], key)
+    if selected is None and route_text == "cpu" and device_cpu_connect_late(context):
+        # A CPU-routed block in a GPU installation (device='cpu') whose
+        # process admitted no CPU device yet (a restored block): the host
+        # training images load beside the GPU set now, once
+        # (python/mojolearn/_native_neural_bridge.py `connect_training_cpu`,
+        # registered by models/causal_lm.py through `cpu_load_later`). Failure
+        # path of the first CPU backward only; a connected process reads the
+        # table above.
+        selected = py_get(context["training_bindings"], key)
     if selected is None:
-        if String(py=fields["_native_route"]) == "cpu":
-            # A CPU-routed block in a GPU installation (device='cpu'): the
-            # host training images are the CPU-only installation's and are
-            # not loaded beside their GPU siblings (failure path only).
-            # Goes when the host training images load beside the GPU set
-            # (the duplicate type registration, lane dw-core round 2).
-            device_cpu_absent(String("backward"), String("the host training images are not loaded beside the GPU set in this installation"))
+        if route_text == "cpu":
+            device_cpu_absent(String("backward"), String("the host training images did not load beside the GPU set in this installation"))
         raise Error("NotImplementedError: native training bindings unavailable for " + String(key))
     var family = "transformer" if String(fields["_native_kind"]) == "transformer" else "mamba"
     var entries = selected[family]

@@ -416,7 +416,7 @@ def _connect_causal_native():
                 except (ImportError, RuntimeError, ValueError, OSError, AttributeError) as exc:
                     entries[name] = f"native binding {target} for {mode} is unavailable: {exc}"
             bindings["gpu:" + mode] = entries
-    return runtime, {
+    context = {
         "admission_context": admission_context,
         "runtime": runtime, "backend": _backend, "selected_vendor": vendor, "model_class": CausalLM,
         "block_option_names": ("n_kv_heads", "head_dim", "window", "rope_theta", "rope_scaling",
@@ -445,6 +445,13 @@ def _connect_causal_native():
                                {"transformer": TransformerState, "mamba1": Mamba1State,
                                 "mamba2": Mamba2State}, GenerationStream),
     }
+    if vendor not in (None, "cpu"):
+        # device="cpu" blocks beside the GPU set train on the host images,
+        # loaded at the first CPU admission, never at import.
+        from .._native_family_bridge import cpu_load_later
+        from .._native_neural_bridge import connect_training_cpu
+        cpu_load_later(context, lambda: connect_training_cpu(_backend, context))
+    return runtime, context
 
 
 _NATIVE, _NATIVE_CONTEXT = _connect_causal_native()

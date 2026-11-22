@@ -9,7 +9,7 @@ released") or a different result is a failure.
 import numpy as np
 import pytest
 
-from _proving import DEVICES, assert_same, binary, cls, data, in_threads, make
+from _proving import DEVICES, assert_same, binary, cls, data, in_threads, make, member
 
 X, Y, C = data()
 X_NEW = data(rows=40, seed=7)[0]
@@ -18,7 +18,9 @@ X_NEW = data(rows=40, seed=7)[0]
 #: logistic, qn_regressor, linear_svm.
 FAMILIES = [
     ("GradientBoostingRegressor", dict(n_estimators=8, max_depth=3, random_state=0), "r"),
-    ("GradientBoostingClassifier", dict(n_estimators=8, max_depth=3, random_state=0), "c"),
+    # GradientBoostingClassifier is binary only ("Exactly two classes are required", its docstring in
+    # python/mojolearn/_gbdt_adapters.py): the two-class target "b".
+    ("GradientBoostingClassifier", dict(n_estimators=8, max_depth=3, random_state=0), "b"),
     ("RandomForestRegressor", dict(n_estimators=6, random_state=0), "r"),
     ("RandomForestClassifier", dict(n_estimators=6, random_state=0), "c"),
     ("DecisionTreeRegressor", dict(random_state=0), "r"),
@@ -43,7 +45,7 @@ IDS = [f[0] for f in FAMILIES]
 
 
 def _target(target):
-    return Y if target == "r" else C
+    return Y if target == "r" else (binary(C) if target == "b" else C)
 
 
 def _fit_predict(name, params, target, device):
@@ -127,13 +129,13 @@ def test_two_threads_cross_val_score_like_one(device, name, params, target):
 @pytest.mark.parametrize("name,params", [
     ("RandomForestRegressor", dict(n_estimators=4, random_state=0)),
     ("ExtraTreesRegressor", dict(n_estimators=4, random_state=0)),
-    ("GradientBoostingRegressor", dict(n_estimators=6, max_depth=3, random_state=0)),
-    ("DARTRegressor", dict(n_estimators=6, random_state=0)),
-    ("Ridge", dict(alpha=1.0)),
+    ("DecisionTreeRegressor", dict(random_state=0)),
 ])
 def test_two_threads_bagging_over_a_member_like_one(device, name, params):
+    # Bagging members are tree estimators (_proving.NOT_BAGGING_MEMBERS: the others are refused by name); the device
+    # is the ensemble's (_proving.member).
     def bag(_):
-        model = cls("BaggingRegressor")(make(name, device, **params), n_estimators=4, random_state=0)
+        model = make("BaggingRegressor", device, estimator=member(name, **params), n_estimators=4, random_state=0)
         return np.asarray(model.fit(X, Y).predict(X_NEW))
 
     alone = bag(0)
@@ -145,8 +147,8 @@ def test_two_threads_bagging_over_a_member_like_one(device, name, params):
 @pytest.mark.parametrize("name", ["RandomForestClassifier", "ExtraTreesClassifier"])
 def test_two_threads_bagging_classifier_over_a_forest(device, name):
     def bag(_):
-        model = cls("BaggingClassifier")(make(name, device, n_estimators=4, random_state=0), n_estimators=3,
-                                         random_state=0)
+        model = make("BaggingClassifier", device, estimator=member(name, n_estimators=4, random_state=0),
+                     n_estimators=3, random_state=0)
         return np.asarray(model.fit(X, binary(C)).predict_proba(X_NEW))
 
     alone = bag(0)

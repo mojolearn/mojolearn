@@ -9,6 +9,8 @@ casts are the same `core/msel_convert.mojo` functions the kernels call.
 
 from std.memory import bitcast, unsafe_memcpy
 
+from core.shared_slot import shared_slot_lock, shared_slot_unlock
+
 from core.msel_convert import (
     MSEL_I64,
     msel_itemsize,
@@ -25,25 +27,52 @@ comptime _F32 = MutPointer[Float32, MutAnyOrigin]
 
 
 struct MselHostStore(Defaultable, Movable):
+    """The process-wide host fold store. Its operations run with the GIL
+    released (cross_val_score workers, two Python threads each running a
+    search), so the id lists are guarded by `lock` word 0: two threads
+    appending, freeing or reading ids at once corrupted them ("msel store:
+    id N is not live", "holds 432 bytes, 640 read"; proving suite
+    2026-11-22). The lock covers the bookkeeping only (a few list
+    operations); the byte copies run after it, on the id's own buffer, which
+    no other thread frees (each id has one owner) and which a list growth
+    never moves (the outer list moves the inner list headers, not their
+    storage)."""
     var bufs: List[List[UInt8]]
     #: bytes held by each id; -1 for a freed id
     var nbytes: List[Int]
     var released: List[Int]
     var live: Int
+    #: word 0 guards `bufs`, `nbytes`, `released` and `live`
+    var lock: List[Int64]
 
     def __init__(out self):
         self.bufs = List[List[UInt8]]()
         self.nbytes = List[Int]()
         self.released = List[Int]()
         self.live = 0
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
-    def check(self, id: Int, need: Int) raises:
+    def _word(self) -> MutPointer[Int64, MutUntrackedOrigin]:
+        return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(self.lock.unsafe_ptr()))
+
+    def _check_held(self, id: Int, need: Int) raises:
+        """`check` with the lock held by the caller."""
         if id < 0 or id >= len(self.nbytes) or self.nbytes[id] < 0:
             raise Error(String("msel store: id ", id, " is not live"))
         if self.nbytes[id] < need:
             raise Error(String("msel store: id ", id, " holds ", self.nbytes[id], " bytes, ", need, " read"))
 
+    def check(self, id: Int, need: Int) raises:
+        var word = self._word()
+        shared_slot_lock(word)
+        try:
+            self._check_held(id, need)
+        finally:
+            shared_slot_unlock(word)
+
     def _insert(mut self, var buf: List[UInt8], n: Int) -> Int:
+        var word = self._word()
+        shared_slot_lock(word)
         var id: Int
         if len(self.released) > 0:
             id = self.released.pop()
@@ -54,6 +83,7 @@ struct MselHostStore(Defaultable, Movable):
             self.nbytes.append(n)
             id = len(self.nbytes) - 1
         self.live += 1
+        shared_slot_unlock(word)
         return id
 
     def put(mut self, src_addr: Int, n: Int) raises -> Int:
@@ -69,8 +99,15 @@ struct MselHostStore(Defaultable, Movable):
         return self._insert(List[UInt8](length=n, fill=0), n)
 
     def ptr(mut self, id: Int, need: Int) raises -> _U8:
-        self.check(id, need)
-        return _U8(unsafe_from_address=Int(self.bufs[id].unsafe_ptr()))
+        var word = self._word()
+        shared_slot_lock(word)
+        var address = 0
+        try:
+            self._check_held(id, need)
+            address = Int(self.bufs[id].unsafe_ptr())
+        finally:
+            shared_slot_unlock(word)
+        return _U8(unsafe_from_address=address)
 
     def read(mut self, id: Int, dst_addr: Int, n: Int) raises:
         self.check(id, n)
@@ -80,11 +117,20 @@ struct MselHostStore(Defaultable, Movable):
             unsafe_memcpy(dest=_U8(unsafe_from_address=dst_addr), src=self.ptr(id, n), count=n)
 
     def free(mut self, id: Int) raises:
-        self.check(id, 0)
-        self.bufs[id] = List[UInt8]()
-        self.nbytes[id] = -1
-        self.released.append(id)
-        self.live -= 1
+        # The freed bytes are dropped after the lock (a heap free never runs
+        # under the spin word).
+        var dropped = List[UInt8]()
+        var word = self._word()
+        shared_slot_lock(word)
+        try:
+            self._check_held(id, 0)
+            swap(self.bufs[id], dropped)
+            self.nbytes[id] = -1
+            self.released.append(id)
+            self.live -= 1
+        finally:
+            shared_slot_unlock(word)
+        _ = dropped^
 
 
 def host_take_rows(

@@ -44,7 +44,9 @@ from core.shared_slot import SharedSlot
 
 #: The host fold store of the core host binding: one process-wide slot, read
 #: by its Python exports (`bindings/msel_host.mojo`) and by the table's runs.
-comptime MSEL_HOST_STORE = SharedSlot[MselHostStore, "MojolearnMselHostStoreV1"]
+#: V2 (2026-11-22): the store gained its lock word (a new layout, so a
+#: binding of the old layout never shares the slot).
+comptime MSEL_HOST_STORE = SharedSlot[MselHostStore, "MojolearnMselHostStoreV2"]
 
 
 def select_folds_i64_host_run(fa: Int, rows: Int, splits: Int, sa: Int, ta: Int, ra: Int) raises -> Int:

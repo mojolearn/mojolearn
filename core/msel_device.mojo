@@ -89,34 +89,73 @@ def _status(ctx: DeviceContext, mut d_status: DeviceBuffer[DType.int32]) raises 
 
 #: Layout version of `MselStore` (core/shared_slot.mojo rule; the store is
 #: one process-wide `_Global` read by every binding, core/msel_device_x.mojo).
-#: V2: the layout word.
-comptime MSEL_STORE_LAYOUT = 3
+#: V2: the layout word. 4 (2026-11-22): the lock word.
+comptime MSEL_STORE_LAYOUT = 4
 
 
 struct MselStore(Defaultable, Movable):
+    """The process-wide resident store. Its operations run with the GIL
+    released (cross_val_score workers, two Python threads each running a
+    search), so the id lists are guarded by `lock` word 0: two threads
+    appending, freeing or reading ids at once corrupted them ("msel store:
+    id N is not live", "holds 432 bytes, 640 read"; proving suite
+    2026-11-22). The lock covers the bookkeeping only; allocation, copies,
+    launches and synchronization run outside it, on the id's own buffer,
+    which no other thread frees (each id has one owner)."""
     var bufs: List[DeviceBuffer[DType.uint8]]
     #: bytes held by each id; -1 for a freed id
     var nbytes: List[Int]
     var released: List[Int]
     var live: Int
+    #: word 0 guards `bufs`, `nbytes`, `released` and `live`
+    var lock: List[Int64]
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.uint8]]()
         self.nbytes = List[Int]()
         self.released = List[Int]()
         self.live = 0
+        self.lock = List[Int64](length=1, fill=Int64(0))
 
-    def check(self, id: Int, need: Int) raises:
-        """Raises unless `id` is live and holds at least `need` bytes."""
+    def _word(self) -> MutPointer[Int64, MutUntrackedOrigin]:
+        return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(self.lock.unsafe_ptr()))
+
+    def _check_held(self, id: Int, need: Int) raises:
+        """`check` with the lock held by the caller."""
         if id < 0 or id >= len(self.nbytes) or self.nbytes[id] < 0:
             raise Error(String("msel store: id ", id, " is not live"))
         if self.nbytes[id] < need:
             raise Error(String("msel store: id ", id, " holds ", self.nbytes[id], " bytes, ", need, " read"))
 
+    def check(self, id: Int, need: Int) raises:
+        """Raises unless `id` is live and holds at least `need` bytes."""
+        var word = self._word()
+        shared_slot_lock(word)
+        try:
+            self._check_held(id, need)
+        finally:
+            shared_slot_unlock(word)
+
+    def address(self, id: Int, need: Int) raises -> Int:
+        """The device address of a live id holding at least `need` bytes,
+        read under the lock (the kernels take it as a raw pointer)."""
+        var word = self._word()
+        shared_slot_lock(word)
+        var at = 0
+        try:
+            self._check_held(id, need)
+            at = Int(self.bufs[id].unsafe_ptr())
+        finally:
+            shared_slot_unlock(word)
+        return at
+
     def _insert(mut self, var buf: DeviceBuffer[DType.uint8], n: Int) -> Int:
+        var word = self._word()
+        shared_slot_lock(word)
         var id: Int
         if len(self.released) > 0:
             id = self.released.pop()
+            # The reused id's one-byte placeholder (`free`) is dropped here.
             self.bufs[id] = buf^
             self.nbytes[id] = n
         else:
@@ -124,6 +163,7 @@ struct MselStore(Defaultable, Movable):
             self.nbytes.append(n)
             id = len(self.nbytes) - 1
         self.live += 1
+        shared_slot_unlock(word)
         return id
 
     def put(mut self, ctx: DeviceContext, src_addr: Int, n: Int) raises -> Int:
@@ -147,24 +187,45 @@ struct MselStore(Defaultable, Movable):
     def read(self, ctx: DeviceContext, id: Int, dst_addr: Int, n: Int) raises:
         """The id's first `n` bytes into host memory, after every launch
         queued before it; waits."""
-        self.check(id, n)
         if n > 0:
             if dst_addr == 0:
+                self.check(id, n)
                 raise Error("msel store: read into a null address")
-            ctx.enqueue_copy(
-                dst_ptr=_U8(unsafe_from_address=dst_addr),
-                src_buf=self.bufs[id].create_sub_buffer[DType.uint8](0, n),
-            )
+            # The view of the id's bytes is taken under the lock; the copy
+            # runs after it.
+            var sub = Optional[DeviceBuffer[DType.uint8]]()
+            var word = self._word()
+            shared_slot_lock(word)
+            try:
+                self._check_held(id, n)
+                sub = self.bufs[id].create_sub_buffer[DType.uint8](0, n)
+            finally:
+                shared_slot_unlock(word)
+            ctx.enqueue_copy(dst_ptr=_U8(unsafe_from_address=dst_addr), src_buf=sub.value())
+            ctx.synchronize()
+            _ = sub^
+            return
+        self.check(id, n)
         ctx.synchronize()
 
     def free(mut self, ctx: DeviceContext, id: Int) raises:
-        """Release the id now: wait for the context, drop the buffer."""
+        """Release the id now: wait for the context, drop the buffer (after
+        the lock: the freed buffer is swapped out for a one-byte placeholder
+        and released once the lock is given back)."""
         self.check(id, 0)
         ctx.synchronize()
-        self.bufs[id] = ctx.enqueue_create_buffer[DType.uint8](1)
-        self.nbytes[id] = -1
-        self.released.append(id)
-        self.live -= 1
+        var dropped = ctx.enqueue_create_buffer[DType.uint8](1)
+        var word = self._word()
+        shared_slot_lock(word)
+        try:
+            self._check_held(id, 0)
+            swap(self.bufs[id], dropped)
+            self.nbytes[id] = -1
+            self.released.append(id)
+            self.live -= 1
+        finally:
+            shared_slot_unlock(word)
+        _ = dropped^
 
 
 # ===========================================================================
@@ -422,15 +483,15 @@ def device_take_rows(
     index is out of range."""
     if n_idx < 1 or row_bytes < 1:
         return True
-    store.check(src_id, n_src * row_bytes)
-    store.check(idx_id, n_idx * 8)
+    var src_at = store.address(src_id, n_src * row_bytes)
+    var idx_at = store.address(idx_id, n_idx * 8)
     var total = n_idx * row_bytes
     var d_out = ctx.enqueue_create_buffer[DType.uint8](total)
     var d_status = ctx.enqueue_create_buffer[DType.int32](2)
     enqueue_fill(ctx, d_status, Int32(0))
     # the kernels declare idx mutable; the store hands out an immutable view (box-run-2 compile fix)
-    var idx = store.bufs[idx_id].unsafe_ptr().bitcast[Int64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var src_u8 = store.bufs[src_id].unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var idx = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=idx_at)
+    var src_u8 = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src_at)
     if row_bytes % 4 == 0:
         var w = row_bytes // 4
         ctx.enqueue_function[_take_words_kernel](
@@ -495,8 +556,8 @@ def device_scatter_rows(
     (the block is then not to be read)."""
     if n_src < 1 or width < 1:
         return True
-    store.check(dst_id, n_dst * width * 8)
-    store.check(idx_id, n_src * 8)
+    var dst_at = store.address(dst_id, n_dst * width * 8)
+    var idx_at = store.address(idx_id, n_src * 8)
     var nbytes = n_src * width * msel_itemsize(src_code)
     var d_src = ctx.enqueue_create_buffer[DType.uint8](nbytes)
     ctx.enqueue_copy(dst_buf=d_src, src_ptr=_U8(unsafe_from_address=src_addr))
@@ -504,8 +565,8 @@ def device_scatter_rows(
     enqueue_fill(ctx, d_status, Int32(0))
     ctx.enqueue_function[_scatter_kernel](
         d_src.unsafe_ptr(), Int32(src_code), Int64(n_src), Int64(width),
-        store.bufs[idx_id].unsafe_ptr().bitcast[Int64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin](), Int64(n_dst),
-        store.bufs[dst_id].unsafe_ptr().bitcast[UInt64]().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin](), Int32(dst_code), d_status.unsafe_ptr(),
+        MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=idx_at), Int64(n_dst),
+        MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=dst_at), Int32(dst_code), d_status.unsafe_ptr(),
         grid_dim=_grid(n_src * width), block_dim=MSEL_TPB,
     )
     var ok = _status(ctx, d_status) == 0

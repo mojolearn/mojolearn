@@ -21,7 +21,7 @@ import sys
 import numpy as np
 import pytest
 
-from _proving import DEVICES, HERE, assert_same, cls, make, workers_for
+from _proving import DEVICES, HERE, assert_same, cls, make, member, workers_for
 
 import _arm_cases
 
@@ -90,9 +90,15 @@ def test_case_runs_on_the_default_arm(arm_root, device, name):
     if name == "voting_stacking_multioutput_ovr":
         for n in (-1, 1, 2):
             assert_same(result[f"voting_n_jobs_{n}"], result["voting_n_jobs_None"], f"voting n_jobs={n}")
-    if name in ("nan_refusals", "missing_class_folds"):
+    if name == "nan_refusals":
         for key, words in result.items():
             assert str(words) != "no error", f"{name}.{key}: the invalid input was admitted"
+    if name == "missing_class_folds":
+        # Stacking refuses a fold whose training rows lack a class, in words. CalibratedClassifierCV admits it: each
+        # fold's member is fitted on the classes present and its scores are mapped by the member's class codes (lane
+        # ma-callers R2 unit 4, `_cal_scores`), as scikit-learn's CalibratedClassifierCV does.
+        assert str(result["stacking"]) != "no error", f"{name}.stacking: the invalid input was admitted"
+        assert str(result["calibrated"]) == "no error", f"{name}.calibrated: {result['calibrated']}"
     if name == "grid_ridge_and_logistic":
         assert float(result["ridge_alpha"]) in (0.1, 1.0)
 
@@ -117,7 +123,7 @@ def test_case_equals_the_off_arm(arm_root, device, arm, name):
                                         n_jobs=0),
     lambda d: cls("MultiOutputClassifier")(make("LogisticRegression", d), n_jobs=0),
     lambda d: cls("OneVsRestClassifier")(make("LogisticRegression", d), n_jobs=0),
-    lambda d: cls("BaggingClassifier")(make("LogisticRegression", d), n_jobs=0),
+    lambda d: make("BaggingClassifier", d, estimator=member("DecisionTreeClassifier"), n_jobs=0),
 ], ids=["voting", "stacking", "multioutput", "ovr", "bagging"])
 def test_n_jobs_zero_is_refused(device, build):
     # ma-callers round 2: n_jobs=0 -> ValueError.

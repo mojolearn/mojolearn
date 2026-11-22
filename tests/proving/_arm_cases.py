@@ -46,6 +46,13 @@ def make(name, **params):
     return klass(**params)
 
 
+def bare(name, **params):
+    """A Bagging member: its `device` left None, because the members run on the ensemble's device and a member
+    with another explicit device is refused in words (BaggingClassifier's `device` docstring); `make` gives the
+    ensemble its device."""
+    return getattr(mojolearn, name)(**params)
+
+
 def _cv(result):
     """cross_validate's dict without its clocks."""
     return {k: v for k, v in result.items() if not k.endswith("_time") and k != "estimator"}
@@ -117,7 +124,9 @@ def cvp_svc_decision_function():
 
 @case
 def cvs_error_score():
-    return {"scores": ms.cross_val_score(make("Ridge", alpha=-1.0), X, Y, error_score=0.5)}
+    # A number for error_score is cross_validate's (its docstring: "'raise' or float"); cross_val_score documents
+    # error_score='raise' only and refuses a number by name.
+    return {"scores": ms.cross_validate(make("Ridge", alpha=-1.0), X, Y, error_score=0.5)["test_score"]}
 
 
 @case
@@ -134,8 +143,8 @@ def grid_ridge_and_logistic():
 @case
 def cvs_member_fallback_families():
     out = {}
-    out["pca"] = ms.cross_val_score(make("PCA", n_components=2), X, None)
-    out["kmeans"] = ms.cross_val_score(make("KMeans", n_clusters=3, random_state=0), X, None)
+    # PCA and KMeans are not here: cross_val_score takes 1-D targets y and, with scoring=None, an estimator that has
+    # `score` (its docstring); mojolearn's PCA and KMeans define no score.
     out["logistic"] = ms.cross_val_score(make("LogisticRegression"), X, C)
     out["knn"] = ms.cross_val_score(make("KNeighborsClassifier"), X, C)
     out["nearest_centroid"] = ms.cross_val_score(make("NearestCentroid"), X, C)
@@ -157,8 +166,10 @@ def cvs_neural_and_pls():
 
 @case
 def cvs_lstm_regressor():
-    return {"scores": ms.cross_val_score(make("LSTMRegressor", hidden_size=4, max_epochs=2, random_state=0),
-                                         X3, Y3, cv=3)}
+    # cross_val_score takes a 2-D X ("X : array-like of shape (n_samples, n_features)", its docstring); the
+    # (n, T, F) sequences an LSTMRegressor reads are refused in words, the same on every arm.
+    return {"refusal": _error(lambda: ms.cross_val_score(
+        make("LSTMRegressor", hidden_size=4, max_epochs=2, random_state=0), X3, Y3, cv=3))}
 
 
 # ---------------------------------------------------------------- ma-callers: meta-estimators over members
@@ -166,18 +177,18 @@ def cvs_lstm_regressor():
 @case
 def bagging_over_trees():
     out = {}
-    regressor = mojolearn.BaggingRegressor(make("DecisionTreeRegressor", random_state=0), n_estimators=5,
-                                           max_features=0.6, bootstrap_features=True, oob_score=True,
-                                           random_state=0).fit(X, Y, sample_weight=W)
+    regressor = make("BaggingRegressor", estimator=bare("DecisionTreeRegressor", random_state=0), n_estimators=5,
+                     max_features=0.6, bootstrap_features=True, oob_score=True,
+                     random_state=0).fit(X, Y, sample_weight=W)
     out["regressor_predict"] = regressor.predict(X)
     out["regressor_oob"] = regressor.oob_score_
-    classifier = mojolearn.BaggingClassifier(make("RandomForestClassifier", n_estimators=4, random_state=0),
-                                             n_estimators=4, max_features=0.6, random_state=0).fit(X, C)
+    classifier = make("BaggingClassifier", estimator=bare("RandomForestClassifier", n_estimators=4, random_state=0),
+                      n_estimators=4, max_features=0.6, random_state=0).fit(X, C)
     out["classifier_proba"] = classifier.predict_proba(X)
     rare = C.copy()
     rare[:2] = 3                     # a rare class two rows hold
-    out["rare_class_predict"] = mojolearn.BaggingClassifier(make("DecisionTreeClassifier", random_state=0),
-                                                            n_estimators=4, random_state=0).fit(X, rare).predict(X)
+    out["rare_class_predict"] = make("BaggingClassifier", estimator=bare("DecisionTreeClassifier", random_state=0),
+                                     n_estimators=4, random_state=0).fit(X, rare).predict(X)
     return out
 
 
@@ -196,7 +207,9 @@ def voting_stacking_multioutput_ovr():
         out[f"voting_n_jobs_{n}"] = mojolearn.VotingClassifier(_classifiers(), voting="soft",
                                                                n_jobs=n).fit(X, C).predict_proba(X)
     stack = mojolearn.StackingClassifier(_classifiers(), make("LogisticRegression")).fit(X, C)
-    out["stack_proba"], out["stack_decision"] = stack.predict_proba(X), stack.decision_function(X)
+    # StackingClassifier has predict and predict_proba (python/mojolearn/_expansion_trees.py); it defines no
+    # decision_function.
+    out["stack_proba"], out["stack_predict"] = stack.predict_proba(X), stack.predict(X)
     regressors = [("ridge", make("Ridge")), ("ols", make("LinearRegression")), ("knn", make("KNeighborsRegressor"))]
     stack_r = mojolearn.StackingRegressor(regressors, make("Ridge")).fit(X, Y)
     out["stack_r_predict"], out["stack_r_transform"] = stack_r.predict(X), stack_r.transform(X)
@@ -259,7 +272,9 @@ def nan_refusals():
         "multioutput": lambda: mojolearn.MultiOutputRegressor(make("Ridge")),
         "ovr": lambda: mojolearn.OneVsRestClassifier(make("LogisticRegression")),
         "calibrated": lambda: mojolearn.CalibratedClassifierCV(make("LogisticRegression"), cv=3),
-        "bagging": lambda: mojolearn.BaggingRegressor(make("Ridge"), oob_score=True, random_state=0),
+        # Bagging members are tree estimators (BaggingRegressor's `estimator` docstring; Ridge is refused by name).
+        "bagging": lambda: make("BaggingRegressor", estimator=bare("DecisionTreeRegressor", random_state=0),
+                                oob_score=True, random_state=0),
         "rfe": lambda: mojolearn.RFE(make("LogisticRegression"), n_features_to_select=2),
     }
     regression = {"multioutput", "bagging"}

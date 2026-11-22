@@ -35,7 +35,7 @@ Resolution is a metadata operation with no independent numerical work to
 split; it runs once per estimator, never per row.
 """
 from std.python import PythonObject
-from bindings.py_balanced import py_type, py_get, py_fields, py_call
+from bindings.py_balanced import py_type, py_get, py_fields, py_call, py_setitem
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner_run import XprepCaps
 from core.device_route import (
@@ -105,17 +105,32 @@ def scaler_route_clear(model: PythonObject) raises:
 
 
 def _scaler_cpu_sync(cpu: PythonObject, context: PythonObject, b: PythonObject) raises:
-    """Copy into the CPU context the keys its source context gained after
-    import (another family connecting to the owner's context): the CPU
-    context names every key of its source, so the sizes alone say whether
-    anything is missing. In place: estimators already resolved to the CPU
-    context see the keys too. Its own values (the CPU entries, the vendor)
-    are kept. Once per estimator resolution; two C-level dictionary updates
-    when something is missing, one size compare otherwise."""
-    if len(cpu) >= len(context):
+    """Copy the CPU context again from its source context when the source
+    changed since the copy (another family connecting to the owner's
+    context, or NumPy connecting at the first construction, which adds keys
+    AND replaces the type tuples `native_value_types`, `scalar_types`, ...):
+    the source's size at the copy is recorded (`prep_cpu_source_size`,
+    python/mojolearn/_native_prep_device.py). Every value is the source's
+    except the CPU context's own (`prep_cpu_overrides`: the CPU entries, the
+    vendor). The former form copied only the keys the source gained and kept
+    the stale type tuples, so a device="cpu" scaler whose CPU context was
+    copied before NumPy connected refused a NumPy X ("Sequential requires
+    native input types", proving suite 2026-11-22). In place: estimators
+    already resolved to the CPU context see the values too. Once per
+    estimator resolution; one dictionary read and one size compare when
+    nothing changed."""
+    var held = py_get(cpu, "prep_cpu_source_size")
+    var size = len(context)
+    if held is not None and Int(py=held) == size:
         return
     var merged = py_call(b.dict, context)
-    _ = py_call(merged.update, cpu)
+    var overrides = py_get(cpu, "prep_cpu_overrides")
+    if overrides is not None:
+        for k in range(len(overrides)):  # small-loop(overrides): the CPU context's few own keys
+            var key = overrides[k]
+            py_setitem(merged, key, cpu[key])
+        py_setitem(merged, PythonObject("prep_cpu_overrides"), overrides)
+    py_setitem(merged, PythonObject("prep_cpu_source_size"), PythonObject(size))
     _ = py_call(cpu.update, merged)
 
 
