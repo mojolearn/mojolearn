@@ -20,7 +20,7 @@ from bindings.operation_names_mexp import (
     MEXP_OPN_FAMILY_MEXP_CLUSTER_NMI,
     MEXP_OPN_FAMILY_MEXP_CLUSTER_PAIR_CONFUSION,
 )
-from bindings.metrics_exp_cluster_run import nmi_finish, ami_finish, contingency_dtype_code
+from bindings.metrics_exp_common_run import nmi_finish, ami_finish, contingency_dtype_code
 from std.python import Python, PythonObject
 from bindings.admitted_family_door import admit_family
 from bindings.py_balanced import py_call

@@ -18,7 +18,7 @@ from core.classical_pandas_impl import _pd_double
 from core.scaler_fit_impl import scaler_cast
 from core.host_sparse_impl import host_sparse_place, host_sparse_compressed, host_sparse_coo, host_sparse_dia, host_sparse_uint64_bound
 from bindings.py_cpython_table import cpython_table
-from bindings.host_sparse_native_run import _address_in
+from core.host_sparse_impl import _address_in
 from bindings.host_rest_keys_unpack import host_rest_keys
 from bindings.py_balanced import py_item
 

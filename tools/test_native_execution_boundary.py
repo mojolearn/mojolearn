@@ -12,8 +12,8 @@ def test_engine_endpoint_dependencies_resolve():
 def test_common_invocation_reads_only_admitted_native_state():
     source = (ROOT/'providers/python/native_execution_pyapi_door.mojo').read_text()
     invocation = source.split('def _native_execution_run')[1].split('struct AdmittedNativeExecution')[0]
-    # The typed lease and its finish are RUN (bindings/native_execution_pyapi_run.mojo).
-    finish = (ROOT/'bindings/native_execution_pyapi_run.mojo').read_text().split('def _native_execution_finish')[1]
+    # The typed lease and its finish are RUN (core/native_execution.mojo).
+    finish = (ROOT/'core/native_execution.mojo').read_text().split('def _native_execution_finish')[1]
     for forbidden in ('py_call', 'PythonObject', 'downcast_value_ptr', 'getattr', 'import_module'):
         assert forbidden not in invocation and forbidden not in finish
     assert 'with GILReleased(Python()):' in invocation

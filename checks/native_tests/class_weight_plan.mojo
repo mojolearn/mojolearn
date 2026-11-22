@@ -24,7 +24,7 @@ from xtrees.label_weights_native import label_weights_native_v1
 from core.labels_native_api import LabelsRatioRequest
 from core.labels_native_host import LabelsHostKernels
 from core.admitted_cast_elements import admitted_cast_elements
-from bindings.class_weight_rows_run import class_weight_rows_plan
+from core.class_weight_plan import class_weight_rows_plan
 from checks.native_tests.tsa_metrics_fixture_words import fixture_i32
 from core.class_weight_plan import (
     ClassWeightInputs, class_weight_kind, class_weight_value,

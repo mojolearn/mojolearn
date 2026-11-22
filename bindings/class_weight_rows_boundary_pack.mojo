@@ -14,7 +14,7 @@ from bindings.label_weights_boundary_unpack import label_weights_run
 from bindings.labels_descriptor_boundary_door import labels_class_ratio_f64
 from core.admitted_cast_elements import admitted_cast_elements
 from core.class_weight_plan import ClassWeightInputs, ClassWeightPlan
-from bindings.class_weight_rows_run import class_weight_rows_plan
+from core.class_weight_plan import class_weight_rows_plan
 from core.label_weights_native_api import LabelWeightsRequest, LABEL_WEIGHTS_COUNTS, LABEL_WEIGHTS_ROWS
 
 

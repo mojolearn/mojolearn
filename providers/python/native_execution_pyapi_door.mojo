@@ -14,7 +14,7 @@ from core.native_call_output import NativeCallWorkspace, NativeCallWorkspaceLeas
 from core.native_execution import NativeExecutionEndpoint
 from core.operation_lock import operation_lock_acquire, operation_lock_release
 from providers.python.neural_descriptor_pyapi_door import NeuralDescriptorProvider
-from bindings.native_execution_pyapi_run import NativeExecutionLease, _native_execution_finish
+from core.native_execution import NativeExecutionLease, _native_execution_finish
 
 def _native_execution_run(lease: NativeExecutionLease, operation: Int,
                           aa: Int, na: Int, pp: Int, np: Int, ff: Int, nf: Int,

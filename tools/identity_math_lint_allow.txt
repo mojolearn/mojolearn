@@ -14,7 +14,7 @@ bindings/forest_config_run.mojo:forest_features_fraction:sqrt  # SAFE-EXACT: hos
 bindings/mani_decomp_run.mojo:iso_reconstruction_error_run:sqrt  # SAFE-EXACT: host Float64 sqrt in iso_reconstruction_error_run (mani_decomp_run.mojo:512); IEEE correctly rounded on every host
 bindings/mani_decomp_run.mojo:lle_smallest_run:sqrt  # SAFE-EXACT: host Float64 sqrt(n) in lle_smallest_run (mani_decomp_run.mojo:562); IEEE correctly rounded
 bindings/mani_decomp_run.mojo:mani_lanczos_top:sqrt  # SAFE-EXACT: host Float64 sqrt in mani_lanczos_top (host driver on MRun); IEEE correctly rounded on x86 and ARM hosts, never in a GPU kernel
-bindings/metrics_exp_cluster_run.mojo:_generalized_average:sqrt  # SAFE-EXACT: host binary64 NMI/AMI epilogue _generalized_average (metrics_exp_cluster_run.mojo:7); IEEE sqrt correctly rounded
+bindings/metrics_exp_common_run.mojo:_generalized_average:sqrt  # SAFE-EXACT: host binary64 NMI/AMI epilogue _generalized_average (metrics_exp_common_run.mojo:50); IEEE sqrt correctly rounded
 bindings/normal_dist_helpers_run.mojo:normal_inv_cdf64:sqrt  # SAFE-EXACT: host Float64 sqrt in normal_inv_cdf64 (normal_dist_helpers_run.mojo:140); log already portable_log64; sqrt IEEE correctly rounded
 bindings/rp_native_door.mojo:rp_fit:sqrt  # SAFE-EXACT: host Float64 1/sqrt(d) for density='auto' in the RP door; IEEE correctly rounded
 cluster/impl/detail/kmeans.mojo:init_scalable_kmeans_plus_plus:log  # SAFE-EXACT: host (after ctx.synchronize, kmeans.mojo:1114); only sets integer niter = min(8, ceil(log(psi))); psi is a widened Float32, and for float32 psi near e^k (k=1..7) |log(psi)-k| >= 1.7e-9, far beyond Float64 libm error, log(1)=0 exactly everywhere
