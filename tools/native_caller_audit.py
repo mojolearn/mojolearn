@@ -122,7 +122,9 @@ FAMILIES = (
                    "_groves_sabotage"],
          note="the read-back every binding exports under its own prefix (load_host_module, load_door_host, "
               "backend_public_native_door, the runtime report)"),
-    dict(site="python/mojolearn/_native_arena_rows.py", literal='getattr(module, prefix + "_dev_put")', strict=False,
+    # The arena is native (arena units C / D, 2026-11-21): the cache binding pack resolves the prefixed
+    # entries by name natively (`_cache_entry_name(prefix, ...)`); _native_arena_rows.py no longer does.
+    dict(site="bindings/arena_cache_binding_pack.mojo", literal='_cache_entry_name(prefix,"_dev_put",context)', strict=False,
          prefixes="MODULE", suffixes=["_dev_put", "_dev_free", "_dev_live", "_dev_take_rows"],
          note="the device arena entries a binding exports under its own prefix (arena rows, arena_prog, x_prep owner)"),
 )

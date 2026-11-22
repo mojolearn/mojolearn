@@ -382,8 +382,6 @@ def msel_parallel_operation(operation: String, args: PythonObject, context: Pyth
         native_require_worker_inventory(args[0], String(args[1]), args[2], Int(py=args[3]))
     elif operation == "family_msel_parallel_wire":
         return msel_wire_unpack(msel_wire_pack(args[0], context), context)
-    elif operation == "family_msel_parallel_model_pack":
-        return msel_parallel_model_pack(args[0], context)
     elif operation == "family_msel_parallel_last_run":
         return py_item(py_item(context, nk[].k_family_msel_parallel), nk[].k_last_run)
     elif operation == "family_msel_parallel_require_batch":

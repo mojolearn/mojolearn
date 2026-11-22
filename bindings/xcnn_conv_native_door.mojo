@@ -38,7 +38,7 @@ from bindings.sequential_inputs_door import sequential_input
 from bindings.py_optional import py_present
 from bindings.xcnn_keys_unpack import (
     xcnn_keys, XCNN_OPN_BN_INIT, XCNN_OPN_BN_TRAIN, XCNN_OPN_BLOCK_BACKWARD, XCNN_OPN_BLOCK_FIT, XCNN_OPN_BLOCK_FORWARD, XCNN_OPN_BLOCK_INIT,
-    XCNN_OPN_BLOCK_PARAMETERS, XCNN_OPN_BLOCK_TRAIN, XCNN_OPN_BLOCK_TRANSFORM, XCNN_OPN_CONV_BACKWARD,
+    XCNN_OPN_BLOCK_PARAMETER_DESCRIPTORS, XCNN_OPN_BLOCK_TRAIN, XCNN_OPN_BLOCK_TRANSFORM, XCNN_OPN_CONV_BACKWARD,
     XCNN_OPN_CONV_FIT, XCNN_OPN_CONV_FORWARD, XCNN_OPN_CONV_GRAD_BIAS, XCNN_OPN_CONV_GRAD_BIAS_SET,
     XCNN_OPN_CONV_GRAD_WEIGHT, XCNN_OPN_CONV_GRAD_WEIGHT_SET, XCNN_OPN_CONV_INIT, XCNN_OPN_CONV_INIT1D,
     XCNN_OPN_CONV_PIN, XCNN_OPN_CONV_SET_WEIGHTS, XCNN_OPN_CONV_SET_WEIGHTS1D, XCNN_OPN_CONV_TRANSFORM,
@@ -1422,7 +1422,7 @@ def xcnn_conv_layers(layer: PythonObject, operation: Int, name: PythonObject, ar
         return _block_train(layer, args[0], context)
     if operation == XCNN_OPN_BLOCK_BACKWARD:
         return _block_backward(layer, args[0], context)
-    if operation == XCNN_OPN_BLOCK_PARAMETERS:
+    if operation == XCNN_OPN_BLOCK_PARAMETER_DESCRIPTORS:
         return _block_parameters(layer, context)
     if operation == XCNN_OPN_BLOCK_FIT:
         _ = _block_fields(layer, context)

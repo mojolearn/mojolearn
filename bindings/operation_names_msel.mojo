@@ -36,7 +36,6 @@ def operation_names_msel(mut names: List[String], mut leaves: List[Int]):
     names.append("family_msel_parallel_initialize")
     names.append("family_msel_parallel_inventory")
     names.append("family_msel_parallel_last_run")
-    names.append("family_msel_parallel_model_pack")
     names.append("family_msel_parallel_require_batch")
     names.append("family_msel_parallel_require_inventory")
     names.append("family_msel_parallel_score")
