@@ -86,9 +86,8 @@ struct Members(Movable):
         return VoteRows(0, N, D)
 
 
-def check_hard_vote() raises:
+def check_hard_vote(m: Members) raises:
     """test_hard_vote_of_forest_members_matches_their_predictions."""
-    var m = Members()
     var members: List[VoteMember] = [VoteMember(Int(m.codes[0].unsafe_ptr()), 1, 0, 1.0),
                                      VoteMember(Int(m.codes[1].unsafe_ptr()), 1, 0, 1.0)]
     var acc = List[Float64](length=N * K, fill=0.0)
@@ -106,9 +105,8 @@ def check_hard_vote() raises:
         require(Int(got[i]) == best, "hard vote row " + String(i) + ": " + String(got[i]) + " != " + String(best))
 
 
-def check_soft_vote() raises:
+def check_soft_vote(m: Members) raises:
     """test_soft_vote_is_the_weighted_mean_of_member_probabilities (weights 2, 1), and the soft predict codes."""
-    var m = Members()
     var cols = Int(m.classes.unsafe_ptr())
     var members: List[VoteMember] = [VoteMember(Int(m.proba[0].unsafe_ptr()), K, cols, 2.0),
                                      VoteMember(Int(m.proba[1].unsafe_ptr()), K, cols, 1.0)]
@@ -129,9 +127,8 @@ def check_soft_vote() raises:
         require(Int(codes[i]) == best, "soft predict row " + String(i))
 
 
-def check_regress_vote() raises:
+def check_regress_vote(m: Members) raises:
     """VotingRegressor.predict: the weighted mean of the members' predictions (weights 2, 1, 1)."""
-    var m = Members()
     var a = List[Float32](length=N, fill=Float32(0))
     var b = List[Float32](length=N, fill=Float32(0))
     var c = List[Float32](length=N, fill=Float32(0))
@@ -149,10 +146,9 @@ def check_regress_vote() raises:
         require(abs(acc[i] - want) <= 1e-12, "regress row " + String(i) + ": " + String(acc[i]) + " != " + String(want))
 
 
-def check_transform() raises:
+def check_transform(m: Members) raises:
     """Voting*.transform: hard, the members' outputs side by side; soft, each member's probabilities at its
     classes, rounded to float32, in its own k columns."""
-    var m = Members()
     var a = List[Float32](length=N, fill=Float32(0))
     var b = List[Float32](length=N, fill=Float32(0))
     for i in range(N):  # small-loop(fixture: two members' codes as float32 predictions)
@@ -177,10 +173,9 @@ def check_transform() raises:
                         "soft transform cell " + String(i) + "," + String(j) + "," + String(c))
 
 
-def check_refusal_index() raises:
+def check_refusal_index(m: Members) raises:
     """A native member whose call refuses (here: a plan with no published member entry) is reported by its
     index, and no vote is written: every member answers before any vote is cast."""
-    var m = Members()
     var plan = MemberPlan()
     var members: List[VoteMember] = [VoteMember(Int(m.codes[0].unsafe_ptr()), 1, 0, 1.0),
                                      VoteMember(Int(UnsafePointer(to=plan)), 0, MEMBER_OP_PREDICT, 1, MEMBER_I32, 0,
@@ -196,23 +191,25 @@ def check_refusal_index() raises:
     _ = plan^
 
 
-def run_case(which: Int) raises:
-    if which == 0:
-        check_hard_vote()
-    elif which == 1:
-        check_soft_vote()
-    elif which == 2:
-        check_regress_vote()
-    elif which == 3:
-        check_transform()
-    else:
-        check_refusal_index()
-
-
 def test_vote_run() raises:
     # The publication _mojolearn_x_trees_host makes at module init, once before the parallel cases.
     publish_x_trees_glue("cpu")
+    # The members are fitted once (each fit splits its own work over the cores); the cases read them.
+    var members = Members()
+    var at = UnsafePointer(to=members)
+    def run_case(which: Int) raises {imm at}:
+        if which == 0:
+            check_hard_vote(at[])
+        elif which == 1:
+            check_soft_vote(at[])
+        elif which == 2:
+            check_regress_vote(at[])
+        elif which == 3:
+            check_transform(at[])
+        else:
+            check_refusal_index(at[])
     check_cases("vote", CASES, run_case)
+    _ = members^
 
 
 def main() raises:
