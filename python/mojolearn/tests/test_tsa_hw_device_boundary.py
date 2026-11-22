@@ -71,8 +71,8 @@ def test_default_runs_on_this_installations_device():
 def test_cpu_device_runs_the_cpu_binary():
     fitted = model(device="cpu").fit()
     assert fitted.vendor_used() == "cpu"
-    assert np.asarray(fitted.forecast(5)).shape == (4, 5)
-    assert np.asarray(fitted.predict(0, 50)).shape == (4, 50)
+    assert np.asarray(fitted.forecast(5)).shape == (5, 4)          # (h, ts_num), as documented
+    assert np.asarray(fitted.predict(0, 50)).shape == (50, 4)
 
 
 @two_devices
