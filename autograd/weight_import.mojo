@@ -39,7 +39,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from core.cast_in import CAST_KIND_BFLOAT, CAST_KIND_FLOAT, CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast
-from autograd.model import LAYER_CONV2D, LAYER_LAYER_NORM, LAYER_LINEAR, SPEC2_ARGS, ModelSpec, conv_in_per_group
+from autograd.model import LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM, LAYER_LINEAR, SPEC2_ARGS, ModelSpec, conv_in_per_group
 
 #: the dtype code of a bfloat16 source (NumPy has no number for it)
 comptime WI_DTYPE_BF16 = 4096
@@ -198,14 +198,14 @@ def _has_bias(spec: ModelSpec, i: Int) -> Bool:
     var k = spec.kinds[i]
     if k == LAYER_LINEAR:
         return spec.arg1[i] == 1
-    if k == LAYER_CONV2D:
+    if k == LAYER_CONV2D or k == LAYER_CONV1D:
         return spec.xargs[SPEC2_ARGS * i + 4] == 1
     return k == LAYER_LAYER_NORM
 
 
 def _has_params(spec: ModelSpec, i: Int) -> Bool:
     var k = spec.kinds[i]
-    return k == LAYER_LINEAR or k == LAYER_LAYER_NORM or k == LAYER_CONV2D
+    return k == LAYER_LINEAR or k == LAYER_LAYER_NORM or k == LAYER_CONV2D or k == LAYER_CONV1D
 
 
 def _layer_kind(spec: ModelSpec, i: Int) -> String:
@@ -214,6 +214,8 @@ def _layer_kind(spec: ModelSpec, i: Int) -> String:
         return "linear"
     if k == LAYER_LAYER_NORM:
         return "layer_norm"
+    if k == LAYER_CONV1D:
+        return "conv1d"
     return "conv2d"
 
 
@@ -241,7 +243,8 @@ def _expected(spec: ModelSpec, i: Int, slot: Int, layout: Int) -> List[Int]:
             var ks = spec.arg1[i]
             out.append(conv_in_per_group(spec, i))
             out.append(ks)
-            out.append(ks)
+            if k == LAYER_CONV2D:
+                out.append(ks)
     return out^
 
 
@@ -252,6 +255,8 @@ def _weight_count(spec: ModelSpec, i: Int) -> Int:
     if k == LAYER_LAYER_NORM:
         return spec.in_width[i]
     var ks = spec.arg1[i]
+    if k == LAYER_CONV1D:
+        return spec.arg0[i] * conv_in_per_group(spec, i) * ks
     return spec.arg0[i] * conv_in_per_group(spec, i) * ks * ks
 
 

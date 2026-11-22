@@ -12,7 +12,9 @@ from ._mode import CheckMixin as _CheckMixin
 # Description codes (autograd/model.mojo LAYER_*, LOSS_*, ...).
 _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "layer_norm": 6, "dropout": 7, "residual": 8,
-          "reshape": 9, "permute": 10, "flatten": 11, "conv2d": 12, "max_pool2d": 13, "avg_pool2d": 14}
+          "reshape": 9, "permute": 10, "flatten": 11, "conv2d": 12, "max_pool2d": 13, "avg_pool2d": 14,
+          "conv1d": 15, "max_pool1d": 16, "avg_pool1d": 17, "adaptive_avg_pool1d": 18, "branch": 19,
+          "concat": 20, "residual_block": 0, "parallel": 0}
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -117,7 +119,11 @@ class Sequential(_CheckMixin):
             output), ``'reshape'`` (``shape``), ``'permute'`` (``axes``),
             ``'flatten'``, ``'conv2d'`` (``out_channels``, ``kernel_size``,
             ``stride=1``, ``padding=0``, ``bias=True``), ``'max_pool2d'``
-            or ``'avg_pool2d'`` (``kernel_size``, ``stride=None``).
+            or ``'avg_pool2d'`` (``kernel_size``, ``stride=None``),
+            ``'conv1d'``, ``'max_pool1d'``, ``'avg_pool1d'``,
+            ``'adaptive_avg_pool1d'``, ``'branch'``, ``'concat'``,
+            ``'residual_block'`` and ``'parallel'`` (the arguments of the
+            methods of the same names).
         *args, **kwargs
             The layer's arguments, as listed for ``kind``.
 
@@ -211,6 +217,101 @@ class Sequential(_CheckMixin):
         samples over square ``kernel_size`` windows, ``stride`` apart (by
         default ``kernel_size``)."""
         return _SEQUENTIAL_ENTRY(self, "add", ("avg_pool2d", (kernel_size, stride), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def conv1d(self, out_channels, kernel_size, stride=1, padding=0, bias=True, groups=1):
+        """Append a 1-D convolution of ``(channels, length)`` samples with
+        ``out_channels`` kernels of length ``kernel_size``, ``stride`` and
+        ``padding`` zeros at both ends. With ``groups`` greater than 1 the
+        channels split into ``groups`` equal blocks, each block of outputs
+        seeing only its block of inputs; the weight is ``(out_channels,
+        channels // groups, kernel_size)``. A ``kernel_size`` of 1 is a
+        pointwise (bottleneck) convolution.
+
+        Example::
+
+            model.conv1d(32, 7, padding=3)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("conv1d", (out_channels, kernel_size, stride, padding, bias, groups), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def max_pool1d(self, kernel_size, stride=None, padding=0):
+        """Append a max pooling of ``(channels, length)`` samples over
+        windows of ``kernel_size``, ``stride`` apart (by default
+        ``kernel_size``), with ``padding`` positions at both ends that are
+        never chosen (at most ``kernel_size // 2``)."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("max_pool1d", (kernel_size, stride, padding), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def avg_pool1d(self, kernel_size, stride=None, padding=0):
+        """Append an average pooling of ``(channels, length)`` samples over
+        windows of ``kernel_size``, ``stride`` apart (by default
+        ``kernel_size``), with ``padding`` zeros at both ends counted in each
+        window (at most ``kernel_size // 2``)."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("avg_pool1d", (kernel_size, stride, padding), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def adaptive_avg_pool1d(self, output_size=1):
+        """Append an average pooling of ``(channels, length)`` samples to
+        ``(channels, output_size)``: each output is the mean of one of
+        ``output_size`` equal windows, so ``output_size`` must divide the
+        length. ``output_size=1`` is the global average over the length."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("adaptive_avg_pool1d", (output_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def branch(self, source=-1):
+        """Append a layer whose output is the output of layer ``source``
+        (-1: the model input), so the layers after it start a new branch
+        from that point."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("branch", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def concat(self, sources):
+        """Append the outputs of the layers ``sources`` (1 to 6 layer
+        indices, -1 for the model input) joined along the first axis of
+        each sample (the channels). The other axes must agree."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("concat", (sources,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def residual_block(self, body, shortcut=None):
+        """Append a residual block: ``body(h) + shortcut(h)``, where ``h`` is
+        the current output and ``shortcut`` is the identity when None.
+
+        Parameters
+        ----------
+        body : Sequential
+            The layers of the main path, for example two convolutions.
+        shortcut : Sequential or None, default None
+            The layers applied to the block's input before the addition,
+            typically a ``conv1d`` of kernel size 1 when the body changes
+            the number of channels. Its output must have the body's shape.
+
+        The layers of ``body`` and ``shortcut`` are copied into this model
+        (they take their place in :attr:`layers` and in the parameter
+        names); the two models themselves are not changed or trained.
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> body = mojolearn.Sequential().conv1d(16, 3, padding=1).relu().conv1d(16, 3, padding=1)
+        >>> model = mojolearn.Sequential(input_shape=(4, 32)).conv1d(16, 1)
+        >>> model = model.residual_block(body).relu()
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("residual_block", (body, shortcut), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def parallel(self, *branches):
+        """Append parallel branches whose outputs are joined along the
+        channels: each branch (a ``Sequential``) reads the current output,
+        and the result is their outputs concatenated in order along the
+        first axis of each sample. An empty branch passes its input
+        through. 1 to 6 branches; their outputs must agree outside the
+        channel axis.
+
+        The branches' layers are copied into this model; the branch
+        models themselves are not changed or trained.
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> a = mojolearn.Sequential().conv1d(8, 9, padding=4)
+        >>> b = mojolearn.Sequential().conv1d(8, 5, padding=2)
+        >>> c = mojolearn.Sequential().max_pool1d(3, stride=1, padding=1).conv1d(8, 1)
+        >>> model = mojolearn.Sequential(input_shape=(4, 32)).parallel(a, b, c).relu()
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("parallel", branches, _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     @property
     def layers(self):
@@ -661,7 +762,8 @@ _SEQUENTIAL_CONTEXT = {
     "optimizer_codes": _OPT, "schedule_codes": _SCHED,
     "layer_names": ("", "linear", "relu", "sigmoid", "tanh", "softmax",
                     "layer_norm", "dropout", "residual", "reshape", "permute",
-                    "flatten", "conv2d", "max_pool2d", "avg_pool2d"),
+                    "flatten", "conv2d", "max_pool2d", "avg_pool2d", "conv1d", "max_pool1d",
+                    "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat"),
 }
 
 

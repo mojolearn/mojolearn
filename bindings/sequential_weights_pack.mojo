@@ -34,7 +34,7 @@ def sequential_parameter_layers(model: PythonObject) raises -> PythonObject:
     for k in range(len(layers)):  # driver-loop: over parameter layer metadata
         var layer = layers[k]
         var code = Int(py=layer[0])
-        if code == 1 or code == 6 or code == 12:
+        if code == 1 or code == 6 or code == 12 or code == 15:
             var bias = code == 6 or (Int(py=layer[2]) == 1 if code == 1 else Int(py=layer[4][4]) == 1)
             _ = py_call(result.append, Python.tuple(k, bias))
     return result
@@ -136,7 +136,7 @@ def sequential_load_weights(mut mods: NativeModules, model: PythonObject, args: 
             uses_shape = uses_shape or Int(py=description[k][0]) >= 9
         if uses_shape:
             if py_item(fields, nk[].k_input_shape) is None:
-                raise Error("load_state_dict: set input_shape on a model with reshape, permute, flatten, conv2d or pooling layers")
+                raise Error("load_state_dict: set input_shape on a model with reshape, permute, flatten, convolution, pooling, branch or concat layers")
             sample = py_item(fields, nk[].k_input_shape)
         else:
             var first = Int(py=layers[0][0])

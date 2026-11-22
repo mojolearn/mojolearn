@@ -33,7 +33,10 @@ from autograd.cast_ops import gather_labels_device, upload_cast, validation_code
 # Description version 2 (lane ag-rankn-python, plan AUTOGRAD_RANKN (git history)
 # section 5): per-sample input shapes of any rank and the shape layers.
 from autograd.rankn import RN_MAX_RANK, ShapeN
-from autograd.rankn_conv import rankn_conv2d, rankn_max_pool2d, rankn_avg_pool2d
+from autograd.rankn_conv import (
+    rankn_conv1d, rankn_conv2d, rankn_max_pool1d, rankn_max_pool2d, rankn_avg_pool1d, rankn_avg_pool2d,
+)
+from autograd.rankn_layout import rankn_concat
 from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_shape, rn_with_batch
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
@@ -113,6 +116,15 @@ comptime LAYER_FLATTEN = 11      # the per-sample shape becomes one axis
 comptime LAYER_CONV2D = 12       # (out_channels, kernel, stride, padding, bias 0/1, groups; 0 = 1); input (C, H, W)
 comptime LAYER_MAXPOOL2D = 13    # (kernel, stride); input (C, H, W)
 comptime LAYER_AVGPOOL2D = 14    # (kernel, stride); input (C, H, W)
+# The 1-D sequence blocks (lane seq-blocks, 2026-11-22): input (C, L).
+comptime LAYER_CONV1D = 15       # (out_channels, kernel, stride, padding, bias 0/1, groups; 0 = 1)
+comptime LAYER_MAXPOOL1D = 16    # (kernel, stride, padding)
+comptime LAYER_AVGPOOL1D = 17    # (kernel, stride, padding)
+comptime LAYER_ADAPTIVE_AVGPOOL1D = 18  # (output_size): (C, L) -> (C, output_size), output_size divides L
+# Branches (the containers' flat form): a layer reads an earlier output, not only the previous one.
+comptime LAYER_BRANCH = 19       # (source): the output is source's output (-1 the model input)
+comptime LAYER_CONCAT = 20       # (sources..., -2 pads): earlier outputs joined on the sample's first axis
+comptime CONCAT_UNUSED = -2
 
 # Version 2: [2, ndim, d0 .. d7 (unused 1), layer count, then per layer
 # (code, arg0 .. arg5, 0)]; one float per layer as in version 1.
@@ -442,6 +454,82 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
             cd.append(oh)
             cd.append(ow)
             nxt = rn_shape(cd, _layer_name(i))
+        elif k == LAYER_CONV1D or k == LAYER_MAXPOOL1D or k == LAYER_AVGPOOL1D or k == LAYER_ADAPTIVE_AVGPOOL1D:
+            if cur.ndim != 2:
+                raise Error(_layer_name(i) + ": 1-D convolution and pooling take a (channels, length) input")
+            var c = cur.d[0]
+            var length = cur.d[1]
+            var ch = c
+            var ol: Int
+            if k == LAYER_ADAPTIVE_AVGPOOL1D:
+                if a0 < 1 or length % a0 != 0:
+                    raise Error(_layer_name(i) + " (AdaptiveAvgPool1d): output_size must be positive and divide "
+                                + "the length " + String(length))
+                ol = a0
+            else:
+                var ks: Int
+                var st: Int
+                var pad = _arg(prog, base, 2)
+                if k == LAYER_CONV1D:
+                    ch = a0
+                    ks = a1
+                    st = pad
+                    pad = _arg(prog, base, 3)
+                    var bias = _arg(prog, base, 4)
+                    var groups = max(1, _arg(prog, base, 5))
+                    if ch < 1 or ks < 1 or st < 1 or pad < 0 or (bias != 0 and bias != 1):
+                        raise Error(_layer_name(i) + " (Conv1d): out_channels, kernel_size and stride must be "
+                                    + "positive, padding >= 0 and bias 0 or 1")
+                    if c % groups != 0 or ch % groups != 0:
+                        raise Error(_layer_name(i) + " (Conv1d): groups must divide the input channels and "
+                                    + "out_channels")
+                    p_off = off
+                    off += ch * (c // groups) * ks + (ch if bias == 1 else 0)
+                else:
+                    ks = a0
+                    st = a1
+                    if ks < 1 or st < 1 or pad < 0 or 2 * pad > ks:
+                        raise Error(_layer_name(i) + " (pooling): kernel_size and stride must be positive and "
+                                    + "padding between 0 and kernel_size / 2")
+                if length + 2 * pad < ks:
+                    raise Error(_layer_name(i) + ": the kernel is longer than the (padded) input")
+                ol = (length + 2 * pad - ks) // st + 1
+            var cd = List[Int]()
+            cd.append(ch)
+            cd.append(ol)
+            nxt = rn_shape(cd, _layer_name(i))
+        elif k == LAYER_BRANCH:
+            if a0 < -1 or a0 >= i:
+                raise Error(_layer_name(i) + " (Branch): the source must be -1 (the model input) "
+                            + "or the index of an earlier layer")
+            nxt = s.sample if a0 == -1 else s.out_shape[a0]
+        elif k == LAYER_CONCAT:
+            var count = 0
+            var total = 0
+            var first = cur
+            for j in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): description parsing, no data
+                var v = _arg(prog, base, j)
+                if v == CONCAT_UNUSED:
+                    continue
+                if v < -1 or v >= i:
+                    raise Error(_layer_name(i) + " (Concat): each source must be -1 (the model input) "
+                                + "or the index of an earlier layer")
+                var sj = s.sample if v == -1 else s.out_shape[v]
+                if count == 0:
+                    first = sj
+                elif sj.ndim != first.ndim:
+                    raise Error(_layer_name(i) + " (Concat): the sources have different ranks")
+                else:
+                    for q in range(1, sj.ndim):  # small-loop(ndim: the sample rank, at most 7): shape metadata, no data
+                        if sj.d[q] != first.d[q]:
+                            raise Error(_layer_name(i) + " (Concat): the sources differ outside the first axis")
+                total += sj.d[0]
+                count += 1
+            if count < 1:
+                raise Error(_layer_name(i) + " (Concat): give at least one source")
+            var jd = rn_dims(first)
+            jd[0] = total
+            nxt = rn_shape(jd, _layer_name(i) + " (Concat)")
         else:
             raise Error(_layer_name(i) + ": unknown layer code " + String(k))
         if nxt.ndim > RN_MAX_RANK - 1:
@@ -595,6 +683,15 @@ def model_init_params[E: Exec](mut ex: E, spec: ModelSpec, P: FP, seed: UInt64) 
             var fan = c * ks * ks + oc * ks * ks
             var bound = ftz(identical_sqrt(ftz(identical_div(Float32(6), Float32(fan)))))
             var n = oc * c * ks * ks + (oc if spec.xargs[SPEC2_ARGS * i + 4] == 1 else 0)
+            _init_uniform(ex, P + off, n, off, seed, bound)
+        elif k == LAYER_CONV1D:
+            # conv2d's rule over a length-ks receptive field
+            var oc = spec.arg0[i]
+            var ks = spec.arg1[i]
+            var c = conv_in_per_group(spec, i)
+            var fan = c * ks + oc * ks
+            var bound = ftz(identical_sqrt(ftz(identical_div(Float32(6), Float32(fan)))))
+            var n = oc * c * ks + (oc if spec.xargs[SPEC2_ARGS * i + 4] == 1 else 0)
             _init_uniform(ex, P + off, n, off, seed, bound)
 
 
@@ -783,6 +880,52 @@ def _model_forward_v2[E: Exec](
             h = rankn_max_pool2d(tape, ex, h, spec.arg0[i], spec.arg1[i])
         elif k == LAYER_AVGPOOL2D:
             h = rankn_avg_pool2d(tape, ex, h, spec.arg0[i], spec.arg1[i])
+        elif k == LAYER_CONV1D:
+            var oc = spec.arg0[i]
+            var ks = spec.arg1[i]
+            var c = conv_in_per_group(spec, i)
+            var groups = conv_groups(spec, i)
+            var off = spec.param_off[i]
+            var wd = List[Int]()
+            wd.append(oc)
+            wd.append(c)
+            wd.append(ks)
+            var w2 = _param(tape, ex, P, Gr, off, oc, c * ks, train)
+            var w3 = tape.view_nd(ex, w2, rn_shape(wd, "model"))
+            if spec.xargs[xa + 4] == 1:
+                var bd = List[Int]()
+                bd.append(oc)
+                var b2 = _param(tape, ex, P, Gr, off + oc * c * ks, 1, oc, train)
+                var b1 = tape.view_nd(ex, b2, rn_shape(bd, "model"))
+                h = rankn_conv1d(tape, ex, h, w3, Optional[Tensor](b1), spec.xargs[xa + 2], spec.xargs[xa + 3],
+                                 groups)
+            else:
+                h = rankn_conv1d(tape, ex, h, w3, None, spec.xargs[xa + 2], spec.xargs[xa + 3], groups)
+        elif k == LAYER_MAXPOOL1D:
+            h = rankn_max_pool1d(tape, ex, h, spec.arg0[i], spec.arg1[i], spec.xargs[xa + 2])
+        elif k == LAYER_AVGPOOL1D:
+            h = rankn_avg_pool1d(tape, ex, h, spec.arg0[i], spec.arg1[i], spec.xargs[xa + 2])
+        elif k == LAYER_ADAPTIVE_AVGPOOL1D:
+            var length = spec.in_shape[i].d[1]
+            if spec.arg0[i] == 1:
+                # the global mean of each (sample, channel) row: one blocked fold over the length
+                # (the (B C, L) matrix view), parallel over rows and blocks
+                h = tape.mean(ex, h, 1)
+            else:
+                # output_size divides the length: equal windows, an average pool
+                var win = length // spec.arg0[i]
+                h = rankn_avg_pool1d(tape, ex, h, win, win, 0)
+        elif k == LAYER_BRANCH:
+            h = x0 if spec.arg0[i] == -1 else outs[spec.arg0[i]]
+        elif k == LAYER_CONCAT:
+            var parts = List[Tensor]()
+            for j in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): tensor handles, no data
+                var v = spec.xargs[xa + j]
+                if v == CONCAT_UNUSED:
+                    continue
+                parts.append(x0 if v == -1 else outs[v])
+            # axis 1: the sample's first axis (the channels), after the batch axis
+            h = rankn_concat(tape, ex, parts, 1)
         h = rn_as_shape(tape, ex, h, rn_with_batch(B, spec.out_shape[i], "model"))
         outs.append(h)
         i += 1
@@ -799,8 +942,13 @@ def _absorbed_activation(spec: ModelSpec, i: Int) -> Int:
     if i + 1 >= spec.n_layers():
         return 0
     for j in range(i + 1, spec.n_layers()):  # driver-loop: over layers
-        if spec.kinds[j] == LAYER_RESIDUAL and spec.arg0[j] == i:
+        var kj = spec.kinds[j]
+        if (kj == LAYER_RESIDUAL or kj == LAYER_BRANCH) and spec.arg0[j] == i:
             return 0
+        if kj == LAYER_CONCAT:
+            for q in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): metadata, no data
+                if spec.xargs[SPEC2_ARGS * j + q] == i:
+                    return 0
     var nk = spec.kinds[i + 1]
     if nk == LAYER_RELU:
         return RELU
