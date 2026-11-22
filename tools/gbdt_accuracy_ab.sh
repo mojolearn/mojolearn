@@ -115,7 +115,7 @@
 #   GBM_BENCH_DATA            dataset store (default ~/datasets/gbm-bench)
 set -u
 
-OUT="${MOJOLEARN_GACC_OUT:-bench/results/gbdt_accuracy_ab/$(date +%Y-%m-%d_%H%M%S)}"
+OUT="${MOJOLEARN_GACC_OUT:-${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/gbdt_accuracy_ab/$(date +%Y-%m-%d_%H%M%S)}"
 ROUNDS="${MOJOLEARN_GACC_ROUNDS:-3}"
 ROWS="${MOJOLEARN_GACC_ROWS:-2000000}"
 LANE="${MOJOLEARN_GACC_LANE:-gbdt-symmetric}"
