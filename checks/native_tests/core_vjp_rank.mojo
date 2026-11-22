@@ -100,20 +100,6 @@ def _host_fixture(fixture_id: Int) raises:
     again.close()
 
 
-def _device_fixture(fixture_id: Int) raises:
-    var record = True
-    var s = OpsSession[DeviceExec](DeviceExec(), record)
-    var again = OpsSession[DeviceExec](DeviceExec(), record)
-    try:
-        run_core_vjp_rank_fixture(s, again, fixture_id)
-    except error:
-        s.close()
-        again.close()
-        raise error
-    s.close()
-    again.close()
-
-
 # The host column: each fixture on its own two host sessions, the fixtures across host cores. The device column:
 # DeviceExec shares sequence_ctx() and its pool, so independent concurrent sessions would race that context's
 # ownership (as in ops_higher's device column); the fixtures run one after another and each kernel keeps its own
@@ -122,7 +108,19 @@ def test_vjp_rank() raises:
     comptime if CPU_COLUMN_BUILD:
         check_cases("vjp_rank", CORE_VJP_RANK_FIXTURES, _host_fixture)
     else:
-        check_cases_serial("vjp_rank", CORE_VJP_RANK_FIXTURES, _device_fixture)
+        def device_fixture(fixture_id: Int) raises:
+            var record = True
+            var s = OpsSession[DeviceExec](DeviceExec(), record)
+            var again = OpsSession[DeviceExec](DeviceExec(), record)
+            try:
+                run_core_vjp_rank_fixture(s, again, fixture_id)
+            except error:
+                s.close()
+                again.close()
+                raise error
+            s.close()
+            again.close()
+        check_cases_serial("vjp_rank", CORE_VJP_RANK_FIXTURES, device_fixture)
 
 
 def main() raises:
