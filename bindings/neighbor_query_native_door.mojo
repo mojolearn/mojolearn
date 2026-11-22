@@ -39,6 +39,7 @@ from bindings.scaler_lifecycle_native_door import _outside
 from bindings.p3nc_fitted_freeze_unpack import fitted_is_freezable, fitted_freeze
 from bindings.py_optional import py_present
 from providers.python.estimator_binding_pyapi_door import estimator_binding_routed
+from providers.python.x_neighbors_admission_pyapi_door import xn_module
 
 
 def _query_kind(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -96,6 +97,11 @@ def _query_route(model: PythonObject, kind: PythonObject, group: String, context
         var name = String("_mojolearn") if group == "base" else (
             String("_mojolearn_x_neighbors") if group == "sort" else String("_mojolearn_ivf"))
         var module = estimator_binding_routed(model, requested, name, context["neighbor_query_family_context"])
+        if group == "sort":
+            # The checked route of `_mojolearn_x_neighbors` in identical mode is its admitted
+            # CompiledBindingSnapshot (estimator_checked_mode -> xn_admit_checked), not the module:
+            # the alias rows are keyed by the module (one pointer read; fast mode returns the module).
+            module = xn_module(module)
         var connected = py_get(context["neighbor_query_binding_aliases"], py_call(b.id, module))
         if connected is None or connected[0] is not module:
             raise Error("ImportError: mojolearn: " + name + " is not connected to neighbor queries on this estimator's device")
