@@ -89,6 +89,7 @@ from gbdt.host.gbdt_oracle_depthwise import (
     gbdt_host_ns_model_text,
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
+from gbdt.options.catboost_options import querywise_pointwise_leaf_check
 from gbdt.options.overfitting_detector_options import (
     load_overfitting_detector_options,
 )
@@ -1063,6 +1064,9 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
         or pw_objective == GBDT_OBJ_PAIR_LOGIT
         or pw_objective == GBDT_OBJ_YETI_RANK
     )
+    # The grouped pointwise search's leaf method, admitted where the device
+    # fit admits it, in its words (gbdt/options/catboost_options.mojo).
+    querywise_pointwise_leaf_check(use_pointwise, ranking_pointwise, GBDT_LEAF_NEWTON if leaf_method == -1 else leaf_method)
     if use_pointwise and not ranking_pointwise:
         # the gbdt-pointwise-l2-bayesian-eval lane, its own arm and refusals
         # (`_gbdt_fit_pointwise_arm`, gbdt/host/gbdt_oracle_pointwise.mojo)

@@ -1033,12 +1033,9 @@ def querywise[I: GbdtImage](unit: Int) raises:
         require(not same_f32(unit_pred, weighted), "explicit pair weights ignored")
         inp.pairs = List[UInt32]()
         inp.pair_weights = List[Float32]()
-        comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
-            # Open finding (lane py2mojo-C, 2026-11-22): the host fit accepts leaf_estimation_method=Simple under
-            # the pointwise PairLogit search, where the device fit refuses it ("querywise use_pointwise_searcher
-            # requires Newton or Gradient", gbdt/methods/doc_parallel_boosting.mojo). The arm is asserted on the
-            # device column only until the host refuses the same.
-            return
+        # Both columns (lane bm-trees, 2026-11-22): the host and device fits admit the leaf method of the
+        # grouped pointwise search in one place, gbdt/options/catboost_options.mojo
+        # `querywise_pointwise_leaf_check`, with the same refusal words.
         var simple = _qw_opts("PairLogit")
         simple.leaf_method = "Simple"
         var refused = False
