@@ -15,6 +15,7 @@ forecasts its last value. One fixture per variant.
 """
 from sequence.exec import Exec, HostExec
 from sequence.ops_impl import croston_impl, croston_forecast_impl
+from core.host_parallel import host_parallelize
 from checks.native_tests.sequence_port_common import allclose, require, u01
 from sequence.exec_device import DeviceExec
 from std.testing import TestSuite
