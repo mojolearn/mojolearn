@@ -340,7 +340,7 @@ def _install(classes):
     deferred = () if host is None else tuple(
         cls for cls in vars(host).values()  # glue: fixed built-in descendants outside this migration
         if type(cls) is type and cls not in _CONTEXT['plans'] and cls not in previous
-        and cls.__module__ == host.__name__ and 'set_params' not in vars(cls)
+        and getattr(cls, '__module__', None) == host.__name__ and 'set_params' not in vars(cls)
         and any(base in installed for base in cls.__mro__[1:])  # glue: fixed host ancestry at connection
         and _resolved(cls, 'set_params', _CONTEXT['missing']) in (ParamsMixin.set_params,
                                                                    NativeFullResetParams.set_params))

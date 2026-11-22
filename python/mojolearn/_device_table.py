@@ -80,7 +80,9 @@ def record_loaded(package):
         if module is None or not name.startswith(prefix) or name.startswith(prefix + "tests"):
             continue
         for cls in tuple(vars(module).values()):  # glue: the classes a module defines
-            if not isinstance(cls, type) or cls in _SWEPT or cls.__module__ != name:
+            # A native Mojo type (add_type in a host module such as _mojolearn_tokenizer_host) has no
+            # __module__ attribute: it is never a device= class.
+            if not isinstance(cls, type) or cls in _SWEPT or getattr(cls, "__module__", None) != name:
                 continue
             _SWEPT.add(cls)
             if cls in CPU_CLASSES:
