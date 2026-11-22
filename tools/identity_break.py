@@ -5198,8 +5198,8 @@ def _rank_ndcg(ml, groups, relevance, pred):
     rows = np.concatenate([np.arange(s, s + _GBDT_RANK_NDCG_SIZE)
                            for s, c in zip(starts, sizes) if c == _GBDT_RANK_NDCG_SIZE])
     shape = (-1, _GBDT_RANK_NDCG_SIZE)
-    return np.float64(ml.metrics.ndcg_score(relevance[rows].reshape(shape).astype(np.float64),
-                                            np.asarray(pred, dtype=np.float64)[rows].reshape(shape)))
+    return np.float64(ml.metrics.ndcg_score(relevance[rows].reshape(shape).astype(np.float32),
+                                            np.asarray(pred, dtype=np.float32)[rows].reshape(shape)))
 
 
 def _rank_pairs(groups, relevance, skip_last=2):
