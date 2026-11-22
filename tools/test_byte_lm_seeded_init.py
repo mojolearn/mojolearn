@@ -1,9 +1,7 @@
 """The seeded initializer, as a test that runs rather than a script nobody calls.
 
-`tools/byte_lm_seeded_init_gate.py` needs a retained capture tree to compare
-against, and CI sparse-checkout fetches at most one of the three. These tests
-need NONE of them: they pin the arithmetic itself, which is the part that must
-not drift. The tree comparison is the workflow's job and is a separate step.
+`tools/byte_lm_seeded_init.py` is the generator. These tests need no capture
+tree: they pin the arithmetic itself, which is the part that must not drift.
 
 WHAT IS PINNED HERE, and why each one would otherwise rot silently:
 
@@ -35,7 +33,7 @@ def _load(name, filename):
     return module
 
 
-seeded = _load('_seeded_init', 'byte_lm_seeded_init_gate.py')
+seeded = _load('_seeded_init', 'byte_lm_seeded_init.py')
 shapes = _load('_byte_lm_shape', 'byte_lm_shape.py')
 
 #: What all three retained trees record for the b2-l32 shape.
