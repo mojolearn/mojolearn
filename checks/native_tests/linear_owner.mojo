@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Typed Ridge/OLS RUN checks with independent small-system expectations.
 
 Eight Ridge cases preserve weighted/unweighted, scalar-weight, intercept and
@@ -28,7 +29,18 @@ from glm.linear_predict_device import linear_predict_device_v1
 from x_linear.ridge_descriptor_device import ridge_fit_device_v1
 from x_decomp.descriptor_device import x_decomp_device_v1
 from x_metrics.descriptor_device import metrics_program_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime LINEAR_OWNER_FIXTURES = 23
@@ -354,17 +366,12 @@ def run_linear_fixture(api: LinearTestAPI, fixture_id: Int) raises:
 
 # ---- The host column (was linear_owner_cpu_suite.mojo) ----
 # Independent native CPU linear fits/scores use the existing host pool.
-def _run_cpu(mut report: Report) raises:
-    var api = LinearTestAPI(linear_fit_host_v1, ridge_fit_host_v1,
-        linear_predict_host_v1, x_decomp_host_v1, metrics_program_host_v1)
-    require(api.vendor == 0, "CPU fixture connected a device descriptor")
-    var cases = report.cases(LINEAR_OWNER_FIXTURES)
-    def task(fixture_id: Int) {imm api, imm cases}:
-        try:
-            run_linear_fixture(api, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, LINEAR_OWNER_FIXTURES)
+def _host_fixture(fixture_id: Int) raises:
+    comptime if CPU_COLUMN_BUILD:
+        var api = LinearTestAPI(linear_fit_host_v1, ridge_fit_host_v1,
+            linear_predict_host_v1, x_decomp_host_v1, metrics_program_host_v1)
+        require(api.vendor == 0, "CPU fixture connected a device descriptor")
+        run_linear_fixture(api, fixture_id)
 
 
 # ---- The device column (was linear_owner_gpu_suite.mojo) ----
@@ -373,27 +380,28 @@ def _run_cpu(mut report: Report) raises:
 # The product entries share process_ctx and the decomposition device pool, so
 # fixture graphs submit in order. Source preparation uses host_parallelize and
 # product kernels retain their native parallelism; no concurrency claim.
-def _run_gpu(mut report: Report) raises:
-    var api = LinearTestAPI(linear_fit_device_v1, ridge_fit_device_v1,
-        linear_predict_device_v1, x_decomp_device_v1, metrics_program_device_v1)
-    require(api.vendor != 0, "GPU fixture connected a host descriptor")
-    var cases = report.cases(LINEAR_OWNER_FIXTURES)
-    for fixture_id in range(LINEAR_OWNER_FIXTURES):
-        try:
-            run_linear_fixture(api, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _device_fixtures_in_order() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var api = LinearTestAPI(linear_fit_device_v1, ridge_fit_device_v1,
+            linear_predict_device_v1, x_decomp_device_v1, metrics_program_device_v1)
+        require(api.vendor != 0, "GPU fixture connected a host descriptor")
+        var failed = 0
+        for fixture_id in range(LINEAR_OWNER_FIXTURES):  # one shared device context: the fixtures in order
+            try:
+                run_linear_fixture(api, fixture_id)
+            except error:
+                failed += 1
+                print("FAIL linear_owner gpu fixture", fixture_id, String(error))
+        if failed:
+            raise Error("linear_owner GPU failed " + String(failed) + " of " + String(LINEAR_OWNER_FIXTURES) + " fixtures")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", LINEAR_OWNER_FIXTURES, _host_fixture)
+    else:
+        _device_fixtures_in_order()
 
 
-def register() -> Check:
-    return Check("linear_owner", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

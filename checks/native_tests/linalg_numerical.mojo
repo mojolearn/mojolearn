@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original linalg numerical cases, independent of the Python binding layer.
 
 Inputs preserve NumPy seed 5 and every original dimension. QR uses its Gram
@@ -16,7 +17,19 @@ from x_decomp.host import HostExec
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from decomposition.linalg_door_impl import qr_r_device_into, svdvals_device_into
 from x_decomp.device import DevExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.linalg_fixture_inputs import input_values
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime LINALG_NUMERICAL_FIXTURES = 5
@@ -30,22 +43,6 @@ trait LinalgNumericalCalls:
     def singular(source: List[Float32], rows: Int, cols: Int, dst: Int) raises: ...
     @staticmethod
     def eigen(source: Int, values: Int, vectors: Int, n: Int) raises: ...
-
-
-def input_values(name: String, count: Int) raises -> List[Float32]:
-    var result = List[Float32](unsafe_uninit_length=count)
-    with open("checks/native_tests/fixtures/linalg_numerical/" + name + ".f32", "r") as file:
-        var bytes = file.read_bytes()
-        require(len(bytes) == count * 4, "linalg input fixture extent changed")
-        var bp = bytes.unsafe_ptr()
-        var rp = result.unsafe_ptr()
-        def word(index: Int) {imm bp, imm rp}:
-            var at = index * 4
-            var bits = UInt32(bp[at]) | (UInt32(bp[at + 1]) << 8) | (UInt32(bp[at + 2]) << 16) | (UInt32(bp[at + 3]) << 24)
-            rp.unsafe_store(index, bitcast[DType.float32](bits))
-        host_parallelize(word, count)
-        _ = bytes^
-    return result^
 
 
 def constant_reference() raises -> List[Float64]:
@@ -209,15 +206,10 @@ struct HostLinalgNumerical(LinalgNumericalCalls):
                       F32Ptr(unsafe_from_address=vectors), n, 1)
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(LINALG_NUMERICAL_FIXTURES)
-    def task(index: Int) {imm cases}:
-        try:
-            fixture[HostLinalgNumerical](index)
-        except error:
-            cases.fail(index, error)
-    report.parallel(task, LINALG_NUMERICAL_FIXTURES)
+def _host_fixture(index: Int) raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        fixture[HostLinalgNumerical](index)
 
 
 # ---- The device column (was linalg_numerical_gpu_suite.mojo) ----
@@ -241,25 +233,26 @@ struct DeviceLinalgNumerical(LinalgNumericalCalls):
                      F32Ptr(unsafe_from_address=vectors), n, 1)
 
 
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(LINALG_NUMERICAL_FIXTURES)
-    for index in range(LINALG_NUMERICAL_FIXTURES):
-        try:
-            fixture[DeviceLinalgNumerical](index)
-        except error:
-            cases.fail(index, error)
+def _device_fixtures_in_order() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failed = 0
+        for index in range(LINALG_NUMERICAL_FIXTURES):  # shared device contexts: graph submissions in order
+            try:
+                fixture[DeviceLinalgNumerical](index)
+            except error:
+                failed += 1
+                print("FAIL linalg_numerical gpu fixture", index, String(error))
+        if failed:
+            raise Error("linalg numerical GPU failed " + String(failed) + " of " + String(LINALG_NUMERICAL_FIXTURES) + " fixtures")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", LINALG_NUMERICAL_FIXTURES, _host_fixture)
+    else:
+        _device_fixtures_in_order()
 
 
-def register() -> Check:
-    return Check("linalg_numerical", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

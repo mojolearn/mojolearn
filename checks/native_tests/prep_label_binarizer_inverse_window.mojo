@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """LabelBinarizer inverse programs never read or write beyond their window.
 
 Ported from python/mojolearn/tests/test_label_binarizer_inverse_window.py
@@ -15,10 +16,15 @@ pos_label) / 2 unless the original passed one.
 The fixtures are independent units and run across host cores.
 """
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.preprocessing_program import prep_program_stage
 from x_prep.host.program import run_program_host
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The host column (was prep_label_binarizer_inverse_window_suite.mojo) ----
@@ -101,23 +107,9 @@ def fixture(unit: Int) raises:
             "multiclass inverse")
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(LB_INVERSE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, LB_INVERSE_FIXTURES)
+def test_fixtures() raises:
+    check_cases("fixture", LB_INVERSE_FIXTURES, fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("prep_label_binarizer_inverse_window", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

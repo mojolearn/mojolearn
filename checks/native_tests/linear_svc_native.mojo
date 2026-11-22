@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Existing QN solvers against closed-form hinge/squared-hinge objectives.
 
 Binary unit points reduce the objective to A*(1-w)^2 + lambda*w^2/2.
@@ -26,7 +27,18 @@ from core.logistic_native_api import (
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from glm.host.linear_svc_native_host import linear_svc_host_v1
 from glm.linear_svc_native_device import linear_svc_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime LINEAR_SVC_PROVIDER_CASES = 8
@@ -211,36 +223,32 @@ def fixture(driver: LinearSvcDriver, unit: Int) raises:
 
 
 # ---- The host column (was linear_svc_native_cpu_suite.mojo) ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(LINEAR_SVC_CPU_CASES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(LinearSvcDriver(linear_svc_host_v1), unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, LINEAR_SVC_CPU_CASES)
+def _host_fixture(unit: Int) raises:
+    comptime if CPU_COLUMN_BUILD:
+        fixture(LinearSvcDriver(linear_svc_host_v1), unit)
 
 
 # ---- The device column (was linear_svc_native_gpu_suite.mojo) ----
 # Ordered actual OVR numerical cases; shared-context concurrency stays parked.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(LINEAR_SVC_PROVIDER_CASES)
-    for unit in range(LINEAR_SVC_PROVIDER_CASES):  # ordered shared-context numerical fixtures
-        try:
-            fixture(LinearSvcDriver(linear_svc_device_v1), unit)
-        except problem:
-            cases.fail(unit, problem)
+def _device_fixtures_in_order() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = 0
+        for unit in range(LINEAR_SVC_PROVIDER_CASES):  # one shared device context: the fixtures in order
+            try:
+                fixture(LinearSvcDriver(linear_svc_device_v1), unit)
+            except error:
+                failed += 1
+                print("FAIL linear_svc_native gpu fixture", unit, String(error))
+        if failed:
+            raise Error("linear_svc_native GPU failed " + String(failed) + " of " + String(LINEAR_SVC_PROVIDER_CASES) + " fixtures")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", LINEAR_SVC_CPU_CASES, _host_fixture)
+    else:
+        _device_fixtures_in_order()
 
 
-def register() -> Check:
-    return Check("linear_svc_native", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
