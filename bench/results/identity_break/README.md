@@ -1,5 +1,17 @@
 # identity_break columns
 
+**Thinned 2026-11-21 (lane verify-thin; Andrew: "when we do the next release we run all of the
+verification a fresh time").** This directory now holds only what the shipped verify and its build
+read: the 93 present records `python/mojolearn/verify_reference/table.json` cites (and their
+`retained/<sha256>/` copies), the columns `python/mojolearn/host_surface.py` names
+(`TRAINING_GPU_COLUMNS`, `CLASSICAL_GPU_COLUMNS`, `GBDT_CTR_MODELS_DIR`), and every record directory
+a code, test or CI file names. The older releases' columns (1,135 files here, 44 elsewhere under
+`bench/results`) were archived byte for byte to `~/mojolearn-evidence/repo-archive-20261125/<same
+path>` (rows in its `MANIFEST.tsv`, classes `verify-thin-*`) and remain in git history; their
+`INDEX.tsv` / `CELLS_INDEX.tsv` rows were retired. The table builder (`verify --all
+--emit-reference`) is NOT run now: the next release records every lane on every device fresh
+(reuse is opt-in, AGENTS.md) and builds a new table from those records.
+
 Written by `tools/identity_break.py --json`, one file per box, diffed with
 `tools/identity_break.py --diff a.json b.json ...`. The three GPU columns at
 the shipped default are under `2026-09-13_three-columns/` (its README names

@@ -168,6 +168,10 @@ def main():
     args = ap.parse_args()
     r = census()
     if args.json:
+        # FIX (2026-11-21, verify-thin): `where` is keyed by (lane, class) tuples, which json cannot
+        # write, so `--json` raised TypeError whenever any column carried a declared part.
+        for g in r["gaps"].values():
+            g["where"] = {f"{lane}/{cls}": rel for (lane, cls), rel in g["where"].items()}
         json.dump(r, sys.stdout, indent=2, default=list)
         print()
         return 0
