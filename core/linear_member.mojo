@@ -302,7 +302,7 @@ def _predict(slot: MutPointer[LinearMemberSlot, MutUntrackedOrigin], call: MutPo
     if call[].dst.rows != call[].x.rows or call[].dst.cols != 1:
         raise Error("ValueError: the prediction buffer holds one value per row of X")
     var request = linear_state_predict_request(slot[].state, call[].x.data, call[].dst.data,
-        call[].x.rows, call[].x.cols, False, estimator)
+        call[].x.rows, call[].x.cols, estimator)
     _ = linear_predict_run(call[].route.second.call, request)
 
 

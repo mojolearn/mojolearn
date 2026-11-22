@@ -7,7 +7,7 @@ from bindings.classical_error_boundary_pack import classical_python_error
 from bindings.sequential_description_unpack import sequential_fields
 from providers.python.linear_parameter_boundary_unpack import classical_ridge_parameters
 from providers.python.linear_fit_boundary_unpack import classical_ridge_fit
-from providers.python.linear_predict_boundary_unpack import classical_linear_predict, classical_linear_predict_public
+from providers.python.linear_predict_boundary_unpack import classical_linear_predict
 from providers.python.linear_ols_boundary_unpack import classical_ols_fit
 from providers.python.linear_score_boundary_unpack import classical_linear_score
 from providers.python.linear_metadata_boundary_door import classical_initialize, classical_get_params, classical_set_params, classical_is_fitted, classical_parameter_list
@@ -27,7 +27,6 @@ from bindings.classical_pandas_door import classical_admit_value, classical_admi
 # Restore: experiments/removed/P1_NATIVE_SKLEARN_TAGS.patch.
 from bindings.classical_validate_unpack import classical_refuse_sparse, classical_estimator_name, classical_weight_refusal
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
-from bindings.classical_caller_unpack import classical_caller_outside
 from bindings.native_loaded_module_door import native_loaded_module, NativeModules
 from bindings.admitted_call_door import AdmittedCall
 from core.linear_metadata import linear_vendor_name, linear_constructor_check, linear_constructor_device
@@ -308,19 +307,12 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             if not linear:
                 raise Error("TypeError: ols_fit requires LinearRegression")
             result = classical_ols_fit(model, args, route, routed.owner, context)
-        elif operation == CLASSICAL_OPN_PREDICT or operation == CLASSICAL_OPN_PREDICT_SCORE:
-            # Native scorers consume the same float32 kernel result that
-            # historical package-internal callers received, without relying
-            # on a Python frame to distinguish them from public predict.
+        elif (operation == CLASSICAL_OPN_PREDICT or operation == CLASSICAL_OPN_PREDICT_SCORE
+              or operation == CLASSICAL_OPN_PREDICT_PUBLIC):
+            # One result for every caller (Andrew, 2026-11-22, lane
+            # predict-dtype): the kernel's float32 predictions, with no
+            # caller test and no float64 widening.
             result = classical_linear_predict(model, args[0], route, routed.owner, context)
-        elif operation == CLASSICAL_OPN_PREDICT_PUBLIC:
-            # A caller outside the package gets scikit-learn's float64
-            # regression output; mojolearn's own code (and its identity
-            # harness) keeps the float32 prediction the kernels produce.
-            if classical_caller_outside(context):
-                result = classical_linear_predict_public(model, args[0], route, routed.owner, context)
-            else:
-                result = classical_linear_predict(model, args[0], route, routed.owner, context)
         elif operation == CLASSICAL_OPN_SCORE or operation == CLASSICAL_OPN_SCORE_PUBLIC:
             result = classical_linear_score(model, args, route, routed.owner, context)
         elif operation == CLASSICAL_OPN_NUMERIC_MODE_USED:

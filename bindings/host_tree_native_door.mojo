@@ -27,7 +27,6 @@ from core.entry_table import EntryRef
 from core.host_entry_table_calls import fh_ref, fh_vote, fh_groves_prepare, fh_groves_predict, fh_gbdt_expand_ctr, fh_gbdt_predict, fh_gbdt_sigmoid_pair
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
-from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside
 
 
 def host_tree_key(context: PythonObject) raises -> EntryRef:
@@ -663,7 +662,9 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
                 raise Error("predict_proba is defined for Logloss and CrossEntropy")
         var raw = host_gbdt_predict(fields, args[0], context)
         if not probability:
-            return raw
+            # predict: the estimator's type (lane predict-dtype, 2026-11-22):
+            # its float32 scores as a NumPy view when NumPy is loaded.
+            return classical_input(raw, context, "prediction")
         var wide = host_tree_wide(raw, context)
         var rows = Int(py=raw.shape[0])
         var out = host_archive_typed(Python.tuple(rows, 2), "<f8", py_item(context, nk[].k_output_context))
@@ -680,22 +681,12 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         return vote
     if probability:
         return vote if String(py_item(fields, nk[].k_family)) == "rf" else host_tree_wide(vote, context)
+    # predict returns what the saving estimator's predict returns, for every
+    # caller (Andrew, 2026-11-22, lane predict-dtype): the labels, or the
+    # forest's float32 mean vote for both families with no float64 widening
+    # pass, as a NumPy view when NumPy is loaded.
     if Bool(py=py_item(fields, nk[].k_is_classifier)):
-        return host_tree_labels(py_item(fields, nk[].k_classes_), vote, context)
+        var labels = host_tree_labels(py_item(fields, nk[].k_classes_), vote, context)
+        return classical_input(labels, context, "prediction") if classical_is_array(labels, context) else labels
     var flat = classical_wrap_array(vote._store, Python.tuple(vote.shape[0]), "<f4", "C", py_item(context, nk[].k_output_context))
-    # The twin returns the dtype the saving estimator returns to the same
-    # caller. Extra trees widen to float64 always (`_predict_staged`). A
-    # random forest's float32 vote is widened by the estimator's
-    # `_public_result` (trees_public_lifecycle_native_door.mojo) only for a
-    # caller outside the package with NumPy connected: the same test
-    # (`estimator_outside`, the same frame depth: one public method hands
-    # over to this owner) decides here. Lane pv-digest (9e42c35649) widened
-    # always, which fixed the user's `host_model(path).predict(X)` (proving
-    # run 2026-11-22) but gave a package caller (verify's harness, a
-    # meta-estimator) float64 where the estimator gives float32 (lane
-    # r2-known, 2026-11-22). The widening is exact.
-    if String(py_item(fields, nk[].k_family)) != "rf" or (
-        py_get(context, nk[].k_ndarray) is not None and estimator_outside()
-    ):
-        return host_tree_wide(flat, context)
-    return flat
+    return classical_input(flat, context, "prediction")

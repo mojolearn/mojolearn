@@ -11,17 +11,7 @@ from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
 from core.metrics_entry_table import MetricsEntryKey, MetricsR2Owner, MR_R2, metrics_r2_check_spans, metrics_r2_publish
 from metrics.host.metrics_oracle import host_r2_score, host_weighted_r2
-
-
-def _check_float_pair(a: List[Float32], b: List[Float32], n: Int) raises:
-    if n <= 0:
-        raise Error("metrics: n must be positive, got " + String(n))
-    if len(a) < n or len(b) < n:
-        raise Error(
-            "metrics: the two float arrays hold " + String(len(a)) + " and "
-            + String(len(b)) + " entries, both must hold at least n = "
-            + String(n)
-        )
+from metrics.label_pair_admission import metrics_check_float_pair as _check_float_pair
 
 
 def _r2_value(y_addr: Int, yh_addr: Int, n: Int) raises -> Float32:

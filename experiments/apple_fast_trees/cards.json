@@ -1,0 +1,3554 @@
+{
+ "schema": "mojolearn.apple-fast-cards/1",
+ "family": "trees",
+ "description": "Apple fast tree cards AFT F/G/N/P, one row per card.",
+ "loader": "tools/apple_fast_cards.py",
+ "path_moves": {},
+ "documents": [
+  {
+   "legacy_path": "experiments/apple_fast_trees/F.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "F01",
+    "F02",
+    "F03",
+    "F04",
+    "F05",
+    "F06",
+    "F07",
+    "F08",
+    "F09",
+    "F10",
+    "F11",
+    "F12"
+   ],
+   "key_order": [
+    "schema",
+    "lane",
+    "scope",
+    "validation",
+    "integration_status",
+    "integration_groups",
+    "cards"
+   ],
+   "fields": {
+    "schema": 1,
+    "lane": "F",
+    "scope": "Apple GPU FAST trees only; all switches are opt-in and require both mode and vendor guards",
+    "validation": "No compilation, verification, testing, linting, import, candidate execution or measurement performed",
+    "integration_status": "Source-level caller connections recorded by reading only; no runtime proof",
+    "integration_groups": [
+     {
+      "ids": [
+       "F01",
+       "F02",
+       "F03",
+       "F04",
+       "F05"
+      ],
+      "required_bindings": [
+       "rf"
+      ],
+      "build_source": "bindings/build_rf.sh -> bindings/_mojolearn_rf.mojo",
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": [
+       "rf"
+      ],
+      "expanded_harness": "tools/bench_board_algos.py",
+      "expanded_harness_lanes": [
+       "decision-tree-clf",
+       "decision-tree-reg",
+       "bagging-clf",
+       "bagging-reg",
+       "adaboost-clf",
+       "adaboost-reg",
+       "dart",
+       "dart-reg"
+      ],
+      "expanded_support_bindings": [
+       "x_trees"
+      ],
+      "caller_chain": [
+       "python/mojolearn/randomforest.py",
+       "bindings/_mojolearn_rf.mojo",
+       "ensemble/randomforest.mojo:fit_forest_prepared",
+       "ensemble/decisiontree/batched_levelalgo/builder.mojo:Builder"
+      ],
+      "scope_notes": [
+       "Expanded DecisionTree rows use splitter=best; splitter=random reaches the ExtraTrees group instead",
+       "DART residual/member training reaches rf_regressor_fit_dart_binding in the rf extension; compiling only x_trees would omit F01-F05",
+       "Composite wrappers also need their ordinary support extensions; AFT defines must reach rf for the member builds",
+       "No forest GPU extension exists; forest_host is an unrelated CPU binding",
+       "Mixed-model voting/stacking wrappers can contain affected tree members but their complete mixed-model campaigns are outside this tree-only selection"
+      ]
+     },
+     {
+      "ids": [
+       "F06",
+       "F07",
+       "F08",
+       "F09"
+      ],
+      "required_bindings": [
+       "trees"
+      ],
+      "build_source": "bindings/build_trees.sh -> bindings/_mojolearn_trees.mojo",
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": [
+       "et"
+      ],
+      "expanded_harness": "tools/bench_board_algos.py",
+      "expanded_harness_lanes": [
+       "random-trees-embedding"
+      ],
+      "expanded_support_bindings": [
+       "x_trees",
+       "rf"
+      ],
+      "caller_chain": [
+       "python/mojolearn/extratrees.py",
+       "bindings/_mojolearn_trees.mojo",
+       "extratrees/estimator.mojo",
+       "extratrees/impl/randomforest/randomforest.mojo",
+       "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:train_forest_classification_device/train_forest_regression_device"
+      ],
+      "scope_notes": [
+       "RandomTreesEmbedding creates an ExtraTreesRegressor; its expansion module also imports rf and x_trees support",
+       "DecisionTree(splitter=random) reaches this same ExtraTrees route, but the saved decision-tree board recipes currently specify the best splitter",
+       "F08 needs enough tree-row slots to make the baseline group budget active; a saved full workload that fits one group does not establish this candidate's effect",
+       "F09 needs the existing tiled-range admission and preserves the untiled fallback"
+      ]
+     },
+     {
+      "ids": [
+       "F10",
+       "F11",
+       "F12"
+      ],
+      "required_bindings": [
+       "svm"
+      ],
+      "build_source": "bindings/build_svm.sh -> bindings/_mojolearn_svm.mojo",
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": [
+       "iforest"
+      ],
+      "caller_chain": [
+       "python/mojolearn/_iforest_impl.py",
+       "bindings/_mojolearn_svm.mojo:iforest_run_binding",
+       "isolation_forest/estimator.mojo:iforest_run_host/iforest_run_resident",
+       "isolation_forest/impl/isolation_forest.mojo:IsolationForest.fit/compute_path_lengths",
+       "isolation_forest/impl/isolation_tree_builder.mojo"
+      ],
+      "scope_notes": [
+       "The extension name svm is packaging; these candidates affect isolation trees only, with no SVM algorithm change",
+       "The existing Python shell probes iforest_resident. The older forest_speed_arm.our_iforest_arm docstring describes rebuild-every-score behavior; later experiment provenance must report the actual selected binding path",
+       "F11 requires full score/predict consumption and separate first/repeated prediction reporting; fit-only timing is incomplete coverage",
+       "F10 and F12 feed the existing build kernel used by both one-shot and resident estimator entries"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "legacy_path": "experiments/apple_fast_trees/G.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "G01",
+    "G02",
+    "G03",
+    "G04",
+    "G05",
+    "G06",
+    "G07",
+    "G08",
+    "G09",
+    "G10",
+    "G11",
+    "G12"
+   ],
+   "key_order": [
+    "schema",
+    "lane",
+    "branch",
+    "status",
+    "instructions",
+    "evidence_paths",
+    "shared_contracts",
+    "cards",
+    "planned_interactions",
+    "pending",
+    "integration_repairs",
+    "source_wiring_scope"
+   ],
+   "fields": {
+    "schema": 1,
+    "lane": "G",
+    "branch": "ideas/apple-fast-trees-20261006",
+    "status": "source_added_uncompiled_unverified_unmeasured",
+    "instructions": "Source programming only. No compile, verification, tests, measurements, lint, imports, hooks or candidate executions were run. No defaults promoted. All future acceptance work is pending.",
+    "evidence_paths": [
+     "experiments/apple_fast_trees/IDEAS.md",
+     "experiments/apple_fast_trees/G.json"
+    ],
+    "shared_contracts": "STATS_BLOCK and fused-level block-equality contracts are unchanged. No edits to targets, greedy_subsets_searcher, train, resident_model or models/kernel. Existing negative/rejected-switch notes are retained.",
+    "planned_interactions": [
+     "G01+G02+G03",
+     "G05+G06+G09+G10 (route-qualified; G05 per-feature and G06 packed normally exercise different preparation arms)",
+     "G07+G08",
+     "G11+G12",
+     "Whole fit/preparation/predict consumer configuration"
+    ],
+    "pending": [
+     "All compilation",
+     "All numerical/correctness/quality acceptance",
+     "All full-dataset end-to-end timing",
+     "Hardware/source/binary/dataset provenance for future measurements",
+     "Winner/loser decisions and board entries"
+    ],
+    "integration_repairs": [
+     {
+      "source": "gbdt/methods/ordered_boosting.mojo",
+      "mechanism": "fast_on now additionally requires opts.leaf_iterations == 1 before selecting the one-step ordered batched estimator.",
+      "reason": "estimate_can_batch accepts every positive iteration count; the fused estimator computes one Newton/Gradient step. Dispatch previously admitted multi-iteration tasks into that one-step path.",
+      "fallback": "Multi-iteration batchable tasks use the existing _ordered_estimate_prepare/estimate_advance/_estimate_complete batched walker, retaining all requested iterations.",
+      "scope": "Existing ordered Apple FAST correctness dispatch; no new experiment is enabled by default.",
+      "status": "source_added_uncompiled_unverified_unmeasured"
+     }
+    ],
+    "source_wiring_scope": "Read switches, changed kernels, real launch sites, shared training dispatch, public binding exports, and harness configuration source. No compiler, interpreter import of repository modules, selector, harness, verification tool or measurement ran."
+   }
+  },
+  {
+   "legacy_path": "experiments/apple_fast_trees/N.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "N01",
+    "N02",
+    "N03",
+    "N04",
+    "N05",
+    "N06",
+    "N07",
+    "N08",
+    "N09",
+    "N10",
+    "N11",
+    "N12"
+   ],
+   "key_order": [
+    "schema",
+    "lane",
+    "status",
+    "branch",
+    "default_policy",
+    "evidence",
+    "future_qualification",
+    "interactions",
+    "cards",
+    "source_integration_notes"
+   ],
+   "fields": {
+    "schema": 1,
+    "lane": "N",
+    "status": "source_added_uncompiled_unverified_unmeasured",
+    "branch": "ideas/apple-fast-trees-20261006",
+    "default_policy": "All twelve MOJOLEARN_AFT_Nxx defines are absent by default and require both NUMERIC_FAST and has_apple_gpu_accelerator(). No promotion.",
+    "evidence": "Source implementation only. No compilation, syntax/import checks, verification, tests, lint, diff checks, timing, benchmarking, queue launch or quality measurement performed.",
+    "future_qualification": "Not authorized in this session. Map all reachable estimator/representation paths to retained full datasets, versions/hashes, actual dimensions/settings and timed boundaries. Full fit/preparation/synchronization/consumed-output A/B plus neighboring shapes/non-board data and applicable quality gates remain pending.",
+    "interactions": [
+     "N01/N02/N04 on Lossguide; N02 through N06 on Depthwise with actual path prerequisites",
+     "N03 plus N06 on Depthwise vector partition/copy",
+     "N07 plus N08 on each PairLogit representation",
+     "N09 plus N10 on nonfused block32KiB Yeti",
+     "N11 plus N12 on ranking search and the applicable estimation routes"
+    ],
+    "source_integration_notes": [
+     "N08 grouped-loop scope repaired from frozen base source; no compiler or checker run.",
+     "N02 now covers Apple-default quantized histogram replicas as well as generic fallback.",
+     "Public non-symmetric routing rejects ranking and multiclass; manifests now state actual affected objectives.",
+     "Default board min_split_gain=0.0 bypasses N05; an explicit same-settings A/B recipe using min_split_gain=None is required.",
+     "No build, import, selector, harness, validation or measurement was executed."
+    ]
+   }
+  },
+  {
+   "legacy_path": "experiments/apple_fast_trees/P.json",
+   "container": "list",
+   "card_key": "cards",
+   "card_ids": [
+    "P01",
+    "P02",
+    "P03",
+    "P04",
+    "P05",
+    "P06",
+    "P07",
+    "P08",
+    "P09",
+    "P10",
+    "P11",
+    "P12"
+   ],
+   "key_order": [
+    "schema",
+    "lane",
+    "base_commit",
+    "status",
+    "integration_status",
+    "integration_groups",
+    "cards"
+   ],
+   "fields": {
+    "schema": 1,
+    "lane": "P",
+    "base_commit": "07f2b3c00",
+    "status": "source_only",
+    "integration_status": "Source-level caller and launch connections recorded by reading only; no runtime proof",
+    "integration_groups": [
+     {
+      "ids": [
+       "P01",
+       "P02",
+       "P03",
+       "P04"
+      ],
+      "required_bindings": [
+       "rf",
+       "trees"
+      ],
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": [
+       "rf",
+       "et"
+      ],
+      "expanded_harness": "tools/bench_board_algos.py",
+      "expanded_harness_lanes": [
+       "decision-tree-clf",
+       "decision-tree-reg",
+       "bagging-clf",
+       "bagging-reg",
+       "adaboost-clf",
+       "adaboost-reg"
+      ],
+      "expanded_support_bindings": [
+       "x_trees"
+      ],
+      "caller_chain": [
+       "python/mojolearn/_forest_protocol.py",
+       "bindings/forest_inference_binding.mojo imported by rf/trees extensions",
+       "core/forest_inference_model.mojo:ResidentForest prediction methods",
+       "core/forest_inference.mojo:launch_forest_inference/launch_forest_argmax"
+      ],
+      "scope_notes": [
+       "Public FAST auto names parallel_groves but accepts the compiled resident ordered policy; P01/P03 need the explicit equal-arm OFF prerequisite recorded below",
+       "P02 uses ordered resident traversal; P01/P03 use lane-grove traversal. Separate route-specific A/B cells are required, and their combination alone does not prove both routes ran",
+       "P04 public class-code entry is FAST and requires the Python parallel_groves engine name; probability-only consumption will miss it",
+       "Transient forest_predict_gpu also reaches the shared dispatcher but is not a substitute for public full-workload coverage",
+       "No GPU forest extension exists; these shared kernels are compiled into rf and trees"
+      ]
+     },
+     {
+      "ids": [
+       "P05",
+       "P06"
+      ],
+      "required_bindings": [
+       "gbdt"
+      ],
+      "public_harness": "bench/speed/forest_speed_arm.py",
+      "public_harness_lanes": [
+       "gbdt-symmetric",
+       "gbdt-symmetric-1000",
+       "gbdt-ordered",
+       "gbdt-multiclass",
+       "gbdt-rank-pairlogit",
+       "gbdt-rank-yetirank",
+       "gbdt-depthwise",
+       "gbdt-lossguide",
+       "gbdt-categorical"
+      ],
+      "alternate_public_harness": "tools/speed_gbdt_arm.py",
+      "caller_chain": [
+       "bindings/_mojolearn_gbdt.mojo:gbdt_resident_predict_binding",
+       "gbdt/resident_model.mojo:gbdt_resident_predict/ResidentGbdtModel._predict_device",
+       "gbdt/models/kernel/add_bin_values.mojo:compute_bins_and_add_all_kernel",
+       "gbdt/models/kernel/resident_link.mojo:resident_link_kernel"
+      ],
+      "scope_notes": [
+       "P05 only reaches oblivious models with the equal-arm packed-prediction prerequisite; non-oblivious models retain _apply",
+       "P06 also reaches gbdt/train.mojo's shared resident-link launcher, whose grid and block already derive from LINK_BLOCK",
+       "Categorical/multiclass/ranking resident callers require their actual full saved recipes; a symmetric regression result alone cannot qualify their outputs",
+       "Fit, first prediction and repeated prediction need distinct consumed-output coverage"
+      ]
+     },
+     {
+      "ids": [
+       "P07",
+       "P08",
+       "P09",
+       "P10"
+      ],
+      "required_bindings": [
+       "x_trees"
+      ],
+      "support_bindings": [
+       "rf"
+      ],
+      "public_harness": "tools/bench_board_algos.py",
+      "public_harness_lanes": [
+       "tree-shap"
+      ],
+      "caller_chain": [
+       "python/mojolearn/_expansion_trees.py:TreeExplainer",
+       "bindings/_mojolearn_x_trees.mojo:tree_shap_prepare_binding/tree_shap_binding",
+       "xtrees/shap_device.mojo:shap_prepare/tree_shap_values",
+       "tree_kernel/table_row_kernel/tab_row_kernel and fold_kernel"
+      ],
+      "scope_notes": [
+       "The saved tree-shap board recipe fits an RF model and consumes explanations; other supported model families need their own full recipes",
+       "All direct, leaf-table and decision-table branches share the tile mapping; tail row count is the current chunk rc",
+       "P08 includes preparation kernels; P09 can be inert if the existing units cap or small input determines chunk size",
+       "P07 keeps the previously losing pair arm and its evidence separate"
+      ]
+     },
+     {
+      "ids": [
+       "P11",
+       "P12"
+      ],
+      "required_bindings": [
+       "x_trees"
+      ],
+      "support_bindings": [
+       "rf"
+      ],
+      "public_harness": "tools/bench_board_algos.py",
+      "public_harness_lanes": [
+       "dart",
+       "dart-reg"
+      ],
+      "caller_chain": [
+       "python/mojolearn/_expansion_trees.py:DARTClassifier/DARTRegressor",
+       "bindings/_mojolearn_x_trees.mojo:dart_step_binding/dart_add_binding/dart_predict_binding",
+       "xtrees/dart_device.mojo:dart_step/dart_add/dart_predict",
+       "dart_row_kernel/dart_add_kernel/dart_predict_kernel"
+      ],
+      "scope_notes": [
+       "Training requires the normal DART_DEVICE entry; do not disable it in either arm",
+       "Member trees are still trained through rf, so x_trees-only runtime availability is insufficient for full DART fitting",
+       "P11 needs both training residual and consumed prediction coverage; P12 only changes the score-add stage after the existing leaf/Newton work"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "rows": [
+  {
+   "id": "F01",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F01",
+     "caller_integration": "Builder workspace uses blk_cols_for; enqueue_best_splits advances complete feature rounds by N_BLKS_FOR_COLS and _compute_split launches their histograms and split search",
+     "title": "RF histogram passes with 32 column slots",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F01"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+     ],
+     "affected_estimators": [
+      "RandomForestClassifier",
+      "RandomForestRegressor",
+      "DecisionTree and composite callers reaching ensemble Builder"
+     ],
+     "mechanism": "N_BLKS_FOR_COLS becomes 32 instead of the Apple default 40. Existing workspace sizing, column-round progression and ragged final passes consume this single value; every sampled feature remains scored.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "The histogram builder must be reached"
+     ],
+     "limitations": [
+      "This changes columns per pass, not features cooperatively processed inside one block",
+      "Inputs sampling at most 32 columns may see no scheduling change",
+      "Do not mix legacy RF column override defines into either arm",
+      "More column rounds may outweigh the smaller live workspace"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F02",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F02",
+     "caller_integration": "Builder._enqueue_loop_batches passes HIST_WORKLOAD_GRANULARITY and its TPB ratio to launch_loop_pop/launch_loop_retry_next; enqueue_best_splits consumes that device-built workload map",
+     "title": "RF histogram work descriptors covering eight rows per lane",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F02"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "ensemble/decisiontree/batched_levelalgo/builder.mojo"
+     ],
+     "affected_estimators": [
+      "RandomForestClassifier",
+      "RandomForestRegressor",
+      "DecisionTree and composite callers reaching ensemble Builder"
+     ],
+     "mechanism": "HIST_ITEMS_PER_THREAD becomes eight, yielding 1024 rows per 128-lane histogram work descriptor instead of 512. Existing grid-stride histogram kernels and device workload construction retain all rows and fixed bin precision; partition mapping remains independent.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "Existing histogram workload path"
+     ],
+     "limitations": [
+      "Fewer descriptors can reduce parallelism on small frontiers",
+      "Do not combine legacy histogram-items overrides",
+      "F01 plus F02 needs its own whole-fit comparison"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F03",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F03",
+     "caller_integration": "Builder._compute_split passes n_classes to launch_find_best_splits_kernel; its byte-budget-admitted branch launches find_best_splits_warp_kernel using FBS_WARP_CELLS for shared allocation and grid/block geometry",
+     "title": "RF two small-histogram split cells per threadgroup",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F03"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+     ],
+     "affected_estimators": [
+      "RandomForestClassifier",
+      "RandomForestRegressor",
+      "DecisionTree and composite callers reaching ensemble Builder"
+     ],
+     "mechanism": "FBS_WARP_CELLS becomes two instead of four. Each split cell still owns one SIMD group; launch Y extent and shared-memory allocation derive from the same value. Revised from the dormant host-staged small-node path to the small-histogram split scheduler actually used by the device loop.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "MOJOLEARN_RF_FBS_WARP_OFF absent",
+      "The existing byte-capacity gate admits the SIMD-group split kernel"
+     ],
+     "limitations": [
+      "This schedules small histogram cells, not a new node-row threshold",
+      "Large histogram cells retain the existing general split kernel",
+      "More threadgroups may cost more than reduced shared memory saves",
+      "All tie, min-leaf and candidate-fold semantics remain in the existing routines"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F04",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F04",
+     "caller_integration": "Builder owns NodeSplitScratch and calls launch_node_split_kernel from both replay and device-loop partition paths; the scratch constructor and both sampled/plain scan launches use the same AFT_RF_SCAN_WIDTH_SCALE",
+     "title": "RF partition scan at double cooperative width",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F04"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+     ],
+     "affected_estimators": [
+      "RandomForestClassifier",
+      "RandomForestRegressor",
+      "DecisionTree and composite callers reaching ensemble Builder"
+     ],
+     "mechanism": "AFT_RF_SCAN_WIDTH_SCALE doubles the inclusive segmented scan's threadgroup width while preserving the original TPB inside partition ops, workload keys and copy-back kernels. NodeSplitScratch allocates aggregates and block heads for the new scan width. Both sampled-label and plain partition scan launchers use it.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "Existing NodeSplitScratch and launch_node_split_kernel path"
+     ],
+     "limitations": [
+      "The public builder changes scan width from 128 to 256; nonstandard direct template widths need later resource qualification",
+      "Count and copy-back launches keep their original geometry",
+      "Larger shared-memory scans may reduce occupancy",
+      "Stable partition tails, empty segments, labels and weights require later quality coverage"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F05",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F05",
+     "caller_integration": "fit_forest_prepared calls Builder.stage_sampled_order before begin_tree when separate gather is needed; stage_sampled_order calls launch_gather_sampled_order_kernel, whose launch and device stripe indexing both use AFT_RF_GATHER_ROWS",
+     "title": "RF sampled-label and weight gather with four row stripes per lane",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F05"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+     ],
+     "affected_estimators": [
+      "RandomForestClassifier",
+      "RandomForestRegressor",
+      "Composite callers using sampled-order forest labels"
+     ],
+     "mechanism": "AFT_RF_GATHER_ROWS changes the existing gather kernel from one sampled row per lane to four block-strided row positions. The launch covers four times as many positions per block, reuses each sampled row index for its label and optional weight, and guards each stripe independently.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "The sampled-order gather runs; the normal Apple forest path has LABELS_SAMPLED_ORDER enabled"
+     ],
+     "limitations": [
+      "This is label/weight row-copy tiling, not a new RNG sampler or feature-matrix copy",
+      "An explicitly enabled fused-bootstrap route may skip this gather; keep that prerequisite identical across arms",
+      "Bootstrap draws, sorted-row policy and OOB membership are unchanged by the candidate",
+      "Large prediction-only workloads are unaffected"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F06",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F06",
+     "caller_integration": "DEVICE_TPB is shared by make_level_workspace callers, search_batch_enqueue/search_batch_regression_enqueue and _et_run_depthwise/_et_run_bestfirst; score reductions and partition launches therefore consume the same selected block geometry",
+     "title": "ExtraTrees 64-thread coupled frontier geometry",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F06"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+     ],
+     "affected_estimators": [
+      "ExtraTreesClassifier",
+      "ExtraTreesRegressor",
+      "ExtraTree and RandomTreesEmbedding callers reaching this builder"
+     ],
+     "mechanism": "_device_tpb selects 64 lanes, two Apple SIMD groups, instead of 128. Scoring shared reductions and per-lane accumulator work shrink accordingly. Range, score, partition, workspace and workload maps retain their existing coupling through DEVICE_TPB, preserving full row coverage.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "Existing device ExtraTrees builder"
+     ],
+     "limitations": [
+      "This necessarily changes other frontier passes alongside score geometry; it is not an isolated score-only claim",
+      "This is a distinct 64-lane arm, not the previously rejected Apple 256-lane experiment",
+      "Do not combine legacy ET_TPB override defines",
+      "Full classification criteria, regression, bootstrap and best-first paths require later qualification"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F07",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F07",
+     "caller_integration": "Both device grow loops derive tile_p from DEVICE_TPB*PART_ROWS_PER_THREAD; EtDeviceLoop.enqueue_stage builds that partition map and _et_enqueue_partition supplies the same template value to count, scan, scatter and copy-back kernels",
+     "title": "ExtraTrees partition tile twice the search row budget",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F07"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+     ],
+     "affected_estimators": [
+      "ExtraTreesClassifier",
+      "ExtraTreesRegressor",
+      "ExtraTree and RandomTreesEmbedding callers reaching this builder"
+     ],
+     "mechanism": "PART_ROWS_PER_THREAD becomes twice SEARCH_ROWS_PER_THREAD. At baseline Apple geometry, count/scan/scatter/copy-back cover 4096 rows per workgroup instead of 2048 using the existing stable multi-row partition implementation. Existing separate work-map construction handles unequal search and partition tiles.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "Existing multi-block partition path"
+     ],
+     "limitations": [
+      "The unequal tiles can introduce work-map staging cost and regress whole fits",
+      "F06 changes the absolute row tile, so the combination is a distinct experiment",
+      "Existing flag caching remains conditioned on one row per thread",
+      "Do not combine legacy partition/search-row override defines"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F08",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F08",
+     "caller_integration": "train_forest_classification_device and train_forest_regression_device default row_slot_cap to FOREST_ROW_SLOT_CAP; their timed implementations compute group_cap from slot_rows and allocate both row planes for each resulting group",
+     "title": "ExtraTrees more concurrent trees under a 1 GiB row-plane budget",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F08"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+     ],
+     "affected_estimators": [
+      "ExtraTreesClassifier",
+      "ExtraTreesRegressor",
+      "RandomTreesEmbedding and composite forest callers reaching this trainer"
+     ],
+     "mechanism": "FOREST_ROW_SLOT_CAP increases from 2^26 to 2^27 Int32 slots per plane. The two row/partition planes therefore have a combined 1 GiB budget. Existing grouping admits more complete trees and hence independent nodes into the merged frontier without changing each tree's RNG, candidate features or growth policy.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "Default row_slot_cap used",
+      "A forest large enough that the original row-slot budget limits concurrent trees"
+     ],
+     "limitations": [
+      "One-tree fits and forests already fitting one group can be unchanged",
+      "Caller-supplied row_slot_cap remains authoritative",
+      "Other workspace and per-tree buffers add to the stated row-plane budget",
+      "Peak memory and allocation failures must be included in later full-workload qualification",
+      "Best-first max_batch_size continues to bound the number of concurrent trees"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F09",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F09",
+     "caller_integration": "search_batch_enqueue launches the float tiled range kernel; search_batch_regression_enqueue launches either float or uint16-code tiled range kernel. All instantiate node_feature_range_tiled_kernel containing the paired-row loop",
+     "title": "ExtraTrees tiled feature ranges with paired row-address staging",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F09"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo"
+     ],
+     "affected_estimators": [
+      "ExtraTreesClassifier",
+      "ExtraTreesRegressor",
+      "ExtraTree and RandomTreesEmbedding callers using tiled ranges"
+     ],
+     "mechanism": "node_feature_range_tiled_kernel stages two grid-strided row addresses per lane, then applies each feature descriptor to both rows before advancing. The existing feature count, code tile, key ordering, min/max and missing-count reductions remain intact. Applies to both float and uint16-code instantiations.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "Existing tiled-range route and resident row-major representation admitted"
+     ],
+     "limitations": [
+      "Untiled range fallback is unchanged",
+      "Additional row-address registers may cost occupancy",
+      "This does not retry the previously slower 16/32-code feature tiles; accepted ET_CODE_TILE stays eight",
+      "Tail rows, constant features, signed zero, finite extremes and missing-value handling need later coverage"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F10",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F10",
+     "caller_integration": "IsolationForestEstimator initializes IFLaunchKnobs.default; IsolationForest.fit launches build_isolation_trees_global_kernel with knobs.build_tpb, whose default is the candidate-dependent IF_BUILD_TPB",
+     "title": "Isolation forest 64-thread tree build",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F10"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "isolation_forest/impl/isolation_tree_builder.mojo"
+     ],
+     "affected_estimators": [
+      "IsolationForest"
+     ],
+     "mechanism": "IF_BUILD_TPB changes the default build launch from 128 to 64. Existing sampling, min/max, stable partition and gather loops use actual n_threads; serial threshold/path arithmetic and seed mapping remain in the original routines. Shared allocation capacity remains IF_BUILD_TPB_MAX.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "IFLaunchKnobs.default used for build geometry"
+     ],
+     "limitations": [
+      "Explicit caller build_tpb still overrides the default",
+      "Shared scratch capacity is unchanged, so any gain comes from scheduling and active-lane work rather than a smaller allocation",
+      "Sampling large input populations may become slower with fewer lanes",
+      "All subsample and feature-sample settings require later quality qualification"
+     ],
+     "quality_gates": [
+      "I",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F11",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F11",
+     "caller_integration": "IsolationForest.compute_path_lengths launches compute_path_lengths_global_kernel with threads*AFT_IF_PATH_ROWS rows per block; _pooled_path_lengths likewise adjusts its compute_path_lengths_range_kernel grid. Both kernels use identical stripe indexing",
+     "title": "Isolation forest paired-row path traversal",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F11"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "isolation_forest/impl/isolation_tree_builder.mojo",
+      "isolation_forest/impl/isolation_forest.mojo"
+     ],
+     "affected_estimators": [
+      "IsolationForest score_samples",
+      "IsolationForest decision_function",
+      "IsolationForest predict",
+      "IsolationForest path_lengths and contamination scoring"
+     ],
+     "mechanism": "AFT_IF_PATH_ROWS makes each traversal lane own two block-strided query rows. Both global and range traversal kernels reuse the tree offset/outer loop across two independent Float32 accumulators, preserving each row's tree order. Both corresponding launch grids divide by twice the thread count; shard accumulators retain their original continuation semantics.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "Resident global or range traversal kernel reached"
+     ],
+     "limitations": [
+      "No fused sigmoid/pow, normalization or threshold change",
+      "Tiny queries may leave the second stripe inactive",
+      "Traversal divergence and extra accumulators may offset loop reuse",
+      "Pooled-model runtime support retains all pre-existing limitations; no new multi-device support is claimed"
+     ],
+     "quality_gates": [
+      "I",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "F12",
+   "parts": {
+    "experiments/apple_fast_trees/F.json": {
+     "id": "F12",
+     "caller_integration": "IsolationForest.fit always launches build_isolation_trees_global_kernel; its AFT_IF_GATHER_TILE branch runs after the existing row/feature selection barriers and before build_tree_iterative_global consumes the sampled matrix",
+     "title": "Isolation forest flattened four-cell sampled gather",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_F12"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "isolation_forest/impl/isolation_tree_builder.mojo"
+     ],
+     "affected_estimators": [
+      "IsolationForest fit"
+     ],
+     "mechanism": "The existing sampled matrix is flattened across rows and features. Each build lane copies a four-Float32 tile, reusing its first sampled-row lookup for cells remaining in that row and reloading the exact row index when crossing a row boundary. Tiles stride by four times the block width. Original sampled feature indices and guarded tail cells are retained.",
+     "prerequisites": [
+      "Apple GPU FAST",
+      "IF_FAST_ROWMAJOR enabled; do not set MOJOLEARN_IF_ROWMAJOR_OFF"
+     ],
+     "limitations": [
+      "This is explicit device copy tiling, not a claim that the compiler emits vector memory instructions",
+      "Row-boundary divisions can outweigh lookup reuse on very narrow rows",
+      "Column-major fallback retains its original gather",
+      "F10 changes the tile stride and therefore needs a combined experiment",
+      "No observations, feature samples or RNG draws are removed"
+     ],
+     "quality_gates": [
+      "I",
+      "P"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured"
+    }
+   }
+  },
+  {
+   "id": "G01",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G01",
+     "title": "Cooperative histogram prefix scan",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G01"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/methods/kernel/split_properties_helpers.mojo",
+      "gbdt/methods/pointwise_kernels.mojo"
+     ],
+     "affected_estimators": [
+      "Symmetric single-target GBDT classifiers",
+      "Symmetric single-target GBDT regressors",
+      "Ordered single-target GBDT when using pointwise histogram search"
+     ],
+     "mechanism": "B assigns one complete feature/partition/fold to a 128-thread block, scans each statistic plane in 128-bin shared-memory tiles using a barrier-uniform inclusive scan, and carries each tile sum forward. A assigns one thread per feature and serially scans bins. One-hot and zero/one-bin features preserve their skip behavior; padded lanes never load/store histogram tails.",
+     "prerequisites": [
+      "Pointwise histogram scan route must be active",
+      "Keep MOJOLEARN_SYM_SCAN_SUB_FUSED absent in both arms to cover partial-pass scans; it bypasses the separate scan",
+      "Same feature policies, borders, hist_count and split settings"
+     ],
+     "limitations": [
+      "FAST prefix association changes bits",
+      "One block per feature adds block scheduling/barrier cost for short slices; all feature widths must be covered",
+      "No fused scan/subtraction variant is introduced",
+      "All barriers are uniform by construction, but no compile or device evidence exists"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "O"
+     ],
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-ordered"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+      "Plain pointwise oblivious search or fit_ordered",
+      "pointwise_kernels::compute_hist2_dev -> scan_pointwise_histograms",
+      "AFT_G01 -> aft_cooperative_scan_kernel (AFT_SCAN_LANES block; feature_count x partitions x folds grid)"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_SYM_SCAN_SUB_FUSED"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Default gbdt-categorical uses Lossguide and does not cover pointwise oblivious search. Symmetric categorical fit remains a separately saved full-workload recipe requirement."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G02",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G02",
+     "title": "Histogram occupancy constrained by partition row work",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G02"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/methods/pointwise_kernels.mojo"
+     ],
+     "affected_estimators": [
+      "Symmetric single-target GBDT classifiers",
+      "Symmetric single-target GBDT regressors",
+      "Ordered single-target GBDT when using pointwise histogram search"
+     ],
+     "mechanism": "B chooses a power-of-two document multiplier aiming for three blocks per compute unit from nx*ny*nz feature/leaf/fold concurrency, but permits another doubling only when the prospective average partition chunk retains four histogram-block row strides. The existing multiplier cap and kernel row-coverage ladder remain. A uses the original SM/fold heuristic.",
+     "prerequisites": [
+      "Pointwise FAST document-split route",
+      "Do not enable MOJOLEARN_SYM_HIST_MULT in the comparison; G02 otherwise takes precedence",
+      "Same hardware, feature policy and settings"
+     ],
+     "limitations": [
+      "Float atomic arrival and sum grouping may change bits/run-to-run spread",
+      "Average partition row budget does not model skew; deep/imbalanced leaves require full coverage",
+      "This is a hardware/work rule, not the previously rejected fixed multiplier retry"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "O"
+     ],
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-ordered"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+      "Plain pointwise oblivious search or fit_ordered",
+      "pointwise histogram launchers -> pw_block_multiplier",
+      "AFT_G02 -> occupancy/partition-row-budget multiplier -> unchanged binary/half-byte/one-byte multiplier launch ladder"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_SYM_HIST_MULT"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Default gbdt-categorical uses Lossguide and does not cover pointwise oblivious search. Symmetric categorical fit remains a separately saved full-workload recipe requirement."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G03",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G03",
+     "title": "Leader resolves a block winner and broadcasts",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G03"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/methods/kernel/pointwise_split_resolve.mojo"
+     ],
+     "affected_estimators": [
+      "Symmetric single-target GBDT classifiers",
+      "Symmetric single-target GBDT regressors",
+      "Ordered single-target GBDT when using pointwise histogram search"
+     ],
+     "mechanism": "B has lane zero run the original r0/r1/r2 winner folds in their original serial record order, then broadcasts feature, bin, score and gain through sixteen shared bytes and one barrier. Each row continues using the unchanged descriptor and bin predicate. A repeats the winner folds in each thread. This differs from the old SYM_RESOLVE_BLOCK parallel tree reduction.",
+     "prerequisites": [
+      "PW_FUSED_SEARCH resolve/pack/bins path active",
+      "MOJOLEARN_GBDT_FUSED_LEVEL_OFF and MOJOLEARN_GBDT_FUSED_PW_OFF absent",
+      "Keep MOJOLEARN_SYM_RESOLVE_BLOCK and MOJOLEARN_SYM_HIST_ALL absent to compare against the original per-thread fold",
+      "At most three live feature-policy helpers; additional helpers use the existing unfused chain."
+     ],
+     "limitations": [
+      "Leader latency may dominate long record arrays",
+      "G03 takes precedence if an old block-reduction define is also supplied",
+      "Tie/NaN/sentinel behavior needs future quality evidence; comparison helper and record order are preserved in source"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "O"
+     ],
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-ordered"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+      "oblivious_tree_doc_parallel_structure_searcher: fused_pw=PW_FUSED_SEARCH and live_helpers<=3",
+      "enqueue pw_resolve_pack_bins_kernel with PW_SPLIT_BLOCK_SIZE",
+      "AFT_G03 -> leader fold/shared broadcast -> existing descriptor and grid-stride bins apply"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_GBDT_FUSED_LEVEL_OFF",
+      "MOJOLEARN_GBDT_FUSED_PW_OFF",
+      "MOJOLEARN_SYM_RESOLVE_BLOCK",
+      "MOJOLEARN_SYM_HIST_ALL"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Default gbdt-categorical uses Lossguide and does not cover pointwise oblivious search. Symmetric categorical fit remains a separately saved full-workload recipe requirement."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G04",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G04",
+     "title": "Half-width partition-property reduction",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G04"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/methods/kernel/pointwise_scores.mojo"
+     ],
+     "affected_estimators": [
+      "Symmetric single-target GBDT classifiers",
+      "Symmetric single-target GBDT regressors",
+      "Ordered single-target GBDT when using pointwise histogram search"
+     ],
+     "mechanism": "B launches the existing partition_update_kernel with 512 threads instead of 1024, shrinking the shared buffer while each lane still visits its entire assigned stripe. All present weight, target and count planes and absent-count=row-count behavior remain. The independent gather kernel retains its 1024-thread contract.",
+     "prerequisites": [
+      "update_partition_props route",
+      "Keep MOJOLEARN_SYM_PART_STATS_PAR absent in both arms; that existing chunk-atomic route bypasses this candidate"
+     ],
+     "limitations": [
+      "FAST floating reduction association changes",
+      "One block per partition remains; no extra atomic or extra plane pass",
+      "Not a repetition of the old rejected chunked partition-statistics experiment"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "O"
+     ],
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-ordered"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+      "pointwise_optimization_subsets::update_subsets_stats",
+      "update_partition_props -> partition_update_kernel[AFT_PARTITION_BLOCK]",
+      "AFT_G04 -> AFT_PARTITION_BLOCK=512; launch and shared reduction specialization agree"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_SYM_PART_STATS_PAR"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Default gbdt-categorical uses Lossguide and does not cover pointwise oblivious search. Symmetric categorical fit remains a separately saved full-workload recipe requirement."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G05",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G05",
+     "title": "Smaller float-quantization threadgroup",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G05"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/gpu_data/kernel/binarize.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT classifier/regressor float-feature preparation",
+      "Ordered and categorical GBDT float columns",
+      "Resident GBDT prediction using per-feature binarization"
+     ],
+     "mechanism": "B uses 512 threads rather than 1024 in binarize_float_feature_kernel, retaining eight rows per thread. Existing launchers import the same block constant, so row grids follow the new 4096-row block. The same at-most-256 shared border values, exact_f32_gt comparisons, NaN inputs and packed OR stores are used.",
+     "prerequisites": [
+      "Per-feature float-binarization path; packed-word path uses G06 instead",
+      "Hold any MOJOLEARN_GBDT_QUANT_DEVICE or resident-route prerequisite equal in A and B",
+      "No additional route prerequisite is needed for default per-feature training preparation"
+     ],
+     "limitations": [
+      "Does not change border selection or promise border-search acceleration",
+      "More blocks replicate border staging; tiny and full row counts must both be covered",
+      "Cold/preparation and prediction effects must be measured separately in a future authorized campaign",
+      "Packed-word defines can bypass per-feature float quantization; selector must not label a fully packed float workload as G05 coverage. Categorical and CTR per-feature tails are separate retained paths."
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "O",
+      "P"
+     ],
+     "plan_revision": "G05 implements quantization block/row tiling only; device border-search algorithms are unchanged.",
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-depthwise",
+      "gbdt-lossguide",
+      "gbdt-rank-yetirank",
+      "gbdt-rank-pairlogit",
+      "gbdt-multiclass",
+      "gbdt-categorical",
+      "gbdt-ordered"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit float-column compression",
+      "or resident_model raw-float prediction preparation",
+      "train/resident launchers import BINARIZE_BLOCK_SIZE and BINARIZE_DOCS_PER_THREAD",
+      "AFT_G05 -> binarize_float_feature_kernel block=512 and matching rows/grid"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_GBDT_INDEX_PACK_DEVICE",
+      "MOJOLEARN_SYM_FEAT_ALL"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G06",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G06",
+     "title": "Packed-word 128-thread sixteen-row tile",
+     "baseline_defines": [
+      "MOJOLEARN_GBDT_INDEX_PACK_DEVICE"
+     ],
+     "candidate_defines": [
+      "MOJOLEARN_GBDT_INDEX_PACK_DEVICE",
+      "MOJOLEARN_AFT_G06"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/gpu_data/kernel/binarize.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT classifier/regressor compressed-index preparation",
+      "Ordered/categorical GBDT packed float columns",
+      "Resident GBDT prediction where packed index construction is enabled"
+     ],
+     "mechanism": "B changes PACK_BLOCK/PACK_DOCS from 256x8 to 128x16, retaining 2048 rows per block. Shared border and descriptor staging is unchanged and its loops follow PACK_BLOCK; more independent row values/bins/word accumulators live in each thread. Bin layout, feature masks/shifts, exact comparison and all rows remain.",
+     "prerequisites": [
+      "MOJOLEARN_GBDT_INDEX_PACK_DEVICE in BOTH A and B (implies existing GBDT_QUANT_DEVICE route)",
+      "Packed table must fit existing PACK_MAX_ENTRIES/PACK_BORDER_CAP guards; fallback remains per-feature",
+      "Resident packed prediction needs its existing route prerequisite identically in both arms",
+      "MOJOLEARN_GBDT_PREDICT_PACKED must also be equal in both arms when assessing packed resident-prediction preparation; it is not silently enabled by this training recipe."
+     ],
+     "limitations": [
+      "Existing packed-index prerequisite source is historically uncompiled/untimed; this candidate is not a promotion of it",
+      "Higher register footprint can spill/regress",
+      "Unsupported table shapes intentionally use existing fallback and do not exercise G06"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "O",
+      "P"
+     ],
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-depthwise",
+      "gbdt-lossguide",
+      "gbdt-rank-yetirank",
+      "gbdt-rank-pairlogit",
+      "gbdt-multiclass",
+      "gbdt-categorical",
+      "gbdt-ordered"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding (or gbdt_fit_rowmajor when enabled) -> gbdt/train.mojo::gbdt_fit",
+      "GBDT_INDEX_PACK_DEVICE -> device column packing route after existing word-table guards",
+      "train/resident launchers import PACK_BLOCK/PACK_DOCS",
+      "AFT_G06 -> pack_cindex_words_kernel block=128/docs=16 and matching shared-load stride/row grid"
+     ],
+     "conflicting_defines": [],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Packing fallbacks and non-float categorical columns do not exercise PACK_BLOCK/PACK_DOCS; confirm route from future execution evidence before admitting a cell."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G07",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G07",
+     "title": "Narrower Apple leaf-walker reduction",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G07"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/methods/leaves_estimation/apple_fast_est.mojo"
+     ],
+     "affected_estimators": [
+      "Plain symmetric pointwise GBDT classifier/regressor using Apple fast estimator",
+      "Depthwise and Lossguide single-target pointwise GBDT using shared _estimate_and_apply",
+      "Categorical/nonbatched ordered callers only where their existing route reaches _estimate_and_apply; default categorical permutation batching and default ordered batching may bypass it"
+     ],
+     "mechanism": "B changes EST_WALK_BLOCK from 256 to 128 for the Apple device leaf walker. The same objective partials are reduced, and every leaf direction, regularization, iteration, step decision and acceptance comparison executes with a narrower grid-stride traversal. A retains the original 256-thread walker.",
+     "prerequisites": [
+      "Existing Apple fast leaf-estimator route with supported pointwise objective",
+      "Keep existing EST_ALL/EST_ITERS_DEVICE routing identical in A and B",
+      "No EST_REUSE_PART prerequisite; its recorded wrong-leaf rejection remains untouched",
+      "Eligible objectives exclude MultiClass, MultiClassOneVsAll, MultiRMSE, PairLogit, YetiRank and QueryRMSE; require one-dimensional Newton/Gradient and no query/pair/yeti state."
+     ],
+     "limitations": [
+      "Floating objective reduction order may move a line-search acceptance boundary; weighted and multiple-iteration cases require full quality gates",
+      "Shared STATS_BLOCK remains 512 to honor fused-level block contracts",
+      "Does not fuse derivative computation or change shared partition-statistics kernels"
+     ],
+     "quality_gates": [
+      "C",
+      "R"
+     ],
+     "plan_revision": "Source reading exposed a fused-level equality contract on shared STATS_BLOCK. G07 therefore uses the Apple leaf walker objective-reduction/leaf-direction tile instead of changing shared stats geometry.",
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-depthwise",
+      "gbdt-lossguide"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+      "doc_parallel_boosting::_estimate_and_apply -> apple_est_handles",
+      "apple_fast_estimate_and_apply::_walk -> enqueue est_walk_kernel",
+      "AFT_G07 -> EST_WALK_BLOCK=128 for objective-partial reduction, leaf traversal and launch"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_SYM_EST_ALL_OFF",
+      "MOJOLEARN_SYM_LEAF_FROM_STATS",
+      "MOJOLEARN_EST_REUSE_PART"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Default categorical CTR_PERM_BATCH can bypass apple_fast_estimate_and_apply; isolated coverage requires its existing MOJOLEARN_GBDT_CTR_PERM_BATCH_OFF prerequisite in both A and B or a saved eligible one-permutation recipe. Do not change defaults or claim default categorical coverage.",
+      "Main harness pins one estimation iteration; weighted multiple-iteration and Gradient walker recipes remain pending and cannot be inferred from default lanes."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G08",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G08",
+     "title": "Four-row leaf-apply loop",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G08"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/methods/kernel_add_model_value.mojo"
+     ],
+     "affected_estimators": [
+      "Plain GBDT classifier/regressor shared partition-indexed cursor updates",
+      "Ranking and multiclass GBDT device-walker cursor updates",
+      "Categorical GBDT batched-permutation completion using add_model_value_kernel",
+      "Nondefault ordered walker completion when the fused one-step apply route is not used"
+     ],
+     "mechanism": "B unrolls four independent grid-stride rows per leaf-update iteration. A leaf/dimension raw value and partition metadata are loaded once as before; four cursor operations share loop control and expose independent loads/stores. The outer stride becomes four grid strides, so every row appears once and odd tails are guarded. A keeps one row per iteration.",
+     "prerequisites": [
+      "Partition-indexed add_model_value_kernel route",
+      "Same launch geometry, leaf partition, dimensions and learning rate",
+      "No EST_REUSE_PART or EST_SHRINK_FUSED requirement"
+     ],
+     "limitations": [
+      "Only leaves exceeding a grid stride use multiple useful lanes of the tile; unchanged small-leaf work may be neutral",
+      "Launch count is unchanged",
+      "Cursor arithmetic retains identical_mul_add; no numerical accuracy claim is made without future evidence"
+     ],
+     "quality_gates": [
+      "C",
+      "R",
+      "Q",
+      "P"
+     ],
+     "plan_revision": "Existing kernel already hoists each leaf value; G08 adds independent grid-stride rows and loop unrolling instead of claiming a new metadata-hoisting optimization.",
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-symmetric",
+      "gbdt-symmetric-1000",
+      "gbdt-depthwise",
+      "gbdt-lossguide",
+      "gbdt-rank-yetirank",
+      "gbdt-rank-pairlogit",
+      "gbdt-multiclass",
+      "gbdt-categorical"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit",
+      "doc_parallel_boosting direct/shared/batched-estimator completion or apple_fast_estimate_and_apply",
+      "enqueue add_model_value_kernel with original occupancy-sized grid",
+      "AFT_G08 -> four complete grid-stride rows per loop; no caller signature/grid change required"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_SYM_LEAF_FROM_STATS",
+      "MOJOLEARN_EST_REUSE_PART",
+      "MOJOLEARN_EST_SHRINK_FUSED"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Default ordered one-step batching uses _ord_bat_apply_kernel, so gbdt-ordered is deliberately absent from default G08 lane mapping. That path is G12; alternate ordered walker coverage requires a separately frozen matched route prerequisite."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G09",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G09",
+     "title": "Eight-row ordered CTR numerator preparation",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G09"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/ctrs/kernel/ctr_calcers.mojo"
+     ],
+     "affected_estimators": [
+      "Categorical GBDT classifier/regressor using target-dependent Borders/Buckets CTRs",
+      "Ordered categorical GBDT target-statistic preparation"
+     ],
+     "mechanism": "B changes only fill_binarized_targets_stats_kernel and its launcher from four to eight rows per worker, doubling the register tile used to prepare target-hit weighted numerator values before the exact segmented scan. It retains target > bin or == bin predicates, signed segment flags including negative zero, sample weights and every row. A uses the original four-row tile.",
+     "prerequisites": [
+      "Target-dependent CTR preparation route; pure feature-frequency CTRs alone do not exercise G09",
+      "Same category order, target bins, priors, permutations and prefix-exclusion logic"
+     ],
+     "limitations": [
+      "This card tiles the pre-scan numerator pass; count scans and segment/index builders are unchanged",
+      "Larger consecutive-row register tile may regress coalescing/register pressure",
+      "Existing CTR_DOCS_PER_THREAD frequency kernel remains unchanged"
+     ],
+     "quality_gates": [
+      "O",
+      "C",
+      "R"
+     ],
+     "plan_revision": "G09 is scoped to exact target-hit/sum preparation rather than rewriting the segmented count/sum scan, preserving the prefix-exclusion mechanism.",
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-categorical"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit with declared categorical columns",
+      "ctrs/ctr_calcers::visit_cat_feature_ctr or ctrs/fast_prep target-dependent preparation",
+      "launch_fill_binarized_targets_stats -> fill_binarized_targets_stats_kernel",
+      "AFT_G09 -> AFT_CTR_TARGET_DOCS=8 in kernel tile AND launcher ceiling"
+     ],
+     "conflicting_defines": [],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Default gbdt-ordered taxi/istella have no declared categorical features, so they cannot cover CTR. Ordered categorical and categorical regression full-workload recipes remain pending."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G10",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G10",
+     "title": "Four-row CTR lookup and scatter",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G10"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/ctrs/kernel/ctr_calcers.mojo"
+     ],
+     "affected_estimators": [
+      "Categorical GBDT weighted FeatureFreq CTRs",
+      "Categorical GBDT classifier/regressor target CTR mean/scatter outputs",
+      "Ordered categorical GBDT CTR output preparation"
+     ],
+     "mechanism": "B tiles weighted_bin_freq_ctrs_kernel and make_means_and_scatter_kernel four coalesced rows per lane and reduces their launch grids accordingly. Each row still reads its own category/segment result, applies the same priors and original total weight denominator, and writes through its original row map. A uses one row per lane.",
+     "prerequisites": [
+      "Weighted frequency or mean-and-scatter CTR path",
+      "Same inputs, priors, write-index presence and map mask",
+      "Nonweighted FeatureFreq and in-place-only means kernels remain separate existing routes"
+     ],
+     "limitations": [
+      "No category approximation, lookup-table truncation or CTR-border change",
+      "This card does not change downstream binarization geometry (G05/G06 cover that)",
+      "Cold categorical preparation and training consumers need future full-workload measurements"
+     ],
+     "quality_gates": [
+      "O",
+      "C",
+      "R"
+     ],
+     "plan_revision": "G10 tiles exact weighted-frequency lookup and mean scatter, without modifying border-selection/binarization semantics.",
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-categorical"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit with declared categorical columns",
+      "ctrs/fast_prep weighted frequency or ctrs/ctr_calcers/fast_prep target mean-scatter outputs",
+      "launch_compute_weighted_bin_freq_ctr or launch_make_means_and_scatter",
+      "AFT_G10 -> AFT_CTR_LOOKUP_DOCS=4 in both kernel bodies AND both launcher ceilings"
+     ],
+     "conflicting_defines": [],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Default gbdt-ordered taxi/istella have no declared categorical features, so they cannot cover CTR. Ordered categorical and categorical regression full-workload recipes remain pending."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G11",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G11",
+     "title": "128-thread ordered prefix-stat reduction",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G11"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/methods/ordered_boosting.mojo"
+     ],
+     "affected_estimators": [
+      "Ordered single-target GBDT classifiers using batched one-step leaf estimation",
+      "Ordered single-target GBDT regressors using batched one-step leaf estimation"
+     ],
+     "mechanism": "B changes only _ord_bat_reduce_kernel launch width and its three pinned_block_sum specializations from 256 to 128. Chunk count remains eight per task/leaf; the identical prefix snapshot, sorted row run, cursor offset, gradient/Hessian equations and weight sum are consumed. A retains 256 threads.",
+     "prerequisites": [
+      "Existing ORDERED_BATCH_EST route active (MOJOLEARN_ORDERED_BATCH_EST_OFF absent)",
+      "Supported batched objective and one leaf-estimation iteration; other cases keep existing route",
+      "Fixed seed, permutations, task descriptors and weights",
+      "MOJOLEARN_IDENTITY_TRACE must be unset: tracing selects the existing per-task walker and bypasses these candidates."
+     ],
+     "limitations": [
+      "FAST sums differ in association; causality and quality remain unproved",
+      "Multiple-iteration nonbatched ordered estimation is unaffected",
+      "No chunk-count or snapshot change"
+     ],
+     "quality_gates": [
+      "O",
+      "C",
+      "R"
+     ],
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-ordered"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit -> fit_ordered",
+      "fast_on requires estimate_can_batch, exactly one leaf iteration and tracing disabled",
+      "_ord_fast_estimate_tree -> _launch_ord_bat_reduce -> _ord_bat_reduce_kernel",
+      "AFT_G11 -> AFT_ORDERED_REDUCE_BLOCK=128 in all three reductions AND launch"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_ORDERED_BATCH_EST_OFF"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Exactly one leaf-estimation iteration and Newton/Gradient pointwise objective required for the fused fast route. Multi-iteration tasks intentionally retain every iteration in the existing batched walker."
+     ]
+    }
+   }
+  },
+  {
+   "id": "G12",
+   "parts": {
+    "experiments/apple_fast_trees/G.json": {
+     "numeric_mode": "FAST",
+     "hardware": "Apple GPU only; both compile-time guards required",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "default_enabled": false,
+     "quality_evidence": "none",
+     "performance_evidence": "none",
+     "future_measurement_boundary": "Full saved dataset through public preparation, fit/training, synchronization and consumed outputs; fit, first prediction and repeated prediction separately when affected. Audit intrinsic caps, dataset hash, dimensions, settings, weights and seed. Full neighboring-shape and non-board coverage remains pending.",
+     "excluded_defines": [
+      "MOJOLEARN_NUMERIC_IDENTICAL",
+      "MOJOLEARN_NUMERIC_DETERMINISTIC"
+     ],
+     "id": "G12",
+     "title": "Cached-task four-row ordered apply",
+     "baseline_defines": [],
+     "candidate_defines": [
+      "MOJOLEARN_AFT_G12"
+     ],
+     "source_paths": [
+      "gbdt/gpu_data/apple_fast_trees_experiments.mojo",
+      "gbdt/methods/ordered_boosting.mojo"
+     ],
+     "affected_estimators": [
+      "Ordered single-target GBDT classifiers using batched one-step estimation/apply",
+      "Ordered single-target GBDT regressors using batched one-step estimation/apply"
+     ],
+     "mechanism": "B applies four coalesced cursor rows per worker and quarters the corresponding apply grids (rounded up). Each worker caches the task lower/upper cursor offset while its increasing row positions remain in that task; a boundary crossing performs the original segment search again. Every row reads its own permutation, bin and leaf value. A retains the original single-row implementation.",
+     "prerequisites": [
+      "Existing ORDERED_BATCH_EST single-iteration apply route",
+      "Same prefix tasks, folds, permutations, leaf values and rate",
+      "Off/task descriptors remain the existing model buffers",
+      "MOJOLEARN_IDENTITY_TRACE must be unset: tracing selects the existing per-task walker and bypasses these candidates."
+     ],
+     "limitations": [
+      "Rows striding across many tiny tasks get less descriptor reuse; all such boundaries are retained",
+      "No batching across dependent trees or skipped prefix models",
+      "Does not change ordered reduce geometry unless explicitly combined with G11"
+     ],
+     "quality_gates": [
+      "O",
+      "C",
+      "R",
+      "P"
+     ],
+     "binding_source": "bindings/_mojolearn_gbdt.mojo",
+     "binding_build_script": "bindings/build_gbdt.sh",
+     "binding_module": "mojolearn._mojolearn_gbdt",
+     "public_estimator": "mojolearn.GradientBoosting",
+     "harness_script": "bench/speed/forest_speed_arm.py",
+     "harness_spec": "tools/speed_gbdt_arm.py",
+     "harness_lanes": [
+      "gbdt-ordered"
+     ],
+     "source_call_chain": [
+      "gbdt_fit_binding -> gbdt/train.mojo::gbdt_fit -> fit_ordered",
+      "fast_on requires estimate_can_batch, exactly one leaf iteration and tracing disabled",
+      "_ord_fast_estimate_tree -> fold-buffer and estimation-buffer _ord_bat_apply_kernel launches",
+      "AFT_G12 -> four-row cached-task traversal AND reduced grid at both launches"
+     ],
+     "conflicting_defines": [
+      "MOJOLEARN_ORDERED_BATCH_EST_OFF"
+     ],
+     "source_wiring_status": "source_read_and_programmed_only_uncompiled_unverified_unmeasured",
+     "coverage_gaps": [
+      "No runtime evidence that any card was entered; source routes only.",
+      "Full dataset/version/hash, shape, estimator configuration, preparation/fit/consumed-output boundary and full-size cap audit still pending.",
+      "No automatic harness lane is a substitute for all affected estimator/settings coverage.",
+      "Exactly one leaf-estimation iteration and Newton/Gradient pointwise objective required for the fused fast route. Multi-iteration tasks intentionally retain every iteration in the existing batched walker."
+     ]
+    }
+   }
+  },
+  {
+   "id": "N01",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N01",
+     "title": "Exact Lossguide speculative batch width 256",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N01"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT Lossguide classifier/regressor",
+      "categorical pointwise-loss Lossguide callers"
+     ],
+     "mechanism": "Select LG_EXACT_BATCH_WIDTH=256 instead of the Apple FAST default128. Existing exact speculative scoring, strict winner order, rollback/replay and final leaf budget remain in control; extra slots trade scratch footprint for fewer batch rounds.",
+     "prerequisites": [
+      "Apple FAST",
+      "LG_EXACT_BATCH active; legacy approximate batch switch must remain off in both arms"
+     ],
+     "limitations": [
+      "More candidate scratch may regress memory pressure",
+      "Only workloads that use the additional speculative width can change work scheduling",
+      "No compile, quality or timing evidence",
+      "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers."
+     ],
+     "quality_gates": [
+      "C",
+      "R"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "source_route": [
+       "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+       "gbdt/train.mojo",
+       "gbdt/methods/doc_parallel_boosting.mojo",
+       "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+      ],
+      "harness_lanes": [
+       "gbdt-lossguide",
+       "gbdt-categorical"
+      ],
+      "runtime_requirements": {
+       "grow_policy": "Lossguide",
+       "score_noise_condition": "random_strength=0 OR score_function=L2/NewtonL2",
+       "batch_condition": "LG_EXACT_BATCH and runtime lg_exact remain active"
+      }
+     },
+     "conflicting_defines": [
+      "MOJOLEARN_GBDT_LG_BATCH",
+      "MOJOLEARN_GBDT_LG_EXACT_BATCH_OFF",
+      "MOJOLEARN_GBDT_LG_EXACT_BATCH32",
+      "MOJOLEARN_GBDT_LG_EXACT_BATCH128_OFF"
+     ],
+     "pending_full_workloads": [
+      "Pointwise regression and categorical Lossguide; full dataset and speculative capacity metadata required",
+      "Cases using extra speculative slots, not only already-constrained tiny leaf budgets"
+     ]
+    }
+   }
+  },
+  {
+   "id": "N02",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N02",
+     "title": "Halve occupancy-derived non-symmetric histogram replicas",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N02"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo",
+      "gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo",
+      "gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT Depthwise classifier/regressor",
+      "GBDT Lossguide classifier/regressor",
+      "categorical pointwise-loss callers of those two grow policies"
+     ],
+     "mechanism": "Halve the final occupancy/work-derived row replica count, rounding upward to at least one, in BOTH Apple-default quantized_hist_launcher.qh_replicas and the standard histogram fallback selected by the non-symmetric driver. Every row/feature/bin remains in the strided work. Explicit replicas_override retains precedence in the generic launcher.",
+     "prerequisites": [
+      "Apple FAST",
+      "Non-symmetric Depthwise or Lossguide pointwise objective",
+      "For generic fallback, no explicit replicas_override for the measured arm"
+     ],
+     "limitations": [
+      "Already-one-replica work is unchanged",
+      "Reduced parallelism may lose on sparse active-leaf sets",
+      "Generic floating accumulation order can change; quantized addends and precision remain the same",
+      "No new shape-dependent route rule; each existing histogram family receives its own complete work"
+     ],
+     "quality_gates": [
+      "C",
+      "R"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "source_route": [
+       "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+       "gbdt/train.mojo",
+       "gbdt/methods/doc_parallel_boosting.mojo",
+       "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+      ],
+      "harness_lanes": [
+       "gbdt-depthwise",
+       "gbdt-lossguide",
+       "gbdt-categorical"
+      ],
+      "runtime_requirements": {
+       "grow_policy": [
+        "Depthwise",
+        "Lossguide"
+       ],
+       "default_route": "quantized family for two-stat one-byte layouts; generic fallback otherwise"
+      }
+     },
+     "conflicting_defines": [],
+     "pending_full_workloads": [
+      "Both default quantized layouts and natural sub-byte/generic fallback layouts",
+      "Full regression and categorical workloads"
+     ],
+     "experiment_variants": [
+      {
+       "name": "default_quantized_or_natural_fallback",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFT_N02"
+       ]
+      },
+      {
+       "name": "generic_histogram_control",
+       "baseline_defines": [
+        "MOJOLEARN_2045_FAST_NO_QUANT_HIST"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_2045_FAST_NO_QUANT_HIST",
+        "MOJOLEARN_AFT_N02"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "N03",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N03",
+     "title": "Eight-simdgroup vector partition blocks",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N03"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT Depthwise classifier/regressor",
+      "categorical pointwise-loss Depthwise callers"
+     ],
+     "mechanism": "Use DW2_PART_BLOCK=256 instead of512 with four contiguous rows per lane. DW2_PART_CHUNK, chunk-table sizing, flag counts, prefix scans and stable scatters derive from the same constant. All rows and both children remain present.",
+     "prerequisites": [
+      "Apple FAST",
+      "DW_FUSED_CHAIN and DW2_PART_VEC4 active",
+      "Existing row-index-only routing must select this path"
+     ],
+     "limitations": [
+      "More chunk records/scan work may offset occupancy gains",
+      "Legacy scalar/stat-moving partition is unchanged",
+      "No partition-order or quality evidence has been collected",
+      "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers.",
+      "Lossguide explicitly bypasses the DW fused partition chain, including exact-batch Lossguide."
+     ],
+     "quality_gates": [
+      "C",
+      "R"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "source_route": [
+       "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+       "gbdt/train.mojo",
+       "gbdt/methods/doc_parallel_boosting.mojo",
+       "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+      ],
+      "harness_lanes": [
+       "gbdt-depthwise"
+      ],
+      "runtime_requirements": {
+       "grow_policy": "Depthwise",
+       "route": "use_ridx AND DW_FUSED_CHAIN AND DW2_PART_VEC4"
+      }
+     },
+     "conflicting_defines": [
+      "MOJOLEARN_2044_FAST_NO_RIDX_ONLY",
+      "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF",
+      "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
+     ],
+     "pending_full_workloads": [
+      "Depthwise regression and categorical public callers; categorical board recipe currently uses Lossguide"
+     ]
+    }
+   }
+  },
+  {
+   "id": "N04",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N04",
+     "title": "Eight-feature non-symmetric histogram prefix tiles",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N04"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT Depthwise classifier/regressor",
+      "GBDT Lossguide classifier/regressor",
+      "categorical pointwise-loss callers of those two grow policies"
+     ],
+     "mechanism": "DW2_SCAN_FT changes16 to8 and its shared slab changes4096+8 to2048+8 floats. Each feature still folds every bin in its original order; more independent leaf/stat/feature tiles trade launch count against shared memory residency.",
+     "prerequisites": [
+      "Apple FAST",
+      "DW2_SCAN_SMEM active"
+     ],
+     "limitations": [
+      "This is prefix-scan work decomposition, not a replacement for partition-statistics reduction",
+      "Noncontiguous or oversized spans retain the existing fallback",
+      "Small feature sets can receive no parallelism benefit",
+      "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers."
+     ],
+     "quality_gates": [
+      "C",
+      "R"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "idea_revision": "N04 is narrowed to the non-symmetric shared histogram prefix scan; shared partition-statistics ownership stays in lane G.",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "source_route": [
+       "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+       "gbdt/train.mojo",
+       "gbdt/methods/doc_parallel_boosting.mojo",
+       "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+      ],
+      "harness_lanes": [
+       "gbdt-depthwise",
+       "gbdt-lossguide",
+       "gbdt-categorical"
+      ],
+      "runtime_requirements": {
+       "grow_policy": [
+        "Depthwise",
+        "Lossguide"
+       ],
+       "route": "DW2_SCAN_SMEM"
+      }
+     },
+     "conflicting_defines": [
+      "MOJOLEARN_GBDT_DW2_SCAN_SMEM_OFF"
+     ],
+     "pending_full_workloads": [
+      "Full regression and categorical workloads; varied bin layouts and feature tails"
+     ]
+    }
+   }
+  },
+  {
+   "id": "N05",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N05",
+     "title": "Four-simdgroup leaf split descriptor selection blocks",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N05"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/methods/greedy_subsets_searcher/kernel/split_chain_fused.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT Depthwise classifier/regressor with min_split_gain unset",
+      "categorical pointwise-loss Depthwise callers with min_split_gain unset"
+     ],
+     "mechanism": "DW_SELECT_BLOCK changes64 to128. Each worker performs the existing strict-gain leaf selection and ordered prefix rank, then packs its split descriptor. The complete multi-leaf list and creation-order tie semantics stay intact.",
+     "prerequisites": [
+      "Apple FAST",
+      "DW_NO_LEVEL_SYNC/device split descriptor selection active",
+      "Public min_split_gain=None in BOTH arms; default board min_split_gain=0.0 is not this experiment"
+     ],
+     "limitations": [
+      "This changes descriptor selection/packing geometry; it does not fuse partition or alter which leaves split",
+      "Little benefit expected when very few leaves need descriptors",
+      "Larger blocks may lose occupancy",
+      "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers."
+     ],
+     "quality_gates": [
+      "C",
+      "R"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "idea_revision": "The final N05 experiment targets the multi-leaf split descriptor stage rather than adding another already-fused row application kernel.",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "source_route": [
+       "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+       "gbdt/train.mojo",
+       "gbdt/methods/doc_parallel_boosting.mojo",
+       "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+      ],
+      "harness_lanes": [
+       "gbdt-depthwise"
+      ],
+      "runtime_requirements": {
+       "grow_policy": "Depthwise",
+       "min_split_gain": null,
+       "route": "use_ridx AND DW_NO_LEVEL_SYNC; internal min_split_gain sentinel<0"
+      },
+      "board_default_exercises_candidate": false,
+      "required_recipe_adjustment": "Set min_split_gain=None identically in A and B; the current board value0.0 bypasses device selection. Do not silently label the unchanged board route as N05."
+     },
+     "conflicting_defines": [
+      "MOJOLEARN_2044_FAST_NO_RIDX_ONLY",
+      "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF",
+      "MOJOLEARN_GBDT_DW_NO_LEVEL_SYNC_OFF"
+     ],
+     "pending_full_workloads": [
+      "Saved full-dataset Depthwise public recipe with min_split_gain=None",
+      "Regression and categorical versions of that same supported route"
+     ]
+    }
+   }
+  },
+  {
+   "id": "N06",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N06",
+     "title": "Two vector groups per row-index cursor copy iteration",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N06"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT Depthwise classifier/regressor",
+      "categorical pointwise-loss Depthwise callers"
+     ],
+     "mechanism": "dw2_copy_back_kernel unrolls two existing strided four-row vector groups per worker iteration under N06. The leaf descriptor and stride are reused, and each group retains its exact boundary guards and copy destination.",
+     "prerequisites": [
+      "Apple FAST",
+      "DW2_PART_VEC4 row-index partition chain active"
+     ],
+     "limitations": [
+      "This copies the searcher row-index cursor, not numerical prediction values",
+      "Each copy keeps four-wide alignment and scalar boundary stores",
+      "Register/code size may outweigh reduced loop control",
+      "Ranking and multiclass objectives currently refuse non-symmetric growth; they are not claimed as affected callers.",
+      "Lossguide explicitly bypasses the DW fused partition chain, including exact-batch Lossguide."
+     ],
+     "quality_gates": [
+      "C",
+      "R"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "idea_revision": "N06 revised with root approval to searcher row-index cursor copy tiling; numerical leaf prediction application is owned by lane G/root.",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "source_route": [
+       "bindings/_mojolearn_gbdt.mojo:_gbdt_fit_impl",
+       "gbdt/train.mojo",
+       "gbdt/methods/doc_parallel_boosting.mojo",
+       "gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:fit_non_symmetric_tree"
+      ],
+      "harness_lanes": [
+       "gbdt-depthwise"
+      ],
+      "runtime_requirements": {
+       "grow_policy": "Depthwise",
+       "route": "use_ridx AND DW_FUSED_CHAIN AND DW2_PART_VEC4"
+      }
+     },
+     "conflicting_defines": [
+      "MOJOLEARN_2044_FAST_NO_RIDX_ONLY",
+      "MOJOLEARN_GBDT_DW_FUSED_CHAIN_OFF",
+      "MOJOLEARN_GBDT_DW2_PART_VEC4_OFF"
+     ],
+     "pending_full_workloads": [
+      "Depthwise regression and categorical public callers; categorical board recipe currently uses Lossguide"
+     ]
+    }
+   }
+  },
+  {
+   "id": "N07",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N07",
+     "title": "PairLogit smaller pair/query worker tiles",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N07"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/targets/kernel/pair_logit_group.mojo",
+      "gbdt/targets/kernel/pair_logit.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT PairLogit ranker, SymmetricTree only; generated-group and explicit-pair representations"
+     ],
+     "mechanism": "The default implicit-group path selects64 physical threads rather than128 per complete-query block. Explicit-pair buffers select128 threads rather than256 for pair derivatives and function-value partials; pair_blocks and the pair reduction/launch widths use the same constant. Every pair, weight and query is retained.",
+     "prerequisites": [
+      "Apple FAST",
+      "Implicit-group or explicit-pair path selected by the existing public target setup"
+     ],
+     "limitations": [
+      "The two representations are separate affected workloads; both need later full-recipe coverage",
+      "Function-value partial layout changes for explicit pairs; consumers use pair_blocks/q.blocks",
+      "Group function-value/magnitude reduction order may change",
+      "The64-lane group arm differs from the historical256-versus128 experiment"
+     ],
+     "quality_gates": [
+      "Q"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "harness_lanes": [
+       "gbdt-rank-pairlogit"
+      ],
+      "runtime_requirements": {
+       "loss": "PairLogit",
+       "grow_policy": "SymmetricTree",
+       "permutation_count": 1,
+       "eval_set": null,
+       "generated_pairs": "fit(group_id=...)",
+       "explicit_pairs": "fit(group_id=..., pairs=..., pairs_weight=...)"
+      },
+      "source_route": [
+       "gbdt/methods/doc_parallel_boosting.mojo:launch_pair_logit_with[False,...]",
+       "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:launch_pair_logit_with[True,False]",
+       "gbdt/targets/kernel/pair_logit.mojo:launch_pair_logit_with",
+       "gbdt/targets/kernel/pair_logit_group.mojo:launch_pair_logit_group"
+      ]
+     },
+     "conflicting_defines": [],
+     "pending_full_workloads": [
+      "Saved full explicit-pair dataset/version/hash and weights; the board normally generates pairs",
+      "Leaf estimation iterations>1 and unchanged required objective/backtracking settings",
+      "All query/pair resource limits retained and audited before any full-dataset claim"
+     ],
+     "experiment_variants": [
+      {
+       "name": "default_generated_group",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFT_N07"
+       ]
+      },
+      {
+       "name": "explicit_pair_representation",
+       "baseline_defines": [
+        "MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF",
+        "MOJOLEARN_AFT_N07"
+       ]
+      },
+      {
+       "name": "fresh_leaf_estimation",
+       "baseline_defines": [
+        "MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF",
+        "MOJOLEARN_AFT_N07"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "N08",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N08",
+     "title": "PairLogit ordered endpoint pair unrolling",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N08"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/targets/kernel/pair_logit_group.mojo",
+      "gbdt/targets/kernel/pair_logit.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT PairLogit ranker, SymmetricTree only; generated-group and explicit-pair representations"
+     ],
+     "mechanism": "Group kernels unroll two ascending shared-memory opponent visits per loop; explicit row accumulation unrolls two ascending endpoint records. Each add, pair multiplicity, endpoint sign and tail visit remains in the original order. This is not the historical rejected each-pair-once algorithm.",
+     "prerequisites": [
+      "Apple FAST",
+      "For implicit groups keep PL_PAIRS_ONCE disabled equally in A and B"
+     ],
+     "limitations": [
+      "Compiler may already perform similar unrolling",
+      "Repeated document endpoints and extreme margins need later quality coverage",
+      "Legacy pairs-once group arm bypasses the modified inner loop for fitting groups"
+     ],
+     "quality_gates": [
+      "Q"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "harness_lanes": [
+       "gbdt-rank-pairlogit"
+      ],
+      "runtime_requirements": {
+       "loss": "PairLogit",
+       "grow_policy": "SymmetricTree",
+       "permutation_count": 1,
+       "eval_set": null,
+       "generated_pairs": "fit(group_id=...)",
+       "explicit_pairs": "fit(group_id=..., pairs=..., pairs_weight=...)"
+      },
+      "source_route": [
+       "gbdt/methods/doc_parallel_boosting.mojo:launch_pair_logit_with[False,...]",
+       "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:launch_pair_logit_with[True,False]",
+       "gbdt/targets/kernel/pair_logit.mojo:launch_pair_logit_with",
+       "gbdt/targets/kernel/pair_logit_group.mojo:launch_pair_logit_group"
+      ]
+     },
+     "conflicting_defines": [
+      "MOJOLEARN_PL_PAIRS_ONCE"
+     ],
+     "pending_full_workloads": [
+      "Saved full explicit-pair dataset/version/hash and weights; the board normally generates pairs",
+      "Leaf estimation iterations>1 and unchanged required objective/backtracking settings",
+      "All query/pair resource limits retained and audited before any full-dataset claim"
+     ],
+     "experiment_variants": [
+      {
+       "name": "default_generated_group",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFT_N08"
+       ]
+      },
+      {
+       "name": "explicit_pair_representation",
+       "baseline_defines": [
+        "MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_PAIRLOGIT_GROUP_FUSED_OFF",
+        "MOJOLEARN_AFT_N08"
+       ]
+      },
+      {
+       "name": "fresh_leaf_estimation",
+       "baseline_defines": [
+        "MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_PAIRLOGIT_EST_REUSE_OFF",
+        "MOJOLEARN_AFT_N08"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "N09",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N09",
+     "title": "Two complete Yeti tasks per scheduled threadgroup",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N09"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/targets/kernel/yeti_rank.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT YetiRank ranker, SymmetricTree only"
+     ],
+     "mechanism": "Nonfused32KiB and16KiB block kernels compile-unroll two whole tasks per block with a grid of ceil(task_count/2). Shared allocation is reused with a barrier between tasks. Task IDs, task-derived seeds, four-lane ownership, number of permutations and query boundaries are unchanged; the odd last task is guarded.",
+     "prerequisites": [
+      "Apple FAST",
+      "YETI_BLOCK_PARALLEL active",
+      "YETI_TASK_FUSED disabled equally in both arms (current default)"
+     ],
+     "limitations": [
+      "Reducing concurrent task blocks may regress short workloads",
+      "Sequential fallback and legacy task-fused kernel are unchanged",
+      "Legacy direct kernel callers omitting n_tasks_in retain one task per block",
+      "No RNG or identity validation performed"
+     ],
+     "quality_gates": [
+      "Q"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "harness_lanes": [
+       "gbdt-rank-yetirank"
+      ],
+      "runtime_requirements": {
+       "loss": "YetiRank",
+       "grow_policy": "SymmetricTree",
+       "permutation_count": 1,
+       "eval_set": null
+      },
+      "source_route": [
+       "gbdt/methods/doc_parallel_boosting.mojo:launch_yeti_rank_with[False]",
+       "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:YetiRank evaluation",
+       "gbdt/targets/kernel/yeti_rank.mojo:launch_yeti_rank_with / launch_yeti_rank_estimation_from_search"
+      ]
+     },
+     "conflicting_defines": [
+      "MOJOLEARN_3040_YETI_SEQUENTIAL",
+      "MOJOLEARN_YR_TASK_FUSED",
+      "MOJOLEARN_SYM_MULTI_ALL"
+     ],
+     "pending_full_workloads": [
+      "Additional estimation calls: public leaf_estimation_iterations>1 with settings held equal in both arms",
+      "Weighted/skewed full-query workload and full non-board dataset"
+     ],
+     "experiment_variants": [
+      {
+       "name": "default_search_and_reuse_estimation",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFT_N09"
+       ]
+      },
+      {
+       "name": "fresh_estimation_calls",
+       "baseline_defines": [
+        "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF",
+        "MOJOLEARN_AFT_N09"
+       ]
+      },
+      {
+       "name": "sixteen_kib_task_control",
+       "baseline_defines": [
+        "MOJOLEARN_YETI_FAST_SORT_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_YETI_FAST_SORT_OFF",
+        "MOJOLEARN_AFT_N09"
+       ],
+       "additional_conditions": "Keep MOJOLEARN_YETI_SEARCH_TASK16K_OFF absent; no task fusion."
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "N10",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N10",
+     "title": "Eight-output exact Yeti merge tiles",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N10"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/targets/kernel/yeti_rank.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT YetiRank ranker, SymmetricTree only"
+     ],
+     "mechanism": "After the existing128-key register sort, each active worker emits eight merged composite keys instead of four. Half of the workers perform co-rank searches; all workers still participate in every inter-pass barrier. The256-worker RNG and pair ownership is unchanged. Implemented in the32KiB block and task-fused kernels.",
+     "prerequisites": [
+      "Apple FAST",
+      "YETI_FAST_SORT active (current default)",
+      "32KiB block kernel or existing task-fused route"
+     ],
+     "limitations": [
+      "The16KiB rank-merge and sequential fallbacks are unchanged",
+      "More serial merge outputs per worker can lose throughput",
+      "Unique composite keys retain the original tie definition, but that argument is unverified"
+     ],
+     "quality_gates": [
+      "Q"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "harness_lanes": [
+       "gbdt-rank-yetirank"
+      ],
+      "runtime_requirements": {
+       "loss": "YetiRank",
+       "grow_policy": "SymmetricTree",
+       "permutation_count": 1,
+       "eval_set": null
+      },
+      "source_route": [
+       "gbdt/methods/doc_parallel_boosting.mojo:launch_yeti_rank_with[False]",
+       "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:YetiRank evaluation",
+       "gbdt/targets/kernel/yeti_rank.mojo:launch_yeti_rank_with / launch_yeti_rank_estimation_from_search"
+      ]
+     },
+     "conflicting_defines": [
+      "MOJOLEARN_3040_YETI_SEQUENTIAL",
+      "MOJOLEARN_YETI_FAST_SORT_OFF"
+     ],
+     "pending_full_workloads": [
+      "Additional estimation calls: public leaf_estimation_iterations>1 with settings held equal in both arms",
+      "Weighted/skewed full-query workload and full non-board dataset"
+     ],
+     "experiment_variants": [
+      {
+       "name": "default_search_and_reuse_estimation",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFT_N10"
+       ]
+      },
+      {
+       "name": "fresh_estimation_calls",
+       "baseline_defines": [
+        "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF",
+        "MOJOLEARN_AFT_N10"
+       ]
+      },
+      {
+       "name": "fused_task_control",
+       "baseline_defines": [
+        "MOJOLEARN_YR_TASK_FUSED"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_YR_TASK_FUSED",
+        "MOJOLEARN_AFT_N10"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "N11",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N11",
+     "title": "Two-row ranking estimation/search scatter tile",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N11"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/targets/kernel/yeti_rank.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT YetiRank ranker, SymmetricTree only"
+     ],
+     "mechanism": "yeti_rank_row_kernel uses128 physical workers for each original256-row logical partial tile, with two row stores per worker. Estimation/search plane layouts and function-value partial count are unchanged. The two-row magnitude sums feed a128-worker reduction, so their FAST fold order can change.",
+     "prerequisites": [
+      "Apple FAST",
+      "Row-scatter path used by nonfused target evaluation or YETI_EST_REUSE_SEARCH estimation"
+     ],
+     "limitations": [
+      "Task-fused target evaluation bypasses this row scatter",
+      "No estimation iteration, backtracking evaluation or pair sample is skipped",
+      "Magnitude fold changes need end-to-end quality qualification",
+      "MOJOLEARN_YR_TASK_FUSED/SYM_MULTI_ALL bypass the search scatter but reuse estimation may still reach it; keep these absent for the primary full workload."
+     ],
+     "quality_gates": [
+      "Q"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "harness_lanes": [
+       "gbdt-rank-yetirank"
+      ],
+      "runtime_requirements": {
+       "loss": "YetiRank",
+       "grow_policy": "SymmetricTree",
+       "permutation_count": 1,
+       "eval_set": null
+      },
+      "source_route": [
+       "gbdt/methods/doc_parallel_boosting.mojo:launch_yeti_rank_with[False]",
+       "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:YetiRank evaluation",
+       "gbdt/targets/kernel/yeti_rank.mojo:launch_yeti_rank_with / launch_yeti_rank_estimation_from_search"
+      ],
+      "estimation_reuse": "The default first estimation evaluation reaches launch_yeti_rank_estimation_from_search -> row kernel; fresh calls also reach it through the nonfused target."
+     },
+     "conflicting_defines": [],
+     "pending_full_workloads": [
+      "Additional estimation calls: public leaf_estimation_iterations>1 with settings held equal in both arms",
+      "Weighted/skewed full-query workload and full non-board dataset"
+     ],
+     "experiment_variants": [
+      {
+       "name": "default_search_and_reuse_estimation",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFT_N11"
+       ]
+      },
+      {
+       "name": "fresh_estimation_calls",
+       "baseline_defines": [
+        "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF",
+        "MOJOLEARN_AFT_N11"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "N12",
+   "parts": {
+    "experiments/apple_fast_trees/N.json": {
+     "id": "N12",
+     "title": "Four-simdgroup complete-query mean reductions",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_N12"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "gbdt/apple_fast_tree_experiments.mojo",
+      "gbdt/targets/kernel/query_rmse.mojo",
+      "gbdt/targets/kernel/yeti_rank.mojo"
+     ],
+     "affected_estimators": [
+      "GBDT YetiRank ranker, SymmetricTree only",
+      "GBDT QueryRMSE regressor/ranker, SymmetricTree only"
+     ],
+     "mechanism": "A local launch_aft_group_means wrapper selects one128-thread block per complete query. Lanes retain all weighted target terms with strided FMA, then reduce target and weight sums and preserve zero-total-weight behavior. QueryRMSE evaluation and nonfused Yeti centering call the wrapper; the baseline delegates to the original query helper.",
+     "prerequisites": [
+      "Apple FAST",
+      "Nonfused query mean computation; task-fused Yeti mean computation is unchanged"
+     ],
+     "limitations": [
+      "A query remains whole regardless of length; no query-size cap or routing threshold",
+      "More blocks and idle workers can regress singleton/short queries",
+      "Weighted mean reduction order changes, including Yeti centering and downstream sort keys",
+      "All full-query quality coverage remains pending",
+      "Yeti task fusion bypasses this centering wrapper; QueryRMSE remains reachable. Keep MOJOLEARN_YR_TASK_FUSED and SYM_MULTI_ALL absent for the primary Yeti comparison."
+     ],
+     "quality_gates": [
+      "Q",
+      "R"
+     ],
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "integration": {
+      "binding_builder": "bindings/build_gbdt.sh",
+      "binding_entry": "bindings/_mojolearn_gbdt.mojo",
+      "binding_module": "mojolearn._mojolearn_gbdt",
+      "binding_artifact": "python/mojolearn/_mojolearn_gbdt.so",
+      "numeric_mode": "fast",
+      "public_estimator": "mojolearn.GradientBoosting",
+      "public_source": "python/mojolearn/ensemble.py",
+      "build_define_input": "MOJOLEARN_EXTRA_DEFINES",
+      "main_harness": "bench/speed/forest_speed_arm.py",
+      "recipe_source": "tools/speed_gbdt_arm.py",
+      "integration_status": "source_wired_not_executed",
+      "harness_lanes": [
+       "gbdt-rank-yetirank"
+      ],
+      "runtime_requirements": {
+       "loss": "YetiRank",
+       "grow_policy": "SymmetricTree",
+       "permutation_count": 1,
+       "eval_set": null
+      },
+      "source_route": [
+       "gbdt/methods/doc_parallel_boosting.mojo:launch_yeti_rank_with[False]",
+       "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:YetiRank evaluation",
+       "gbdt/targets/kernel/yeti_rank.mojo:launch_yeti_rank_with / launch_yeti_rank_estimation_from_search",
+       "gbdt/methods/leaves_estimation/pointwise_oracle.mojo:launch_query_rmse_with[True] -> query_rmse.launch_aft_group_means"
+      ],
+      "additional_full_data_caller": {
+       "source": "tools/speed_gbdt_rank.py",
+       "arguments": [
+        "--library",
+        "ours",
+        "--loss",
+        "QueryRMSE"
+       ],
+       "full_rows_setting": "Omit --rows (default None), then audit loader intrinsic caps and actual dataset manifest before qualifying",
+       "numeric_mode_environment": "MOJOLEARN_NUMERIC_MODE=fast",
+       "status": "legacy_full_data_recipe_available_but_not_run_or_qualified"
+      },
+      "queryrmse_requirements": {
+       "loss": "QueryRMSE",
+       "grow_policy": "SymmetricTree",
+       "permutation_count": 1,
+       "eval_set": null,
+       "fit_argument": "group_id"
+      }
+     },
+     "conflicting_defines": [],
+     "pending_full_workloads": [
+      "Additional estimation calls: public leaf_estimation_iterations>1 with settings held equal in both arms",
+      "Weighted/skewed full-query workload and full non-board dataset",
+      "QueryRMSE is absent from the main board lane registry; retain it separately until a full recipe and result destination are selected"
+     ],
+     "experiment_variants": [
+      {
+       "name": "default_search_and_reuse_estimation",
+       "baseline_defines": [],
+       "candidate_defines": [
+        "MOJOLEARN_AFT_N12"
+       ]
+      },
+      {
+       "name": "fresh_estimation_calls",
+       "baseline_defines": [
+        "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF"
+       ],
+       "candidate_defines": [
+        "MOJOLEARN_YETI_EST_REUSE_SEARCH_OFF",
+        "MOJOLEARN_AFT_N12"
+       ]
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "P01",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P01",
+     "caller_integration": "ResidentForest with ordered=False reaches launch_forest_inference[GROVE=True] and _launch_grove_lanes; scalar/vector launch grids, block dimensions and shared reductions use AFT_GROVE_BLOCK/AFT_GROVES_PER_BLOCK together",
+     "source_evidence": [
+      "python/mojolearn/_forest_protocol.py:_prediction_engine returns parallel_groves for FAST auto",
+      "python/mojolearn/_forest_protocol.py:_resident_ordered_flag returns None for FAST parallel_groves, accepting the compiled policy",
+      "core/forest_inference_model.mojo:forest_ordered_resident_policy returns not disabled and a supported FAST/IDENTICAL GPU condition; disabled is MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
+      "core/forest_inference_model.mojo:ResidentForest branches on self.ordered before selecting GROVE=False/True"
+     ],
+     "title": "Two logical forest groves per block",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
+      "MOJOLEARN_AFT_P01"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
+     ],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "core/forest_inference.mojo"
+     ],
+     "affected_estimators": [
+      "RandomForestClassifier",
+      "RandomForestRegressor",
+      "ExtraTreesClassifier",
+      "ExtraTreesRegressor",
+      "exported forest parallel_groves engine"
+     ],
+     "mechanism": "64 rather than 128 threads for lane-grove kernels; scratch, item mapping and launch geometry use the same constant.",
+     "quality_gates": [
+      "P",
+      "C",
+      "R"
+     ],
+     "prerequisites": [
+      "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF in both arms for public FAST resident callers",
+      "Public inference_engine auto or parallel_groves; no forced row-thread schedule"
+     ],
+     "limitations": [
+      "Only public callers selecting the grove inference engine reach this candidate.",
+      "Existing row-thread schedule overrides still route to their original kernel."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P02",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P02",
+     "caller_integration": "ResidentForest ordered paths and transient GROVE=False callers launch forest_ordered_kernel; dispatcher grid uses AFT_ORDERED_ITEMS and kernel item/second-plane indices use the same row/output tile",
+     "conflicting_defines": [
+      "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
+     ],
+     "source_evidence": [
+      "core/forest_inference_model.mojo:FOREST_ORDERED_RESIDENT uses forest_ordered_resident_policy[TARGET_COLUMN, GLOBAL_NUMERIC_MODE, forced, disabled]",
+      "core/forest_inference_model.mojo:forest_ordered_resident_policy returns not disabled and ((mode FAST or IDENTICAL) and supported GPU column, or forced IDENTICAL)",
+      "python/mojolearn/_forest_protocol.py:_resident_ordered_flag returns None for FAST parallel_groves, making the OFF define bypass ordered traversal in the common experiment route",
+      "Explicit public inference_engine=sequential can still force ordered traversal, but that is a separate route-specific experiment rather than a P01/P03 combination"
+     ],
+     "title": "Paired ordered forest output traversal",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P02"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "core/forest_inference.mojo"
+     ],
+     "affected_estimators": [
+      "RandomForestClassifier/Regressor with ordered resident prediction",
+      "ExtraTreesClassifier/Regressor with ordered resident prediction",
+      "exported forest ordered engine",
+      "tree wrappers selecting ordered forest inference"
+     ],
+     "mechanism": "Two row/output items share the tree loop, with independent ordered accumulators and a guarded second plane.",
+     "quality_gates": [
+      "P",
+      "C",
+      "R"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "Requires ordered inference, not parallel_groves.",
+      "Does not change traversal representation or node thresholds."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P03",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P03",
+     "caller_integration": "The public resident OFF prerequisite selects _launch_grove_lanes; forest_grove32_kernel and forest_vector_grove32_kernel allocate the selected capacity and stage rows before their unchanged traversals when feature bytes fit",
+     "source_evidence": [
+      "core/forest_inference_model.mojo:forest_ordered_resident_policy returns False when disabled=MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
+      "python/mojolearn/_forest_protocol.py:_resident_ordered_flag lets FAST parallel_groves accept that compiled False",
+      "core/forest_inference.mojo:launch_forest_inference[GROVE=True] selects _launch_grove_lanes unless the existing row-thread override applies"
+     ],
+     "title": "Forest shared rows with a two KiB block budget",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF",
+      "MOJOLEARN_AFT_P03"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"
+     ],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "core/forest_inference.mojo"
+     ],
+     "affected_estimators": [
+      "RandomForestClassifier",
+      "RandomForestRegressor",
+      "ExtraTreesClassifier",
+      "ExtraTreesRegressor",
+      "exported forest parallel_groves engine"
+     ],
+     "mechanism": "Enable shared-row staging with capacity derived from 2048 bytes divided by Float32 size and groves per block; overflow rows use direct loads.",
+     "quality_gates": [
+      "P",
+      "C",
+      "R"
+     ],
+     "prerequisites": [
+      "MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF in both arms for public FAST resident callers",
+      "Public inference_engine auto or parallel_groves; no forced row-thread schedule"
+     ],
+     "limitations": [
+      "Extends existing staging code with a different storage budget; existing 256-feature staging outcome is not claimed as new evidence.",
+      "With P01, per-row capacity increases because fewer rows share the same fixed byte budget.",
+      "Scalar-output staging is applicable only to one-output leaves; vector leaves have the existing capacity dispatch."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P04",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P04",
+     "caller_integration": "_predict_forest_labels calls forest_predict_resident_labels_gpu_binding, then resident_predict_labels and ResidentForest's label methods; launch_forest_argmax and forest_argmax_kernel share AFT_ARGMAX_ROWS for complete class-code output coverage",
+     "source_evidence": [
+      "python/mojolearn/_forest_protocol.py:_predict_forest_labels returns None unless effective mode is fast and _prediction_engine() is parallel_groves; FAST auto resolves to that name",
+      "bindings/_mojolearn_rf.mojo and bindings/_mojolearn_trees.mojo register forest_predict_resident_labels_gpu",
+      "core/forest_inference_model.mojo:ResidentForest label paths call launch_forest_argmax after either ordered or grove traversal, so the default ordered resident policy does not bypass P04"
+     ],
+     "title": "Paired row forest class argmax",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P04"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "core/forest_inference.mojo"
+     ],
+     "affected_estimators": [
+      "forest classifiers through launch_forest_argmax"
+     ],
+     "mechanism": "Two row planes per worker call a shared first-max helper; nonfinite sentinel and class order remain unchanged.",
+     "quality_gates": [
+      "P",
+      "C"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "No effect for regression or raw/probability requests that do not consume class codes."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P05",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P05",
+     "caller_integration": "gbdt_resident_predict_binding reaches _predict_device; GBDT_PREDICT_PACKED with a nonempty oblivious model selects _apply_all. Its grid covers 512 rows/block under P05, matching two 256-lane planes in compute_bins_and_add_all_kernel and its doubled grid stride",
+     "title": "Two rows reuse packed GBDT split descriptors",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_GBDT_PREDICT_PACKED",
+      "MOJOLEARN_AFT_P05"
+     ],
+     "baseline_defines": [
+      "MOJOLEARN_GBDT_PREDICT_PACKED"
+     ],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "gbdt/models/kernel/add_bin_values.mojo",
+      "gbdt/resident_model.mojo"
+     ],
+     "affected_estimators": [
+      "oblivious GradientBoosting resident prediction"
+     ],
+     "mechanism": "Each worker loads a tree/split descriptor once for two independent rows; the grid and stride account for two row planes.",
+     "quality_gates": [
+      "P",
+      "C",
+      "R",
+      "Q"
+     ],
+     "prerequisites": [
+      "MOJOLEARN_GBDT_PREDICT_PACKED"
+     ],
+     "limitations": [
+      "Prerequisite is held equal in both arms; no packed-prediction default is changed.",
+      "Non-symmetric fallback keeps its original kernel.",
+      "Packed path preparation and its synchronization remain in the future cold-use timed boundary."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P06",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P06",
+     "caller_integration": "Both gbdt/resident_model.mojo and gbdt/train.mojo import LINK_BLOCK and use it in grid construction and resident_link_kernel block_dim; the kernel derives its index/stride from actual block_dim/grid_dim",
+     "title": "Smaller GBDT resident link block",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P06"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "gbdt/models/kernel/resident_link.mojo",
+      "gbdt/resident_model.mojo"
+     ],
+     "affected_estimators": [
+      "GradientBoosting resident raw/proba/class prediction"
+     ],
+     "mechanism": "LINK_BLOCK is 128 rather than 256; the existing grid-stride kernel and its callers share the constant.",
+     "quality_gates": [
+      "P",
+      "C",
+      "R"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "Same software binary64 exp/div; this is a scheduling experiment, not reduced precision.",
+      "Standalone users of the shared resident-link constant are also affected and need future coverage."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P07",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P07",
+     "caller_integration": "tree_shap_values computes row_units=n_trees*ceil(rc/SHAP_ROW_TILE) for each chunk and uses it for every direct/table/decision-table row launch; each kernel reverses that mapping to the same tree*rc+row unit before calling the original unit implementation",
+     "title": "TreeSHAP four-row tree tiles",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P07"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/shap_device.mojo"
+     ],
+     "affected_estimators": [
+      "TreeExplainer tree_shap_values"
+     ],
+     "mechanism": "Four adjacent rows per tree worker in direct, leaf-table and decision-table paths, with exact row-tail guards.",
+     "quality_gates": [
+      "S"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "Mutually exclusive with MOJOLEARN_SHAP_FAST_ROW_PAIR.",
+      "Existing pair audit counter is not used to claim quartet execution.",
+      "Sequential unit calls change work mapping; no new persistent model cache is claimed."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P08",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P08",
+     "caller_integration": "shap_prepare, _Forest preparation and tree_shap_values launches use TPB and _grid; kernel _uid or explicit indexing uses that same TPB, including P07/P10 combinations",
+     "title": "TreeSHAP smaller worker block",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P08"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/shap_device.mojo"
+     ],
+     "affected_estimators": [
+      "TreeExplainer preparation and tree_shap_values"
+     ],
+     "mechanism": "TPB is 64 rather than 128 for SHAP preparation, table, row and fold kernels.",
+     "quality_gates": [
+      "S"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "Requires full preparation-plus-explanation coverage, not only the row kernel."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P09",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P09",
+     "caller_integration": "tree_shap_values uses _rows_per_chunk(BUF_BYTES) for its contribution allocation and per-iteration rc; it launches and folds every rc-row chunk before advancing r0 by rc",
+     "title": "TreeSHAP contribution scratch budget",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P09"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/shap_device.mojo"
+     ],
+     "affected_estimators": [
+      "TreeExplainer tree_shap_values"
+     ],
+     "mechanism": "Contribution scratch budget becomes 64 MiB instead of 128 MiB, with unchanged per-tree units cap and complete row coverage.",
+     "quality_gates": [
+      "S"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "Can increase chunk count and lose performance; no win claimed.",
+      "The full output and leaf table allocations retain existing sizes, so this is not a bound on total GPU memory."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P10",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P10",
+     "caller_integration": "tree_shap_values launches fold_kernel with ceil(fu/AFT_SHAP_FOLD_ITEMS) logical workers; fold_kernel uses TPB*AFT_SHAP_FOLD_ITEMS for each block base and invokes shap_fold_unit for both guarded output-cell planes",
+     "title": "Paired TreeSHAP output-cell folding",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P10"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/shap_device.mojo"
+     ],
+     "affected_estimators": [
+      "TreeExplainer tree_shap_values"
+     ],
+     "mechanism": "Two independent flattened attribution output cells per worker; each still folds every original tree contribution in the original order.",
+     "quality_gates": [
+      "S"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "Refines initial row-tiling idea to output-cell tiling matching the existing fold layout.",
+      "No cross-cell reduction or discarded feature attribution."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P11",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P11",
+     "caller_integration": "dart_step launches dart_row_kernel for n rows and dart_predict launches dart_predict_kernel for k*n class/row cells; both callers divide logical work by AFT_DART_ROWS and kernels multiply block bases and capped-grid strides by the same factor",
+     "title": "Paired DART residual and prediction scheduling",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P11"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/dart_device.mojo"
+     ],
+     "affected_estimators": [
+      "DARTClassifier",
+      "DARTRegressor"
+     ],
+     "mechanism": "Two contiguous lane planes per worker in dart_row_kernel and dart_predict_kernel; launch grids and grid strides use the same tile.",
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "Dropout draws and unit functions are unchanged.",
+      "For prediction a work unit is a class/row cell, not always an entire multiclass row."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  },
+  {
+   "id": "P12",
+   "parts": {
+    "experiments/apple_fast_trees/P.json": {
+     "id": "P12",
+     "caller_integration": "dart_add performs existing apply/leaf-sum/Newton work, then launches dart_add_kernel with ceil(n/AFT_DART_ADD_ROWS) logical workers; the kernel applies the original dart_add_unit to the same two row planes and uses a matching multiplied grid stride",
+     "title": "Paired DART score addition scheduling",
+     "status": "source_added_uncompiled_unverified_unmeasured",
+     "mode": "fast",
+     "vendor": "apple",
+     "candidate_defines": [
+      "MOJOLEARN_AFT_P12"
+     ],
+     "baseline_defines": [],
+     "source_paths": [
+      "core/apple_fast_tree_experiments.mojo",
+      "xtrees/dart_device.mojo"
+     ],
+     "affected_estimators": [
+      "DARTClassifier",
+      "DARTRegressor"
+     ],
+     "mechanism": "Two row planes per worker in dart_add_kernel, preserving factor, shrinkage and leaf lookup in the existing unit.",
+     "quality_gates": [
+      "C",
+      "R",
+      "P"
+     ],
+     "prerequisites": [],
+     "limitations": [
+      "Does not fuse Newton reduction with score addition or change normalization."
+     ],
+     "default_enabled": false,
+     "compile_status": "not_run_owner_instruction",
+     "verification_status": "not_run_owner_instruction",
+     "measurement_status": "not_run_owner_instruction",
+     "quality_status": "pending",
+     "samples": 0,
+     "recipes": [
+      "tools/bench_board.py",
+      "bench/speed/forest_speed_arm.py",
+      "tools/speed_gbdt_arm.py",
+      "tools/bench_board_algos.py"
+     ],
+     "full_workload_status": "pending_recipe_binding_and_dataset_provenance"
+    }
+   }
+  }
+ ]
+}

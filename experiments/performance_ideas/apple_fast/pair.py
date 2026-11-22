@@ -13,7 +13,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-from support import ROOT, apple_fast
+from support import ROOT, apple_fast, card as load_card, caller
 sys.path.insert(0, str(ROOT / 'tools'))
 from fast_quality_rule import RULE, judge
 
@@ -35,7 +35,7 @@ def main():
     apple_fast(load_product=False)
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     subprocess.run(['git', 'diff', '--quiet', 'HEAD', '--'], cwd=ROOT, check=True)
-    card = json.loads((ROOT / 'experiments/performance_ideas' / args.idea / 'manifest.json').read_text())
+    card = load_card(args.idea)
     if card['status'].startswith('blocked_'):
         raise RuntimeError(card['blocker'])
     manifest = json.loads((args.arms / 'manifest.json').read_text())
@@ -87,7 +87,7 @@ def main():
         env = dict(os.environ, PYTHONPATH=str(package.parent), MOJOLEARN_NUMERIC_MODE='fast',
                    MOJOLEARN_VENDOR='apple', OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='1')
         output = args.output / (arm + '.json')
-        command = [sys.executable, str(ROOT / 'experiments/performance_ideas' / args.idea / card.get('variant_callers', {}).get(args.variant, 'caller.py')),
+        command = [sys.executable, str(caller(args.idea, card.get('variant_callers', {}).get(args.variant, 'caller.py'))),
                    '--arm', arm, '--variant', args.variant, '--output', str(output)]
         with (args.output / (arm + '.log')).open('x') as stream:
             result = subprocess.run(command, cwd=ROOT, env=env, stdout=stream, stderr=subprocess.STDOUT)

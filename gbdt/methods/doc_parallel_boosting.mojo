@@ -108,6 +108,7 @@ from gbdt.models.add_non_symmetric_tree_doc_parallel import (
     add_non_symmetric_trees_packed,
     compute_non_symmetric_bins_for_model,
 )
+from gbdt.options.catboost_options import querywise_pointwise_leaf_check
 from gbdt.options.catboost_options import (
     GROW_DEPTHWISE,
     GROW_LOSSGUIDE,
@@ -4305,16 +4306,9 @@ def fit_with_test(
     # the BOOTSTRAPPED search-stat leaves; routing it through the oracle
     # would silently change the algorithm. Keep that new combination
     # explicitly unavailable until those search leaves are carried through.
-    if use_pointwise_searcher and (is_querywise or is_pair_logit or is_yeti_rank):
-        if (
-            leaf_estimation_method != LEAF_ESTIMATION_NEWTON
-            and leaf_estimation_method != LEAF_ESTIMATION_GRADIENT
-        ):
-            raise Error(
-                "querywise use_pointwise_searcher requires Newton or Gradient"
-                " leaf estimation; Simple search-stat leaves and Exact are"
-                " not implemented on this arm"
-            )
+    querywise_pointwise_leaf_check(
+        use_pointwise_searcher, is_querywise or is_pair_logit or is_yeti_rank, leaf_estimation_method
+    )
     if not (is_querywise or is_pair_logit or is_yeti_rank) and (
         len(group_sizes) > 0 or len(pair_winners) > 0
     ):

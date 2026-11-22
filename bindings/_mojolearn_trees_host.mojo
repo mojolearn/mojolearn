@@ -50,11 +50,6 @@ is `extratrees/checks/pcg_rng.mojo::PCG_HOST_SABOTAGE`: one extra draw
 before every threshold, so every forest this binary fits differs.
 """
 from core.experiment_guards_trees import TREES_GUARDS_OK
-from core.weight_compact_host import (
-    host_gather_colmajor,
-    host_gather_f32,
-    host_nonzero_weight_rows,
-)
 from std.os import abort
 from std.python import Python, PythonObject
 from bindings.native_loaded_module_door import native_loaded_module
@@ -63,72 +58,45 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.forest_export_binding_unpack import (
-    ForestExportRegistry,
-    copy_forest_export_leaves,
     forest_export_py_list_f64,
     forest_export_py_list_i64,
-    validate_forest_export_destinations,
 )
 from bindings.forest_export_binding_pack import (
     forest_export_descriptor_py,
 )
-from core.mojolearn_forest_host_impl import forest_host_vote_into
-from core.mojolearn_rf_host_impl import rf_host_col_major
-from core.mojolearn_trees_host_impl import et_export_into, et_forest_lists
-from core.hostptr import f32_ptr, i32_ptr, read_f32
+from core.mojolearn_trees_host_impl import et_forest_lists
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.forest_host_predict import et_host_predict, et_host_trees
 from bindings.forest_host_strict_binding_pack import (
     forest_strict_prepare_host_binding, forest_strict_predict_host_binding, forest_strict_release_host_binding,
-    forest_strict_predict_host_native,
 )
-from core.forest_host_strict_run import forest_strict_prepare_host_native, forest_strict_release_host_native
 from bindings.forest_host_groves_binding_pack import (
     forest_predict_resident_host_binding,
     forest_prepare_host_binding,
     forest_release_host_binding,
 )
-from core.forest_host_groves_run import (
-    forest_prepare_host_native, forest_predict_resident_host_native, forest_release_host_native,
-)
 from bindings.forest_fit_boundary_unpack import forest_fit_args_py
-from core.forest_fit_request import ForestFitArgs, XF_CAP_STRICT, forest_export_verify_lists
+from core.entry_table import ENTRY_OP_GIL_FREE
 from core.extra_trees_member import extra_trees_member_publish_image
-from core.forest_entry import ForestImage, forest_entry_dispatch, forest_entry_publish
+from core.forest_entry import forest_entry_dispatch, forest_entry_publish, forest_host_entry_releases
 from core.forest_entry_table import FOREST_TABLE_ET
 from core.native_descriptor_abi import NativeDescriptorError
+from core.native_descriptor_call import native_descriptor_report
 from extratrees.checks.pcg_rng import PCG_HOST_SABOTAGE
-from extratrees.estimator import (
-    ExtraTreesConfig,
-    FitResult,
+from extratrees.estimator import FitResult
+# RUN (lane bm-trees, 2026-11-22): the fit, the export registry, the predict
+# walk and the image's entry operations are typed Mojo in core.
+from core.mojolearn_et_host_run import (
+    ET_HOST_EXPORTS,
+    EtHostForest,
+    et_host_export_into,
+    et_host_fit_handle,
+    et_host_predict_walk,
 )
-from extratrees.host_estimator import (
-    fit_extra_trees_classifier_host_exact,
-    fit_extra_trees_regressor_host_exact,
-)
-from extratrees.impl.decisiontree.decisiontree import (
-    CRITERION_ENTROPY,
-    CRITERION_GINI,
-    CRITERION_GAMMA,
-    CRITERION_INVERSE_GAUSSIAN,
-    CRITERION_MSE,
-    CRITERION_POISSON,
-)
-from core.shared_slot import SharedSlot
-
-
-comptime N_FIT_PARAMS = 22
-"""`bindings/_mojolearn_trees.mojo::N_FIT_PARAMS`, the same 22 slots in the
-same order (that docstring is the contract; slot 20 is `device`, 21 the
-criterion code)."""
-
-# V2 (lane fx-gil, 2026-11-25): the registry gained its lock word.
-comptime ET_HOST_EXPORTS = SharedSlot[ForestExportRegistry[FitResult], "MojolearnETFitExportHostV4", 3]
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -193,45 +161,6 @@ def trees_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
 
-def _config_from(
-    params: ForestFitArgs, base: ExtraTreesConfig
-) raises -> ExtraTreesConfig:
-    """`bindings/_mojolearn_trees.mojo::_config_from`, the same slots written
-    OVER `base` in the same order (DEVIATION 458's lesson: every slot
-    overwrites its field after the base is taken)."""
-    var config = base.copy()
-    config.n_estimators = Int32(params.i(3))
-    config.max_depth = Int32(params.i(4))
-    config.min_samples_split = Int32(params.i(5))
-    config.min_samples_leaf = Int32(params.i(6))
-    config.min_weight_fraction_leaf = params.f(7)
-    config.max_features_spec = params.i(8)
-    config.max_features_fraction = params.f(9)
-    config.min_impurity_decrease = Float32(params.f(10))
-    config.bootstrap = params.i(11) != 0
-    config.oob_score = params.i(12) != 0
-    config.random_state = UInt64(params.i(13))
-    config.warm_start = params.i(14) != 0
-    config.ccp_alpha = params.f(15)
-    config.has_class_weight = params.i(16) != 0
-    config.has_monotonic_cst = params.i(17) != 0
-    config.max_samples = params.i(18)
-    config.max_leaf_nodes = Int32(params.i(19))
-    config.criterion = Int32(params.i(21))
-    return config^
-
-
-def _read_x_col_major(
-    x_addr: Int, n_rows: Int, n_features: Int, row_major: Bool
-) raises -> List[Float32]:
-    """The design as the trainer reads it, COLUMN-major. A ROW-major X (the
-    `_rowmajor` entries, DEVIATION 2637) is transposed here on the host:
-    the same bytes the GPU binding's pinned stage holds, moved and folded
-    through nothing."""
-    var flat = read_f32(x_addr, n_rows * n_features)
-    return rf_host_col_major(flat^, n_rows, n_features, row_major)
-
-
 def _forest_out(result: FitResult) raises -> PythonObject:
     """`bindings/_mojolearn_trees.mojo::_forest_out`, the same six lists."""
     var offsets = List[Int64]()
@@ -256,136 +185,6 @@ def _forest_out(result: FitResult) raises -> PythonObject:
     out.append(meta)
     return out
 
-
-def _retain_et_handle(var result: FitResult) raises -> Int:
-    """`bindings/_mojolearn_trees.mojo::_retain_et_export`: the fitted
-    forest kept under a handle until `forest_export_release`."""
-    var trees = len(result.forest.trees)
-    var nodes = 0
-    for tree in result.forest.trees:  # driver-loop: over fitted trees, one node count each (export shape bookkeeping)
-        nodes += tree.num_nodes()
-        if len(tree.vector_leaf) != tree.num_nodes() * Int(result.forest.num_outputs):
-            raise Error("fitted ET leaf storage differs from export dimensions")
-    var meta: List[Int64] = [
-        Int64(result.forest.n_trees),
-        Int64(result.forest.num_outputs),
-        Int64(1 if result.depth_cap_bound else 0),
-        Int64(result.plan.params.max_depth),
-        Int64(result.plan.max_features_count),
-        Int64(result.plan.n_sampled_rows),
-    ]
-    var outputs = Int(result.forest.num_outputs)
-    if trees != Int(result.forest.n_trees):
-        raise Error("fitted ET tree metadata differs from export dimensions")
-    return ET_HOST_EXPORTS.get_or_create_ptr()[].insert_native(
-        result^, trees, nodes, outputs, meta^
-    )
-
-
-def et_legacy_meta(result: FitResult) -> List[Int64]:
-    """The six metadata words `_forest_out` reports (and the export keeps)."""
-    var meta: List[Int64] = [Int64(result.forest.n_trees), Int64(result.forest.num_outputs),
-        Int64(1 if result.depth_cap_bound else 0), Int64(result.plan.params.max_depth),
-        Int64(result.plan.max_features_count), Int64(result.plan.n_sampled_rows)]
-    return meta^
-
-
-def _et_fit_result[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> FitResult:
-    """`_et_classifier_fit` / `_et_regressor_fit` of the GPU binding: the
-    same slot checks in the same words, then the host fit. `tree_start` is
-    the GPU binding's global tree ID offset (the shard fits below). Returns
-    the export handle (lane calltable-forest)."""
-    var tree_start = params.tree_start
-    var weights_addr = params.weights
-    comptime entry = "et_classifier_fit" if CLASSIFIER else "et_regressor_fit"
-    if len(params) != N_FIT_PARAMS:
-        raise Error(
-            entry + ": params must hold "
-            + String(N_FIT_PARAMS)
-            + " values, got "
-            + String(len(params))
-        )
-    var n_rows = params.i(0)
-    var n_features = params.i(1)
-    var n_classes = params.i(2)
-    comptime if not CLASSIFIER:
-        if n_classes != 0:
-            raise Error("et_regressor_fit: n_classes (slot 2) must be 0")
-    if params.f(20) != Float64(1):
-        raise Error(
-            entry + ": device (slot 20) must be 1, the value the wrapper"
-            " sends; the host binding fits the same forest the GPU fits"
-        )
-    var config: ExtraTreesConfig
-    comptime if CLASSIFIER:
-        config = _config_from(params, ExtraTreesConfig())
-        if config.criterion != CRITERION_GINI and config.criterion != CRITERION_ENTROPY:
-            raise Error(
-                "et_classifier_fit: criterion (slot 21) must be GINI (0) or"
-                " ENTROPY (1); got " + String(config.criterion)
-            )
-    else:
-        config = _config_from(params, ExtraTreesConfig().for_regression())
-        if config.criterion != CRITERION_MSE and config.criterion != CRITERION_POISSON and (
-        config.criterion != CRITERION_GAMMA and config.criterion != CRITERION_INVERSE_GAUSSIAN
-    ):
-            raise Error(
-                "et_regressor_fit: criterion (slot 21) must be MSE (2), POISSON (4), GAMMA (5) or INVERSE_GAUSSIAN (6); got "
-                + String(config.criterion)
-            )
-    if n_rows < 1 or n_features < 1:
-        raise Error(entry + ": n_rows and n_features must be >= 1")
-    var x_address = params.x
-    var y_address = params.y
-    var result: FitResult
-    var x = _read_x_col_major(x_address, n_rows, n_features, ROWMAJOR)
-    var y = read_f32(y_address, n_rows)
-    # lane sk-kernels / sk-final: the per-row weights (0: none)
-    var w = List[Float32]()
-    if weights_addr != 0:
-        w = read_f32(weights_addr, n_rows)
-    # lane sk-weq-trees: without bootstrap the zero-weight rows leave
-    # the fit, the device's `DeviceDataset.drop_zero_weight_rows` (same
-    # rows, same ascending order); the plan then sees the kept count, as
-    # the device fit's does (`device_count_nonzero_weights`)
-    var n_fit = n_rows
-    if len(w) > 0 and not config.bootstrap:
-        var rows = host_nonzero_weight_rows(w)
-        if len(rows) > 0 and len(rows) < n_rows:
-            x = host_gather_colmajor(x, n_rows, n_features, rows)
-            y = host_gather_f32(y, rows)
-            w = host_gather_f32(w, rows)
-            n_fit = len(rows)
-    comptime if CLASSIFIER:
-        result = fit_extra_trees_classifier_host_exact(
-            x, y, Int32(n_fit), Int32(n_features), Int32(n_classes), config,
-            tree_start, w^,
-        )
-    else:
-        result = fit_extra_trees_regressor_host_exact(
-            x, y, Int32(n_fit), Int32(n_features), config, tree_start,
-            w^,
-        )
-    return result^
-
-
-def _et_fit[CLASSIFIER: Bool, ROWMAJOR: Bool](params: ForestFitArgs) raises -> Int:
-    """`_et_fit_result` kept in ET_HOST_EXPORTS: the export handle. A door
-    holds the GIL, released here around the whole fit (its slot checks
-    included: they read plain words and raise in words); a member's worker
-    holds none (`params.gil_free`, core/forest_entry.mojo) and runs it bare."""
-    var result: FitResult
-    if params.gil_free:
-        result = _et_fit_result[CLASSIFIER, ROWMAJOR](params)
-    else:
-        with GILReleased(Python()):
-            result = _et_fit_result[CLASSIFIER, ROWMAJOR](params)
-    return _retain_et_handle(result^)
-
-
-def _et_fit_native[CLASSIFIER: Bool, ROWMAJOR: Bool](args: ForestFitArgs) raises -> Int:
-    """One fit (the forest entry's XF_FIT): the export handle."""
-    return _et_fit[CLASSIFIER, ROWMAJOR](args)
 
 
 def _kept_forest_out(handle: Int) raises -> PythonObject:
@@ -438,7 +237,13 @@ def _et_fit_py[CLASSIFIER: Bool, ROWMAJOR: Bool](
     var args = forest_fit_args_py(x_addr, y_addr, params, PythonObject(None))
     args.weights = weights
     args.tree_start = tree_start
-    return _et_handle_py(_et_fit_native[CLASSIFIER, ROWMAJOR](args), export)
+    # The GIL released around the whole fit (its slot checks included: they
+    # read plain words and raise in words) and the retain (its registry has
+    # its own lock word, core/forest_export_run.mojo).
+    var handle = 0
+    with GILReleased(Python()):
+        handle = et_host_fit_handle[CLASSIFIER, ROWMAJOR](args)
+    return _et_handle_py(handle, export)
 
 
 def et_classifier_fit_binding[EXPORT: Bool = False](
@@ -453,66 +258,6 @@ def et_regressor_fit_binding[EXPORT: Bool = False](
     return _et_fit_py[False, False](x_addr, y_addr, params, EXPORT)
 
 
-def _et_export_into_native(id: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
-    """XF_EXPORT_INTO: the retained forest into the caller's five arrays."""
-    var registry = ET_HOST_EXPORTS.get_or_create_ptr()
-    registry[].validate(id, trees, nodes, outputs)
-    validate_forest_export_destinations(dst[0], dst[1], dst[2], dst[3], dst[4])
-    var op = i32_ptr(dst[0])
-    var cp = i32_ptr(dst[1])
-    var tp = f32_ptr(dst[2])
-    var lp = i32_ptr(dst[3])
-    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
-    # no lock held and put back on every path.
-    var entry = registry[].take(id)
-    var failed = False
-    var words = String("")
-    try:
-        et_export_into(entry.model, op, cp, tp, lp, dst[4], entry.outputs)
-    except problem:
-        failed = True
-        words = String(problem)
-    registry[].put_back(id, entry^)
-    if failed:
-        raise Error(words)
-
-
-def _et_export_verify_native(id: Int, dst: List[Int]) raises -> Int:
-    """XF_EXPORT_VERIFY (MOJOLEARN_FOREST_EXPORT=verify): the diagnostic
-    lists `forest_export_legacy` returns, against the exported arrays."""
-    var registry = ET_HOST_EXPORTS.get_or_create_ptr()
-    # THE LOCK (core/forest_export_run.mojo): the entry is taken out, read with
-    # no lock held and put back on every path.
-    var entry = registry[].take(id)
-    var offsets = List[Int64]()
-    var colid = List[Int64]()
-    var quesval = List[Float64]()
-    var left_child = List[Int64]()
-    var leaves = List[Float64]()
-    var same = True
-    var failed = False
-    var words = String("")
-    try:
-        var legacy = et_legacy_meta(entry.model)
-        if len(legacy) != len(entry.meta):
-            same = False
-        else:
-            for k in range(len(legacy)):  # small-loop(meta: six export metadata words)
-                if legacy[k] != entry.meta[k]:
-                    same = False
-        if same:
-            et_forest_lists(entry.model, offsets, colid, quesval, left_child, leaves)
-    except problem:
-        failed = True
-        words = String(problem)
-    registry[].put_back(id, entry^)
-    if failed:
-        raise Error(words)
-    if not same:
-        return -1
-    return forest_export_verify_lists(offsets, colid, quesval, left_child, leaves, dst)
-
-
 def et_forest_export_binding(
     handle: PythonObject,
     offsets: PythonObject,
@@ -522,11 +267,11 @@ def et_forest_export_binding(
     leaves: PythonObject,
     counts: PythonObject,
 ) raises -> PythonObject:
-    """`forest_export` (UNPACK of `_et_export_into_native`)."""
+    """`forest_export` (UNPACK of `et_host_export_into`)."""
     if len(counts) != 3:
         raise Error("forest_export requires trees, nodes, outputs capacities")
     var dst: List[Int] = [_index(offsets), _index(columns), _index(thresholds), _index(left), _index(leaves)]
-    _et_export_into_native(_index(handle), dst, _index(counts[0]), _index(counts[1]), _index(counts[2]))
+    et_host_export_into(_index(handle), dst, _index(counts[0]), _index(counts[1]), _index(counts[2]))
     return PythonObject(None)
 
 
@@ -539,46 +284,14 @@ def et_forest_export_release_binding(handle: PythonObject) raises -> PythonObjec
     return PythonObject(None)
 
 
-def _et_predict_walk(model: List[Int], x_address: Int, out_addr: Int, n_rows: Int, n_features: Int,
-                      n_trees: Int, num_outputs: Int) raises -> Int:
-    """`et_predict`'s contract (XF_PREDICT): the forest's averaged vote per
-    row of a ROW-major `x`, `out` is `n_rows * num_outputs` float32; returns
-    rows written. The walk is `core/forest_host_predict.mojo`'s, which
-    rebuilds the trees from the five arrays and refuses a malformed node
-    instead of reading past it."""
-    if n_trees < 1 or num_outputs < 1:
-        raise Error("et_predict: n_trees and num_outputs must be >= 1")
-    if n_rows < 0 or n_features < 1:
-        raise Error("et_predict: n_rows must be >= 0 and n_features >= 1")
-    var offsets_p = i32_ptr(model[0])
-    var colid_p = i32_ptr(model[1])
-    var quesval_p = f32_ptr(model[2])
-    var left_p = i32_ptr(model[3])
-    var leaves_p = f32_ptr(model[4])
-    var op = f32_ptr(out_addr)
-    var n_nodes = Int(offsets_p[n_trees])
-    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
-        raise Error("et_predict: tree_offsets must start at 0 and hold at least one node per tree")
-    if n_rows == 0:
-        return 0
-    var rows = read_f32(x_address, n_rows * n_features)
-    forest_host_vote_into(
-        False, rows, offsets_p, colid_p, quesval_p, left_p,
-        leaves_p, op, n_rows, n_features, n_trees, num_outputs, n_nodes,
-    )
-    return n_rows
-
-
 def et_predict_native(model: List[Int], x_address: Int, out_addr: Int, n_rows: Int, n_features: Int,
-                      n_trees: Int, num_outputs: Int, free: Bool = False) raises -> Int:
-    """`_et_predict_walk` for a caller that holds the GIL (released around
-    the whole walk, its checks included: they read plain words) or, with
-    `free`, for a member's worker that holds none (core/forest_entry.mojo)."""
-    if free:
-        return _et_predict_walk(model, x_address, out_addr, n_rows, n_features, n_trees, num_outputs)
+                      n_trees: Int, num_outputs: Int) raises -> Int:
+    """`et_host_predict_walk` (core) for the Python entry, which holds the
+    GIL: released around the whole walk, its checks included (they read
+    plain words)."""
     var written = 0
     with GILReleased(Python()):
-        written = _et_predict_walk(model, x_address, out_addr, n_rows, n_features, n_trees, num_outputs)
+        written = et_host_predict_walk(model, x_address, out_addr, n_rows, n_features, n_trees, num_outputs)
     return written
 
 
@@ -631,112 +344,35 @@ def resident_release_binding(handle: PythonObject) raises -> PythonObject:
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_trees_host.mojo
-# (the per-binding build) and in the merged roots tools/merged_bindings.py
-# writes from bindings/merged_groups.json (one shared file per directory set).
-struct EtHostForest(ForestImage):
-    """This image's forest entry operations (core/forest_entry.mojo; lane
-    calltable-forest). The host column scans X itself, keeps its trees in
-    the strict snapshot and has no ordered resident word or resident
-    labels."""
-
-    @staticmethod
-    def caps() -> Int:
-        return XF_CAP_STRICT
-
-    @staticmethod
-    def dt_default_bins() -> Int:
-        return 128
-
-    @staticmethod
-    def fit(classifier: Bool, row_major: Bool, args: ForestFitArgs) raises -> Int:
-        if classifier:
-            if row_major:
-                return _et_fit[True, True](args)
-            return _et_fit[True, False](args)
-        if row_major:
-            return _et_fit[False, True](args)
-        return _et_fit[False, False](args)
-
-    @staticmethod
-    def fit_dart(args: ForestFitArgs) raises -> Int:
-        raise Error("RuntimeError: the extra-trees binding has no DART member fit")
-
-    @staticmethod
-    def export_sizes(handle: Int, out_addr: Int) raises:
-        ET_HOST_EXPORTS.get_or_create_ptr()[].sizes_into(handle, out_addr)
-
-    @staticmethod
-    def export_into(handle: Int, dst: List[Int], trees: Int, nodes: Int, outputs: Int) raises:
-        _et_export_into_native(handle, dst, trees, nodes, outputs)
-
-    @staticmethod
-    def export_verify(handle: Int, dst: List[Int]) raises -> Int:
-        return _et_export_verify_native(handle, dst)
-
-    @staticmethod
-    def export_release(handle: Int) raises:
-        ET_HOST_EXPORTS.get_or_create_ptr()[].release(handle)
-
-    @staticmethod
-    def predict(model: List[Int], x: Int, out_addr: Int, rows: Int, cols: Int, trees: Int, outputs: Int,
-                regression: Bool, free: Bool) raises -> Int:
-        return et_predict_native(model, x, out_addr, rows, cols, trees, outputs, free)
-
-    @staticmethod
-    def resident_prepare(model: List[Int], features: Int, trees: Int, outputs: Int, ordered: Int) raises -> Int:
-        return forest_prepare_host_native[False](model, features, trees, outputs, ordered)
-
-    @staticmethod
-    def resident_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
-        return forest_predict_resident_host_native[False](handle, x, out_addr, rows, cols, outputs)
-
-    @staticmethod
-    def resident_labels(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int) raises -> Int:
-        raise Error("RuntimeError: this forest binding has no resident label prediction")
-
-    @staticmethod
-    def resident_release(handle: Int) raises:
-        forest_release_host_native[False](handle)
-
-    @staticmethod
-    def strict_prepare(model: List[Int], features: Int, trees: Int, outputs: Int) raises -> Int:
-        return forest_strict_prepare_host_native[False](model, features, trees, outputs)
-
-    @staticmethod
-    def strict_predict(handle: Int, x: Int, out_addr: Int, rows: Int, cols: Int, outputs: Int,
-                       free: Bool) raises -> Int:
-        return forest_strict_predict_host_native[False](handle, x, out_addr, rows, cols, outputs, free)
-
-    @staticmethod
-    def strict_release(handle: Int) raises:
-        forest_strict_release_host_native[False](handle)
-
-    @staticmethod
-    def session_open(x: Int, rows: Int, cols: Int, row_major: Bool, share_tables: Bool) raises -> Int:
-        raise Error("RuntimeError: the extra-trees host binding has no forest data session")
-
-    @staticmethod
-    def session_close(handle: Int) raises:
-        raise Error("RuntimeError: the extra-trees host binding has no forest data session")
-
-    @staticmethod
-    def fit_session(classifier: Bool, args: ForestFitArgs) raises -> Int:
-        raise Error("RuntimeError: the extra-trees host binding has no forest data session")
-
-    @staticmethod
-    def ada_open(handle: Int, w: Int, y: Int, cw: Int, n: Int, k: Int) raises:
-        raise Error("RuntimeError: the extra-trees host binding has no AdaBoost device rounds")
-
-    @staticmethod
-    def fit_ada_round(classifier: Bool, args: ForestFitArgs) raises -> Int:
-        raise Error("RuntimeError: the extra-trees host binding has no AdaBoost device rounds")
 
 
 def et_host_forest_entry_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,
     ff: Int, nf: Int, result: Int, context: Int, sink: NativeDescriptorError) abi("C") -> Int:
-    """This image's published forest entry (core/forest_entry_table.mojo)."""
-    return forest_entry_dispatch[EtHostForest](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    """This image's published forest entry (core/forest_entry_table.mojo).
 
+    ONE BODY, TWO ENTRIES (lane bm-trees, 2026-11-22; the gbdt host image's
+    pattern): the operations of `EtHostForest` (core/mojolearn_et_host_run.mojo)
+    never touch the GIL; a door's long operation (`forest_host_entry_releases`:
+    the fit, the predict walk, the strict predict) runs with it released
+    around the whole dispatch and the GIL-free bit set; a member's worker
+    sends `ENTRY_OP_GIL_FREE` and runs the same dispatch with no release."""
+    if not forest_host_entry_releases(operation):
+        return forest_entry_dispatch[EtHostForest](operation, aa, na, pp, np, ff, nf, result, context, sink)
+    var status = 1
+    try:
+        with GILReleased(Python()):
+            status = forest_entry_dispatch[EtHostForest](
+                operation + ENTRY_OP_GIL_FREE, aa, na, pp, np, ff, nf, result, context, sink
+            )
+    except problem:
+        native_descriptor_report(problem, context, sink)
+        return 1
+    return status
+
+
+# The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_trees_host.mojo
+# (the per-binding build) and in the merged roots tools/merged_bindings.py
+# writes from bindings/merged_groups.json (one shared file per directory set).
 
 def build__mojolearn_trees_host() -> PythonObject:
     comptime assert TREES_GUARDS_OK, "invalid integrated experiment configuration (trees guards)"

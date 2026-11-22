@@ -72,7 +72,7 @@ from bindings.logistic_admission_unpack import logistic_storage, logistic_fields
 from bindings.logistic_admission_pack import logistic_initialize, logistic_get_params, logistic_set_params
 from bindings.prep_lda_admission_door import lda_native_context, lda_native_labels
 from bindings.classifier_public_lifecycle_door import classifier_after_fit, classifier_label_list
-from bindings.scaler_lifecycle_native_door import _public_result
+from bindings.scaler_lifecycle_native_door import _public_result, _predict_result
 from bindings.classical_labels_door import _flatten_labels
 from bindings.labels_descriptor_boundary_door import labels_scope
 from bindings.classical_arrays_door import classical_address
@@ -722,7 +722,8 @@ def logistic_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             finally:
                 _ = query^
         _ = routed.owner  # the route's image pins live until the operation's result is packed
-        result = _public_result(result, context)
+        # predict: one result for every caller (lane predict-dtype, 2026-11-22).
+        result = _predict_result(result, context) if operation == LOGISTIC_OPN_PREDICT else _public_result(result, context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:

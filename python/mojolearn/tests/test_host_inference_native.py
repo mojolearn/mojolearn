@@ -154,7 +154,8 @@ def test_internal_array_and_external_numpy_result_contract(tmp_path, name):
     assert type(internal) is np.ndarray
     assert type(external) is np.ndarray
     assert _state(internal) == _state(external)
-    assert external.dtype == (np.dtype("int32") if name == "KMeans" else np.dtype("float64"))
+    # predict: the kernel's dtype for every caller (lane predict-dtype, 2026-11-22).
+    assert external.dtype == (np.dtype("int32") if name == "KMeans" else np.dtype("float32"))
 
 
 @pytest.mark.parametrize("name", NAMES)

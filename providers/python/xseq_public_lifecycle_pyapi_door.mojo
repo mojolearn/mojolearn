@@ -21,9 +21,8 @@ from bindings.classical_labels_door import labels_shape_of
 from bindings.classical_warnings_unpack import classical_warn_column
 from bindings.prep_lda_admission_door import lda_native_labels
 from bindings.classifier_public_lifecycle_door import classifier_label_list
-from bindings.sequential_arrays_door import sequential_array, sequential_address
-from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside, estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
-from core.classical_ridge_impl import classical_widen_f32_f64
+from bindings.sequential_arrays_door import sequential_address
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_feature_check, estimator_fit_begin, estimator_fit_end, estimator_fit_complete
 from core.host_inference_impl import host_inference_nd_finite
 from bindings.py_model_records import (
     RECORDS_PREPARED, ContentRecord, content_value, records_drop, records_stampable, records_stamped_get,
@@ -266,7 +265,6 @@ struct XseqPublicLifecycle(Movable):
     var fitting: Bool
     var classifier: Bool
     var nested: Bool
-    var outside: Bool
     var name: String
     var method: String
     var shape: List[Int]
@@ -292,7 +290,6 @@ struct XseqPublicLifecycle(Movable):
         self.lifecycle = py_item(context, nk[].k_xseq_lifecycle_context)
         self.fitting = fitting
         self.method = _xseq_method(operation, name, fitting)
-        self.outside = estimator_outside()
         self.name = classical_estimator_name(model)
         self.shape = List[Int]()
         var b = native_loaded_module("builtins")
@@ -390,12 +387,7 @@ struct XseqPublicLifecycle(Movable):
             else:
                 estimator_fit_complete(model, self.source, self.classifier, self.lifecycle)
             return result
-        if self.outside and self.method == "predict" and not self.classifier:
-            # The former public-output wrapper widens external regression
-            # predictions exactly. Internal score/identity calls retain f32.
-            if py_type(result) is py_item(context, nk[].k_ndarray) and String(py=result.dtype.kind) == "f" and Int(py=result.itemsize) == 4:
-                var wide = sequential_array(result.shape, py_item(context, nk[].k_float64), context)
-                classical_widen_f32_f64(Int(py=sequential_address(result)), Int(py=sequential_address(wide)), Int(py=result.size))
-                _ = result
-                return wide
+        # predict has one result for every caller (Andrew, 2026-11-22, lane
+        # predict-dtype): the network's float32 values, with no caller test
+        # and no float64 widening pass into a second buffer.
         return result

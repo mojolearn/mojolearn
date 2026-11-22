@@ -35,7 +35,7 @@ from bindings.host_inference_state_unpack import host_inference_state
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.classical_arrays_door import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
 from bindings.host_array_native_pack import host_archive_typed
-from bindings.host_tree_native_door import host_tree_input, host_tree_scalar, host_tree_wide
+from bindings.host_tree_native_door import host_tree_input, host_tree_scalar
 from core.host_tree_impl import host_tree_column_copy
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite
 from bindings.py_optional import py_present
@@ -79,7 +79,12 @@ def host_inference_entry(name: String, context: PythonObject) raises -> PythonOb
     return entry
 
 
-def host_inference_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject, error_context: PythonObject, public: Bool) raises -> PythonObject:
+def host_inference_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject, error_context: PythonObject, caller_outside: Bool) raises -> PythonObject:
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the twin's kernel dtype (the estimator's) as a NumPy
+    # view, with no caller test and no float64 widening. The other public
+    # results keep the caller test.
+    var public = caller_outside or operation == "host_infer_predict"
     var nk = host_rest_keys()
     var state = host_inference_state(model, context)
     var fields = state[0]
@@ -193,7 +198,7 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         _ = column^
         _ = coef^
         _ = x^
-        return classical_input(host_tree_wide(out, context), context, "prediction") if public and py_get(context, nk[].k_ndarray) is not None else out
+        return classical_input(out, context, "prediction") if public and py_get(context, nk[].k_ndarray) is not None else out
     var centers = host_tree_input(py_item(fields, nk[].k_cluster_centers_), context)
     if features != Int(py=centers.shape[1]):
         raise Error("X feature count differs from the fitted centers")

@@ -14,6 +14,18 @@ import time
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / 'tools'))
+CALLERS = Path(__file__).resolve().parent / 'callers'
+
+
+def card(idea):
+    """The F-card manifest from this directory's cards.json (its former file is the address)."""
+    import apple_fast_cards
+    return apple_fast_cards.document(f'experiments/performance_ideas/{idea}/manifest.json', ROOT)
+
+
+def caller(idea, name='caller.py'):
+    """An F card's caller script: callers/<idea>_<name> (formerly experiments/performance_ideas/<idea>/<name>)."""
+    return CALLERS / f'{idea}_{name}'
 
 
 def apple_fast(load_product=True):

@@ -229,6 +229,26 @@ currently does. "Protected" forbids leaving verify broken, weakened or unable to
 reason to hold the product back. The verify smoke (`tools/ops/wheel_verify_smoke.sh`) is how a change shows verify
 still works.
 
+### One body per operation (Andrew, 2026-11-22)
+
+The math of an operation is written ONCE, as an `@always_inline` function, and every form of that operation calls
+it: the standalone layer's kernel, any fused kernel that contains the operation, the host (CPU) column and the
+device kernel. A fused kernel keeps its own loop, tiling, launch and buffers and calls the bodies in sequence; it
+does not carry its own copy of the math. New code is written this way from the start; a second copy of an
+operation's math, on any column or in any kernel, is a defect.
+
+- Why: two copies drift. On 2026-11-22 the CPU GBDT loop still had a fused multiply-add where the device used a
+  rounded multiply then add; CPU and GPU models differed and no check caught it.
+- Existing duplicates are converted kernel by kernel (`docs/plans/CLEANUP_LATER_2026-11-25.md` section 8), each
+  decided at once: BITS on the CPU box in minutes (outputs and gradients hashed before and after, same seed; one
+  differing bit means revert that kernel and write down why), then SPEED on the measurement box the same day (that
+  kernel before and after, quality = outputs equal; slower means revert).
+- The exception, recorded beside the kernel: a fused kernel that is fast because it does the steps DIFFERENTLY (a
+  reduction shared across steps, another summation order, a scan specialised across operations) keeps its own
+  math, with a comment saying which body it departs from and why, and a check comparing it with the shared body's
+  result to the stated tolerance or bits.
+- A body takes typed values and has no launch, allocation or Python in it, so it inlines into every caller.
+
 ### No refactor adds cost on a hot path (Andrew, 2026-11-11)
 
 A change that removes a Python crossing, a copy, a lookup or a layer is judged on the whole path it touches, never
@@ -241,21 +261,26 @@ change carries this rule and the lane's report lists, per converted site, the lo
 did there. An orchestrator audits every wave against these patterns before the integration compile and fixes what it
 finds in the same round; a wave without that audit does not merge.
 
-### A measured winner is never deleted on reasoning (Andrew, 2026-11-09)
+### When a removal needs a measurement, and when it does not (Andrew, 2026-11-22; replaces "A measured winner is never deleted on reasoning", 2026-11-09)
 
-- Code that won a measurement (a hand-tuned kernel, a fused path, a switch whose
-  A/B it won) is deleted only after a measurement on NVIDIA and AMD shows its
-  replacement is at least as fast with quality equal. "The new path subsumes it"
-  is a claim to measure, never a reason to delete.
-- A refactor that moves a family onto a shared runtime keeps the tuned kernel as
-  an op of that runtime (one runtime path, tuned kernels inside it). It does not
-  replace the kernel with the generic op.
-- Hand-tuned kernels are not touched by a refactor. What a refactor may change
-  is the plumbing around them: per-call weight uploads, per-token doors, host
-  reads per iteration, duplicate forwards for train and predict.
-- Until the measurement exists, the old code stays behind its switch, default
-  unchanged. This narrows "remove what a change made unnecessary": unnecessary
-  means measured, not argued.
+Measure when speed or quality could actually change. Do not measure to remove duplication of form.
+
+- NO measurement is needed to remove or merge: a second public class, trainer, wrapper, session or inference twin
+  that runs the SAME kernels as the one that stays; an older API form of the same computation; plumbing around
+  kernels (per-call uploads, per-token doors, host reads per iteration, duplicate forwards for train and predict);
+  dead code; a switch nobody builds with. The evidence is that the kept path calls the same kernels and the same
+  tests pass with the same outputs; say that in the report.
+- A measurement IS needed only when the change replaces the code that does the work on a hot path with different
+  code: a hand-tuned or fused kernel swapped for a generic one, a different algorithm, a different fold order or
+  precision. Then the replacement is timed against what it replaces on the measurement box, with quality beside the
+  time ("What a win is"), before the old kernel goes. One measurement of the affected rows; not a campaign.
+- A refactor that moves a family onto a shared runtime keeps its tuned kernels as ops of that runtime; it does not
+  replace them with the generic op. Hand-tuned kernels are not edited by a refactor.
+- Removing a whole capability (an architecture, an estimator, a mode users can ask for) is not a measurement
+  question at all: it is a product decision, and Andrew makes it. Bring him what would be lost and what it costs to
+  keep; never decide it by timing and never by cleanup.
+- The release's timing against the paper baseline is where an unexpected slowdown from any refactor is caught; a
+  refactor that could not have changed the kernels does not wait for it.
 
 ## 3. Measurement
 

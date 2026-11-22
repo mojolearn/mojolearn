@@ -177,9 +177,10 @@ def family_lifecycle_finish(model: PythonObject, spec: FamilyLifecycle, result: 
         var fields = _fields(model)
         if not py_contains(fields, "n_features_in_") and call.columns >= 0:
             py_setitem(fields, "n_features_in_", PythonObject(call.columns))
-    if call.outside and result is not model and call.method != "score":
-        # A regressor's predict is float64 alongside NumPy (scikit-learn's
-        # dtype); an outlier detector's scores are float64 for every caller.
-        var widen = spec.widen and (call.method != "predict" or py_get(context, "ndarray") is not None)
-        return _public_result(result, widen, context)
+    # predict has one result for every caller (Andrew, 2026-11-22, lane
+    # predict-dtype): the kernel's float32 values (or labels) as a NumPy view,
+    # with no caller test and no float64 widening pass into a second buffer.
+    # An outlier detector's scores keep the caller test and their widening.
+    if (call.outside or call.method == "predict") and result is not model and call.method != "score":
+        return _public_result(result, spec.widen, context)
     return result

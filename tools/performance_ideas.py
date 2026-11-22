@@ -31,6 +31,7 @@ _TOOLS = str(Path(__file__).resolve().parent)
 if _TOOLS not in sys.path:
     sys.path.insert(0, _TOOLS)
 from apple_fast_tree_integration import TREE_IDS, manifests as tree_manifests, manifest_path as tree_manifest_path
+import apple_fast_cards
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -70,7 +71,20 @@ def mode_for(idea: str) -> str:
     return "fast" if idea.startswith(("F", "AFCL-", "AFT_")) else "identical"
 
 
-def digest(path: Path) -> str:
+def card_path(path: Path, root: Path = ROOT) -> str | None:
+    """The former card file path a table now holds (tools/apple_fast_cards.py), else None."""
+    try:
+        relative = str(Path(path).resolve().relative_to(Path(root).resolve()))
+    except ValueError:
+        return None
+    return relative if apple_fast_cards.is_card_path(relative, root) else None
+
+
+def digest(path: Path, root: Path = ROOT) -> str:
+    # A card's digest is its rebuilt document's canonical JSON; any other file hashes its bytes.
+    relative = card_path(path, root)
+    if relative is not None:
+        return apple_fast_cards.digest(relative, root)
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -102,7 +116,8 @@ def afcl_configuration(record: dict[str, Any], root: Path) -> dict[str, Any]:
     if record.get("id") not in AFCL_EXPECTED or not isinstance(registration, str):
         raise ExperimentError("Invalid Apple FAST classical registration")
     try:
-        lane = json.loads(inside(root, registration).read_text())
+        inside(root, registration)
+        lane = apple_fast_cards.read_json(registration, root)
         matches = [entry for entry in lane["entries"] if entry["id"] == record["id"]]
         if len(matches) != 1:
             raise ExperimentError(f"{record['id']}: expected one authoritative lane entry")
@@ -127,6 +142,8 @@ def afcl_configuration(record: dict[str, Any], root: Path) -> dict[str, Any]:
 
 
 def read_manifest(path: Path, root: Path = ROOT, *, document: dict | None = None) -> dict[str, Any]:
+    if document is None and card_path(path, root) is not None:
+        document = apple_fast_cards.document(card_path(path, root), root)
     try:
         record = json.loads(path.read_text()) if document is None else document
     except (OSError, json.JSONDecodeError) as exc:
@@ -188,7 +205,8 @@ def read_manifest(path: Path, root: Path = ROOT, *, document: dict | None = None
             raise ExperimentError(f"{idea}: {key} must be boolean")
     if record.get("afcl_registration"):
         for name in require_string_list(record.get("recipe_sources"), f"{idea}.recipe_sources", allow_empty=False):
-            if not inside(root, name).is_file():
+            inside(root, name)
+            if not apple_fast_cards.exists(name, root):
                 raise ExperimentError(f"{idea}: missing linked recipe source: {name}")
     if record.get("output_kind", "file") not in {"file", "directory"}:
         raise ExperimentError(f"{idea}: invalid output_kind")
@@ -200,9 +218,9 @@ def read_manifest(path: Path, root: Path = ROOT, *, document: dict | None = None
 def recipe_digest(path: Path, record: dict[str, Any], root: Path = ROOT) -> str:
     """Bind quality to resolved AFCL recipes, not just their registration stub."""
     if not record.get("afcl_registration"):
-        return digest(path)
-    linked = {name: digest(inside(root, name)) for name in record.get("recipe_sources", [])}
-    payload = {"registration_sha256": digest(path), "record": record, "recipe_sources": linked}
+        return digest(path, root)
+    linked = {name: digest(inside(root, name), root) for name in record.get("recipe_sources", [])}
+    payload = {"registration_sha256": digest(path, root), "record": record, "recipe_sources": linked}
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -211,6 +229,11 @@ def catalog(root: Path = ROOT) -> tuple[dict[str, dict[str, Any]], list[str]]:
     problems: list[str] = []
     paths = list((root / "experiments/performance_ideas").glob("*/manifest.json"))
     paths += list((root / "experiments/classical_identical_ideas").glob("*/manifest.json"))
+    # The Apple fast F01-F20 and AFCL manifests live in their family tables; their former
+    # paths stay their addresses.
+    for family in ("perf", "classical"):
+        if apple_fast_cards.table_path(family, root).is_file():
+            paths += [root / name for name in apple_fast_cards.legacy_paths(family, root) if name.endswith("/manifest.json")]
     for path in sorted(paths):
         try:
             record = read_manifest(path, root)

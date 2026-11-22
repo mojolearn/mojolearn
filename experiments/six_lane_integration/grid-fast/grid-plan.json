@@ -17459,51 +17459,62 @@
   "sources": {
    "afcl-build_bindings.json": {
     "path": "experiments/apple_fast_classical_20261006/build_bindings.json",
-    "sha256": "42805481111c50a838ec68aa1036e55183484678356ef9dc558ca3e816bf4ee6"
+    "sha256": "b3fcedb8fafa516e89d5051733bd44acd01c6ad6fc405778765c9d44fa755814",
+    "table": "experiments/apple_fast_classical_20261006/cards.json"
    },
    "afcl-full_workloads.json": {
     "path": "experiments/apple_fast_classical_20261006/full_workloads.json",
-    "sha256": "ff7a2cda52ee7c1c1e4df6ec9ab0a5117448c015acca37682c2b5226990eb581"
+    "sha256": "4587313fc2b1e482b8f56f528bf2fb97e3714a0374c65365d2fc0943ca95a824",
+    "table": "experiments/apple_fast_classical_20261006/cards.json"
    },
    "afcl-ideas.json": {
     "path": "experiments/apple_fast_classical_20261006/ideas.json",
-    "sha256": "e1e554d8b5141dfa8effd4a7a16d05b4df9911d68648d0ae8a077a1022890344"
+    "sha256": "7b4daebcf89656ea73a63709d6e4e8f567ba159a93258399a13d135a2130e9f6",
+    "table": "experiments/apple_fast_classical_20261006/cards.json"
    },
    "afcl-lanes-geometry.json": {
     "path": "experiments/apple_fast_classical_20261006/lanes/geometry.json",
-    "sha256": "3b5b539de81d4b3fb996945d493978aa9d8f1c28c647fa4418747896a3c9a416"
+    "sha256": "53b2e337ea0b53378009e760045dbc640e6ec9b6e76d35761f5898d2c11315ba",
+    "table": "experiments/apple_fast_classical_20261006/cards.json"
    },
    "afcl-lanes-linear.json": {
     "path": "experiments/apple_fast_classical_20261006/lanes/linear.json",
-    "sha256": "5937213e6a942039dd90ace336801563f781c581fb52278f35169fcd563c5336"
+    "sha256": "87d0f104a4f8e4bd3edba4642e0e4c1dad06fe096d73d1923d1589014a44faaa",
+    "table": "experiments/apple_fast_classical_20261006/cards.json"
    },
    "afcl-lanes-preprocessing.json": {
     "path": "experiments/apple_fast_classical_20261006/lanes/preprocessing.json",
-    "sha256": "e04e2faca3e32d482d56d76e05d0f82a75883b558b27ea2db79c3d4800ef85bb"
+    "sha256": "86d9a9faf6d968a55c87617ff731c6b664229e1f09a2eb836ff2129cf9f137fc",
+    "table": "experiments/apple_fast_classical_20261006/cards.json"
    },
    "afcl-lanes-trees.json": {
     "path": "experiments/apple_fast_classical_20261006/lanes/trees.json",
-    "sha256": "15aa87057948adb524926a95d6823d3c6a70b964ec2fd15df2ff094e1a518a4a"
+    "sha256": "47618bcf1ddd9d833f71515821a56921c27d4c04c3d80943763f05fc70fc9b6c",
+    "table": "experiments/apple_fast_classical_20261006/cards.json"
    },
    "aft-F": {
     "path": "experiments/apple_fast_trees/F.json",
-    "sha256": "977a2e45d1baa00ba6fb90797b253875a605cbb0de3d658f391638516a8bfd54"
+    "sha256": "aaf30fe6b30f55134dcc109f95f6a88b0d6508173cfebb6141598ce5d27b3af4",
+    "table": "experiments/apple_fast_trees/cards.json"
    },
    "aft-G": {
     "path": "experiments/apple_fast_trees/G.json",
-    "sha256": "e2c0c75db5a8b46cf0f8c9c388908e092459617fc72dc704123acc481871c48f"
+    "sha256": "a5142e7bda23a5a6171ce2075eb7c44f30b00cbb5a89f7c75a01ebc13e2cd000",
+    "table": "experiments/apple_fast_trees/cards.json"
    },
    "aft-N": {
     "path": "experiments/apple_fast_trees/N.json",
-    "sha256": "d067849f617f6438f5b1e64d5c4bebc59bf2748eefa0276281a68c18ac353493"
+    "sha256": "4e5fba5509244c22c1dcd06d6ad14d6299737b08ea46118558f3b8a32d94d146",
+    "table": "experiments/apple_fast_trees/cards.json"
    },
    "aft-P": {
     "path": "experiments/apple_fast_trees/P.json",
-    "sha256": "32ee22f41ecb89cb6db593ffd610588ed347f68633dc39320db0407150a91636"
+    "sha256": "084f3e5a74c3a83bb0d57b85f7c0056c41047e9ccece27f89ad6ba836d4bc55a",
+    "table": "experiments/apple_fast_trees/cards.json"
    },
    "aft-interactions": {
     "path": "tools/apple_fast_tree_ideas.py",
-    "sha256": "d3ca889f6c6c35e147935c87ae767b510a7eb7a3224b1d58ce47e01aa55b1465"
+    "sha256": "4438092128e7645ccaec055a24eb2be74016625b0a262d43076a6dbb93c96cb9"
    },
    "apple-fast-round2": {
     "branch": "lane/apple-fast-round2",

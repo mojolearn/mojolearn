@@ -31,7 +31,7 @@
         "decomposition.host.pca_oracle.host_column_mean_launch"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -85,7 +85,7 @@
         "x_decomp.device centered OLS entry -> col_sums_pair_buf"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -134,7 +134,7 @@
         "preprocessing.estimator.minmax_fit_direct -> _minmax_fit_direct_cls2 -> minmax_fit_flagged_dev"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -187,7 +187,7 @@
         "python.mojolearn._expansion_prep.LinearDiscriminantAnalysis.transform -> centered_matmul op178"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -242,7 +242,7 @@
         "glm.estimator.ols_fit_weighted_host"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -296,7 +296,7 @@
         "kde.impl.distance.distance ordinary/cosine norms (root)"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -348,7 +348,7 @@
         "x_prep.device.run_program_device_ptr -> radix_sort_cols_device"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -410,7 +410,7 @@
         "x_prep.units.run_unit[9] -> onehot_unit; device and host scheduled totals reduced by four"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -465,7 +465,7 @@
         "mojolearn.metrics.regression_report -> native adjacent reg_term stages -> x_metrics.plan op82 -> reg_pair_unit"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -513,7 +513,7 @@
         "mojolearn.metrics.ranking_report -> adjacent bin_curve -> planner curve_copy_unit and rank_epi/curve_out tails"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -556,7 +556,7 @@
         "mojolearn.resample.resample -> _gpu_gather -> binding resample_gather_gpu -> classical_draw_gather_kernel"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -606,7 +606,7 @@
         "metric_workloads.classical_classification_report -> public cohen_kappa_score -> _confusion -> group_sort"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -665,7 +665,7 @@
         "logistic_objective host/team/grid"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -725,7 +725,7 @@
         "RidgeCV refit"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -780,7 +780,7 @@
         "ARDRegression.fit"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -833,7 +833,7 @@
         "_glm_fit_grid"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -885,7 +885,7 @@
         "ls_backtrack_exact_trials"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -938,7 +938,7 @@
         "cd_idn_gram_sweep_kernel"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -987,7 +987,7 @@
         "SGD_PS_CHUNK ordered chunk launch"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1039,7 +1039,7 @@
         "KernelCache.init_full_tile_batching"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1087,7 +1087,7 @@
         "SMO block solve"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1136,7 +1136,7 @@
         "SVC/SVR working-set square tile"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1199,7 +1199,7 @@
         "MCD.emp_cov/emp_cov_at (root integration)"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1254,7 +1254,7 @@
         "linalg QR/SVD/lstsq and OLS factor callers"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1308,7 +1308,7 @@
         "RBFSampler.transform public binding"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1361,7 +1361,7 @@
         "NMF.fit and transform bindings"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1426,7 +1426,7 @@
         "power_dev"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1487,7 +1487,7 @@
         "DictionaryLearning sparse_encode"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/linear_controls.mojo"
+        "core/classical_identical_controls/linear_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/linear_implementation.json"
@@ -1534,7 +1534,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1598,7 +1598,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1652,7 +1652,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1695,7 +1695,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1739,7 +1739,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1784,7 +1784,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1825,7 +1825,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1865,7 +1865,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1916,7 +1916,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -1964,7 +1964,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -2011,7 +2011,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -2051,7 +2051,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -2092,7 +2092,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -2130,7 +2130,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -2177,7 +2177,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -2225,7 +2225,7 @@
       ],
       "production_callers": [],
       "controls_paths": [
-        "experiments/classical_identical_ideas/graph_controls.mojo"
+        "core/classical_identical_controls/graph_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/graph_implementation.json"
@@ -2463,7 +2463,7 @@
         "_kde_lse_row_chunked"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/stats_controls.mojo"
+        "core/classical_identical_controls/stats_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/stats_implementation.json"
@@ -2506,7 +2506,7 @@
         "BayesianGaussianMixture.fit -> DeviceOps._moments_gemm"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/stats_controls.mojo"
+        "core/classical_identical_controls/stats_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/stats_implementation.json"
@@ -2553,7 +2553,7 @@
         "SVGP.predict -> op_svgp_predict -> _launch_scaled_rbf(prediction=True) -> _c54_svgp_predict_kernel"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/stats_controls.mojo"
+        "core/classical_identical_controls/stats_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/stats_implementation.json"
@@ -2601,7 +2601,7 @@
         "GaussianNB/discrete NB _class_stats -> class_stats/class_stats_w -> class_stats_group_unit; host _groups bypass ensures candidate unit"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json"
@@ -2643,7 +2643,7 @@
       "runtime_reach": "NOT DEMONSTRATED",
       "manifest": "experiments/classical_identical_ideas/C56/manifest.json",
       "production_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo",
+        "core/classical_identical_controls/shared_controls.mojo",
         "bindings/_mojolearn_x_prep.mojo",
         "bindings/_mojolearn_x_prep_host.mojo",
         "python/mojolearn/_expansion_prep.py",
@@ -2655,8 +2655,8 @@
         "QuadraticDiscriminantAnalysis.decision_function/predict_proba -> x_prep qda_dec_unit"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/shared_controls.mojo",
-        "experiments/classical_identical_ideas/stats_controls.mojo"
+        "core/classical_identical_controls/shared_controls.mojo",
+        "core/classical_identical_controls/stats_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/shared_implementation.json",
@@ -2704,7 +2704,7 @@
         "Mcd.c_step/DMcd.c_step -> emp_cov_at"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/stats_controls.mojo"
+        "core/classical_identical_controls/stats_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/stats_implementation.json"
@@ -2754,7 +2754,7 @@
         "GARCH, ETS(A,A|Ad,N), Prophet fit -> _group -> owned team launch loop"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/stats_controls.mojo"
+        "core/classical_identical_controls/stats_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/stats_implementation.json"
@@ -2812,7 +2812,7 @@
         "AutoARIMA candidate ARIMA fits"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/stats_controls.mojo"
+        "core/classical_identical_controls/stats_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/stats_implementation.json"
@@ -2859,7 +2859,7 @@
         "classical_second_diff_reuse"
       ],
       "controls_paths": [
-        "experiments/classical_identical_ideas/stats_controls.mojo"
+        "core/classical_identical_controls/stats_controls.mojo"
       ],
       "source_ledgers": [
         "experiments/classical_identical_ideas/stats_implementation.json"

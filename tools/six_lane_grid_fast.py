@@ -39,6 +39,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 
 import six_lane_grid as G  # noqa: E402
+import apple_fast_cards  # noqa: E402
+
+
+def _card(path):
+    """A former card file's document from its family table, and its provenance entry."""
+    rel = _rel(path)
+    entry = dict(path=rel, table=apple_fast_cards.TABLES[apple_fast_cards.family_of(rel, ROOT)],
+                 sha256=apple_fast_cards.digest(rel, ROOT))
+    return apple_fast_cards.document(rel, ROOT), entry
 
 MODE = 'fast'
 OUT_DIR = ROOT / 'experiments/six_lane_integration/grid-fast'
@@ -290,8 +299,7 @@ def load_aft():
     controls, files = {}, {}
     for lane_letter in 'FGNP':
         path = AFT_DIR / (lane_letter + '.json')
-        doc = json.loads(path.read_text())
-        files['aft-' + lane_letter] = dict(path=_rel(path), sha256=G.file_sha(path))
+        doc, files['aft-' + lane_letter] = _card(path)
         groups = doc.get('integration_groups') or []
         for card in doc['cards']:
             lanes, bindings = [], []
@@ -323,14 +331,15 @@ def load_aft():
 def load_afcl():
     controls, files = {}, {}
     names = ['ideas.json', 'full_workloads.json', 'build_bindings.json'] + ['lanes/' + n + '.json' for n in ('geometry', 'linear', 'preprocessing', 'trees')]
+    docs = {}
     for n in names:
-        files['afcl-' + n.replace('/', '-')] = dict(path=_rel(AFCL_DIR / n), sha256=G.file_sha(AFCL_DIR / n))
-    ideas = {e['id']: e for e in json.loads((AFCL_DIR / 'ideas.json').read_text())['entries']}
-    recipes = {e['id']: e for e in json.loads((AFCL_DIR / 'full_workloads.json').read_text())['entries']}
-    binds = json.loads((AFCL_DIR / 'build_bindings.json').read_text())['cards']
+        docs[n], files['afcl-' + n.replace('/', '-')] = _card(AFCL_DIR / n)
+    ideas = {e['id']: e for e in docs['ideas.json']['entries']}
+    recipes = {e['id']: e for e in docs['full_workloads.json']['entries']}
+    binds = docs['build_bindings.json']['cards']
     arms, pending = {}, []
     for n in ('geometry', 'linear', 'preprocessing', 'trees'):
-        doc = json.loads((AFCL_DIR / 'lanes' / (n + '.json')).read_text())
+        doc = docs['lanes/' + n + '.json']
         entries = doc['entries'] if isinstance(doc['entries'], list) else list(doc['entries'].values())
         for e in entries:
             arms[e['id']] = e

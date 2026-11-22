@@ -45,5 +45,6 @@ def test_apply_kernel_method_matches_plain_predict_for_a_user():
     got = _call_in(_user_globals(), parallel_classical.apply_kernel_method, est, X)
     want = _call_in(_user_globals(), est.predict, X)
     assert type(got) is type(want) is np.ndarray
-    assert got.dtype == want.dtype == np.float64
+    # predict: the kernel's float32 for every caller (lane predict-dtype, 2026-11-22).
+    assert got.dtype == want.dtype == np.float32
     assert got.tobytes() == want.tobytes()

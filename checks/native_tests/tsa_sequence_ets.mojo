@@ -18,11 +18,16 @@ season, period 1; no fixed alpha, beta, phi or gamma), horizon 60:
 - the batch-of-two forecast equals, value for value, each series fitted
   alone.
 
-The comparison against statsforecast's AutoETS stays in the Python file
-(an external-library oracle). Importable; no `main()`.
+`test_against_statsforecast` (lane py2mojo-A, 2026-11-22; ported from
+`test_against_statsforecast`): the batch-of-two fit with horizon 8 against
+statsforecast AutoETS(model="AAN", damped=True) 8-step means of each series,
+stored as binary64 words in `fixtures/tsa_ets_statsforecast/` by
+`tools/py2mojo_native_fixtures_b8.py` (statsforecast 2.1.1), to rtol 5e-3
+(assert_allclose's default atol 0).
 """
 from std.math import isnan
 from checks.native_tests.tsa_metrics_fixture_words import TSA_FIXTURE_DIR, fixture_f32
+from checks.native_tests.py2mojo_fixture_words import fixture_f64
 from core.xseq_entry_table import XS_ETS
 from sequence.exec import HostExec
 from sequence.xseq_glue import xseq_glue_run
@@ -147,6 +152,39 @@ def _run_cpu() raises:
     check_cases("tsa_sequence_ets", ETS_UNITS, unit_fit)
     check_forecasts(forecasts)
     _ = y^
+
+
+comptime ETS_SF_H = 8
+comptime ETS_SF_DIR = "checks/native_tests/fixtures/tsa_ets_statsforecast/"
+
+
+def ets_statsforecast[R: EtsRun]() raises:
+    """`DampedETS().fit(Y).predict(8)`: both series in one fit, horizon 8, against the stored AutoETS means."""
+    var y = ets_series()
+    var forecasts = List[Float32](length=ETS_B * ETS_SF_H, fill=Float32(0))
+    var info = List[Float32](length=ETS_B * 10, fill=Float32(0))
+    var states = List[Float32](length=ETS_B, fill=Float32(0))
+    var addresses: List[Int] = [Int(y.unsafe_ptr()), Int(forecasts.unsafe_ptr()), Int(info.unsafe_ptr()),
+                                Int(states.unsafe_ptr())]
+    var words: List[Int] = [ETS_B, ETS_N, ETS_SF_H, 0, 1, 1, 0, 0, 1]
+    var floats: List[Float64] = [0.0, 0.0, 0.0, 0.0]
+    require(R.run(addresses, words, floats) == ETS_B * ETS_SF_H, "ETS forecast count, horizon 8")
+    var want = fixture_f64(ETS_SF_DIR + "ets-sf-mean.f64", ETS_B * ETS_SF_H)
+    for i in range(ETS_B * ETS_SF_H):  # small-loop(oracle: two 8-step forecasts)
+        var got = Float64(forecasts[i])
+        require(abs(got - want[i]) <= 5e-3 * abs(want[i]), "ETS series " + String(i // ETS_SF_H) + " step "
+                + String(i % ETS_SF_H) + ": " + String(forecasts[i]) + ", statsforecast " + String(want[i]))
+    _ = y^
+    _ = forecasts^
+    _ = info^
+    _ = states^
+
+
+def test_against_statsforecast() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        ets_statsforecast[HostEts]()
+    else:
+        ets_statsforecast[DeviceEts]()
 
 
 def test_fits_then_forecasts() raises:
