@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "id": "F09",
+  "title": "Memory-bounded LM head in a fixed actual SGD task",
+  "mode": "fast",
+  "vendors": [
+    "apple"
+  ],
+  "status": "source_ready",
+  "implementation_paths": [
+    "experiments/performance_ideas/F09/caller.py",
+    "training/chunked_lm_head_v2.mojo",
+    "training/afn_optim.mojo"
+  ],
+  "candidate_defines": [],
+  "baseline_defines": [],
+  "build_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/build_pair.py",
+    "--idea",
+    "F09",
+    "--output",
+    "{output}/arms",
+    "--source-sha",
+    "{source_sha}"
+  ],
+  "run_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F09",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ],
+  "validation_paths": [
+    "experiments/performance_ideas/F09/caller.py"
+  ],
+  "depends_on": [],
+  "quality_gates": [
+    "actual compiled GPU loss and backward",
+    "same SGD optimizer/hyperparameters",
+    "final task loss and independent stable-normalization oracle",
+    "public logits request still materializes every logit"
+  ],
+  "timing_contract": "Eight whole head train steps through read of loss/gradients; requested logits measured separately; A full logits B chunked public API",
+  "blocker": null,
+  "output_kind": "directory",
+  "binding": "training",
+  "prerequisite_bindings": [
+    "core"
+  ],
+  "build_uses_compile_slot": true,
+  "paired_build": true,
+  "validation_argv": [
+    "{python}",
+    "experiments/performance_ideas/apple_fast/pair.py",
+    "--idea",
+    "F09",
+    "--arms",
+    "{output}/arms",
+    "--output",
+    "{output}/run"
+  ]
+}

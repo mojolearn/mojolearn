@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "id": "F05",
+  "mode": "fast",
+  "vendor": "apple",
+  "source_guard_paths": [
+    "experiments/apple_fast/gemm/softmax_narrow.mojo"
+  ],
+  "guard_audit": "New mechanisms require their opt-in defines and FAST Apple admission; no new production default is enabled.",
+  "existing_default_exception": null,
+  "variants": [
+    {
+      "name": "default",
+      "binding": "estimators",
+      "baseline_defines": [
+        "MOJOLEARN_SOFTMAX_G2_AUDIT"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_SOFTMAX_FAST_G2_NARROW",
+        "MOJOLEARN_SOFTMAX_G2_AUDIT"
+      ],
+      "caller": "caller.py",
+      "prerequisites": [
+        "core"
+      ],
+      "compiler_status": "pending_current_source_instantiation",
+      "device_quality": "pending",
+      "performance": "pending"
+    }
+  ],
+  "native_checks": [],
+  "input_transport_helper": {
+    "binding": "core",
+    "numeric_mode": "identical",
+    "defines": [],
+    "role": "input_transport_helpers"
+  },
+  "remaining_subarms": [],
+  "qualification": "pending: source and compiler success are not device quality/speed/opponent admission",
+  "promotion_authorized": false
+}

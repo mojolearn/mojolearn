@@ -1,0 +1,503 @@
+{
+  "lane": "trees",
+  "branch": "lane/apple-fast-classical-ideas-20261006",
+  "base_commit": "fd6cf8045",
+  "status": "source_written_uncompiled_unverified_unmeasured",
+  "run_policy": "Source programming only. No compile, verification, tests, lint, manifest checking, measurement, GPU job, hook or benchmark was executed.",
+  "mode_note": "FAST is selected by absence of MOJOLEARN_NUMERIC_IDENTICAL and MOJOLEARN_NUMERIC_DETERMINISTIC. All new switches require the Apple target. Bare define presence enables; =0 does not disable.",
+  "entries": [
+    {
+      "id": "AFCL-T01",
+      "title": "Quantized boosting histogram row chunks",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T01"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "gbdt/apple_fast_classical.mojo",
+        "gbdt/methods/greedy_subsets_searcher/kernel/hist_quantized_shared.mojo",
+        "gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo"
+      ],
+      "mechanism": "QH_MIN_ITEMS_PER_BLOCK is 4096 with T01 instead of 8192. The same constant feeds host replica selection and per-partition active-block limits; all rows keep their existing quantization and bin destinations.",
+      "affected_callers": [
+        "GradientBoosting/CatBoost-style Depthwise fit",
+        "GradientBoosting/CatBoost-style Lossguide fit"
+      ],
+      "actual_scope": "Existing one-byte, two-statistic quantized shared-histogram family; both mode-skip and ordinary/gather launchers consume the new row chunk.",
+      "prerequisites": [
+        "Apple FAST",
+        "QUANTIZED_HIST_LIVE; do not define MOJOLEARN_2045_FAST_NO_QUANT_HIST",
+        "Every policy block is one-byte and stat_count is two"
+      ],
+      "limitations": [
+        "Original broad symmetric idea adapted to the supported nonsymmetric shared family; symmetric histogram kernels unchanged.",
+        "Occupancy/grid floors can make the replica count equal across arms for some shapes; this is not a promise of a change for every input.",
+        "Binary/half-byte and multistat fallbacks unchanged."
+      ],
+      "quality_scope": [
+        "Same quantized addends and overflow bounds; later compare complete histogram cells and resulting splits.",
+        "Full fit quality: heldout RMSE/logloss/AUC/ranking metrics as applicable to each actually admitted objective; full settings and all rows retained."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T02",
+      "title": "Quantized boosting histogram feature groups",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T02"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "gbdt/apple_fast_classical.mojo",
+        "gbdt/methods/greedy_subsets_searcher/kernel/hist_quantized_shared.mojo",
+        "gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo"
+      ],
+      "mechanism": "QH_GROUP_FEATURES becomes eight; shared allocation, whole compressed-index-word count, feature offsets, skip-bin vector width and launcher group count derive from it. This reduces the per-group histogram to 16 KiB.",
+      "affected_callers": [
+        "GradientBoosting/CatBoost-style Depthwise fit",
+        "GradientBoosting/CatBoost-style Lossguide fit"
+      ],
+      "actual_scope": "Same one-byte, two-statistic shared-histogram family as T01; samples, features, bins and quantized statistics are unchanged.",
+      "prerequisites": [
+        "Apple FAST",
+        "QUANTIZED_HIST_LIVE; MOJOLEARN_2045_FAST_NO_QUANT_HIST absent",
+        "One-byte policy blocks and two statistic planes"
+      ],
+      "limitations": [
+        "Original symmetric feature-group idea adapted to the supported nonsymmetric family; symmetric packed-feature kernels unchanged.",
+        "Sub-byte/multistat fallbacks unchanged.",
+        "Extra groups may cost more launches/flushes; no performance result exists."
+      ],
+      "quality_scope": [
+        "Histogram totals, best-split tie behavior, tail groups, categorical one-byte encodings and missing bins.",
+        "Heldout full-workload quality for both growth policies; T01+T02 must later be evaluated together."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T03",
+      "title": "Per-feature binarization block width",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T03"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "gbdt/apple_fast_classical.mojo",
+        "gbdt/gpu_data/kernel/binarize.mojo"
+      ],
+      "mechanism": "BINARIZE_BLOCK_SIZE becomes 512 instead of 1024, keeping eight documents per thread. Imported launcher constants and in-kernel row strides use the same geometry; all 256 border slots remain loadable.",
+      "affected_callers": [
+        "Boosted-tree fit quantization",
+        "Boosted-tree resident prediction quantization"
+      ],
+      "actual_scope": "binarize_float_feature_kernel and its callers using BINARIZE_BLOCK_SIZE/BINARIZE_DOCS_PER_THREAD; bin comparisons still use exact_f32_gt.",
+      "prerequisites": [
+        "Apple FAST",
+        "A workload reaching the per-feature binarizer in both arms"
+      ],
+      "limitations": [
+        "The existing packed-word binarizer is unchanged. A workload routed entirely through GBDT_INDEX_PACK_DEVICE/GBDT_PREDICT_PACKED does not establish T03 coverage.",
+        "Borders, border count, NaN substitution and feature packing policy unchanged."
+      ],
+      "quality_scope": [
+        "Exact bins at border ties, signed zero, subnormals and NaNs; same feature word packing.",
+        "Full fitted-model and prediction quality with numerical and categorical inputs."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T04",
+      "title": "Symmetric partition metadata geometry",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T04"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "gbdt/apple_fast_classical.mojo",
+        "gbdt/methods/pointwise_optimization_subsets.mojo"
+      ],
+      "mechanism": "SPLIT_BLOCK_SIZE becomes 128 instead of 256. Bin-update, partition-offset/size and associated fused winner/bin launches inherit the four-SIMD-group width and matching grids/shared-array sizing.",
+      "affected_callers": [
+        "Symmetric boosted-tree structure search",
+        "Ordered symmetric structure-search callers of pointwise optimization subsets"
+      ],
+      "actual_scope": "Pointwise optimization-subset row metadata and fused bin-update schedule. Existing radix/reorder kernels keep their own block widths and algorithm.",
+      "prerequisites": [
+        "Apple FAST",
+        "A caller reaching pointwise_optimization_subsets"
+      ],
+      "limitations": [
+        "This is partition metadata/bin scheduling, not a replacement of the physical radix partition.",
+        "Depthwise/lossguide partition kernels outside this module unchanged.",
+        "T05 shares the fused winner/bin launch and needs a later joint A/B."
+      ],
+      "quality_scope": [
+        "Every row assigned exactly once; child counts, missing routing and ordered membership.",
+        "Full symmetric/ordered heldout quality, including categorical and weighted inputs."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T05",
+      "title": "Cooperative split-record batches",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [
+        "MOJOLEARN_SYM_RESOLVE_BLOCK"
+      ],
+      "candidate_defines": [
+        "MOJOLEARN_SYM_RESOLVE_BLOCK",
+        "MOJOLEARN_AFCL_T05"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "gbdt/apple_fast_classical.mojo",
+        "gbdt/methods/kernel/pointwise_split_resolve.mojo"
+      ],
+      "mechanism": "Inside existing cooperative _fold_block, a lane folds four adjacent candidate records before stepping by block_width*4, instead of one strided record. The same _record_less comparator, all candidates, shared winner reduction and descriptor writes remain.",
+      "affected_callers": [
+        "Symmetric/ordered boosted-tree fused split search"
+      ],
+      "actual_scope": "Cooperative winner resolution in pw_resolve_pack_bins_kernel. This is an additional scheduling variant of the existing opt-in cooperative arm.",
+      "prerequisites": [
+        "Apple FAST",
+        "MOJOLEARN_SYM_RESOLVE_BLOCK enabled in BOTH arms",
+        "MOJOLEARN_GBDT_FUSED_LEVEL_OFF and MOJOLEARN_GBDT_FUSED_PW_OFF absent"
+      ],
+      "limitations": [
+        "The new switch does not activate SYM_RESOLVE_BLOCK by itself.",
+        "The unfused/serial resolver is unchanged.",
+        "No claim that the prerequisite cooperative implementation is qualified; its status is inherited."
+      ],
+      "quality_scope": [
+        "Best score, feature/bin tie ordering, sentinel/empty helpers and tails.",
+        "Constrained/categorical split outcomes and full fitted heldout quality; T04 interaction."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T06",
+      "title": "Apple leaf-statistic partial budget",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T06"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "gbdt/apple_fast_classical.mojo",
+        "gbdt/methods/leaves_estimation/apple_fast_est.mojo"
+      ],
+      "mechanism": "_afcl_leaf_stats_sm maps the hardware-derived statistic scheduling budget to ceil(sm/2). Both scratch sizing and all one-/two-stat gathered/non-gathered leaf-statistic launches use the same budget; remaining solver/work kernels use the original sm.",
+      "affected_callers": [
+        "Apple fast pointwise boosted-tree leaf estimation",
+        "Weighted/unweighted regression and binary-classification objectives admitted by apple_est_handles"
+      ],
+      "actual_scope": "Current AppleEstScratch and apple_fast_estimate_and_apply path. Float reduction association can change; solver iterations, acceptance/backtracking, regularization and row membership are preserved.",
+      "prerequisites": [
+        "Apple FAST",
+        "Existing EST_STATS_FUSED/EST_ITERS_DEVICE path admitted by apple_est_handles",
+        "For standard current defaults, MOJOLEARN_SYM_EST_ALL_OFF absent; do not enable rejected EST_REUSE_PART merely for this card"
+      ],
+      "limitations": [
+        "Multiclass, multi-RMSE, pair/group/ranking objectives and has_group cases are refused by the existing path and unchanged.",
+        "No standalone change to generic partition reducers; unrelated callers unaffected.",
+        "Small hardware budgets can collapse to the same integer count."
+      ],
+      "quality_scope": [
+        "Leaf statistics with sample weights, cancellation, skewed leaves, small Hessians and tail rows.",
+        "Leaf values, solver acceptance/stopping behavior and independent heldout objective quality, allowing changed bits."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T07",
+      "title": "Resident boosted-tree prediction blocks",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T07"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "gbdt/apple_fast_classical.mojo",
+        "gbdt/resident_model.mojo"
+      ],
+      "mechanism": "Resident oblivious model application uses AFCL_PREDICT_BLOCK=128 instead of 256 for both ceil-divided row grids and launches, including ordinary per-tree/four-tree and packed all-tree applications. Existing bounded grid stride covers every row.",
+      "affected_callers": [
+        "Resident GradientBoosting/CatBoost-style predict",
+        "Resident boosted-tree predict_proba/link callers"
+      ],
+      "actual_scope": "Oblivious ResidentGbdtModel application. Tree order, approximation dimensions, categorical bins and model buffers unchanged.",
+      "prerequisites": [
+        "Apple FAST",
+        "Resident oblivious model prediction in both arms"
+      ],
+      "limitations": [
+        "Nonresident prediction and nonsymmetric resident delegation unchanged.",
+        "Existing packed prediction remains its own prerequisite when that route is selected; T07 does not activate it.",
+        "Quantization and output-link launch widths are unchanged by T07."
+      ],
+      "quality_scope": [
+        "Final raw scores/probabilities across all approximation dimensions, zero-tree/depth cases and categorical routes.",
+        "Heldout accuracy/logloss/RMSE, repeated outputs and concurrent-live-model lifetime."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T08",
+      "title": "RF traversal workgroup width",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T08"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "core/forest_inference.mojo"
+      ],
+      "mechanism": "RF_INPUT specializations use 64 instead of 128 threads per traversal group. Ordered and row-owned groves use matching ceil-divided grids; lane-owned groves use two rather than four rows, with matching shared row staging and partial-buffer layouts. Logical 32-tree grove reductions are retained.",
+      "affected_callers": [
+        "RandomForestClassifier GPU inference",
+        "RandomForestRegressor GPU inference"
+      ],
+      "actual_scope": "Shared launch_forest_inference transient/resident ordered, scalar and vector grove paths, guarded additionally on RF_INPUT=True. ExtraTrees specializations retain 128 threads.",
+      "prerequisites": [
+        "Apple FAST",
+        "RF caller reaching core forest inference, including the explicit parallel_groves engine; same engine and layout flags in both arms"
+      ],
+      "limitations": [
+        "Legacy/host inference engines and OOB training kernels are unchanged.",
+        "No source change was needed in core/forest_inference_model.mojo; its existing dispatch consumes launch_forest_inference.",
+        "Shared-row/packed-node/vector flags must match across arms; their existing eligibility rules are unchanged."
+      ],
+      "quality_scope": [
+        "Scalar/vector probability or regression outputs, label argmax, uneven depths, output capacity tails and leaf comparisons.",
+        "Heldout quality, same complete forest and every output; repeated calls and model lifetime."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T09",
+      "title": "ExtraTrees sampled-feature tiles",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T09"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "extratrees/impl/decisiontree/batched_levelalgo/builder.mojo"
+      ],
+      "mechanism": "ET_FEATURE_TILE is eight instead of sixteen for tiled range searches and tiled regression-score kernels, including their ceil-divided feature grids. Selected feature slots and RNG/threshold assignment do not change.",
+      "affected_callers": [
+        "ExtraTreesClassifier fit",
+        "ExtraTreesRegressor fit",
+        "RandomTreesEmbedding or other ExtraTrees-builder callers reaching tiled range search"
+      ],
+      "actual_scope": "Existing ET_RANGE_TILED and ET_SCORE_TILED routes only; the classifier receives range scheduling, while regression may receive range and score scheduling.",
+      "prerequisites": [
+        "Apple FAST",
+        "Actual tiled range/score dispatch, with existing row-major eligibility and switches identical in both arms"
+      ],
+      "limitations": [
+        "Does not force row-major layout or enable a previously disabled tiled route.",
+        "Classification score kernels outside the tiled regression path unchanged.",
+        "Existing row-major/cost routing and all thresholds/features/tree counts unchanged."
+      ],
+      "quality_scope": [
+        "Ranges, sampled-feature RNG mapping, threshold assignment, impurity/split ties and completed tree count.",
+        "Full classifier/regressor heldout quality; embedding output quality for affected callers."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T10",
+      "title": "IsolationForest query blocks",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T10"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "isolation_forest/impl/isolation_tree_builder.mojo"
+      ],
+      "mechanism": "IF_PATH_TPB defaults to 128 instead of 256; IFLaunchKnobs.default and existing path/score launchers consume it, preserving per-row traversal and correction arithmetic.",
+      "affected_callers": [
+        "IsolationForest score_samples",
+        "IsolationForest decision_function/predict",
+        "IsolationForest path_lengths and fit-time contamination scoring using default launch knobs"
+      ],
+      "actual_scope": "Existing path/score and score-epilogue launch geometry selected by the default IFLaunchKnobs; training tree construction geometry is unchanged.",
+      "prerequisites": [
+        "Apple FAST",
+        "Default path launch knobs or explicit IF_PATH_TPB use in both arms"
+      ],
+      "limitations": [
+        "A caller supplying a fixed explicit path_tpb can override the candidate and must not be counted as reached.",
+        "Tree count, max_samples, max_depth, contamination and seed unchanged."
+      ],
+      "quality_scope": [
+        "Path lengths and correction for degenerate leaves, anomaly score/ranking, contamination threshold and decisions.",
+        "Full scoring and fit/contamination boundary, repeated output lifetime."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T11",
+      "title": "TreeSHAP query/fold block width",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T11"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "xtrees/shap_device.mojo"
+      ],
+      "mechanism": "QUERY_TPB=64 instead of 128 is used by query grids for direct tree units, table row units, decision-word table row units and final contribution fold. Preparation and table construction retain TPB=128.",
+      "affected_callers": [
+        "GPU TreeExplainer/TreeSHAP values for classical tree models"
+      ],
+      "actual_scope": "All existing row-query variants and the contribution fold in shap_device; table/direct eligibility and attribution arithmetic unchanged.",
+      "prerequisites": [
+        "Apple FAST",
+        "Existing GPU TreeSHAP route; preparation/table flags identical in both arms"
+      ],
+      "limitations": [
+        "Does not enable MOJOLEARN_SHAP_FAST_ROW_PAIR, a recorded loser.",
+        "Background preparation, table construction, chunk memory budget and unsupported interaction APIs unchanged."
+      ],
+      "quality_scope": [
+        "Every feature/output contribution and additivity versus independent references, shallow/deep/zero-cover cases.",
+        "No dropped rows/features; old-output and concurrent-model lifetime."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    },
+    {
+      "id": "AFCL-T12",
+      "title": "CTR elementwise/count preprocessing blocks",
+      "default_enabled": false,
+      "guard": "GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator()",
+      "baseline_defines": [],
+      "candidate_defines": [
+        "MOJOLEARN_AFCL_T12"
+      ],
+      "baseline_env": {},
+      "candidate_env": {},
+      "implementation_paths": [
+        "gbdt/apple_fast_classical.mojo",
+        "gbdt/ctrs/kernel/ctr_calcers.mojo"
+      ],
+      "mechanism": "CTR_BLOCK_SIZE=128 instead of 256 changes the existing elementwise/calculation launchers and their matching per-thread row strides. CTR_DOCS_PER_THREAD stays four.",
+      "affected_callers": [
+        "Categorical boosted-tree CTR preparation",
+        "Categorical boosted-tree inference/preparation callers actually using ctr_calcers launchers"
+      ],
+      "actual_scope": "Trivial weights, border masks, weighted frequency, means/scatter, target stats and related admitted CTR calculation kernels. Sort and segmented prefix/reduction algorithms unchanged.",
+      "prerequisites": [
+        "Apple FAST",
+        "A categorical task reaching gbdt.ctrs.kernel.ctr_calcers launchers"
+      ],
+      "limitations": [
+        "Inference paths using saved CTR table lookups directly are unchanged.",
+        "Unimplemented groupwise-CTR kernels remain unsupported; no new ranking-group claim.",
+        "Category order, smoothing priors and leakage prevention unchanged."
+      ],
+      "quality_scope": [
+        "Ordered statistics, unseen categories, category counts, fold isolation, tied values and scatter tails.",
+        "Full categorical heldout quality; T03+T07+T12 complete-configuration A/B remains pending."
+      ],
+      "status": "source_written_uncompiled_unverified_unmeasured",
+      "measurement_status": "NEVER RUN \u2014 PENDING MEASUREMENT",
+      "performance_claim": null,
+      "quality_claim": null
+    }
+  ],
+  "pending_combinations": [
+    [
+      "AFCL-T01",
+      "AFCL-T02"
+    ],
+    [
+      "AFCL-T04",
+      "AFCL-T05"
+    ],
+    [
+      "AFCL-T01",
+      "AFCL-T02",
+      "AFCL-T06"
+    ],
+    [
+      "AFCL-T03",
+      "AFCL-T07",
+      "AFCL-T12"
+    ]
+  ],
+  "future_evidence": "Frozen full-dataset end-to-end A/B with saved recipe/version/hash, all affected estimators/settings, preparation/fit/sync/consumed outputs, independent quality and neighboring/non-board coverage. No default promotion evidence exists.",
+  "remaining_source_blockers": [],
+  "unimplemented_broader_scope": "The planned cards named broad families. Actual production reach and unchanged fallbacks are stated per entry; no full-family coverage is inferred."
+}
