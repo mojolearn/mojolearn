@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """MoEBlock forward against a float64 restatement of Mixtral's sparse block,
 and the routing tie rule (ported from
 python/mojolearn/tests/test_x_sequence_moe.py `test_forward_and_ties`).
@@ -20,7 +21,10 @@ from sequence.exec import Exec, HostExec
 from sequence.ops_impl import moe_forward_impl
 from checks.native_tests.sequence_port_common import allclose, u01, normal
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, count_failures, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+from checks.native_tests.sequence_port_common import require
 
 
 comptime MOE_FIXTURES = 2
@@ -141,43 +145,22 @@ def run_moe_fixture[E: Exec](mut ex: E, unit: Int) raises:
     _ = weights^
 
 
-# ---- The host column (was sequence_moe_cpu_suite.mojo) ----
-# MoEBlock forward against the float64 Mixtral block and the routing tie rule: the independent fixtures run across host cores, each on its own
-# HostExec with a private failure slot.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(MOE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
+# ---- The host and device columns ----
+# MoEBlock forward against the float64 Mixtral block and the routing tie rule. The host column: the independent fixtures across host cores, each on its own HostExec.
+# The device column: the fixtures run in order on one DeviceExec: they share the one device and its queue,
+# and each fixture's kernels already spread its work across the device.
+def test_moe() raises:
+    comptime if CPU_COLUMN_BUILD:
+        def host_fixture(unit: Int) raises:
             var ex = HostExec()
             run_moe_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, MOE_FIXTURES)
-
-
-# ---- The device column (was sequence_moe_gpu_suite.mojo) ----
-# MoEBlock forward against the float64 Mixtral block and the routing tie rule, on the device column. The fixtures run in order on one
-# DeviceExec: they share the one device and its queue, and each fixture's
-# kernels already spread its work across the device.
-def _run_gpu(mut report: Report) raises:
-    var ex = DeviceExec()
-    var cases = report.cases(MOE_FIXTURES)
-    for unit in range(MOE_FIXTURES):  # driver-loop: over fixtures on the one device
-        try:
+        check_cases("moe", MOE_FIXTURES, host_fixture)
+    else:
+        var ex = DeviceExec()
+        def device_fixture(unit: Int) raises {mut ex}:
             run_moe_fixture(ex, unit)
-        except error:
-            cases.fail(unit, error)
+        check_cases_serial("moe", MOE_FIXTURES, device_fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("sequence_moe", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

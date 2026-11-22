@@ -143,18 +143,10 @@ from checks.native_tests.rankn_math import register as register_rankn_math
 from checks.native_tests.rankn_views import register as register_rankn_views
 from checks.native_tests.resample_cross_vendor_fold import register as register_resample_cross_vendor_fold
 from checks.native_tests.resample_cv_row_order import register as register_resample_cv_row_order
-from checks.native_tests.resident_second_call import register as register_resident_second_call
 from checks.native_tests.runner import Check
 from checks.native_tests.sequence_garch import register as register_sequence_garch
-from checks.native_tests.sequence_moe import register as register_sequence_moe
-from checks.native_tests.sequence_norm import register as register_sequence_norm
 from checks.native_tests.sequence_optimizer import register as register_sequence_optimizer
-from checks.native_tests.sequence_rnn import register as register_sequence_rnn
-from checks.native_tests.sequence_samba_surface import register as register_sequence_samba_surface
-from checks.native_tests.sequence_stl import register as register_sequence_stl
-from checks.native_tests.sequence_theta import register as register_sequence_theta
 from checks.native_tests.sequence_theta_variants import register as register_sequence_theta_variants
-from checks.native_tests.sequence_var import register as register_sequence_var
 from checks.native_tests.solver_estimators_ops import register as register_solver_estimators_ops
 from checks.native_tests.solver_qn_objectives import register as register_solver_qn_objectives
 from checks.native_tests.spectral_assignment import register as register_spectral_assignment
@@ -717,17 +709,9 @@ def all_checks() -> List[Check]:
     checks.append(register_rankn_views())
     checks.append(register_resample_cross_vendor_fold())
     checks.append(register_resample_cv_row_order())
-    checks.append(register_resident_second_call())
     checks.append(register_sequence_garch())
-    checks.append(register_sequence_moe())
-    checks.append(register_sequence_norm())
     checks.append(register_sequence_optimizer())
-    checks.append(register_sequence_rnn())
-    checks.append(register_sequence_samba_surface())
-    checks.append(register_sequence_stl())
-    checks.append(register_sequence_theta())
     checks.append(register_sequence_theta_variants())
-    checks.append(register_sequence_var())
     checks.append(register_solver_estimators_ops())
     checks.append(register_solver_qn_objectives())
     checks.append(register_spectral_assignment())
