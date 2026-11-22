@@ -17,7 +17,7 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "concat": 20, "residual_block": 0, "parallel": 0,
           "silu": 32, "gelu": 33, "softplus": 34, "rms_norm": 35, "rotary": 36, "multiply": 37,
           "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0,
-          "selective_scan": 42}
+          "selective_scan": 42, "trapezoid_scan": 44}
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -447,6 +447,36 @@ class Sequential(_CheckMixin):
             model.concat([u, delta, b, c], axis=1).selective_scan(16)
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("selective_scan", (d_state,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def trapezoid_scan(self, heads, d_state):
+        """Append Mamba-3's trapezoid state-space scan over ``(length,
+        features)`` samples whose features are ``[v | k | q | dt | A |
+        trap]``: per head, ``headdim`` values ``v``, ``d_state`` keys ``k``
+        and queries ``q``, and one step size ``dt``, decay rate ``A`` and
+        trapezoid logit ``trap`` per position, so ``features = heads *
+        (headdim + 2 * d_state + 3)``. The output is ``(length, heads *
+        headdim)``. Per head, from ``h = 0``::
+
+            alpha = exp(A dt), sigma = sigmoid(trap)
+            h[t] = alpha h[t-1] + dt (1 - sigma) alpha k[t-1] v[t-1]
+                   + dt sigma k[t] v[t]
+            y[t] = q[t] . h[t] + D v[t]
+
+        ``D`` ``(heads,)`` is learned, initialized to 1.
+
+        Parameters
+        ----------
+        heads : int
+            Number of heads.
+        d_state : int
+            State size per head.
+
+        Example: the core of a Mamba-3 mixer with 2 heads of 16 channels
+        and 32 states over ``(length, 2 * (16 + 64 + 3))`` samples::
+
+            model.trapezoid_scan(heads=2, d_state=32)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("trapezoid_scan", (heads, d_state), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     def gated(self, gate, up):
         """Append a gated block: ``gate(h) * up(h)``, where ``h`` is the

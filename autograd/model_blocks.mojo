@@ -33,6 +33,13 @@ EXISTING backward rule; no kernel is written or edited here:
                                  [u | delta | B | C] (narrow views), parameters A_log
                                  (dim, state) and D (dim); its arithmetic is the Mamba-1
                                  block kernels' own thread bodies
+  44    trapezoid_scan (heads,   graph_trapezoid_scan (autograd/ssm_m3_primitives.mojo), SsmRules 242
+        state)                   the Mamba-3 trapezoid core as a generic op (lane
+                                 neural-blocks-3-m3, 2026-11-22): the (length, heads (P +
+                                 2 state + 3)) input is [v | k | q | dt | A | trap],
+                                 parameter D (heads); its arithmetic is the Mamba-3
+                                 decode step's bodies (autograd/kernels/
+                                 mamba3_trapezoid_body.mojo)
 
 `ModelRules` (below) is the backward of a version-2 description: ImportRules (the import family plus
 RankNRules, which holds NeuralRules and TransformerPrimitiveRules) plus RecurrentRules. Every tag the
@@ -63,6 +70,8 @@ from autograd.import_ops import IMP_SILU, IMP_GELU_ERF, IMP_GELU_TANH, IMP_SOFTP
 from autograd.rules_recurrent import RecurrentRules, RNN_LINEAR, RNN_LAYER, RNN_LAST_STEP, rnn_scan_op
 from autograd.ssm_primitives import SsmRules, SSM_TAG_FIRST, SSM_TAG_LAST, graph_selective_scan
 from autograd.ssm_ops import ssm_m1_states_supported
+# Mamba-3 (lane neural-blocks-3-m3)
+from autograd.ssm_m3_primitives import graph_trapezoid_scan
 
 comptime LAYER_SILU = 32
 comptime LAYER_GELU = 33
@@ -212,11 +221,32 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
         sd.append(cur.d[0])
         sd.append(wide // 2)
         return rn_shape(sd, name + " (SelectiveScan)")
+    # Mamba-3 (lane neural-blocks-3-m3)
+    if code == LAYER_TRAPEZOID_SCAN:
+        if cur.ndim != 2:
+            raise Error(name + " (TrapezoidScan): the input must be (length, features)")
+        var th = a0
+        var tn = _x(xargs, i, 1)
+        if th < 1 or tn < 1:
+            raise Error(name + " (TrapezoidScan): heads and d_state must be positive")
+        var vw = cur.d[1] - th * (2 * tn + 3)
+        if vw < th or vw % th != 0:
+            raise Error(name + " (TrapezoidScan): the features must be heads * (headdim + 2 * d_state + 3), "
+                        + "[v | k | q | dt | A | trap]")
+        var td = List[Int]()
+        td.append(cur.d[0])
+        td.append(vw)
+        return rn_shape(td, name + " (TrapezoidScan)")
     raise Error(name + ": unknown layer code " + String(code))
 
 
 def _scan_dim(xargs: List[Int], i: Int, cur: ShapeN) -> Int:
     return (cur.d[1] - 2 * _x(xargs, i, 0)) // 2
+
+
+def _trap_v(xargs: List[Int], i: Int, cur: ShapeN) -> Int:
+    """The trapezoid scan's v width, heads * headdim."""
+    return cur.d[1] - _x(xargs, i, 0) * (2 * _x(xargs, i, 1) + 3)
 
 
 def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[Int]:
@@ -245,6 +275,8 @@ def block_param_sizes(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
         var dim = _scan_dim(xargs, i, cur)
         out.append(dim * _x(xargs, i, 0))  # A_log (dim, state)
         out.append(dim)                    # D
+    elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
+        out.append(_x(xargs, i, 0))        # D (heads)
     return out^
 
 
@@ -267,6 +299,8 @@ def block_param_names(code: Int) -> List[String]:
         out.append(".bias_hh")
     elif code == LAYER_SELECTIVE_SCAN:
         out.append(".A_log")
+        out.append(".D")
+    elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
         out.append(".D")
     return out^
 
@@ -312,6 +346,8 @@ def block_init_bounds(code: Int, xargs: List[Int], i: Int, cur: ShapeN) -> List[
     elif code == LAYER_SELECTIVE_SCAN:
         # Mamba's init: A_log[d, n] = log(n + 1) (S4D-real), D = 1
         out.append(BLOCK_INIT_S4D)
+        out.append(Float32(-2))
+    elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3): D = 1
         out.append(Float32(-2))
     return out^
 
@@ -472,6 +508,18 @@ def block_forward[E: Exec](
         var a_log = _p(tape, ex, P, Gr, off, dim, a0, train)
         var d_skip = _p(tape, ex, P, Gr, off + dim * a0, 1, dim, train)
         return graph_selective_scan(tape, ex, u, dl, bm, cm, a_log, d_skip)
+    # Mamba-3 (lane neural-blocks-3-m3): [v | k | q | dt | A | trap] as narrow views
+    if code == LAYER_TRAPEZOID_SCAN:
+        var tv = _trap_v(xargs, i, cur)
+        var tk = a0 * _x(xargs, i, 1)
+        var v = rankn_narrow(tape, ex, h, 2, 0, tv)
+        var k = rankn_narrow(tape, ex, h, 2, tv, tk)
+        var q = rankn_narrow(tape, ex, h, 2, tv + tk, tk)
+        var dt = rankn_narrow(tape, ex, h, 2, tv + 2 * tk, a0)
+        var av = rankn_narrow(tape, ex, h, 2, tv + 2 * tk + a0, a0)
+        var tr = rankn_narrow(tape, ex, h, 2, tv + 2 * tk + 2 * a0, a0)
+        var t_skip = _p(tape, ex, P, Gr, off, 1, a0, train)
+        return graph_trapezoid_scan(tape, ex, v, k, q, dt, av, tr, t_skip, a0)
     raise Error("model: unknown block code " + String(code))
 
 
@@ -558,6 +606,8 @@ def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: In
         out.append(dim)
         if slot == 0:
             out.append(_x(xargs, i, 0))
+    elif code == LAYER_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
+        out.append(_x(xargs, i, 0))
     return out^
 
 

@@ -5,7 +5,8 @@
 Each block layer of autograd/model_blocks.mojo (silu, gelu erf and tanh, softplus, rms_norm, rotary,
 multiply / the gated container, narrow after a padded depthwise conv1d (Mamba's causal conv), embedding,
 attention: multi-head, grouped-query, rotary, causal, sliding window and non-causal; rnn, lstm, gru;
-selective_scan, Mamba-1's core as a generic op, lane neural-blocks-2, at state sizes 4 and 8) is
+selective_scan, Mamba-1's core as a generic op, lane neural-blocks-2, at state sizes 4 and 8;
+trapezoid_scan, Mamba-3's core as a generic op, lane neural-blocks-3-m3, at 1 and 2 heads) is
 checked through the model interpreter (autograd/model.mojo model_forward, the version-2 backward with
 ModelRules), inside a small model `linear -> block -> flatten -> linear`:
   - every parameter gradient against central finite differences of the interpreter's own forward loss
@@ -13,6 +14,7 @@ ModelRules), inside a small model `linear -> block -> flatten -> linear`:
   - the attention forward against a float64 oracle written here (projections, rotary, mask, softmax);
   - the rms_norm forward against a float64 oracle;
   - the selective_scan forward against a float64 oracle of the reference recurrence;
+  - the trapezoid_scan forward against a float64 oracle of the trapezoid recurrence;
   - one `NEURAL_BLOCKS <case> digest` line over the output and gradient words.
 Columns: the CPU column runs on HostExec. The device column runs each case on DeviceExec AND HostExec and
 requires the same words (forward values and every gradient): the host-column-versus-device bytes check.
@@ -25,6 +27,7 @@ from autograd.model import ModelSpec, parse_model, model_forward
 from autograd.model_blocks import (
     ModelRules, LAYER_SILU, LAYER_GELU, LAYER_SOFTPLUS, LAYER_RMS_NORM, LAYER_ROTARY, LAYER_MULTIPLY,
     LAYER_NARROW, LAYER_EMBEDDING, LAYER_ATTENTION, LAYER_RECURRENT, LAYER_SELECTIVE_SCAN,
+    LAYER_TRAPEZOID_SCAN,  # Mamba-3 (lane neural-blocks-3-m3)
 )
 from autograd.model_execution import model_float_words
 from sequence.exec_trait import Exec
@@ -171,6 +174,15 @@ def _cases() -> List[_Case]:
         ss.layer(LAYER_SELECTIVE_SCAN, states[k])
         _head(ss)
         out.append(_Case("selective_scan_n" + String(states[k]), ss^, 2, 24, _vals(48, 7, 31, 16)))
+    # Mamba-3 (lane neural-blocks-3-m3) trapezoid_scan: (L 6, 4) -> linear(heads (P + 2 N + 3)) =
+    # [v | k | q | dt | A | trap] -> scan -> (6, heads P); (heads, headdim, state) = (2, 2, 3) and (1, 3, 4)
+    var tshape: List[List[Int]] = [[2, 2, 3], [1, 3, 4]]
+    for k in range(2):  # small-loop(2 head layouts)
+        var ts = _model([6, 4])
+        ts.layer(L_LINEAR, tshape[k][0] * (tshape[k][1] + 2 * tshape[k][2] + 3), 1)
+        ts.layer(LAYER_TRAPEZOID_SCAN, tshape[k][0], tshape[k][2])
+        _head(ts)
+        out.append(_Case("trapezoid_scan_h" + String(tshape[k][0]), ts^, 2, 24, _vals(48, 5, 29, 16)))
     return out^
 
 
@@ -334,6 +346,49 @@ def _scan_oracle(c: _Case, spec: ModelSpec, p: List[Float32]) -> List[Float64]:
     return _linear64(y, c.rows, L * dim, p, spec.param_off[3], 2, True)
 
 
+def _trap_oracle(c: _Case, spec: ModelSpec, p: List[Float32]) -> List[Float64]:
+    """Mamba-3 (lane neural-blocks-3-m3): `linear -> trapezoid_scan -> flatten -> linear(2)` in float64:
+    alpha = exp(A dt), sigma = sigmoid(trap), h[t] = alpha h[t-1] + dt (1 - sigma) alpha k[t-1] v[t-1]
+    + dt sigma k[t] v[t], y = q . h + D v."""
+    var L = 6
+    var H = c.model.args[6]
+    var N = c.model.args[7]
+    var spec_w = c.model.args[0]
+    var P = (spec_w - H * (2 * N + 3)) // H
+    var W = spec_w
+    var x = List[Float64]()
+    for i in range(len(c.x)):  # small-loop(oracle)
+        x.append(Float64(c.x[i]))
+    var h = _linear64(x, c.rows * L, 4, p, 0, W, True)
+    var off = spec.param_off[1]
+    var HP = H * P
+    var HN = H * N
+    var y = List[Float64](length=c.rows * L * HP, fill=0)
+    for b in range(c.rows):  # small-loop(oracle)
+        for hh in range(H):  # small-loop(oracle)
+            for pp in range(P):  # small-loop(oracle)
+                var st = List[Float64](length=N, fill=0)
+                for t in range(L):  # small-loop(oracle)
+                    var r = (b * L + t) * W
+                    var vv = h[r + hh * P + pp]
+                    var dt = h[r + HP + 2 * HN + hh]
+                    var av = h[r + HP + 2 * HN + H + hh]
+                    var sg = 1.0 / (1.0 + exp(-h[r + HP + 2 * HN + 2 * H + hh]))
+                    var al = exp(av * dt)
+                    var be = dt * (1.0 - sg) * al
+                    var ga = dt * sg
+                    var acc = Float64(0)
+                    for n in range(N):  # small-loop(oracle)
+                        var drive = ga * h[r + HP + hh * N + n] * vv
+                        if t > 0:
+                            var rp = r - W
+                            drive += be * h[rp + HP + hh * N + n] * h[rp + hh * P + pp]
+                        st[n] = al * st[n] + drive
+                        acc += h[r + HP + HN + hh * N + n] * st[n]
+                    y[(b * L + t) * HP + hh * P + pp] = acc + Float64(p[off + hh]) * vv
+    return _linear64(y, c.rows, L * HP, p, spec.param_off[3], 2, True)
+
+
 def _close(name: String, got: List[Float32], want: List[Float64], tol: Float64) raises:
     if len(got) != len(want):
         _fail(name + ": length " + String(len(got)) + " expected " + String(len(want)))
@@ -369,6 +424,8 @@ def run_case[E: Exec](mut ex: E, c: _Case, finite_differences: Bool) raises -> L
         _close(c.name + " forward", yv, _rms_oracle(c, spec, params), 1e-4)
     elif c.name.startswith("selective_scan"):
         _close(c.name + " forward", yv, _scan_oracle(c, spec, params), 1e-4)
+    elif c.name.startswith("trapezoid_scan"):  # Mamba-3 (lane neural-blocks-3-m3)
+        _close(c.name + " forward", yv, _trap_oracle(c, spec, params), 1e-4)
     if finite_differences:
         var fd = List[Float64](length=len(params), fill=0)
         for i in range(len(params)):  # small-loop(every parameter probed)
