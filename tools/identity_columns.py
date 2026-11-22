@@ -545,13 +545,23 @@ def record_lane_results(path, h, v, cls, want_fix, want_held):
 
 
 def record_sources(dirs):
-    """Every *.identical.json under `dirs` (recursively), sorted, deduplicated."""
+    """Every *.identical.json under `dirs` (recursively), sorted, deduplicated.
+
+    A checkout's `bench/results/identity_break` is read through its record
+    index (INDEX.tsv, the rows the verify table reads; 2026-11-21 lane
+    tree-readers), never walked, so a stray file there is no reuse evidence
+    either. Other directories (a run's output dir) are walked as given."""
     seen, out = set(), []
     for d in dirs:
         d = Path(d)
         if not d.is_dir():
             continue
-        for path in sorted(d.rglob("*.identical.json")):
+        if d.resolve().parts[-3:] == ("bench", "results", "identity_break"):
+            found = sorted(Path(p) for p in vref().indexed_record_paths(str(d), str(d.resolve().parents[2]))
+                           if p.endswith(".identical.json"))
+        else:
+            found = sorted(d.rglob("*.identical.json"))
+        for path in found:
             if any(tag in str(path) for tag in _NOT_A_SOURCE):
                 continue
             real = path.resolve()

@@ -257,6 +257,30 @@ def identity_companions(path, record):
     return files
 
 
+def index_identity(root, paths):
+    """Give retained columns their rows in the record index the verify table
+    reads (bench/results/identity_break/INDEX.tsv; python/mojolearn/
+    _verify_reference.py repository_record_paths reads ONLY listed files,
+    2026-11-21 lane tree-readers). Idempotent; a file that is not
+    column-shaped gets no row. A checkout with no index is given one only when
+    it holds no other identity record, so a lost index is never replaced by a
+    one-row table."""
+    import importlib.util
+    root = Path(root)
+    source = root / 'python/mojolearn/_verify_reference.py'
+    if not source.is_file():
+        source = ROOT / 'python/mojolearn/_verify_reference.py'
+    spec = importlib.util.spec_from_file_location('_retain_vref', source)
+    v = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(v)
+    base = root / 'bench/results/identity_break'
+    named = {Path(p).resolve() for p in paths}
+    others = (q for q in base.rglob('*.json')
+              if q.resolve() not in named and not any(x.startswith('.admission-preview-') for x in q.parts))
+    create = not (root / v.RECORD_INDEX).exists() and next(others, None) is None
+    return v.add_to_index(str(root), [str(p) for p in paths], create=create)
+
+
 def retain_identity(path, repo=None):
     """Keep the exact column bytes at an immutable path, before table admission."""
     root = repository(repo)
@@ -287,6 +311,7 @@ def retain_identity(path, repo=None):
         immutable_bytes(sidecar, raw_provenance)
         retained_provenance = sidecar.relative_to(root).as_posix()
     immutable_bytes(target, raw, limit=MAX_IDENTITY_BYTES)
+    index_identity(root, [target])
     retain('verification', 'identity-' + str(record.get('vendor', 'unknown')),
            dict(record=target.relative_to(root).as_posix(), sha256=sha,
                 provenance=retained_provenance, companions=retained_companions,

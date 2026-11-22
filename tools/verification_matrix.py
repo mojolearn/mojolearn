@@ -252,9 +252,15 @@ def negative_control_moves(cell, clean, part):
 
 
 def read_columns(verify_reference):
-    """Every identity_break column committed under bench/results/."""
+    """Every identity_break column committed under bench/results/: the files
+    the record indexes list (bench/results/identity_break/INDEX.tsv and
+    bench/results/CELLS_INDEX.tsv, tools/record_index.py), never a glob of the
+    tree (2026-11-21, lane tree-readers: the glob took every JSON with a
+    `cells` dict, so a stray file changed the matrix). A listed file that is
+    missing or changed is refused; `tools/record_index.py check` lists the
+    column-shaped files no index names."""
     cols = []
-    for path in sorted(glob.glob(os.path.join(ROOT, "bench/results/**/*.json"), recursive=True)):
+    for path in verify_reference.indexed_cells_paths(ROOT):
         try:
             with open(path) as fh:
                 j = json.load(fh)

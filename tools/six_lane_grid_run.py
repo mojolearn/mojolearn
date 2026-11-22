@@ -110,6 +110,42 @@ def sha_refs(value, out):
     return out
 
 
+#: The committed Oct 6 receipts `kit` reads, by name (2026-11-21, lane tree-readers): it used to glob
+#: `*/*/*/attempt-*/receipt.json` under this directory, so any file dropped there became attestation.
+OCT6_RECEIPTS = ROOT / 'experiments/six_lane_integration/measurements/20261006/receipts'
+OCT6_RECEIPTS_INDEX = OCT6_RECEIPTS / 'INDEX.tsv'
+
+
+def oct6_receipt_rows():
+    """[(receipt path, vendor)] from OCT6_RECEIPTS_INDEX (path relative to the receipts dir, sha256,
+    vendor). A listed receipt that is missing or changed is refused; an unlisted one is ignored."""
+    rows, problems = [], []
+    for line in OCT6_RECEIPTS_INDEX.read_text().splitlines():
+        if not line or line.startswith('#') or line == 'path\tsha256\tvendor':
+            continue
+        rel, sha, vendor = line.split('\t')
+        path = OCT6_RECEIPTS / rel
+        if not path.is_file():
+            problems.append(f'{rel} is listed but missing')
+        elif sha_file(path) != sha:
+            problems.append(f'{rel} is listed with sha256 {sha[:16]} but its bytes changed')
+        rows.append((path, vendor))
+    if problems:
+        raise SystemExit(f'REFUSED: {OCT6_RECEIPTS_INDEX.relative_to(ROOT)}: ' + '; '.join(problems[:8]))
+    return rows
+
+
+def oct6_receipt_bindings():
+    """[(vendor, workload id, sorted A-arm binding stems)] of the indexed Oct 6 receipts, in path order."""
+    out = []
+    for receipt, vendor in oct6_receipt_rows():
+        job = read(receipt).get('workload', {})
+        names = sorted({stem(a['path']) for a in job.get('artifact_provenance', {}).get('A', [])})
+        if job.get('workload_id') and names:
+            out.append((vendor, job['workload_id'], names))
+    return out
+
+
 def kit(args):
     evidence = Path(args.evidence).expanduser()
     out = Path(args.out).expanduser()
@@ -142,14 +178,9 @@ def kit(args):
                     if names:
                         bindings[vendor].setdefault(canon(wid), names)
     # Committed Oct 6 receipts carry the same attestation for workloads whose deployment file is gone.
-    for receipt in sorted((ROOT / 'experiments/six_lane_integration/measurements/20261006/receipts').glob('*/*/*/attempt-*/receipt.json')):
-        vendor = receipt.parts[-5]
-        if vendor not in bindings:
-            continue
-        job = read(receipt).get('workload', {})
-        names = sorted({stem(a['path']) for a in job.get('artifact_provenance', {}).get('A', [])})
-        if job.get('workload_id') and names:
-            bindings[vendor].setdefault(canon(job['workload_id']), names)
+    for vendor, wid, names in oct6_receipt_bindings():
+        if vendor in bindings:
+            bindings[vendor].setdefault(canon(wid), names)
     # Small sha-bound evidence the registered input variants read (proposals, receipts, plans, contracts),
     # followed one level into retained JSON documents. Large data inputs are listed, never copied.
     by_name = {}

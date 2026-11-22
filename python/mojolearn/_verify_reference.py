@@ -95,19 +95,235 @@ def require_repository_records(paths, repo_root):
 
 
 def repository_record_paths(records, repo_root):
-    """Discover normal records; temporary check-only inputs require explicit selection."""
+    """The table's inputs: explicit record files, plus the RECORD INDEX rows
+    under each directory named. A directory is never walked.
+
+    THE RECORD INDEX (2026-11-21, lane tree-readers; Andrew: "what is reading
+    all of this stuff and why? maybe the reader needs to be fixed"). This used
+    to `os.walk` every `*.json` under the directory, so every file on disk was
+    a possible input: a stray file changed the table and nothing could be
+    moved. The inputs are now the rows of `bench/results/identity_break/
+    INDEX.tsv` (path, sha256, class, vendor, commit), generated once from what
+    the walk returned (every JSON with a `cells` dict; the others were refused
+    as "not an identity_break column" and never reached a cell) and appended to
+    by the tool that retains a record (tools/retain_run_summary.py
+    `retain_identity`, tools/identity_admission_guard.py `inputs`). A listed
+    file that is missing or whose bytes changed is refused; a file the index
+    does not list is ignored (`python3 tools/record_index.py check` lists
+    them). A check-only preview is never indexed: its owner passes the exact
+    preview files."""
     paths = []
     for record in records:
         if os.path.isfile(record):
             paths.append(record)
             continue
-        for directory, children, names in os.walk(record):
-            # A concurrent or interrupted preview must never become another
-            # admission's input. Its owner supplies the exact preview files.
-            children[:] = [name for name in children if not name.startswith('.admission-preview-')]
-            paths.extend(os.path.join(directory, name) for name in names if name.endswith('.json'))
+        paths.extend(indexed_record_paths(record, repo_root))
     require_repository_records(paths, repo_root)
     return paths
+
+
+# --------------------------------------------------------------------------
+# the record indexes (what the readers of bench/results read, by name)
+# --------------------------------------------------------------------------
+
+#: The verify table's inputs (and the identity_break part of the matrix's).
+RECORD_INDEX = "bench/results/identity_break/INDEX.tsv"
+#: The column-shaped JSONs OUTSIDE identity_break that tools/verification_matrix.py
+#: and tools/part_set_census.py read (they never feed the verify table).
+CELLS_INDEX = "bench/results/CELLS_INDEX.tsv"
+INDEX_FIELDS = ("path", "sha256", "class", "vendor", "commit")
+
+
+class RecordIndexError(ValueError):
+    """A listed record is missing or changed, or the index is unreadable."""
+
+
+def column_shaped(j):
+    """The one test every reader applied to a file it found: a JSON object
+    whose `cells` is a dict. Anything else was skipped by all of them."""
+    return isinstance(j, dict) and isinstance(j.get("cells"), dict)
+
+
+def index_for(rel):
+    """The index a repository-relative record path belongs to, or None."""
+    base = os.path.dirname(RECORD_INDEX) + "/"
+    if rel.startswith(base):
+        return RECORD_INDEX
+    if rel.startswith("bench/results/"):
+        return CELLS_INDEX
+    return None
+
+
+def read_index(repo_root, index=RECORD_INDEX, verify=True):
+    """[(repository-relative path, row dict)] in file order. With `verify`,
+    every listed file must exist with its listed sha256, or this refuses."""
+    index_path = os.path.join(repo_root, index)
+    if not os.path.isfile(index_path):
+        raise RecordIndexError(f"no record index {index}: the readers of bench/results read only "
+                          "the files an index lists (python3 tools/record_index.py)")
+    rows, problems = [], []
+    with open(index_path, "r", encoding="utf-8") as fh:
+        for n, line in enumerate(fh, 1):
+            line = line.rstrip("\n")
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split("\t")
+            if tuple(fields) == INDEX_FIELDS:
+                continue
+            if len(fields) != len(INDEX_FIELDS) or not re.fullmatch(r"[0-9a-f]{64}", fields[1]):
+                raise RecordIndexError(f"{index}:{n}: not a row of {'/'.join(INDEX_FIELDS)}: {line[:120]!r}")
+            row = dict(zip(INDEX_FIELDS, fields))
+            rows.append((row["path"], row))
+            if not verify:
+                continue
+            path = os.path.join(repo_root, row["path"])
+            if not os.path.isfile(path):
+                problems.append(f"{row['path']} is listed but missing")
+            elif sha256_file(path) != row["sha256"]:
+                problems.append(f"{row['path']} is listed with sha256 {row['sha256'][:16]} but its bytes "
+                                f"now hash {sha256_file(path)[:16]}")
+    if problems:
+        raise RecordIndexError(f"record index {index} refuses {len(problems)} listed file(s): "
+                               + "; ".join(problems[:8]) + ". A committed record never changes or moves: "
+                               "restore its bytes, or retire its row on purpose (tools/record_index.py)")
+    return rows
+
+
+def indexed_record_paths(directory, repo_root):
+    """Rows of RECORD_INDEX under `directory` (the record root or one of its
+    subdirectories), spelled `directory` + the rest, as the walk spelled them."""
+    root = os.path.realpath(repo_root)
+    base = os.path.join(root, os.path.dirname(RECORD_INDEX))
+    real = os.path.realpath(directory)
+    if real != base and not real.startswith(base + os.sep):
+        raise ValueError("reference input must be a regular repository file under "
+                         "bench/results/identity_break: " + str(directory))
+    prefix = os.path.relpath(real, root).replace(os.sep, "/")
+    if not os.path.isfile(os.path.join(root, RECORD_INDEX)):
+        # A record tree with no record at all has no inputs. One that holds
+        # records but no index is refused (read_index), never read as empty.
+        for _, children, names in os.walk(base):
+            children[:] = [n for n in children if not n.startswith(".admission-preview-")]
+            if any(n.endswith(".json") for n in names):
+                read_index(repo_root, RECORD_INDEX)
+        return []
+    out = []
+    for rel, _ in read_index(repo_root, RECORD_INDEX):
+        if rel == prefix or rel.startswith(prefix + "/"):
+            out.append(os.path.join(directory, *rel[len(prefix) + 1:].split("/")))
+    return out
+
+
+def indexed_cells_paths(repo_root):
+    """Every column-shaped JSON the matrix and the census read: RECORD_INDEX
+    and CELLS_INDEX rows, as sorted absolute paths (the order their glob gave)."""
+    rels = [rel for index in (RECORD_INDEX, CELLS_INDEX) for rel, _ in read_index(repo_root, index)]
+    return sorted(os.path.join(repo_root, rel) for rel in rels)
+
+
+def index_row(repo_root, path):
+    """The row for a record file, or None when the file is not column-shaped
+    (no reader takes it, so no index lists it)."""
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    try:
+        j = json.loads(raw)
+    except ValueError:
+        return None
+    if not column_shaped(j):
+        return None
+    rel = os.path.relpath(os.path.realpath(path), os.path.realpath(repo_root)).replace(os.sep, "/")
+    try:
+        cls, _ = record_device_class(j, path)
+    except Exception:  # a malformed signature; the role is informational
+        cls = None
+    def text(v):
+        return re.sub(r"[\t\n\r]", " ", str(v)) if v not in (None, "") else "-"
+    return dict(path=rel, sha256=hashlib.sha256(raw).hexdigest(), **{"class": text(cls)},
+                vendor=text(j.get("vendor")), commit=text(j.get("commit")))
+
+
+def write_index(repo_root, index, rows, header_note):
+    """Write `rows` (row dicts) sorted by path, atomically."""
+    index_path = os.path.join(repo_root, index)
+    tmp = index_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        for note in header_note:
+            fh.write("# " + note + "\n")
+        fh.write("\t".join(INDEX_FIELDS) + "\n")
+        for row in sorted(rows, key=lambda r: r["path"]):
+            if any("\t" in row[k] or "\n" in row[k] for k in INDEX_FIELDS):
+                raise RecordIndexError(f"cannot index {row['path']!r}: a tab or newline in a field")
+            fh.write("\t".join(row[k] for k in INDEX_FIELDS) + "\n")
+    os.replace(tmp, index_path)
+
+
+def index_header(repo_root, index):
+    """The leading `#` lines of an existing index (kept on rewrite)."""
+    index_path = os.path.join(repo_root, index)
+    notes = []
+    if os.path.isfile(index_path):
+        with open(index_path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                if not line.startswith("#"):
+                    break
+                notes.append(line[2:].rstrip("\n") if line.startswith("# ") else line[1:].rstrip("\n"))
+    return notes
+
+
+#: The `#` lines a new index starts with.
+INDEX_NOTES = {
+    RECORD_INDEX: (
+        "THE VERIFY TABLE'S INPUTS (python/mojolearn/_verify_reference.py repository_record_paths).",
+        "One row per column-shaped record: path, sha256, device class, vendor, commit. Only these files",
+        "are read; a listed file that is missing or changed is refused. New rows come from the tool that",
+        "retains a record (tools/retain_run_summary.py retain_identity) or tools/record_index.py add.",
+    ),
+    CELLS_INDEX: (
+        "COLUMN-SHAPED JSONS OUTSIDE identity_break read by tools/verification_matrix.py and",
+        "tools/part_set_census.py (never by the verify table). Same rules as identity_break/INDEX.tsv.",
+    ),
+}
+
+
+def add_to_index(repo_root, paths, create=False):
+    """Append the rows for newly recorded files (the recording tools call this).
+    Idempotent for a listed file with the same bytes; refuses a listed path
+    whose bytes differ, and a path outside bench/results. A missing index is
+    refused (it would silently become a table with only the new rows) unless
+    `create`: the caller proved the tree holds no other record. Returns the
+    rows added."""
+    added, by_index = [], {}
+    for path in paths:
+        if any(part.startswith(".admission-preview-") for part in str(path).split(os.sep)):
+            continue  # a check-only preview is never an input of the tree's readers
+        row = index_row(repo_root, path)
+        if row is None:
+            continue
+        index = index_for(row["path"])
+        if index is None:
+            raise RecordIndexError(f"{row['path']} is not under bench/results; no index lists it")
+        by_index.setdefault(index, []).append(row)
+    for index, new in by_index.items():
+        missing = not os.path.isfile(os.path.join(repo_root, index))
+        if missing and not create:
+            read_index(repo_root, index, verify=False)  # refuses in words
+        rows = {} if missing else {rel: row for rel, row in read_index(repo_root, index, verify=False)}
+        fresh = []
+        for row in new:
+            old = rows.get(row["path"])
+            if old is not None:
+                if old["sha256"] != row["sha256"]:
+                    raise RecordIndexError(f"{index} lists {row['path']} with sha256 {old['sha256'][:16]}; "
+                                           f"the file now hashes {row['sha256'][:16]}; a record never changes")
+                continue
+            rows[row["path"]] = row
+            fresh.append(row)
+        if fresh:
+            notes = INDEX_NOTES.get(index, ()) if missing else index_header(repo_root, index)
+            write_index(repo_root, index, rows.values(), notes)
+            added.extend(fresh)
+    return added
 
 
 TABLE_DIR = "verify_reference"

@@ -180,13 +180,38 @@ class RepositoryVerification(unittest.TestCase):
 
     def test_discovery_cannot_consume_another_admissions_temporary_preview(self):
         base = self.root / V.RECORDS
+        ref = self.generator()
+        self.column.write_text(json.dumps(dict(commit="a" * 40, vendor="cpu", cells={})))
+        with self.assertRaisesRegex(ValueError, 'no record index'):
+            ref.repository_record_paths([base], self.root)
+        self.assertEqual([r['path'] for r in ref.add_to_index(str(self.root), [str(self.column)], create=True)],
+                         [str(self.column.relative_to(self.root))])
         preview = base / '.admission-preview-other' / 'temporary.json'
         preview.parent.mkdir()
         preview.write_bytes(self.column.read_bytes())
-        ref = self.generator()
+        self.assertEqual(ref.add_to_index(str(self.root), [str(preview)]), [])
         self.assertEqual(set(map(Path, ref.repository_record_paths([base], self.root))), {self.column})
         self.assertEqual(set(map(Path, ref.repository_record_paths([base, preview], self.root))),
                          {self.column, preview})
+
+    def test_discovery_reads_only_the_record_index(self):
+        base = self.root / V.RECORDS
+        ref = self.generator()
+        self.column.write_text(json.dumps(dict(commit="a" * 40, vendor="cpu", cells={})))
+        ref.add_to_index(str(self.root), [str(self.column)], create=True)
+        stray = base / 'stray' / 'cpu.json'
+        stray.parent.mkdir()
+        stray.write_bytes(self.column.read_bytes())
+        self.assertEqual(set(map(Path, ref.repository_record_paths([base], self.root))), {self.column})
+        self.assertEqual(set(map(Path, ref.repository_record_paths([base / 'stray'], self.root))), set())
+        self.column.write_text(json.dumps(dict(commit="b" * 40, vendor="cpu", cells={})))
+        with self.assertRaisesRegex(ValueError, 'listed with sha256'):
+            ref.repository_record_paths([base], self.root)
+        with self.assertRaisesRegex(ValueError, 'a record never changes'):
+            ref.add_to_index(str(self.root), [str(self.column)])
+        self.column.unlink()
+        with self.assertRaisesRegex(ValueError, 'listed but missing'):
+            ref.repository_record_paths([base], self.root)
 
 
 if __name__ == "__main__":
