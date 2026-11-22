@@ -1850,8 +1850,11 @@ def _predict_staged(kind: String, staged: ForestStaged, context: PythonObject) r
     if _classifier(kind):
         var nk = trees_keys()
         return trees_decode_labels(py_item(staged.fields, nk[].k_classes_), _codes_staged(kind, staged, context), context)
+    # predict has one type (Andrew, 2026-11-22, lane predict-dtype): the
+    # float32 mean vote for both families, with no float64 widening pass
+    # (it was exact: the same values in a second buffer twice the size).
     if _family(kind) == "et":
-        return _widen(_vote(staged, "et_predict", context), Python.tuple(staged.x.rows), context)
+        return _vote(staged, "et_predict", context)
     return _vote(staged, "rf_predict_reg", context)
 
 
@@ -1880,7 +1883,7 @@ def forest_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
 def forest_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`predict`: a classifier's labels (the resident fused labels, else the
     first-max argmax of the vote) decoded through `classes_`; a regressor's
-    values (RF and DT float32, ET float64)."""
+    values (float32 for RF, ET and DT)."""
     # A random-splitter tree answers through its inner forest: followed in a
     # loop, not by self-recursion (ne-fix-hang2; kept on its own merits,
     # the compile hang was elsewhere); same model reached, same calls on it.

@@ -13,7 +13,7 @@ from bindings.classical_pandas_door import classical_admit_value, native_pandas_
 from bindings.sequential_admission_door import _ordinary_torch
 from bindings.native_torch_admission_door import native_torch_numpy
 from bindings.host_array_native_pack import host_archive_typed
-from bindings.host_tree_native_door import host_tree_input, host_tree_constructor_fields, host_tree_wide
+from bindings.host_tree_native_door import host_tree_input, host_tree_constructor_fields
 from bindings.host_sparse_native_door import host_sparse_format, host_sparse_dense
 from bindings.host_inference_features_unpack import host_inference_feature_names
 from bindings.host_inference_scalars_door import host_inference_scalar
@@ -160,7 +160,7 @@ def host_svr_predict(model: PythonObject, fields: PythonObject, source: PythonOb
     _ = dual^
     _ = support^
     _ = columns^
-    return classical_input(host_tree_wide(out, context), context, "prediction") if public and py_get(context, nk[].k_ndarray) is not None else out
+    return classical_input(out, context, "prediction") if public and py_get(context, nk[].k_ndarray) is not None else out
 
 
 def _svr_coefficients(model: PythonObject, context: PythonObject) raises -> PythonObject:
