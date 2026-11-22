@@ -32,6 +32,9 @@ comptime MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM = 12
 comptime MANI_OPN_FAMILY_MANI_UMAP_FIT = 13
 comptime MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM = 14
 comptime MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM = 15
+# `vendor_used` of the decomp four (Isomap, LocallyLinearEmbedding, MDS,
+# ClassicalMDS): metadata, no input, served before any lifecycle step.
+comptime MANI_OPN_FAMILY_MANI_VENDOR_USED = 16
 
 
 def operation_names_mani(mut names: List[String], mut leaves: List[Int]):
@@ -68,3 +71,5 @@ def operation_names_mani(mut names: List[String], mut leaves: List[Int]):
     leaves.append(MANI_OPN_FAMILY_MANI_UMAP_FIT_TRANSFORM)
     names.append("family_mani_umap_transform")
     leaves.append(MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM)
+    names.append("family_mani_vendor_used")
+    leaves.append(MANI_OPN_FAMILY_MANI_VENDOR_USED)

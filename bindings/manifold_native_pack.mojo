@@ -7,7 +7,7 @@
 from std.python import Python, PythonObject
 from bindings.mani_tsne_native_unpack import tsne_operation
 from bindings.mani_umap_native_door import umap_operation
-from bindings.mani_decomp_native_door import mani_decomp_operation
+from bindings.mani_decomp_native_door import mani_decomp_operation, mani_decomp_vendor_used
 from bindings.manifold_settings_native_door import ManifoldSettings, manifold_transforms
 from bindings.manifold_lifecycle_native_door import (
     manifold_method, manifold_require_fitted, manifold_input, manifold_ignored_target,
@@ -23,7 +23,7 @@ from bindings.public_lifecycle_owner_door import lifecycle_begin, lifecycle_end
 from bindings.operation_names_mani import (
     MANI_OPN_FAMILY_MANI_ISO_RECONSTRUCTION_ERROR, MANI_OPN_FAMILY_MANI_MDS_FIT, MANI_OPN_FAMILY_MANI_MDS_FIT_TRANSFORM,
     MANI_OPN_FAMILY_MANI_TSNE_FIT, MANI_OPN_FAMILY_MANI_TSNE_FIT_TRANSFORM, MANI_OPN_FAMILY_MANI_UMAP_FIT,
-    MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM,
+    MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM, MANI_OPN_FAMILY_MANI_VENDOR_USED,
 )
 from bindings.mani_keys_unpack import mani_keys
 from bindings.py_balanced import py_item
@@ -56,6 +56,9 @@ def manifold_operation(model: PythonObject, operation: Int, args: PythonObject,
     var release = sequence_array_release(context) if py_get(py_item(context, nk[].k_modules), nk[].k_numpy) is not None else 0
     py_setitem(context, nk[].k_family_mani_numpy_release, PythonObject(release))
     var settings = ManifoldSettings(model, operation, context)
+    if operation == MANI_OPN_FAMILY_MANI_VENDOR_USED:
+        # Metadata, no input and no lifecycle step (as PLS / the decomp kit).
+        return mani_decomp_vendor_used(model, settings, context)
     if operation >= MANI_OPN_FAMILY_MANI_UMAP_FIT and operation <= MANI_OPN_FAMILY_MANI_UMAP_TRANSFORM:
         # UMAP's whole public lifecycle (the former `_mode` wrappers): the
         # fitted check (NotFittedError), X refusals, width and feature-name
