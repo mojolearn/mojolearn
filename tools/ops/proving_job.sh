@@ -4,7 +4,7 @@
 # tools/ops/feature_proof_job.sh on the same venv, then checks/device_context_concurrent_repro.mojo from the tree.
 # Diagnostic tooling: times nothing, decides no release. Each step prints `PROVING <name> PASS|FAIL rc=<n> <s>s` and
 # keeps its full output in logs/<name>.log; the job exits 1 when any step failed. The steps share the one GPU, so they
-# run one after another; inside the pytest step the test files spread over every core (-n auto).
+# run one after another; inside the pytest step the test files spread over every core (one worker per allocated core).
 #
 #   tools/nvidia_central.sh submit <lane> --cap 90 --results box-out/proving-<sha12> \
 #       --env PV_WHEEL_DIR=/root/pc-in/<sha12>/nvidia tools/ops/proving_job.sh
@@ -14,6 +14,9 @@ RES="${MOJOLEARN_RESULTS_DIR:?proving_job.sh needs MOJOLEARN_RESULTS_DIR (set by
 mkdir -p "$RES/logs" && RES="$(cd "$RES" && pwd)"
 WHEELS="${PV_WHEEL_DIR:?proving_job.sh needs PV_WHEEL_DIR (the staged candidate wheels)}"
 VENV="$RES/venv"
+# Workers follow the allocation, not the host: xdist's auto count read 128 host CPUs on a 14-core cgroup and every
+# worker's import aborted (2026-11-22, nvc1-0002).
+. "$HERE/box_cores_lib.sh"; W=$(alloc_cores)
 fails=0
 step() { # name, command...
     local n=$1; shift; local t0=$SECONDS
@@ -29,8 +32,8 @@ step install install || true
 [ -x "$VENV/bin/python" ] || { echo "PROVING setup FAIL no venv"; exit 4; }
 "$VENV/bin/python" -I -c "import mojolearn as ml; print('PROVING wheel', ml.__version__)" 2>&1 | tail -n 1
 cd "$REPO" || exit 4
-step proving "$VENV/bin/python" -m pytest tests/proving -q -n auto -p no:cacheprovider
-step proving_gpu "$VENV/bin/python" -m pytest tests/proving -q -m gpu -n auto -p no:cacheprovider
+step proving "$VENV/bin/python" -m pytest tests/proving -q -n "$W" -p no:cacheprovider
+step proving_gpu "$VENV/bin/python" -m pytest tests/proving -q -m gpu -n "$W" -p no:cacheprovider
 step feature_proof env FP_VENV="$VENV" MOJOLEARN_RESULTS_DIR="$RES/feature-proof" bash tools/ops/feature_proof_job.sh
 step concurrent_repro bash -c "export PATH=\$PATH:/root/.pixi/bin; pixi run -q mojo run -I . checks/device_context_concurrent_repro.mojo"
 echo "PROVING done fails=$fails"
