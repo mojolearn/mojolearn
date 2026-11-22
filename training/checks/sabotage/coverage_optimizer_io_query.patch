@@ -1,22 +1,22 @@
---- a/training/optimizer_public.mojo
-+++ b/training/optimizer_public.mojo
-@@ -628,7 +628,7 @@
+--- a/training/optimizer_public.mojo	2026-11-22 12:35:39
++++ b/training/optimizer_public.mojo	2026-11-22 12:35:39
+@@ -630,7 +630,7 @@
          else:
              available = False
      if op_code == IO_QUERY:
 -        return (h, 1 if available else 0)
-+        return (h, 0 if available else 1)
++        return (h, 0 if available else 1)  # SABOTAGE (coverage-native-optimizer-io-query): the GPU IO query reports the opposite capability
      if not available:
          raise Error(
              "RuntimeError: mojolearn optimizer: this build has no device-resident parameter "
---- a/bindings/optimizer_public_host_pyapi.mojo
-+++ b/bindings/optimizer_public_host_pyapi.mojo
-@@ -36,7 +36,7 @@
+--- a/training/host/optimizer_kernels.mojo	2026-11-22 12:35:39
++++ b/training/host/optimizer_kernels.mojo	2026-11-22 12:35:39
+@@ -49,7 +49,7 @@
          if op_code != 0:
              raise Error("RuntimeError: mojolearn optimizer: this build has no device-resident parameter "
                          "entries (a CPU-only install)")
 -        return (req.handle, 0)
-+        return (req.handle, 1)
++        return (req.handle, 1)  # SABOTAGE (coverage-native-optimizer-io-query): the CPU IO query reports a capability it does not have
  
      @staticmethod
      def clip(addrs: List[Int], nbytes: List[Int], max_norm: Float32) raises -> Tuple[Float32, Float32]:

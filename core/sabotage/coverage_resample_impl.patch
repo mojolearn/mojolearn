@@ -1,9 +1,22 @@
---- a/core/resample_impl.mojo
-+++ b/core/resample_impl.mojo
-@@ -6,3 +6,6 @@
- def resample_store_indices(op: MutPointer[Int32, MutUntrackedOrigin], idx: List[Int32], count: Int):
-     for i in range(count):
-         op.unsafe_store(i, idx[i])
+--- a/core/resample_impl.mojo	2026-11-22 12:34:48
++++ b/core/resample_impl.mojo	2026-11-22 12:35:37
+@@ -9,3 +9,6 @@
+     # int32 buffer (it was a serial one-element-per-iteration host loop)
+     if count > 0:
+         unsafe_memcpy(dest=op, src=idx.unsafe_ptr(), count=count)
 +    if count > 1:  # SABOTAGE (coverage arm): the first two indices swapped
 +        op.unsafe_store(0, idx[1])
 +        op.unsafe_store(1, idx[0])
+--- a/resample/resample_native.mojo	2026-11-22 12:35:37
++++ b/resample/resample_native.mojo	2026-11-22 12:35:37
+@@ -186,6 +186,10 @@
+         resample_indices_replace_into(n, count, seed, dst)
+     else:
+         resample_indices_permute_into(n, count, seed, dst)
++    if count > 1:  # SABOTAGE (coverage arm): the first two indices swapped
++        var first = dst.unsafe_load(0)
++        dst.unsafe_store(0, dst.unsafe_load(1))
++        dst.unsafe_store(1, first)
+     return 0
+ 
+ 

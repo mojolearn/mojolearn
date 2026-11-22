@@ -1,11 +1,20 @@
---- a/bindings/lr_table_helpers.mojo
-+++ b/bindings/lr_table_helpers.mojo
-@@ -238,6 +238,8 @@
-         var style = Int(py=args[3])
-         var out = py_call(Python.import_module("array").array, PythonObject("f"), py_call(bi.bytes, PythonObject(4 * n)))
-         var r = lr_spec_fill(_spec(ip, args[1]), 1, n, F32P(unsafe_from_address=Int(py=out.buffer_info()[0])))
-+        if n > 0:
-+            F32P(unsafe_from_address=Int(py=out.buffer_info()[0]))[0] = Float32(0.0)
-         if r[0] != 0:
-             raise _lr_refusal(r[0], 1 + r[1], style, Int(py=ip[3]))
-         return out.steal_data()
+--- a/bindings/optimizer_schedule_native_door.mojo	2026-11-22 12:34:48
++++ b/bindings/optimizer_schedule_native_door.mojo	2026-11-22 12:34:53
+@@ -277,6 +277,8 @@
+             var rates = List[Float32](length=plan.count, fill=0)
+             with GILReleased(Python()):
+                 plan.fill(rates.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]())
++            if plan.count > 0:  # SABOTAGE (coverage-native-schedule-series): the series' first returned rate is zeroed
++                rates[0] = Float32(0.0)
+             return py_list_f32(rates)
+         # lane fix-output-zero-fill (2026-11-14): unfilled; plan.fill writes all plan.count rates.
+         var result = native_array_unfilled("f", plan.count)
+@@ -285,6 +287,8 @@
+         var address = native_buffer_address(result)
+         with GILReleased(Python()):
+             plan.fill(F32P(unsafe_from_address=address))
++        if plan.count > 0:  # SABOTAGE (coverage-native-schedule-series): the series' first returned rate is zeroed
++            F32P(unsafe_from_address=address)[0] = Float32(0.0)
+         _ = result
+         return result
+     var stored = List[Float32](length=1, fill=0)
