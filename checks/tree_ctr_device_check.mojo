@@ -184,6 +184,7 @@ def check_tree_ctr_device() raises:
     var borders = tree_ctr_uniform_borders_host(cp, n, 15)
     var bins = List[UInt32](length=n, fill=UInt32(0))
     tree_ctr_bins_into(cp, n, borders, _u32p(bins))
+    _ = col^  # keep alive: cp points into it and the two calls above read through cp
     var d_bins = upload[DType.uint32](ctx, bins)
     launch_tree_slot_write(ctx, d_cindex, packed.layout.features[2], n, d_bins)
     # a second write of the same slot replaces, it does not OR

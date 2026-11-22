@@ -260,6 +260,7 @@ def _fit_ovo(drivers: SvcDrivers, plan: SvcFitPlan, settings: SvcOperationSettin
             _gather(drivers, plan.x, n, plan.cols, _i32(index), m, _i32(index) if precomputed else 0, sub_cols, _f32(sub))
             var scratch = SvcSolveScratch(m, sub_cols)
             var n_sv = _solve(drivers, settings, _f32(sub), m, sub_cols, _f32(pair_labels), _f32(pair_bounds), scratch)
+            _ = sub^  # keep alive: the call above reads it through an untracked pointer
             if _round_f32(scratch.info[3]) != 0.0 or _round_f32(scratch.info[4]) != 1.0:
                 result.status = SVC_FIT_PAIR_LABELS
                 result.bad_i = i
@@ -385,6 +386,11 @@ def _platt(drivers: SvcDrivers, plan: SvcFitPlan, settings: SvcOperationSettings
                                      n, _f32(consts), _f64(signs), 0)
             var ab = List[Float64](length=2, fill=0.0)
             _ = drivers.platt(_f64(decisions) if n > 0 else 0, _f64(signs) if n > 0 else 0, _f64(ab), n)
+            _ = decisions^  # keep alive: the call above reads it through an untracked pointer
+            _ = signs^  # keep alive: the epilogue / platt calls above read it through an untracked pointer
+            _ = consts^  # keep alive: the epilogue / platt calls above read it through an untracked pointer
+            _ = dec_perm^  # keep alive: the epilogue / platt calls above read it through an untracked pointer
+            _ = perm^  # keep alive: the epilogue / platt calls above read it through an untracked pointer
             result.prob_a[pair_no] = ab[0]
             result.prob_b[pair_no] = ab[1]
             pair_no += 1

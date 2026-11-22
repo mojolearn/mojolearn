@@ -198,6 +198,7 @@ def groups_and_columns() raises:
     var cb = tree_ctr_uniform_borders_host(
         TreeF32Ptr(unsafe_from_address=Int(flat_const.unsafe_ptr())), 9, 15
     )
+    _ = flat_const^  # keep alive: the call above reads it through an untracked pointer
     _need(len(cb) == 1 and cb[0] == Float32(0.5), "a constant column takes 0.5")
     # the lists above are read through raw pointers
     _ = len(a)

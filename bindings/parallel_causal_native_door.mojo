@@ -693,6 +693,7 @@ def parallel_causal_worker(mut mods: NativeModules, argv: PythonObject) raises:
                 # A model error is the reply; the worker and its registry live on.
                 reply = wire_text(String(error))
                 failed = True
+            _ = turn^  # keep alive: worker_request_decode reads turn.request through an untracked pointer
             mods.released()
             wire_send(socket, WIRE_ERROR if failed else WIRE_RESULT, sequence, no_request, reply)
             mods.released()

@@ -58,7 +58,9 @@ def keys() raises:
     var site_bytes = site.as_bytes()
     var other_bytes = other.as_bytes()
     var a = category_key_text(Int(site_bytes.unsafe_ptr()), site.byte_length())
+    _ = site_bytes^  # keep alive: the call above reads it through an untracked pointer
     var b = category_key_text(Int(other_bytes.unsafe_ptr()), other.byte_length())
+    _ = other_bytes^  # keep alive: the call above reads it through an untracked pointer
     _need(a != b, "two texts are two categories")
     _need((a >> UInt64(63)) == UInt64(1), "a text key carries the text tag")
     _need((category_key_integer(-7) >> UInt64(62)) == UInt64(0), "a whole key carries no tag")
@@ -182,6 +184,7 @@ def fit_and_apply() raises:
 def _text_key(text: String) -> UInt64:
     var bytes = text.as_bytes()
     var key = category_key_text(Int(bytes.unsafe_ptr()), text.byte_length())
+    _ = bytes^  # keep alive: the call above reads it through an untracked pointer
     _ = text
     return key
 
@@ -231,6 +234,7 @@ def codes() raises:
 def _number(text: String, mut ok: Bool) -> Float64:
     var bytes = text.as_bytes()
     var value = category_text_number(Int(bytes.unsafe_ptr()), text.byte_length(), ok)
+    _ = bytes^  # keep alive: the call above reads it through an untracked pointer
     _ = text
     return value
 

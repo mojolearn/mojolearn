@@ -57,6 +57,7 @@ def transport_send_words(fd: Int, timeout: Float64, header_address: Int, header_
     for i in range(4):  # small-loop(the 4-byte frame length word)
         prefix[i] = UInt8((header_bytes >> (24 - i * 8)) & 255)
     posix_transfer_run(fd, PosixBytes(unsafe_from_address=Int(prefix.unsafe_ptr())), 4, timeout, True)
+    _ = prefix^  # keep alive: the call above reads it through an untracked pointer
     posix_transfer_run(fd, PosixBytes(unsafe_from_address=header_address), header_bytes, timeout, True)
     if payload_bytes > 0:
         posix_transfer_run(fd, PosixBytes(unsafe_from_address=payload_address), payload_bytes, timeout, True)

@@ -284,6 +284,7 @@ def run_case(unit: Int) raises:
             raise Error("a row index past the source did not refuse")
         except problem:
             _refuses(problem, "row index out of bounds")
+        _ = taken^  # keep alive: the call in the try above reads it through an untracked pointer
         _ = msel_store_free(k, picks_id)
         _ = msel_store_free(k, rows_id)
         _ = rows
