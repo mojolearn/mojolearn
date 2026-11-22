@@ -93,7 +93,9 @@ def test_resample_extensions_have_cpu_routes_without_claiming_reference_admissio
     family = next(f for f in surface.FAMILIES if f['family'] == 'resample')
     assert names <= set(family['training_lanes'])
     assert names <= set(surface.covered_lanes())
-    assert {'bootstrap_unpaired', 'permutation_samples', 'resample_indices'} <= set(family['exports'])
+    # 067cc9c9bd moved the by-name operation entries (bootstrap_unpaired, permutation_samples,
+    # resample_indices and the rest) into the binding's one typed operations table.
+    assert 'resample_native_api_v1' in set(family['exports'])
     exposure = surface.lane_exposure(sorted(names), 'cpu')
     assert all(row['status'] == surface.LANE_EXPOSED for row in exposure.values())
     # A declared executable route is not numerical evidence. Removing the
