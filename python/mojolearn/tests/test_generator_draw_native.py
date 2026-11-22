@@ -29,6 +29,25 @@ def _c32(a, name, where):
     return as_f32_c(a, ndim=None, name=name)[0]
 
 
+def _rng_call(binding, kind, n, offset, seed, stream, a, b, inp=None):
+    """Frozen copy of the former `_training_impl._rng_call` (deleted from the
+    package 2026-11-21 by 0a82fb5a7f, which moved Generator draws to the typed
+    entry table): the image's neural_rng entry, called directly."""
+    from mojolearn import _buffer as _buffers
+    out = _buffers.empty(n, '<f4')
+    if inp is None:
+        inp = _buffers.zeros(1, '<f4')
+    # addresses = [out, inp]; params = [n, offset, seed_lo, seed_hi,
+    # stream_id, kind, a, b] (bindings/_mojolearn_training.mojo::neural_rng_binding).
+    binding.neural_rng(
+        [_buffers.addr(out, name="output buffer"), _buffers.addr_ro(inp, name="input buffer")],
+        [int(n), int(offset), int(seed & 0xFFFFFFFF),
+         int((seed >> 32) & 0xFFFFFFFF), int(stream), int(kind),
+         float(a), float(b)],
+    )
+    return out
+
+
 class LegacyDraws:
     def __init__(self, seed=7, counter=0, mode=None):
         self.seed, self.counter, self.numeric_mode = seed, counter, mode
@@ -55,7 +74,7 @@ class LegacyDraws:
         span = float(training._round_f32(hi-lo))
         if not span >= 0:
             raise ValueError('high must be >= low')
-        out = training._rng_call(training._load(self.numeric_mode), 0, n, 0,
+        out = _rng_call(training._load(self.numeric_mode), 0, n, 0,
                                  self.seed, self.next(), lo, span)
         return out.reshape(shape)
 
@@ -64,7 +83,7 @@ class LegacyDraws:
         sd = float(training._round_f32(std))
         if not sd >= 0:
             raise ValueError('std must be >= 0')
-        out = training._rng_call(training._load(self.numeric_mode), 1, n, 0,
+        out = _rng_call(training._load(self.numeric_mode), 1, n, 0,
                                  self.seed, self.next(), float(training._round_f32(mean)), sd)
         return out.reshape(shape)
 
@@ -76,13 +95,13 @@ class LegacyDraws:
         scale = float(training._round_f32(1/(1-p)))
         stream = self.next() if stream is None else int(stream)
         key = dict(seed=self.seed, stream=stream, p=p, scale=scale, offset=int(offset))
-        y = training._rng_call(training._load(self.numeric_mode), 2, x.size,
+        y = _rng_call(training._load(self.numeric_mode), 2, x.size,
                               key['offset'], self.seed, stream, p, scale, x.reshape(-1))
         return y.reshape(x.shape), key
 
     def dropout_backward(self, dy, key):
         dy = _c32(dy, 'dy', 'Generator.dropout_backward')
-        dx = training._rng_call(training._load(self.numeric_mode), 3, dy.size,
+        dx = _rng_call(training._load(self.numeric_mode), 3, dy.size,
                                key['offset'], key['seed'], key['stream'], key['p'], key['scale'], dy.reshape(-1))
         return dx.reshape(dy.shape)
 
