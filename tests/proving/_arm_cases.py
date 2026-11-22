@@ -207,7 +207,9 @@ def voting_stacking_multioutput_ovr():
         out[f"voting_n_jobs_{n}"] = mojolearn.VotingClassifier(_classifiers(), voting="soft",
                                                                n_jobs=n).fit(X, C).predict_proba(X)
     stack = mojolearn.StackingClassifier(_classifiers(), make("LogisticRegression")).fit(X, C)
-    out["stack_proba"], out["stack_decision"] = stack.predict_proba(X), stack.decision_function(X)
+    # StackingClassifier has predict and predict_proba (python/mojolearn/_expansion_trees.py); it defines no
+    # decision_function.
+    out["stack_proba"], out["stack_predict"] = stack.predict_proba(X), stack.predict(X)
     regressors = [("ridge", make("Ridge")), ("ols", make("LinearRegression")), ("knn", make("KNeighborsRegressor"))]
     stack_r = mojolearn.StackingRegressor(regressors, make("Ridge")).fit(X, Y)
     out["stack_r_predict"], out["stack_r_transform"] = stack_r.predict(X), stack_r.transform(X)
