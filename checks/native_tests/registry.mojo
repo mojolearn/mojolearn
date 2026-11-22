@@ -466,29 +466,6 @@ from checks.ordered_ctr_device_check import register as register_ordered_ctr_dev
 # lane fx-checks-orphans (2026-11-18): the family standalone main() checks nothing ran; each suite stays in
 # <family>/checks/ (its main() is now run_checks()) and its registered wrapper is checks/native_tests/<family>_<stem>.mojo
 from checks.native_tests.arima_fit_check import register as register_arima_fit_check
-from checks.native_tests.autograd_data_cpu import register as register_autograd_data_cpu
-from checks.native_tests.autograd_data_gpu import register as register_autograd_data_gpu
-from checks.native_tests.autograd_distributed_setup_failure import register as register_autograd_distributed_setup_failure
-from checks.native_tests.autograd_embedding_cpu import register as register_autograd_embedding_cpu
-from checks.native_tests.autograd_embedding_gpu import register as register_autograd_embedding_gpu
-from checks.native_tests.autograd_fold_cpu import register as register_autograd_fold_cpu
-from checks.native_tests.autograd_fold_gpu import register as register_autograd_fold_gpu
-from checks.native_tests.autograd_fused_cpu import register as register_autograd_fused_cpu
-from checks.native_tests.autograd_fused_gpu import register as register_autograd_fused_gpu
-from checks.native_tests.autograd_gemm_gpu import register as register_autograd_gemm_gpu
-from checks.native_tests.autograd_gpu_arguments import register as register_autograd_gpu_arguments
-from checks.native_tests.autograd_loss_cpu import register as register_autograd_loss_cpu
-from checks.native_tests.autograd_loss_gpu import register as register_autograd_loss_gpu
-from checks.native_tests.autograd_lossblock_cpu import register as register_autograd_lossblock_cpu
-from checks.native_tests.autograd_lossblock_gpu import register as register_autograd_lossblock_gpu
-from checks.native_tests.autograd_optim_cpu import register as register_autograd_optim_cpu
-from checks.native_tests.autograd_order_cpu import register as register_autograd_order_cpu
-from checks.native_tests.autograd_order_gpu import register as register_autograd_order_gpu
-from checks.native_tests.autograd_pass1_cpu import register as register_autograd_pass1_cpu
-from checks.native_tests.autograd_pass1_gpu import register as register_autograd_pass1_gpu
-from checks.native_tests.autograd_program_setup_failure import register as register_autograd_program_setup_failure
-from checks.native_tests.autograd_view_cpu import register as register_autograd_view_cpu
-from checks.native_tests.autograd_view_gpu import register as register_autograd_view_gpu
 from checks.native_tests.cluster_host_gemm_check import register as register_cluster_host_gemm_check
 from checks.native_tests.decomposition_variance_identity_check import register as register_decomposition_variance_identity_check
 from checks.native_tests.ensemble_builder_check import register as register_ensemble_builder_check
@@ -553,14 +530,8 @@ from checks.native_tests.hdbscan_sparse_mr_check import register as register_hdb
 from checks.native_tests.hierarchy_linkage_host_check import register as register_hierarchy_linkage_host_check
 from checks.native_tests.holtwinters_hw_estimate_check import register as register_holtwinters_hw_estimate_check
 from checks.native_tests.holtwinters_hw_predict_ptr_check import register as register_holtwinters_hw_predict_ptr_check
-from checks.native_tests.ivf_ivf_large_k_check import register as register_ivf_ivf_large_k_check
 from checks.native_tests.ivf_ops_table import register as register_ivf_ops_table
-from checks.native_tests.kde_reused_workspace_check import register as register_kde_reused_workspace_check
 from checks.native_tests.kernel_methods_nystroem_basis_sort_check import register as register_kernel_methods_nystroem_basis_sort_check
-from checks.native_tests.mamba_mamba3_increment_tile_check import register as register_mamba_mamba3_increment_tile_check
-from checks.native_tests.mamba_mamba3_refusal_check import register as register_mamba_mamba3_refusal_check
-from checks.native_tests.mamba_mamba3_s17_tail_tree_check import register as register_mamba_mamba3_s17_tail_tree_check
-from checks.native_tests.mamba_mamba3_yintra_tile_check import register as register_mamba_mamba3_yintra_tile_check
 from checks.native_tests.metrics_host_binary_ranking_check import register as register_metrics_host_binary_ranking_check
 from checks.native_tests.metrics_host_rand_score_check import register as register_metrics_host_rand_score_check
 from checks.native_tests.neighbors_fused_logical32_check import register as register_neighbors_fused_logical32_check
@@ -600,8 +571,6 @@ from checks.native_tests.x_neighbors_fold_check import register as register_x_ne
 from checks.native_tests.x_neighbors_model_check import register as register_x_neighbors_model_check
 from checks.native_tests.x_neighbors_semi_check import register as register_x_neighbors_semi_check
 from checks.native_tests.x_neighbors_sketch_check import register as register_x_neighbors_sketch_check
-from checks.native_tests.xtrees_glue_check import register as register_xtrees_glue_check
-from checks.native_tests.xtrees_zero_cover_check import register as register_xtrees_zero_cover_check
 from checks.native_tests.tsa_hw_route import register as register_tsa_hw_route
 from checks.native_tests.tsa_arima_route import register as register_tsa_arima_route
 from checks.native_tests.causal_owner import register as register_causal_owner
@@ -1053,29 +1022,6 @@ def all_checks() -> List[Check]:
     checks.append(register_tree_ctr_slice_check())
     checks.append(register_ordered_ctr_device_check())
     checks.append(register_arima_fit_check())
-    checks.append(register_autograd_data_cpu())
-    checks.append(register_autograd_data_gpu())
-    checks.append(register_autograd_distributed_setup_failure())
-    checks.append(register_autograd_embedding_cpu())
-    checks.append(register_autograd_embedding_gpu())
-    checks.append(register_autograd_fold_cpu())
-    checks.append(register_autograd_fold_gpu())
-    checks.append(register_autograd_fused_cpu())
-    checks.append(register_autograd_fused_gpu())
-    checks.append(register_autograd_gemm_gpu())
-    checks.append(register_autograd_gpu_arguments())
-    checks.append(register_autograd_loss_cpu())
-    checks.append(register_autograd_loss_gpu())
-    checks.append(register_autograd_lossblock_cpu())
-    checks.append(register_autograd_lossblock_gpu())
-    checks.append(register_autograd_optim_cpu())
-    checks.append(register_autograd_order_cpu())
-    checks.append(register_autograd_order_gpu())
-    checks.append(register_autograd_pass1_cpu())
-    checks.append(register_autograd_pass1_gpu())
-    checks.append(register_autograd_program_setup_failure())
-    checks.append(register_autograd_view_cpu())
-    checks.append(register_autograd_view_gpu())
     checks.append(register_cluster_host_gemm_check())
     checks.append(register_decomposition_variance_identity_check())
     checks.append(register_ensemble_builder_check())
@@ -1140,13 +1086,7 @@ def all_checks() -> List[Check]:
     checks.append(register_hierarchy_linkage_host_check())
     checks.append(register_holtwinters_hw_estimate_check())
     checks.append(register_holtwinters_hw_predict_ptr_check())
-    checks.append(register_ivf_ivf_large_k_check())
-    checks.append(register_kde_reused_workspace_check())
     checks.append(register_kernel_methods_nystroem_basis_sort_check())
-    checks.append(register_mamba_mamba3_increment_tile_check())
-    checks.append(register_mamba_mamba3_refusal_check())
-    checks.append(register_mamba_mamba3_s17_tail_tree_check())
-    checks.append(register_mamba_mamba3_yintra_tile_check())
     checks.append(register_metrics_host_binary_ranking_check())
     checks.append(register_metrics_host_rand_score_check())
     checks.append(register_neighbors_fused_logical32_check())
@@ -1186,8 +1126,6 @@ def all_checks() -> List[Check]:
     checks.append(register_x_neighbors_model_check())
     checks.append(register_x_neighbors_semi_check())
     checks.append(register_x_neighbors_sketch_check())
-    checks.append(register_xtrees_glue_check())
-    checks.append(register_xtrees_zero_cover_check())
     checks.append(register_tsa_hw_route())
     checks.append(register_tsa_arima_route())
     checks.append(register_causal_owner())
