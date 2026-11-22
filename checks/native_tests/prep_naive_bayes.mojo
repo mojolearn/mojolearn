@@ -38,15 +38,15 @@ comptime NB_D = 6
 comptime NB_K = 3
 
 
-def ref(tag: String, name: String, count: Int) raises -> List[Float64]:
+def want_f64(tag: String, name: String, count: Int) raises -> List[Float64]:
     return fixture_f64(PREP_NB_DIR + tag + "-" + name + ".f64", count)
 
 
 def check_answer(got: ClsAnswer, tag: String, label: String) raises:
     var n = NB_N
     var K = NB_K
-    check_close(got.proba, ref(tag, "proba", n * K), 1e-3, 1e-5, label + ": predict_proba")
-    check_close(got.log_proba, ref(tag, "logproba", n * K), 1e-3, 1e-4, label + ": predict_log_proba")
+    check_close(got.proba, want_f64(tag, "proba", n * K), 1e-3, 1e-5, label + ": predict_proba")
+    check_close(got.log_proba, want_f64(tag, "logproba", n * K), 1e-3, 1e-4, label + ": predict_log_proba")
     var share = agreement(got.codes, fixture_i32(PREP_NB_DIR + tag + "-predict.i32", n))
     require(share > 0.99, label + ": predict agrees with scikit-learn on " + String(share) + " of the rows")
 
@@ -62,11 +62,11 @@ def gaussian_case(tag: String, data: String, held: String, weighted: Bool, block
     var xh = fixture_f32(PREP_NB_DIR + "xh" + held + ".f32", n * d)
     var w = fixture_f32(PREP_NB_DIR + "w7.f32", n) if weighted else List[Float32]()
     var m = gnb_fit(x, y, w, n, d, K, List[Float64](), blocked)
-    check_close(m.theta, ref(tag, "theta", K * d), rtol, atol, label + ": theta_")
-    check_close(m.var_, ref(tag, "var", K * d), rtol, atol, label + ": var_")
-    check_close(m.class_prior, ref(tag, "class_prior", K), rtol, atol, label + ": class_prior_")
+    check_close(m.theta, want_f64(tag, "theta", K * d), rtol, atol, label + ": theta_")
+    check_close(m.var_, want_f64(tag, "var", K * d), rtol, atol, label + ": var_")
+    check_close(m.class_prior, want_f64(tag, "class_prior", K), rtol, atol, label + ": class_prior_")
     if weighted:
-        check_close(m.class_count, ref(tag, "class_count", K), rtol, atol, label + ": class_count_")
+        check_close(m.class_count, want_f64(tag, "class_count", K), rtol, atol, label + ": class_count_")
     var records = List[List[Float32]]()
     records.append(m.theta.copy())
     records.append(m.var_.copy())
@@ -92,13 +92,13 @@ def discrete_case(tag: String, kind: Int, data: String, held: String, weighted: 
     for a in range(len(attrs)):  # small-loop(oracle: at most three fitted attributes)
         var name = attrs[a]
         if name == "feature_count":
-            check_close(m.feature_count, ref(tag, name, K * d), rtol, atol, label + ": feature_count_")
+            check_close(m.feature_count, want_f64(tag, name, K * d), rtol, atol, label + ": feature_count_")
         elif name == "feature_log_prob":
-            check_close(m.log_prob, ref(tag, name, K * d), rtol, atol, label + ": feature_log_prob_")
+            check_close(m.log_prob, want_f64(tag, name, K * d), rtol, atol, label + ": feature_log_prob_")
         elif name == "class_log_prior":
-            check_close(m.log_prior, ref(tag, name, K), rtol, atol, label + ": class_log_prior_")
+            check_close(m.log_prior, want_f64(tag, name, K), rtol, atol, label + ": class_log_prior_")
         else:
-            check_close(m.class_count, ref(tag, name, K), rtol, atol, label + ": class_count_")
+            check_close(m.class_count, want_f64(tag, name, K), rtol, atol, label + ": class_count_")
     var records = List[List[Float32]]()
     if kind == CLS_KIND_BNB:
         records.append(m.w.copy())
