@@ -36,6 +36,8 @@ from core.host_predict_threads import host_predict_task_count_work, host_predict
 from core.shared_slot import shared_slot_lock, shared_slot_unlock, SharedSlot
 from core.msel_convert import (
     MSEL_I64,
+    MSEL_ID_SLOT_BITS,
+    MSEL_ID_SLOT_MASK,
     msel_itemsize,
     msel_load_f32,
     msel_load_f64_bits,
@@ -101,20 +103,29 @@ struct _MselTable(Movable):
     #: bytes held by each id; -1 for a freed id
     var nbytes: List[Int]
     var released: List[Int]
+    #: generation of each slot, raised on every reuse (MSEL_ID_SLOT_BITS)
+    var gens: List[Int]
     var live: Int
 
     def __init__(out self):
         self.bufs = List[DeviceBuffer[DType.uint8]]()
         self.nbytes = List[Int]()
         self.released = List[Int]()
+        self.gens = List[Int]()
         self.live = 0
 
-    def check_held(self, id: Int, need: Int) raises:
+    def check_held(self, id: Int, need: Int) raises -> Int:
         """`MselStore.check` with the store's lock held by the caller."""
-        if id < 0 or id >= len(self.nbytes) or self.nbytes[id] < 0:
+        # Returns the id's slot. An id whose slot was freed and handed out
+        # again carries the old generation and is refused, never read as the
+        # new holder's bytes (MSEL_ID_SLOT_BITS).
+        var slot = id & MSEL_ID_SLOT_MASK
+        if (id < 0 or slot >= len(self.nbytes) or self.nbytes[slot] < 0
+                or self.gens[slot] != (id >> MSEL_ID_SLOT_BITS)):
             raise Error(String("msel store: id ", id, " is not live"))
-        if self.nbytes[id] < need:
-            raise Error(String("msel store: id ", id, " holds ", self.nbytes[id], " bytes, ", need, " read"))
+        if self.nbytes[slot] < need:
+            raise Error(String("msel store: id ", id, " holds ", self.nbytes[slot], " bytes, ", need, " read"))
+        return slot
 
 
 struct MselStore(Defaultable, Movable):
@@ -166,7 +177,7 @@ struct MselStore(Defaultable, Movable):
         var word = self._word()
         shared_slot_lock(word)
         try:
-            table[].check_held(id, need)
+            _ = table[].check_held(id, need)
         finally:
             shared_slot_unlock(word)
 
@@ -178,8 +189,8 @@ struct MselStore(Defaultable, Movable):
         shared_slot_lock(word)
         var at = 0
         try:
-            table[].check_held(id, need)
-            at = Int(table[].bufs[id].unsafe_ptr())
+            var slot = table[].check_held(id, need)
+            at = Int(table[].bufs[slot].unsafe_ptr())
         finally:
             shared_slot_unlock(word)
         return at
@@ -188,16 +199,19 @@ struct MselStore(Defaultable, Movable):
         var table = self._table()
         var word = self._word()
         shared_slot_lock(word)
-        var id: Int
+        var slot: Int
         if len(table[].released) > 0:
-            id = table[].released.pop()
+            slot = table[].released.pop()
             # The reused id's one-byte placeholder (`free`) is dropped here.
-            table[].bufs[id] = buf^
-            table[].nbytes[id] = n
+            table[].bufs[slot] = buf^
+            table[].nbytes[slot] = n
+            table[].gens[slot] += 1
         else:
             table[].bufs.append(buf^)
             table[].nbytes.append(n)
-            id = len(table[].nbytes) - 1
+            table[].gens.append(1)
+            slot = len(table[].nbytes) - 1
+        var id = (table[].gens[slot] << MSEL_ID_SLOT_BITS) | slot
         table[].live += 1
         shared_slot_unlock(word)
         return id
@@ -234,8 +248,8 @@ struct MselStore(Defaultable, Movable):
             var word = self._word()
             shared_slot_lock(word)
             try:
-                table[].check_held(id, n)
-                sub = table[].bufs[id].create_sub_buffer[DType.uint8](0, n)
+                var slot = table[].check_held(id, n)
+                sub = table[].bufs[slot].create_sub_buffer[DType.uint8](0, n)
             finally:
                 shared_slot_unlock(word)
             ctx.enqueue_copy(dst_ptr=_U8(unsafe_from_address=dst_addr), src_buf=sub.value())
@@ -256,10 +270,10 @@ struct MselStore(Defaultable, Movable):
         var word = self._word()
         shared_slot_lock(word)
         try:
-            table[].check_held(id, 0)
-            swap(table[].bufs[id], dropped)
-            table[].nbytes[id] = -1
-            table[].released.append(id)
+            var slot = table[].check_held(id, 0)
+            swap(table[].bufs[slot], dropped)
+            table[].nbytes[slot] = -1
+            table[].released.append(slot)
             table[].live -= 1
         finally:
             shared_slot_unlock(word)
