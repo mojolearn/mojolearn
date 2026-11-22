@@ -51,8 +51,11 @@ def test_one_shared_admission_helper_keeps_explicit_internal_arguments():
     assert 'if len(args) == 0 or args[0] is not None:' in source
     assert 'estimator_binding(model, name, context)' in source
     family = (ROOT / 'bindings/family_native_door.mojo').read_text()
-    for name in ('_mojolearn_estimators', '_mojolearn_svm', '_mojolearn'):
+    for name in ('_mojolearn_svm', '_mojolearn', '_mojolearn_x_neighbors'):
         assert f'estimator_arguments(model, "{name}", args, context)' in family
+    # 37eb54d381: LinearSVC / LinearSVR hold their driver on the device route
+    # (linear_svc_route); the per-call `_mojolearn_estimators` step is gone.
+    assert 'estimator_arguments(model, "_mojolearn_estimators", args, context)' not in family
 
 
 def test_import_connection_unwraps_host_proxy_without_attribute_callback(monkeypatch):
@@ -99,7 +102,11 @@ def test_import_connection_unwraps_host_proxy_without_attribute_callback(monkeyp
     # A GPU installation: the CPU identical module beside the device one, loaded once at import;
     # a binding name without a CPU training binding records its refusal in words.
     backend._CPU_ONLY=None
-    backend._HOST_MODULES={'_mojolearn_x_neighbors':'_mojolearn_x_neighbors_host'}
+    # The route table is the host surface manifest's (host_surface.routed_modules),
+    # read once per process by the bridge; `_backend._HOST_MODULES` is not read here.
+    surface=types.ModuleType('_provider_fixture.host_surface')
+    surface.routed_modules=lambda:{'_mojolearn_x_neighbors':'_mojolearn_x_neighbors_host'}
+    monkeypatch.setitem(sys.modules,surface.__name__,surface)
     assert bridge._connect_cpu_binding(backend,'_mojolearn_x_neighbors')==(real,real.__name__,'x_neighbors_host_numeric_mode')
     refused=bridge._connect_cpu_binding(backend,'_mojolearn_other')
     assert len(refused)==1 and "device='cpu' is not available" in refused[0] and 'device=None' in refused[0]
