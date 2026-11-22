@@ -39,6 +39,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from core.cast_in import CAST_KIND_BFLOAT, CAST_KIND_FLOAT, CastIn, cast_in_kind
 from autograd.cast_ops import upload_cast
+from autograd.model_blocks import block_param_sizes, block_tensor_dims, block_tensor_transposed, is_block
 from autograd.model import LAYER_CONV1D, LAYER_CONV2D, LAYER_LAYER_NORM, LAYER_LINEAR, SPEC2_ARGS, ModelSpec, conv_in_per_group
 
 #: the dtype code of a bfloat16 source (NumPy has no number for it)
@@ -203,8 +204,33 @@ def _has_bias(spec: ModelSpec, i: Int) -> Bool:
     return k == LAYER_LAYER_NORM
 
 
+def _slots(spec: ModelSpec, i: Int) -> Int:
+    """How many parameter tensors layer i has: weight (and bias), or a block layer's tensors."""
+    var k = spec.kinds[i]
+    if is_block(k):
+        return len(block_param_sizes(k, spec.xargs, i, spec.in_shape[i]))
+    if not _has_params(spec, i):
+        return 0
+    return 2 if _has_bias(spec, i) else 1
+
+
+def _slot_offset(spec: ModelSpec, i: Int, slot: Int) -> Int:
+    var off = spec.param_off[i]
+    var k = spec.kinds[i]
+    if is_block(k):
+        var sizes = block_param_sizes(k, spec.xargs, i, spec.in_shape[i])
+        for j in range(slot):  # small-loop(slot < 4: the block's earlier tensors)
+            off += sizes[j]
+        return off
+    if slot == WI_SLOT_BIAS:
+        off += _weight_count(spec, i)
+    return off
+
+
 def _has_params(spec: ModelSpec, i: Int) -> Bool:
     var k = spec.kinds[i]
+    if is_block(k):
+        return len(block_param_sizes(k, spec.xargs, i, spec.in_shape[i])) > 0
     return k == LAYER_LINEAR or k == LAYER_LAYER_NORM or k == LAYER_CONV2D or k == LAYER_CONV1D
 
 
@@ -223,6 +249,8 @@ def _expected(spec: ModelSpec, i: Int, slot: Int, layout: Int) -> List[Int]:
     """The source shape layer i's slot takes in `layout`."""
     var out = List[Int]()
     var k = spec.kinds[i]
+    if is_block(k):
+        return block_tensor_dims(k, spec.xargs, i, spec.in_shape[i], slot, layout == WI_LAYOUT_TORCH)
     if k == LAYER_LINEAR:
         var fi = spec.in_width[i]
         var fo = spec.arg0[i]
@@ -281,7 +309,7 @@ def model_import_params[E: Exec](
     if n < 1 or len(recs) != n * WI_RECORD:
         raise Error("load_state_dict: the import takes " + String(WI_RECORD) + " integers per source tensor")
     var nl = spec.n_layers()
-    var seen = List[Bool](length=2 * nl, fill=False)
+    var seen = List[Bool](length=4 * nl, fill=False)
     var views = List[CastIn]()
     var dsts = List[Int]()
     for r in range(n):  # driver-loop: over source tensors
@@ -293,17 +321,17 @@ def model_import_params[E: Exec](
         if i < 0 or i >= nl or not _has_params(spec, i):
             raise Error("load_state_dict: " + _q(name) + " names layer " + String(i)
                         + ", which has no parameters")
-        if slot != WI_SLOT_WEIGHT and slot != WI_SLOT_BIAS:
+        if slot < 0 or slot >= _slots(spec, i):
             raise Error("load_state_dict: " + _q(name) + ": unknown parameter slot " + String(slot))
-        if slot == WI_SLOT_BIAS and not _has_bias(spec, i):
+        if slot == WI_SLOT_BIAS and not is_block(spec.kinds[i]) and not _has_bias(spec, i):
             raise Error("load_state_dict: " + _q(name) + ": layer " + String(i) + " (" + _layer_kind(spec, i)
                         + ") has no bias")
         if layout != WI_LAYOUT_TORCH and layout != WI_LAYOUT_NATIVE:
             raise Error("load_state_dict: " + _q(name) + ": unknown layout " + String(layout))
-        if seen[2 * i + slot]:
+        if seen[4 * i + slot]:
             raise Error("load_state_dict: " + _q(name) + ": layer " + String(i)
                         + "'s " + _slot_name(slot) + " is given twice")
-        seen[2 * i + slot] = True
+        seen[4 * i + slot] = True
         var src = wi_source(recs, r, name)
         var want = _expected(spec, i, slot, layout)
         if not _same(src.dims, want):
@@ -312,18 +340,23 @@ def model_import_params[E: Exec](
                         + _slot_name(slot) + " of shape " + wi_shape_str(want))
         # torch stores a linear weight (out, in): its transpose is params_' (in, out)
         var transpose = spec.kinds[i] == LAYER_LINEAR and slot == WI_SLOT_WEIGHT and layout == WI_LAYOUT_TORCH
+        if is_block(spec.kinds[i]):
+            transpose = layout == WI_LAYOUT_TORCH and block_tensor_transposed(spec.kinds[i], slot)
         views.append(wi_matrix(src, transpose))
-        var off = spec.param_off[i]
-        if slot == WI_SLOT_BIAS:
-            off += _weight_count(spec, i)
-        dsts.append(off)
+        dsts.append(_slot_offset(spec, i, slot))
     for i in range(nl):  # driver-loop: over layers
         if not _has_params(spec, i):
             continue
-        if not seen[2 * i]:
+        if is_block(spec.kinds[i]):
+            for j in range(_slots(spec, i)):  # small-loop(at most four tensors of a block layer)
+                if not seen[4 * i + j]:
+                    raise Error("load_state_dict: no source tensor for layer " + String(i) + "'s tensor "
+                                + String(j))
+            continue
+        if not seen[4 * i]:
             raise Error("load_state_dict: no source tensor for layer " + String(i) + "'s ("
                         + _layer_kind(spec, i) + ") weight")
-        if _has_bias(spec, i) and not seen[2 * i + 1]:
+        if _has_bias(spec, i) and not seen[4 * i + 1]:
             raise Error("load_state_dict: no source tensor for layer " + String(i) + "'s ("
                         + _layer_kind(spec, i) + ") bias")
     var D = ex.alloc(spec.n_params)
@@ -382,8 +415,7 @@ def model_export_tensors(spec: ModelSpec) -> Int:
     """How many parameter tensors `model_export_params` writes."""
     var count = 0
     for i in range(spec.n_layers()):  # driver-loop: over layers
-        if _has_params(spec, i):
-            count += 2 if _has_bias(spec, i) else 1
+        count += _slots(spec, i)
     return count
 
 
@@ -406,12 +438,14 @@ def model_export_params[E: Exec](
     for i in range(spec.n_layers()):  # driver-loop: over layers
         if not _has_params(spec, i):
             continue
-        for slot in range(2):  # small-loop(2: the weight and the bias slot): metadata, no data
-            if slot == WI_SLOT_BIAS and not _has_bias(spec, i):
-                continue
-            var off = spec.param_off[i]
-            if slot == WI_SLOT_BIAS:
-                off += _weight_count(spec, i)
+        for slot in range(_slots(spec, i)):  # small-loop(at most 4 tensors of a layer): metadata, no data
+            var off = _slot_offset(spec, i, slot)
+            if is_block(spec.kinds[i]) and block_tensor_transposed(spec.kinds[i], slot):
+                # params_ holds the projection (in, out); torch's (out, in) is its transpose
+                var bd = block_tensor_dims(spec.kinds[i], spec.xargs, i, spec.in_shape[i], slot, False)
+                var bview = CastIn(params + 4 * off, CAST_KIND_FLOAT, 4, bd[1], bd[0], 4, 4 * bd[1])
+                bview.check("state_dict: layer " + String(i) + " tensor " + String(slot))
+                upload_cast(ex, D + off, bview)
             if spec.kinds[i] == LAYER_LINEAR and slot == WI_SLOT_WEIGHT:
                 # params_ holds (in, out) row-major: element (o, k) of the
                 # (out, in) view is at k * out + o.

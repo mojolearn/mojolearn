@@ -118,7 +118,8 @@ def block_shape(code: Int, xargs: List[Int], i: Int, f: Float32, cur: ShapeN, na
     """Validate layer i (a block code) on its per-sample input shape `cur`; its output shape."""
     var a0 = _x(xargs, i, 0)
     var a1 = _x(xargs, i, 1)
-    if code == LAYER_SILU or code == LAYER_SOFTPLUS:
+    if code == LAYER_SILU or code == LAYER_SOFTPLUS or code == LAYER_MULTIPLY:
+        # (multiply's source shape is checked by the interpreter, autograd/model.mojo)
         return cur
     if code == LAYER_GELU:
         if a0 != 0 and a0 != 1:
@@ -455,3 +456,42 @@ struct ModelRules(BackwardRules, ImplicitlyCopyable, Movable):
             RecurrentRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         else:
             ImportRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
+
+
+# ---------------------------------------------------------------- weight import / export (load_state_dict, state_dict)
+def block_tensor_dims(code: Int, xargs: List[Int], i: Int, cur: ShapeN, slot: Int, torch_layout: Bool) -> List[Int]:
+    """The shape of block layer i's parameter tensor `slot` as a source gives it: PyTorch's layout
+    (torch_layout; a projection weight (out, in)) or params_' own (a projection weight (in, out))."""
+    var out = List[Int]()
+    if code == LAYER_RMS_NORM:
+        out.append(cur.cols())
+    elif code == LAYER_EMBEDDING:
+        out.append(_x(xargs, i, 0))
+        out.append(_x(xargs, i, 1))
+    elif code == LAYER_ATTENTION:
+        var hh = _heads(xargs, i)
+        var d = cur.d[1]
+        var hd = d // hh[0]
+        var fi = d if slot < 3 else hh[0] * hd
+        var fo = d if slot == 3 else (hh[0] if slot == 0 else hh[1]) * hd
+        if torch_layout:
+            out.append(fo)
+            out.append(fi)
+        else:
+            out.append(fi)
+            out.append(fo)
+    elif code == LAYER_RECURRENT:
+        # PyTorch's layout is params_' own
+        var hsz = _x(xargs, i, 0)
+        var gh = gates_of(_cell_of(_x(xargs, i, 1))) * hsz
+        out.append(gh)
+        if slot == 0:
+            out.append(cur.d[1])
+        elif slot == 1:
+            out.append(hsz)
+    return out^
+
+
+def block_tensor_transposed(code: Int, slot: Int) -> Bool:
+    """True when PyTorch's layout of the tensor is the transpose of params_' (the attention projections)."""
+    return code == LAYER_ATTENTION
