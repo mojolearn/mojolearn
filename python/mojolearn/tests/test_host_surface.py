@@ -17,6 +17,7 @@ packaging scripts were deleted on 2026-11-15 (lane tests-delete-source-text).
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,11 @@ ROOT = Path(__file__).resolve().parents[3]
 # Source archives omit local historical evidence; its original immutable root
 # can be supplied explicitly without replacing source or runtime imports.
 EVIDENCE_ROOT = Path(os.environ.get("MOJOLEARN_TEST_EVIDENCE_ROOT", ROOT))
+if (EVIDENCE_ROOT / "tools/fixture_packs.py").is_file():
+    # The recordings are tracked as one archive each (tools/fixture_packs.py): recreate their directories.
+    import subprocess as _subprocess
+    _subprocess.run([sys.executable, str(EVIDENCE_ROOT / "tools/fixture_packs.py"), "unpack"], check=True,
+                    stdout=_subprocess.DEVNULL)
 
 #: The three vendor classes a cross-vendor claim needs, as the shipped
 #: table's `cols` spells them. `cpu` is deliberately not one of them: it is

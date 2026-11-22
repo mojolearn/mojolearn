@@ -107,7 +107,7 @@ def _unpack_case(base: str, archive: str) -> tuple[str, str]:
     case_dir = os.path.join(base, case)
     want = _sha256_file(source)
     stamp = _stamp(base, case)
-    if os.path.isfile(stamp) and open(stamp, encoding="utf-8").read().strip() == want:
+    if os.path.isdir(case_dir) and os.path.isfile(stamp) and open(stamp, encoding="utf-8").read().strip() == want:
         return case, "current"
     if os.path.isdir(case_dir):
         shutil.rmtree(case_dir)

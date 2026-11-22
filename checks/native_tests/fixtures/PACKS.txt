@@ -2,3 +2,4 @@
 checks/native_tests/fixtures/mamba
 checks/native_tests/fixtures/mamba/mamba2
 checks/native_tests/fixtures/mamba/mamba3
+verification/records/classical_host

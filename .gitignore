@@ -211,3 +211,5 @@ box-out/
 /checks/native_tests/fixtures/mamba/mamba2/*/
 /checks/native_tests/fixtures/mamba/mamba3/*/
 /checks/native_tests/fixtures/**/.*.pack-sha256
+/verification/records/classical_host/*/
+/verification/records/**/.*.pack-sha256

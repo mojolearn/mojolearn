@@ -47,6 +47,7 @@ only if something differs.
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -898,6 +899,9 @@ def do_check(args):
 
 
 def main():
+    # The recordings are tracked as one archive each (tools/fixture_packs.py): recreate their directories.
+    subprocess.run([sys.executable, str(ROOT / 'tools/fixture_packs.py'), 'unpack'], check=True,
+                   stdout=subprocess.DEVNULL)
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--package-root', default=None,
                         help="directory to import mojolearn from (default: this checkout's python/; "
