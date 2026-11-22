@@ -28,6 +28,17 @@ class PublicAttributeConnection(unittest.TestCase):
         mode.PublicOutputsMixin = type('PublicOutputsMixin', (), {'__getattribute__': original, '__module__': mode.__name__})
         mode.ParamsMixin = type('ParamsMixin', (mode.PublicOutputsMixin,), {'__module__': mode.__name__})
         mode.NumericModeMixin = type('NumericModeMixin', (), {'__module__': mode.__name__})
+        # `digest_` is the one property of the shared base (_mode.CheckMixin);
+        # the connector registers it as the `fitted_digest` property recipe and
+        # asks _digest_fields.connect for the compiled entry. Without the
+        # saved-model owner (this fixture) the entry is not a builtin, so no
+        # recipe is published and nothing native is imported.
+        mode.CheckMixin = type('CheckMixin', (), {'__module__': mode.__name__,
+                                                  'digest_': property(lambda self: (_ for _ in ()).throw(
+                                                      AssertionError('digest_ read during connection')))})
+        digest_fields = ModuleType(package.__name__ + '._digest_fields')
+        digest_fields.connect = lambda base: (None, {'archive_unavailable': True})
+        package._digest_fields = digest_fields
         bridge = ModuleType(package.__name__ + '._native_classical_bridge')
         bridge._IMPORT_LAYOUTS = []  # Import-time layout registry used by the extracted helper.
         tree = ast.parse((ROOT / 'python/mojolearn/_native_classical_bridge.py').read_text())
@@ -65,7 +76,8 @@ class PublicAttributeConnection(unittest.TestCase):
                        property_schemas={vars(cholesky.Cholesky)['logdet_']: 'cholesky_logdet'}, svm_owner=None,
                        stl_connected=False)
         namespace['_CONTEXT'] = context
-        modules = {m.__name__: m for m in (package, mode, bridge, tokenizer, cholesky, svm, mode_properties, array)}
+        modules = {m.__name__: m for m in (package, mode, bridge, tokenizer, cholesky, svm, mode_properties, array,
+                                                    digest_fields)}
         return package, mode, namespace, context, modules, original
 
     def test_unknown_properties_and_getattr_keep_original_slots(self):
