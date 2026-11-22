@@ -961,8 +961,9 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     y_true : array-like of shape (n_samples,)
         String or integer class labels, nonempty.
     y_pred : array-like of shape (n_samples,), (n_samples, 1) or (n_samples, n_classes)
-        float32 probabilities. Other dtypes raise ``TypeError``; Python lists
-        are converted to float32.
+        float32 or float64 probabilities (the ``predict_proba`` output of the
+        classifiers is float64); float64 values are rounded to float32. Other
+        dtypes raise ``TypeError``; Python lists are converted to float32.
     normalize : bool, default True
         True returns the mean loss per sample, False the sum.
     sample_weight : array-like of shape (n_samples,), default None

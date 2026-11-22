@@ -521,8 +521,14 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
     var present = true.classes
     var n = true.n
     var a = mc_f32_lists(args[1], "y_proba", context)
-    if classical_dtype_str(a, context) != "<f4":
-        raise Error("TypeError: mojolearn " + caller + ": y_proba must have dtype float32; cast explicitly")
+    # float64 too: the classifiers' predict_proba is float64, and the
+    # admission below rounds it to the float32 words the program reads
+    # (`admit_family`). Refusing it made metrics.log_loss(y, predict_proba(X))
+    # and the neg_log_loss scorer fail on every estimator (proving suite
+    # 2026-11-22).
+    var a_dtype = classical_dtype_str(a, context)
+    if a_dtype != "<f4" and a_dtype != "<f8":
+        raise Error("TypeError: mojolearn " + caller + ": y_proba must have dtype float32 or float64; cast explicitly")
     var nd = Int(py=a.ndim)
     var binary = nd == 1 or (nd == 2 and Int(py=a.shape[1]) == 1)
     var codes: PythonObject
@@ -591,8 +597,11 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if mc_len(family_call(mc_set(true.classes).difference, selected)) > 0:
         raise Error("y_true contains a label missing from labels")
     var probabilities = mc_f32_lists(args[1], "input", context)
-    if classical_dtype_str(probabilities, context) != "<f4":
-        raise Error("TypeError: log_loss probabilities must have dtype float32")
+    # float32 or float64 (rounded to float32 by `admit_family` below), as in
+    # `_log_loss_options`.
+    var p_dtype = classical_dtype_str(probabilities, context)
+    if p_dtype != "<f4" and p_dtype != "<f8":
+        raise Error("TypeError: log_loss probabilities must have dtype float32 or float64")
     var nd = Int(py=probabilities.ndim)
     if nd != 1 and nd != 2:
         raise Error("log_loss probabilities must have shape (n,), (n,1) or (n,k)")
