@@ -220,7 +220,11 @@ def test_native_boundary_admits_before_hooks_and_scopes_predictor_lifetime():
     assert source.index('py_type(value) is not b.tuple') < source.index('py_call(b.tuple, value)')
     assert 'py_type(cls) is not b.type' in source
     assert 'parallel estimator methods or storage hooks changed' in source
-    assert 'if py_type(lock) is not meta["lock_type"]' in source
+    # pools-frame: the lock is no instance attribute any more; the native owner
+    # record creates it from the admitted lock type and holds it, so no
+    # instance lock is read or type-checked.
+    assert 'py_call(py_item(meta, "lock_type"))' in source
+    assert 'var lock = rec[].lock' in source and '"_lock"' not in source
     assert 'finally:\n        _ = py_call(lock.release)' in source
     assert 'py_setitem(saved, "_resident_holder", Python.dict())' in source
     assert 'parallel_public_result(result,' in source
