@@ -409,6 +409,13 @@ def _pinned(name: String) -> UInt64:
         return UInt64(12107700610124185639)
     if name == "selective_scan_n8":
         return UInt64(3944575162351859353)
+    # Mamba-3 (lane neural-blocks-3-m3): the trapezoid scan's words are the Mamba-3 trapezoid bodies'
+    # (autograd/kernels/mamba3_trapezoid_body.mojo); -D MOJOLEARN_MAMBA3_SABOTAGE_TRAP_LEFT_ONLY moves them.
+    # Recorded on the CPU column (cpc2, 2026-11-22).
+    if name == "trapezoid_scan_h2":
+        return UInt64(9596372206100812605)
+    if name == "trapezoid_scan_h1":
+        return UInt64(5371293045682281016)
     return UInt64(0)
 
 
