@@ -333,7 +333,7 @@ def test_wrapper_failure_cannot_mutate_shipped_table(tmp_path, problem, check_on
     assert table.read_bytes() == before
     assert raw.read_bytes() == original
     if check_only:
-        assert not list((repo/'bench/results/identity_break').rglob('*.json'))
+        assert not list((repo/'verification/records/identity').rglob('*.json'))
 
 
 @pytest.mark.parametrize("check_only", [False, True])
@@ -350,16 +350,16 @@ def test_wrapper_checks_candidate_and_preserves_original_unselected_record(tmp_p
     if check_only:
         assert table.read_bytes() == before
         assert not (repo / 'bench/results/reference_admissions').exists()
-        assert not list((repo/'bench/results/identity_break').rglob('*.json'))
+        assert not list((repo/'verification/records/identity').rglob('*.json'))
     else:
         assert json.loads(table.read_text()) == candidate
-        retained = repo / 'bench/results/identity_break/retained' / hashlib.sha256(original).hexdigest() / raw.name
+        retained = repo / 'verification/records/identity/retained' / hashlib.sha256(original).hexdigest() / raw.name
         assert retained.read_bytes() == original
         assert (repo / 'bench/results/reference_admissions/2026-10-23-inert/agreement-summary.json').exists()
     calls = Path(env['EMIT_CALLS']).read_text().splitlines()
     assert len(calls) == 1
-    assert len(list((repo/'bench/results/identity_break').rglob('*.identical.json'))) == (0 if check_only else 1)
-    assert all(Path(p).is_relative_to(repo/'bench/results/identity_break') for p in json.loads(calls[0]))
+    assert len(list((repo/'verification/records/identity').rglob('*.identical.json'))) == (0 if check_only else 1)
+    assert all(Path(p).is_relative_to(repo/'verification/records/identity') for p in json.loads(calls[0]))
     assert subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD']) == head
 
 
@@ -368,7 +368,7 @@ def test_admission_refuses_unsafe_input_without_mutating_table(tmp_path, change)
     base, candidate = tables()
     repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
     if change == 'corrupted-copy':
-        retained = repo/'bench/results/identity_break/retained'/hashlib.sha256(raw.read_bytes()).hexdigest()/raw.name
+        retained = repo/'verification/records/identity/retained'/hashlib.sha256(raw.read_bytes()).hexdigest()/raw.name
         retained.parent.mkdir(parents=True)
         retained.write_text('{}')
     else:
@@ -387,14 +387,14 @@ def test_admission_refuses_unsafe_input_without_mutating_table(tmp_path, change)
 def test_admission_reuses_an_uncommitted_repository_copy(tmp_path):
     base, candidate = tables()
     repo, table, raw, env = wrapper_fixture(tmp_path, candidate, base)
-    retained = repo/'bench/results/identity_break/new-run'/raw.name
+    retained = repo/'verification/records/identity/new-run'/raw.name
     retained.parent.mkdir(parents=True)
     retained.write_bytes(raw.read_bytes())
     result = subprocess.run(['bash', str(repo/'tools/admit_identity_columns.sh'), '--lanes', 'selected', str(raw.parent)],
                             env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(table.read_text()) == candidate
-    assert list((repo/'bench/results/identity_break').rglob('*.identical.json')) == [retained]
+    assert list((repo/'verification/records/identity').rglob('*.identical.json')) == [retained]
 
 
 def test_source_derived_host_only_cpu_is_sufficient(monkeypatch):
@@ -442,7 +442,7 @@ def test_repository_inputs_keep_verifier_companions(tmp_path, preview):
     root=tmp_path/'repo';(root/'.git').mkdir(parents=True);(root/'tools').mkdir()
     original=tmp_path/'producer';original.mkdir()
     column,report,launch=verifier_column(original)
-    preview_dir=root/'bench/results/identity_break/.admission-preview-case' if preview else None
+    preview_dir=root/'verification/records/identity/.admission-preview-case' if preview else None
     [retained]=GUARD.repository_inputs(root,[column],preview_dir=preview_dir)
     assert retained.with_name(report.name).read_bytes()==report.read_bytes()
     assert retained.with_name(launch.name).read_bytes()==launch.read_bytes()

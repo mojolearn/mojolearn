@@ -8,7 +8,7 @@ WHAT IT IS. One small JSON shipped in the wheel at
 `stepfull`) it holds the hash the committed records agree on, and which
 record each device class (apple, nvidia, amd, cpu) got it from, with that
 record's directory and commit. No hash in it is typed: `build_table` reads the
-JSON columns under `bench/results/identity_break/`, produced by the identity
+JSON columns under `verification/records/identity/`, produced by the identity
 harness or retained from witnessed verifier reports by `identity_columns.py`.
 
 WHICH RECORDS COUNT. A column is admitted only if it is identical mode, names
@@ -77,7 +77,7 @@ def require_repository_records(paths, repo_root):
     """
     from pathlib import Path
     root = Path(repo_root).resolve()
-    base = root / "bench/results/identity_break"
+    base = root / "verification/records/identity"
     for filename in paths:
         path = Path(os.path.abspath(filename))
         resolved = path.resolve()
@@ -91,7 +91,7 @@ def require_repository_records(paths, repo_root):
                 bad = True
                 break
         if bad:
-            raise ValueError("reference input must be a regular repository file under bench/results/identity_break: " + str(path))
+            raise ValueError("reference input must be a regular repository file under verification/records/identity: " + str(path))
 
 
 def repository_record_paths(records, repo_root):
@@ -102,7 +102,7 @@ def repository_record_paths(records, repo_root):
     all of this stuff and why? maybe the reader needs to be fixed"). This used
     to `os.walk` every `*.json` under the directory, so every file on disk was
     a possible input: a stray file changed the table and nothing could be
-    moved. The inputs are now the rows of `bench/results/identity_break/
+    moved. The inputs are now the rows of `verification/records/identity/
     INDEX.tsv` (path, sha256, class, vendor, commit), generated once from what
     the walk returned (every JSON with a `cells` dict; the others were refused
     as "not an identity_break column" and never reached a cell) and appended to
@@ -123,14 +123,17 @@ def repository_record_paths(records, repo_root):
 
 
 # --------------------------------------------------------------------------
-# the record indexes (what the readers of bench/results read, by name)
+# the record indexes (what the readers of the record trees read, by name)
 # --------------------------------------------------------------------------
 
 #: The verify table's inputs (and the identity_break part of the matrix's).
-RECORD_INDEX = "bench/results/identity_break/INDEX.tsv"
+RECORD_INDEX = "verification/records/identity/INDEX.tsv"
 #: The column-shaped JSONs OUTSIDE identity_break that tools/verification_matrix.py
 #: and tools/part_set_census.py read (they never feed the verify table).
-CELLS_INDEX = "bench/results/CELLS_INDEX.tsv"
+CELLS_INDEX = "verification/records/CELLS_INDEX.tsv"
+#: The trees whose column-shaped JSONs an index lists (2026-11-25, lane verify-home: the
+#: verification records move from bench/results to verification/records; verification/README.md).
+RECORD_ROOTS = ("verification/records/", "bench/results/")
 INDEX_FIELDS = ("path", "sha256", "class", "vendor", "commit")
 
 
@@ -149,7 +152,7 @@ def index_for(rel):
     base = os.path.dirname(RECORD_INDEX) + "/"
     if rel.startswith(base):
         return RECORD_INDEX
-    if rel.startswith("bench/results/"):
+    if rel.startswith(RECORD_ROOTS):
         return CELLS_INDEX
     return None
 
@@ -159,7 +162,7 @@ def read_index(repo_root, index=RECORD_INDEX, verify=True):
     every listed file must exist with its listed sha256, or this refuses."""
     index_path = os.path.join(repo_root, index)
     if not os.path.isfile(index_path):
-        raise RecordIndexError(f"no record index {index}: the readers of bench/results read only "
+        raise RecordIndexError(f"no record index {index}: the readers of the record trees read only "
                           "the files an index lists (python3 tools/record_index.py)")
     rows, problems = [], []
     with open(index_path, "r", encoding="utf-8") as fh:
@@ -197,7 +200,7 @@ def indexed_record_paths(directory, repo_root):
     real = os.path.realpath(directory)
     if real != base and not real.startswith(base + os.sep):
         raise ValueError("reference input must be a regular repository file under "
-                         "bench/results/identity_break: " + str(directory))
+                         "verification/records/identity: " + str(directory))
     prefix = os.path.relpath(real, root).replace(os.sep, "/")
     if not os.path.isfile(os.path.join(root, RECORD_INDEX)):
         # A record tree with no record at all has no inputs. One that holds
@@ -281,7 +284,7 @@ INDEX_NOTES = {
     ),
     CELLS_INDEX: (
         "COLUMN-SHAPED JSONS OUTSIDE identity_break read by tools/verification_matrix.py and",
-        "tools/part_set_census.py (never by the verify table). Same rules as identity_break/INDEX.tsv.",
+        "tools/part_set_census.py (never by the verify table). Same rules as identity/INDEX.tsv.",
         "A byte-identical copy of an identity_break record is not listed (it was counted twice).",
     ),
 }
@@ -290,7 +293,7 @@ INDEX_NOTES = {
 def add_to_index(repo_root, paths, create=False):
     """Append the rows for newly recorded files (the recording tools call this).
     Idempotent for a listed file with the same bytes; refuses a listed path
-    whose bytes differ, and a path outside bench/results. A missing index is
+    whose bytes differ, and a path outside the RECORD_ROOTS. A missing index is
     refused (it would silently become a table with only the new rows) unless
     `create`: the caller proved the tree holds no other record. Returns the
     rows added."""
@@ -303,7 +306,7 @@ def add_to_index(repo_root, paths, create=False):
             continue
         index = index_for(row["path"])
         if index is None:
-            raise RecordIndexError(f"{row['path']} is not under bench/results; no index lists it")
+            raise RecordIndexError(f"{row['path']} is not under {' or '.join(RECORD_ROOTS)}; no index lists it")
         by_index.setdefault(index, []).append(row)
     for index, new in by_index.items():
         missing = not os.path.isfile(os.path.join(repo_root, index))
@@ -542,7 +545,7 @@ def device_class(vendor, filename):
         # what a Metal round writes when the GPU label does not reach the
         # recorder -- classified as None and counted for NOTHING. Two admitted
         # arima-exog cells sat unread in
-        # bench/results/identity_break/2026-09-15_arima-exog/metal/ for four
+        # verification/records/identity/2026-09-15_arima-exog/metal/ for four
         # days because of it. A file cannot be named `metal` and be any other
         # vendor.
         if (cls in v or cls in base
@@ -699,7 +702,7 @@ def admit(j, path, par_axis=False, *, known_lanes=()):
     Stateable only on two devices, admissible only on one. No run on any
     hardware could ever discharge them, while the verification matrix
     listed them as thirteen gaps to go close. The evidence existed the whole
-    time: bench/results/identity_break/2026-09-19_par-lane-amd-class/ carries
+    time: verification/records/identity/2026-09-19_par-lane-amd-class/ carries
     117 cells at par_devices='0' and 117 at par_devices='0,1', off one build
     on one box at one commit, with IDENTICAL hashes on all 117.
 
@@ -949,7 +952,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         if bad:
             log(f"skip {path}: fixture bytes differ from this harness ({', '.join(bad[:4])})")
             continue
-        rel_dir = os.path.relpath(os.path.dirname(path), os.path.join(repo_root, "bench", "results", "identity_break"))
+        rel_dir = os.path.relpath(os.path.dirname(path), os.path.join(repo_root, "verification", "records", "identity"))
         commit = j["commit"]
         rec = dict(dir=rel_dir, file=os.path.basename(path), vendor=j.get("vendor"), **{"class": cls},
                    commit=commit, commit_time=_commit_time(repo_root, commit, cache))

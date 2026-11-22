@@ -41,7 +41,7 @@ import pytest
 
 from mojolearn import _verify_reference as vref
 
-RECORDS = "bench/results/identity_break"
+RECORDS = "verification/records/identity"
 
 
 def clean_column():

@@ -54,7 +54,7 @@
 #                           whose source closure (tools/lane_select.py, this column's backend)
 #                           changed since the newest good evidence of THIS device class are
 #                           recorded: the admitted table's rows and every admissible record under
-#                           bench/results/identity_break (retained/ included), <outdir> and
+#                           verification/records/identity (retained/ included), <outdir> and
 #                           MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2. Prints REUSED n / RECORD m,
 #                           and NOTHING-CHANGED (exit 0) when no lane is owed; decisions in
 #                           <outdir>/<label>.reuse.json. A depth-1 box tree is enough: the reuse
@@ -265,7 +265,7 @@ else
     SELECTION=auto-reuse
     CLASS=$("${PY[@]}" -c 'import sys; sys.path.insert(0, "tools"); import identity_columns as c; print(c.label_class(sys.argv[1]))' "$LABEL") \
         || die "no device class for label $LABEL"
-    reuse_args=(--class "$CLASS" --records "$ROOT/bench/results/identity_break" --records "$OUT"
+    reuse_args=(--class "$CLASS" --records "$ROOT/verification/records/identity" --records "$OUT"
                 --summary-json "$OUT/$LABEL.reuse.json")
     # Admissible records that are not committed yet (a previous box run, a
     # retained archive): MOJOLEARN_IDENTITY_REUSE_RECORDS=dir1:dir2.

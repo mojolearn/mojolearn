@@ -52,7 +52,7 @@ def recorded_then_admitted(repo, column="nvidia"):
     """X: the source a refresh recorded; M: X plus the admission (table, records, README) only."""
     x = commit(repo, {"python/mojolearn/a.py": "x = 1\n", "tools/identity_break.py": "# harness\n"}, "source")
     t = table([(column, x), ("ptx", x)])
-    m = commit(repo, {F.TABLE_PATH: json.dumps(t), "bench/results/identity_break/r0.json": "{}",
+    m = commit(repo, {F.TABLE_PATH: json.dumps(t), "verification/records/identity/r0.json": "{}",
                       "bench/results/reference_admissions/2026-11-05-ref-x/README.md": "GAPS: none.\n"}, "admit")
     return x, m, t
 
@@ -63,7 +63,7 @@ def no_selector(paths, ref, backend):
 
 def test_record_outputs_are_the_only_paths_dropped():
     assert F.is_record_output(F.TABLE_PATH)
-    assert F.is_record_output("bench/results/identity_break/retained/x/y.json")
+    assert F.is_record_output("verification/records/identity/retained/x/y.json")
     assert F.is_record_output("bench/results/reference_admissions/2026-11-05-ref-x/README.md")
     for path in ("python/mojolearn/verify_reference/other.json", "bench/results/identity_breakage.json",
                  "tools/identity_break.py", "bindings/x.mojo", "docs/release/x.md"):

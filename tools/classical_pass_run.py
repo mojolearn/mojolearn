@@ -57,7 +57,7 @@ try:
         run([base, '-m', 'venv', venv], 'venv.log')
     py = venv / 'bin/python'
     run([py, '-m', 'pip', 'install', 'mojolearn==0.8.31', 'numpy==2.5.2', 'scipy==1.18.0'], 'packages-install.log', 1800)
-    # torch only generates the Mamba weights (mamba/corpus/gen_corpus.py) on the CPU
+    # torch only generates the Mamba weights (checks/native_tests/fixtures/mamba/gen_corpus.py) on the CPU
     run([py, '-m', 'pip', 'install', 'torch==2.13.0', '--index-url', 'https://download.pytorch.org/whl/cpu'], 'torch-install.log', 1800)
     run([py, '-m', 'pip', 'freeze'], 'packages.txt')
     native = out / 'native'; native.mkdir(exist_ok=True)

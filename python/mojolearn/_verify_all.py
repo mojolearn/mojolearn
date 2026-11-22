@@ -4347,7 +4347,7 @@ def cmd_verify_all(args):
 
 #: Where the committed columns a reference came from live, so `record` in the
 #: evidence block is a path a reader can open rather than a bare name.
-RECORD_ROOT = "bench/results/identity_break"
+RECORD_ROOT = "verification/records/identity"
 
 
 def _native_provenance_complete(report):
@@ -4469,7 +4469,7 @@ def _cmd_emit_reference(args):
         return EXIT_USAGE
     records = list(getattr(args, "records", None) or [])
     if not records:
-        records = [os.path.join(root, "bench", "results", "identity_break")]
+        records = [os.path.join(root, "verification", "records", "identity")]
     try:
         paths = vref.repository_record_paths(records, root)
     except (OSError, ValueError, subprocess.SubprocessError) as exc:

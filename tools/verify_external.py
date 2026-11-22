@@ -182,7 +182,7 @@ def arguments(argv=None):
     if (args.wheelhouse or args.installed) and not args.source:
         parser.error("--wheelhouse and --installed require --source; no public clone is used")
     if args.record is None:
-        records = sorted((ROOT / "bench/results/identity_break").glob("*-lanes"))
+        records = sorted((ROOT / "verification/records/identity").glob("*-lanes"))
         if not records:
             parser.error("no default identity record; supply a record directory")
         args.record = records[-1]

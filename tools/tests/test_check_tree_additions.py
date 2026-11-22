@@ -82,20 +82,26 @@ CASES = [
         "bench/results/dataset_store/groups/opponents@trees-linux-x86_64-cp311.txt",
         "bench/results/dataset_store/repo-data/experiments@six_lane_integration@measurements.tsv",
         "experiments/six_lane_integration/measurements/README.md",
-        "bench/results/identity_break/retained/abc/cpu.identical.json",
+        "verification/records/identity/retained/abc/cpu.identical.json",
         "bench/results/reference_admissions/0.8.67/a.json",
         "bench/results/release_evidence/0.8.67/a.json",
-        "bench/results/release_verification/0.8.67/a.json",
         "bench/results/r2-index.tsv",
-        "bench/results/CELLS_INDEX.tsv",
-        "bench/results/identity_break/INDEX.tsv",
+        "verification/records/CELLS_INDEX.tsv",
+        "verification/records/identity/INDEX.tsv",
+        "verification/README.md",
+        "verification/records/identity/2026-11-21/cpu.identical.json",
+        "checks/native_tests/fixtures/mamba/case/manifest.json",
         "docs/plans/NEW_PLAN.md",
         "tools/new_tool.py",
     ], [], 0, []),
     ("new run dir refused", ["bench/results/nvc-measure/2026-11-21/summary.json"], [], 1,
      ["bench/results/nvc-measure/2026-11-21/summary.json", "~/mojolearn-evidence/"]),
+    ("new identity record under bench/results refused (its home is verification/records/identity)",
+     ["bench/results/identity_break/2026-11-21/cpu.json"], [], 1, ["bench/results/identity_break/2026-11-21/cpu.json"]),
     ("log under identity_break refused", ["bench/results/identity_break/2026-11-21/build.log"], [], 1,
      ["identity_break/2026-11-21/build.log", "logs belong in ~/mojolearn-evidence/"]),
+    ("new log under verification refused", ["verification/records/identity/2026-11-21/build.log"], [], 1,
+     ["verification/records/identity/2026-11-21/build.log", "logs belong in ~/mojolearn-evidence/"]),
     ("log under a live board refused", ["bench/results/bench_board/run.log"], [], 1, ["bench_board/run.log"]),
     ("new file in a repo-data bucket refused", ["experiments/six_lane_integration/measurements/20261006/x.json"], [],
      1, ["measurements/20261006/x.json", "tools/repo_data.py"]),
@@ -144,13 +150,33 @@ def run_sequence_cases():
     write(clone, "notes/run.json")
     git(clone, "add", "-A")
     git(clone, "commit", "-q", "-m", "notes")
-    # git mv does not create the destination directory (exit 128 without it).
-    os.makedirs(os.path.join(clone, "bench/results/moved"), exist_ok=True)
+    os.makedirs(os.path.join(clone, "bench/results/moved"), exist_ok=True)  # git mv needs the target directory
     git(clone, "mv", "notes/run.json", "bench/results/moved/run.json")
     git(clone, "commit", "-q", "-m", "move")
     code, err = check(clone, git(clone, "rev-parse", "HEAD"))
     out.append(("rename into bench/results is refused",
                 [] if code == 1 and "bench/results/moved/run.json" in err else [f"exit {code}: {err[:300]}"]))
+    # 3b. a tracked record (its log included) moved into verification/ with git mv is not an addition
+    clone = scratch()
+    os.makedirs(os.path.join(clone, "verification/records"), exist_ok=True)
+    git(clone, "mv", "bench/results/old_run", "verification/records/old_run")
+    git(clone, "commit", "-q", "-m", "move")
+    code, err = check(clone, git(clone, "rev-parse", "HEAD"))
+    out.append(("git mv of a record with its log into verification/ passes",
+                [] if code == 0 else [f"exit {code}: {err[:300]}"]))
+    # 3c. a record (its log included) deleted in a pushed commit and restored (a revert) is not new run output
+    clone = scratch()
+    os.makedirs(os.path.join(clone, "verification/records"), exist_ok=True)
+    git(clone, "mv", "bench/results/old_run", "verification/records/old_run")
+    git(clone, "commit", "-q", "-m", "move")
+    git(clone, "rm", "-q", "-r", "verification/records/old_run")
+    git(clone, "commit", "-q", "-m", "delete")
+    git(clone, "push", "-q", "origin", "lane/x")
+    pushed = git(clone, "rev-parse", "HEAD")
+    git(clone, "revert", "--no-edit", "HEAD")
+    code, err = check(clone, git(clone, "rev-parse", "HEAD"), pushed)
+    out.append(("a restored record log under verification/ passes",
+                [] if code == 0 else [f"exit {code}: {err[:300]}"]))
     # 4. many offenders: at most 20 named, then a count
     clone = scratch()
     sha = commit(clone, [f"bench/results/many/f{i:02d}.json" for i in range(25)])
@@ -189,11 +215,15 @@ class TreeAdditions(unittest.TestCase):
             "bench/results/board_best_ever/nvidia.json": False,
             "bench/results/paper_compare/x.md": False,
             "bench/results/paper_compare/sub/x.md": True,
-            "bench/results/identity_break/a/b.json": False,
-            "bench/results/identity_break/a/b.log": True,
+            "bench/results/identity_break/a/b.json": True,
+            "verification/records/identity/a/b.json": False,
+            "verification/records/identity/a/b.log": True,
             "bench/results/release_evidence/a/b.json": False,
             "bench/results/r2-index.tsv": False,
-            "bench/results/CELLS_INDEX.tsv": False,
+            "verification/records/CELLS_INDEX.tsv": False,
+            "verification/records/a/b.json": False,
+            "verification/records/a/b.log": True,
+            "verification/README.md": False,
             "docs/handoffs/README.md": False,
             "docs/handoffs/H.md": True,
         }

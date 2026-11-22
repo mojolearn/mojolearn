@@ -1,7 +1,7 @@
 #!/bin/sh
 # tools/identity_three_columns_leg.sh: the on-box body of the three-vendor identity legs
 # (MOJOLEARN_GEMM_LEG_EXTRA for tools/gemm_remote_leg.sh, tools/do_extra_leg.sh and
-# tools/hotaisle_leg.sh). Evidence of 2026-09-13: bench/results/identity_break/.
+# tools/hotaisle_leg.sh). Evidence of 2026-09-13: verification/records/identity/.
 
 # Three-vendor identity at the shipped default (claims audit, 2026-09-13):
 # build every IDENTICAL binding for this box's own architecture, then run

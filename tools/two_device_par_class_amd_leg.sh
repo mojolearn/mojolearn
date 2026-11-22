@@ -32,7 +32,7 @@
 #            remote/identity/identity_break.nvidia-...-4090-sm_89.json
 #            (par_devices=0, admitted). They need `amd` and `apple`.
 #   two      par-forest-pool and par-rbf-sampler: amd AND nvidia already, from
-#            bench/results/identity_break/2026-09-15_par-lanes-new/. The only
+#            verification/records/identity/2026-09-15_par-lanes-new/. The only
 #            class they lack is `apple`, and an Apple column is a Metal run on
 #            the one Mac. NOTHING ON A RENTED BOX CAN GIVE THEM A THIRD CLASS
 #            and this leg does not pretend otherwise.
@@ -52,7 +52,7 @@
 # while a disagreement can still be re-run instead of reported.
 #
 # WHAT IS ALREADY DISCHARGED, so this leg does not buy it twice. On 2026-09-19
-# bench/results/identity_break/2026-09-19_hardware-gaps/ landed two-device
+# verification/records/identity/2026-09-19_hardware-gaps/ landed two-device
 # columns for eleven of the thirteen on BOTH vendors (nvidia-par-*.json and
 # amd-par-*-two.json). All 99 of their cells were checked here against the
 # one-device NVIDIA column above and every one is equal. What that set does NOT
@@ -382,7 +382,7 @@ run admit_check timeout "$(cap 120)" env MOJOLEARN_NUMERIC_MODE=identical \
     PYTHONPATH=/root/mojolearn/python pixi run python -c "
 import json, sys
 from mojolearn import _verify_reference as vr
-base = 'bench/results/identity_break/2026-09-19_par-lane-amd-class/'
+base = 'verification/records/identity/2026-09-19_par-lane-amd-class/'
 for name, expect in (('$LABEL.par-one.json', 'ADMISSIBLE'), ('$LABEL.par-two.json', 'par_devices 0,1')):
     try:
         j = json.load(open('$OUT/' + name))

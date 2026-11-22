@@ -44,7 +44,10 @@ TABLE_PATH = "python/mojolearn/verify_reference/table.json"
 #: Paths a reference refresh writes (tools/reference_refresh.py RECORD_OUTPUT_PATHS + TABLE): the admitted
 #: table, the column records and the admission READMEs. They are what an identity run PRODUCES, never an
 #: input of a lane, so a diff made only of them leaves every lane's bits where the records found them.
-RECORD_OUTPUTS = (TABLE_PATH, "bench/results/identity_break/", "bench/results/reference_admissions/")
+#: bench/results/identity_break/ is where the column records lived before 2026-11-25 (verification/README.md): a diff
+#: across that move, or from an older freeze, names them there.
+RECORD_OUTPUTS = (TABLE_PATH, "verification/records/identity/", "bench/results/identity_break/",
+                  "bench/results/reference_admissions/")
 #: The harness every column runs: a change here invalidates the table rows of every lane (their
 #: lane_admission harness_sha256 no longer matches), so every lane of the column is owed.
 HARNESS_PATHS = ("tools/identity_break.py", "tools/identity_lanes/")

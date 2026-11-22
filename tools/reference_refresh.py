@@ -90,8 +90,8 @@ ADMISSIONS = "bench/results/reference_admissions/"
 #: The env a PTX record needs (tools/identity_box_job_cpu_ptx.sh): REFRESH_<name> on the Mac -> <name> on the pod.
 PTX_ENV = ("PTX_SET_TGZ", "PTX_SET_SHA256", "PTX_SET_COMMIT")
 #: Paths a record run may leave untracked in a box tree; they are removed before a sync (0.8.65: a resubmit
-#: refused "untracked source bench/results/identity_break/retained/...").
-RECORD_OUTPUT_PATHS = ("bench/results/identity_break", "bench/results/reference_admissions")
+#: refused "untracked source verification/records/identity/retained/...").
+RECORD_OUTPUT_PATHS = ("verification/records/identity", "bench/results/reference_admissions")
 #: Files that travel with a record into admission (tools/admit_identity_columns.sh's NEXT line names them).
 RECORD_COMPANIONS = (".provenance.txt", ".source-report.json.gz", ".verifier-run.json")
 NOT_A_RECORD = (".admission-preview-", ".other-commit-")
@@ -520,7 +520,7 @@ class Refresh:
         mode, backend = SELECTION[c]
         cmd = [self.py, "tools/identity_columns.py", "changed-lanes", "--scope", SURFACE_SCOPE, "--backend", backend]
         if mode == "class":
-            cmd += ["--class", c, "--records", str(Path(tree) / "bench/results/identity_break")]
+            cmd += ["--class", c, "--records", str(Path(tree) / "verification/records/identity")]
         return cmd + ["--summary-json", str(self.home / "plan" / ("%s.reuse.json" % c))]
 
     def select(self, c, tree):

@@ -70,7 +70,7 @@ WHAT IT REUSES (it re-implements no measurement)
              one arm each, the precision in the arm name (bench_board_neural's
              `opponents`). The torch models are the repo's twins
              (tools/torch_lm_step_opponent.py, tools/speed_torch_seq.py
-             LlamaEager, mamba/corpus/gen_corpus.py). `--neural-shape full` is
+             LlamaEager, checks/native_tests/fixtures/mamba/gen_corpus.py). `--neural-shape full` is
              the board; `small` is a smoke. The Apple FAST arm is its
              `ours-fast` arm (MOJOLEARN_NUMERIC_MODE=fast in that worker, the
              same FAST binaries the wheel ships on Apple; quality columns
@@ -553,7 +553,7 @@ DEFAULT_TORCH_EXTRA_INDEX = {"nvidia": "https://download.pytorch.org/whl/cu129",
 CPU_ARM = "ours-cpu"
 
 
-#: The neural family's one extra pin: einops, which mamba/corpus/gen_corpus.py's
+#: The neural family's one extra pin: einops, which checks/native_tests/fixtures/mamba/gen_corpus.py's
 #: verbatim selective_scan_ref (the Mamba-1 torch twin) imports (pixi.toml
 #: carries einops >= 0.8 for the same reference).
 NEURAL_PINS = ["einops==0.8.1",
@@ -569,7 +569,7 @@ NEURAL_APPLE_PINS = ["mlx==0.26.1"]
 
 # FAIRNESS FIX (2026-10-13 audit): THE REAL MAMBA OPPONENT (tools/bench_board_neural.py
 # MAMBA_SSM_VENDOR_ARMS), from lane/mamba-opp facde18cc: mamba_ssm's fused kernels, pinned to the
-# state-spaces/mamba commit mamba/corpus/gen_corpus.py cites (its Mamba3 is the heavy-tail A our
+# state-spaces/mamba commit checks/native_tests/fixtures/mamba/gen_corpus.py cites (its Mamba3 is the heavy-tail A our
 # Mamba3Block implements; PyPI's 2.3.2.post1 is an older Mamba-3). Both packages BUILD FROM SOURCE in
 # the board's venv against its torch (--no-build-isolation, --no-deps: mamba-ssm's install_requires
 # pull tilelang, quack-kernels and an unpinned transformers; transformers is pinned in NEURAL_PINS):

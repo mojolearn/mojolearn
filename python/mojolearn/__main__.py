@@ -459,7 +459,7 @@ def build_parser():
                    help="MAINTAINER PATH, with --all --emit-reference: the "
                         "identity_break record directories or JSONs to build "
                         "the table from (default: the checkout's "
-                        "bench/results/identity_break)")
+                        "verification/records/identity)")
     v.add_argument("--emit-models", dest="emit_models", metavar="DIR",
                    default=None,
                    help="MAINTAINER PATH, GPU install: save the portable "

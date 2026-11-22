@@ -437,7 +437,7 @@ if [ "${MOJOLEARN_LEG_NO_CLONE:-0}" != "1" ] && [ -n "$CLONE_URL" ]; then
       git init -q
       git remote add origin '$CLONE_URL'
       git -c protocol.version=2 fetch -q --depth 1 origin '$COMMIT'
-      git sparse-checkout set --no-cone '/*' '!bench/results' >/dev/null 2>&1 || true
+      git sparse-checkout set --no-cone '/*' '!bench/results' '!verification/records' >/dev/null 2>&1 || true
       git checkout -q --detach FETCH_HEAD
       got=\$(git rev-parse HEAD)
       if [ \"\$got\" != '$COMMIT' ]; then
@@ -480,7 +480,7 @@ if [ "$CLONE_OK" != 1 ]; then
       bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh tools/knn_public_price_do_diag.sh \
       bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo \
       tools/knn_layout_dispatch_price.sh tools/knn_layout_do_diag.sh \
-      mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py \
+      mamba/__init__.mojo mamba/checks mamba/impl checks/native_tests/fixtures/mamba/gen_corpus.py \
       tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_backward_do_diag.sh \
       tools/mamba_gradient_oracle.py tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py tools/with_identical_mode.sh \
       tools/with_build_lock.sh tools/umap_identity_compare.py \
@@ -489,7 +489,7 @@ if [ "$CLONE_OK" != 1 ]; then
       bench/external/record_environment.sh "${EXTRA_CERT_SOURCE[@]}" | gzip > "$BUNDLE" \
       || { log "bounded archive failed"; exit 6; }
   else
-    git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' \
+    git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!verification/records' \
       | gzip > "$BUNDLE" || { log "archive failed"; exit 6; }
   fi
   SRC_SHA=$( { shasum -a 256 "$BUNDLE" 2>/dev/null || sha256sum "$BUNDLE"; } | awk '{print $1}' )

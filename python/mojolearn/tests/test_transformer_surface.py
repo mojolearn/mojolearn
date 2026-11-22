@@ -33,7 +33,7 @@ claim. The tolerance pair (rtol 1e-5, atol 1e-6) is the mamba corpus's
 calibrated anchor ADOPTED AS A STARTING POINT, not calibrated here: if
 the first run fails this arm on magnitude alone (an ACCURACY excess,
 never a shape, state or bitwise failure), recalibrate against a torch
-fp32 self-test the way `mamba/corpus/README.md` did, and record the
+fp32 self-test the way `checks/native_tests/fixtures/mamba/README.md` did, and record the
 finding -- do not widen silently. THE DEBT ARM at the bottom keys on
 `transformer/corpus/` gaining case data: the moment the corpus is
 actually generated, this file must compare against it and FAILS until

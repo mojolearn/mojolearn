@@ -476,7 +476,7 @@ def sources(root):
             paths.add(path)
     # The installed Mamba surface gate reads these committed reference operands.
     for case in CORPUS_CASES:
-        directory = root / 'mamba/corpus' / case
+        directory = root / 'checks/native_tests/fixtures/mamba' / case
         require((directory / 'x.f32').is_file(), 'Missing installed Mamba corpus: ' + case)
         paths.update(p for p in directory.rglob('*') if p.is_file())
     return {str(p.relative_to(root)): sha(p) for p in sorted(paths)}

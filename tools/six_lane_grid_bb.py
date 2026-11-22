@@ -84,7 +84,7 @@ def groups(races):
 
 
 DEFAULT_PIP = 'sklearn=scikit-learn==1.7.2'
-# The Mamba lanes' conductor builds its inputs from mamba/corpus/gen_corpus.py's shape and range tables
+# The Mamba lanes' conductor builds its inputs from checks/native_tests/fixtures/mamba/gen_corpus.py's shape and range tables
 # (bench_board_neural.mamba_weight_spec), and gen_corpus imports torch at module top. The box's pixi default env has
 # no torch, so in grid ge123e6f9 every mamba1/2/3-forward race died in the conductor before writing its race JSON
 # (status UNKNOWN(no race json, rc 1), all vendors, arms A and B). torch only shapes the inputs here: ours runs alone.

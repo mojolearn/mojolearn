@@ -39,14 +39,14 @@ class AdmissionTests(unittest.TestCase):
             (root / 'tools').mkdir()
             (root / 'tools/linux_surface_qualification.sh').write_text('# fixture driver')
             for case in gate.CORPUS_CASES:
-                path = root / 'mamba/corpus' / case
+                path = root / 'checks/native_tests/fixtures/mamba' / case
                 path.mkdir(parents=True)
                 (path / 'x.f32').write_bytes(b'input')
                 (path / 'reference.f64').write_bytes(b'reference')
             first = gate.sources(root)
             for case in gate.CORPUS_CASES:
-                self.assertIn('mamba/corpus/' + case + '/x.f32', first)
-            changed = root / 'mamba/corpus/mamba2/m2_base_b2_l4_d32/reference.f64'
+                self.assertIn('checks/native_tests/fixtures/mamba/' + case + '/x.f32', first)
+            changed = root / 'checks/native_tests/fixtures/mamba/mamba2/m2_base_b2_l4_d32/reference.f64'
             changed.write_bytes(b'changed reference')
             self.assertNotEqual(first, gate.sources(root))
 
@@ -56,7 +56,7 @@ class AdmissionTests(unittest.TestCase):
             (root / 'tools').mkdir()
             (root / 'tools/linux_surface_qualification.sh').write_text('# fixture driver')
             for case in gate.CORPUS_CASES[:-1]:
-                path = root / 'mamba/corpus' / case
+                path = root / 'checks/native_tests/fixtures/mamba' / case
                 path.mkdir(parents=True)
                 (path / 'x.f32').write_bytes(b'input')
             with self.assertRaisesRegex(ValueError, 'mamba3/m3_base'):

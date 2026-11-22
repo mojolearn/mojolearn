@@ -68,7 +68,7 @@ def stage_smoke_corpora(root, commit, stage):
     from verify_linux_surface_qualification import CORPUS_CASES
     records = {}
     for case in CORPUS_CASES:
-        prefix = "mamba/corpus/" + case
+        prefix = "checks/native_tests/fixtures/mamba/" + case
         listing = subprocess.check_output(
             ["git", "-C", str(root), "ls-tree", "-r", "-z", commit, "--", prefix])
         entries = [entry for entry in listing.split(b"\0") if entry]

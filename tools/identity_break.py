@@ -3097,7 +3097,7 @@ def _ragged(result):
     # np.asarray(container) does not"), never by iterating or converting
     # the container: an outsider's numpy 2.4.4 with the 0.8.5 wheel raised
     # "setting an array element with a sequence" on six fixtures under the
-    # iterating spelling (2026-09-14, bench/results/verify_external/).
+    # iterating spelling (2026-09-14, verification/records/cells/verify_external/).
     n = len(idx)
     rows_i = [np.asarray(idx[i]).reshape(-1).astype(np.int64) for i in range(n)]
     rows_d = [np.asarray(dists[i], dtype=np.float32).reshape(-1) for i in range(n)]
@@ -3905,7 +3905,7 @@ def _(ml, X, yc, yr, Xh=None):
     WHAT WAS ALREADY TRUE, AND WHAT WAS NOT. `tools/forest_host_gate.py`
     compares `host_model(<file>).predict` and `.predict_proba` against a
     SHA-256 a GPU box recorded, over 24 committed fixtures (three vendors x
-    eight kinds under `bench/results/forest_host/`); that gate is real and it
+    eight kinds under `verification/records/forest_host/`); that gate is real and it
     passes -- re-run on the M4 at this commit, 8 Apple fixtures IDENTICAL.
     The 2026-09-18 coverage audit is right that HostForest and HostGBDT
     are not two unimplemented algorithms. TWO THINGS IT DOES NOT COVER.
@@ -3949,7 +3949,7 @@ def _(ml, X, yc, yr, Xh=None):
     Under the family's define all three engines move (the groves engine
     carries a second arm of its own, `MOJOLEARN_FOREST_GROVES_SABOTAGE`).
     MEASURED on the M4, one core, `--repeats 2`, ALL NINE FIXTURES
-    (`bench/results/identity_break/2026-09-19_laneless-public-classes/`):
+    (`verification/records/identity/2026-09-19_laneless-public-classes/`):
     the clean prebuilt host set against `-D MOJOLEARN_FOREST_HOST_SABOTAGE=1`
     moves 9 of 9 cells (`base` 3918f891959b852a -> 4f407d8f1968fd09) through
     `rf`, `gbdt`, `groves` and `flags`; the same set against
@@ -4208,7 +4208,7 @@ def _(ml, X, yc, yr, Xh=None):
     `host_surface.GATE_SABOTAGE_OWN_DEFINES` so the gate's sabotage set
     carries it beside the family one. MEASURED on the M4, one core,
     `--repeats 2`, ALL NINE FIXTURES
-    (`bench/results/identity_break/2026-09-19_laneless-public-classes/`):
+    (`verification/records/identity/2026-09-19_laneless-public-classes/`):
     the clean prebuilt host set against a linalg binding built with BOTH
     defines moves 9 of 9 cells (`base` 0ff2da2cf430c48a -> d58be6e94de78728)
     through `bf16_bits`, `int8`, `materialized`, `widened`, `linalg` and
@@ -6117,7 +6117,7 @@ def _(ml, X, yc, yr, Xh=None):
     SABOTAGE: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 reverses ONLY the tie-break
     (largest (left_id, right_id) among the pairs at the top count instead of
     smallest). It moves ALL FIVE parts. MEASURED on x86-64 EPYC, 2026-09-17,
-    both fixtures (`bench/results/identity_break/2026-09-17_sabotage-sweep/
+    both fixtures (`verification/records/identity/2026-09-17_sabotage-sweep/
     e-python-lanes/`): `base` 302 tokens, 46 merges, 42 ties broken clean
     against 301, 45 and 41 sabotaged; `ties` 309/53/33 against 308/52/31.
 
@@ -6145,7 +6145,7 @@ def _(ml, X, yc, yr, Xh=None):
     -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 moves every cell (`base` ->
     f5172d25e6499662, the env arm's value) and the env arm now reaches the
     Mojo trainer as `break_ties_high`
-    (bench/results/identity_break/2026-09-18_bpe-builder-native/)."""
+    (verification/records/identity/2026-09-18_bpe-builder-native/)."""
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     v = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
     ranks = np.frombuffer(v.render_ranks().encode("ascii"), dtype=np.uint8)
@@ -6174,7 +6174,7 @@ def _(ml, X, yc, yr, Xh=None):
 
     SABOTAGE, two arms, both must move it. MEASURED on the M4, one core,
     `--repeats 2`, all nine fixtures DIVERGENT under each
-    (bench/results/identity_break/2026-09-18_tokenized-corpus/):
+    (verification/records/identity/2026-09-18_tokenized-corpus/):
     MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (the trainer's reversed tie-break) moves
     `ranks`, `tokenizer_json`, `identity` and `ids` and leaves `decoded`,
     `roundtrip` and `flags` (a different vocabulary still round trips); the
@@ -6481,7 +6481,7 @@ def _(ml, X, yc, yr, Xh=None):
     integer bookkeeping in Python. So the family's GENERIC arm is the wrong
     one and its OWN arm is the right one, and both were measured on the M4,
     one core, `--repeats 2`, nine fixtures, 2026-09-19
-    (bench/results/identity_break/2026-09-19_models-namespace):
+    (verification/records/identity/2026-09-19_models-namespace):
 
       -D MOJOLEARN_HOST_SABOTAGE=1 alone: THE CELL DOES NOT MOVE, on any
       fixture, in any of the eight parts (`base` stays 2e4e083eaea46d80).
@@ -6632,7 +6632,7 @@ def _(ml, X, yc, yr, Xh=None):
 
     SABOTAGE: TWO ARMS OF THE TOKENIZER FAMILY, AND NEITHER ALONE REACHES
     EVERY PART. Measured on the M4, one core, `--repeats 2`, nine fixtures,
-    2026-09-19 (bench/results/identity_break/2026-09-19_models-namespace);
+    2026-09-19 (verification/records/identity/2026-09-19_models-namespace);
     the cell moves under each, and both are in this family's
     GATE_SABOTAGE_OWN_DEFINES, so the gate's set carries both:
 
@@ -6855,7 +6855,7 @@ def _(ml, X, yc, yr, Xh=None):
     host family (gemm_oracle's descending leaf, the arm `mlp`,
     `transformer` and the Mamba lanes read DIVERGENT under) moves the cell
     on every fixture: MEASURED on the M4, one core, `--repeats 2`, nine
-    fixtures, 2026-09-19 (bench/results/identity_break/
+    fixtures, 2026-09-19 (verification/records/identity/
     2026-09-19_models-namespace), `base` 13d9b4ba89461093 ->
     9b87625cbfe914f6, through `every`, `logits` and `step`, and
     the infer and batch columns move with it.
@@ -7433,7 +7433,7 @@ def _(ml, X, yc, yr, Xh=None):
     is not a negative control on that fixture.
 
     MEASURED on the M4, one core, `--repeats 2`, ALL NINE FIXTURES
-    (`bench/results/identity_break/2026-09-19_laneless-public-classes/`):
+    (`verification/records/identity/2026-09-19_laneless-public-classes/`):
     9 of 9 cells move (`base` 7914bf0b244d9142 -> c18d7abf3e2a978e), through
     `combined`, `unaligned` and `pairs`.
 
@@ -7778,7 +7778,7 @@ def _par_devices():
 # next GPU call after one RandomForest.fit hang -- DEVIATION 1946, the same
 # class one call later: the binding's context was destroyed at its last use
 # and its own buffers were freed behind it. 1946 is FIXED IN SOURCE AND UNRUN
-# ON A 4090 (see bench/results/identity_break/RESULTS.md, RUN OWED). A hang
+# ON A 4090 (see verification/records/identity/RESULTS.md, RUN OWED). A hang
 # cannot be caught from inside this process, so the JSON is written after
 # every lane, the caller wraps the run in `timeout`, and the historically
 # hanging lane runs last; a killed run still leaves every earlier lane on
@@ -8105,7 +8105,7 @@ def _(ml, X, yc, yr, Xh=None):
     (`gemm_oracle`'s descending leaf, which every projection reaches),
     against a CLEAN build of the SAME source. MEASURED on the M4, one core,
     `nice -n 19`, `--repeats 2`, all nine fixtures, 2026-09-20
-    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
+    (verification/records/identity/2026-09-20_cpu-routes-gpu-only-four/):
     train, infer and stepfull DIVERGENT on 9 of 9. What does NOT move is
     written down too -- `flags` never, because a refusal is not arithmetic,
     and `step` on the `negative` fixture alone, where only `state` moves,
@@ -8221,7 +8221,7 @@ def _(ml, X, yc, yr, Xh=None):
     `stepfull` do not move at all. Neither arm is redundant; each watches what
     the other cannot. MEASURED on the M4, one core, `nice -n 19`,
     `--repeats 2`, all nine fixtures, 2026-09-20
-    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/,
+    (verification/records/identity/2026-09-20_cpu-routes-gpu-only-four/,
     `sabotage-transformer.json` and `sabotage-neural-transformer-session.json`).
     `flags` does NOT move under either and cannot.
 

@@ -59,7 +59,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-IB = os.path.join(ROOT, "bench", "results", "identity_break")
+IB = os.path.join(ROOT, "verification", "records", "identity")
 TABLE = os.path.join(ROOT, "python", "mojolearn", "verify_reference", "table.json")
 
 
@@ -110,7 +110,7 @@ def census(root=ROOT):
         cols.append(dict(rel=os.path.relpath(path, root), j=j, cls=cls,
                          admit=vr.admit(j, path), parts=parts_of(j),
                          in_tree=os.path.abspath(path).startswith(
-                             os.path.join(root, "bench", "results", "identity_break") + os.sep)))
+                             os.path.join(root, "verification", "records", "identity") + os.sep)))
 
     usable = [c for c in cols if c["admit"] is None and c["cls"] and c["in_tree"]]
     shapes = collections.Counter(tuple(sorted(c["parts"])) for c in usable)
@@ -176,7 +176,7 @@ def main():
         print()
         return 0
     print("columns under bench/results with an identity_break shape : %d" % r["total"])
-    print("admissible, device-classed, inside bench/results/identity_break: %d" % r["usable"])
+    print("admissible, device-classed, inside verification/records/identity: %d" % r["usable"])
     print("of those, carrying `stepfull` at all                      : %d" % r["carrying_stepfull"])
     print("\n--- part sets, by how many columns have them ---")
     for shape, n in r["shapes"].items():

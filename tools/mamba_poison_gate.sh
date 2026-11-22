@@ -28,7 +28,7 @@ set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$HERE"
 LANES="mamba1,mamba2,mamba2-dtlimit,mamba3"
-RECORD="${MOJOLEARN_POISON_RECORD:-bench/results/identity_break/2026-09-14_120-lanes-2711flip}"
+RECORD="${MOJOLEARN_POISON_RECORD:-verification/records/identity/2026-09-14_120-lanes-2711flip}"
 COLUMNS="$RECORD/apple-m4.json $RECORD/nvidia-h100-sm_90a.json $RECORD/amd-mi300x-gfx942.json"
 for c in $COLUMNS; do [ -f "$c" ] || { echo "no record column at $c" >&2; exit 2; }; done
 # MOJOLEARN_MAMBA_POISON_SABOTAGE

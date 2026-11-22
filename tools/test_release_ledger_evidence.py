@@ -277,10 +277,12 @@ class IdentityTableAdmission(unittest.TestCase):
             (root / "adm").mkdir()
             sha = "0" * 64
             (root / "adm" / "README.md").write_text(
-                f"| `bench/results/identity_break/retained/{sha}/apple-m4.identical.json` | x |\n"
-                f"| `bench/results/identity_break/retained/{sha}/apple-m4.identical.json` | dup |\n")
+                f"| `verification/records/identity/retained/{sha}/apple-m4.identical.json` | x |\n"
+                f"| `verification/records/identity/retained/{sha}/apple-m4.identical.json` | dup |\n"
+                # a README written before 2026-11-25 cites the old root; it is read at the new one
+                f"| `bench/results/identity_break/retained/{sha}/apple-m4.identical.json` | old spelling |\n")
             self.assertEqual(retained.admission_records(root, "adm"),
-                             [(f"bench/results/identity_break/retained/{sha}/apple-m4.identical.json", sha)])
+                             [(f"verification/records/identity/retained/{sha}/apple-m4.identical.json", sha)])
             (root / "adm" / "README.md").write_text("nothing")
             with self.assertRaises(ValueError):
                 retained.admission_records(root, "adm")

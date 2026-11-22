@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The record indexes: which files under bench/results the readers read.
+"""The record indexes: which files under the record trees (verification/records, bench/results) the readers read.
 
 Andrew, 2026-11-25: "what is reading all of this stuff and why? maybe the
 reader needs to be fixed." Three readers used to take whatever was on disk:
@@ -9,9 +9,9 @@ the verify table builder (`python/mojolearn/_verify_reference.py`
 `bench/results/**/*.json` and took every JSON with a `cells` dict). They now
 read only the rows of two tracked indexes:
 
-  bench/results/identity_break/INDEX.tsv  the verify table's inputs (and the
+  verification/records/identity/INDEX.tsv  the verify table's inputs (and the
                                           identity_break part of the matrix)
-  bench/results/CELLS_INDEX.tsv           column-shaped JSONs outside
+  verification/records/CELLS_INDEX.tsv    column-shaped JSONs outside
                                           identity_break (matrix, census only)
 
 Each row is `path  sha256  class  vendor  commit`. A reader refuses a listed
@@ -23,7 +23,7 @@ A new record gets its row from the tool that retains it
 Usage:
   python3 tools/record_index.py check            # listed files intact? unlisted column JSONs?
   python3 tools/record_index.py add <file>...    # index new records (idempotent)
-  python3 tools/record_index.py add --unlisted-under bench/results/identity_break   # adopt restored records
+  python3 tools/record_index.py add --unlisted-under verification/records/identity   # adopt restored records
   python3 tools/record_index.py retire --reason "..." <file>...   # drop rows on purpose
   python3 tools/record_index.py generate [--force]   # ONE-TIME: from what the walk/glob took
 
@@ -51,7 +51,7 @@ def vref(root=ROOT):
 def walked_records(root):
     """What `repository_record_paths` walked before the index (os.walk of
     identity_break, `.admission-preview-*` pruned, every `*.json`)."""
-    base = os.path.join(root, "bench", "results", "identity_break")
+    base = os.path.join(root, "verification", "records", "identity")
     out = []
     for directory, children, names in os.walk(base):
         children[:] = [n for n in children if not n.startswith(".admission-preview-")]
@@ -60,8 +60,11 @@ def walked_records(root):
 
 
 def globbed_columns(root):
-    """What the matrix and the census globbed before the index."""
-    return sorted(glob.glob(os.path.join(root, "bench/results/**/*.json"), recursive=True))
+    """What the matrix and the census globbed before the index, over every record tree
+    (bench/results and, since lane verify-home, verification/records)."""
+    v = vref(root)
+    return sorted(p for base in v.RECORD_ROOTS
+                  for p in glob.glob(os.path.join(root, base + "**/*.json"), recursive=True))
 
 
 def rows_of(v, root, paths):
@@ -110,7 +113,7 @@ def generate(v, root, force):
 
 
 def unlisted_columns(v, root, listed, inputs, under=""):
-    """Column-shaped files under bench/results (or `under`) no index lists, except a byte copy,
+    """Column-shaped files under the record trees (or `under`) no index lists, except a byte copy,
     outside identity_break, of an indexed identity_break record (not indexed, see generate)."""
     ib = os.path.dirname(v.RECORD_INDEX) + "/"
     out = []

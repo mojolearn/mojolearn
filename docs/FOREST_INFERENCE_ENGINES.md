@@ -238,7 +238,7 @@ record` runs on a GPU box and writes the SHA-256 of that box's predictions for
 a saved model and a regenerable fixture; `tools/forest_host_gate.py check`
 runs on the CPU box and exits 0 only when the host predictions hash the same.
 `.github/workflows/forest-host-gate.yml` runs the check on seven hosted CPUs
-against the fixtures under `bench/results/forest_host/`, and those fixtures
+against the fixtures under `verification/records/forest_host/`, and those fixtures
 are the record of which recordings exist. A CPU or a vendor
 not in that record is not certified.
 

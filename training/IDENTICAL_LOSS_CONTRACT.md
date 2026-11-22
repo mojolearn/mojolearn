@@ -899,7 +899,7 @@ lane; numbers cited from elsewhere (204, 258, 504, 522, 528, 720, 740-746,
 3. **A `pixi.toml` task**, `check-loss`, plus the sabotage arms as `-D` builds.
 4. **`training/corpus/` does not exist**, so clause 12's A3 arm has no
    independent Float64 reference and **three of the twenty stages are the same
-   host code on both sides of every comparison**. `mamba/corpus/` and
+   host code on both sides of every comparison**. `checks/native_tests/fixtures/mamba/` and
    `tools/mamba_corpus_check.py` are the pattern.
 5. **`checks/numerics.mojo` should carry `refuse_nonfinite`** (a THIRD copy
    lives here, DEVIATION 1164, with `mamba_oracle.mojo:57` and

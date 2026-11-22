@@ -336,7 +336,7 @@ def test_box_facts_are_read_once_per_worker(monkeypatch):
 
 
 def test_torch_switches_a_recipe_flipped_are_put_back(monkeypatch):
-    # smoke-fixes (2026-10-14): a neural recipe imports mamba/corpus/gen_corpus.py, which turns on
+    # smoke-fixes (2026-10-14): a neural recipe imports checks/native_tests/fixtures/mamba/gen_corpus.py, which turns on
     # torch.use_deterministic_algorithms(True) and one thread at import; in the one worker process that
     # leaked into the gcn torch arms on MPS (scatter_reduce_mps refuses deterministic mode)
     state = dict(det=False, warn=False, threads=8)

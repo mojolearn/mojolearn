@@ -190,9 +190,9 @@ def gpu_init(report, vendor):
 # torch-eager-fp32" and the other torch arms): each torch arm's construction raised "scatter_reduce_mps does
 # not have a deterministic implementation, but you set 'torch.use_deterministic_algorithms(True)'" in PyG's
 # gcn_norm. The gcn recipe sets no such switch. The neural mamba recipes, checked earlier in this same
-# process, import mamba/corpus/gen_corpus.py (tools/bench_board_neural.py _load_mamba_corpus), and that file
+# process, import checks/native_tests/fixtures/mamba/gen_corpus.py (tools/bench_board_neural.py _load_mamba_corpus), and that file
 # calls torch.set_num_threads(1) and torch.use_deterministic_algorithms(True) AT IMPORT
-# (mamba/corpus/gen_corpus.py:86-87; transformer/corpus/gen_corpus.py:98-99 does the same). In the timed
+# (checks/native_tests/fixtures/mamba/gen_corpus.py:86-87; transformer/corpus/gen_corpus.py:98-99 does the same). In the timed
 # campaign every recipe is its own process, so no later recipe sees those switches; in this worker they
 # leaked into every later recipe. torch's process-global switches are recorded once after the load and put
 # back before every recipe, so each recipe starts with the switches a fresh process starts with. The reply

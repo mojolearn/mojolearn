@@ -195,7 +195,7 @@ def _source_members(repo, drivers):
     for name in names:
         p = repo / name
         if (not name or p.suffix not in suffixes or not p.is_file()
-                or name.startswith(("bench/results/", "docs/", "docs-site/"))):
+                or name.startswith(("bench/results/", "verification/records/", "docs/", "docs-site/"))):
             continue
         members[name] = p.read_bytes()
         inventory[str(p.resolve())] = digest(members[name])

@@ -12,10 +12,10 @@ second copy: the element rule is `mojolearn.mamba.corpus.hash.v1` unchanged
 tensor names"), so the only things new here are the SEED BASE, the tensor
 names/ids and the case table.
 
-THE CASE TABLE MIRRORS `mamba/corpus/gen_corpus.py`'s LANDED mamba2 family
+THE CASE TABLE MIRRORS `checks/native_tests/fixtures/mamba/gen_corpus.py`'s LANDED mamba2 family
 (commit 35e7ceaa, `M2_SEED_BASE`/`M2_TENSOR_IDS`/`M2_CASES`) bit for bit --
 seed base 0x4D6D6232436F7270 ("Mmb2Corp"), tensor ids 21-31 disjoint from
-the Mamba-1 table, cases landing in `mamba/corpus/mamba2/<case>/`. This
+the Mamba-1 table, cases landing in `checks/native_tests/fixtures/mamba/mamba2/<case>/`. This
 file REIMPLEMENTS that table (the Mamba-1 fixture's rule: the check that
 loads a corpus case FIRST asserts file bytes == this generator's bytes,
 so the two lanes agreeing on the fixture is itself a gate) and the byte
@@ -157,7 +157,7 @@ struct Mamba2Weights(Copyable, Movable):
 # ===========================================================================
 # The mamba2 tensor-name/id table, element rule `mojolearn.mamba.corpus.
 # hash.v1` (the mamba-1 spec's rule, NEW names -- contract section 8g).
-# Corpus file names are `<name>.f32` inside `mamba/corpus/<case>/`.
+# Corpus file names are `<name>.f32` inside `checks/native_tests/fixtures/mamba/<case>/`.
 # ===========================================================================
 
 comptime M2_TID_X = 21  # x.f32                        [B, L, d_model]
@@ -430,8 +430,8 @@ def m2_case_init_states(k: Int) raises -> List[Float32]:
 
 def m2_corpus_dir(k: Int) raises -> String:
     """Where the corpus files for this case live (gen_corpus.py's mamba2
-    family layout): `mamba/corpus/mamba2/<case>/<tensor>.f32` plus the
+    family layout): `checks/native_tests/fixtures/mamba/mamba2/<case>/<tensor>.f32` plus the
     reference dumps and manifest. The check that reads these REFUSES BY
     NAME when the directory does not exist yet -- generation is RUN OWED
     on the corpus side; a missing fixture is a refusal, never a skip."""
-    return String("mamba/corpus/mamba2/") + String(m2_corpus_case(k).name)
+    return String("checks/native_tests/fixtures/mamba/mamba2/") + String(m2_corpus_case(k).name)

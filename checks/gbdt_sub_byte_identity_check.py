@@ -52,7 +52,7 @@ only), hist_2_one_byte_base 8/16 (bits5 and bits6 MOVED only). On an H100
 both builds gave the same bits in all 16 cells.
 
 MEASURED on the Apple M4, 2026-09-11, source a5f0b584: identity_break's 36
-gbdt cells IDENTICAL to bench/results/identity_break/apple-m4.identical.json
+gbdt cells IDENTICAL to verification/records/identity/apple-m4.identical.json
 and this check 16/16 PASS against the H100 references, so DEVIATION 2600
 holds on all three vendors. To re-run on Apple, from the repository root:
 
@@ -60,7 +60,7 @@ holds on all three vendors. To re-run on Apple, from the repository root:
         --lanes gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse \\
         --vendor apple-m4 --json /tmp/apple-m4.gbdt.json
     python3 tools/identity_break.py --diff \\
-        bench/results/identity_break/apple-m4.identical.json /tmp/apple-m4.gbdt.json
+        verification/records/identity/apple-m4.identical.json /tmp/apple-m4.gbdt.json
     MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python \\
         python3 checks/gbdt_sub_byte_identity_check.py --json /tmp/apple-m4.sub_byte.json
 
@@ -96,7 +96,7 @@ WIDTHS = {
 #: NVIDIA H100 80GB, IDENTICAL, cell hash per lane. `ties` is the retained
 #: identity_break set (bench/results/trees_identical/
 #: mi325x_2026-09-11_taxi_istella/leg1/ib/h100_baseline.json, equal to
-#: bench/results/identity_break/apple-m4.identical.json). `bin2`, `bits5`
+#: verification/records/identity/apple-m4.identical.json). `bin2`, `bits5`
 #: and `bits6` were recorded on a RunPod H100 80GB HBM3 (pod
 #: b8rlb4ggl30u4o, driver 580.126.09) at source 8020a0c9 on 2026-09-11,
 #: both fits of every cell equal; the same build reproduced all 36 retained

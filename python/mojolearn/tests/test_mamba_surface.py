@@ -22,8 +22,8 @@ per call, a buf_len (and, for Mamba-3, a pending flag) that must survive
 the round trip, and dtype/shape refusals that exist only on this side.
 
 THE EXPECTED VALUES ARE THE COMMITTED CORPUS'S, NOT OUR OWN TALLY. The
-Mamba-1/2 forward arms run corpus cases (`mamba/corpus/base_b2_l4_d8`,
-`mamba/corpus/mamba2/m2_base_b2_l4_d32`) and compare against their
+Mamba-1/2 forward arms run corpus cases (`checks/native_tests/fixtures/mamba/base_b2_l4_d8`,
+`checks/native_tests/fixtures/mamba/mamba2/m2_base_b2_l4_d32`) and compare against their
 `ref64` stages at the corpus README's calibrated tolerance (rtol 1e-5,
 atol 1e-6) -- a TOLERANCE anchor, per that README: the bitwise oracle is
 the lane's, and this file makes no cross-vendor claim. The corpus lives
@@ -52,7 +52,7 @@ HOW TO RUN IT
     # 1. build the extension (identical is the default tier)
     bash bindings/build_mamba.sh
 
-    # 2. the gate, FROM THE REPOSITORY ROOT (it reads mamba/corpus/)
+    # 2. the gate, FROM THE REPOSITORY ROOT (it reads checks/native_tests/fixtures/mamba/)
     cd python && python3 -m mojolearn.tests.test_mamba_surface
 
     # 3. the identical tier, where the bitwise arms are asserted
@@ -140,14 +140,14 @@ class Report(object):
 
 
 # ---------------------------------------------------------------------------
-# The committed corpus (mamba/corpus/README.md). IN-REPO: walk up from this
+# The committed corpus (checks/native_tests/fixtures/mamba/README.md). IN-REPO: walk up from this
 # file to the repository root; a missing corpus FAILS, it never skips.
 # ---------------------------------------------------------------------------
 
 def corpus_root():
     d = os.path.dirname(os.path.abspath(__file__))
     for _ in range(8):
-        cand = os.path.join(d, "mamba", "corpus")
+        cand = os.path.join(d, "checks", "native_tests", "fixtures", "mamba")
         if os.path.isdir(cand):
             return cand
         d = os.path.dirname(d)
@@ -431,7 +431,7 @@ def main(out=sys.stdout):
     root = corpus_root()
     arm = "CORPUS"
     if not rep.check(arm, root is not None,
-                     "mamba/corpus found walking up from this file",
+                     "checks/native_tests/fixtures/mamba found walking up from this file",
                      "this gate runs IN-REPO; a wheel does not carry the "
                      "corpus, and a skip here would be a pass with "
                      "nothing behind it"):
@@ -568,7 +568,7 @@ def main(out=sys.stdout):
     # -- MAMBA-3 FORWARD vs the committed reference ----------------------
     #
     # THE DEBT THIS REPLACES. Until 2026-09-02 the block above ended in a
-    # tripwire: while `mamba/corpus/mamba3` did not exist the row passed as
+    # tripwire: while `checks/native_tests/fixtures/mamba/mamba3` did not exist the row passed as
     # [OWED], and the moment the directory appeared without this comparison
     # being wired the row FAILED, so the debt could not rot. The corpus
     # landed, the tripwire fired on all three vendors at once, and this is

@@ -30,7 +30,7 @@ compare against recordings committed in the tree.
 | workflow | what a green run proves |
 |---|---|
 | `byte-lm-cpu-gate.yml` | the byte language model's CPU forward pass and one CPU training step reproduce the bytes recorded on the three GPUs for all 128 recorded steps, on that runner's CPU |
-| `forest-host-gate.yml` | a CPU-only binding reproduces every prediction digest of the random forest, Extra Trees and gradient boosting models trained on the three GPUs (`bench/results/forest_host/`) |
+| `forest-host-gate.yml` | a CPU-only binding reproduces every prediction digest of the random forest, Extra Trees and gradient boosting models trained on the three GPUs (`verification/records/forest_host/`) |
 | `cpu-identity-gate.yml` | the CPU training lanes (`COVERED_LANES` in the workflow) fit on the runner's CPU with every cell equal to the three committed GPU columns, and the classical CPU inference lanes reproduce the three-vendor recordings |
 
 Each workflow also builds a sabotage arm, a binding with one arithmetic step
@@ -126,7 +126,7 @@ The terminal summary ends with `VERDICT: PASS` on success. The verdict is positi
 only when your column has no REFUSED and no MOVED cell and the diff found every
 compared cell identical. A diff that reports nothing divergent over a column of
 refusals is not a pass; the first outsider run (an H100 on 2026-09-14,
-`bench/results/verify_external/`) had six refused radius cells behind a clean
+`verification/records/cells/verify_external/`) had six refused radius cells behind a clean
 diff, which is why the verdict is computed from your column too. Time: about an hour on
 an H100 or an M4; longer on a 4090.
 
@@ -144,7 +144,7 @@ the script checks the harness out at the record's commit; local paths check
 the supplied source witness instead. A wheel
 built from an older commit can refuse a lane the newer harness calls, which
 reads REFUSED and fails the verdict. That is a real mismatch and the script
-has no switch to hide it. The two outsider runs on 2026-09-14 (`bench/results/verify_external/`)
+has no switch to hide it. The two outsider runs on 2026-09-14 (`verification/records/cells/verify_external/`)
 show exactly this against the 0.8.5 wheel: six radius cells refused. From 0.8.7
 the wheel ships the columns of a record taken at its own commit, so the recipe
 is one command with no skew. (0.8.6 would have been the first to do so; it was

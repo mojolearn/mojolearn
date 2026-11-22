@@ -45,7 +45,7 @@
 #   CPU_COLUMN_ALSO=1  after the device column, run the harness again from a
 #                   package copy that carries no GPU set, MOJOLEARN_HOST_DIR
 #                   naming the host bindings: the CPU column of the same box
-#                   (bench/results/identity_break/2026-09-17_lowbit-m4/README.md's recipe)
+#                   (verification/records/identity/2026-09-17_lowbit-m4/README.md's recipe)
 #   PYTHON          how to run OUR harness (default "pixi run python")
 #   VENV            the incumbent's throwaway venv (default /root/.venv-model-leg)
 #   TRANSFORMERS_PIN  e.g. 4.56.2; empty installs the newest and the record pins what ran

@@ -10,7 +10,7 @@ from mojolearn import host_surface
 
 
 ROOT = Path(__file__).resolve().parents[3]
-RECORDS = ROOT / "bench/results/identity_break/2026-09-18_tokenized-corpus"
+RECORDS = ROOT / "verification/records/identity/2026-09-18_tokenized-corpus"
 LANES = ("bpe-vocabulary", "tokenized-corpus")
 
 

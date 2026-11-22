@@ -73,7 +73,7 @@ def _reach(graph, starts):
 
 def ignored(path):
     name = os.path.basename(path)
-    return (name.startswith("test_") or path.startswith(("docs/", "docs-site/", "bench/results/", "experiments/"))
+    return (name.startswith("test_") or path.startswith(("docs/", "docs-site/", "bench/results/", "verification/records/", "experiments/"))
             or path.endswith((".md", ".txt", ".json", ".tsv", ".csv", ".patch")))
 
 

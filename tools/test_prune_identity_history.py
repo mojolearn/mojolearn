@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(ROOT, "tools"))
 
 import prune_identity_history as pih  # noqa: E402
 
-BRK = "bench/results/identity_break"
+BRK = "verification/records/identity"
 A, B, C, D = "2026-09-01_table-cited", "2026-09-02_retained-named", "2026-09-03_nv-newest", "2026-09-04_nv-older"
 E, F, G, H = "2026-09-05_code-named", "2026-09-06_docs-only", "2026-09-07_other-tree", "2026-09-08_apple-copy"
 I, J, K = "2026-09-09_amd-lane-l2", "2026-09-10_amd-newest", "2026-09-11_report-only"
@@ -72,10 +72,10 @@ def tree(tmp_path):
     ret = brk / "retained" / ("a" * 64)
     # H's record, byte-copied into the live set: the retained copy wins the tie.
     write(ret / "apple-m2.identical.json", (brk / H / "apple-m2.identical.json").read_text())
-    write(ret / "apple-m2.provenance.txt", f"source=bench/results/identity_break/{B}/x.json\n"
+    write(ret / "apple-m2.provenance.txt", f"source=verification/records/identity/{B}/x.json\n"
                                            f"other=bench/results/identity_columns/{G}/y.json\n")
     with gzip.open(ret / "apple-m2.identical.source-report.json.gz", "wt") as fh:
-        fh.write(json.dumps({"inputs": [f"bench/results/identity_break/{K}/z.json"]}))
+        fh.write(json.dumps({"inputs": [f"verification/records/identity/{K}/z.json"]}))
     table = dict(records=[dict(dir=f"{A}/nvidia", file="nvidia-l40s.identical.json", commit=t[1])], cells={})
     write(root / pih.REL_TABLE, json.dumps(table))
     write(root / "tools" / "leg.sh", f'OUT="$ROOT/{BRK}/{E}"\n')

@@ -8,7 +8,7 @@
 # `ols/base` lane on the HOST column (MOJOLEARN_VENDOR=cpu), so no Metal.
 #
 # Column mode (records from tools/record_identity_column.sh on each box):
-#   Incoming columns are retained under bench/results/identity_break before
+#   Incoming columns are retained under verification/records/identity before
 #   generation. Commit the records and updated table together after checks.
 #   1. every <records dir>/*.identical.json must pass
 #      tools/identity_columns.py check (the same _verify_reference.admit() the
@@ -18,7 +18,7 @@
 #      record of its class or has an unchanged closure (identity_columns.py
 #      reuse-check); every commit must be in this repository (its commit time
 #      decides "newest wins")
-#   2. retains byte-identical copies under bench/results/identity_break/,
+#   2. retains byte-identical copies under verification/records/identity/,
 #      reusing existing copies without requiring a separate prerequisite commit
 #   3. regenerates python/mojolearn/verify_reference/table.json from every
 #      repository column for the selected lanes (`verify --all --emit-reference`
@@ -243,8 +243,8 @@ done
 [ ${#files[@]} -gt 0 ] || die "no *.identical.json under ${dirs[*]}"
 preview_args=()
 if [ $CHECK_ONLY = 1 ]; then
-    mkdir -p "$ROOT/bench/results/identity_break"
-    PREVIEW_INPUTS=$(mktemp -d "$ROOT/bench/results/identity_break/.admission-preview-XXXXXX") \
+    mkdir -p "$ROOT/verification/records/identity"
+    PREVIEW_INPUTS=$(mktemp -d "$ROOT/verification/records/identity/.admission-preview-XXXXXX") \
         || die "cannot prepare temporary record inputs"
     trap 'rm -rf -- "$PREVIEW_INPUTS"' EXIT
     preview_args=(--preview-dir "$PREVIEW_INPUTS")
@@ -321,7 +321,7 @@ LANES=$("${PY[@]}" tools/identity_admission_guard.py lanes --lanes "$LANES" "${f
     || die "invalid admission scope"
 tmp=$(mktemp -d "$EVID/admission.XXXXXX")
 cp "$TABLE" "$tmp/base.json" || die "cannot retain base table"
-record_args=(--records "$ROOT/bench/results/identity_break")
+record_args=(--records "$ROOT/verification/records/identity")
 if [ $CHECK_ONLY = 1 ]; then
     for f in "${files[@]}"; do
         case "$f" in "$PREVIEW_INPUTS/"*) record_args+=(--records "$f") ;; esac

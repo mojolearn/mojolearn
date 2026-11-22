@@ -1,11 +1,13 @@
 # Keep raw verifier records and release receipts in DOI source archives.
 /bench/results/* export-ignore
-/bench/results/identity_break -export-ignore
-/bench/results/release_verification -export-ignore
+# verification/records (verification/README.md): the same rule as bench/results, which they came from
+/verification/records/* export-ignore
+/verification/records/identity -export-ignore
+/verification/records/release_verification -export-ignore
 /bench/results/release089 -export-ignore
 /bench/results/parallel-next -export-ignore
 /bench/results/par_lm_xvendor -export-ignore
-/mamba/corpus/** export-ignore
-/mamba/corpus/gen_corpus.py -export-ignore
+/checks/native_tests/fixtures/mamba/** export-ignore
+/checks/native_tests/fixtures/mamba/gen_corpus.py -export-ignore
 # 2026-10-08: measurement records are not release sources; the release legs archive the tree with a 24 MiB cap
 /experiments/six_lane_integration/build_coverage.json export-ignore

@@ -244,9 +244,9 @@ def test_select_prints_the_call_graph_reason():
 # ------------------------------------------------------------ data files
 def test_a_data_file_whose_directory_a_lane_names_still_widens():
     """THE ARM THAT MUST WIDEN: a directory named by code a lane
-    reaches (mamba/corpus/mamba2/ is), so a manifest there is not dismissed for its generic name."""
+    reaches (checks/native_tests/fixtures/mamba/mamba2/ is), so a manifest there is not dismissed for its generic name."""
     path = next(p for p in sorted(lane_select.tracked_files())
-                if p.startswith("mamba/corpus/mamba2/") and p.endswith("/manifest.json"))
+                if p.startswith("checks/native_tests/fixtures/mamba/mamba2/") and p.endswith("/manifest.json"))
     assert lane_select._generic_data_name(path)
     assert lane_select.unreachable(path) is None, path
 

@@ -39,7 +39,7 @@ Subcommands (each writes one JSON; `compare` reads a directory of them):
                AdamW; test loss and accuracy.
   mlp-torch    The same in torch from the same init, split and batches.
   blocks       Block-level accuracy against the float64 references: every
-               Mamba-1/2/3 corpus case (mamba/corpus, ref64 from the
+               Mamba-1/2/3 corpus case (checks/native_tests/fixtures/mamba, ref64 from the
                reference algorithms) and TransformerBlock forward against a
                float64 NumPy restatement of HF's LlamaDecoderLayer at 5
                seeds x 2 shapes. Error = max|y - ref64| / max|ref64|.
@@ -399,7 +399,7 @@ def cmd_blocks(args):
     from mojolearn import Mamba1Block, Mamba2Block, Mamba3Block, TransformerBlock
     import test_mamba_surface as tm
     cases = []
-    root = ROOT / "mamba" / "corpus"
+    root = ROOT / "checks" / "native_tests" / "fixtures" / "mamba"
     fams = [("mamba1", root, Mamba1Block, tm.m1_weights, "block.out"),
             ("mamba2", root / "mamba2", Mamba2Block, tm.m2_weights, "residual.out"),
             ("mamba3", root / "mamba3", Mamba3Block, tm.m3_weights_corpus, "residual.out")]

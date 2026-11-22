@@ -25,10 +25,11 @@ else
   git worktree add --no-checkout -b "${branch}" "${path}" origin/main
 fi
 
-# Non-cone patterns: everything, minus bench/results/, plus the board dir.
+# Non-cone patterns: everything, minus bench/results/ and verification/records/, plus the board dir.
 git -C "${path}" sparse-checkout set --no-cone \
   '/*' \
   '!/bench/results/' \
+  '!/verification/records/' \
   "/${canonical}/"
 git -C "${path}" checkout -q "${branch}"
 echo "lean worktree: ${path} on ${branch} (bench/results/ left out except ${canonical}/)"

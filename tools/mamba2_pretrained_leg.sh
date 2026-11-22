@@ -23,7 +23,7 @@
 #     lease end, verified by process alive, id baked in and a
 #     token GET returning 200, else the box is destroyed unused :1093-1121
 #   the source: git archive of the commit minus bench/results,
-#     mamba/corpus, oracles and *.bin, about 10 MB gzipped
+#     checks/native_tests/fixtures/mamba, oracles and *.bin, about 10 MB gzipped
 #     (cap 15 MB), sha256 checked on the box                  :503-529, :1138-1173
 #   fetch of /root/gemm_leg_out to <out>/remote/               :1253-1271
 # The lease is 60 minutes, the hard cap, so both dead-men fire by then.

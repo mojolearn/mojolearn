@@ -27,8 +27,8 @@ def repo(tmp_path, monkeypatch):
     sh(r, "config", "user.email", "t@example.com")
     sh(r, "config", "user.name", "t")
     # a complete checkout carries the verification CTR models the pack stages (bc90e70162)
-    (r / "bench/results/identity_break").mkdir(parents=True)
-    (r / "bench/results/identity_break/model.json").write_text("{}\n")
+    (r / "verification/records/identity").mkdir(parents=True)
+    (r / "verification/records/identity/model.json").write_text("{}\n")
     for i in range(2):
         for j in range(30):
             (r / f"f{j}.txt").write_text(f"{i}-{j}\n")
@@ -141,4 +141,4 @@ def test_a_tree_without_the_verification_models_is_incomplete(repo):
     assert release.Release._source_problem(r, head) is None
     sh(r, "rm", "-rq", "bench")
     sh(r, "commit", "-qm", "drop models")
-    assert "lacks bench/results/identity_break" in release.Release._source_problem(r, sh(r, "rev-parse", "HEAD"))
+    assert "lacks verification/records/identity" in release.Release._source_problem(r, sh(r, "rev-parse", "HEAD"))

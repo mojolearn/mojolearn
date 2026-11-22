@@ -189,7 +189,7 @@ def test_no_committed_record_moved(record, columns, require, divergent_cells):
     """NO COMMITTED CELL MOVED. The two comparisons the CPU identity gate
     makes over committed columns: every comparable train cell IDENTICAL but
     the recorded DIVERGENT ones (test_a_real_divergence_still_exits_one keeps the DIVERGENT exit)."""
-    base = os.path.join(ROOT, "bench", "results", "identity_break", record)
+    base = os.path.join(ROOT, "verification", "records", "identity", record)
     if not os.path.isdir(base):
         pytest.skip(f"{base} is not in this checkout")
     divergent = len(_live_divergent(base, columns, divergent_cells))

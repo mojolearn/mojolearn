@@ -205,7 +205,7 @@ Mamba references were the opponents before; see "library opponents" below):
                 mamba_ssm's own fused kernels (Block + Mamba / Mamba2 /
                 Mamba3 SISO), our weights loaded. The torch-* arms below are
                 the pure-PyTorch references and are REFUSED by name.
-  mamba1        mamba/corpus/gen_corpus.py block_forward: the PURE-PYTORCH
+  mamba1        checks/native_tests/fixtures/mamba/gen_corpus.py block_forward: the PURE-PYTORCH
                 reference (mamba_ssm's selective_scan_ref, a per-token Python
                 loop). NOT a fused deployment kernel: mamba-ssm's CUDA
                 kernels are not installed by the board. A per-token loop is
@@ -235,7 +235,7 @@ The conductor writes ONE input file per race and every arm reads it (seed 7):
     stream the same way.
   * transformer: every weight normal(0, .02), +1 on the two norms; x
     standard normal.
-  * mamba1/2/3: every weight uniform in mamba/corpus/gen_corpus.py's default
+  * mamba1/2/3: every weight uniform in checks/native_tests/fixtures/mamba/gen_corpus.py's default
     range for that tensor (default_ranges / m2_default_ranges /
     m3_default_ranges), x uniform(-2, 2).
   * samba: SambaStack's initializer rules on numpy's generator: embedding
@@ -377,7 +377,7 @@ FIT_CELL = {"lstm-fit": "lstm", "gru-fit": "gru", "rnn-fit": "rnn"}
 DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-decode",
                 "samba-decode")
 #: Decode lanes with a torch decode twin in this harness. The Mamba
-#: references (mamba/corpus/gen_corpus.py) are full-sequence scans with no
+#: references (checks/native_tests/fixtures/mamba/gen_corpus.py) are full-sequence scans with no
 #: carried-state step; mamba1-decode and mamba2-decode race mamba_ssm's own
 #: step kernels instead (MAMBA_SSM_DECODE_LANES, 2026-10-22 lane measure-coverage).
 DECODE_TORCH_TWIN = ("transformer-decode",)
@@ -454,7 +454,7 @@ VENDORS = ("apple", "nvidia", "amd")
 #                    the Triton kernels is IEEE fp32 (ours' precision).
 #   mamba-ssm-tf32   TF32 on in torch and TRITON_F32_DEFAULT=tf32 (Triton's own default, what an
 #                    out-of-the-box install runs); NVIDIA only (TF32 is a CUDA tensor-core mode).
-# Pinned to the state-spaces/mamba commit mamba/corpus/gen_corpus.py cites (PyPI 2.3.2.post1 is
+# Pinned to the state-spaces/mamba commit checks/native_tests/fixtures/mamba/gen_corpus.py cites (PyPI 2.3.2.post1 is
 # an older Mamba-3). Results raced before this change were wrong for this lane; apply extra
 # scrutiny.
 MAMBA_SSM_ARMS = ("mamba-ssm-fp32", "mamba-ssm-tf32")
@@ -539,7 +539,7 @@ NOT_COVERED = [
     # (MAMBA_SSM_VENDOR_ARMS), and the Samba torch arms run mamba_ssm's Mamba3 layers.
     # Results raced before this change were wrong for this lane; apply extra scrutiny.
     "The Mamba lanes' torch-* arms would be the repo's pure-PyTorch references "
-    "(mamba/corpus/gen_corpus.py: mamba_ssm's selective_scan_ref for Mamba-1, the chunked SSD "
+    "(checks/native_tests/fixtures/mamba/gen_corpus.py: mamba_ssm's selective_scan_ref for Mamba-1, the chunked SSD "
     "reference for Mamba-2, the SISO reference for Mamba-3), not mamba-ssm's fused CUDA/Triton "
     "kernels; a reference implementation is not an opponent, so they are refused by name. The "
     "Mamba opponent is mamba_ssm's own fused kernels (mamba-ssm-fp32 on NVIDIA and AMD, "
@@ -584,7 +584,7 @@ NOT_COVERED = [
 # change were wrong for this lane; apply extra scrutiny.
 REFERENCE_TWIN_LANES = {
     lane: ("not an opponent: the torch twin of %s is a pure-PyTorch reference implementation "
-           "(mamba/corpus/gen_corpus.py%s), not a library kernel; mamba_ssm's fused kernels are "
+           "(checks/native_tests/fixtures/mamba/gen_corpus.py%s), not a library kernel; mamba_ssm's fused kernels are "
            "the opponent only where they run (2026-10-13 fairness audit)"
            % (lane, " m3_forward inside the Samba stack" if lane.startswith("samba") else ""))
     # samba-train-step / samba-forward are not here: their torch arms now run mamba_ssm's Mamba3
@@ -1225,12 +1225,12 @@ def _small_rows_suffix(rec):
 
 
 def _load_mamba_corpus():
-    """mamba/corpus/gen_corpus.py under its own alias (tools/speed_torch_seq.py
+    """checks/native_tests/fixtures/mamba/gen_corpus.py under its own alias (tools/speed_torch_seq.py
     _load_module's reason). It needs torch and numpy."""
     alias = "mojolearn_mamba_corpus"
     if alias in sys.modules:
         return sys.modules[alias]
-    path = os.path.join(REPO, "mamba", "corpus", "gen_corpus.py")
+    path = os.path.join(REPO, "checks", "native_tests", "fixtures", "mamba", "gen_corpus.py")
     spec = importlib.util.spec_from_file_location(alias, path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[alias] = mod
@@ -1328,7 +1328,7 @@ def samba_init(rng, name, shape):
     return np.ones(shape, dtype=np.float32)
 
 
-#: the pure shape/range definitions of mamba/corpus/gen_corpus.py that mamba_weight_spec reads
+#: the pure shape/range definitions of checks/native_tests/fixtures/mamba/gen_corpus.py that mamba_weight_spec reads
 _MAMBA_METADATA_FUNCTIONS = ("fan_in_scale", "default_ranges", "shapes_for", "m2_default_ranges", "m2_shapes_for",
                              "m3_dims", "m3_default_ranges", "m3_shapes_for")
 _MAMBA_METADATA_CONSTANTS = ("M2_D_STATE", "M2_D_CONV", "M2_EXPAND", "M2_HEADDIM", "M2_NGROUPS",
@@ -1337,7 +1337,7 @@ _MAMBA_METADATA = []
 
 
 def mamba_corpus_metadata():
-    """mamba/corpus/gen_corpus.py's shape and range functions, without importing the module (it imports torch at
+    """checks/native_tests/fixtures/mamba/gen_corpus.py's shape and range functions, without importing the module (it imports torch at
     module top). Their exact source bodies and the literal constants they read are executed with `math` only, so
     there is no second shape table to keep in step.
 
@@ -1349,7 +1349,7 @@ def mamba_corpus_metadata():
         return _MAMBA_METADATA[0]
     import ast
     import math
-    path = os.path.join(REPO, "mamba", "corpus", "gen_corpus.py")
+    path = os.path.join(REPO, "checks", "native_tests", "fixtures", "mamba", "gen_corpus.py")
     with open(path) as fh:
         tree = ast.parse(fh.read(), path)
     wanted, found, body = set(_MAMBA_METADATA_FUNCTIONS) | set(_MAMBA_METADATA_CONSTANTS), set(), []
@@ -1363,7 +1363,7 @@ def mamba_corpus_metadata():
             body.append(node)
             found.add(node.targets[0].id)
     if found != wanted:
-        raise RuntimeError("mamba/corpus/gen_corpus.py metadata definitions changed: missing %s"
+        raise RuntimeError("checks/native_tests/fixtures/mamba/gen_corpus.py metadata definitions changed: missing %s"
                            % sorted(wanted - found))
     namespace = {"math": math}
     exec(compile(ast.Module(body=body, type_ignores=[]), path, "exec"), namespace)
@@ -1372,7 +1372,7 @@ def mamba_corpus_metadata():
 
 
 def mamba_weight_spec(model, d):
-    """[(name, shape, (lo, hi))] from mamba/corpus/gen_corpus.py's shape and
+    """[(name, shape, (lo, hi))] from checks/native_tests/fixtures/mamba/gen_corpus.py's shape and
     range functions, plus x's."""
     corpus = mamba_corpus_metadata()
     dm, B, L = d["d_model"], d["batch"], d["length"]
@@ -1550,7 +1550,7 @@ def _write_inputs(lane, shape, steps, path, *, mamba_spec=None):
         for n, s, (lo, hi) in spec:
             arrays["w:" + n] = rng.uniform(lo, hi, s).astype(np.float32)
         arrays["x"] = rng.uniform(xrange[0], xrange[1], xshape).astype(np.float32)
-        rec["inputs"] = ("every tensor default_rng(%d).uniform over mamba/corpus/gen_corpus.py's "
+        rec["inputs"] = ("every tensor default_rng(%d).uniform over checks/native_tests/fixtures/mamba/gen_corpus.py's "
                          "default range for it" % SEED)
         rec["ranges"] = {n: list(r) for n, _, r in spec}
     elif model == "samba":
@@ -3942,9 +3942,9 @@ class TorchArm:
         self.uses_default_device = True
         self.module = self._module(self._dev_params(), call)
         self.host = [self._t(self.data["x"])]
-        self.info["twin"] = {"mamba1": "mamba/corpus/gen_corpus.py block_forward (selective_scan_ref)",
-                             "mamba2": "mamba/corpus/gen_corpus.py m2_forward",
-                             "mamba3": "mamba/corpus/gen_corpus.py m3_forward"}[model]
+        self.info["twin"] = {"mamba1": "checks/native_tests/fixtures/mamba/gen_corpus.py block_forward (selective_scan_ref)",
+                             "mamba2": "checks/native_tests/fixtures/mamba/gen_corpus.py m2_forward",
+                             "mamba3": "checks/native_tests/fixtures/mamba/gen_corpus.py m3_forward"}[model]
 
     _build_mamba1 = _build_mamba2 = _build_mamba3 = _build_mamba
 
@@ -4978,7 +4978,7 @@ def mamba_ssm_setting(arm):
 
 def mamba_ssm_config(model, corpus, dm):
     """The mixer's constructor arguments (every one EXPLICIT, never the library default) and the
-    block norm's eps, from mamba/corpus/gen_corpus.py: the constants our blocks use."""
+    block norm's eps, from checks/native_tests/fixtures/mamba/gen_corpus.py: the constants our blocks use."""
     if model == "mamba1":
         return dict(d_state=corpus.D_STATE, d_conv=corpus.D_CONV, expand=corpus.EXPAND,
                     dt_rank=-(-dm // 16), conv_bias=True, bias=False,
