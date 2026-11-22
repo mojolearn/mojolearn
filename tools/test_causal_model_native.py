@@ -128,8 +128,13 @@ def test_operation_owner_preserves_aliases_tied_weights_and_original_parameters(
     assert 'identity = Int(layers[i]._obj_ptr)' in state and 'layer = seen.get(identity, PythonObject(None))' in state
     assert '"_native_state_identity", state' in state
     assert '"_causal_admission_failure"' in state
-    params = PUBLIC.split("def causal_lm_parameters_binding", 1)[1].split("def causal_lm_blocks_binding", 1)[0]
-    assert 'py_setitem(result, name, originals[key])' in params
+    # parameters() is a one-line overload onto the body that state_dict shares
+    # (`copies`, fx-leftovers 2026-11-21): the body is the overload with `copies`.
+    params = PUBLIC.split("def causal_lm_parameters_binding(mut mods: NativeModules, model: PythonObject, copies: Bool)",
+                          1)[1].split("def causal_lm_blocks_binding", 1)[0]
+    assert 'py_setitem(result, name, _causal_weight_out(mods, originals[key], copies))' in params
+    out = PUBLIC.split("def _causal_weight_out", 1)[1].split("\ndef ", 1)[0]
+    assert out.rstrip().endswith("return value")  # parameters(): the original arrays themselves
     assert '"_neural_original_w"' in params and '"_neural_original_wopt"' in params
     assert 'pieces[k][2], keep' in params  # fused outputs consume captured bytes
 
