@@ -6,11 +6,6 @@ fit and at predict, and the refusals by name.
 Every accepted form of the same data must give the same predictions: the
 category of a value does not depend on the container it arrived in. Small
 fits only (a few trees, CPU); nothing here is a measurement.
-
-The fits use the categorical arm the CPU gbdt binding trains (SymmetricTree,
-Logloss, no bootstrap, no score noise: gbdt/mojolearn_gbdt_host_run.mojo,
-the by-name refusals of bootstrap_type and of cat_features outside
-SymmetricTree with Logloss), so they run on every install.
 """
 import numpy as np
 import pytest
@@ -19,21 +14,18 @@ mojolearn = pytest.importorskip("mojolearn")
 
 N = 240
 CATS = ["red", "green", "blue", "teal"]
-#: the categorical arm of the CPU gbdt binding (see the module docstring)
-CPU_CTR = {"loss": "Logloss", "bootstrap_type": "No", "random_strength": 0.0}
 
 
 def _data():
     rng = np.random.default_rng(3)
     cat = [CATS[i % 4] for i in range(N)]
     num = rng.normal(size=N).astype(np.float64)
-    # binary (Logloss): the category and the numeric feature both decide it
-    y = np.array([float(i % 4 + 0.5 * num[i] > 1.5) for i in range(N)], dtype=np.float32)
+    y = np.array([float(i % 4) + 0.1 * num[i] for i in range(N)], dtype=np.float32)
     return cat, num, y
 
 
 def _model():
-    return mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0], device="cpu", **CPU_CTR)
+    return mojolearn.GradientBoosting(n_estimators=8, max_depth=3, cat_features=[0], device="cpu")
 
 
 def _fit_predict(X, y, X_test=None):

@@ -112,7 +112,9 @@ quantize OFF, 2581 group width ON, 2030 fused move OFF)
      (`descent_helpers.mojo:81-100`, `:186-285`) with AnyImprovement
      (`step_estimator.mojo:50-72`), and `add_model_value_kernel`
      (`gbdt/methods/kernel_add_model_value.mojo:45-104`, the cursor update
-     through `identical_mul_add`).
+     `cursor + round(leaf * rate)`, `rescaled_leaves` and
+     `apply_scaled_leaves_host`; RMSE through the same loop since
+     2026-11-22, see `gbdt_host_boost`).
   6. The weak model's rescale (`doc_parallel_boosting.mojo:2131-2133`), the
      learn loss bookkeeping (`:2158-2169`, `:2180-2259`) and the model text
      (`gbdt/models/model_text.mojo:268-312`, `:374-487`, `:601-670`).
@@ -154,6 +156,7 @@ from checks.numerics import (
     identical_sqrt,
 )
 from gbdt.data.permutation import TRandom
+from gbdt.methods.cursor_rescale import rescaled_leaves
 from gbdt.gpu_util.kernel.random_gen import (
     advance_seed_k,
     next_normal_f,
@@ -270,6 +273,10 @@ comptime GBDT_FLOAT32_MAX = Float32(3.4028234663852886e38)
 comptime GBDT_SENTINEL = UInt32(0xFFFFFFFF)
 #: Logloss's Newton iteration default (`catboost_options.mojo:1304-1308`).
 comptime GBDT_LOGLOSS_NEWTON_ITERATIONS = 10
+#: the objectives `gbdt_host_boost` trains, the codes of
+#: `gbdt_oracle_losses.mojo` (`GBDT_OBJ_RMSE`, `GBDT_OBJ_LOGLOSS`)
+comptime GBDT_BOOST_RMSE = 0
+comptime GBDT_BOOST_LOGLOSS = 1
 
 
 # ===========================================================================
@@ -553,6 +560,147 @@ def _logloss_value(
 
     host_parallelize(score_blocks, units)
     return _deterministic_sum_lanes(fv_partials, 1, blocks)[0]
+
+
+# ===========================================================================
+# THE RMSE TARGET KERNEL: `pointwise_target_kernel[OBJECTIVE_RMSE]` and the
+# searcher's leaf (moved word for word from gbdt_oracle_rmse.mojo by lane
+# pv-gbdt-cpu-cat, 2026-11-22, so `gbdt_host_boost` trains RMSE as well)
+# ===========================================================================
+
+
+#: `MIN_LEAF_WEIGHT` (`leaves_estimation.mojo:72`).
+comptime GBDT_RMSE_MIN_LEAF_WEIGHT = Float32(1e-20)
+
+
+@fieldwise_init
+struct _RmseRow(ImplicitlyCopyable, Movable):
+    var der: Float32
+    var score: Float32
+
+
+def _rmse_row(relev: Float32, val: Float32, weight: Float32) -> _RmseRow:
+    """One in-range thread of `pointwise_target_kernel[OBJECTIVE_RMSE,
+    estimation=False]` (`pointwise_targets.mojo:696-775`): `target_der` is
+    `t - p` (`:421-423`), stored flushed as `ftz(weight * der)`;
+    `target_score` is `(t - p) * (t - p)` (`:348-350`), accumulated as
+    `-weight * score`."""
+    var der = ftz(weight * (relev - val))
+    var score = -weight * ((relev - val) * (relev - val))
+    return _RmseRow(der, score)
+
+
+def _rmse_search_pass(
+    targets: List[Float32],
+    cursor: List[Float32],
+    n_rows: Int,
+    mut stats: List[Float32],
+    mut fv_partials: List[Float32],
+    mut mag_partials: List[Float32],
+):
+    """`launch_approximate[False]` on RMSE with `compute_fv` and
+    `compute_magnitudes` set: plane 0 the unit weight, plane 1 the flushed
+    der, one score partial and two magnitude partials per 256-thread block
+    through the halving tree. Out-of-range threads add 0.0."""
+    var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
+    # THE SPLIT (lane gbdt-host-par), the unit of `_logloss_search_pass`:
+    # one 256-thread device block owns its rows' two planes and its three
+    # partials, and its halving trees are the kernel's. Blocks go round
+    # robin to `_gbdt_units` tasks; a task holds three block slabs.
+    var units = _gbdt_units(blocks, 8 * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+    var mag_p = rebind[HostF32Ptr](mag_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm targets_p, imm cursor_p, imm stats_p, imm fv_p, imm mag_p}:
+        var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
+        var s_w = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
+        var s_g = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
+        var weight = Float32(1.0)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slabs are reused)
+                s_score[t] = Float32(0.0)
+                s_w[t] = Float32(0.0)
+                s_g[t] = Float32(0.0)
+                if i < n_rows:
+                    var r = _rmse_row(targets_p[i], cursor_p[i], weight)
+                    var plane0 = weight
+                    stats_p[i] = plane0
+                    stats_p[n_rows + i] = r.der
+                    s_score[t] = r.score
+                    s_w[t] = abs(plane0)
+                    s_g[t] = abs(r.der)
+            fv_p[b] = _halving_fold(s_score)
+            mag_p[2 * b] = _halving_fold(s_w)
+            mag_p[2 * b + 1] = _halving_fold(s_g)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(targets)
+    _ = len(cursor)
+    _ = len(stats)
+    _ = len(fv_partials)
+    _ = len(mag_partials)
+
+
+def _rmse_value(targets: List[Float32], cursor: List[Float32], n_rows: Int) -> Float32:
+    """The final learn loss pass (`doc_parallel_boosting.mojo:2180-2211`):
+    the same kernel's score partials, folded by
+    `deterministic_sum_lanes_kernel[1]`."""
+    var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
+    var fv_partials = List[Float32](length=blocks, fill=Float32(0.0))
+    # THE SPLIT (lane gbdt-host-par): one 256-thread device block per unit
+    # (its own halving tree), round robin to `_gbdt_units` tasks; the lane
+    # fold over the blocks runs after the join in block order.
+    var units = _gbdt_units(blocks, 8 * n_rows)
+    var targets_p = rebind[HostF32Ptr](targets.unsafe_ptr())
+    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
+    var fv_p = rebind[HostF32Ptr](fv_partials.unsafe_ptr())
+
+    def score_blocks(unit: Int) {imm units, imm blocks, imm n_rows, imm targets_p, imm cursor_p, imm fv_p}:
+        var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
+        var weight = Float32(1.0)
+        var b = unit
+        while b < blocks:
+            for t in range(GBDT_MSE_BLOCK):
+                var i = b * GBDT_MSE_BLOCK + t
+                # an out-of-range thread adds 0.0 (the slab is reused)
+                s_score[t] = Float32(0.0)
+                if i < n_rows:
+                    s_score[t] = _rmse_row(targets_p[i], cursor_p[i], weight).score
+            fv_p[b] = _halving_fold(s_score)
+            b += units
+
+    host_parallelize(score_blocks, units)
+    _ = len(targets)
+    _ = len(cursor)
+    return _deterministic_sum_lanes(fv_partials, 1, blocks)[0]
+
+
+# ===========================================================================
+# THE SEARCHER'S LEAF: `compute_leaf_values_kernel`
+# ===========================================================================
+
+
+def _rmse_leaf_value(w: Float32, g: Float32, l2: Float32) -> Float32:
+    """`compute_leaf_values_kernel` (`leaves_estimation.mojo:75-181`) for
+    one leaf, term for term. The sabotage arm adds 1.0 to the regularizer
+    (see THE NEGATIVE CONTROL)."""
+    var reg = l2
+    comptime if GBDT_ORACLE_HOST_SABOTAGE:
+        reg = reg + Float32(1.0)
+    var hessian = w + reg
+    if hessian <= Float32(0.0):
+        return Float32(0.0)
+    var v = g / (hessian + Float32(1e-20))
+    if w < GBDT_RMSE_MIN_LEAF_WEIGHT:
+        v = Float32(0.0)
+    return v
 
 
 # ===========================================================================
@@ -3061,13 +3209,19 @@ def _oracle_eval(
     mut gradient: List[Float64],
     mut cached_der2: List[Float64],
     g_weights: List[Float32] = List[Float32](),
+    objective: Int = GBDT_BOOST_LOGLOSS,
 ):
     """`write_value_and_first_derivatives`' single-dimensional arm
     (`pointwise_oracle.mojo:458-573`): `cross_entropy_kernel[True, True]`
     (plane 0 `ftz(weight * (c - p))`, plane 1 `ftz(weight * p * (1 - p))`,
     one score partial per 256-thread block), `compute_partition_stats` per
     leaf over the gathered order, and the value as the HOST Float32 fold of
-    the partials in block order."""
+    the partials in block order. Under `GBDT_BOOST_RMSE` the kernel is
+    `pointwise_target_kernel[OBJECTIVE_RMSE, estimation=True]` (plane 0
+    `ftz(weight * (t - p))`, plane 1 `ftz(weight * 1)`, the score
+    `-weight * (t - p)^2`), the terms of `gbdt_oracle_losses.mojo::_loss_row`
+    at unit weight; the objective is resolved once per block, outside the
+    row loop."""
     var blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var fv = List[Float32](length=blocks, fill=Float32(0.0))
@@ -3083,9 +3237,26 @@ def _oracle_eval(
     var stats_p = rebind[HostF32Ptr](stats.unsafe_ptr())
     var fv_p = rebind[HostF32Ptr](fv.unsafe_ptr())
 
-    def score_blocks(unit: Int) {imm chunk, imm blocks, imm n_rows, imm border, imm has_weights, imm target_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p}:
+    var is_rmse = objective == GBDT_BOOST_RMSE
+
+    def score_blocks(unit: Int) {imm chunk, imm blocks, imm n_rows, imm border, imm has_weights, imm is_rmse, imm target_p, imm cursor_p, imm weights_p, imm stats_p, imm fv_p}:
         var s_score = List[Float32](length=GBDT_MSE_BLOCK, fill=Float32(0.0))
         for b in range(unit * chunk, min((unit + 1) * chunk, blocks)):
+            if is_rmse:
+                for t in range(GBDT_MSE_BLOCK):
+                    var i = b * GBDT_MSE_BLOCK + t
+                    var score = Float32(0.0)
+                    if i < n_rows:
+                        var weight = Float32(1.0)
+                        if has_weights:
+                            weight = weights_p[i]
+                        var r = _rmse_row(target_p[i], cursor_p[i], weight)
+                        stats_p[i] = r.der
+                        stats_p[n_rows + i] = ftz(weight * Float32(1.0))
+                        score = r.score
+                    s_score[t] = score
+                fv_p[b] = _halving_fold(s_score)
+                continue
             for t in range(GBDT_MSE_BLOCK):
                 var i = b * GBDT_MSE_BLOCK + t
                 var score = Float32(0.0)
@@ -3158,11 +3329,13 @@ def _estimate_leaves(
     l2_leaf_reg: Float32,
     iterations: Int,
     weights: List[Float32] = List[Float32](),
+    objective: Int = GBDT_BOOST_LOGLOSS,
 ) raises -> List[Float32]:
     """`_estimate_and_apply`'s estimate (`doc_parallel_boosting.mojo:
     698-797`): the gathers by the row index, the oracle, and
     `newton_like_walker_estimate` with AnyImprovement
-    (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`)."""
+    (`descent_helpers.mojo:198-285`, `step_estimator.mojo:50-72`).
+    `objective` picks the oracle's target kernel (`_oracle_eval`)."""
     var n_leaves = len(sizes)
     var g_target = List[Float32](length=n_rows, fill=Float32(0.0))
     var g_cursor = List[Float32](length=n_rows, fill=Float32(0.0))
@@ -3229,7 +3402,7 @@ def _estimate_leaves(
     _oracle_move_to(cur_point, current_point, bins, g_cursor, n_rows)
     _oracle_eval(
         g_target, g_cursor, offsets, sizes, n_rows, border, lambda_reg,
-        cur_value, cur_grad, cached_der2, g_weights,
+        cur_value, cur_grad, cached_der2, g_weights, objective,
     )
     var cur_hess = cached_der2.copy()
     var direction = _diagonal_direction(cur_grad, cur_hess)
@@ -3253,7 +3426,7 @@ def _estimate_leaves(
             _oracle_move_to(next_point, current_point, bins, g_cursor, n_rows)
             _oracle_eval(
                 g_target, g_cursor, offsets, sizes, n_rows, border, lambda_reg,
-                next_value, next_grad, cached_der2, g_weights,
+                next_value, next_grad, cached_der2, g_weights, objective,
             )
             if function_value <= next_value:
                 cur_hess = cached_der2.copy()
@@ -3270,40 +3443,6 @@ def _estimate_leaves(
         if not accepted:
             break
     return cur_point^
-
-
-def _apply_leaves(
-    mut cursor: List[Float32],
-    row_index: List[Int],
-    offsets: List[Int],
-    sizes: List[Int],
-    leaves: List[Float32],
-    rate: Float32,
-    n_rows: Int,
-):
-    """`cursor[row] = identical_mul_add(leaves[leaf], rate, cursor[row])`
-    for every row of every leaf of a partition (the weak model onto a
-    cursor, one device thread a row, one pinned fma each). A row is in one
-    leaf, so rows are the units: a task owns a run of positions and visits
-    each leaf's range clipped to it; `_gbdt_units` tasks."""
-    var n_leaves = len(sizes)
-    var units = _gbdt_units(n_rows, 4 * n_rows)
-    var chunk = (n_rows + units - 1) // units
-    var cursor_p = rebind[HostF32Ptr](cursor.unsafe_ptr())
-    var row_p = rebind[GbdtIntPtr](row_index.unsafe_ptr())
-    var off_p = rebind[GbdtIntPtr](offsets.unsafe_ptr())
-    var sz_p = rebind[GbdtIntPtr](sizes.unsafe_ptr())
-    var leaves_p = rebind[HostF32Ptr](leaves.unsafe_ptr())
-
-    def rows(unit: Int) {imm chunk, imm n_rows, imm n_leaves, imm rate, imm cursor_p, imm row_p, imm off_p, imm sz_p, imm leaves_p}:
-        var lo = unit * chunk
-        var hi = min(lo + chunk, n_rows)
-        for leaf in range(n_leaves):
-            for pos in range(max(off_p[leaf], lo), min(off_p[leaf] + sz_p[leaf], hi)):
-                var row = row_p[pos]
-                cursor_p[row] = identical_mul_add(leaves_p[leaf], rate, cursor_p[row])
-
-    host_parallelize(rows, units)
 
 
 def apply_scaled_leaves_host(
@@ -3618,9 +3757,15 @@ def gbdt_host_fit_eval(
     random_strength: Float32,
     eval: GbdtHostEval,
     weights: List[Float32] = List[Float32](),
+    objective: Int = GBDT_BOOST_LOGLOSS,
+    starting_approx: Float64 = 0.0,
 ) raises -> GbdtHostFitWithEval:
     """`train` then `fit_with_test` on the covered configuration (see the
     module docstring for what that is and what mirrors what).
+
+    `objective` is `GBDT_BOOST_LOGLOSS` or `GBDT_BOOST_RMSE` and
+    `starting_approx` the resolved `boost_from_average` constant every
+    cursor starts at (`gbdt_host_boost`).
 
     `eval` is the HELD-OUT arm (`gbdt/host/gbdt_oracle_eval.mojo`): their
     `testCursor`, the held-out curve, the overfitting detector and
@@ -3707,7 +3852,7 @@ def gbdt_host_fit_eval(
     return gbdt_host_boost(
         cindexes, 0, y, n_rows, n_features, grid^, layout, params,
         bootstrap_kind, bootstrap_param, random_strength, eval, test_cindex,
-        no_tree_ctr, weights,
+        no_tree_ctr, weights, objective, starting_approx,
     )
 
 
@@ -3896,8 +4041,10 @@ def gbdt_host_boost(
     mut test_cindex: List[UInt32],
     mut tree_ctr: List[GbdtTreeCtrHost],
     weights: List[Float32] = List[Float32](),
+    objective: Int = GBDT_BOOST_LOGLOSS,
+    starting_approx: Float64 = 0.0,
 ) raises -> GbdtHostFitWithEval:
-    """`fit_with_test`'s Plain SymmetricTree Logloss loop over ONE compressed
+    """`fit_with_test`'s Plain SymmetricTree Logloss and RMSE loop over ONE compressed
     index PER PERMUTATION (`gbdt/methods/doc_parallel_boosting.mojo:1821-1860`,
     `:2192-2228`, `:2841-2925`), `cindexes[p]` binned against the one `grid`
     and `layout`, `est_p` the estimation permutation whose leaves the model
@@ -3925,7 +4072,38 @@ def gbdt_host_boost(
     `run_tree_ctr_tree`, which writes the tree-CTR slots of `cindexes` and
     `test_cindex` in place; the fused level loop and its gates then run
     zero levels, and the estimation, the held-out apply and the losses
-    below are the same statements for both."""
+    below are the same statements for both.
+
+    THE OBJECTIVE (lane pv-gbdt-cpu-cat, 2026-11-22; this loop was Logloss
+    only and `gbdt_oracle_rmse.mojo` held a one-permutation numeric twin).
+    `GBDT_BOOST_RMSE` swaps the target kernel of the search pass, the
+    estimation oracle and the loss passes (`_rmse_search_pass`,
+    `_oracle_eval`'s RMSE arm, `_rmse_value`), and every cursor starts at
+    `Float32(starting_approx)` (`doc_parallel_boosting.mojo`, `cursors`
+    all filled with `start_value`). The leaves follow the device's
+    `need_estimation`: RMSE at Newton 1 and ONE permutation takes the
+    searcher's leaves (DEVIATION 64: `compute_partition_stats` over the
+    final, bootstrapped and snapped stats planes, `_rmse_leaf_value`);
+    with more than one permutation every permutation runs the walker, as
+    Logloss always does, on the learn target. Every cursor takes
+    `cursor + round(leaf * rate)` and the model stores `round(leaf * rate)`
+    (`rescaled_leaves`, `apply_scaled_leaves_host`: the device's
+    `add_model_value_kernel` since fb11; this loop still took the fused
+    `fma(leaf, rate, cursor)` until this lane, a CPU-only difference,
+    so the CPU column's Logloss bits change toward the device's).
+    `starting_approx` is not written to the model here; the caller writes
+    the `bias` record (`gbdt_text_with_bias`)."""
+    var is_rmse = objective == GBDT_BOOST_RMSE
+    if not is_rmse and objective != GBDT_BOOST_LOGLOSS:
+        raise Error("gbdt_host_boost: objective must be Logloss or RMSE")
+    if is_rmse and len(weights) > 0:
+        raise Error("gbdt_host_boost: row weights are carried under Logloss only")
+    if is_rmse and eval.n_rows > 0:
+        raise Error("gbdt_host_boost: the held-out arm is carried under Logloss only")
+    if is_rmse and params.leaf_estimation_iterations != 1:
+        raise Error("gbdt_host_boost: RMSE takes Newton leaves at one iteration only")
+    if not is_rmse and starting_approx != 0.0:
+        raise Error("gbdt_host_boost: Logloss starts every cursor at zero here")
     if len(tree_ctr) > 1:
         raise Error("a fit takes at most one tree-CTR state")
     var tree_on = len(tree_ctr) == 1
@@ -3976,9 +4154,10 @@ def gbdt_host_boost(
     # `enqueue_fill(ctx, cursor, start_value)` with no boost from average
     # (`doc_parallel_boosting.mojo:1159-1164`), one per permutation, all
     # written to the same starting value (`:1839-1856`)
+    var start_value = Float32(starting_approx)
     var cursors = List[List[Float32]]()
     for _ in range(perm_count):
-        cursors.append(List[Float32](length=n_rows, fill=Float32(0.0)))
+        cursors.append(List[Float32](length=n_rows, fill=start_value))
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
@@ -4011,10 +4190,15 @@ def gbdt_host_boost(
             rnd.advance(10)
             learn_p = Int(rnd.next_uniform_l() % UInt64(learn_perm_count - 1))
         # ---- the gradients, the learn loss and the magnitudes ----
-        _logloss_search_pass(
-            y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part,
-            weights,
-        )
+        if is_rmse:
+            _rmse_search_pass(
+                y, cursors[learn_p], n_rows, stats, fv_part, mag_part
+            )
+        else:
+            _logloss_search_pass(
+                y, cursors[learn_p], n_rows, border, stats, fv_part, mag_part,
+                weights,
+            )
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
         # `calc_score_model_length_mult` (`random_score_helper.mojo:
@@ -4218,43 +4402,65 @@ def gbdt_host_boost(
 
         # ---- the estimation task, ONE PER PERMUTATION
         # (`doc_parallel_boosting.mojo:2841-2925`), and `AppendModels` ----
-        var estimated = List[Float32]()
-        for p in range(perm_count):
-            var est_p_leaves: List[Float32]
-            if p == learn_p:
-                # the searcher's own partition
-                est_p_leaves = _estimate_leaves(
-                    y, cursors[p], row_index, offsets, sizes, n_rows, border,
-                    params.l2_leaf_reg, params.leaf_estimation_iterations,
-                    weights,
+        # `est_scaled` is the estimation permutation's `round(leaf * rate)`,
+        # the stored model's values
+        var est_scaled = List[Float32]()
+        if is_rmse and perm_count == 1:
+            # DEVIATION 64 (`need_estimation` False): the searcher's own
+            # leaves off the final partition of the stats planes, the
+            # `apply_to_cursor` tail (`greedy_search_helper.mojo:5692-5739`)
+            var leaf_sums = _partition_stats_level(
+                stats, n_rows, 2, GBDT_PARTITION_CHUNKS, offsets, sizes, n_live
+            )
+            var leaf_values = List[Float32](length=n_live, fill=Float32(0.0))
+            for i in range(n_live):  # driver-loop: over the leaves
+                leaf_values[i] = _rmse_leaf_value(
+                    leaf_sums[2 * i], leaf_sums[2 * i + 1], params.l2_leaf_reg
                 )
-                _apply_leaves(
-                    cursors[p], row_index, offsets, sizes, est_p_leaves, lr,
-                    n_rows,
-                )
-            else:
-                var part = _partition_for_model(
-                    cindexes[p], layout, tree_features, tree_bins, grown,
-                    n_rows,
-                )
-                est_p_leaves = _estimate_leaves(
-                    y, cursors[p], part.row_index, part.offsets, part.sizes,
-                    n_rows, border, params.l2_leaf_reg,
-                    params.leaf_estimation_iterations, weights,
-                )
-                _apply_leaves(
-                    cursors[p], part.row_index, part.offsets, part.sizes,
-                    est_p_leaves, lr, n_rows,
-                )
-            # the EXPORTED ensemble is the estimation permutation's
-            if p == est_p:
-                estimated = est_p_leaves.copy()
+            est_scaled = rescaled_leaves(leaf_values, lr)
+            apply_scaled_leaves_host(
+                cursors[0], est_scaled, row_index, offsets, sizes, n_live
+            )
+        else:
+            for p in range(perm_count):  # driver-loop: over the permutations
+                var est_p_leaves: List[Float32]
+                var scaled: List[Float32]
+                if p == learn_p:
+                    # the searcher's own partition
+                    est_p_leaves = _estimate_leaves(
+                        y, cursors[p], row_index, offsets, sizes, n_rows,
+                        border, params.l2_leaf_reg,
+                        params.leaf_estimation_iterations, weights, objective,
+                    )
+                    scaled = rescaled_leaves(est_p_leaves, lr)
+                    apply_scaled_leaves_host(
+                        cursors[p], scaled, row_index, offsets, sizes,
+                        len(sizes),
+                    )
+                else:
+                    var part = _partition_for_model(
+                        cindexes[p], layout, tree_features, tree_bins, grown,
+                        n_rows,
+                    )
+                    est_p_leaves = _estimate_leaves(
+                        y, cursors[p], part.row_index, part.offsets,
+                        part.sizes, n_rows, border, params.l2_leaf_reg,
+                        params.leaf_estimation_iterations, weights, objective,
+                    )
+                    scaled = rescaled_leaves(est_p_leaves, lr)
+                    apply_scaled_leaves_host(
+                        cursors[p], scaled, part.row_index, part.offsets,
+                        part.sizes, len(part.sizes),
+                    )
+                # the EXPORTED ensemble is the estimation permutation's
+                if p == est_p:
+                    est_scaled = scaled.copy()
         for i in range(grown):
             split_features.append(tree_features[i])
             split_bins.append(tree_bins[i])
         tree_split_offsets.append(len(split_features))
-        for i in range(len(estimated)):
-            model_leaves.append(estimated[i] * lr)
+        for i in range(len(est_scaled)):
+            model_leaves.append(est_scaled[i])
         tree_leaf_offsets.append(len(model_leaves))
 
         # ---- `AppendModels(..., learnCursors, testCursor)`
@@ -4264,9 +4470,7 @@ def gbdt_host_boost(
         # early. The stored values ALREADY carry the learning rate.
         if has_test:
             if grown > 0:
-                var tree_values = List[Float32](capacity=len(estimated))
-                for i in range(len(estimated)):
-                    tree_values.append(estimated[i] * lr)
+                var tree_values = est_scaled.copy()
                 var test_bins = gbdt_eval_test_bins(
                     test_cindex, n_eval, tree_features, tree_bins,
                     feat_offset, feat_mask, feat_shift, feat_one_hot,
@@ -4295,10 +4499,15 @@ def gbdt_host_boost(
     # detector cut the loop short (`doc_parallel_boosting.mojo:2415-2516`)
     # (the ESTIMATION permutation's cursor, `doc_parallel_boosting.mojo:
     # 3001-3052`, which is the only cursor when there is one permutation)
-    losses.append(
-        -Float64(_logloss_value(y, cursors[est_p], n_rows, border, weights))
-        / Float64(n_rows)
-    )
+    if is_rmse:
+        losses.append(
+            -Float64(_rmse_value(y, cursors[est_p], n_rows)) / Float64(n_rows)
+        )
+    else:
+        losses.append(
+            -Float64(_logloss_value(y, cursors[est_p], n_rows, border, weights))
+            / Float64(n_rows)
+        )
 
     # ---- `ShrinkToBestIteration` (`gbdt/train.mojo:2241-2254`) ----
     # Their SECOND tracker, not the detector's: fed only the iterations at

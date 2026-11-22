@@ -1554,9 +1554,9 @@ NO_CPU_PATH = (
     "feature-frequency route refuses that case",
 
     "gradient boosting training with a categorical or one-hot column "
-    "outside SymmetricTree with Logloss and Plain boosting, or with "
-    "sample/class weights, bootstrap or nonzero random_strength: the "
-    "categorical owners do not implement those combinations",
+    "outside SymmetricTree with Logloss or RMSE and Plain boosting, or "
+    "with sample/class weights: the categorical owners do not implement "
+    "those combinations",
 
     "gradient boosting training with an eval set or the overfitting "
     "detector outside the covered SymmetricTree Logloss, Ordered and "
