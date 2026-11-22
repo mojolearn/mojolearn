@@ -1,12 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native optimizer control transitions and actual descriptor-owned resources."""
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from training.optimizer_owner_control import OptimizerOwnerControl, optimizer_restored_pristine
 from training.optimizer_native_api import OptimizerNativeDriver
 from checks.native_tests.optimizer_descriptor import FourCells
-from core.host_parallel import host_parallelize
 from training.host.optimizer_native import optimizer_host_v1
 from training.optimizer_native_gpu import optimizer_gpu_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime OWNER_PURE = 18
@@ -187,69 +198,26 @@ def resource(driver: OptimizerNativeDriver, fixture_id: Int) raises:
     _ = owner
 
 
-# ---- The host column (was optimizer_owner_cpu_suite.mojo) ----
-# Importable typed optimizer owner CPU lifecycle checks.
-def _run_cpu(mut report: Report) raises:
-    var failures = List[Int](length=OWNER_PURE, fill=0)
-    var fp = failures.unsafe_ptr()
-    def task(fixture_id: Int) {imm fp}:
+def _pure(fixture_id: Int) raises:
+    comptime if CPU_COLUMN_BUILD:
+        pure(OptimizerNativeDriver(optimizer_host_v1, True), fixture_id)
+    else:
+        pure(OptimizerNativeDriver(optimizer_gpu_v1, False), fixture_id)
+
+
+def test_owner() raises:
+    # Independent pure controls run across the host workers; the host and device optimizer pools use shared handle
+    # tables, so the resource transitions run in order after them.
+    check_cases("control", OWNER_PURE, _pure)
+    for fixture_id in range(OWNER_RESOURCE):  # driver-loop: ordered resource transitions on the shared handle table
         try:
-            pure(OptimizerNativeDriver(optimizer_host_v1, True), fixture_id)
-        except error:
-            fp.unsafe_store(fixture_id, 1)
-            print("FAIL optimizer_owner_cpu control", fixture_id, String(error))
-    host_parallelize(task, OWNER_PURE)
-    var failed = 0
-    for value in failures:
-        failed += value
-    # The existing host and device optimizer pools use shared handle tables.
-    # Resource transitions are ordered; independent pure controls run above.
-    for fixture_id in range(OWNER_RESOURCE):
-        try:
-            resource(OptimizerNativeDriver(optimizer_host_v1, True), fixture_id)
-        except error:
-            failed += 1
-            print("FAIL optimizer_owner_cpu resource", fixture_id, String(error))
-    require(failed == 0, "optimizer_owner_cpu failed " + String(failed) + " fixtures")
-    print("PASS optimizer_owner_cpu:", OWNER_PURE + OWNER_RESOURCE, "typed owner/control fixtures")
+            comptime if CPU_COLUMN_BUILD:
+                resource(OptimizerNativeDriver(optimizer_host_v1, True), fixture_id)
+            else:
+                resource(OptimizerNativeDriver(optimizer_gpu_v1, False), fixture_id)
+        except problem:
+            raise Error("resource row " + String(fixture_id) + ": " + String(problem))
 
 
-# ---- The device column (was optimizer_owner_gpu_suite.mojo) ----
-# Importable typed optimizer owner GPU lifecycle checks.
-def _run_gpu(mut report: Report) raises:
-    var failures = List[Int](length=OWNER_PURE, fill=0)
-    var fp = failures.unsafe_ptr()
-    def task(fixture_id: Int) {imm fp}:
-        try:
-            pure(OptimizerNativeDriver(optimizer_gpu_v1, False), fixture_id)
-        except error:
-            fp.unsafe_store(fixture_id, 1)
-            print("FAIL optimizer_owner_gpu control", fixture_id, String(error))
-    host_parallelize(task, OWNER_PURE)
-    var failed = 0
-    for value in failures:
-        failed += value
-    # The existing host and device optimizer pools use shared handle tables.
-    # Resource transitions are ordered; independent pure controls run above.
-    for fixture_id in range(OWNER_RESOURCE):
-        try:
-            resource(OptimizerNativeDriver(optimizer_gpu_v1, False), fixture_id)
-        except error:
-            failed += 1
-            print("FAIL optimizer_owner_gpu resource", fixture_id, String(error))
-    require(failed == 0, "optimizer_owner_gpu failed " + String(failed) + " fixtures")
-    print("PASS optimizer_owner_gpu:", OWNER_PURE + OWNER_RESOURCE, "typed owner/control fixtures")
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("optimizer_owner", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

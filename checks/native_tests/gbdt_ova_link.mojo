@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """MultiClassOneVsAll: dimensions, the sigmoid link, argmax classes and the
 effect of sample weights through the native fit (ported from the native part
 of `python/mojolearn/tests/test_multiclass_ova_surface.py`
@@ -34,7 +35,7 @@ from gbdt.gbdt_entry import GbdtImage
 from gbdt.mojolearn_gbdt_run import gbdt_fit_native_run as gbdt_fit_native_run_gpu
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.native_tests.gbdt_public_fits import GbdtOpts, GbdtInputs, fit, predict, predict_proba, model_dim, same_f32
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
 
 
 comptime OVA_ROWS = 30
@@ -179,24 +180,19 @@ def ova_unit[I: GbdtImage](classes: Int) raises:
     _ = predicted^
 
 
-# ---- The device column only (see the docstring) ----
-def _run_gpu(mut report: Report) raises:
+def test_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(OVA_UNITS)
+    var failed = String("")
+    var count = 0
     for unit in range(OVA_UNITS):  # driver-loop: over the fits, one device graph at a time
         try:
             ova_unit[_DeviceFit](unit + 2)
         except error:
-            cases.fail(unit, error)
+            count += 1
+            failed += "\n      gbdt_ova_link row " + String(unit) + ": " + String(error)
+    if count > 0:
+        raise Error("gbdt_ova_link: " + String(count) + " of " + String(OVA_UNITS) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gbdt_ova_link", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

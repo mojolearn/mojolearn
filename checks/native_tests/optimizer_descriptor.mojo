@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Real optimizer descriptor contracts, native owners and independent literals.
 
 Every malformed call reaches the exported C entry. The custom sink copies
@@ -6,20 +7,30 @@ transient error text before return; no Python bridge or mock entry is involved.
 Independent CPU fixtures are parallel. Only one fixture opens optimizer state;
 other math calls explicitly use caller-owned moments.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.native_string import unsafe_string_from_utf8_cstr
 from core.native_descriptor_abi import NativeDescriptorCall
 from core.native_descriptor_call import native_descriptor_call, native_descriptor_call_spans
 from core.native_call_output import NativeCallOutput
 from training.optimizer_native_api import OptimizerNativeDriver, OPT_NATIVE_COUNT
 from training.optimizer_public_common import PublicStep, OptHyper
-from core.host_parallel import host_parallelize
 from training.host.optimizer_native import optimizer_host_v1
 from core.hostptr import f32_ptr
 from core.neural_context import neural_ctx
 from training.optimizer_kernels_gpu import _NEURAL_CTX
 from training.optimizer_native_gpu import optimizer_gpu_v1
 from training.dev_tensors import train_dev_get, train_dev_size
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime DESCRIPTOR_COMMON_FIXTURES = 24
@@ -352,23 +363,6 @@ def run_descriptor_fixture(driver: OptimizerNativeDriver, fixture_id: Int) raise
         require(refused, "zero-sized native owner was accepted")
 
 
-# ---- The host column (was optimizer_descriptor_cpu_suite.mojo) ----
-# Parallel host descriptor contracts; each call has private request/error owners.
-def _run_cpu(mut report: Report) raises:
-    comptime COUNT = DESCRIPTOR_COMMON_FIXTURES + 1
-    var cases = report.cases(COUNT)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var driver = OptimizerNativeDriver(optimizer_host_v1, True)
-            if fixture_id == DESCRIPTOR_COMMON_FIXTURES:
-                host_io_refusals(driver)
-            else:
-                run_descriptor_fixture(driver, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, COUNT)
-
-
 # ---- The device column (was optimizer_descriptor_gpu_suite.mojo) ----
 # GPU descriptor contracts and unpublished device allocation release.
 #
@@ -450,29 +444,35 @@ def io_lifetime(driver: OptimizerNativeDriver) raises:
     _ = owners
 
 
-def _run_gpu(mut report: Report) raises:
-    comptime COUNT = DESCRIPTOR_COMMON_FIXTURES + 1
-    var cases = report.cases(COUNT)
-    for fixture_id in range(COUNT):
-        try:
-            var driver = OptimizerNativeDriver(optimizer_gpu_v1, False)
-            if fixture_id == DESCRIPTOR_COMMON_FIXTURES:
-                io_lifetime(driver)
-            else:
-                run_descriptor_fixture(driver, fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _host_fixture(fixture_id: Int) raises:
+    var driver = OptimizerNativeDriver(optimizer_host_v1, True)
+    if fixture_id == DESCRIPTOR_COMMON_FIXTURES:
+        host_io_refusals(driver)
+    else:
+        run_descriptor_fixture(driver, fixture_id)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
+def _device_fixture(fixture_id: Int) raises:
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        var driver = OptimizerNativeDriver(optimizer_gpu_v1, False)
+        if fixture_id == DESCRIPTOR_COMMON_FIXTURES:
+            io_lifetime(driver)
         else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+            run_descriptor_fixture(driver, fixture_id)
 
 
-def register() -> Check:
-    return Check("optimizer_descriptor", cpu=True, gpu=True, serial="", run=run_cases)
+def test_descriptor() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("descriptor", DESCRIPTOR_COMMON_FIXTURES + 1, _host_fixture)
+    else:
+        for unit in range(DESCRIPTOR_COMMON_FIXTURES + 1):  # driver-loop: submissions ordered for the producer's shared neural context/optimizer pool; math runs on parallel GPU kernels
+            try:
+                _device_fixture(unit)
+            except problem:
+                raise Error("descriptor row " + String(unit) + ": " + String(problem))
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

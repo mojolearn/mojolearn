@@ -1,14 +1,14 @@
---- a/sequence/seq_tensor.mojo
-+++ b/sequence/seq_tensor.mojo
-@@ -21,6 +21,7 @@
- (`seq_tensor_alloc_py` ...) are `sequence/seq_tensor_pyapi.mojo`'s; this
+--- a/sequence/seq_tensor.mojo	2026-11-22 12:33:47
++++ b/sequence/seq_tensor.mojo	2026-11-22 12:35:05
+@@ -20,6 +20,7 @@
+ tier (as `_ResPool`); a freed handle's slot is reused. The Python entries
+ (`seq_tensor_alloc_py` ...) are `providers/python/sequence_seq_tensor_pyapi.mojo`'s; this
  file takes typed handles and addresses only."""
- from std.ffi import _Global
 +from std.memory import bitcast
  from max.gpu.host import DeviceBuffer
  
  from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-@@ -61,6 +62,14 @@
+@@ -62,6 +63,14 @@
      return FP(unsafe_from_address=Int(pool[].bufs[h - 1].unsafe_ptr()))
  
  
@@ -23,7 +23,7 @@
  def seq_tensor_alloc(n: Int, zero: Bool) raises -> Int:
      """A new resident tensor of n >= 1 floats; zero fills it with +0.0
      on the device (else its contents are unspecified until written).
-@@ -70,7 +79,7 @@
+@@ -71,7 +80,7 @@
      var ctx = sequence_ctx()
      var buf = ctx.enqueue_create_buffer[DType.float32](n)
      if zero:
@@ -32,7 +32,7 @@
      var pool = _SEQ_TENSORS.get_or_create_ptr()
      var h = -1
      for j in range(len(pool[].n)):  # small-loop(pool: resident tensor handles): free handle slot search, no data
-@@ -113,8 +122,16 @@
+@@ -118,8 +127,16 @@
      var ctx = sequence_ctx()
      var pool = _SEQ_TENSORS.get_or_create_ptr()
      var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
@@ -50,15 +50,15 @@
      _ = view^
      return n
  
-@@ -132,6 +149,7 @@
+@@ -137,6 +154,7 @@
      var view = pool[].bufs[h - 1].create_sub_buffer[DType.float32](0, n)
      ctx.enqueue_copy(dst_ptr=FP(unsafe_from_address=a), src_buf=view)
      ctx.synchronize()
 +    _cov_flip(FP(unsafe_from_address=a), n)  # SABOTAGE coverage: every downloaded value one ulp off
      _ = view^
-     return n
- 
-@@ -148,6 +166,15 @@
+     # A resident tensor holds float32 cells a model computed, and this is
+     # where they leave the device: NAN_CANON_ON
+@@ -159,6 +177,15 @@
      var vs = pool[].bufs[hs - 1].create_sub_buffer[DType.float32](0, n)
      ctx.enqueue_copy(dst_buf=vd, src_buf=vs)
      ctx.synchronize()

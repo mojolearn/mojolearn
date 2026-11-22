@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """THE SMALLER-SIBLING TIE-BREAK, and what an exact size tie costs.
 
@@ -46,6 +47,9 @@ WHAT THIS FILE CHECKS, and why each part is here.
    flip and diff the fingerprint: that is the "did a chosen split change"
    measurement.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
@@ -697,7 +701,7 @@ def measure_fit(n_trees: Int, depth: Int, pointwise: Bool) raises:
         )
 
 
-def run_checks() raises:
+def test_sibling_tiebreak() raises:
     # THE MEASUREMENTS RUN FIRST and the gate last, deliberately: the gate
     # RAISES, and a gate that raises before the numbers are printed turns a
     # measurement run into a stack trace.
@@ -710,20 +714,10 @@ def run_checks() raises:
     check_planner_matches_theirs()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("sibling_tiebreak_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # Tests listed by name, not discovered: `__functions_in_module()` instantiates every function of the
+    # module for the host, and this module's GPU kernels refuse the host target (the stdlib's
+    # `_get_intrinsic_name` constraint; cpc1 sm_89 cross-compile, 2026-11-22).
+    var suite = TestSuite()
+    suite.test[test_sibling_tiebreak]()
+    suite^.run()

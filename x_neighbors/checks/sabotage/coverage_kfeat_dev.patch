@@ -1,7 +1,9 @@
+diff --git a/x_neighbors/kfeat_dev.mojo b/x_neighbors/kfeat_dev.mojo
+index 7c9c47783d..ad211e6074 100644
 --- a/x_neighbors/kfeat_dev.mojo
 +++ b/x_neighbors/kfeat_dev.mojo
-@@ -93,6 +93,15 @@
- comptime KFEAT_STAGE = _Global[StorageType=_KfeatStage, name="MojoXNeighborsKfeatStageFast", init_fn=_KfeatStage.__init__]
+@@ -97,6 +97,15 @@ struct _KfeatStage(Defaultable, Movable):
+ comptime KFEAT_STAGE = SharedSlot[_KfeatStage, "MojolearnXNeighborsKfeatStageFastV1"]
  
  
 +@always_inline
@@ -16,7 +18,7 @@
  def kfeat_flags() -> Int:
      """bit 1 ACHI2_DEVSCAN, bit 2 SCHI2_MOJO_MT, bit 4 SCHI2_LAZYW (0 on
      every other build)."""
-@@ -439,6 +448,10 @@
+@@ -443,6 +452,10 @@ def kfeat_schi2_fit_idn(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: In
      ctx.enqueue_copy(dst_ptr=wp, src_buf=dw)
      ctx.enqueue_copy(dst_ptr=op, src_buf=doff)
      ctx.synchronize()
@@ -27,7 +29,7 @@
      _ = dz^
      _ = dw^
      _ = doff^
-@@ -465,5 +478,7 @@
+@@ -469,5 +482,7 @@ def kfeat_pcs_draw_idn(seed_word: Int, nc: Int, total: Int, idx_out: Int, sgn_ou
      ctx.enqueue_copy(dst_ptr=ip, src_buf=didx)
      ctx.enqueue_copy(dst_ptr=sp, src_buf=dsgn)
      ctx.synchronize()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The host-only half of the control plane, asserted against their source.
 
@@ -9,6 +10,8 @@ This file used to only PRINT. A probe that cannot fail is a probe that has
 never checked anything, so every line now carries an expected value and the
 CatBoost line that fixes it.
 """
+
+from std.testing import TestSuite
 
 from gbdt.gpu_lib.fwd import EPtrType, is_host_ptr
 from gbdt.gpu_lib.gpu_base import TCudaStream, TCudaStreamsProvider, DEFAULT_STREAM
@@ -52,7 +55,7 @@ def expect_bool(what: String, got: Bool, want: Bool) raises:
     print("  ok  ", what, "=", got)
 
 
-def run_checks() raises:
+def test_gpu_lib() raises:
     # fwd.h / cuda_base.h:115 -- everything that is not device memory is host
     # memory, which is what makes TCudaHostBufferPtr dereferenceable.
     print("EPtrType (cuda_base.h:115)")
@@ -231,19 +234,5 @@ def run_checks() raises:
     print("gpu_lib host check: all assertions hold")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gpu_lib_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

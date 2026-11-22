@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One-hot features across the GRID-POLICY BOUNDARIES.
 
@@ -82,6 +83,8 @@ rather than re-deriving one.
 The `k = 256` case asserts the REFUSAL instead: `train()` raises above 254
 categories, and a refusal nothing exercises is an unchecked branch.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 
@@ -290,23 +293,9 @@ def check_one_hot_cardinality() raises:
     )
 
 
-def run_checks() raises:
+def test_one_hot_cardinality() raises:
     check_one_hot_cardinality()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("one_hot_cardinality_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The host GradientBoosting fit against the device fit, model text byte for
 byte, on the symmetric configurations the host column trains since lane
 pv-gbdt-cpu-cat (2db07105a5): numeric Logloss and RMSE, RMSE with CTR and
@@ -33,7 +34,8 @@ from checks.native_tests.gbdt_public_fits import (
     _HostFit,
     fit,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 
 comptime CAT_ROWS = 2000
 comptime CAT_TREES = 12
@@ -160,43 +162,42 @@ def _first_difference(device: String, host: String) -> String:
             + String(at) + "\n  device: " + dl + "\n  host:   " + hl)
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CAT_UNITS)
+def test_host_text_is_device_text() raises:
+    """Every host fit across the cores first, then one device graph at a time against its text."""
     var host_texts = List[String](length=CAT_UNITS, fill=String(""))
     var texts_addr = Int(host_texts.unsafe_ptr())
 
-    def host_task(unit: Int) {imm cases, imm texts_addr}:
-        try:
-            var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
-            var outcome = fit[_HostFit](_opts(unit), _inputs(_is_rmse(unit)))
-            p[unit] = outcome.text.copy()
-        except error:
-            cases.fail(unit, error)
+    def host_fit(unit: Int) raises {imm texts_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var outcome = fit[_HostFit](_opts(unit), _inputs(_is_rmse(unit)))
+        p[unit] = outcome.text.copy()
 
-    report.parallel(host_task, CAT_UNITS)
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat host", CAT_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
     for unit in range(CAT_UNITS):  # one device graph at a time (see the docstring)
         if host_texts[unit].byte_length() == 0:
             continue  # the host fit failed and is recorded
         try:
             var outcome = fit[_DeviceFit](_opts(unit), _inputs(_is_rmse(unit)))
             if outcome.text != host_texts[unit]:
-                cases.fail_message(
-                    unit,
+                raise Error(
                     "gbdt_host_device_cat unit " + String(unit) + ": the host model text is not the device's ("
-                    + _first_difference(outcome.text, host_texts[unit]) + ")",
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
                 )
         except error:
-            cases.fail(unit, error)
+            count += 1
+            failed += "\n      gbdt_host_device_cat device row " + String(unit) + ": " + String(error)
     _ = host_texts^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat device: " + String(count) + " of " + String(CAT_UNITS) + " cases failed" + failed
+                       if count > 0 else ""))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gbdt_host_device_cat", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

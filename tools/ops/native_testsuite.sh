@@ -32,8 +32,11 @@ python3 -c 'import sys' 2> /dev/null || PY="pixi run python3"
 
 case "$cmd" in
 is)
-    head -n 2 "checks/native_tests/${2:?is <name>}.mojo" 2> /dev/null | sed -n 2p | grep -qE '^# native-check:( (cpu|gpu))+[[:space:]]*$'
-    exit $? ;;
+    # checks/native_tests/<name>.mojo, or a standalone check at the top of checks/ (lane ts-b9, 2026-11-22)
+    for f in "checks/native_tests/${2:?is <name>}.mojo" "checks/$2.mojo"; do
+        head -n 2 "$f" 2> /dev/null | sed -n 2p | grep -qE '^# native-check:( (cpu|gpu))+[[:space:]]*$' && exit 0
+    done
+    exit 1 ;;
 build)
     column=${2:?build <column> <bindir> <outdir>}; bindir=${3:?}; out=${4:?}
     mkdir -p "$bindir/ts" "$out/results" "$out/logs"

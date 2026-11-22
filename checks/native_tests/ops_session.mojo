@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native session correctness fixtures migrated from test_ops_session_coverage.
 
 No Python imports, bindings, objects or callbacks. Both executors use these
 same fixtures. Float64 formulas below are independent test oracles; they do
 not call product math helpers. Tolerances match the former NumPy tests.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import exp, log, log1p
 from autograd.ops_api import (
     OpsSession,
@@ -36,10 +39,16 @@ from core.cast_in import CastIn, CAST_KIND_FLOAT
 from core.hostptr import f32_ptr
 from sequence.exec_trait import Exec
 from sequence.ops import OPT_SGD
-from core.host_parallel import host_parallelize
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime OPS_SESSION_FIXTURES = 28
@@ -267,56 +276,54 @@ def run_ops_session_fixture[E: Exec & Movable & Deinitable](mut s: OpsSession[E]
         require(s.learning_rate(optimizer) == 0.25, "advanced step-scheduler learning rate")
 
 
-# ---- The host column entry (was ops_session_cpu.mojo) ----
-# Independent typed host sessions run in parallel on the existing host pool.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(OPS_SESSION_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var s = OpsSession[HostExec](HostExec(), False)
-            try:
-                run_ops_session_fixture(s, fixture_id)
-            except error:
-                s.close()
-                raise error
-            s.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, OPS_SESSION_FIXTURES)
-
-
-# ---- The device column entry (was ops_session_gpu.mojo) ----
-# Native GPU correctness coverage using the existing DeviceExec context.
-#
-# GPU element work runs in its existing parallel kernels. Fixture submission
-# is ordered because DeviceExec shares sequence_ctx() and its pool; independent
-# concurrent sessions would race that context's ownership. This check records
-# that limitation explicitly and does not claim concurrent-session coverage.
-# Use the smallest existing GPU host; this is not a CPU scaling measurement.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(OPS_SESSION_FIXTURES)
-    for fixture_id in range(OPS_SESSION_FIXTURES):
-        try:
-            var s = OpsSession[DeviceExec](DeviceExec(), False)
-            try:
-                run_ops_session_fixture(s, fixture_id)
-            except error:
-                s.close()
-                raise error
-            s.close()
-        except error:
-            cases.fail(fixture_id, error)
-
-
-def run_cases(column: Column, mut report: Report):
+def _host_fixture(fixture_id: Int) raises:
+    var s = OpsSession[HostExec](HostExec(), False)
     try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
+        run_ops_session_fixture(s, fixture_id)
     except error:
-        report.abort(error)
+        s.close()
+        raise error
+    s.close()
 
 
-def register() -> Check:
-    return Check("ops_session", cpu=True, gpu=True, serial="", run=run_cases)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("ops_session host", OPS_SESSION_FIXTURES, _host_fixture)
+
+
+# The device column: native GPU correctness coverage using the existing
+# DeviceExec context. Fixture submission is ordered because DeviceExec shares
+# sequence_ctx() and its pool; independent concurrent sessions would race that
+# context's ownership. No concurrent-session coverage is claimed.
+def _device_fixture(fixture_id: Int) raises:
+    var s = OpsSession[DeviceExec](DeviceExec(), False)
+    try:
+        run_ops_session_fixture(s, fixture_id)
+    except error:
+        s.close()
+        raise error
+    s.close()
+
+
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = String("")
+        for fixture_id in range(OPS_SESSION_FIXTURES):  # driver-loop: ordered submission on the shared sequence_ctx
+            try:
+                _device_fixture(fixture_id)
+            except problem:
+                failed += "\n      ops_session device row " + String(fixture_id) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("ops_session device: cases failed" + failed)
+
+
+def main() raises:
+    # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
+    # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
+    # is not supported"), so a two-column file names its tests.
+    var suite = TestSuite()
+    comptime if CPU_COLUMN_BUILD:
+        suite.test[test_host_fixtures]()
+    else:
+        suite.test[test_device_fixtures]()
+    suite^.run()

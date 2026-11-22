@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Independent observed-label accuracy oracles over the actual COUNT program.
 
 The six analytic graphs prescribe the sorted union and every remapped row.
@@ -19,7 +20,14 @@ from core.gp_native_host import GPHostKernels
 from x_metrics.descriptor_host import metrics_program_host_v1
 from core.gp_native_device import GPDeviceKernels
 from x_metrics.descriptor_device import metrics_program_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime GPC_SCORE_NATIVE_CASES = 14
@@ -286,18 +294,14 @@ def fixture(driver: GPDriver, metrics: NativeDescriptorCall, unit: Int) raises:
 comptime GPC_SCORE_CPU_CASES = 1 + GPC_SCORE_NATIVE_CASES
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(GPC_SCORE_CPU_CASES)
-    def run(unit: Int) {imm cases}:
-        try:
-            if unit == 0:
-                empty_case()
-            else:
-                fixture(GPDriver(gp_native_v1[GPHostKernels]), metrics_program_host_v1,
-                    unit - 1)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, GPC_SCORE_CPU_CASES)
+def _run_cpu() raises:
+    def run(unit: Int) raises:
+        if unit == 0:
+            empty_case()
+        else:
+            fixture(GPDriver(gp_native_v1[GPHostKernels]), metrics_program_host_v1,
+                unit - 1)
+    check_cases("gpc_score", GPC_SCORE_CPU_CASES, run)
 
 
 # ---- The device column (was gpc_score_gpu_suite.mojo) ----
@@ -305,24 +309,23 @@ def _run_cpu(mut report: Report) raises:
 #
 # Shared DeviceContext concurrent submission remains separately unresolved.
 # Each graph preserves the parallel fit/query/metric kernels and range route.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(GPC_SCORE_NATIVE_CASES)
-    for unit in range(GPC_SCORE_NATIVE_CASES):  # ordered graphs on the one shared physical GPU
-        try:
-            fixture(GPDriver(gp_native_v1[GPDeviceKernels]), metrics_program_device_v1, unit)
-        except problem:
-            cases.fail(unit, problem)
+def _run_gpu() raises:
+    # ordered graphs on the one shared physical GPU
+    def ordered_case(unit: Int) raises:
+        fixture(GPDriver(gp_native_v1[GPDeviceKernels]), metrics_program_device_v1, unit)
+    check_cases_serial("gpc_score", GPC_SCORE_NATIVE_CASES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_gpc_score() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("gpc_score", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # The tests by name, not discover_tests: discovery instantiates every function of the module, and the
+    # device column's functions do not compile in the host column build.
+    var suite = TestSuite()
+    suite.test[test_gpc_score]()
+    suite^.run()

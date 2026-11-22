@@ -128,6 +128,21 @@ def test_testsuite_files_are_checks_by_their_marker(tmp_path, capsys):
         assert "both" in str(e)
 
 
+def test_testsuite_files_at_the_top_of_checks(tmp_path, capsys):
+    # lane ts-b9 (2026-11-22): the standalone checks at the top of checks/ are TestSuite files in place
+    _registry(tmp_path, {"old_host": (True, False)})
+    (tmp_path / "checks/top_gpu.mojo").write_text("# SPDX-License-Identifier: Apache-2.0\n# native-check: gpu\n")
+    assert ncr.load_checks(tmp_path) == {"old_host": (True, False), "top_gpu": (False, True)}
+    assert ncr.main(["testsuite", "--root", str(tmp_path), "--column", "gpu"]) == 0
+    assert capsys.readouterr().out.split() == ["top_gpu", "checks/top_gpu.mojo"]
+    (tmp_path / "checks/native_tests/top_gpu.mojo").write_text("# SPDX\n# native-check: cpu\n")
+    try:
+        ncr.load_checks(tmp_path)
+        raise AssertionError("one name as a TestSuite file in two directories was accepted")
+    except ValueError as e:
+        assert "both" in str(e)
+
+
 def test_result_writer_reads_the_testsuite_summary_and_a_crash(tmp_path):
     log = tmp_path / "t.log"
     log.write_text("Running 3 tests for x.mojo\n    PASS [ 0.001 ] test_a\n    FAIL [ 0.010 ] test_b\n"

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The FOLD, PAD/CARRY and PLAN arms of `test_embedding_surface.py` on the
 typed embedding run the `_mojolearn_embedding` door calls
 (`embedding/embedding_words_run.mojo`: `embedding_forward_released`,
@@ -17,16 +18,21 @@ The arms run in order on the one device context the embedding run shares
 wiring arms (negative padding_idx, `grad=` copied, the plan name admission,
 refusals, provenance) stay in the Python gate.
 """
+from std.testing import TestSuite
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from embedding.checks.embedding_oracle import EmbConfig, EMB_NO_PADDING_IDX
 from embedding.checks.embedding_identical import PLAN_AUTO, emb_resolve_plan
 from autograd.kernels.embedding_sort import PLAN_SCAN, PLAN_SORT
 from embedding.embedding_words_run import embedding_forward_released, embedding_backward_released
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
 
 # ---- The device column (was embedding_surface_gpu_suite.mojo) ----
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
+
 comptime V = 37
 comptime D = 5
 comptime T = 211
@@ -204,28 +210,20 @@ def arm_plan_sort() raises:
     same(forward(d.w, d.ids), gather(d.w, d.ids), "PLAN forward")
 
 
-def _run_gpu(mut report: Report) raises:
+def test_fold() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(3)
-    for arm in range(3):
-        try:
-            if arm == 0:
-                arm_fold()
-            elif arm == 1:
-                arm_padding_and_carry()
-            else:
-                arm_plan_sort()
-        except error:
-            cases.fail(arm, error)
+    arm_fold()
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_padding_and_carry() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    arm_padding_and_carry()
 
 
-def register() -> Check:
-    return Check("embedding_surface", cpu=False, gpu=True, serial="", run=run_cases)
+def test_plan_sort() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    arm_plan_sort()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """PCA transform writes every output word (ported from
 python/mojolearn/tests/test_classical_infer_one_call.py
 `test_pca_transform_output_is_fully_written`).
@@ -12,16 +13,20 @@ components through the covariance route (`svd_solver='covariance_eigh'`).
 The data are a deterministic Mojo-generated matrix: the property does not
 depend on NumPy's stream. Guard words around each output stay untouched.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.math import isfinite, sin
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.pca_native_api import PCANativeDriver, PCAFoldStore
-from checks.native_tests.pca_native import PCATestState, PCA_TEST_GUARD, guards, unchanged
+from checks.native_tests.pca_native_helpers import PCATestState, PCA_TEST_GUARD, guards, unchanged, require
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.pca_native_host import pca_host_native_v1
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.pca_native_device import pca_device_native_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime INFER_ONE_CALL_FIXTURES = 1
@@ -93,47 +98,36 @@ def fixture(driver: PCANativeDriver, unit: Int) raises:
     _ = state^
 
 
-# ---- The host column (was decomp_classical_infer_one_call_cpu_suite.mojo) ----
-# PCA transform writes every output word, on the CPU provider.
+# Host column: PCA transform writes every output word, on the CPU provider.
 #
 # Independent fixtures run across host cores; the one fixture's cell
 # comparisons and data generation use the host pool as well.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(INFER_ONE_CALL_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(PCANativeDriver(pca_host_native_v1), unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, INFER_ONE_CALL_FIXTURES)
-
-
-# ---- The device column (was decomp_classical_infer_one_call_gpu_suite.mojo) ----
-# PCA transform writes every output word, on the GPU estimator provider.
+# Device column: PCA transform writes every output word, on the GPU estimator provider.
 #
 # The production device context is shared, so fixture graphs submit in order
 # on the one device; the device kernels keep their own parallelism and the
 # host-side cell comparisons use the host pool.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(INFER_ONE_CALL_FIXTURES)
-    for unit in range(INFER_ONE_CALL_FIXTURES):
-        try:
-            fixture(PCANativeDriver(pca_device_native_v1), unit)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(PCANativeDriver(pca_host_native_v1), unit)
 
 
-def register() -> Check:
-    return Check("decomp_classical_infer_one_call", cpu=True, gpu=True, serial="", run=run_cases)
+def test_decomp_classical_infer_one_call() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("decomp_classical_infer_one_call", INFER_ONE_CALL_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(INFER_ONE_CALL_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture(PCANativeDriver(pca_device_native_v1), unit)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("decomp_classical_infer_one_call: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

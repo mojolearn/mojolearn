@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate for `gbdt/methods/dynamic_boosting_folds.mojo`.
 
@@ -124,6 +125,8 @@ The `static_cast<ui32>` wrap described in DEVIATION 111 is likewise not
 gated: reaching it needs `sampleCount * growthRate >= 2^32` with
 `growthRate > 1`, which their own `ui32 sampleCount` cannot supply.
 """
+
+from std.testing import TestSuite
 
 from gbdt.ctrs.ctr_bins_builder import int_log2
 from gbdt.methods.dynamic_boosting_folds import (
@@ -392,7 +395,7 @@ def check_invariants(
     return bad
 
 
-def run_checks() raises:
+def test_dynamic_boosting_folds() raises:
     var failures = 0
 
     # -------------------------------------------------------------- F12
@@ -1271,18 +1274,5 @@ def run_checks() raises:
     )
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("dynamic_boosting_folds_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -640,7 +640,7 @@ class RandomForestRegressor(_RandomForestBase):
 
         Returns
         -------
-        Array of shape (n_samples,), float32
+        Array of shape (n_samples,), float64
         """
         return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 

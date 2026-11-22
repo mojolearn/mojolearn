@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Native fixtures for the two typed mixture transports the mixture door
 calls (lane thin-unpack-mixture-cluster): `mixture_native_api_v1`
 (core/mixture_native_api.mojo over mixture/host/gmm_native_host.mojo) and
@@ -11,7 +12,6 @@ answer for its labels: the first four rows share one label, the last four
 the other.
 """
 from std.math import isfinite
-from core.host_parallel import host_parallelize
 from core.kmeans_variants_api import VariantsSpan
 from core.native_descriptor_fixed_call import native_descriptor_call_fixed
 from core.mixture_native_api import (
@@ -28,7 +28,8 @@ from core.mixture_native_api import (
 from core.bgmm_native_api import BgmmDriver, BgmmFitRequest, BgmmResultSlot, BGMM_NATIVE_FIT
 from mixture.host.gmm_native_host import gmm_native_host_v1
 from x_cluster.bgmm_native_host import bgmm_native_host_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 
 # ---- The host column (was mixture_native_cpu_suite.mojo) ----
@@ -164,23 +165,9 @@ def fixture(unit: Int) raises:
     _ = scored
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(MIXTURE_NATIVE_CASES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, MIXTURE_NATIVE_CASES)
+def test_cases() raises:
+    check_cases("mixture_native", MIXTURE_NATIVE_CASES, fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("mixture_native", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

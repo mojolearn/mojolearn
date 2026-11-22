@@ -1,19 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
+"""`x_cnn/checks/gemm_host_check.mojo` as one TestSuite test: its `run_checks()` runs every fixture of that check."""
+from std.testing import TestSuite
 from x_cnn.checks.gemm_host_check import run_checks
-from checks.native_tests.runner import Check, Column, Report
 
 
-# Registered by lane fx-checks-orphans (2026-11-18): `x_cnn/checks/gemm_host_check.mojo` was a
-# standalone main() that no pixi task, workflow, development group or tools
-# script ran. Its main() is now `run_checks()` there; this is its one entry
-# (`pixi run check-native-cpu x_cnn_gemm_host_check`).
-# Host column: the suite is host work and does not branch on the target.
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
+def test_gemm_host() raises:
+    run_checks()
 
 
-def register() -> Check:
-    return Check("x_cnn_gemm_host_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

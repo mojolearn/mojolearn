@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """RobustScaler fit_transform and transform programs against an independent
 NaN-ignoring percentile oracle.
 
@@ -26,11 +27,16 @@ fixture's per-feature oracle is serial over at most 2049 values.
 """
 from std.math import floor, isnan
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.preprocessing_program import prep_program_stage
 from x_prep.host.program import run_program_host
 from x_prep.robust_native_run import _robust_fit_program
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The host column (was prep_robust_scaler_native_lifecycle_suite.mojo) ----
@@ -183,23 +189,9 @@ def fixture(unit: Int) raises:
     _ = x^
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(ROBUST_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, ROBUST_FIXTURES)
+def test_fixtures() raises:
+    check_cases("fixture", ROBUST_FIXTURES, fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("prep_robust_scaler_native_lifecycle", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

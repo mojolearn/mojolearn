@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native convolution/pool/finite-difference checks with scalar Float64 oracles.
 
 Preserves test_ops_rankn's shapes, strides, padding, derivative probes and
@@ -10,14 +11,16 @@ from autograd.rankn import ShapeN
 from core.host_parallel import host_parallelize
 from sequence.exec_trait import Exec
 from std.memory import bitcast
-from checks.native_tests.rankn_math import _upload, _binary, _gradient, _close
-from checks.native_tests.rankn_graph import _sum, _download
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.rankn_cases import _upload, _binary, _gradient, _close, _sum, _download, require
 
 
 comptime RANKN_CONV_FIXTURES = 2
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 def _to_f64(values: List[Float32]) -> List[Float64]:
@@ -243,51 +246,44 @@ def run_rankn_conv_fixture[E: Exec & Movable & Deinitable](mut s: OpsSession[E],
 
 # ---- The host column entry (was rankn_conv_cpu.mojo) ----
 # Native host graphs, oracle cells and finite-difference arms run in parallel.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(RANKN_CONV_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var s = OpsSession[HostExec](HostExec(), True)
-            try:
-                run_rankn_conv_fixture(s, fixture_id)
-            except error:
-                s.close()
-                raise error
-            s.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, RANKN_CONV_FIXTURES)
 
 
-# ---- The device column entry (was rankn_conv_gpu.mojo) ----
-# Native GPU convolution graphs with independent parallel host oracles.
-#
-# DeviceExec owns a shared context/pool; submit fixtures in order and use
-# existing parallel kernels. Session concurrency/scaling is not claimed.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(RANKN_CONV_FIXTURES)
-    for fixture_id in range(RANKN_CONV_FIXTURES):
-        try:
-            var s = OpsSession[DeviceExec](DeviceExec(), True)
-            try:
-                run_rankn_conv_fixture(s, fixture_id)
-            except error:
-                s.close()
-                raise error
-            s.close()
-        except error:
-            cases.fail(fixture_id, error)
-
-
-def run_cases(column: Column, mut report: Report):
+def _host_fixture(fixture_id: Int) raises:
+    var s = OpsSession[HostExec](HostExec(), True)
     try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
+        run_rankn_conv_fixture(s, fixture_id)
     except error:
-        report.abort(error)
+        s.close()
+        raise error
+    s.close()
 
 
-def register() -> Check:
-    return Check("rankn_conv", cpu=True, gpu=True, serial="", run=run_cases)
+def test_fixture() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", RANKN_CONV_FIXTURES, _host_fixture)
+    else:
+        # The device column (was rankn_conv_gpu.mojo), inline in the comptime branch: TestSuite discovery
+        # instantiates every module function and the host column build has no device target.
+        # Native GPU convolution graphs with independent parallel host oracles.
+        # DeviceExec owns a shared context/pool; submit fixtures in order and use
+        # existing parallel kernels. Session concurrency/scaling is not claimed.
+        var failed = 0
+        var text = String("")
+        for fixture_id in range(RANKN_CONV_FIXTURES):  # driver-loop: ordered shared-context submissions
+            try:
+                var s = OpsSession[DeviceExec](DeviceExec(), True)
+                try:
+                    run_rankn_conv_fixture(s, fixture_id)
+                except error:
+                    s.close()
+                    raise error
+                s.close()
+            except error:
+                failed += 1
+                text += "\n      fixture row " + String(fixture_id) + ": " + String(error)
+        if failed:
+            raise Error("fixture: " + String(failed) + " of " + String(RANKN_CONV_FIXTURES) + " cases failed" + text)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

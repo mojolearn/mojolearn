@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Independent packed Holt-Winters state and query expectations.
 
 Dyadic level/trend/season formulas give exact representable predictions, so
@@ -7,6 +8,8 @@ Shapes include the former public48x4/period4 case plus41x7/period6; both
 additive/multiplicative modes cover inside, crossing, future-only, forecast
 and warmup spans. No identity hashes or fit-as-its-own-oracle comparison.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
@@ -18,7 +21,14 @@ from holtwinters.resident_state import (
     holtwinters_resident_count,
     holtwinters_query_resident,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime HW_STATE_OWNERS = 4
@@ -161,17 +171,6 @@ def fixture(fixture_id: Int) raises:
     _ = packed
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime COUNT = HW_STATE_OWNERS * HW_STATE_QUERIES
-    var cases = report.cases(COUNT)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            fixture(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, COUNT)
-
-
 # ---- The device column entry (was holtwinters_state_gpu.mojo) ----
 # Direct GPU per-call/resident fitted-state queries and owner lifetime.
 #
@@ -245,24 +244,34 @@ def fixture_gpu(owner_id: Int) raises:
     _ = refused_output
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(HW_STATE_OWNERS)
-    for owner_id in range(HW_STATE_OWNERS):
-        try:
-            fixture_gpu(owner_id)
-        except error:
-            cases.fail(owner_id, error)
+def test_host_queries() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("holtwinters_state host", HW_STATE_OWNERS * HW_STATE_QUERIES, fixture)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+# The device column: direct GPU per-call/resident fitted-state queries and
+# owner lifetime. Resident-owner submissions and changing queries are ordered
+# for the existing GPU context; kernels, preparation and oracle cells run in
+# parallel.
+def test_device_owners() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = String("")
+        for owner_id in range(HW_STATE_OWNERS):  # driver-loop: resident owners in order on one GPU context
+            try:
+                fixture_gpu(owner_id)
+            except problem:
+                failed += "\n      holtwinters_state device row " + String(owner_id) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("holtwinters_state device: cases failed" + failed)
 
 
-def register() -> Check:
-    return Check("holtwinters_state", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
+    # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
+    # is not supported"), so a two-column file names its tests.
+    var suite = TestSuite()
+    comptime if CPU_COLUMN_BUILD:
+        suite.test[test_host_queries]()
+    else:
+        suite.test[test_device_owners]()
+    suite^.run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Tree-CTR (feature combination) model columns ON THE DEVICE against the
 host column, word for word.
@@ -20,6 +21,8 @@ features, a Borders and a FeatureFreq table). Checked:
   * `launch_combination_tuples` (the fit side) rebuilds the map's tuple
     list from the per-row member values and group ids.
 """
+
+from std.testing import TestSuite
 
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -144,22 +147,9 @@ def check_combination_device() raises:
     print("  tree-CTR model columns on the device equal the host column")
 
 
-def run_checks() raises:
+def test_combination_device() raises:
     check_combination_device()
 
 
-# Device column only: the suite needs a GPU, so the CPU build never
-# instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("combination_code_device_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

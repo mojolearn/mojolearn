@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """KernelRidge's polynomial degree reaches the fit and the prediction (ported
 from python/mojolearn/tests/test_cpu_kernel_variants.py
 `test_polynomial_degree_affects_host_fit_and_inference`).
@@ -9,15 +10,23 @@ its own rows: the four predictions must be four different word sets, so a fit
 or a prediction that ignored the degree fails. Cases 0 to 3 are the four
 independent fits; case 4 compares their predictions.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.hostptr import f32_ptr, f64_ptr
 from kernel_methods.host.kernel_methods_host_run import kernel_ridge_fit_host_run, kernel_ridge_predict_host_run
 from core.identity_trace import IdentityTrace
 from kernel_methods.estimator import kernel_ridge_fit_host, kernel_ridge_predict_host
 from svm.impl.svm_parameter import KernelParams, KERNEL_POLYNOMIAL
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime POLY_DEGREES = 4
@@ -89,24 +98,6 @@ struct HostPolyDegree(PolyDegreeCalls):
         return prediction^
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(POLY_CASES)
-    var words = List[Float32](length=POLY_DEGREES * POLY_ROWS, fill=0)
-    var wp = Int(words.unsafe_ptr())
-    def task(unit: Int) {imm cases, imm wp}:
-        try:
-            fit_unit[HostPolyDegree](unit, wp)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, POLY_DEGREES)
-    try:
-        distinct_predictions(words)
-    except error:
-        cases.fail(POLY_DEGREES, error)
-    _ = words^
-
-
 # ---- The device column ----
 # The device estimator entries. The fits run in order: each submits to the
 # shared family DeviceContext (see kernel_methods_krr_options.mojo); the
@@ -123,32 +114,44 @@ struct DevicePolyDegree(PolyDegreeCalls):
         return prediction^
 
 
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(POLY_CASES)
-    var words = List[Float32](length=POLY_DEGREES * POLY_ROWS, fill=0)
-    var wp = Int(words.unsafe_ptr())
-    for unit in range(POLY_DEGREES):
-        try:
-            fit_unit[DevicePolyDegree](unit, wp)
-        except error:
-            cases.fail(unit, error)
-    try:
+# The fits fill one prediction row per degree; the distinct-predictions case
+# reads them all afterwards.
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var words = List[Float32](length=POLY_DEGREES * POLY_ROWS, fill=0)
+        var wp = Int(words.unsafe_ptr())
+        def fit(unit: Int) raises {imm wp}:
+            fit_unit[HostPolyDegree](unit, wp)
+        check_cases("kernel_methods_poly_degree host fits", POLY_DEGREES, fit)
         distinct_predictions(words)
-    except error:
-        cases.fail(POLY_DEGREES, error)
-    _ = words^
+        _ = words^
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var words = List[Float32](length=POLY_DEGREES * POLY_ROWS, fill=0)
+        var wp = Int(words.unsafe_ptr())
+        var failed = String("")
+        for unit in range(POLY_DEGREES):  # driver-loop: fits in order on the shared family device context
+            try:
+                fit_unit[DevicePolyDegree](unit, wp)
+            except problem:
+                failed += "\n      kernel_methods_poly_degree device fits row " + String(unit) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("kernel_methods_poly_degree device fits: cases failed" + failed)
+        distinct_predictions(words)
+        _ = words^
 
 
-def register() -> Check:
-    return Check("kernel_methods_poly_degree", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
+    # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
+    # is not supported"), so a two-column file names its tests.
+    var suite = TestSuite()
+    comptime if CPU_COLUMN_BUILD:
+        suite.test[test_host_fixtures]()
+    else:
+        suite.test[test_device_fixtures]()
+    suite^.run()

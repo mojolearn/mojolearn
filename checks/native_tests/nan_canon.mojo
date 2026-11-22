@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """A computed NaN is ONE word on every column (lane fx-nan-canon, 2026-11-19).
 
 IEEE 754 fixes when a NaN appears and not its word: NVIDIA writes 0x7fffffff,
@@ -36,6 +37,8 @@ compares inside each case run across the cores.
 and both again from a build with -D MOJOLEARN_IDENTITY_FAST_NAN_CANON_OFF
 (the arm-off clauses; `pixi run check-nan-canon-off-cpu` / `-gpu`).
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
@@ -48,7 +51,14 @@ from gemm.host_entry import identical_gemm_host
 from gemm.checks.gemm_lowbit_check import _upload_f32
 from max.gpu.host import DeviceContext
 from checks.fixture_rng import splitmix64_of_sum
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
 
 comptime NAN_CANON_UNIT_CASES = 3
 comptime NAN_CANON_GEMM_CASES = 3
@@ -363,46 +373,49 @@ def download_case_gpu(ctx: DeviceContext, which: Int) raises:
     _ = want
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime TOTAL = NAN_CANON_UNIT_CASES + NAN_CANON_GEMM_CASES
-    var cases = report.cases(TOTAL)
-    def task(unit: Int) {imm cases}:
-        try:
-            if unit < NAN_CANON_UNIT_CASES:
-                unit_case(unit)
-            else:
-                gemm_case_cpu(unit - NAN_CANON_UNIT_CASES)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, TOTAL)
+def _host_case(unit: Int) raises:
+    if unit < NAN_CANON_UNIT_CASES:
+        unit_case(unit)
+    else:
+        gemm_case_cpu(unit - NAN_CANON_UNIT_CASES)
 
 
-def _run_gpu(mut report: Report) raises:
-    comptime TOTAL = NAN_CANON_UNIT_CASES + NAN_CANON_GEMM_CASES + NAN_CANON_DOWN_CASES
-    var ctx = DeviceContext()
-    var cases = report.cases(TOTAL)
-    for unit in range(TOTAL):  # driver-loop: over the cases, in order on the one device context
-        try:
-            if unit < NAN_CANON_UNIT_CASES:
-                unit_case(unit)
-            elif unit < NAN_CANON_UNIT_CASES + NAN_CANON_GEMM_CASES:
-                gemm_case_gpu(ctx, unit - NAN_CANON_UNIT_CASES)
-            else:
-                download_case_gpu(ctx, unit - NAN_CANON_UNIT_CASES - NAN_CANON_GEMM_CASES)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
+def test_host_fixtures() raises:
     comptime assert NAN_CANON_BITS == 0x7FC00000, "nan_canon: the canonical word moved; update _canon_word"
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("nan_canon host", NAN_CANON_UNIT_CASES + NAN_CANON_GEMM_CASES, _host_case)
 
 
-def register() -> Check:
-    return Check("nan_canon", cpu=True, gpu=True, serial="", run=run_cases)
+def _device_case(ctx: DeviceContext, unit: Int) raises:
+    if unit < NAN_CANON_UNIT_CASES:
+        unit_case(unit)
+    elif unit < NAN_CANON_UNIT_CASES + NAN_CANON_GEMM_CASES:
+        gemm_case_gpu(ctx, unit - NAN_CANON_UNIT_CASES)
+    else:
+        download_case_gpu(ctx, unit - NAN_CANON_UNIT_CASES - NAN_CANON_GEMM_CASES)
+
+
+def test_device_fixtures() raises:
+    comptime assert NAN_CANON_BITS == 0x7FC00000, "nan_canon: the canonical word moved; update _canon_word"
+    comptime if not CPU_COLUMN_BUILD:
+        var ctx = DeviceContext()
+        var failed = String("")
+        for unit in range(NAN_CANON_UNIT_CASES + NAN_CANON_GEMM_CASES + NAN_CANON_DOWN_CASES):  # driver-loop: over the cases, in order on the one device context
+            try:
+                _device_case(ctx, unit)
+            except problem:
+                failed += "\n      nan_canon device row " + String(unit) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("nan_canon device: cases failed" + failed)
+
+
+def main() raises:
+    # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
+    # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
+    # is not supported"), so a two-column file names its tests.
+    var suite = TestSuite()
+    comptime if CPU_COLUMN_BUILD:
+        suite.test[test_host_fixtures]()
+    else:
+        suite.test[test_device_fixtures]()
+    suite^.run()

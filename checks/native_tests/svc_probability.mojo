@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """SVC probability contracts using actual native arithmetic, no Python oracle.
 
 Preserve the original fifty-element permutation, eight calibration samples and
 three-class coupling matrix. Expectations are independent permutation, monotone
 orientation and probability-distribution properties, not copied algorithms.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from core.host_parallel import host_parallelize
 from svm.host.svc_proba import host_splitmix_perm, host_platt_train
 from svm.impl.svc_rows import U64P, sp_sigmoid_predict, multiclass_probability, I32P
@@ -13,7 +16,14 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from svm.estimator import _family_ctx
 from svm.impl.svc_epilogue import device_splitmix_perm, device_platt_train
 from checks.native_tests.kit import upload_address, upload_whole_into
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime SVC_PROBABILITY_FIXTURES = 3
@@ -174,16 +184,6 @@ struct HostSvcProbability(SvcProbabilityCalls):
             U64P(unsafe_from_address=dst), q, q + 9)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(SVC_PROBABILITY_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            fixture[HostSvcProbability](fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, SVC_PROBABILITY_FIXTURES)
-
-
 # ---- The device column (was svc_probability_gpu_suite.mojo) ----
 # Importable native GPU SVC probability contracts.
 #
@@ -258,24 +258,40 @@ struct DeviceSvcProbability(SvcProbabilityCalls):
         return result
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(SVC_PROBABILITY_FIXTURES)
-    for fixture_id in range(SVC_PROBABILITY_FIXTURES):
-        try:
-            fixture[DeviceSvcProbability](fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _host_fixture(fixture_id: Int) raises:
+    fixture[HostSvcProbability](fixture_id)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_host_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("svc_probability host", SVC_PROBABILITY_FIXTURES, _host_fixture)
 
 
-def register() -> Check:
-    return Check("svc_probability", cpu=True, gpu=True, serial="", run=run_cases)
+# The device column: the native SVM entries share _family_ctx, so fixture
+# submissions are ordered.
+def _device_fixture(fixture_id: Int) raises:
+    fixture[DeviceSvcProbability](fixture_id)
+
+
+def test_device_fixtures() raises:
+    comptime if not CPU_COLUMN_BUILD:
+        var failed = String("")
+        for fixture_id in range(SVC_PROBABILITY_FIXTURES):  # driver-loop: ordered submissions on the shared family context
+            try:
+                _device_fixture(fixture_id)
+            except problem:
+                failed += "\n      svc_probability device row " + String(fixture_id) + ": " + String(problem)
+        if failed.byte_length() > 0:
+            raise Error("svc_probability device: cases failed" + failed)
+
+
+def main() raises:
+    # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
+    # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
+    # is not supported"), so a two-column file names its tests.
+    var suite = TestSuite()
+    comptime if CPU_COLUMN_BUILD:
+        suite.test[test_host_fixtures]()
+    else:
+        suite.test[test_device_fixtures]()
+    suite^.run()

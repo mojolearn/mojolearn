@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Ownership/compile gate for the synchronized tensor-search state."""
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 from gbdt.gpu_data.compressed_index_builder import build_layout
@@ -14,7 +17,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_base import (
 )
 
 
-def run_checks() raises:
+def test_tensor_sync_state() raises:
     var ctx = DeviceContext()
     var folds: List[Int] = [1, 255]
     var layout = build_layout(folds)
@@ -36,19 +39,5 @@ def run_checks() raises:
     print("tensor synchronized level state PASS")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("tensor_sync_state_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

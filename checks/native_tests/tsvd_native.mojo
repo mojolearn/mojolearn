@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original literal TSVD query case over actual typed native providers.
 
 Expected integers are analytic dot products of the original 2x3 source and
@@ -12,7 +13,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.tsvd_native_host import tsvd_host_native_v1
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.tsvd_native_device import tsvd_device_native_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime TSVD_NATIVE_FIXTURES = 7
@@ -154,15 +162,11 @@ def negative_lease(driver: TSVDNativeDriver) raises:
 
 # ---- The host column (was tsvd_native_cpu_suite.mojo) ----
 # Independent typed CPU TSVD query fixtures run in parallel.
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(TSVD_NATIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(TSVDNativeDriver(tsvd_host_native_v1), unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, TSVD_NATIVE_FIXTURES)
+    def task(unit: Int) raises:
+        fixture(TSVDNativeDriver(tsvd_host_native_v1), unit, True)
+    check_cases("tsvd_native", TSVD_NATIVE_FIXTURES, task)
 
 
 # ---- The device column (was tsvd_native_gpu_suite.mojo) ----
@@ -170,29 +174,27 @@ def _run_cpu(mut report: Report) raises:
 #
 # Fixture graphs submit in order because production contexts/store are shared;
 # existing GPU kernels and independent oracle cells retain parallel execution.
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(TSVD_NATIVE_FIXTURES + 1)
-    for unit in range(TSVD_NATIVE_FIXTURES + 1):
-        try:
-            var driver = TSVDNativeDriver(tsvd_device_native_v1)
-            if unit < TSVD_NATIVE_FIXTURES:
-                fixture(driver, unit, False)
-            else:
-                negative_lease(driver)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
+    def ordered_case(unit: Int) raises:
+        var driver = TSVDNativeDriver(tsvd_device_native_v1)
+        if unit < TSVD_NATIVE_FIXTURES:
+            fixture(driver, unit, False)
         else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+            negative_lease(driver)
+    check_cases_serial("tsvd_native", TSVD_NATIVE_FIXTURES + 1, ordered_case)
 
 
-def register() -> Check:
-    return Check("tsvd_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_tsvd_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
+
+
+def main() raises:
+    # The tests by name, not discover_tests: discovery instantiates every function of the module, and the
+    # device column's functions do not compile in the host column build.
+    var suite = TestSuite()
+    suite.test[test_tsvd_native]()
+    suite^.run()

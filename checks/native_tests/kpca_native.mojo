@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual typed KernelPCA graphs with independent mathematical references.
 
 The four original 80x6 workloads retain their original score/eigen tolerances.
@@ -6,6 +7,9 @@ Tiny dyadic linear cases separately expose the global-mean centering defect.
 Explicit Lanczos/resident cases exercise existing backend options; they do not
 claim that the original 80-row public auto route selects those options.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -30,7 +34,7 @@ from core.kpca_native_plan import (
     KPCADenseFit,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from checks.native_tests.pca_native import guards, unchanged, PCA_TEST_GUARD
+from checks.native_tests.pca_native_helpers import guards, unchanged, PCA_TEST_GUARD, require
 from core.neighbors_native_driver import XnDriver
 from core.kpca_native_provider import KPCAEigenKernels
 from x_neighbors.native_descriptor_host import xn_native_v1
@@ -44,7 +48,8 @@ from x_decomp.descriptor_device import x_decomp_device_v1
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from x_decomp.decomp_owner_dev import DevDecomp
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime KPCA_NATIVE_FIXTURES = 15
@@ -282,46 +287,35 @@ def fixture(driver: KPCANativeDriver, near: KPCANeighborDriver, decomp: NativeDe
         graph(driver, near, decomp, unit)
 
 
-# ---- The host column (was kpca_native_cpu_suite.mojo) ----
-# Independent actual host KernelPCA graphs run across host cores.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(KPCA_NATIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(KPCANativeDriver(kpca_native_v1[KPCAEigenKernels[HostExec, NoRDev, False, HostDecomp]]),
-                KPCANeighborDriver(XnDriver(xn_native_v1)), x_decomp_host_v1, unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, KPCA_NATIVE_FIXTURES)
-
-
-# ---- The device column (was kpca_native_gpu_suite.mojo) ----
-# Actual KernelPCA graphs, one job at a time on the one physical GPU.
+# Host column: Independent actual host KernelPCA graphs run across host cores.
+# Device column: Actual KernelPCA graphs, one job at a time on the one physical GPU.
 #
 # Shared DeviceContexts require ordered graph submission for this numerical
 # suite; kernels and oracle cells remain parallel. Separate recorded shared-
 # context concurrency failures are unchanged and are not cleared by this suite.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(KPCA_NATIVE_FIXTURES + KPCA_RESIDENT_FIXTURES)
-    for unit in range(KPCA_NATIVE_FIXTURES + KPCA_RESIDENT_FIXTURES):
-        try:
-            fixture(KPCANativeDriver(kpca_native_v1[KPCAEigenKernels[DevExec, DevRDev, True, DevDecomp]]),
-                KPCANeighborDriver(XnDriver(xn_native_v1_gpu)), x_decomp_device_v1, unit, False)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(KPCANativeDriver(kpca_native_v1[KPCAEigenKernels[HostExec, NoRDev, False, HostDecomp]]),
+        KPCANeighborDriver(XnDriver(xn_native_v1)), x_decomp_host_v1, unit, True)
 
 
-def register() -> Check:
-    return Check("kpca_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_kpca_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("kpca_native", KPCA_NATIVE_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(KPCA_NATIVE_FIXTURES + KPCA_RESIDENT_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture(KPCANativeDriver(kpca_native_v1[KPCAEigenKernels[DevExec, DevRDev, True, DevDecomp]]),
+                    KPCANeighborDriver(XnDriver(xn_native_v1_gpu)), x_decomp_device_v1, unit, False)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("kpca_native: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native attention/layout graphs with independent coordinate/Float64 oracles.
 
 Shapes, operations and gradient assertions migrate from test_ops_rankn.
@@ -26,13 +27,16 @@ from core.cast_in import CastIn, CAST_KIND_SIGNED
 from core.hostptr import f32_ptr
 from core.host_parallel import host_parallelize
 from sequence.exec_trait import Exec
-from checks.native_tests.rankn_math import _upload, _binary, _gradient, _close
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.rankn_cases import _upload, _binary, _gradient, _close, _sum, _download, require
 
 
 comptime RANKN_GRAPH_FIXTURES = 2
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 def _attention_oracle(q: List[Float32], k: List[Float32], w: List[Float32]) -> Tuple[List[Float64], List[Float64], List[Float64]]:
@@ -141,18 +145,6 @@ def _attention[E: Exec & Movable & Deinitable](mut s: OpsSession[E]) raises:
         require((bitcast[DType.uint32](v) & 0x7F800000) != 0x7F800000, "attention Q gradient finite")
     for v in gk:
         require((bitcast[DType.uint32](v) & 0x7F800000) != 0x7F800000, "attention K gradient finite")
-
-
-def _sum[E: Exec & Movable & Deinitable](mut s: OpsSession[E], h: Int) raises -> Int:
-    var hs: List[Int] = [h]
-    var ints: List[Int] = [-1]
-    return s.run_op(OPS_SUM_N, hs, ints, List[Float32]())
-
-
-def _download[E: Exec & Movable & Deinitable](mut s: OpsSession[E], h: Int, count: Int) raises -> List[Float32]:
-    var values = List[Float32](length=count, fill=0)
-    s.download(h, f32_ptr(Int(values.unsafe_ptr())))
-    return values^
 
 
 def _layout[E: Exec & Movable & Deinitable](mut s: OpsSession[E]) raises:
@@ -266,51 +258,44 @@ def run_rankn_graph_fixture[E: Exec & Movable & Deinitable](mut s: OpsSession[E]
 
 # ---- The host column entry (was rankn_graph_cpu.mojo) ----
 # Independent graph sessions and attention-oracle queries run in parallel.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(RANKN_GRAPH_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            var s = OpsSession[HostExec](HostExec(), True)
-            try:
-                run_rankn_graph_fixture(s, fixture_id)
-            except error:
-                s.close()
-                raise error
-            s.close()
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, RANKN_GRAPH_FIXTURES)
 
 
-# ---- The device column entry (was rankn_graph_gpu.mojo) ----
-# Native GPU attention/layout graphs; ordered shared-context submissions.
-#
-# DeviceExec owns a shared sequence context/pool. Existing kernels and host
-# oracle queries provide parallel work; session concurrency is not claimed.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(RANKN_GRAPH_FIXTURES)
-    for fixture_id in range(RANKN_GRAPH_FIXTURES):
-        try:
-            var s = OpsSession[DeviceExec](DeviceExec(), True)
-            try:
-                run_rankn_graph_fixture(s, fixture_id)
-            except error:
-                s.close()
-                raise error
-            s.close()
-        except error:
-            cases.fail(fixture_id, error)
-
-
-def run_cases(column: Column, mut report: Report):
+def _host_fixture(fixture_id: Int) raises:
+    var s = OpsSession[HostExec](HostExec(), True)
     try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
+        run_rankn_graph_fixture(s, fixture_id)
     except error:
-        report.abort(error)
+        s.close()
+        raise error
+    s.close()
 
 
-def register() -> Check:
-    return Check("rankn_graph", cpu=True, gpu=True, serial="", run=run_cases)
+def test_fixture() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", RANKN_GRAPH_FIXTURES, _host_fixture)
+    else:
+        # The device column (was rankn_graph_gpu.mojo), inline in the comptime branch: TestSuite discovery
+        # instantiates every module function and the host column build has no device target.
+        # Native GPU attention/layout graphs; ordered shared-context submissions.
+        # DeviceExec owns a shared sequence context/pool. Existing kernels and host
+        # oracle queries provide parallel work; session concurrency is not claimed.
+        var failed = 0
+        var text = String("")
+        for fixture_id in range(RANKN_GRAPH_FIXTURES):  # driver-loop: ordered shared-context submissions
+            try:
+                var s = OpsSession[DeviceExec](DeviceExec(), True)
+                try:
+                    run_rankn_graph_fixture(s, fixture_id)
+                except error:
+                    s.close()
+                    raise error
+                s.close()
+            except error:
+                failed += 1
+                text += "\n      fixture row " + String(fixture_id) + ": " + String(error)
+        if failed:
+            raise Error("fixture: " + String(failed) + " of " + String(RANKN_GRAPH_FIXTURES) + " cases failed" + text)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

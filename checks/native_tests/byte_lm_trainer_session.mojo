@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The byte LM trainer's resident session, reached through the image's
 session entry (`core/byte_lm_entry_table_sessions.mojo`), ported from
 `test_byte_lm_train_steps.py`, `test_byte_lm_trainer_logits.py`,
@@ -42,11 +43,12 @@ from core.byte_lm_entry_table_sessions import (
 )
 from training.byte_lm_config import ByteConfig
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.host_parallel import host_parallelize
 from training.byte_lm_host_glue_entry import publish_byte_lm_host_entries
 from checks.vendor import COMPILED_VENDOR
 from training.byte_lm_glue_entry import publish_byte_lm_entries
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime BYTE_LM_TRAINER_SESSION_CASES = 7
@@ -400,51 +402,40 @@ def run_case(key: ByteLmEntryKey, unit: Int) raises:
         raise Error("unknown byte LM trainer session case")
 
 
-# ---- The host column (was byte_lm_trainer_session_cpu_suite.mojo) ----
-# The byte LM trainer session units on the host column (vendor word 0),
-# each on its own sessions, run across host cores.
-def _run_cpu(mut report: Report) raises:
+def _host_case(unit: Int) raises:
+    run_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), unit)
+
+
+def _cpu_cases() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    # The publication `_mojolearn_byte_lm_host` makes at module init.
     publish_byte_lm_host_entries()
-    var cases = report.cases(BYTE_LM_TRAINER_SESSION_CASES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), 0), unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, BYTE_LM_TRAINER_SESSION_CASES)
+    check_cases("byte_lm_trainer_session", BYTE_LM_TRAINER_SESSION_CASES, _host_case)
 
 
-# ---- The device column (was byte_lm_trainer_session_gpu_suite.mojo) ----
-# The byte LM trainer session units on the image's GPU column.
-#
-# The units run in order: every resident session of the image shares the one
-# device the trainer binds, and each unit's training steps keep their kernels'
-# own parallelism on it.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var vendor = byte_lm_vendor_word(COMPILED_VENDOR)
-    require(vendor > 0, "byte_lm_trainer_session_gpu needs a GPU build (cuda, hip or metal)")
-    # The publication `_mojolearn_byte_lm` makes at module init.
-    publish_byte_lm_entries()
-    var cases = report.cases(BYTE_LM_TRAINER_SESSION_CASES)
-    for unit in range(BYTE_LM_TRAINER_SESSION_CASES):
-        try:
-            run_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor), unit)
-        except error:
-            cases.fail(unit, error)
+def _gpu_cases() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var vendor = byte_lm_vendor_word(COMPILED_VENDOR)
+        require(vendor > 0, "byte_lm_trainer_session_gpu needs a GPU build (cuda, hip or metal)")
+        publish_byte_lm_entries()
+        var failed = String("")
+        var count = 0
+        for unit in range(BYTE_LM_TRAINER_SESSION_CASES):  # driver-loop: over the cases on the one device
+            try:
+                run_case(ByteLmEntryKey(Int(GLOBAL_NUMERIC_MODE), vendor), unit)
+            except error:
+                count += 1
+                failed += "\n      byte_lm_trainer_session row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("byte_lm_trainer_session: " + String(count) + " of " + String(BYTE_LM_TRAINER_SESSION_CASES) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("byte_lm_trainer_session", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

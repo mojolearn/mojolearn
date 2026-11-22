@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The Transformer block session as a registry handle, reached natively on a
 GPU column (lane transformer-session-native, 2026-11-12).
 
@@ -33,7 +34,7 @@ from core.neural_entry_table import (
 )
 from core.transformer_block_session import TransformerBlockSession, transformer_block_session_of
 from transformer.neural_entry_device import publish_neural_transformer_device
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
 
 
 # ---- The device column (was transformer_block_session_gpu_suite.mojo) ----
@@ -125,24 +126,20 @@ def run_case(unit: Int) raises:
         _expect(NEURAL_BLOCK_RESERVE, none, [h], "state is not fitted or was released")
 
 
-def _run_gpu(mut report: Report) raises:
+def test_cases() raises:
     publish_neural_transformer_device()
     publish_neural_transformer_device()
-    var cases = report.cases(BLOCK_SESSION_CASES)
+    var failed = String("")
+    var count = 0
     for unit in range(BLOCK_SESSION_CASES):  # driver-loop: cases share the image's registry, one after another
         try:
             run_case(unit)
-        except problem:
-            cases.fail(unit, problem)
+        except error:
+            count += 1
+            failed += "\n      transformer_block_session row " + String(unit) + ": " + String(error)
+    if count > 0:
+        raise Error("transformer_block_session: " + String(count) + " of " + String(BLOCK_SESSION_CASES) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("transformer_block_session", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

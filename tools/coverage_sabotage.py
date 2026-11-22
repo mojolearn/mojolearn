@@ -392,9 +392,16 @@ def plan(arm):
 
 
 def apply_check(table):
+    # Each patch is checked on its own, so the checks run across every core.
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(arm):
+        return subprocess.run(["git", "-C", ROOT, "apply", "--check", arm["patch"]], capture_output=True, text=True)
+
+    with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
+        results = list(pool.map(one, table.values()))
     bad = 0
-    for name, arm in table.items():
-        r = subprocess.run(["git", "-C", ROOT, "apply", "--check", arm["patch"]], capture_output=True, text=True)
+    for (name, arm), r in zip(table.items(), results):
         if r.returncode:
             bad += 1
             print(f"{name}: {arm['patch']} does not apply: {r.stderr.strip().splitlines()[:1]}")

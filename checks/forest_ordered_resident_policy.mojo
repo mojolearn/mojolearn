@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Pure policy gate for default ordered resident forest inference."""
+
+from std.testing import TestSuite
 from core.forest_inference_model import forest_ordered_resident_policy
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 
 
-def run_checks() raises:
+def test_forest_ordered_resident_policy() raises:
     if not forest_ordered_resident_policy[COLUMN_NVIDIA, NUMERIC_IDENTICAL, False, False]():
         raise Error("NVIDIA IDENTICAL must select ordered resident")
     if not forest_ordered_resident_policy[COLUMN_NVIDIA, NUMERIC_FAST, False, False]():
@@ -29,18 +32,5 @@ def run_checks() raises:
     print("PASS forest ordered resident policy")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("forest_ordered_resident_policy", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

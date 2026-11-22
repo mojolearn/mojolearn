@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Stable partition oracle above the NVIDIA single-pass routing threshold.
 
@@ -7,6 +8,9 @@ The banner distinguishes actual single-pass reach from a fallback-only run.
 Permuted leaf slots, an empty leaf, a short leaf, all-zero/all-one flags,
 ragged tails and sentinel gaps check the complete permutation and its bounds.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download, upload, upload_into
 from max.gpu.host import DeviceContext
 from std.testing import assert_equal
 from checks.kernel_matrix import TARGET_COLUMN, reorder_single_pass_for
@@ -15,7 +19,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.split_points import PARTITION_B
 from gbdt.gpu_util.kernel.reorder_single_pass import launch_stable_partition_routed
 
 
-def run_checks() raises:
+def test_gbdt_large_partition() raises:
     var ctx = DeviceContext()
     comptime IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     comptime ROUTED = reorder_single_pass_for[TARGET_COLUMN, IDENTICAL]()
@@ -84,20 +88,5 @@ def run_checks() raises:
     _ = chunk_offsets^
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download, upload, upload_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gbdt_large_partition_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

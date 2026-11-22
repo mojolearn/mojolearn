@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """GradientBoosting over a sweep of table shapes, and a missing value at
 predict in a column that had none at fit.
 
@@ -69,7 +70,9 @@ from checks.native_tests.gbdt_public_fits import (
     predict,
     same_f32,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 
 comptime SWEEP_MIXES = 5
@@ -340,25 +343,28 @@ def neighbour_unit[I: GbdtImage](unit: Int) raises:
 
 def _resident_raw(text: String, x: List[Float32], n: Int) raises -> List[Float32]:
     """The device-resident predict (`gbdt_resident_ns_predict._resident`)."""
-    var model = ResidentGbdtModel(text)
-    var scores = List[Float32](length=n, fill=Float32(0.0))
-    var out64 = List[Float64](length=1, fill=0.0)
-    var codes = List[Int64](length=1, fill=0)
-    var width = model.predict_into(
-        _F32P(unsafe_from_address=Int(x.unsafe_ptr())),
-        n,
-        _F32P(unsafe_from_address=Int(scores.unsafe_ptr())),
-        _F64P(unsafe_from_address=Int(out64.unsafe_ptr())),
-        _I64P(unsafe_from_address=Int(codes.unsafe_ptr())),
-        RESIDENT_RAW,
-        False,
-    )
-    require(width == 1, "gbdt shape sweep: the resident predict wrote width " + String(width))
-    _ = out64^
-    _ = codes^
-    _ = model^
-    _ = x
-    return scores^
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        raise Error("gbdt shape sweep: the resident predict runs on the device column only")
+    else:
+        var model = ResidentGbdtModel(text)
+        var scores = List[Float32](length=n, fill=Float32(0.0))
+        var out64 = List[Float64](length=1, fill=0.0)
+        var codes = List[Int64](length=1, fill=0)
+        var width = model.predict_into(
+            _F32P(unsafe_from_address=Int(x.unsafe_ptr())),
+            n,
+            _F32P(unsafe_from_address=Int(scores.unsafe_ptr())),
+            _F64P(unsafe_from_address=Int(out64.unsafe_ptr())),
+            _I64P(unsafe_from_address=Int(codes.unsafe_ptr())),
+            RESIDENT_RAW,
+            False,
+        )
+        require(width == 1, "gbdt shape sweep: the resident predict wrote width " + String(width))
+        _ = out64^
+        _ = codes^
+        _ = model^
+        _ = x
+        return scores^
 
 
 def nan_unit[I: GbdtImage](unit: Int) raises:
@@ -400,7 +406,7 @@ def nan_unit[I: GbdtImage](unit: Int) raises:
         same_f32(got, want),
         "gbdt shape sweep: a NaN at predict is not the " + o.nan_mode + " side of every split on its column",
     )
-    comptime if not CPU_COLUMN_BUILD:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():
         var device_got = _resident_raw(model.text, missing, n)
         var device_want = _resident_raw(model.text, stand_in, n)
         require(
@@ -428,46 +434,42 @@ def shape_unit[I: GbdtImage](unit: Int) raises:
     neighbour_unit[I](at - NAN_UNITS)
 
 
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SHAPE_UNITS)
-    # A host fit that TRAPS (CPU box cpc1-0010: rc 132 inside the border
-    # grid's parallel range, no case printed) ends the process, so no
-    # `except` and no report can name its unit. Each unit therefore prints a
-    # line when it starts and one when it returns or raises; after a trap the
-    # units with a start line and no done line are the ones that were in
-    # flight (at most one per core), and the trapping unit is among them.
-    def task(unit: Int) {imm cases}:
-        print("gbdt_shape_sweep unit", unit, "start")
-        try:
-            shape_unit[_HostFit](unit)
-        except error:
-            cases.fail(unit, error)
+def _host_shape(unit: Int) raises:
+    print("gbdt_shape_sweep unit", unit, "start")
+    try:
+        shape_unit[_HostFit](unit)
+    finally:
         print("gbdt_shape_sweep unit", unit, "done")
-    report.parallel(task, SHAPE_UNITS)
 
 
-def _run_gpu(mut report: Report) raises:
+def _cpu_cases() raises:
+    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    check_cases("gbdt_shape_sweep", SHAPE_UNITS, _host_shape)
+
+
+def _gpu_cases() raises:
     """One device fit at a time, in unit order: the first failing unit is the
     shape that faulted (a device fault stays on the context)."""
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(SHAPE_UNITS)
-    for unit in range(SHAPE_UNITS):  # driver-loop: over units, ordered GPU work on one context
-        try:
-            shape_unit[_DeviceFit](unit)
-        except error:
-            cases.fail(unit, error)
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        var failed = String("")
+        var count = 0
+        for unit in range(SHAPE_UNITS):  # driver-loop: over units, ordered GPU work on one context
+            try:
+                shape_unit[_DeviceFit](unit)
+            except error:
+                count += 1
+                failed += "\n      gbdt_shape_sweep row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("gbdt_shape_sweep: " + String(count) + " of " + String(SHAPE_UNITS) + " cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _cpu_cases()
+    else:
+        _gpu_cases()
 
 
-def register() -> Check:
-    return Check("gbdt_shape_sweep", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

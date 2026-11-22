@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Host-only portable_log2_64 admission: 2^18 deterministic hashed positive
 finite doubles across every exponent band, including subnormals; exact powers
@@ -9,6 +10,8 @@ hashes on separately executed hosts, not this one run, establish host agreement.
 
     pixi run check-native-cpu portable_log2_64_check
 """
+
+from std.testing import TestSuite
 from std.ffi import external_call
 
 from checks.numerics import portable_log2_64
@@ -45,7 +48,7 @@ def _ulps(a: Float64, b: Float64) -> Int:
     return Int(distance)
 
 
-def run_checks() raises:
+def test_portable_log2_64() raises:
     from std.memory import bitcast
 
     var n = 1 << 18
@@ -126,18 +129,5 @@ def run_checks() raises:
     print("portable log2_64 check OK")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("portable_log2_64_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

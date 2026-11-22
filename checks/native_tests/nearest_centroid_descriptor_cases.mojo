@@ -3,13 +3,18 @@
 
 Eight metric/split/shrink combinations and three empty-query contracts run
 independently across host workers.
+No `main()` and no `test_*`: the shared cases of the nearest_centroid_native (both columns) and
+nearest_centroid_numeric (ordered device) checks.
 Closed-form symmetric-data oracles do not derive expected values from kernels.
 """
 from std.math import sqrt
-from core.host_parallel import host_parallelize
 from core.nearest_centroid_plan import NcDriver, NcFitPlan, NcQueryPlan, NcLabelCodes, nc_binary_decision, nc_scratch_address
 from core.native_descriptor_abi import NativeDescriptorCall
-from checks.native_tests.nearest_centroid_plan_suite import require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 def fixture(entry: NativeDescriptorCall, unit: Int) raises:
@@ -103,23 +108,3 @@ def empty_case(entry: NativeDescriptorCall, unit: Int) raises:
     _ = words^
     _ = codes^
     _ = empty_codes^
-
-
-def run_checks(entry: NativeDescriptorCall) raises:
-    var failures = List[Int](length=11, fill=0)
-    var fp = failures.unsafe_ptr()
-    def run(unit: Int) {imm fp, imm entry}:
-        try:
-            if unit < 8:
-                fixture(entry, unit)
-            else:
-                empty_case(entry, unit - 8)
-        except error:
-            fp[unit] = 1
-            print("FAIL nearest_centroid_native fixture", unit, String(error))
-    host_parallelize(run, 11)
-    var total = 0
-    for failed in failures:
-        total += failed
-    require(total == 0, "nearest_centroid_native failed " + String(total) + " fixtures")
-    print("PASS nearest_centroid_native: 11 native fit/query/refusal fixtures")

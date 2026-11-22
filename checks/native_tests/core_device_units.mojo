@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The multiprocessor-count readers answer on every device column without raising.
 
 Metal refuses `DeviceAttribute.MULTIPROCESSOR_COUNT` ("not supported for Apple
@@ -17,13 +18,18 @@ Cases:
 The device column only: these read a GPU device context (the host column
 never sizes a grid from a device count).
 """
+from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from core.accelerator_target import TARGET_HAS_APPLE_GPU
 from core.device_units import device_multiprocessor_count
 from checks.hardware_matrix import gpu_cores_for
 from checks.kernel_matrix import TARGET_COLUMN
 from transformer.impl.llama.fused_attention import attn_device_units
-from checks.native_tests.runner import Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime DEVICE_UNITS_CASES = 3
@@ -51,25 +57,15 @@ def run_case(ctx: DeviceContext, index: Int) raises:
             require(units > 0, label + ": attention units " + String(units) + " is not positive")
 
 
-# One device context; the cases are submitted in order on it.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(DEVICE_UNITS_CASES)
+def test_cases() raises:
     var ctx = DeviceContext()
     for unit in range(DEVICE_UNITS_CASES):  # driver-loop: over the ordered shared-context cases
         try:
             run_case(ctx, unit)
-        except error:
-            cases.fail(unit, error)
+        except problem:
+            raise Error("device units row " + String(unit) + ": " + String(problem))
     _ = ctx
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_device_units", cpu=False, gpu=True, serial="one device context, cases in order",
-                 run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

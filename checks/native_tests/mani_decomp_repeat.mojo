@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Repeatability of the manifold decomposition kit (plan
 NATIVE_ENTRY_POINTS_AFTER_0866 rows N290, N291, N295, N301), natively.
 
@@ -51,7 +52,9 @@ from bindings.mani_decomp_run import (
     MANI_METRIC_EUCLIDEAN, IsoPlan, IsoState, LlePlan,
     cmds_core, iso_fit_run, iso_transform_run, lle_fit_run, lle_transform_run,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 
 # The fitted owner, as bindings/manifold_storage_native_unpack.mojo
 # `ManifoldMatrix` holds it (that module's file name marks it a boundary
@@ -590,9 +593,11 @@ def fixture[Device: Bool](unit: Int) raises:
         kit.release()
 
 
-# ---- The host column ----
-# Six fixtures plus twelve concurrent transforms in one batch across host cores.
-def _run_cpu(mut report: Report) raises:
+def _cpu_fixture(unit: Int) raises:
+    fixture[False](unit)
+
+
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     var kit = make_kit[False]()
     var x = normal_matrix(80, 5, 7)
@@ -601,59 +606,56 @@ def _run_cpu(mut report: Report) raises:
     var iso_expected = iso_transform(kit, iso, q, 25, 5)
     var lle = lle_fit(kit, x, 80, 5, 6, 2, 0)
     var lle_expected = lle_transform(kit, lle, q, 25, 5)
-    comptime UNITS = MANI_REPEAT_FIXTURES + 2 * MANI_CONCURRENT
-    var cases = report.cases(UNITS)
-    def task(unit: Int) {imm cases, imm iso, imm lle, imm iso_expected, imm lle_expected, imm q}:
+
+    def concurrent(unit: Int) raises {imm iso, imm lle, imm iso_expected, imm lle_expected, imm q}:
+        var local = make_kit[False]()
         try:
-            if unit < MANI_REPEAT_FIXTURES:
-                fixture[False](unit)
+            if unit < MANI_CONCURRENT:
+                var got = iso_transform_shared(local, iso, q, 25, 5)
+                require(same_bits(got, iso_expected),
+                        "Isomap: a concurrent transform of one fitted model returned other bits")
             else:
-                var local = make_kit[False]()
-                try:
-                    if unit - MANI_REPEAT_FIXTURES < MANI_CONCURRENT:
-                        var got = iso_transform_shared(local, iso, q, 25, 5)
-                        require(same_bits(got, iso_expected),
-                                "Isomap: a concurrent transform of one fitted model returned other bits")
-                    else:
-                        var got = lle_transform_shared(local, lle, q, 25, 5)
-                        require(same_bits(got, lle_expected),
-                                "LocallyLinearEmbedding: a concurrent transform of one fitted model returned other bits")
-                finally:
-                    local.release()
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, UNITS)
-    _ = iso^  # the fitted owners every concurrent unit read
-    _ = lle^
-    _ = iso_expected^
-    _ = lle_expected^
-    _ = q^
-    _ = x^
-    kit.release()
+                var got = lle_transform_shared(local, lle, q, 25, 5)
+                require(same_bits(got, lle_expected),
+                        "LocallyLinearEmbedding: a concurrent transform of one fitted model returned other bits")
+        finally:
+            local.release()
 
-
-# ---- The device column ----
-# One fixture at a time on the one device context; kernels stay parallel.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    comptime UNITS = MANI_REPEAT_FIXTURES + 2
-    var cases = report.cases(UNITS)
-    for unit in range(UNITS):  # driver-loop: over the ordered device fixtures
-        try:
-            fixture[True](unit)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
     try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+        check_cases("repeat", MANI_REPEAT_FIXTURES, _cpu_fixture)
+        check_cases("concurrent", 2 * MANI_CONCURRENT, concurrent)
+    finally:
+        _ = iso^  # the fitted owners every concurrent unit read
+        _ = lle^
+        _ = iso_expected^
+        _ = lle_expected^
+        _ = q^
+        _ = x^
+        kit.release()
 
 
-def register() -> Check:
-    return Check("mani_decomp_repeat", cpu=True, gpu=True, serial="", run=run_cases)
+def _run_gpu() raises:
+    comptime if not is_defined["MOJOLEARN_COLUMN_CPU"]():  # discovery instantiates every module function
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        comptime UNITS = MANI_REPEAT_FIXTURES + 2
+        var failed = String("")
+        var count = 0
+        for unit in range(UNITS):  # driver-loop: over the ordered device fixtures
+            try:
+                fixture[True](unit)
+            except error:
+                count += 1
+                failed += "\n      mani_decomp_repeat row " + String(unit) + ": " + String(error)
+        if count > 0:
+            raise Error("mani_decomp_repeat: " + String(count) + " of " + String(UNITS) + " cases failed" + failed)
+
+
+def test_cases() raises:
+    comptime if is_defined["MOJOLEARN_COLUMN_CPU"]():
+        _run_cpu()
+    else:
+        _run_gpu()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The typed rules of the CausalLM model owner's words (core/causal_owner.mojo).
 
 Also the decode state's words: the state check's four refusals in the
@@ -14,7 +15,7 @@ The resident session lease (`causal_lease_*`): the word's rule case by
 case, then the test-and-set under contention: every host worker tries to
 take ONE word many times, and no two are ever inside it together.
 """
-from checks.native_tests.runner import Check, Column, Report, require
+from std.testing import TestSuite
 from core.causal_layer_run import (
     CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1, CAUSAL_LAYER_MAMBA2, CAUSAL_LAYER_OTHER,
 )
@@ -29,6 +30,11 @@ from core.causal_owner import (
 )
 from core.host_parallel import host_parallelize
 from std.atomic import Atomic, Ordering
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 def _refusal(words: CausalModelWords, has_state: Bool, have: Int, capacity: Int, length: Int) -> String:
@@ -53,7 +59,7 @@ def _local(kind: Int) -> CausalModelWords:
     return words^
 
 
-def run_checks() raises:
+def run_admission_checks() raises:
     var words = _local(CAUSAL_LAYER_TRANSFORMER)
     # positions: an allocation has no state and no capacity word
     require(_refusal(words, False, 0, 0, 64) == "", "allocation without a limit is admitted")
@@ -261,14 +267,17 @@ def run_lease_checks() raises:
     _ = storage
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-        run_state_checks()
-        run_lease_checks()
-    except error:
-        report.abort(error)
+def test_admission() raises:
+    run_admission_checks()
 
 
-def register() -> Check:
-    return Check("causal_owner", cpu=True, gpu=False, serial="", run=run_cases)
+def test_state() raises:
+    run_state_checks()
+
+
+def test_lease() raises:
+    run_lease_checks()
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

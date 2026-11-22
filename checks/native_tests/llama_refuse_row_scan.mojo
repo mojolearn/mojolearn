@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The decode step's cache refusal: the appended-row scan against the whole
 scan, and a non-finite value PRODUCED by a step.
 
@@ -45,6 +46,7 @@ partials wrongly (part 1); a watermark advanced past a row nobody scanned, a
 refusal naming the other cache or another index, or no refusal at all for a
 value a step computed (part 2).
 """
+from std.testing import TestSuite
 from std.memory import bitcast
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -72,7 +74,11 @@ from transformer.impl.llama.modeling_llama import (
 )
 
 from checks.native_tests.kit import download, upload
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime LRS_CASES = 6
@@ -313,23 +319,17 @@ def _case(ctx: DeviceContext, which: Int) raises:
         _produced_case(ctx, True)
 
 
-def _run_gpu(mut report: Report) raises:
+def test_cases() raises:
     var ctx = DeviceContext()
-    var cases = report.cases(LRS_CASES)
+    var failed = String("")
     for which in range(LRS_CASES):  # driver-loop: over the check's cases, one device queue
         try:
             _case(ctx, which)
-        except error:
-            cases.fail(which, error)
+        except problem:
+            failed += "\n      llama_refuse_row_scan row " + String(which) + ": " + String(problem)
+    if failed.byte_length() > 0:
+        raise Error("llama_refuse_row_scan: cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("llama_refuse_row_scan", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

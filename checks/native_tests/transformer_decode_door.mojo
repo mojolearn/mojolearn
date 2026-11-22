@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The public Transformer decode session's native door (lane
 fix-transformer-decode-door, 2026-11-13), on a GPU column.
 
@@ -23,6 +24,7 @@ participates.
 The integrator runs `transformer_decode_door_gpu.mojo` in a fresh process;
 lanes do not run it.
 """
+from std.testing import TestSuite
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -43,7 +45,11 @@ from core.causal_lm_entry_table_sessions import (
     CAUSAL_DECODE_PINNED_RUN,
 )
 from transformer.causal_entry_device import publish_causal_transformer_device
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The device column (was transformer_decode_door_gpu_suite.mojo) ----
@@ -279,23 +285,17 @@ def run_case(unit: Int) raises:
     _ = vc
 
 
-def _run_gpu(mut report: Report) raises:
+def test_transformer_decode_door() raises:
     publish_causal_transformer_device()
-    var cases = report.cases(TRANSFORMER_DECODE_DOOR_CASES)
-    for unit in range(TRANSFORMER_DECODE_DOOR_CASES):  # driver-loop: device cases share one device context
+    var failures = String("")
+    for unit in range(TRANSFORMER_DECODE_DOOR_CASES):  # driver-loop: over fixtures, in order
         try:
             run_case(unit)
-        except problem:
-            cases.fail(unit, problem)
+        except error:
+            failures += "\n      row " + String(unit) + ": " + String(error)
+    if failures.byte_length() > 0:
+        raise Error("transformer_decode_door: device fixtures failed:" + failures)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("transformer_decode_door", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The fixture-RNG gate: every existing copy equals its canonical counterpart
 in `checks/fixture_rng.mojo`, bit for bit.
@@ -33,6 +34,8 @@ code imports `checks/fixture_rng.mojo` instead of adding a copy.
 
 GENERATED ONCE from the 2026-09-27 inventory; edit by hand from now on.
 """
+
+from std.testing import TestSuite
 
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -1476,7 +1479,7 @@ def _check_splitmix64_next(t: _Inputs, mut v: _Verdict):
     v.copy("x_linear/checks/seams_oracle.mojo::splitmix", "splitmix64_next", t.rows(), bad, first, False)
 
 
-def run_checks() raises:
+def test_fixture_rng_gate() raises:
     var t = _Inputs()
     if t.rows() < 65536:
         raise Error("VACUOUS: fewer than 65,536 input rows")
@@ -1534,19 +1537,5 @@ def run_checks() raises:
     print("PASS")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("fixture_rng_gate", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Shuffle-split row order against an independent counter-key oracle, moved
 from test_native_cv_row_order.py (lane tmig-msel-metrics-tsa-1, 2026-11-14).
 
@@ -30,10 +31,16 @@ from bindings.arena_prog_run import MetricArenaOwner, MetricProgramInput, metric
 from core.metrics_program_plan import MetricProgramPlan
 from core.native_descriptor_abi import NativeDescriptorCall
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from core.host_parallel import host_parallelize
 from x_metrics.descriptor_host import metrics_program_host_v1
 from x_metrics.descriptor_device import metrics_program_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime CV_ROW_ORDER_FIXTURES = 15
@@ -309,15 +316,11 @@ def run_row_order_fixture(entry: NativeDescriptorCall, unit: Int) raises:
 # Shuffle-split row order on the host metrics program entry
 # (x_metrics/descriptor_host.mojo), the independent fixtures across host
 # cores, each with a private failure slot.
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(CV_ROW_ORDER_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_row_order_fixture(metrics_program_host_v1, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, CV_ROW_ORDER_FIXTURES)
+    def task(unit: Int) raises:
+        run_row_order_fixture(metrics_program_host_v1, unit)
+    check_cases("cv_row_order", CV_ROW_ORDER_FIXTURES, task)
 
 
 # ---- The device column (was resample_cv_row_order_gpu_suite.mojo) ----
@@ -325,25 +328,24 @@ def _run_cpu(mut report: Report) raises:
 # (x_metrics/descriptor_device.mojo). Fixtures run in order: every program is
 # a sequence of launches on the one shared process device context, and each
 # stage keeps its own kernel parallelism.
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(CV_ROW_ORDER_FIXTURES)
-    for unit in range(CV_ROW_ORDER_FIXTURES):  # ordered programs on the one shared device context
-        try:
-            run_row_order_fixture(metrics_program_device_v1, unit)
-        except error:
-            cases.fail(unit, error)
+    # ordered programs on the one shared device context
+    def ordered_case(unit: Int) raises:
+        run_row_order_fixture(metrics_program_device_v1, unit)
+    check_cases_serial("cv_row_order", CV_ROW_ORDER_FIXTURES, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_cv_row_order() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("resample_cv_row_order", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # The tests by name, not discover_tests: discovery instantiates every function of the module, and the
+    # device column's functions do not compile in the host column build.
+    var suite = TestSuite()
+    suite.test[test_cv_row_order]()
+    suite^.run()

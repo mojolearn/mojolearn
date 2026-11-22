@@ -1,6 +1,6 @@
---- a/autograd/import_reader.mojo
-+++ b/autograd/import_reader.mojo
-@@ -1616,12 +1616,48 @@
+--- a/autograd/import_reader.mojo	2026-11-22 12:33:47
++++ b/autograd/import_reader.mojo	2026-11-22 12:34:30
+@@ -1620,12 +1620,48 @@
          else:
              w.append(0)
              w.append(v.dims[i])
@@ -27,7 +27,7 @@
  def onnx_read(file: String) raises -> Int:
      """Read the ONNX model at `file`; returns its handle (>= 1)."""
      var p = alloc[OnnxGraph](1)
-     p.init_pointee_move(onnx_read_file(file))
+     p.unsafe_write(onnx_read_file(file))
 +    # SABOTAGE coverage: every float32 initializer value one ulp off in the bytes the
 +    # reader keeps (the model file, its own bytes, the external data files), and every
 +    # finite float attribute value one float32 ulp off

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """sparse_encode on an orthonormal dictionary, moved from
 test_public_verifier_gap_methods.py (2026-11-14), through x_decomp's typed
 encode driver (x_decomp/dictl.mojo sparse_encode on the host Kit,
@@ -15,13 +16,23 @@ rows = [[2, -0.75, 0.0625], [-0.5, 1, -3]], dictionary = I(3):
 The Theta batch forecasts, the residual dropout mask and the refusals stay
 in the Python test.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from x_decomp.dictl import ENC_LASSO_CD, ENC_LASSO_LARS, ENC_OMP, ENC_THRESHOLD, sparse_encode
 from x_decomp.kit import Mat, Kit
-from core.host_parallel import host_parallelize
 from x_decomp.host import HostExec
 from x_decomp.dictl_dev import sparse_encode_dev
 from x_decomp.kit_device import DKit, DMat
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime VERIFIER_GAP_FIXTURES = 4
@@ -78,46 +89,25 @@ def check_unit(unit: Int) raises:
     check_code(unit, code)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(VERIFIER_GAP_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            check_unit(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, VERIFIER_GAP_FIXTURES)
+def test_sparse_encode() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("sparse_encode", VERIFIER_GAP_FIXTURES, check_unit)
+    else:
+        # DKit enqueues on x_decomp's one shared context (x_decomp/kit_device.mojo xd_ctx), so concurrent kits would
+        # race that context's ownership; the fixtures run one after another, each kernel keeps its parallelism.
+        for unit in range(VERIFIER_GAP_FIXTURES):  # driver-loop: ordered on x_decomp's shared context
+            try:
+                var k = DKit()
+                var x = k.upload(rows_mat())
+                var d = k.upload(eye_mat())
+                var none = DMat(0, 0)
+                var code = sparse_encode_dev(k, x, d, encode_algo(unit), 0.125, encode_nnz(unit), none, False, 100, False)
+                var host = k.get(code)
+                k.sync()
+                check_code(unit, host)
+            except problem:
+                raise Error("sparse_encode row " + String(unit) + ": " + String(problem))
 
 
-# ---- The device column (was core_verifier_gap_methods_gpu_suite.mojo) ----
-# sparse_encode on the device DKit, in order: DKit enqueues on x_decomp's
-# one shared context (x_decomp/kit_device.mojo xd_ctx), so concurrent kits
-# would race that context's ownership; the 2 x 3 fixtures run one after
-# another and each kernel keeps its own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(VERIFIER_GAP_FIXTURES)
-    for unit in range(VERIFIER_GAP_FIXTURES):
-        try:
-            var k = DKit()
-            var x = k.upload(rows_mat())
-            var d = k.upload(eye_mat())
-            var none = DMat(0, 0)
-            var code = sparse_encode_dev(k, x, d, encode_algo(unit), 0.125, encode_nnz(unit), none, False, 100, False)
-            var host = k.get(code)
-            k.sync()
-            check_code(unit, host)
-        except error:
-            cases.fail(unit, error)
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("core_verifier_gap_methods", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

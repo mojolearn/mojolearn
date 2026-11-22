@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The CPU training image's neural RNG: a slice of the stream equals the
 same words of the whole stream, and the dropout kinds replay one mask (lane
 tmig-sequence-1, 2026-11-14; ported from
@@ -20,9 +21,9 @@ The units are independent and run across the native host worker pool.
 """
 from std.memory import bitcast
 from std.math import isfinite
-from core.host_parallel import host_parallelize
 from core.mojolearn_training_host_impl import neural_rng_host_into
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite, assert_true as require
+from checks.native_tests.testsuite_cases import check_cases
 
 
 # ---- The host column (was training_neural_rng_slices_cpu_suite.mojo) ----
@@ -89,23 +90,9 @@ def run_case(unit: Int) raises:
         _dropout()
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(NEURAL_RNG_UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_case(unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(task, NEURAL_RNG_UNITS)
+def test_cases() raises:
+    check_cases("training_neural_rng_slices", NEURAL_RNG_UNITS, run_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("training_neural_rng_slices", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

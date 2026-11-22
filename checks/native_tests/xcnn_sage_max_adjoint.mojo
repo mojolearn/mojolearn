@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """SAGEConv max aggregation: forward maxima and the input gradient against
 an independent tie-splitting adjoint, on the host column (lane
 tests-to-mojo-spatial, 2026-11-16; ported from
@@ -28,7 +29,9 @@ from x_cnn.host.entry_runs_host import publish_x_cnn_host_entries
 from x_cnn.graph_layer_run import GraphTableCalls, SageBackwardHost, graph_views_run, sage_backward_host_run
 from x_cnn.graph_run import graph_run_graph_op, graph_run_aggr_kind
 from checks.native_tests.cnn_cases import cnn_entry
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.cnn_cases import require
 
 
 comptime SAGE_MAX_UNITS = 4
@@ -121,25 +124,11 @@ def _case(unit: Int) raises:
     _ = calls^
 
 
-def _run_cpu(mut report: Report) raises:
-    # The publication _mojolearn_x_cnn_host makes at module init.
+def test_case() raises:
+    # The publication _mojolearn_x_cnn_host makes at module init (idempotent: each test publishes first).
     publish_x_cnn_host_entries()
-    var cases = report.cases(SAGE_MAX_UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            _case(unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(task, SAGE_MAX_UNITS)
+    check_cases("case", SAGE_MAX_UNITS, _case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("xcnn_sage_max_adjoint", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

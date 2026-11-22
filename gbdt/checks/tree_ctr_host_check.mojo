@@ -58,6 +58,14 @@ comptime HOST_TREES = 20
 comptime HOST_DEPTH = 4
 comptime HOST_BORDERS = 32
 comptime HOST_BORDER_SAMPLES = 200_000
+#: The learning rate of both arms: NOT a power of two (lane r2-known,
+#: 2026-11-22). At 0.5 `leaf * rate` is exact, so the fused host update
+#: `fma(leaf, rate, cursor)` and the device's `cursor + round(leaf * rate)`
+#: gave the same bits and this check passed with that CPU != GPU defect live
+#: (`checks/native_tests/gbdt_host_device_cat.mojo`, which runs at 0.1 and
+#: covers neither tree CTR combinations, Ordered boosting nor eval-set
+#: losses, so it does not replace this check).
+comptime HOST_RATE = 0.1
 
 
 def _need(ok: Bool, what: String) raises:
@@ -104,7 +112,7 @@ def _device_fit(
         border_build_max_samples=HOST_BORDER_SAMPLES,
         n_estimators=HOST_TREES,
         max_depth=HOST_DEPTH,
-        learning_rate=Float32(0.5),
+        learning_rate=Float32(HOST_RATE),
         l2_leaf_reg=Float32(1.0),
         bootstrap_type=String("No"),
         random_seed=UInt64(0),
@@ -125,7 +133,7 @@ def _host_fit(
     # Newton iteration count of Logloss, GreedyLogSum (0)
     var p = GbdtHostParams(
         HOST_BORDERS, HOST_BORDER_SAMPLES, HOST_TREES, HOST_DEPTH,
-        Float32(0.5), Float32(1.0), UInt64(0), NAN_MODE_MIN, Float32(0.5),
+        Float32(HOST_RATE), Float32(1.0), UInt64(0), NAN_MODE_MIN, Float32(0.5),
         GBDT_LOGLOSS_NEWTON_ITERATIONS, 0,
     )
     # bit 0: categorical; bit 1 (one-hot) clear on both columns

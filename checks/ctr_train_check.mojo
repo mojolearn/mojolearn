@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`train(cat_features=...)`: the categorical path through the real surface.
 
@@ -88,6 +89,8 @@ after it, so `default()` is now what `train()` FALLS BACK TO and the
 `feature_freq_only()` arm is the one passed explicitly. The ordered
 statistic's VALUES are gated in `checks/ctr_device_check.mojo`, not here.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 
@@ -516,23 +519,9 @@ def check_ctr_train() raises:
     )
 
 
-def run_checks() raises:
+def test_ctr_train() raises:
     check_ctr_train()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ctr_train_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

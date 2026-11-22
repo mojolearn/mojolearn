@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """Conv2d / Conv1d forward and backward against the float64 reference, on
 the host column (lane tmig-sequence-1, 2026-11-14; ported from
 `test_x_cnn_conv.py` and `test_cnn_padding_gradient_ownership.py`).
@@ -19,7 +20,6 @@ The torch comparisons of the references (`test_reference_matches_torch`,
 The units are independent and run across the native host worker pool.
 """
 from std.math import sqrt
-from core.host_parallel import host_parallelize
 from x_cnn.host.entry_runs_host import publish_x_cnn_host_entries
 from checks.native_tests.cnn_cases import (
     ConvCase,
@@ -36,7 +36,9 @@ from checks.native_tests.cnn_cases import (
     PAD_REPLICATE,
     PAD_CIRCULAR,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.cnn_cases import require
 
 
 # ---- The host column (was cnn_conv_cpu_suite.mojo) ----
@@ -168,25 +170,11 @@ def run_case(unit: Int) raises:
         _ownership(unit - 11)
 
 
-def _run_cpu(mut report: Report) raises:
-    # The publication _mojolearn_x_cnn_host makes at module init.
+def test_case() raises:
+    # The publication _mojolearn_x_cnn_host makes at module init (idempotent: each test publishes first).
     publish_x_cnn_host_entries()
-    var cases = report.cases(CNN_CONV_UNITS)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_case(unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(task, CNN_CONV_UNITS)
+    check_cases("case", CNN_CONV_UNITS, run_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("cnn_conv", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

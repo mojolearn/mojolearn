@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """HDBSCAN fit, approximate_predict and soft-membership relations through the
 typed entries (ported from the arms `arm_fit`, `arm_predict` and `arm_soft` of
 `python/mojolearn/tests/test_hdbscan_surface.py`).
@@ -19,6 +20,9 @@ labels, outlier count and core distances against the oracle and the leaf rule.
 Bit relations (repeat fits, rows alone, batch_size, reversed query order) are
 the `identical` contract; the check columns build `identical`.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -47,7 +51,15 @@ from hdbscan.native_fit_host import hdbscan_fit_host_v1
 from hdbscan.native_query_host import hdbscan_query_host_v1
 from hdbscan.native_fit_device import hdbscan_fit_device_v1
 from hdbscan.native_query_device import hdbscan_query_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime HDBSCAN_SURFACE_CASES = 7
@@ -468,38 +480,27 @@ def fixture(fit_driver: HdbscanFitDriver, query_driver: HdbscanQueryDriver, unit
         _case_dupes_soft(fit_driver, query_driver)
 
 
-# ---- The host column ----
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(HDBSCAN_SURFACE_CASES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(HdbscanFitDriver(hdbscan_fit_host_v1), HdbscanQueryDriver(hdbscan_query_host_v1), unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, HDBSCAN_SURFACE_CASES)
+def _host_fixture(unit: Int) raises:
+    fixture(HdbscanFitDriver(hdbscan_fit_host_v1), HdbscanQueryDriver(hdbscan_query_host_v1), unit)
 
 
-# ---- The device column ----
-# In order on one device, as hdbscan_native: shared-DeviceContext concurrency
-# is parked; each fit and query keeps its own kernel parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(HDBSCAN_SURFACE_CASES)
-    for unit in range(HDBSCAN_SURFACE_CASES):  # ordered shared-context numerical cases, not concurrency qualification
-        try:
-            fixture(HdbscanFitDriver(hdbscan_fit_device_v1), HdbscanQueryDriver(hdbscan_query_device_v1), unit)
-        except problem:
-            cases.fail(unit, problem)
+def _device_fixture(unit: Int) raises:
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        fixture(HdbscanFitDriver(hdbscan_fit_device_v1), HdbscanQueryDriver(hdbscan_query_device_v1), unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", HDBSCAN_SURFACE_CASES, _host_fixture)
+    else:
+        for unit in range(HDBSCAN_SURFACE_CASES):  # driver-loop: ordered shared-context numerical cases, as hdbscan_native
+            try:
+                _device_fixture(unit)
+            except problem:
+                raise Error("fixture row " + String(unit) + ": " + String(problem))
 
 
-def register() -> Check:
-    return Check("hdbscan_surface", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

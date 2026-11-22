@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """GaussianMixture fit_predict returns the labels of fit then predict
 (ported from python/mojolearn/tests/test_ne2_g_decomp_entries.py
 `test_gmm_fit_predict_equals_fit_then_predict`, row N401).
@@ -13,6 +14,7 @@ not depend on NumPy's stream). Options are the public defaults the original
 used: full covariance, kmeans init, tol 1e-3, reg_covar 1e-6, max_iter 100,
 random_state 0.
 """
+from std.testing import TestSuite
 from std.math import sin
 from core.host_parallel import host_parallelize
 from core.mixture_native_api import (
@@ -26,7 +28,11 @@ from core.mixture_native_api import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from mixture.gmm_native_device import gmm_native_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime NE2G_FIXTURES = 1
@@ -112,31 +118,18 @@ def fixture(driver: GmmDriver, unit: Int) raises:
     _ = x^
 
 
-# ---- The device column (was decomp_ne2_g_decomp_entries_gpu_suite.mojo) ----
-# GaussianMixture fit_predict equals fit then predict, on the GPU provider.
-#
-# Only the GPU provider owns the fused fit_predict (the host provider's
-# capability word is 0, checked in mixture_native_cpu), so there is no CPU
-# column. The production device context is shared, so fixture graphs submit
-# in order on the one device; the kernels keep their own parallelism and the
-# host-side row comparison uses the host pool.
-def _run_gpu(mut report: Report) raises:
+def _fixture(unit: Int) raises:
+    fixture(GmmDriver(gmm_native_device_v1), unit)
+
+
+def test_fixtures() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(NE2G_FIXTURES)
-    for unit in range(NE2G_FIXTURES):
+    for unit in range(NE2G_FIXTURES):  # driver-loop: device fixtures in order on the binding's shared context
         try:
-            fixture(GmmDriver(gmm_native_device_v1), unit)
-        except error:
-            cases.fail(unit, error)
+            _fixture(unit)
+        except problem:
+            raise Error("fixture row " + String(unit) + ": " + String(problem))
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("decomp_ne2_g_decomp_entries", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

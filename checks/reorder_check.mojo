@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Check their reorder path against a host stable partition.
 
@@ -11,6 +12,9 @@ the ORDER can.
 The check plants a scattered flag pattern and a distinct value per row, runs
 the device path, and compares against a host partition element for element.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 
 from max.gpu.host import DeviceContext
 
@@ -115,7 +119,7 @@ def check_reorder_one_bit(n: Int = 20000, offset: Int = 37) raises:
     print("  ReorderOneBitImpl matches a host stable partition")
 
 
-def run_checks() raises:
+def test_reorder() raises:
     # STANDALONE DRIVER. BOTH arms `checks/probe_main.mojo` runs under "their
     # reorder path (SortWithoutCub)": the large multi-block one and the
     # 513-row one that straddles the block width at offset 0.
@@ -124,20 +128,5 @@ def run_checks() raises:
     check_reorder_one_bit(513, 0)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("reorder_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

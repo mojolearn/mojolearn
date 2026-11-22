@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Original PCA whitening numerical fixtures with independent expectations.
 
 The zero-scale and cutoff states are literal. The fitted8x2 matrix has centered,
 independent axes; unit sample variance and inverse values are checked directly.
 No SVD implementation, old output reference or Python arithmetic is imported.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
@@ -12,7 +16,13 @@ from core.estimators_host_impl import pca_fit_host_run, pca_whiten_host_run
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import process_ctx
 from decomposition.estimator import pca_fit_host, pca_whiten_transform_host, pca_whiten_inverse_transform_host
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime PCA_WHITENING_FIXTURES = 3
@@ -152,8 +162,7 @@ def fixture[A: PcaWhiteningCalls](fixture_id: Int) raises:
     _ = singular
 
 
-# ---- The host column (was pca_whitening_cpu_suite.mojo) ----
-# Importable native CPU PCA whitening checks; independent fixture owners.
+# Host column: Importable native CPU PCA whitening checks; independent fixture owners.
 struct HostPcaWhitening(PcaWhiteningCalls):
     @staticmethod
     def fit(x: Int, components: Int, mean: Int, explained: Int, ratio: Int,
@@ -168,18 +177,7 @@ struct HostPcaWhitening(PcaWhiteningCalls):
             rows * 2, rows * 2, inverse)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(PCA_WHITENING_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            fixture[HostPcaWhitening](fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, PCA_WHITENING_FIXTURES)
-
-
-# ---- The device column (was pca_whitening_gpu_suite.mojo) ----
-# Importable native GPU PCA whitening checks through existing tuned kernels.
+# Device column: Importable native GPU PCA whitening checks through existing tuned kernels.
 #
 # The production estimators context/pools are shared, so fixture graphs submit in
 # order. Product kernels retain their parallel implementation; independent host
@@ -215,24 +213,23 @@ struct DevicePcaWhitening(PcaWhiteningCalls):
         _ = ctx^
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(PCA_WHITENING_FIXTURES)
-    for fixture_id in range(PCA_WHITENING_FIXTURES):
-        try:
-            fixture[DevicePcaWhitening](fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _host_fixture(fixture_id: Int) raises:
+    fixture[HostPcaWhitening](fixture_id)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_pca_whitening() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("pca_whitening", PCA_WHITENING_FIXTURES, _host_fixture)
+    else:
+        var failures = String("")
+        for fixture_id in range(PCA_WHITENING_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture[DevicePcaWhitening](fixture_id)
+            except error:
+                failures += "\n      row " + String(fixture_id) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("pca_whitening: device fixtures failed:" + failures)
 
 
-def register() -> Check:
-    return Check("pca_whitening", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

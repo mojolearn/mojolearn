@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """IVF-Flat sample-filter short-fill on the device and in the host column.
 
 Ported from the filter case of `arm_short_fill` in
@@ -28,7 +29,12 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_build import ivf_flat_build
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import IvfFlatIndexParams, IvfFlatSearchParams
 from ivf.impl.neighbors.ivf_flat.ivf_flat_search import IVF_EXPAND_TPB, ivf_flat_search_traced
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The device column (was ann_ivf_surface_gpu_suite.mojo) ----
@@ -71,7 +77,7 @@ def short_filled(distances: List[Float32], indices: List[UInt32], n_candidates: 
         + " filter short-fill claims fail (3 candidates, the kept rows first, then (+inf, -1))")
 
 
-def _run_gpu(mut report: Report) raises:
+def _run_gpu() raises:
     comptime N = 1024
     comptime D = 8
     comptime Q = 32
@@ -112,13 +118,9 @@ def _run_gpu(mut report: Report) raises:
     print("PASS ann_ivf_surface_gpu: sample-filter short-fill on the device and the host column")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_ivf_surface() raises:
+    _run_gpu()
 
 
-def register() -> Check:
-    return Check("ann_ivf_surface", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

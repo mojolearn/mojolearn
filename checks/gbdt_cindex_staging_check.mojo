@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """WP5: ring wrap/tail, mixed layouts, NaN modes, and source reach.
 Build each numeric mode under tools/with_build_lock.sh; no speed claim.
 """
+
+from std.testing import TestSuite
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from gbdt.train import _build_cindex_from_floats, _build_cindex_from_columns
@@ -87,26 +90,12 @@ def check(ctx: DeviceContext, n_rows: Int, n_features: Int) raises:
     print("PASS WP5 rows", n_rows, "features", n_features)
 
 
-def run_checks() raises:
+def test_gbdt_cindex_staging() raises:
     var ctx = DeviceContext()
     check(ctx, 1, 19)
     check(ctx, 257, 35)
     check(ctx, 8193, 67)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("gbdt_cindex_staging_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

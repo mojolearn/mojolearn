@@ -1183,6 +1183,15 @@ def msel_cv_units(base: PythonObject, candidates: PythonObject, y: PythonObject,
         # Any other member, and any other request, keeps the units below.
         if _msel_member_route(run, rows, y, workers, context):
             return run^
+    # A MEMBER-ONLY plan (python/mojolearn/_native_msel_more.py connect_members:
+    # a marked class registered from its mark, without method recipes) that
+    # its member did not serve is refused HERE, once per operation, in the
+    # words the class had before its mark: its Python units would each raise
+    # them and a numeric error_score (cross_validate's default nan) turned the
+    # refusal into silent nan scores (proving suite 2026-11-22). One plan
+    # read per public operation, never per unit.
+    if py_get(msel_estimator_plan(run.base, context), "member_only") is not None:
+        raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
     if workers <= 1 or run.n_units <= 1:
         run.drain()
         run.reraise()

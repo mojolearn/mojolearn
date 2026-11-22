@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gate the CTR estimation permutation against CatBoost's own generator.
 
@@ -54,6 +55,8 @@ verbatim and which are transcribed.
    an involution, because an involutive fixture cannot tell the two
    directions apart and the whole CTR block depends on which one it has.
 """
+
+from std.testing import TestSuite
 
 from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
@@ -454,22 +457,9 @@ def check_permutation() raises:
     print("  all five sections green")
 
 
-def run_checks() raises:
+def test_permutation() raises:
     check_permutation()
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Host column: the suite is host work and does not branch on the target.
-from checks.native_tests.runner import Check, Column, Report
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ctr_permutation_check", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

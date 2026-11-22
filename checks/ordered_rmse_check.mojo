@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Ordered loop gate: prefix isolation, persistent cursors, full fit/apply.
 
 Build with -D MOJOLEARN_NUMERIC_IDENTICAL and compare ORDERED_BITS lines
 between vendors. A same-vendor numerical PASS alone is not a certificate.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import download_host_into, upload_host_into
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from std.math import isfinite
@@ -189,7 +193,7 @@ def whole_loop_cursor_check(ctx: DeviceContext) raises:
             print("ORDERED_BITS fold_cursor", f, pos, bitcast[DType.uint32](actual))
 
 
-def run_checks() raises:
+def test_ordered_rmse() raises:
     print("ORDERED NUMERIC MODE", numeric_mode_name())
     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("ordered RMSE certification requires MOJOLEARN_NUMERIC_IDENTICAL")
@@ -265,20 +269,5 @@ def run_checks() raises:
     print("ORDERED RMSE PASS: prefix isolation, leakage control, zero-mass prefix L2=0, constant/mixed model apply, two cursor updates, weighted three-tree fit/apply, invalid permutation refusal")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import download_host_into, upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("ordered_rmse_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """The CausalLM session table, reached natively on a GPU column (lane
 causal-lm-sessions-native, 2026-11-11).
 
@@ -18,6 +19,7 @@ these cases add no numerics. No Python participates.
 Device cases share one device context and run one after another.
 Run in a fresh process.
 """
+from std.testing import TestSuite
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from core.causal_lm_entry_table import CausalEntryKey, causal_entry_vendor
@@ -46,10 +48,14 @@ from core.causal_session_handles import CausalSessionHandles
 from core.entry_table import entry_ref_same
 from transformer.causal_entry_device import publish_causal_transformer_device
 from mamba.causal_entry_device import publish_causal_mamba_device
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
 
 
 # ---- The device column (was causal_lm_session_gpu_suite.mojo) ----
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
+
 comptime CAUSAL_SESSION_CASES = 16
 
 
@@ -207,26 +213,22 @@ def run_case(unit: Int) raises:
         _released(CAUSAL_SESSION_DECODE_CLOSE, layer)
 
 
-def _run_gpu(mut report: Report) raises:
+# The device column: the publications first (a second module init repeats
+# them), then the cases in order on the one device context.
+def test_published_sessions() raises:
     publish_causal_transformer_device()
     publish_causal_mamba_device()
     publish_causal_transformer_device()
     publish_causal_mamba_device()
-    var cases = report.cases(CAUSAL_SESSION_CASES)
+    var failed = String("")
     for unit in range(CAUSAL_SESSION_CASES):  # driver-loop: device cases share one device context
         try:
             run_case(unit)
         except problem:
-            cases.fail(unit, problem)
+            failed += "\n      causal_lm_session row " + String(unit) + ": " + String(problem)
+    if failed.byte_length() > 0:
+        raise Error("causal_lm_session: cases failed" + failed)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("causal_lm_session", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

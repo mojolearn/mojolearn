@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """The Mamba-1/2/3 host-arm decode session equals the per-call step byte for
 byte (lane tmig-core-3, 2026-11-15; ported from
 `test_mamba23_decode_sessions.py::test_session_step_is_byte_for_byte_the_per_call_step`
@@ -43,7 +44,13 @@ from mamba.checks.mamba2_fixture import m2_corpus_case, m2_case_weights, m2_case
 from checks.native_tests.mamba3_output_coverage import (
     m3_cov_weights, m3_cov_shape, m3_cov_x, m3_cov_token, m3_cov_zero_state,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime MAMBA_DECODE_SESSION_KINDS = 3
@@ -234,25 +241,17 @@ def run_kind(entry: EntryRef, kind: Int) raises:
 
 
 # ---- The host column ----
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     publish_neural_mamba_host()
     var entry = mamba_host_state_ref(Int(GLOBAL_NUMERIC_MODE))
-    var cases = report.cases(MAMBA_DECODE_SESSION_KINDS)
-    def task(unit: Int) {imm cases, imm entry}:
-        try:
-            run_kind(entry, unit + 1)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, MAMBA_DECODE_SESSION_KINDS)
+    def task(unit: Int) raises {imm entry}:
+        run_kind(entry, unit + 1)
+    check_cases("decode_sessions", MAMBA_DECODE_SESSION_KINDS, task)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
+def test_decode_sessions() raises:
+    _run_cpu()
 
 
-def register() -> Check:
-    return Check("mamba_decode_sessions", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

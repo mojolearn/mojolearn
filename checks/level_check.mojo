@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """One full level, end to end, against a host calculation.
 
@@ -7,6 +8,9 @@ verified is the SEQUENCE: nine kernels in order, each reading what the last
 one wrote. A failure here is a wiring failure, which is the whole reason the
 pieces were checked separately first.
 """
+
+from std.testing import TestSuite
+from checks.native_tests.kit import upload_host_into
 
 from gbdt.models.oblivious_model import TBinarySplit
 from max.gpu.host import DeviceContext
@@ -427,7 +431,7 @@ def check_mixed_tree(max_depth: Int) raises:
     print("  mixed-width tree grows, splits and conserves every row")
 
 
-def run_checks() raises:
+def test_level() raises:
     # STANDALONE DRIVER. The depths `checks/probe_main.mojo` runs under
     # "ONE FULL LEVEL (GPU, end to end)". `check_hist_depends_on_partition`
     # runs beside these there but lives in `hist_dump_check` and has its
@@ -441,20 +445,5 @@ def run_checks() raises:
     check_mixed_tree(6)
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-from checks.native_tests.kit import upload_host_into
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("level_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

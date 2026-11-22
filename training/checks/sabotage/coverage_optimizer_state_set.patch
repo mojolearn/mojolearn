@@ -1,19 +1,18 @@
---- a/bindings/optimizer_public_door.mojo
-+++ b/bindings/optimizer_public_door.mojo
-@@ -1065,13 +1065,13 @@
-     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
-     opt_value(value, OPT_DOOR.get_or_create_ptr()[].context)
-     var name = String("exp_avg") if which == STATE_EXP_AVG else String("exp_avg_sq")
--    set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
-+    set_field(opt, String("_v") if which == STATE_EXP_AVG else String("_m"), value)
-     set_field(opt, "_pristine", PythonObject(False))
-     var a = 0 if value is None else write_addr(value, name)
+--- a/bindings/optimizer_public_door.mojo	2026-11-22 12:35:07
++++ b/bindings/optimizer_public_door.mojo	2026-11-22 12:35:07
+@@ -1004,11 +1004,12 @@
+     var nk = optimizer_keys()
+     var count = Int(py=py_item(py_fields(opt), nk[].k_n_total))
+     var a = 0 if value is None else state_address(value, count, name, buffer_pins)
++    # SABOTAGE (coverage-native-optimizer-state-set): the setters exchange first and second moments in the resident upload and the mirror
      if which == STATE_EXP_AVG:
-+        _upload[K](module, opt, 0, a)
-+    else:
-         _upload[K](module, opt, a, 0)
+-        _upload(record[], a, 0, count)
 -    else:
--        _upload[K](module, opt, 0, a)
-     return PythonObject(None)
- 
- 
+         _upload(record[], 0, a, count)
+-    set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
++    else:
++        _upload(record[], a, 0, count)
++    set_field(opt, String("_v") if which == STATE_EXP_AVG else String("_m"), value)
+     record[].control.pristine = False
+     _ = buffer_pins
+     _ = lease

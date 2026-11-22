@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """One Mamba-1/2/3 session `decode` over N tokens equals N session `step`
 calls byte for byte (decode plan D2; lane tests-prune-remaining-models,
 2026-11-15; ported from
@@ -39,7 +40,14 @@ from mamba.mamba_decode_session_run import MambaDecodeSessionRun
 from mamba.impl.mamba_block_program import MambaBlockProgram
 from checks.native_tests.mamba_decode_sessions import _Case, _same_words
 from checks.native_tests.mamba3_output_coverage import m3_cov_addresses, m3_cov_token
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime MAMBA_DECODE_N_KINDS = 3
@@ -160,16 +168,12 @@ def run_kind_cpu(entry: EntryRef, kind: Int) raises:
     _ = c^
 
 
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     publish_neural_mamba_host()
     var entry = mamba_host_state_ref(Int(GLOBAL_NUMERIC_MODE))
-    var cases = report.cases(MAMBA_DECODE_N_KINDS)
-    def task(unit: Int) {imm cases, imm entry}:
-        try:
-            run_kind_cpu(entry, unit + 1)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, MAMBA_DECODE_N_KINDS)
+    def task(unit: Int) raises {imm entry}:
+        run_kind_cpu(entry, unit + 1)
+    check_cases("decode_n_tokens", MAMBA_DECODE_N_KINDS, task)
 
 
 # ---- The device column ----
@@ -246,24 +250,23 @@ def run_kind_gpu(kind: Int) raises:
     _ = c^
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(MAMBA_DECODE_N_KINDS)
-    for unit in range(MAMBA_DECODE_N_KINDS):  # driver-loop: kinds share the one device context (module docstring)
-        try:
-            run_kind_gpu(unit + 1)
-        except problem:
-            cases.fail(unit, problem)
+def _run_gpu() raises:
+    # check_cases_serial runs the cases in order: kinds share the one device context (module docstring)
+    def ordered_case(unit: Int) raises:
+        run_kind_gpu(unit + 1)
+    check_cases_serial("decode_n_tokens", MAMBA_DECODE_N_KINDS, ordered_case)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_decode_n_tokens() raises:
+    comptime if CPU_COLUMN_BUILD:
+        _run_cpu()
+    else:
+        _run_gpu()
 
 
-def register() -> Check:
-    return Check("mamba_decode_n_tokens", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    # The tests by name, not discover_tests: discovery instantiates every function of the module, and the
+    # device column's functions do not compile in the host column build.
+    var suite = TestSuite()
+    suite.test[test_decode_n_tokens]()
+    suite^.run()

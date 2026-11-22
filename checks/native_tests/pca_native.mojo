@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Typed PCA fit/query correctness using original fixtures and external oracles.
 
 No SVD implementation, output hash, repeated fit comparison or timing. The
 recorded spectra come from independent NumPy Float64 SVD. Query equations
 consume the actual fitted state, so eigenvector signs need no convention.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.math import isfinite
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
@@ -15,131 +19,15 @@ from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.pca_native_device import pca_device_native_v1
 from core.msel_device_x import msel_fold_store, msel_device_x_context
 from core.pca_native_fold import pca_fold_native_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from checks.native_tests.pca_native_helpers import (
+    PCA_TEST_GUARD, PCATestState, require, input_values, reference_values, guards, unchanged, close_values,
+    write_guarded,
+)
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime PCA_NATIVE_FIXTURES = 10
-comptime PCA_TEST_GUARD = Float32(27182.5)
-
-
-def input_values(name: String, count: Int) raises -> List[Float32]:
-    var result = List[Float32](unsafe_uninit_length=count)
-    with open("checks/native_tests/fixtures/pca_native/" + name + ".f32", "r") as file:
-        var bytes = file.read_bytes()
-        require(len(bytes) == count * 4, "PCA input fixture extent changed")
-        var bp = bytes.unsafe_ptr()
-        var rp = result.unsafe_ptr()
-        def word(index: Int) {imm bp, imm rp}:
-            var at = index * 4
-            var bits = UInt32(bp[at]) | (UInt32(bp[at + 1]) << 8) | (UInt32(bp[at + 2]) << 16) | (UInt32(bp[at + 3]) << 24)
-            rp.unsafe_store(index, bitcast[DType.float32](bits))
-        host_parallelize(word, count)
-        _ = bytes^
-    return result^
-
-
-def reference_values(name: String, part: String, count: Int) raises -> List[Float64]:
-    var result = List[Float64](unsafe_uninit_length=count)
-    with open("checks/native_tests/fixtures/pca_native/" + name + "-" + part + ".f64", "r") as file:
-        var bytes = file.read_bytes()
-        require(len(bytes) == count * 8, "PCA reference fixture extent changed")
-        var bp = bytes.unsafe_ptr()
-        var rp = result.unsafe_ptr()
-        def word(index: Int) {imm bp, imm rp}:
-            var bits = UInt64(0)
-            for byte in range(8):  # Fixed file decoding only.
-                bits |= UInt64(bp[index * 8 + byte]) << UInt64(byte * 8)
-            rp.unsafe_store(index, bitcast[DType.float64](bits))
-        host_parallelize(word, count)
-        _ = bytes^
-    return result^
-
-
-def guards(value: List[Float32], name: String) raises:
-    require(value[0] == PCA_TEST_GUARD and value[len(value) - 1] == PCA_TEST_GUARD, name + " guards")
-
-
-def unchanged(actual: List[Float32], original: List[Float32], name: String) raises:
-    require(len(actual) == len(original), name + " storage extent")
-    var count = len(actual)
-    var failures = List[Int](length=count, fill=0)
-    var fp = failures.unsafe_ptr()
-    var ap = actual.unsafe_ptr()
-    var bp = original.unsafe_ptr()
-    def cell(index: Int) {imm fp, imm ap, imm bp}:
-        fp.unsafe_store(index, Int(bitcast[DType.uint32](ap[index]) != bitcast[DType.uint32](bp[index])))
-    host_parallelize(cell, count)
-    for failure in failures:
-        require(failure == 0, name + " was mutated")
-    _ = actual
-    _ = original
-
-
-def close_values(actual: List[Float32], expected: List[Float64], count: Int,
-                 rtol: Float64, atol: Float64, name: String) raises:
-    var failures = List[Int](length=count, fill=0)
-    var fp = failures.unsafe_ptr()
-    var ap = actual.unsafe_ptr() + 1
-    var ep = expected.unsafe_ptr()
-    def cell(index: Int) {imm fp, imm ap, imm ep, imm rtol, imm atol}:
-        fp.unsafe_store(index, Int(not (abs(Float64(ap[index]) - ep[index]) <= atol + rtol * abs(ep[index]))))
-    host_parallelize(cell, count)
-    for failure in failures:
-        require(failure == 0, name + " independent oracle tolerance")
-    _ = actual
-    _ = expected
-
-
-def write_guarded(mut dst: List[Float32], source: List[Float32]):
-    var count = len(source)
-    var dp = dst.unsafe_ptr() + 1
-    var sp = source.unsafe_ptr()
-    def cell(index: Int) {imm dp, imm sp}:
-        dp.unsafe_store(index, sp[index])
-    host_parallelize(cell, count)
-    _ = dst
-    _ = source
-
-
-struct PCATestState(Movable):
-    var components: List[Float32]
-    var mean: List[Float32]
-    var variance: List[Float32]
-    var ratio: List[Float32]
-    var singular: List[Float32]
-    var projected: List[Float32]
-
-    def __init__(out self, rows: Int, features: Int, count: Int):
-        self.components = List[Float32](length=count * features + 2, fill=PCA_TEST_GUARD)
-        self.mean = List[Float32](length=features + 2, fill=PCA_TEST_GUARD)
-        self.variance = List[Float32](length=count + 2, fill=PCA_TEST_GUARD)
-        self.ratio = List[Float32](length=count + 2, fill=PCA_TEST_GUARD)
-        self.singular = List[Float32](length=count + 2, fill=PCA_TEST_GUARD)
-        self.projected = List[Float32](length=rows * count + 2, fill=PCA_TEST_GUARD)
-
-    def check_guards(self) raises:
-        guards(self.components, "PCA components")
-        guards(self.mean, "PCA mean")
-        guards(self.variance, "PCA variance")
-        guards(self.ratio, "PCA ratio")
-        guards(self.singular, "PCA singular")
-        guards(self.projected, "PCA projection")
-
-    def fit_request(self, source: Int, rows: Int, features: Int, count: Int,
-                    dense: Bool, keep_mode: Int, randomized: Bool, project: Bool,
-                    fold: PCAFoldStore) -> PCAFitRequest:
-        return PCAFitRequest(source, Int(self.components.unsafe_ptr()) + 4, Int(self.mean.unsafe_ptr()) + 4,
-            Int(self.variance.unsafe_ptr()) + 4, Int(self.ratio.unsafe_ptr()) + 4, Int(self.singular.unsafe_ptr()) + 4,
-            Int(self.projected.unsafe_ptr()) + 4 if project else 0, rows, features, count,
-            dense, keep_mode, False, randomized, 2 if randomized else 10, 1 if randomized else 0,
-            False, 17 if randomized else 0, True, 0.8 if keep_mode == 1 else 0.0, fold)
-
-    def query_request(self, source: Int, dst: Int, rows: Int, features: Int,
-                      count: Int, fit_rows: Int, inverse: Bool, fold: PCAFoldStore) -> PCAQueryRequest:
-        return PCAQueryRequest(source, Int(self.mean.unsafe_ptr()) + 4, Int(self.components.unsafe_ptr()) + 4,
-            Int(self.singular.unsafe_ptr()) + 4, dst, rows, features, count, fit_rows, inverse, False, fold)
-
-
 def fit_oracle(state: PCATestState, name: String, rows: Int, features: Int,
                spectrum: Int, keep: Int, tight: Bool) raises:
     var mean = reference_values(name, "mean", features)
@@ -404,107 +292,101 @@ comptime PCA_NATIVE_FOLD_FIXTURES = 3
 
 
 def fold_fixture(unit: Int) raises:
-    var driver = PCANativeDriver(pca_fold_native_v1)
-    require(driver.metadata(0) == 1 and driver.metadata(2) == 21, "PCA fold mode/capabilities")
-    var source = input_values("full-8x3", 24)
-    var original = source.copy()
-    var indices: List[Int64] = [7, 6, 5, 4, 3, 2, 1, 0]
-    if unit == 1:
-        source[0] = bitcast[DType.float32](UInt32(0x7FC00042))
-    elif unit == 2:
-        indices[0] = 8
-    var ctx = msel_device_x_context()
-    var store = msel_fold_store()
-    var base_id = -1
-    var index_id = -1
-    try:
-        base_id = store[].put(ctx, Int(source.unsafe_ptr()), 24 * 4)
-        index_id = store[].put(ctx, Int(indices.unsafe_ptr()), 8 * 8)
-        # Each put synchronizes its copy. Changing the original host storage
-        # now must not replace resident data or the admitted index order.
-        source[0] = 12345.0
-        indices[0] = -7
-        var fold = PCAFoldStore(base_id, 8, index_id)
-        var state = PCATestState(8, 3, 3)
-        var answer = driver.fit(state.fit_request(0, 8, 3, 3, True, 0, False, False, fold))
-        if unit == 0:
-            require(answer.keep == 3 and answer.finite == 0 and answer.in_range == 0,
-                    "PCA resident full-fit status")
-            fit_oracle(state, "full-8x3", 8, 3, 3, 3, True)
-        else:
-            require((answer.finite != 0) == (unit == 1) and (answer.in_range != 0) == (unit == 2),
-                    "PCA resident fit finite/range status distinction")
-            var component_values: List[Float32] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
-            write_guarded(state.components, component_values)
-            var mean_values: List[Float32] = [0, 0, 0]
-            write_guarded(state.mean, mean_values)
-        var status = driver.query(state.query_request(0, Int(state.projected.unsafe_ptr()) + 4,
-            8, 3, 3, 8, False, fold))
-        require((status.finite != 0) == (unit == 1) and (status.in_range != 0) == (unit == 2),
-                "PCA resident query finite/range status distinction")
-        if unit == 0:
-            var selected = List[Float32](unsafe_uninit_length=24)
-            var sp = selected.unsafe_ptr()
-            var op = original.unsafe_ptr()
-            def row_word(index: Int) {imm sp, imm op}:
-                sp.unsafe_store(index, op[(7 - index // 3) * 3 + index % 3])
-            host_parallelize(row_word, 24)
-            projection_oracle(selected, state, 8, 3, 3)
-            _ = selected^
-        state.check_guards()
-        _ = state^
-    finally:
-        if index_id >= 0:
-            store[].free(ctx, index_id)
-        if base_id >= 0:
-            store[].free(ctx, base_id)
-        _ = source^
-        _ = original^
-        _ = indices^
-        _ = ctx^
-
-
-# ---- The host column (was pca_native_cpu_suite.mojo) ----
-# Actual CPU PCA request/state fixtures, with independent graphs in parallel.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(PCA_NATIVE_FIXTURES)
-    def task(unit: Int) {imm cases}:
+    # Device column only. TestSuite discovery compiles every function of the module, so the host column build
+    # must not instantiate this body's device contexts (the registry's run_cpu never referenced it).
+    comptime if CPU_COLUMN_BUILD:
+        raise Error("fold_fixture: device column only")
+    else:
+        var driver = PCANativeDriver(pca_fold_native_v1)
+        require(driver.metadata(0) == 1 and driver.metadata(2) == 21, "PCA fold mode/capabilities")
+        var source = input_values("full-8x3", 24)
+        var original = source.copy()
+        var indices: List[Int64] = [7, 6, 5, 4, 3, 2, 1, 0]
+        if unit == 1:
+            source[0] = bitcast[DType.float32](UInt32(0x7FC00042))
+        elif unit == 2:
+            indices[0] = 8
+        var ctx = msel_device_x_context()
+        var store = msel_fold_store()
+        var base_id = -1
+        var index_id = -1
         try:
-            fixture(PCANativeDriver(pca_host_native_v1), unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, PCA_NATIVE_FIXTURES)
+            base_id = store[].put(ctx, Int(source.unsafe_ptr()), 24 * 4)
+            index_id = store[].put(ctx, Int(indices.unsafe_ptr()), 8 * 8)
+            # Each put synchronizes its copy. Changing the original host storage
+            # now must not replace resident data or the admitted index order.
+            source[0] = 12345.0
+            indices[0] = -7
+            var fold = PCAFoldStore(base_id, 8, index_id)
+            var state = PCATestState(8, 3, 3)
+            var answer = driver.fit(state.fit_request(0, 8, 3, 3, True, 0, False, False, fold))
+            if unit == 0:
+                require(answer.keep == 3 and answer.finite == 0 and answer.in_range == 0,
+                        "PCA resident full-fit status")
+                fit_oracle(state, "full-8x3", 8, 3, 3, 3, True)
+            else:
+                require((answer.finite != 0) == (unit == 1) and (answer.in_range != 0) == (unit == 2),
+                        "PCA resident fit finite/range status distinction")
+                var component_values: List[Float32] = [1, 0, 0, 0, 1, 0, 0, 0, 1]
+                write_guarded(state.components, component_values)
+                var mean_values: List[Float32] = [0, 0, 0]
+                write_guarded(state.mean, mean_values)
+            var status = driver.query(state.query_request(0, Int(state.projected.unsafe_ptr()) + 4,
+                8, 3, 3, 8, False, fold))
+            require((status.finite != 0) == (unit == 1) and (status.in_range != 0) == (unit == 2),
+                    "PCA resident query finite/range status distinction")
+            if unit == 0:
+                var selected = List[Float32](unsafe_uninit_length=24)
+                var sp = selected.unsafe_ptr()
+                var op = original.unsafe_ptr()
+                def row_word(index: Int) {imm sp, imm op}:
+                    sp.unsafe_store(index, op[(7 - index // 3) * 3 + index % 3])
+                host_parallelize(row_word, 24)
+                projection_oracle(selected, state, 8, 3, 3)
+                _ = selected^
+            state.check_guards()
+            _ = state^
+        finally:
+            if index_id >= 0:
+                store[].free(ctx, index_id)
+            if base_id >= 0:
+                store[].free(ctx, base_id)
+            _ = source^
+            _ = original^
+            _ = indices^
+            _ = ctx^
 
 
-# ---- The device column (was pca_native_gpu_suite.mojo) ----
-# Actual GPU PCA estimator and resident-fold providers.
+# Host column: Actual CPU PCA request/state fixtures, with independent graphs in parallel.
+# Device column: Actual GPU PCA estimator and resident-fold providers.
 #
 # Production contexts/stores are shared, so fixture graphs submit in order.
 # Device kernels retain their parallel algorithms; independent input decoding
 # and oracle cells use the host pool. No timing or identity comparison.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(PCA_NATIVE_FIXTURES + PCA_NATIVE_FOLD_FIXTURES)
-    for unit in range(PCA_NATIVE_FIXTURES + PCA_NATIVE_FOLD_FIXTURES):
-        try:
-            if unit < PCA_NATIVE_FIXTURES:
-                fixture(PCANativeDriver(pca_device_native_v1), unit, False)
-            else:
-                fold_fixture(unit - PCA_NATIVE_FIXTURES)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(PCANativeDriver(pca_host_native_v1), unit, True)
 
 
-def register() -> Check:
-    return Check("pca_native", cpu=True, gpu=True, serial="", run=run_cases)
+def test_pca_native() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("pca_native", PCA_NATIVE_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(PCA_NATIVE_FIXTURES + PCA_NATIVE_FOLD_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                if unit < PCA_NATIVE_FIXTURES:
+                    fixture(PCANativeDriver(pca_device_native_v1), unit, False)
+                else:
+                    fold_fixture(unit - PCA_NATIVE_FIXTURES)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("pca_native: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

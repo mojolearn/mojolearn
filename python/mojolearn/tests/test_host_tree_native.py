@@ -34,6 +34,19 @@ def _forest_pair(tmp_path, estimator, engine="sequential", labels=None):
     return forest.HostForest(**options), LegacyHostForest(**options)
 
 
+def _as_user_sees(model, prediction):
+    """The oracle's prediction as the product hands it to a caller outside the
+    package. `audit_native_call` is such a caller (`_verify_native_runtime`
+    sets `__mojolearn_user_boundary__`), and there a regressor's predict is
+    float64 for every family: the estimator's `_public_result`
+    (bindings/trees_public_lifecycle_native_door.mojo) widens a random
+    forest's float32 vote and the twin follows it (bindings/
+    host_tree_native_door.mojo, `estimator_outside`; lane r2-known,
+    2026-11-22). The frozen oracle keeps the package-internal float32; the
+    widening is exact."""
+    return prediction if model.is_classifier else prediction.astype("<f8")
+
+
 def _queries(kind, columns=2):
     data = np.arange(6 * columns, dtype="<f8").reshape(6, columns) / 8
     data[0, 0] = -.25
@@ -58,7 +71,7 @@ def _layout(data, kind):
 def test_forest_prediction_matches_existing_bits_without_python(tmp_path, estimator, engine, kind):
     actual, expected = _forest_pair(tmp_path, estimator, engine)
     x = _queries(kind)
-    reference = expected.predict(x)
+    reference = _as_user_sees(expected, expected.predict(x))
     assert _state(audit_native_call(actual.predict, x).assert_native()) == _state(reference)
     assert _state(audit_native_call(actual.predict, x).assert_native()) == _state(reference)
     if actual.is_classifier:

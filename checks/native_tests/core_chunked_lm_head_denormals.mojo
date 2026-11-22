@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Chunked LM-head folds obey identical's signed-zero denormal policy, moved
 from test_chunked_lm_head_denormals.py (2026-11-14).
 
@@ -15,15 +16,25 @@ loss-only call equals the training call's loss. The suites supply the two
 product calls (the loss and the training stage of chunked_lm_head_v2) for
 their column.
 """
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 from std.math import isfinite
 from std.memory import bitcast
-from core.host_parallel import host_parallelize
 from core.mojolearn_training_host_impl import chunked_lm_head_v2_loss_host_into, chunked_lm_head_v2_train_host_into
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.neural_context import neural_ctx
 from core.hostptr import f32_ptr, i32_ptr
 from training.chunked_lm_head_v2 import chunked_lm_head_v2_loss_host, chunked_lm_head_v2_train_host
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime CHUNKED_DENORMAL_FIXTURES = 3
@@ -178,16 +189,6 @@ struct HostChunkedHead(ChunkedHeadCalls):
         _ = chunked_lm_head_v2_train_host_into(a, rows, vocab, width)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(CHUNKED_DENORMAL_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_chunked_denormal_fixture[HostChunkedHead](unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, CHUNKED_DENORMAL_FIXTURES)
-
-
 # ---- The device column (was core_chunked_lm_head_denormals_gpu_suite.mojo) ----
 # The device chunked LM head (training/chunked_lm_head_v2.mojo, the
 # `_mojolearn_training` entries) on the training binding's process context, fixtures in order:
@@ -214,24 +215,27 @@ struct DeviceChunkedHead(ChunkedHeadCalls):
                                           f32_ptr(weight), i32_ptr(targets), rows, vocab, width)
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(CHUNKED_DENORMAL_FIXTURES)
-    for unit in range(CHUNKED_DENORMAL_FIXTURES):
-        try:
-            run_chunked_denormal_fixture[DeviceChunkedHead](unit)
-        except error:
-            cases.fail(unit, error)
+def _host_fixture(unit: Int) raises:
+    run_chunked_denormal_fixture[HostChunkedHead](unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _device_fixture(unit: Int) raises:
+    # Device column only: every module function is instantiated by TestSuite discovery, so the host build
+    # must not reach the device route.
+    comptime if not CPU_COLUMN_BUILD:
+        run_chunked_denormal_fixture[DeviceChunkedHead](unit)
 
 
-def register() -> Check:
-    return Check("core_chunked_lm_head_denormals", cpu=True, gpu=True, serial="", run=run_cases)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", CHUNKED_DENORMAL_FIXTURES, _host_fixture)
+    else:
+        for unit in range(CHUNKED_DENORMAL_FIXTURES):  # driver-loop: the training binding's process context; fixtures share its stream, each call keeps its kernel parallelism
+            try:
+                _device_fixture(unit)
+            except problem:
+                raise Error("fixture row " + String(unit) + ": " + String(problem))
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

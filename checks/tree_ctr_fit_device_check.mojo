@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`train(max_ctr_complexity=2)`: feature combinations through the real fit.
 
@@ -31,6 +32,8 @@ Checked:
   * the FeatureFreq-only configuration (one permutation, no Borders CTR)
     fits, predicts and round-trips.
 """
+
+from std.testing import TestSuite
 
 from max.gpu.host import DeviceContext
 
@@ -198,22 +201,9 @@ def check_tree_ctr_fit_device() raises:
     print("  feature combinations fit, predict, eval and round-trip")
 
 
-def run_checks() raises:
+def test_tree_ctr_fit_device() raises:
     check_tree_ctr_fit_device()
 
 
-# Device column only: the suite needs a GPU, so the CPU build never
-# instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("tree_ctr_fit_device_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

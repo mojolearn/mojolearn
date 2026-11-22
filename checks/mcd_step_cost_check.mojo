@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """MinCovDet's resident fit drains at most once a C-step (lane mcd-per-step-cost, 2026-11-14).
 
@@ -13,6 +14,8 @@ Scope: counts `DKit.sync` only. The wide (n > 32) eigh's per-sweep waits and the
 `ctx.synchronize` directly and are not counted; at d = 16 the C-step runs neither. GPU build only;
 no timing, no identity.
 """
+
+from std.testing import TestSuite
 from checks.fixture_rng import splitmix64_next
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.kit import Mat
@@ -24,7 +27,7 @@ def require(condition: Bool, message: String) raises:
         raise Error(message)
 
 
-def run_checks() raises:
+def test_mcd_step_cost() raises:
     var n = 2000
     var d = 16
     var h = (n + d + 2) // 2  # ceil(0.5 (n + d + 1)), sklearn's n_support
@@ -72,19 +75,5 @@ def run_checks() raises:
     print("MCD_STEP_COST drains_per_cstep=pass")
 
 
-# Registered by lane checks-toplevel (2026-11-16): a standalone main() under
-# checks/ that no CI job ran. One process per check name in CI keeps any
-# fresh-process precondition. Device column only: the suite needs a GPU, so the CPU build never instantiates it.
-from checks.native_tests.runner import Check, Column, Report, CPU_COLUMN_BUILD
-
-
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            run_checks()
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("mcd_step_cost_check", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

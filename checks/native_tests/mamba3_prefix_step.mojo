@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu
 """A Mamba-3 forward equals its prefix forward followed by one decode step,
 bit for bit, on the CPU column (lane tmig-sequence-1, 2026-11-14; ported
 from the numerical relation of
@@ -29,7 +30,12 @@ from checks.native_tests.mamba3_output_coverage import (
     m3_cov_addresses,
     M3_COV_ZERO,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.testing import TestSuite
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The host column (was mamba3_prefix_step_cpu_suite.mojo) ----
@@ -53,7 +59,7 @@ def _prefix(x: List[Float32], b: Int, l: Int, dm: Int, keep: Int) -> List[Float3
     return out^
 
 
-def _run_cpu(mut report: Report) raises:
+def _run_cpu() raises:
     var shape = m3_cov_shape()
     var b = shape[0]
     var l = shape[1]
@@ -92,13 +98,9 @@ def _run_cpu(mut report: Report) raises:
     print("PASS Mamba-3 prefix + step (CPU)", 1)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-    except error:
-        report.abort(error)
+def test_prefix_step() raises:
+    _run_cpu()
 
 
-def register() -> Check:
-    return Check("mamba3_prefix_step", cpu=True, gpu=False, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

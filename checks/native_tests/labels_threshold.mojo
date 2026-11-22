@@ -1,14 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Independent threshold comparison and refusal contracts for label ABI v3."""
 from std.memory import bitcast
 from core.labels_native_api import LabelsNativeDriver, LabelsThresholdRequest
-from core.host_parallel import host_parallelize
 from core.labels_native_host_provider import labels_host_native_v2
 from core.labels_native_device import labels_device_native_v2
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
 
 
 comptime LABELS_THRESHOLD_CASES = 7
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 def fixture(driver: LabelsNativeDriver, unit: Int) raises:
@@ -63,48 +66,29 @@ def fixture(driver: LabelsNativeDriver, unit: Int) raises:
 
 
 # ---- The host column (was labels_threshold_cpu_suite.mojo) ----
-def _run_cpu(mut report: Report) raises:
-    var failures = List[Int](length=LABELS_THRESHOLD_CASES, fill=0)
-    var flags = failures.unsafe_ptr()
-    def run(unit: Int) {imm flags}:
-        try:
-            fixture(LabelsNativeDriver(labels_host_native_v2), unit)
-        except problem:
-            flags[unit] = 1
-            print("FAIL labels_threshold_cpu fixture", unit, String(problem))
-    host_parallelize(run, LABELS_THRESHOLD_CASES)
-    var failed = 0
-    for flag in failures:  # metadata: independent fixture statuses
-        failed += flag
-    if failed:
-        raise Error("labels threshold CPU failed " + String(failed) + " cases")
-    print("PASS labels_threshold_cpu:", LABELS_THRESHOLD_CASES)
+def _host_case(unit: Int) raises:
+    fixture(LabelsNativeDriver(labels_host_native_v2), unit)
 
 
-# ---- The device column (was labels_threshold_gpu_suite.mojo) ----
-# Ordered numerical coverage while shared-context GPU concurrency is parked.
-def _run_gpu(mut report: Report) raises:
-    var failed = 0
-    for unit in range(LABELS_THRESHOLD_CASES):  # ordered shared-context numerical fixtures
-        try:
-            fixture(LabelsNativeDriver(labels_device_native_v2), unit)
-        except problem:
-            failed += 1
-            print("FAIL labels_threshold_gpu fixture", unit, String(problem))
-    if failed:
-        raise Error("labels threshold GPU failed " + String(failed) + " cases")
-    print("PASS labels_threshold_gpu:", LABELS_THRESHOLD_CASES)
+def test_threshold() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("threshold_cpu", LABELS_THRESHOLD_CASES, _host_case)
+    else:
+        # The device column (was labels_threshold_gpu_suite.mojo). Ordered numerical coverage while
+        # shared-context GPU concurrency is parked. Inline in the comptime branch: TestSuite discovery
+        # instantiates every function of the module, and the host column build has no device target.
+        var failed = 0
+        var text = String("")
+        for unit in range(LABELS_THRESHOLD_CASES):  # ordered shared-context numerical fixtures
+            try:
+                fixture(LabelsNativeDriver(labels_device_native_v2), unit)
+            except problem:
+                failed += 1
+                text += "\n      threshold_gpu row " + String(unit) + ": " + String(problem)
+        if failed:
+            raise Error("labels threshold GPU failed " + String(failed) + " of " + String(LABELS_THRESHOLD_CASES) + " cases" + text)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
 
-
-def register() -> Check:
-    return Check("labels_threshold", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
