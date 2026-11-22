@@ -110,28 +110,32 @@ def sha_refs(value, out):
     return out
 
 
-#: The committed Oct 6 receipts `kit` reads, by name (2026-11-21, lane tree-readers): it used to glob
+#: The Oct 6 receipts `kit` reads, by name (2026-11-21, lane tree-readers): it used to glob
 #: `*/*/*/attempt-*/receipt.json` under this directory, so any file dropped there became attestation.
-OCT6_RECEIPTS = ROOT / 'experiments/six_lane_integration/measurements/20261006/receipts'
-OCT6_RECEIPTS_INDEX = OCT6_RECEIPTS / 'INDEX.tsv'
+#: The directory left the checkout on 2026-11-25 (lane data-out): `tools/repo_data.py` resolves this repo path
+#: to its verified copy under $MOJOLEARN_EVIDENCE_ROOT/repo-data/ (fetched from R2 when absent), once per run.
+OCT6_RECEIPTS_REL = 'experiments/six_lane_integration/measurements/20261006/receipts'
 
 
 def oct6_receipt_rows():
-    """[(receipt path, vendor)] from OCT6_RECEIPTS_INDEX (path relative to the receipts dir, sha256,
+    """[(receipt path, vendor)] from the receipts' INDEX.tsv (path relative to the receipts dir, sha256,
     vendor). A listed receipt that is missing or changed is refused; an unlisted one is ignored."""
+    import repo_data
+    receipts = repo_data.resolve(OCT6_RECEIPTS_REL)
+    index = receipts / 'INDEX.tsv'
     rows, problems = [], []
-    for line in OCT6_RECEIPTS_INDEX.read_text().splitlines():
+    for line in index.read_text().splitlines():
         if not line or line.startswith('#') or line == 'path\tsha256\tvendor':
             continue
         rel, sha, vendor = line.split('\t')
-        path = OCT6_RECEIPTS / rel
+        path = receipts / rel
         if not path.is_file():
             problems.append(f'{rel} is listed but missing')
         elif sha_file(path) != sha:
             problems.append(f'{rel} is listed with sha256 {sha[:16]} but its bytes changed')
         rows.append((path, vendor))
     if problems:
-        raise SystemExit(f'REFUSED: {OCT6_RECEIPTS_INDEX.relative_to(ROOT)}: ' + '; '.join(problems[:8]))
+        raise SystemExit(f'REFUSED: {OCT6_RECEIPTS_REL}/INDEX.tsv ({index}): ' + '; '.join(problems[:8]))
     return rows
 
 
