@@ -3,6 +3,12 @@
 `tools/evidence_trim.py` removed these paths from the tree. Each is in git
 history at its listed sha: `git checkout <sha> -- <path>` restores it.
 
+2026-11-21: the daily trim (`.github/workflows/evidence-trim.yml`, `tools/evidence_trim.py`) is retired and
+deleted; the pre-push check `tools/hooks/check_tree_additions.sh` now keeps new run output out of the tree
+instead. The 15 `bench/results/identity_break/` entries below (verify table inputs) were restored from their
+listed shas, without their `*.log` files. The 2026-11-21 tree clean-up's removals are listed, with sizes and
+sha256, in `~/mojolearn-evidence/repo-archive-20261125/MANIFEST.tsv`; each is in git history at its `last_held` sha.
+
 ## Trim of 2026-11-11 14:15 UTC (tree at 21f43e730f)
 
 | path | last commit | date | size |
