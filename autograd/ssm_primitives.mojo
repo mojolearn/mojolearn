@@ -33,6 +33,8 @@ from autograd.ssm_ops import (
 from mamba.host.gen.gemm_identical_parts import contract_partition
 # Mamba-2 (lane neural-blocks-3)
 from autograd.ssm_m2_primitives import GRAPH_SSD_SCAN, ssd_scan_backward
+# Mamba-3 (lane neural-blocks-3-m3): the trapezoid core, tag 242
+from autograd.ssm_m3_primitives import GRAPH_TRAPEZOID_SCAN, trapezoid_scan_bwd
 from gemm.experiments.neural_profile import NEURAL_PROFILE_CHANGED, NEURAL_LEAF, neural_partition
 
 # Tags clear of the import family (192..207) and the transformer primitives (208..211).
@@ -263,8 +265,8 @@ struct SsmRules(BackwardRules, ImplicitlyCopyable, Movable):
     """The backward of the state-space tape operations (tags SSM_TAG_FIRST..SSM_TAG_LAST)."""
 
     def supports(self, tag: Int) -> Bool:
-        # Mamba-2 (lane neural-blocks-3): GRAPH_SSD_SCAN
-        return tag == GRAPH_SELECTIVE_SCAN or tag == GRAPH_SSD_SCAN
+        # Mamba-2 (lane neural-blocks-3): GRAPH_SSD_SCAN; Mamba-3 (lane neural-blocks-3-m3): GRAPH_TRAPEZOID_SCAN
+        return tag == GRAPH_SELECTIVE_SCAN or tag == GRAPH_SSD_SCAN or tag == GRAPH_TRAPEZOID_SCAN
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
         # every destination is overwritten whole: du, ddelta (M dim), dB, dC (M state), dA_log, dD; the SSD
@@ -282,5 +284,7 @@ struct SsmRules(BackwardRules, ImplicitlyCopyable, Movable):
             _selective_scan_bwd(ex, saved, upstream, inputs, gradients)
         elif tag == GRAPH_SSD_SCAN:  # Mamba-2 (lane neural-blocks-3)
             ssd_scan_backward(ex, saved, upstream, inputs, gradients)
+        elif tag == GRAPH_TRAPEZOID_SCAN:  # Mamba-3 (lane neural-blocks-3-m3)
+            trapezoid_scan_bwd(ex, saved, upstream, inputs, gradients)
         else:
             raise Error("unknown state-space backward rule")

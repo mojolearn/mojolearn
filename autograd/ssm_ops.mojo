@@ -40,6 +40,8 @@ from autograd.kernels.mamba1_scan_body import (
     m1_da_log,
     m1_skip_grads,
 )
+# Mamba-3 (lane neural-blocks-3-m3): the trapezoid core's elements, 4860..4899
+from autograd.ssm_m3_ops import OP_SSM_M3_FIRST, OP_SSM_M3_LAST, apply_ssm_m3
 
 comptime OP_SSM_FIRST = 4800
 comptime OP_SSM_M1_A = 4800
@@ -167,3 +169,6 @@ def apply_ssm[OP: Int](cell: Int, a: Args):
         a.p5.unsafe_store(cell, g[1])
     elif OP == OP_SSM_S4D_INIT:
         a.p0.unsafe_store(cell, ftz(identical_log(Float32(cell % a.i0 + 1))))
+    # Mamba-3 (lane neural-blocks-3-m3)
+    elif OP >= OP_SSM_M3_FIRST and OP <= OP_SSM_M3_LAST:
+        apply_ssm_m3[OP](cell, a)

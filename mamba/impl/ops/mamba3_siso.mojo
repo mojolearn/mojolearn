@@ -110,6 +110,15 @@ from max.gpu.sync import barrier
 from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN, column_max_block_size, lib_smem_page_fits_for
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+# Mamba-3 (lane neural-blocks-3-m3): the trapezoid's math, written once (S8's ADT and sigma, S9's gamma
+# and beta'); the generic op and the decode step call the same bodies
+from autograd.kernels.mamba3_trapezoid_body import (
+    SAB3_TRAP_LEFT_ONLY,
+    m3_adt,
+    m3_trap_sigma,
+    m3_trap_gamma,
+    m3_trap_beta_pre,
+)
 from checks.numerics import (
     identical_mul,
     ftz,
@@ -174,9 +183,8 @@ comptime SAB3_SEGSUM_DESCENDING = is_defined[
 comptime SAB3_CHUNK_SIZE_32 = is_defined[
     "MOJOLEARN_MAMBA3_SABOTAGE_CHUNK_SIZE_32"
 ]()
-comptime SAB3_TRAP_LEFT_ONLY = is_defined[
-    "MOJOLEARN_MAMBA3_SABOTAGE_TRAP_LEFT_ONLY"
-]()
+# SAB3_TRAP_LEFT_ONLY is defined in autograd/kernels/mamba3_trapezoid_body.mojo (the trapezoid's state
+# body reads it too) and imported above (lane neural-blocks-3-m3, 2026-11-22).
 comptime SAB3_ANGLE_MOD_PER_CHUNK = is_defined[
     "MOJOLEARN_MAMBA3_SABOTAGE_ANGLE_MOD_PER_CHUNK"
 ]()
@@ -308,18 +316,8 @@ def m3_pre_kernel(
     var widx = (bb * t_work + q0 + li) * nh + hh
     var dtv = dt_new.unsafe_load(mm * nh + hh)
     dt_work.unsafe_store(widx, dtv)  # copy, not a seam
-    adt_work.unsafe_store(
-        widx,
-        ftz(identical_mul(ftz(a_new.unsafe_load(mm * nh + hh)), ftz(dtv))),
-    )
-    sig_work.unsafe_store(
-        widx,
-        ftz(
-            identical_sigmoid(
-                ftz(in_proj.unsafe_load(mm * dip + c_trap + hh))
-            )
-        ),
-    )
+    adt_work.unsafe_store(widx, m3_adt(a_new.unsafe_load(mm * nh + hh), dtv))
+    sig_work.unsafe_store(widx, m3_trap_sigma(in_proj.unsafe_load(mm * dip + c_trap + hh)))
 
 
 # ===========================================================================
@@ -349,20 +347,11 @@ def m3_scale_kernel(
     var rem = cell - bb * t_work * nh
     var t = rem // nh
     var hh = rem - t * nh
-    var g = ftz(
-        identical_mul(
-            ftz(dt_work.unsafe_load(cell)), ftz(sig_work.unsafe_load(cell))
-        )
-    )
+    var g = m3_trap_gamma(dt_work.unsafe_load(cell), sig_work.unsafe_load(cell))
     var bp = Float32(0.0)
     if t + 1 < t_work:
         var nxt = (bb * t_work + t + 1) * nh + hh
-        bp = ftz(
-            identical_mul(
-                ftz(dt_work.unsafe_load(nxt)),
-                ftz(Float32(1.0) - ftz(sig_work.unsafe_load(nxt))),
-            )
-        )
+        bp = m3_trap_beta_pre(dt_work.unsafe_load(nxt), sig_work.unsafe_load(nxt))
     gamma_work.unsafe_store(cell, g)
     betap_work.unsafe_store(cell, bp)
     scale_work.unsafe_store(cell, ftz(g + bp))
@@ -879,6 +868,13 @@ def m3_resume_kernel(
 # Restore: git apply experiments/removed/MOJOLEARN_MAMBA3_LEGACY_STATEPASS.expdel2-28-neural.patch; record in docs/TOMBSTONES.md.
 
 
+# ONE BODY PER OPERATION, THE EXCEPTION (lane neural-blocks-3-m3, 2026-11-22): S14-S20 below spell the
+# trapezoid recurrence (autograd/kernels/mamba3_trapezoid_body.mojo m3_trap_state / m3_trap_readout, the
+# decode step's and the generic trapezoid_scan op's bodies) as a CHUNKED contraction: intra-chunk
+# qk_s / yintra plus the inter-chunk state pass, another summation order, which is why the prefill is
+# parallel over the chunk. They keep their own math. The comparing checks: mamba/checks/mamba3_check.mojo
+# (every corpus case against the host oracle on the device; its L = 1 cases run the decode step) and
+# checks/native_tests/mamba3_prefix_step.mojo (a forward equals its prefix forward plus one step).
 def m3_state_decay_kernel(
     decay: MutPointer[Float32, MutAnyOrigin],
     dacs: MutPointer[Float32, MutAnyOrigin],

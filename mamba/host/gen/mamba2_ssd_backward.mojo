@@ -60,6 +60,11 @@ from autograd.kernels.mamba2_ssd_body import (
     m2_fma_step,
     m2_product,
     m2_fold2,
+    IDN_M2_BWD_CELL,
+    IDN_M2_BWD_FOLD_TILED,
+    M2_BWD_FOLD_ROWS,
+    m2_fold_rows_per_tile,
+    m2_fold_tiles,
     m2_exp_step,
     m2_sum,
 )
@@ -96,29 +101,8 @@ comptime M2_SSD_BWD_TPB = 128
 # ---------------------------------------------------------------------------
 # TOMBSTONE: MOJOLEARN_IDN_M2_BWD_CELL_OFF (old path, no A/B recorded) deleted 2026-11-15 by lane/expdel2-23-neural; code recoverable at a6c819032b.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_M2_BWD_CELL_OFF.patch; record in docs/TOMBSTONES.md.
-comptime IDN_M2_BWD_CELL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-comptime IDN_M2_BWD_FOLD_TILED = IDN_M2_BWD_CELL and not is_defined[
-    "MOJOLEARN_IDN_M2_BWD_FOLD_TILED_OFF"
-]()
-comptime M2_BWD_FOLD_ROWS = 256
-
-
-def m2_fold_rows_per_tile(rows: Int) -> Int:
-    """Rows per fold tile: the fixed height, or every row (main's chain)."""
-    comptime if IDN_M2_BWD_FOLD_TILED:
-        return M2_BWD_FOLD_ROWS
-    var r = rows
-    if r < 1:
-        r = 1
-    return r
-
-
-def m2_fold_tiles(rows: Int) -> Int:
-    var per = m2_fold_rows_per_tile(rows)
-    var n = (rows + per - 1) // per
-    if n < 1:
-        return 1
-    return n
+# IDN_M2_BWD_CELL, IDN_M2_BWD_FOLD_TILED, M2_BWD_FOLD_ROWS, m2_fold_rows_per_tile and m2_fold_tiles moved to
+# autograd/kernels/mamba2_ssd_body.mojo (2026-11-22: the generic SSD op reads them too); imported above.
 
 
 def _grid(n: Int) -> Int:

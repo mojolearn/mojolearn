@@ -252,6 +252,15 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
         var heads = _positive(options[0], "heads", 1, context)
         a0 = PythonObject(heads)
         args = Python.list(heads, 0, 0, 0, 0, 0)
+    # Mamba-3 (lane neural-blocks-3-m3)
+    elif kind == "trapezoid_scan":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("heads", "d_state"),
+                                 Python.tuple(None, None), 2)
+        var t_heads = _positive(options[0], "heads", 1, context)
+        var t_states = _positive(options[1], "d_state", 1, context)
+        a0 = PythonObject(t_heads)
+        a1 = PythonObject(t_states)
+        args = Python.list(t_heads, t_states, 0, 0, 0, 0)
     elif kind == "rnn" or kind == "lstm" or kind == "gru":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("hidden_size"), Python.tuple(None), 1)
         var hidden = _positive(options[0], "hidden_size", 1, context)
