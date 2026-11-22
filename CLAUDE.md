@@ -13,9 +13,12 @@ subagents; a rule that also binds Codex belongs in `AGENTS.md`, never here.
   does not hand its judgment to a lane.
 - Implementation lanes are Opus subagents: one lane, one worktree, one brief. They write code and push; they do not
   compile, test, measure or rent (AGENTS.md "Lanes").
-- Every subagent runs on the latest Opus (`model: "opus"`; Andrew, 2026-11-09, restated 2026-11-15), reading and
-  inventory lanes included. Judgment, planning and changes to the rule files stay with the Fable orchestrator.
-  Andrew asks for a Fable lane by name when he wants one.
+- Subagents run on the latest Opus by default (`model: "opus"`; Andrew, 2026-11-09, restated 2026-11-15), reading
+  and inventory lanes included. Judgment, planning and changes to the rule files stay with the Fable orchestrator.
+- A Fable lane only when necessary (Andrew, 2026-11-22): the orchestrator may launch a subagent on Fable
+  (`model: "fable"`) without asking when an Opus lane has failed at the task or the task is hard diagnosis that Opus
+  is not resolving (a race, a lifetime or compiler defect), and may ask Andrew for Fable lanes otherwise. One Fable
+  lane at a time; the brief and the follow-ups line say why Opus was not enough. Andrew may also ask for one by name.
 - Only the orchestrator compiles, plus the one integration compile-fix lane per integration branch that it names
   in that lane's brief (AGENTS.md "Lanes").
 
