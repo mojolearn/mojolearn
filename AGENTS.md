@@ -241,21 +241,26 @@ change carries this rule and the lane's report lists, per converted site, the lo
 did there. An orchestrator audits every wave against these patterns before the integration compile and fixes what it
 finds in the same round; a wave without that audit does not merge.
 
-### A measured winner is never deleted on reasoning (Andrew, 2026-11-09)
+### When a removal needs a measurement, and when it does not (Andrew, 2026-11-22; replaces "A measured winner is never deleted on reasoning", 2026-11-09)
 
-- Code that won a measurement (a hand-tuned kernel, a fused path, a switch whose
-  A/B it won) is deleted only after a measurement on NVIDIA and AMD shows its
-  replacement is at least as fast with quality equal. "The new path subsumes it"
-  is a claim to measure, never a reason to delete.
-- A refactor that moves a family onto a shared runtime keeps the tuned kernel as
-  an op of that runtime (one runtime path, tuned kernels inside it). It does not
-  replace the kernel with the generic op.
-- Hand-tuned kernels are not touched by a refactor. What a refactor may change
-  is the plumbing around them: per-call weight uploads, per-token doors, host
-  reads per iteration, duplicate forwards for train and predict.
-- Until the measurement exists, the old code stays behind its switch, default
-  unchanged. This narrows "remove what a change made unnecessary": unnecessary
-  means measured, not argued.
+Measure when speed or quality could actually change. Do not measure to remove duplication of form.
+
+- NO measurement is needed to remove or merge: a second public class, trainer, wrapper, session or inference twin
+  that runs the SAME kernels as the one that stays; an older API form of the same computation; plumbing around
+  kernels (per-call uploads, per-token doors, host reads per iteration, duplicate forwards for train and predict);
+  dead code; a switch nobody builds with. The evidence is that the kept path calls the same kernels and the same
+  tests pass with the same outputs; say that in the report.
+- A measurement IS needed only when the change replaces the code that does the work on a hot path with different
+  code: a hand-tuned or fused kernel swapped for a generic one, a different algorithm, a different fold order or
+  precision. Then the replacement is timed against what it replaces on the measurement box, with quality beside the
+  time ("What a win is"), before the old kernel goes. One measurement of the affected rows; not a campaign.
+- A refactor that moves a family onto a shared runtime keeps its tuned kernels as ops of that runtime; it does not
+  replace them with the generic op. Hand-tuned kernels are not edited by a refactor.
+- Removing a whole capability (an architecture, an estimator, a mode users can ask for) is not a measurement
+  question at all: it is a product decision, and Andrew makes it. Bring him what would be lost and what it costs to
+  keep; never decide it by timing and never by cleanup.
+- The release's timing against the paper baseline is where an unexpected slowdown from any refactor is caught; a
+  refactor that could not have changed the kernels does not wait for it.
 
 ## 3. Measurement
 
