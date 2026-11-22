@@ -73,11 +73,11 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from core.hostptr import i32_ptr
 from metrics.mojolearn_metrics_host_run import (
-    _check_range, _guard_spectral_outputs, _guard_embedding_output,
+    _guard_spectral_outputs, _guard_embedding_output,
     homogeneity_completeness_v_measure_run, silhouette_run, precision_recall_curve_run, confusion_matrix_run,
     _spectral_write_outputs, _spectral_write_embedding, _spectral_state_copy, spectral_predict_run,
 )
-from metrics.host.r2_entry_host import _check_float_pair, _r2_value, _r2_weighted_value, publish_metrics_r2_host
+from metrics.host.r2_entry_host import _r2_value, _r2_weighted_value, publish_metrics_r2_host
 from spectral.host.spectral_oracle import (
     SPECTRAL_ORACLE_HOST_SABOTAGE,
     host_spectral_embedding_coo,
@@ -118,8 +118,12 @@ from metrics.host.metrics_host_entries_impl import (
     binary_ranking_checked,
     check_classification,
     log_loss_inputs_check,
-    metrics_check_pair as _check_pair,
     regression_inputs_finite,
+)
+from metrics.label_pair_admission import (
+    metrics_check_pair as _check_pair,
+    metrics_check_float_pair as _check_float_pair,
+    metrics_check_range as _check_range,
 )
 from metrics.host.classification_oracle import (
     MAX_CONFUSION_CLASSES,
@@ -356,8 +360,7 @@ def fowlkes_mallows_score_binding(
     var yp = read_i32(_index(y_pred_addr), n)
     var out = Float64(0.0)
     with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        _check_range(lower, upper)
+        # the body admits its inputs, as the device body does (lane r3-small)
         out = host_fowlkes_mallows(yt, yp, n, lower, upper)
     return PythonObject(out)
 
