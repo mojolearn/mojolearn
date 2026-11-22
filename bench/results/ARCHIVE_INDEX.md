@@ -9,6 +9,8 @@ instead. The 15 `bench/results/identity_break/` entries below (verify table inpu
 listed shas, without their `*.log` files. The 2026-11-21 tree clean-up's removals are listed, with sizes and
 sha256, in `~/mojolearn-evidence/repo-archive-20261125/MANIFEST.tsv`; each is in git history at its `last_held` sha.
 
+Removed paths (both clean-up rounds, bench/results, plans, one-off experiments) live in `~/mojolearn-evidence/repo-archive-20261125/<same path>` (and R2), listed in its `MANIFEST.tsv`; git history holds every file.
+
 ## Trim of 2026-11-11 14:15 UTC (tree at 21f43e730f)
 
 | path | last commit | date | size |
