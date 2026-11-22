@@ -167,10 +167,12 @@ def kmeans(model, X, transform=False):
 
 
 def public_cd_predict(model, X):
-    # PublicOutputsMixin's completed-result conversion, frozen independently
-    # of the native prediction owner. NumPy is a testing oracle only here.
+    # The public predict's completed result, frozen independently of the
+    # native prediction owner: the kernel's float32 words as an ndarray, for
+    # every caller (lane predict-dtype, 2026-11-22: the float64 widening of
+    # PublicOutputsMixin is gone). NumPy is a testing oracle only here.
     import numpy as np
-    return np.asarray(cd_predict(model, X)).astype(np.float64)
+    return np.asarray(cd_predict(model, X))
 
 
 def kernel_model(model, X, name, public=True):
@@ -190,7 +192,8 @@ def kernel_model(model, X, name, public=True):
              addr_ro(x, name="X"), addr(out, name="prediction")],
             [n, d, t, kernel, degree, gamma, coef0, alpha, model.info_, m])
         out = out if model._squeeze else out.reshape((m, t))
-        return np.asarray(out).astype(np.float64) if public else out
+        # predict: the kernel's float32 for every caller (lane predict-dtype, 2026-11-22).
+        return np.asarray(out) if public else out
     if name == "Nystroem":
         q = model.components_.shape[0]
         kernel, degree, gamma, coef0, seed = model._kernel_params

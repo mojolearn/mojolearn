@@ -87,10 +87,11 @@ def test_public_outputs_inspect_callers_without_python_audit_callbacks(family):
             assert callbacks == [], callbacks
             assert retained_calls == [], retained_calls
             if family == 'ridge':
-                # Ridge's existing boundary widens its completed f32 words;
-                # with NumPy connected both sides already own ndarrays.
+                # Ridge's predict has one result for every caller (lane
+                # predict-dtype, 2026-11-22): the kernel's f32 words as an
+                # ndarray, with no caller test.
                 assert type(answer) is np.ndarray, type(answer)
-                assert answer.dtype == np.dtype('f8' if outside else 'f4'), (outside, answer.dtype)
+                assert answer.dtype == np.dtype('f4'), (outside, answer.dtype)
             else:
                 assert type(answer) is (np.ndarray if outside else ml.Array), (family, outside, type(answer))
             np.testing.assert_array_equal(np.asarray(answer), expected)
