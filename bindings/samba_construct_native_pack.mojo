@@ -105,11 +105,15 @@ def _samba_initialize_parameters(model: PythonObject, context: PythonObject) rai
         columns.append(Int(py=output.shape[1]) if rank == 2 else 0)
     # RUN (training/samba_construct_run.mojo): typed words only, one GIL
     # release for the whole registry (it was one release per tensor).
+    # The scratch address is read here, with the GIL held: an attribute read
+    # inside the released block ran PyObject_GetAttrString with no thread
+    # state and segfaulted every seeded SambaStack (smoke 2026-11-22).
+    var unused_addr = Int(py=unused._addr)
     var drawn = 0
     try:
         with GILReleased(Python()):
             samba_initialize_run(primitives, names, addresses, sizes, ranks, columns, low, high, counter,
-                Int(py=unused._addr), drawn)
+                unused_addr, drawn)
     finally:
         # PACK: the streams consumed, also when a launch was refused (each
         # draw advanced the counter before its launch, as before).
