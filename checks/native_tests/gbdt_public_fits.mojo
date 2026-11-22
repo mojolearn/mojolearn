@@ -21,6 +21,11 @@ functions are deleted in the same commit series):
 - the host-only units (the CPU suite runs them): the `*_fits_on_the_host_when_built`
   functions of `test_cpu_training_e3_gbdt.py`, `test_cpu_training_e3_gbdt_trees.py`,
   `test_cpu_training_gbdt_losses.py` and `test_cpu_training_gbdt_ordered.py`.
+- `checks/gbdt_feature_fraction_binding.py` (the fit arms; lane py2mojo-C,
+  2026-11-22) and `checks/gbdt_querywise_pointwise_check.py` (the identical
+  arms): common units 26-36, inputs stored by
+  `tools/py2mojo_native_fixtures_b4.py` under `fixtures/gbdt_ff/` and
+  `fixtures/gbdt_qw/`. What stays in Python is named beside each unit.
 
 A case builds the fit request the public `GradientBoosting.fit` builds
 (`bindings/trees_public_gbdt_fit_door.mojo` `_params` and `gbdt_fit`: the
@@ -68,7 +73,7 @@ from std.sys.compile import is_defined
 comptime FIXTURE_DIR = "checks/native_tests/fixtures/gbdt/"
 comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
-comptime GBDT_COMMON_UNITS = 26
+comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
 comptime GBDT_HOST_UNITS = 20
 
@@ -877,8 +882,187 @@ def yeti_learns[I: GbdtImage]() raises:
             "YetiRank ranks no better than a constant")
 
 
+# ---- checks/gbdt_feature_fraction_binding.py (lane py2mojo-C, 2026-11-22) ----
+# The `identical` arm (the `fast` arm is Apple-only). Kept in Python: the
+# "explicit feature_fraction=1. is the default" arm (the door sends no tail
+# for 1.0, so both requests are the same words: a door decision, not a fit
+# result), the pickle fingerprints and the two adapters (public boundary).
+comptime FF_DIR = "../gbdt_ff/"
+comptime FF_UNITS = 7
+
+
+def _ff_inputs(logloss: Bool) raises -> GbdtInputs:
+    return GbdtInputs(load_f32(FF_DIR + "ff-x.f32", 256 * 8), 256, 8,
+                      load_f32(FF_DIR + ("ff-yb.f32" if logloss else "ff-y.f32"), 256))
+
+
+def _ff_opts(policy: String, loss: String) -> GbdtOpts:
+    """`options(mode, policy, loss)` of the original."""
+    var o = GbdtOpts(loss, 3, 2)
+    o.learning_rate = 0.25
+    o.border_count = 8
+    o.random_state = 17
+    o.grow_policy = policy
+    o.max_leaves = 4 if policy == "Lossguide" else -1
+    o.bootstrap = "Bayesian"
+    o.bagging_temperature = 0.0
+    o.random_strength = 0.0
+    return o^
+
+
+def feature_fraction[I: GbdtImage](unit: Int) raises:
+    """Units 0-5: policy x loss: a fraction of 0.5 and of the least positive
+    float64 fits twice to the same model text and predictions, changes the
+    default model and predicts finite values. Unit 6: the counted class
+    weights, the three tails, the eval set and the sample weights in one
+    Lossguide Logloss fit: finite predictions and a test loss curve."""
+    if unit == 6:
+        var inp = _ff_inputs(True)
+        var o = _ff_opts("Lossguide", "Logloss")
+        o.score_function = "NewtonL2"
+        o.class_weights = [1.0, 2.0]
+        o.min_split_gain = 0.0
+        o.min_child_hessian = 0.0
+        o.feature_fraction = 0.5
+        inp.weights = List[Float32](length=256, fill=Float32(0))
+        for r in range(256):  # small-loop(np.linspace(.5, 1.5, 256, dtype=float32))
+            inp.weights[r] = Float32(0.5 + Float64(r) / 255.0)
+        for j in range(8):  # small-loop(eval_set=(x[:32], target[:32]), column-major)
+            for r in range(32):  # small-loop(the 32 eval rows)
+                inp.eval_x.append(inp.x[j * 256 + r])
+        for r in range(32):  # small-loop(the 32 eval targets)
+            inp.eval_y.append(inp.y[r])
+        var m = fit[I](o, inp)
+        require(all_finite_f32(predict(m.text, inp.x, 256)), "weighted feature_fraction fit: nonfinite predict")
+        require(len(m.test) > 0, "weighted feature_fraction fit: no test loss curve")
+        return
+    var policies: List[String] = ["SymmetricTree", "Depthwise", "Lossguide"]
+    var policy = policies[unit // 2]
+    var loss = String("RMSE") if unit % 2 == 0 else String("Logloss")
+    var key = policy + "/" + loss
+    var inp = _ff_inputs(loss == "Logloss")
+    var default = fit[I](_ff_opts(policy, loss), inp)
+    var fractions: List[Float64] = [0.5, bitcast[DType.float64](UInt64(1))]
+    for fraction in fractions:  # small-loop(the two fractions of the original)
+        var o = _ff_opts(policy, loss)
+        o.feature_fraction = fraction
+        var what = key + " feature_fraction " + String(fraction)
+        var first = _twice[I](o, inp, what)
+        require(first.text != default.text, what + ": feature_fraction had no model effect")
+        require(all_finite_f32(predict(first.text, inp.x, 256)), what + ": nonfinite predict")
+
+
+# ---- checks/gbdt_querywise_pointwise_check.py (lane py2mojo-C, 2026-11-22) ----
+# The grouped losses under use_pointwise_searcher, identical mode. Kept in
+# Python: the npz/vendor records and the cross-vendor comparison (the
+# release verification), and the NDCG it only records.
+comptime QW_DIR = "../gbdt_qw/"
+comptime QW_N = 344
+comptime QW_D = 7
+comptime QW_PAIRS = 2866
+comptime QW_UNITS = 4
+
+
+def _qw_inputs() raises -> GbdtInputs:
+    var inp = GbdtInputs(load_f32(QW_DIR + "qw-x.f32", QW_N * QW_D), QW_N, QW_D, load_f32(QW_DIR + "qw-y.f32", QW_N))
+    inp.group_sizes = load_u32(QW_DIR + "qw-sizes.u32", 40)
+    return inp^
+
+
+def _qw_opts(loss: String) -> GbdtOpts:
+    """`fit(loss, tag)`'s parameters: 5 trees, depth 3, rate 0.1, seed 19,
+    the pointwise searcher, Plain boosting, no bootstrap, no score noise."""
+    var o = GbdtOpts(loss, 5, 3)
+    o.learning_rate = 0.1
+    o.random_state = 19
+    o.pointwise = True
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    return o^
+
+
+struct _QwFit(Movable):
+    var pred: List[Float32]
+    var curve: List[Float64]
+
+    def __init__(out self, var pred: List[Float32], var curve: List[Float64]):
+        self.pred = pred^
+        self.curve = curve^
+
+
+def _qw_fit[I: GbdtImage](o: GbdtOpts, inp: GbdtInputs, tag: String) raises -> _QwFit:
+    """One `fit`: finite predictions and loss curve, not constant."""
+    var m = fit[I](o, inp)
+    var pred = predict(m.text, inp.x, inp.n)
+    var what = o.loss + "-" + tag
+    require(all_finite_f32(pred) and all_finite_f64(m.learn), what + ": nonfinite output")
+    var lo = pred[0]
+    var hi = pred[0]
+    for v in pred:  # small-loop(np.ptp over one prediction block)
+        lo = min(lo, v)
+        hi = max(hi, v)
+    require(hi != lo, what + ": constant predictions")
+    return _QwFit(pred^, m.learn.copy())
+
+
+def querywise[I: GbdtImage](unit: Int) raises:
+    """Units 0-2: QueryRMSE, PairLogit, YetiRank: the repeat, the improving
+    curve (not YetiRank), Bayesian temperature 0 is the plain model, 0.7 and
+    score noise and other group boundaries are not, NewtonCosine fits.
+    Unit 3: PairLogit explicit pairs, unit and weighted, differ; the Simple
+    leaf method is refused by name."""
+    var inp = _qw_inputs()
+    if unit == 3:
+        var o = _qw_opts("PairLogit")
+        inp.pairs = load_u32(QW_DIR + "qw-pairs.u32", 2 * QW_PAIRS)
+        var unit_pred = _qw_fit[I](o, inp, "explicit-unit").pred.copy()
+        inp.pair_weights = load_f32(QW_DIR + "qw-pair-weights.f32", QW_PAIRS)
+        var weighted = _qw_fit[I](o, inp, "explicit-weighted").pred.copy()
+        require(not same_f32(unit_pred, weighted), "explicit pair weights ignored")
+        inp.pairs = List[UInt32]()
+        inp.pair_weights = List[Float32]()
+        var simple = _qw_opts("PairLogit")
+        simple.leaf_method = "Simple"
+        var refused = False
+        try:
+            _ = fit[I](simple, inp)
+        except error:
+            require_fails_with(String(error), "requires Newton or Gradient", "querywise pointwise Simple")
+            refused = True
+        require(refused, "querywise pointwise Simple was silently accepted")
+        return
+    var loss = _rank_loss(unit)
+    var o = _qw_opts(loss)
+    var base = _qw_fit[I](o, inp, "plain")
+    var again = _qw_fit[I](o, inp, "repeat")
+    require(same_f32(base.pred, again.pred), loss + ": repeat predictions")
+    require(same_f64(base.curve, again.curve), loss + ": repeat curve")
+    if loss != "YetiRank":
+        require(base.curve[len(base.curve) - 1] < base.curve[0], loss + ": loss did not improve")
+    var zero = _qw_opts(loss)
+    zero.bootstrap = "Bayesian"
+    zero.bagging_temperature = 0.0
+    require(same_f32(_qw_fit[I](zero, inp, "bayesian-zero").pred, base.pred), loss + ": zero bootstrap changed model")
+    var sampled = _qw_opts(loss)
+    sampled.bootstrap = "Bayesian"
+    sampled.bagging_temperature = 0.7
+    require(not same_f32(_qw_fit[I](sampled, inp, "bayesian").pred, base.pred), loss + ": bootstrap ignored")
+    var noisy = _qw_opts(loss)
+    noisy.random_strength = 1.0
+    require(not same_f32(_qw_fit[I](noisy, inp, "score-noise").pred, base.pred), loss + ": pointwise score noise ignored")
+    var newton = _qw_opts(loss)
+    newton.score_function = "NewtonCosine"
+    _ = _qw_fit[I](newton, inp, "newton-score")
+    inp.group_sizes = load_u32(QW_DIR + "qw-alt-sizes.u32", 69)
+    require(not same_f32(_qw_fit[I](o, inp, "different-groups").pred, base.pred), loss + ": grouping ignored")
+
+
 def common_unit[I: GbdtImage](unit: Int) raises:
-    if unit == 0:
+    if unit >= 26 + FF_UNITS:
+        querywise[I](unit - 26 - FF_UNITS)
+    elif unit >= 26:
+        feature_fraction[I](unit - 26)
+    elif unit == 0:
         multiclass_stochastic[I]("MultiClass")
     elif unit == 1:
         multiclass_stochastic[I]("MultiClassOneVsAll")
