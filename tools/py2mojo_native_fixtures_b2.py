@@ -14,6 +14,7 @@ hands the programs).
     checks/native_tests/fixtures/prep_da/   prep_discriminant.mojo  (test_x_prep_discriminant.py)
     checks/native_tests/fixtures/prep_lab/  prep_labels.mojo        (test_x_prep_labels.py, test_x_prep_parity.py's
                                             test_multilabel_binarizer)
+    checks/native_tests/fixtures/prep_sel/  prep_feature_selection.mojo  (test_x_prep_selection.py)
     checks/native_tests/fixtures/prep_kb/   prep_kbins.mojo         (test_x_prep_kbins.py, test_x_prep_parity.py's
                                             test_kbins_quantile_methods and test_kbins_sample_weight)
 
@@ -354,7 +355,71 @@ def labels():
     return out
 
 
-SETS = (nb_plain, nb_weighted, da_lda, da_qda, da_priors, da_solvers, kbins, kbins_parity, labels)
+# ---------------------------------------------------------------- feature selection (test_x_prep_selection.py)
+def selection():
+    import sklearn.feature_selection as skfs
+    out = []
+
+    def put(name, array, dtype=np.float64):
+        out.append(_put("prep_sel", name, array, dtype))
+
+    # test_variance_threshold
+    rng = np.random.default_rng(0)
+    X = (rng.standard_normal((300, 6)) * np.linspace(0.3, 2.0, 6)).astype(np.float32)
+    X[:, 2] = np.float32(4.0)
+    put("vt-x.f32", X, np.float32)
+    for k, th in enumerate((0.0, 0.5)):
+        r = skfs.VarianceThreshold(th).fit(X.astype(np.float64))
+        put(f"vt{k}-variances.f64", r.variances_)
+        put(f"vt{k}-support.i32", r.get_support(), np.int32)
+        put(f"vt{k}-transform.f32", r.transform(X), np.float32)
+    # test_scores_and_kbest
+    rng = np.random.default_rng(3)
+    n, d = 400, 7
+    y = rng.integers(0, 3, n)
+    X = (rng.standard_normal((n, d)) + y[:, None] * np.linspace(0, 0.6, d)).astype(np.float32)
+    yr = (X[:, 3] * 0.4 + rng.standard_normal(n)).astype(np.float32)
+    put("sk-x.f32", X, np.float32)
+    put("sk-y.i32", y, np.int32)
+    put("sk-yr.f32", yr, np.float32)
+    for tag, f, Xa, ya in (("fc", skfs.f_classif, X, y), ("chi", skfs.chi2, np.abs(X), y),
+                           ("fr", skfs.f_regression, X, yr)):
+        rs, rp = f(Xa.astype(np.float64), ya)
+        put(f"sk-{tag}-s.f64", rs)
+        put(f"sk-{tag}-p.f64", rp)
+    put("sk-kbest.i32", skfs.SelectKBest(k=3).fit(X, y).get_support(), np.int32)
+    # test_score_edges_and_rfe_getter, the score half
+    rng = np.random.default_rng(11)
+    n = 300
+    y = rng.integers(0, 3, n)
+    X = rng.standard_normal((n, 5)).astype(np.float32)
+    X[:, 1] = 2.5
+    X[:, 2] = y.astype(np.float32)
+    Xc = np.abs(X)
+    Xc[:, 4] = 0
+    yr = (X[:, 0] * 0.5 + rng.standard_normal(n)).astype(np.float32)
+    Xr = X.copy()
+    Xr[:, 3] = yr * 2
+    put("ed-x.f32", X, np.float32)
+    put("ed-y.i32", y, np.int32)
+    put("ed-yr.f32", yr, np.float32)
+    put("ed-xr.f32", Xr, np.float32)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for tag, (rs, rp) in (("fc", skfs.f_classif(X.astype(np.float64), y)),
+                              ("chi", skfs.chi2(Xc.astype(np.float64), y))):
+            put(f"ed-{tag}-s.f64", rs)
+            put(f"ed-{tag}-p.f64", rp)
+        for k, ff in enumerate((True, False)):
+            rs, rp = skfs.f_regression(Xr.astype(np.float64), yr, force_finite=ff)
+            put(f"ed-fr{k}-s.f64", rs)
+            put(f"ed-fr{k}-p.f64", rp)
+            put(f"ed-rr{k}.f64", skfs.r_regression(X.astype(np.float64), yr, force_finite=ff))
+        put("ed-kbest.i32", skfs.SelectKBest(k=2).fit(X.astype(np.float64), y).get_support(), np.int32)
+    return out
+
+
+SETS = (nb_plain, nb_weighted, da_lda, da_qda, da_priors, da_solvers, kbins, kbins_parity, labels, selection)
 
 
 def _run(index):
