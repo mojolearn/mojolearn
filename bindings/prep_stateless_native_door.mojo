@@ -50,6 +50,7 @@ from bindings.prep_entry_cache_unpack import prep_entry_word
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_caps
 from bindings.x_prep_native_owner_run import xprep_r3, XprepCaps
 from bindings.prep_stateless_route_unpack import stateless_route_context, stateless_entries, stateless_caps
+from bindings.prep_owner_route_unpack import prep_context_vendor_used
 from core.entry_table import entry_ref_unresolved
 from bindings.py_typed_call import py_call_typed
 from bindings.py_cpython_table import cpython_table
@@ -774,6 +775,11 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
         var public = kind != "normalizer" and (operation == "fit" or operation == "fit_transform"
                                                or operation == "transform" or operation == "inverse_transform")
         if not public:
+            if operation == "vendor_used":
+                # `vendor_used()`: the image of this estimator's device
+                # route, read back (metadata, no input, no lifecycle step;
+                # tested only off the public data path).
+                return prep_context_vendor_used(model, context, b.str).steal_data()
             return _stateless_dispatch(model, kind, operation, args, context).steal_data()
         var depth = lifecycle_begin(model, operation, args[0], True, False, True, context)
         var result = PythonObject(None)

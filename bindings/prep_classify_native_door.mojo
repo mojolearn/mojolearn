@@ -54,6 +54,7 @@ from bindings.prep_classify_prog_run import (
 )
 from bindings.prep_classify_common_door import (
     XIn, CsrIn, PartialCodes, cls_builtins, cls_name, cls_repr, cls_str, cls_kind, cls_mode, cls_requested_mode, cls_entry,
+    cls_vendor_used,
     idn_int, classical_shared, blocked, check_fitted, check_width, cls_x2d, is_sparse, csr_input, csr_dense_x,
     float_list, given_priors, is_real, cls_float, col_stats, class_stats, cls_da_mode,
     da_shrinkage, da_check_estimator_shrinkage, da_solver_is,
@@ -1503,6 +1504,11 @@ def prep_classify_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         if not fixed and op != PREP_OPN_INITIALIZE and op != PREP_OPN_SET_PARAMS:
             context = scaler_route_context(model, context)
         classical_connect_numpy(context)
+        if not fixed and op < 0 and operation == "vendor_used":
+            # `vendor_used()`: the image of this estimator's device route,
+            # read back (a name outside the operation table: one integer
+            # test on a data operation; no input, no lifecycle step).
+            return cls_vendor_used(model, context).steal_data()
         var public_kind = String("") if fixed else _public_kind(model, context)
         if public_kind != "":
             return _classifier_public(model, public_kind, op, operation, args, context).steal_data()

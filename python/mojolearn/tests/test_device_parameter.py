@@ -14,6 +14,10 @@ wrapper, and the classes whose own constructor names `device` and declare `_mojo
   * clone (`type(est)(**est.get_params())`) and pickle carry it;
   * `vendor_used()` of a `device="cpu"` estimator answers `cpu`.
 
+A network layer of the table (the `_expansion_cnn` layers: PyTorch modules, not scikit-learn estimators) has no
+`get_params`, `set_params` or `vendor_used`: its device is the `device` attribute its constructor wrote, and the
+estimator-only checks (set_params, clone through get_params, vendor_used) are skipped for it by name.
+
 No model is fitted here (the per-family device tests fit: test_linear_device_boundary.py,
 test_logistic_device_boundary.py, test_family_device_boundary.py). A class whose constructor needs arguments this
 file cannot invent is skipped by name.
@@ -56,6 +60,22 @@ def _classes():
 
 
 CLASSES = _classes()
+
+
+def _is_estimator(cls):
+    return hasattr(cls, "get_params")
+
+
+def _params(est):
+    # an estimator's get_params; a layer's device is the attribute its constructor wrote
+    if _is_estimator(type(est)):
+        return est.get_params(deep=False)
+    return {"device": est.device}
+
+
+def _require_estimator(cls, what):
+    if not _is_estimator(cls):
+        pytest.skip(f"{cls.__name__} is a layer, not an estimator: it has no {what}")
 
 
 def _build(cls, required, **keywords):
@@ -117,7 +137,7 @@ def test_the_report_lists_every_class_of_the_table():
 @pytest.mark.parametrize("cls, answer, required", CLASSES)
 def test_default_is_none_and_get_params_returns_it(cls, answer, required):
     est = _build(cls, required)
-    assert est.get_params(deep=False)["device"] is None
+    assert _params(est)["device"] is None
     assert est.device is None
 
 
@@ -133,7 +153,7 @@ def test_unknown_device_is_refused_in_words(cls, answer, required, bad):
 def test_explicit_gpu(cls, answer, required):
     _build(cls, required)
     if GPU_INSTALL:
-        assert cls(device="gpu").get_params(deep=False)["device"] == "gpu"
+        assert _params(cls(device="gpu"))["device"] == "gpu"
     else:
         with pytest.raises(ValueError, match="device='cpu'"):
             cls(device="gpu")
@@ -144,8 +164,9 @@ def test_explicit_cpu_follows_the_generated_table(cls, answer, required):
     _build(cls, required)
     if not GPU_INSTALL or answer is True:
         est = cls(device="cpu")
-        assert est.get_params(deep=False)["device"] == "cpu"
-        assert est.vendor_used() == "cpu"
+        assert _params(est)["device"] == "cpu"
+        if _is_estimator(cls):
+            assert est.vendor_used() == "cpu"
     else:
         with pytest.raises(ValueError) as refused:
             cls(device="cpu")
@@ -157,6 +178,7 @@ def test_explicit_cpu_follows_the_generated_table(cls, answer, required):
 @pytest.mark.parametrize("cls, answer, required", CLASSES)
 def test_set_params_checks_the_device_before_the_estimator_changes(cls, answer, required):
     est = _build(cls, required)
+    _require_estimator(cls, "set_params")
     before = dict(est.get_params(deep=False))
     with pytest.raises((ValueError, TypeError), match="device"):
         est.set_params(device="tpu")
@@ -204,6 +226,7 @@ def test_every_public_class_that_takes_device_is_exercised():
 @pytest.mark.parametrize("cls, answer, required", CLASSES)
 def test_clone_and_pickle_carry_the_device(cls, answer, required):
     _build(cls, required)
+    _require_estimator(cls, "get_params to clone from")
     values = [None, "gpu" if GPU_INSTALL else "cpu"]
     if GPU_INSTALL and answer is True:
         values.append("cpu")
@@ -224,4 +247,4 @@ def test_a_constructor_run_again_keeps_the_rule(cls, answer, required):
     with pytest.raises((ValueError, TypeError), match="device"):
         est.__init__(device="tpu")
     est.__init__()
-    assert est.get_params(deep=False)["device"] is None
+    assert _params(est)["device"] is None

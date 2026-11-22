@@ -41,7 +41,7 @@ from bindings.native_loaded_module_door import native_loaded_module
 from bindings.py_balanced import py_call, py_type, py_get, py_item
 from core.mode_answer import MODE_FAMILY_LINEAR, answer_mode_word
 from core.entry_table import EntryRef, entry_ref_word, entry_ref_unresolved
-from core.device_route import device_mode_code, device_vendor_code, device_route_plan, device_route_admit
+from core.device_route import device_mode_code, device_vendor_code, device_vendor_word, device_route_plan, device_route_admit
 from core.linear_entry_table import LINEAR_TABLE_X_LINEAR
 from core.linear_entry_table_ext import xl_ops_entry, XL_OPERATION_COUNT
 from core.native_descriptor_abi import NativeDescriptorCall
@@ -249,6 +249,18 @@ def xl_route(model: PythonObject, fields: PythonObject, context: PythonObject, c
     var entry = native[].route.entry
     var scope = native[].scope
     return XLinearOps(entry.call, entry.word != 0, False, owner, scope)
+
+
+def xl_route_vendor_used(model: PythonObject, fields: PythonObject, context: PythonObject, cd: Bool) raises -> PythonObject:
+    """`vendor_used()`: the vendor word of the image the estimator's route
+    holds (`cpu` for a `device="cpu"` estimator beside a GPU set), resolved
+    as its next data operation would resolve it; a route that could not be
+    resolved raises its own words. Metadata, in no loop."""
+    var ops = xl_route(model, fields, context, cd)
+    xl_ops_require(ops)
+    var vendor = ops.owner.downcast_value_ptr[DeviceRouteOwner]()[].route.vendor
+    _ = ops^  # the owner pins the route record read above
+    return PythonObject(device_vendor_word(vendor))
 
 
 def xl_route_host(context: PythonObject) raises -> XLinearOps:

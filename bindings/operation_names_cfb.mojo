@@ -34,6 +34,10 @@ comptime CFB_OPN_FAMILY_CFB_SE_VALIDATE = 15
 comptime CFB_OPN_FAMILY_CFB_SE_KNN_AFFINITY = 16
 comptime CFB_OPN_FAMILY_CFB_SPECTRAL_EMBEDDING = 17
 comptime CFB_OPN_FAMILY_CFB_COO_TRIPLES = 18
+# `vendor_used()` of AgglomerativeClustering and of SpectralClustering /
+# SpectralEmbedding: metadata, no input, served before any lifecycle step.
+comptime CFB_OPN_FAMILY_CFB_AGGLO_VENDOR_USED = 19
+comptime CFB_OPN_FAMILY_CFB_SPECTRAL_VENDOR_USED = 20
 
 def operation_names_cfb(mut names: List[String], mut leaves: List[Int]):
     """Straight-line appends, once per process."""
@@ -47,6 +51,8 @@ def operation_names_cfb(mut names: List[String], mut leaves: List[Int]):
     leaves.append(CFB_OPN_FAMILY_CFB_AGGLO_PREDICT)
     names.append("family_cfb_agglo_setstate")
     leaves.append(CFB_OPN_FAMILY_CFB_AGGLO_SETSTATE)
+    names.append("family_cfb_agglo_vendor_used")
+    leaves.append(CFB_OPN_FAMILY_CFB_AGGLO_VENDOR_USED)
     names.append("family_cfb_coo_triples")
     leaves.append(CFB_OPN_FAMILY_CFB_COO_TRIPLES)
     names.append("family_cfb_dbscan_fit")
@@ -73,3 +79,5 @@ def operation_names_cfb(mut names: List[String], mut leaves: List[Int]):
     leaves.append(CFB_OPN_FAMILY_CFB_SE_VALIDATE)
     names.append("family_cfb_spectral_embedding")
     leaves.append(CFB_OPN_FAMILY_CFB_SPECTRAL_EMBEDDING)
+    names.append("family_cfb_spectral_vendor_used")
+    leaves.append(CFB_OPN_FAMILY_CFB_SPECTRAL_VENDOR_USED)

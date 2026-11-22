@@ -331,6 +331,19 @@ def _agglo_predict(fields: PythonObject, settings: AggloSettings, binding: Pytho
     return result
 
 
+def cfb_agglo_vendor_used(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`vendor_used()` of AgglomerativeClustering: the vendor word of the
+    `_mojolearn_estimators` image every operation of the estimator takes
+    from its binding route (`cpu` for a `device="cpu"` estimator beside a
+    GPU set; a saved host class keeps its connected CPU binding), selected
+    as `cfb_agglo_operation` selects it. Metadata, no input, in no loop."""
+    var mode = py_get(_fields(model), "numeric_mode")
+    var estimators = host_estimator_binding(model, "_mojolearn_estimators", mode, context)
+    if estimators is None:
+        estimators = estimator_binding_routed(model, mode, "_mojolearn_estimators", context)
+    return py_call(estimators.estimators_vendor)
+
+
 def cfb_agglo_operation(model: PythonObject, operation: Int, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     # `operation` is the leaf code of bindings/operation_names_cfb.mojo

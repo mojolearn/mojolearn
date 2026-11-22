@@ -253,6 +253,17 @@ class ElasticNet(ParamsMixin):
         self.random_state = random_state
         self.numeric_mode = numeric_mode
 
+    def vendor_used(self):
+        """The backend this estimator runs on.
+
+        Returns
+        -------
+        str
+            ``'metal'``, ``'cuda'``, ``'hip'`` or ``'cpu'``, read from the
+            compiled binary the estimator uses.
+        """
+        return _CD_CALL(self, "cd_vendor_used", (), _CD_CONTEXT)
+
     # sample_weight (lane sk-kernels): checked natively with scikit-learn's
     # wording and handed to the weighted coordinate descent
     # (solver/impl/cd_weighted.mojo: weights rescaled to sum to n_samples,

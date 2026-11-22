@@ -280,6 +280,22 @@ def _model_profile_named(mut mods: NativeModules, requested: PythonObject, conte
         raise Error("NotImplementedError: numeric_profile=" + String(selected) + " is unavailable for inference")
 
 
+def _model_device_code(mut mods: NativeModules, device: PythonObject) raises -> Int:
+    """The device code of a CausalLM `device` value (None and 'auto': this
+    installation's device), refused in words otherwise. Read by the
+    constructor before anything else is admitted, and by `_model_route`."""
+    var code = DEVICE_INSTALL
+    if device is not None:
+        if py_type(device) is not mods.module("builtins").str:
+            raise Error("TypeError: CausalLM device requires an ordinary route name")
+        var word = String(device)
+        if word != "auto":
+            code = device_code(word)
+            if code < 0:
+                raise Error("CausalLM: device must be 'auto', 'cpu', 'gpu' or None")
+    return code
+
+
 def _model_route(mut mods: NativeModules, device: PythonObject, context: PythonObject) raises -> PythonObject:
     # The one place a CausalLM's `device` becomes its route word, at
     # construction and load (no forward, step or generate reads the device:
@@ -290,15 +306,7 @@ def _model_route(mut mods: NativeModules, device: PythonObject, context: PythonO
     # later as a missing binding connection); 'cpu' always runs (the neural
     # host image is connected beside every GPU set). 'auto' is CausalLM's
     # older spelling of None and stays accepted.
-    var code = DEVICE_INSTALL
-    if device is not None:
-        if py_type(device) is not mods.module("builtins").str:
-            raise Error("TypeError: CausalLM device requires an ordinary route name")
-        var word = String(device)
-        if word != "auto":
-            code = device_code(word)
-            if code < 0:
-                raise Error("CausalLM: device must be 'auto', 'cpu', 'gpu' or None")
+    var code = _model_device_code(mods, device)
     var nk = causal_keys()
     var selected = py_item(context, nk[].k_selected_vendor)
     var process_vendor = 1
@@ -889,6 +897,12 @@ def _causal_model_prepare_snapshot(mut mods: NativeModules, model: PythonObject,
 
 
 def causal_model_init_binding(mut mods: NativeModules, model: PythonObject, input_plan: PythonObject, input_weights: PythonObject, input_options: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The device (options[2]) is checked first, before the plan, the weights
+    # or any field: a bad device is refused as the device whatever the other
+    # arguments are. `_model_route` reads the admitted snapshot's copy again.
+    var bi = mods.module("builtins")
+    if (py_type(input_options) is bi.tuple or py_type(input_options) is bi.list) and len(input_options) == 4:
+        _ = _model_device_code(mods, input_options[2])
     causal_public_connect(context)
     var plan = model_plan_snapshot(mods, input_plan)
     return _causal_model_init(mods, model, input_plan, plan, input_weights, input_options, context)
