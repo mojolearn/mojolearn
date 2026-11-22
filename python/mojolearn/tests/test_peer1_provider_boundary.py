@@ -249,8 +249,8 @@ def test_precomputed_kernel_ridge_returns_multioutput_result():
     model = KernelRidge(alpha=1.0, kernel="precomputed", numeric_mode="identical")
     assert model.fit(gram, targets) is model
     result = np.asarray(model.predict(gram))
-    # Public regression predictions preserve the existing float64 interface.
-    assert result.dtype == np.float64
+    # predict returns the kernel's float32 values to every caller (lane predict-dtype, 2026-11-22).
+    assert result.dtype == np.float32
     np.testing.assert_allclose(result, [[1., 2.], [2., 4.], [3., 6.]], rtol=2e-6, atol=2e-6)
 
 

@@ -39,7 +39,7 @@ from bindings.py_attr import py_attr
 from bindings.classical_arrays_door import classical_address
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
 from bindings.classifier_public_lifecycle_door import classifier_after_fit
-from bindings.scaler_lifecycle_native_door import _public_result, _entries, scaler_standard_rows, _fitted as scaler_fitted
+from bindings.scaler_lifecycle_native_door import _predict_result, _entries, scaler_standard_rows, _fitted as scaler_fitted
 from bindings.scaler_native_door import scaler_door_calls, scaler_standard_publish, _bool as _scaler_bool
 from bindings.minmax_native_door import minmax_rows, minmax_fit_publish, _configuration as minmax_configuration
 from bindings.minmax_metadata_unpack import _flag as _minmax_flag
@@ -1719,7 +1719,8 @@ def parallel_shard_call(operation: Int, name: PythonObject, args: PythonObject) 
     if operation == PARALLEL_SHARD_OPN_PREDICT_GAUSSIAN_PROCESS_CLASSIFIER:
         var context = _ctx()
         classical_connect_numpy(context)
-        return _public_result(_predict_gpc(args), context)
+        # predict: one result for every caller (lane predict-dtype, 2026-11-22).
+        return _predict_result(_predict_gpc(args), context)
     if operation == PARALLEL_SHARD_OPN_FIT_FOREST:
         return _fit_forest(args)
     if operation == PARALLEL_SHARD_OPN_TRACE_TAKE:

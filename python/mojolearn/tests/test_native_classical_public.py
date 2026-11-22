@@ -101,12 +101,13 @@ def test_fit_predict_score_and_checkpoint_are_native(cls, layout, monkeypatch, t
     assert type(clean(getattr, model, "intercept_")) is float
     assert clean(getattr, model, "n_features_in_") == 3
     prediction = clean(model.predict, x)
-    assert type(prediction) is np.ndarray and prediction.dtype == np.dtype("f8")
-    # mojolearn's own callers keep the float32 words the kernels produced
+    # One result for every caller (lane predict-dtype, 2026-11-22): the
+    # kernel's float32 words as a NumPy array, inside the package too.
+    assert type(prediction) is np.ndarray and prediction.dtype == np.dtype("f4")
     internal = model.predict.__func__  # the one-call shell
     narrow = eval("predict(model, x)", {"__name__": "mojolearn._probe", "predict": internal, "model": model, "x": x})
-    assert narrow.dtype == np.float32
-    np.testing.assert_array_equal(prediction, narrow.astype("f8"))
+    assert type(narrow) is np.ndarray and narrow.dtype == np.float32
+    np.testing.assert_array_equal(prediction.view("u4"), narrow.view("u4"))
     score = clean(model.score, x, y)
     assert type(score) is float and score > .99
     first = tmp_path / "public-native.npz"
