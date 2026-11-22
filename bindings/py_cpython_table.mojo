@@ -291,6 +291,11 @@ comptime _PyLong_AsLongLongAndOverflow = ExternalFunction[
 # int PyCapsule_IsValid(PyObject *capsule, const char *name)  (name as an address word)
 comptime _PyCapsule_IsValid = ExternalFunction[
     "PyCapsule_IsValid", def(PyObjectPtr, Int) thin abi("C") -> c_int]
+# Added by lane arrow-strings (2026-11-21) for the Arrow C data interface
+# capsules of an Arrow-backed pandas column (bindings/arrow_c_data_unpack.mojo).
+# void *PyCapsule_GetPointer(PyObject *capsule, const char *name)  (address words; 0 on error)
+comptime _PyCapsule_GetPointer = ExternalFunction[
+    "PyCapsule_GetPointer", def(PyObjectPtr, Int) thin abi("C") -> Int]
 # Added by lane p3-msel-parallel-and-process-pool (2026-11-09) for the native
 # unit threads (bindings/native_unit_threads.mojo): a worker thread the
 # interpreter did not create takes the GIL once on entry and gives it back on
@@ -394,6 +399,7 @@ struct CPythonTable(Defaultable, Movable):
     var PyByteArray_AsString: _PyByteArray_AsString.type
     var PyLong_AsLongLongAndOverflow: _PyLong_AsLongLongAndOverflow.type
     var PyCapsule_IsValid: _PyCapsule_IsValid.type
+    var PyCapsule_GetPointer: _PyCapsule_GetPointer.type
     var PyGILState_Ensure: _PyGILState_Ensure.type
     var PyGILState_Release: _PyGILState_Release.type
     var PyUnicode_GetLength: _PyUnicode_GetLength.type
@@ -477,6 +483,7 @@ struct CPythonTable(Defaultable, Movable):
         self.PyByteArray_AsString = _PyByteArray_AsString.load(lib)
         self.PyLong_AsLongLongAndOverflow = _PyLong_AsLongLongAndOverflow.load(lib)
         self.PyCapsule_IsValid = _PyCapsule_IsValid.load(lib)
+        self.PyCapsule_GetPointer = _PyCapsule_GetPointer.load(lib)
         self.PyGILState_Ensure = _PyGILState_Ensure.load(lib)
         self.PyGILState_Release = _PyGILState_Release.load(lib)
         self.PyUnicode_GetLength = _PyUnicode_GetLength.load(lib)

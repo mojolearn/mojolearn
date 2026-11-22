@@ -28,7 +28,13 @@ map), at the boundary, before RUN:
     Python-backed string columns through the same cell reader, a
     Categorical through its codes array and its k categories (keyed once,
     then every code mapped in parallel; code -1 is the missing category).
-    An Arrow-backed string column is refused by name;
+    An Arrow-backed column (pandas 3's default text storage with pyarrow,
+    `string[pyarrow]`, an `ArrowDtype` string or dictionary-of-string
+    column, and Arrow-backed categories of a Categorical) is read through
+    the Arrow C data interface (`bindings/arrow_c_data_unpack.mojo`: one
+    `__arrow_c_array__` per chunk at UNPACK) and its validity, offsets and
+    UTF-8 buffers keyed natively, rows across the workers with the GIL
+    released (a null is the missing category);
   * an exact NumPy unicode (U) or bytes (S) array is read natively from
     its fixed-width cells, rows across the workers with the GIL released
     (`category_fixed_text`): the categorical columns keyed as text, the
@@ -65,7 +71,6 @@ from bindings.classical_pandas_door import (
 )
 from bindings.classical_keys_unpack import classical_keys
 from bindings.native_loaded_module_door import native_loaded_module
-from bindings.py_balanced import py_item
 from core.pandas_input_plan import pandas_block_count
 from core.sequential_input_plan import sequence_promote
 from core.cast_in import cast_in_kind
@@ -73,6 +78,7 @@ from core.classical_pandas_impl import pd_scatter_numeric
 from bindings.trees_public_inputs_door import trees_builtins, trees_address
 from bindings.trees_keys_unpack import trees_keys
 from bindings.admitted_input_unpack import AdmittedX, admit_f32, admitted_vector, admitted_words
+from bindings.arrow_c_data_unpack import ArrowTextPiece, arrow_backed_pandas, arrow_text_pieces, pandas_class_name
 from gbdt.data.category_map import (
     CategoryMaps,
     CategoryKeyPtr,
@@ -89,6 +95,8 @@ from gbdt.data.category_map import (
     category_keys_from_codes,
     category_values_from_codes,
     category_fixed_text,
+    category_keys_from_arrow_text,
+    category_keys_from_arrow_indices,
     CATEGORY_TEXT_INVALID,
     CATEGORY_TEXT_NOT_A_NUMBER,
 )
@@ -584,6 +592,11 @@ def _fixed_text_array(X: PythonObject, wide: Bool, name: String, columns: List[I
 comptime _PD_NUMERIC = 1
 comptime _PD_OBJECT = 2
 comptime _PD_CATEGORICAL = 3
+#: an Arrow-backed text column (its chunks in `_PdPart.arrow`); as a
+#: Categorical's `cat_form`, Arrow-backed categories (`_PdPart.cat_arrow`)
+comptime _PD_ARROW = 4
+#: the `_Nd.kind` of storage read through Arrow (not a NumPy kind)
+comptime _ARROW_KIND = "A"
 
 
 @fieldwise_init
@@ -626,22 +639,53 @@ struct _PdPart(Copyable, Movable):
     var positions: List[Int]
     var cat_form: Int
     var cats: _Nd
+    var arrow: List[ArrowTextPiece]
+    var cat_arrow: List[ArrowTextPiece]
 
 
-def _class_name(cls: PythonObject) raises -> String:
-    """`module.qualname` of a class for a refusal, read by `type`'s own
-    descriptors (no metaclass hook)."""
-    var b = native_loaded_module("builtins")
-    var module = py_call(py_item(b.type.__dict__, PythonObject("__module__")).__get__, cls)
-    var qual = py_call(py_item(b.type.__dict__, PythonObject("__qualname__")).__get__, cls)
-    return String(py=module) + "." + String(py=qual)
+def _is_category_column(columns: List[Int], at: Int) -> Bool:
+    """Whether column `at` is one of the `cat_features` columns."""
+    for c in range(len(columns)):  # small-loop(columns: the categorical column indices): one compare each
+        if columns[c] == at:
+            return True
+    return False
+
+
+def _arrow_piece_keys(piece: ArrowTextPiece, dst: CategoryKeyPtr) raises:
+    """The keys of one Arrow chunk's rows to `dst[0 .. piece.rows)`: a
+    string / large_string chunk keyed row by row in parallel; a dictionary
+    chunk's values keyed once, then every index mapped in parallel. Plain
+    buffers only: the caller releases the GIL."""
+    if piece.index_size == 0:
+        category_keys_from_arrow_text(piece.validity, piece.offsets, piece.data, piece.wide, piece.offset,
+                                      piece.rows, dst)
+        return
+    var k = piece.dict_rows
+    var table = List[UInt64](length=max(k, 1), fill=UInt64(0))
+    var tp = CategoryKeyPtr(unsafe_from_address=Int(table.unsafe_ptr()))
+    category_keys_from_arrow_text(piece.dict_validity, piece.dict_offsets, piece.dict_data, piece.dict_wide,
+                                  piece.dict_offset, k, tp)
+    category_keys_from_arrow_indices(piece.validity, piece.offsets, piece.index_size, piece.index_signed,
+                                     piece.offset, piece.rows, tp, k, dst)
+    _ = table^
+
+
+def _arrow_column_keys(pieces: List[ArrowTextPiece], dst: CategoryKeyPtr) raises:
+    """The keys of an Arrow column's chunks, one after another from `dst`,
+    with the GIL released."""
+    var row = 0
+    for q in range(len(pieces)):  # driver-loop: over one column's Arrow chunks (each chunk's rows run on every worker)
+        var piece = pieces[q].copy()
+        with GILReleased(Python()):
+            _arrow_piece_keys(piece, dst + row)
+        row += piece.rows
 
 
 def _pd_text_storage(values: PythonObject, ndarray: PythonObject, what: String) raises -> _Nd:
     """The object words of pandas' Python-backed string array (`StringArray`,
     `StringArrayNumpySemantics`): its `NDArrayBacked._ndarray`, an object
-    array of str and pandas.NA. An Arrow-backed string array has no plain
-    buffer of cells and is refused by name; any other class too."""
+    array of str and pandas.NA. Any other class is refused by name (the
+    Arrow-backed ones are read by the caller before this)."""
     var cls = py_type(values)
     if cls is _pd_class("pandas.core.arrays.string_", "StringArray") or cls is _pd_class(
             "pandas.core.arrays.string_", "StringArrayNumpySemantics"):
@@ -650,16 +694,9 @@ def _pd_text_storage(values: PythonObject, ndarray: PythonObject, what: String) 
             raise Error("TypeError: mojolearn: " + what + " is a pandas string array whose storage is not "
                         + "one object column")
         return nd^
-    if cls is _pd_class("pandas.core.arrays.string_arrow", "ArrowStringArray") or cls is _pd_class(
-            "pandas.core.arrays.string_arrow", "ArrowStringArrayNumpySemantics") or cls is _pd_class(
-            "pandas.core.arrays.arrow.array", "ArrowExtensionArray"):
-        raise Error("TypeError: mojolearn: " + what + " is an Arrow-backed pandas array (" + _class_name(cls)
-                    + "); its cells are not a plain buffer this reader can view. Pass the column as "
-                    + "object or category dtype (for example `X.astype({column: object})`), or X as a "
-                    + "NumPy array")
-    raise Error("TypeError: mojolearn: " + what + " is stored as " + _class_name(cls)
-                + "; a pandas column is admitted as NumPy numbers, NumPy objects, a Python-backed "
-                + "string array or a Categorical")
+    raise Error("TypeError: mojolearn: " + what + " is stored as " + pandas_class_name(cls)
+                + "; a pandas column is admitted as NumPy numbers, NumPy objects, a pandas string "
+                + "array (Python or Arrow storage), an Arrow string column or a Categorical")
 
 
 def _pandas_frame(X: PythonObject, name: String, columns: List[Int], mut keys: List[UInt64],
@@ -727,6 +764,8 @@ def _pandas_frame(X: PythonObject, name: String, columns: List[Int], mut keys: L
         var cat_form = 0
         var cats = none.copy()
         var store: _Nd
+        var pieces = List[ArrowTextPiece]()
+        var cat_pieces = List[ArrowTextPiece]()
         if vcls is ndarray or vcls is integer_array or vcls is floating_array or vcls is boolean_array:
             var data = values
             if vcls is not ndarray:
@@ -765,11 +804,18 @@ def _pandas_frame(X: PythonObject, name: String, columns: List[Int], mut keys: L
                             + "native signed integers")
             if py_type(cat_data) is ndarray:
                 cats = _nd_meta(cat_data, ndarray, what + " categories")
+            elif arrow_backed_pandas(cat_data):
+                # pandas 3's str categories: an Arrow string Index
+                var cat_rows = 0
+                cat_pieces = arrow_text_pieces(cat_data, what + " categories", owned, cat_rows)
+                cats = _Nd(0, cat_rows, 1, 0, 0, 0, 0, String(_ARROW_KIND), True)
             else:
                 cats = _pd_text_storage(cat_data, ndarray, what + " categories")
             if cats.cols != 1:
                 raise Error("TypeError: mojolearn: " + what + " is a Categorical whose categories are not 1-D")
-            if cats.kind == "O":
+            if cats.kind == _ARROW_KIND:
+                cat_form = _PD_ARROW
+            elif cats.kind == "O":
                 cat_form = _PD_OBJECT
             elif cats.kind == "b" or cats.kind == "i" or cats.kind == "u" or cats.kind == "f":
                 cat_form = _PD_NUMERIC
@@ -781,6 +827,19 @@ def _pandas_frame(X: PythonObject, name: String, columns: List[Int], mut keys: L
             owned.append(dtype)
             owned.append(categories)
             owned.append(cat_data)
+        elif arrow_backed_pandas(values):
+            # Arrow storage: its chunks' buffers through the C data interface
+            form = _PD_ARROW
+            objects = True
+            # admitted at a categorical column only: refused before any call
+            if len(positions) != 1 or not _is_category_column(columns, positions[0]):
+                raise Error("TypeError: mojolearn: " + what + " is an Arrow-backed pandas column ("
+                            + pandas_class_name(vcls) + ") outside cat_features; an Arrow column is "
+                            + "admitted as text of a cat_features column")
+            owned.append(values)
+            var arrow_rows = 0
+            pieces = arrow_text_pieces(values, what, owned, arrow_rows)
+            store = _Nd(0, arrow_rows, 1, 0, 0, 0, 0, String(_ARROW_KIND), True)
         else:
             form = _PD_OBJECT
             objects = True
@@ -792,7 +851,7 @@ def _pandas_frame(X: PythonObject, name: String, columns: List[Int], mut keys: L
             raise Error("pandas block column positions differ from numeric storage")
         n_rows = store.rows
         n_features += store.cols
-        parts.append(_PdPart(form, store^, positions^, cat_form, cats^))
+        parts.append(_PdPart(form, store^, positions^, cat_form, cats^, pieces^, cat_pieces^))
     var seen = List[Bool](length=n_features, fill=False)
     for p in range(len(parts)):  # driver-loop: over the blocks' column placements
         for q in range(len(parts[p].positions)):  # driver-loop: over one block's columns
@@ -825,6 +884,10 @@ def _pandas_frame(X: PythonObject, name: String, columns: List[Int], mut keys: L
                         if slot_of[dest] >= 0:
                             # the same keys a numeric X's categorical column gets
                             category_keys_from_f32(column, n_rows, kp + slot_of[dest] * n_rows)
+            elif part.form == _PD_ARROW:
+                # admitted only at a categorical column (checked at the walk)
+                var dest = part.positions[0]
+                _arrow_column_keys(part.arrow, kp + slot_of[dest] * n_rows)
             elif part.form == _PD_OBJECT:
                 for col in range(s.cols):  # driver-loop: over one block's columns (cells read under the GIL)
                     var dest = part.positions[col]
@@ -841,7 +904,13 @@ def _pandas_frame(X: PythonObject, name: String, columns: List[Int], mut keys: L
                 var cat_values = List[Float32](length=max(k, 1), fill=Float32(0.0))
                 var ck = CategoryKeyPtr(unsafe_from_address=Int(cat_keys.unsafe_ptr()))
                 var cv = CategoryF32Ptr(unsafe_from_address=Int(cat_values.unsafe_ptr()))
-                if part.cat_form == _PD_OBJECT:
+                if part.cat_form == _PD_ARROW:
+                    if slot < 0:
+                        raise Error("TypeError: mojolearn: " + name + " column " + String(dest)
+                                    + " is a Categorical of Arrow text; only the cat_features columns may "
+                                    + "hold text")
+                    _arrow_column_keys(part.cat_arrow, ck)
+                elif part.cat_form == _PD_OBJECT:
                     # written as column 0 of a k-row block (`ck[r]` or `cv[r]`)
                     _object_column(t, w, c.address, c.row_stride, k, 0, 0 if slot >= 0 else -1,
                                    ck, cv, view_ptr, name + " column " + String(dest) + " categories")

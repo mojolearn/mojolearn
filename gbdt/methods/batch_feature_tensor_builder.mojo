@@ -26,9 +26,9 @@ Two predicates in `binarizations_manager.h` gate the whole block:
     UseAsBaseTensorForTreeCtr()  tensor.GetComplexity() < MaxTensorComplexity     (:70-72)
 
 and `MaxTensorComplexity` defaults to 4 (`cat_feature_options.cpp:231`).
-**`max_ctr_complexity` defaults to 1 here, so on a default fit the first
-predicate is false and nothing below runs.** A fit that asks for more
-grows its combinations through `gbdt/methods/tree_ctr_search.mojo` (the
+The public `max_ctr_complexity` defaults to 4 as well (resolved per fit by
+the fit door; 1 where this implementation grows no combinations). A fit
+above 1 grows its combinations through `gbdt/methods/tree_ctr_search.mojo` (the
 level-synchronized driver over `gbdt/ctrs/tree_ctr.mojo`'s plan), which is
 the route `train()` takes; this file's builder is not on it.
 

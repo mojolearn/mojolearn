@@ -292,3 +292,24 @@ def test_boost_from_average_bias_is_catboost_cpu_bits():
                              bootstrap_type="No", **extra).fit(X, y)
         got.append(np.float64(m.bias_).tobytes().hex())
     assert got == CATBOOST_CPU_BIAS_BITS
+
+
+def test_max_ctr_complexity_default_is_unset_and_explicit_values_are_checked():
+    # The public default is CatBoost's 4 (cat_feature_options.cpp:231), stored
+    # unset and resolved at fit: 4 on a categorical SymmetricTree fit with the
+    # greedy searcher and feature_fraction 1, 1 elsewhere. Unset is accepted
+    # in every setting; only an explicit value above 1 is refused where no
+    # combination can be grown.
+    assert GradientBoosting().get_params()['max_ctr_complexity'] is None
+    GradientBoosting(cat_features=[0], grow_policy='Depthwise')
+    GradientBoosting(cat_features=[0], use_pointwise_searcher=True)
+    GradientBoosting(cat_features=[0], max_ctr_complexity=4)
+    GradientBoosting(max_ctr_complexity=1)
+    with pytest.raises(ValueError, match='max_ctr_complexity'):
+        GradientBoosting(max_ctr_complexity=0)
+    with pytest.raises(ValueError, match='max_ctr_complexity'):
+        GradientBoosting(max_ctr_complexity=2)
+    with pytest.raises(ValueError, match='max_ctr_complexity'):
+        GradientBoosting(cat_features=[0], grow_policy='Depthwise', max_ctr_complexity=2)
+    with pytest.raises(ValueError, match='max_ctr_complexity'):
+        GradientBoosting(cat_features=[0], use_pointwise_searcher=True, max_ctr_complexity=4)

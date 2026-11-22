@@ -875,10 +875,13 @@ struct TCatFeatureParams(Copyable, Movable):
 
     var max_tensor_complexity: Int
     """`max_ctr_complexity`: how many features one combination may hold.
-    CatBoost's default is 4 (`cat_feature_options.cpp:231`). **OURS IS 1**
-    (no combinations, the fused per-tree fit) until the A/B of the tree-CTR
-    route against that path is recorded (`docs/apple-fast/EXPERIMENTS.md`,
-    the `max_ctr_complexity` row). HONORED above 1: the trees mint
+    CatBoost's default is 4 (`cat_feature_options.cpp:231`), and so is the
+    public default (Andrew, 2026-11-25: "do what catboost does"), resolved
+    per fit by the fit door (`bindings/trees_public_gbdt_fit_door.mojo`
+    `gbdt_config`: 4 with categorical columns under SymmetricTree, the
+    greedy searcher and feature_fraction 1; 1 elsewhere). `default()` here
+    keeps 1: it is the internal building block every caller sets the
+    resolved value on. HONORED above 1: the trees mint
     combinations of each categorical feature with the features already in
     the tree, categorical features and numeric splits alike."""
 
@@ -921,11 +924,11 @@ struct TCatFeatureParams(Copyable, Movable):
         counter-only pair; neither is a implemented loss, so the `default:`
         branch is the only one reachable here.
 
-        ONE DEPARTURE, the same shape as `bootstrap_type`'s:
-        `max_tensor_complexity` is 1 rather than CatBoost's 4: the tree-CTR
-        route is implemented and opt-in, and does not become the default
-        before its A/B against the fused per-tree path is recorded
-        (`max_tensor_complexity`'s own note).
+        ONE DEPARTURE: `max_tensor_complexity` is 1 here rather than
+        CatBoost's 4. The public default IS 4; the fit door resolves it per
+        fit and the estimator sets the resolved value on this struct
+        (`max_tensor_complexity`'s own note), so a direct `train()` caller
+        that passes no options gets no combinations.
         """
         var simple = List[TCtrDescription]()
         simple.append(TCtrDescription.with_priors(CTR_BORDERS))
