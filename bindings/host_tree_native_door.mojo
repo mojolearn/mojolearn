@@ -27,6 +27,7 @@ from core.entry_table import EntryRef
 from core.host_entry_table_calls import fh_ref, fh_vote, fh_groves_prepare, fh_groves_predict, fh_gbdt_expand_ctr, fh_gbdt_predict, fh_gbdt_sigmoid_pair
 from bindings.host_tree_archive_keys_unpack import host_tree_archive_keys
 from bindings.py_balanced import py_item
+from providers.python.estimator_lifecycle_pyapi_unpack import estimator_outside
 
 
 def host_tree_key(context: PythonObject) raises -> EntryRef:
@@ -682,11 +683,19 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
     if Bool(py=py_item(fields, nk[].k_is_classifier)):
         return host_tree_labels(py_item(fields, nk[].k_classes_), vote, context)
     var flat = classical_wrap_array(vote._store, Python.tuple(vote.shape[0]), "<f4", "C", py_item(context, nk[].k_output_context))
-    # Regression values are float64 for every family, as the estimator's
-    # public predict returns them (trees_public_lifecycle_native_door.mojo
-    # `_public_result` widens a random forest's float32 vote; extra trees
-    # widen in `_predict_staged`). The twin returned a random forest's vote as
-    # float32, so `host_model(path).predict(X)` and the saving model's
-    # `predict(X)` differed in dtype (proving run 2026-11-22). Same values:
-    # the widening is exact.
-    return host_tree_wide(flat, context)
+    # The twin returns the dtype the saving estimator returns to the same
+    # caller. Extra trees widen to float64 always (`_predict_staged`). A
+    # random forest's float32 vote is widened by the estimator's
+    # `_public_result` (trees_public_lifecycle_native_door.mojo) only for a
+    # caller outside the package with NumPy connected: the same test
+    # (`estimator_outside`, the same frame depth: one public method hands
+    # over to this owner) decides here. Lane pv-digest (9e42c35649) widened
+    # always, which fixed the user's `host_model(path).predict(X)` (proving
+    # run 2026-11-22) but gave a package caller (verify's harness, a
+    # meta-estimator) float64 where the estimator gives float32 (lane
+    # r2-known, 2026-11-22). The widening is exact.
+    if String(py_item(fields, nk[].k_family)) != "rf" or (
+        py_get(context, nk[].k_ndarray) is not None and estimator_outside()
+    ):
+        return host_tree_wide(flat, context)
+    return flat
