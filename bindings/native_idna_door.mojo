@@ -12,7 +12,7 @@ from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.native_idna_impl import idna_punycode
 from bindings.native_idna_data import IDNA_B3_EXCEPTIONS
 from core.shared_slot import SharedSlot
-from bindings.native_idna_run import _idna_ignored, _idna_prohibited
+from core.native_idna_impl import _idna_ignored, _idna_prohibited
 
 
 struct IdnaBoundary(Defaultable, Movable):
