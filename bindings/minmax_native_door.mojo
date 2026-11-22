@@ -14,7 +14,6 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.native_loaded_module_door import NativeModules
 from bindings.native_prepared_owner_unpack import prepared_get, prepared_put
 from bindings.mode_metadata_native_door import _fields
-from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes_door import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays_door import classical_address, classical_typed, classical_is_array, classical_c_order
 from bindings.classical_pandas_door import classical_admit_value
@@ -24,10 +23,10 @@ from providers.python.preprocessing_input_pyapi_door import ScalerInputSnapshot,
 from bindings.scaler_native_door import _ptr, _copy_row, scaler_door_calls, scaler_transform_calls, ScalerDoorCalls
 from core.scaler_core import (
     ScalerTransformSpec, scaler_minmax_fit_core, scaler_minmax_keep_extrema, scaler_transform_rows,
+    scaler_minmax_partial_fit_run,
     scaler_transform_rows_valid, scaler_transform_core,
 )
-from core.preprocessing_program import prep_program_stage as _stage
-from bindings.scaler_lifecycle_native_door import _run, _direct, _entries, _fitted, _write_back, _public_result
+from bindings.scaler_lifecycle_native_door import _direct, _entries, _fitted, _write_back, _public_result
 from bindings.minmax_metadata_unpack import _flag
 from bindings.minmax_metadata_pack import minmax_range_pair
 from bindings.minmax_archive_native_unpack import minmax_archive_load, minmax_archive_save
@@ -298,38 +297,34 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
         raise Error("MinMaxScaler partial_fit: feature_range changed since the first batch")
     var b = native_loaded_module("builtins")
     var fitted_mode = py_item(fields, nk[].k_numeric_mode_)
-    var batch = py_call(b.object.__new__,py_item(context, nk[].k_scaler_class))
-    var batch_configuration = Python.tuple(_configuration_mode(fitted_mode,context),configuration[1],configuration[2],True,configuration[4])
-    _ = minmax_initialize(batch,Python.tuple(Python.tuple(configuration[1],configuration[2]),True,configuration[4],fitted_mode))
-    _ = minmax_fit(batch,source,context,PythonObject(None),batch_configuration)
-    var fresh = _fields(batch)
-    var d = _features(fields)
-    if _features(fresh) != d:
-        raise Error("MinMaxScaler input feature count differs from fit")
-    var arena = List[Float32](length=9*d,fill=0)
-    var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    var stats = Python.tuple(py_item(fields, nk[].k_data_min_),py_item(fields, nk[].k_data_max_),py_item(fresh, nk[].k_data_min_),py_item(fresh, nk[].k_data_max_))
-    for k in range(4):  # small-loop(stats: old/new extrema buffers)
-        var value = _statistic(stats[k],d,"extrema",context)
-        unsafe_memcpy(dest=ap+k*d,src=_ptr(value),count=d)
-        _ = value  # keep the Python object alive through the native call above
-        _ = value^
-    var entries = _minmax_entries(model,fitted_mode,context)
-    var program = List[Int32]()
-    _stage(program,268,d,0,d,2*d,3*d,d,4*d,8*d)
-    _run(arena,program,entries)
-    var output = classical_typed(Python.tuple(5,d),"<f4",py_item(context, nk[].k_output_context))
-    var colnan = _copy_row(ap+8*d,d,context)
-    _ = py_call_typed(py_item(entries, nk[].k_minmax_fit),Int(ap+4*d),classical_address(output),Python.list(4,d,configuration[1],configuration[2]))
-    _ = output  # keep the Python object alive through the native call above
-    _keep_extrema(fields,output,colnan,entries,context)
-    if py_type(py_item(fields, nk[].k_n_samples_seen_)) is not b.int or py_type(py_item(fresh, nk[].k_n_samples_seen_)) is not b.int:
+    if py_type(py_item(fields, nk[].k_n_samples_seen_)) is not b.int:
         raise Error("TypeError: MinMaxScaler n_samples_seen_ must remain a native integer")
-    py_setitem(fields,nk[].k_n_samples_seen_,py_item(fields, nk[].k_n_samples_seen_) + py_item(fresh, nk[].k_n_samples_seen_))
+    # UNPACK (lane bm-trees, 2026-11-22): the fitted extrema rows, the batch
+    # and the calls of the fitted mode; no batch estimator object is built.
+    var d = _features(fields)
+    var old_min = _statistic(py_item(fields, nk[].k_data_min_), d, "extrema", context)
+    var old_max = _statistic(py_item(fields, nk[].k_data_max_), d, "extrema", context)
+    var entries = _minmax_entries(model, fitted_mode, context)
+    if py_get(entries,nk[].k_minmax_fit) is None:
+        raise Error("ImportError: HostMinMaxScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,nk[].k_scaler_training_error,"minmax_fit is unavailable")))
+    var calls = scaler_door_calls(model, entries, context)
+    var snapshot = scaler_operation_input(source, context, PythonObject(None))
+    var captured = snapshot.downcast_value_ptr[ScalerInputSnapshot]()
+    var values = captured[].values
+    var n = captured[].metadata.source.rows
+    var batch_d = captured[].metadata.source.cols
+    # RUN: the batch fit core, the width refusal and the merge (core/scaler_core.mojo).
+    var rows = scaler_minmax_partial_fit_run(calls, _ptr(old_min), _ptr(old_max), d, _ptr(values), n, batch_d,
+                                             Float32(Float64(py=configuration[1])),
+                                             Float32(Float64(py=configuration[2])))
+    _ = values  # keep the Python objects alive through the native call above
+    _ = old_min
+    _ = old_max
+    # PACK
+    _publish_extrema(fields, rows, d, context)
+    py_setitem(fields,nk[].k_n_samples_seen_,py_item(fields, nk[].k_n_samples_seen_) + PythonObject(n))
     py_setitem(fields,nk[].k_clip_,configuration[4])
-    _ = arena^
-    _ = output^
-    _ = stats^
+    _ = values^
     return model
 
 

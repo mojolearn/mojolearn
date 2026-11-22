@@ -26,7 +26,8 @@ from core.entry_table import EntryRef
 from x_cnn.graph_run import (
     graph_run_csr_words, graph_run_edges, graph_run_check_edge_weight, graph_run_ones, graph_run_slice,
     graph_run_csr_build, graph_run_gather, graph_run_vals_t, graph_run_gcn_loops, graph_run_gcn_norm,
-    graph_run_gcn_backward, graph_run_sage_backward,
+    graph_run_gcn_backward, graph_run_sage_backward, graph_run_gemm, graph_run_spmm, graph_run_add,
+    graph_run_bias_rows,
 )
 
 
@@ -183,6 +184,31 @@ def gcn_graph_run[C: GraphCalls](mut calls: C, edges: GraphEdges, n: Int, weight
 
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
+
+
+def gcn_forward_host_run(entry: EntryRef, x: Int, weight: Int, bias: Int, vals: Int, csr_f: Int, dst: Int, n: Int,
+                         f: Int, d: Int, nnz: Int) raises:
+    """GCNConv.forward on the host form (lane bm-trees, 2026-11-22; the
+    composition bindings/xcnn_graph_native_door.mojo `xcnn_gcn_forward` ran
+    over Python arrays, call for call): `h = x @ weight^T` (gemm op 1),
+    `y = A_hat h` (spmm mode 0 over the normalized values `vals` on the
+    forward CSR view), then `+ bias` broadcast over the rows when `bias` is
+    not 0. `x` is (n, d), `weight` (f, d), `dst` (n, f), all C-ordered
+    Float32. The door (with the GIL released) and a native check call it."""
+    var h = List[Float32](length=n * f, fill=0)
+    graph_run_gemm(entry, x, weight, Int(h.unsafe_ptr()), n, f, d, 1)
+    if bias == 0:
+        graph_run_spmm(entry, vals, Int(h.unsafe_ptr()), dst, csr_f, n, f, nnz, 0)
+        _ = h^
+        return
+    var spread = List[Float32](length=n * f, fill=0)
+    graph_run_spmm(entry, vals, Int(h.unsafe_ptr()), Int(spread.unsafe_ptr()), csr_f, n, f, nnz, 0)
+    var rows = List[Float32](length=n * f, fill=0)
+    graph_run_bias_rows(bias, Int(rows.unsafe_ptr()), n, f)
+    graph_run_add(entry, Int(spread.unsafe_ptr()), Int(rows.unsafe_ptr()), dst, n * f)
+    _ = h^
+    _ = spread^
+    _ = rows^
 
 
 def _ones(count: Int) -> List[Float32]:

@@ -224,6 +224,26 @@ comptime LEAF_ESTIMATION_EXACT = 2
 comptime LEAF_ESTIMATION_SIMPLE = 3
 
 
+def querywise_pointwise_leaf_check(use_pointwise_searcher: Bool, grouped: Bool, leaf_estimation_method: Int) raises:
+    """THE ONE ADMISSION of the leaf method on the grouped pointwise search
+    (QueryRMSE, PairLogit, YetiRank under use_pointwise_searcher), for the
+    device fit (gbdt/methods/doc_parallel_boosting.mojo) and the host fit
+    (gbdt/mojolearn_gbdt_host_run.mojo) alike (lane bm-trees, 2026-11-22:
+    the host accepted Simple there while the device refused it). The
+    pointwise searcher returns a structure, then the native grouped oracle
+    estimates its leaves; CatBoost Simple instead keeps the bootstrapped
+    search-stat leaves, so routing it through the oracle would silently
+    change the algorithm. `leaf_estimation_method` is the resolved code (the
+    default is Newton)."""
+    if use_pointwise_searcher and grouped:
+        if leaf_estimation_method != LEAF_ESTIMATION_NEWTON and leaf_estimation_method != LEAF_ESTIMATION_GRADIENT:
+            raise Error(
+                "querywise use_pointwise_searcher requires Newton or Gradient"
+                " leaf estimation; Simple search-stat leaves and Exact are"
+                " not implemented on this arm"
+            )
+
+
 @fieldwise_init
 struct CatBoostOptions(Copyable, Movable):
     """Their option names, their defaults, and what this implementation honors."""

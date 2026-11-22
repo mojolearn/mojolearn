@@ -17,7 +17,14 @@ THE FACTORED STATE. `ts_factor_host(..., keep=True)` keeps the factored
 matrix, the panels' T factors, the tree tiles and the tree's tau in ONE
 process slot until `ts_apply_host` (or `ts_free_host`) uses it; a new factor
 with `keep=True` replaces it. Temporary factorizations own their state locally
-and leave the explicit retained factorization alone."""
+and leave the explicit retained factorization alone.
+
+A caller that factors and applies inside ONE call (the randomized SVD's
+orthonormalisation, `HostExec._orth_tsqr`) owns its factorization: a local
+`_TsHost` filled by `ts_factor_host_owned` and read by `ts_apply_host_owned`,
+never the process slot (lane r3-small, 2026-11-22). Through the slot, two
+randomized PCA fits at once freed each other's panels mid-apply: SIGSEGV in
+`ts_apply_host` under `RKit.orth`, 100 concurrent host fits, cpc2.)"""
 from std.memory import unsafe_memcpy
 
 from checks.numerics import ftz, identical_div, identical_sqrt
@@ -407,9 +414,11 @@ def _capply_level_host(pcb: F32Ptr, ptl: F32Ptr, ptau: F32Ptr, n: Int, k: Int, n
 
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
-def _ts_factor_host_into(mut state: _TsHost, a: F32Ptr, bp: F32Ptr, r: F32Ptr,
+def ts_factor_host_owned(mut state: _TsHost, a: F32Ptr, bp: F32Ptr, r: F32Ptr,
                          m: Int, d: Int, nrhs: Int):
-    """Factor into the caller's native owner; every scratch span stays live."""
+    """Factor into the caller's native owner; every scratch span stays live.
+    `ts_apply_host_owned(state, ...)` applies it; the process slot is not
+    touched."""
     var n = d + nrhs
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
@@ -458,13 +467,13 @@ def ts_factor_host(a: F32Ptr, bp: F32Ptr, r: F32Ptr, m: Int, d: Int, nrhs: Int, 
         # The explicit factor/apply API owns its one retained factorization.
         ts_free_host()
         var slot = TS_HOST_STATE.get_or_create_ptr()
-        _ts_factor_host_into(slot[], a, bp, r, m, d, nrhs)
+        ts_factor_host_owned(slot[], a, bp, r, m, d, nrhs)
     else:
         # Temporary OLS/Ridge factorizations can overlap. Sharing the retained
         # slot freed another fit's panels while its workers were still using
         # them. Own this call's buffers without touching a retained factor.
         var owned = _TsHost()
-        _ts_factor_host_into(owned, a, bp, r, m, d, nrhs)
+        ts_factor_host_owned(owned, a, bp, r, m, d, nrhs)
 
 
 def ts_apply_host(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
@@ -474,17 +483,26 @@ def ts_apply_host(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
     if not st[].live or st[].m != m or st[].n != n:
         ts_free_host()
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
+    ts_apply_host_owned(st[], c, q, m, n, k)
+    ts_free_host()
+
+
+def ts_apply_host_owned(state: _TsHost, c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
+    """q (m x k) = Q c for the m x n factorization the caller owns in `state`
+    (`ts_factor_host_owned`); c is n x k. The state is left as it is."""
+    if not state.live or state.m != m or state.n != n:
+        raise Error("x_decomp tsqr: no factorization of this shape in the caller's state")
     var nb = ts_blocks(m)
     var npan = ts_panels(n)
     var npair = ts_pairs(n)
     var cbuf = List[Float32](length=nb * n * k, fill=Float32(0.0))
     var pcb = _p(cbuf)
     unsafe_memcpy(dest=pcb, src=c, count=n * k)
-    var pa = _p(st[].a)
-    var pt = _p(st[].t)
-    var pt2 = _p(st[].t2)
-    var ptl = _p(st[].tiles)
-    var ptau = _p(st[].tau)
+    var pa = _p(state.a)
+    var pt = _p(state.t)
+    var pt2 = _p(state.t2)
+    var ptl = _p(state.tiles)
+    var ptau = _p(state.tau)
     var strides = List[Int]()
     var s = 1
     while s < nb:
@@ -505,4 +523,3 @@ def ts_apply_host(c: F32Ptr, q: F32Ptr, m: Int, n: Int, k: Int) raises:
     else:
         host_parallelize(_blk, nb)
     _ = cbuf^
-    ts_free_host()

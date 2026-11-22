@@ -124,6 +124,7 @@ tools/identity_break.py on the metrics lane is the measurement.
 from metrics.impl.stats.detail.v_measure_compose import v_measure_from
 from std.math import fma
 from std.math import sqrt
+from metrics.label_pair_admission import metrics_check_pair, metrics_check_range
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from core.host_parallel import host_parallelize
@@ -676,7 +677,13 @@ def host_fowlkes_mallows(
     """`fowlkes_mallows_from_contingency`, `metrics/impl/fowlkes_mallows.mojo`
     (scikit-learn `fowlkes_mallows_score`): exact Int64 `tk`, `pk`, `qk`
     from the contingency matrix, then two Float64 divisions, two square
-    roots and one multiply, `tk == 0` returning 0.0."""
+    roots and one multiply, `tk == 0` returning 0.0. The admission is the
+    device body's (`fowlkes_mallows_score_host`, `metrics/estimator.mojo`),
+    from the one module both columns import, so the host and device columns
+    refuse the same inputs in the same words; the public door answers empty
+    input with 0.0 before either binding (`bindings/mcls_cluster_door.mojo`)."""
+    metrics_check_pair(first, second, size)
+    metrics_check_range(lower, upper)
     var k = Int(upper - lower + 1)
     var c = host_contingency(first, second, size, lower, upper)
     var n = Int64(size)

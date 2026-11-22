@@ -26,6 +26,7 @@ the copy is one memcpy, the rebuild it replaces was per node).
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from core.forest_host_strict_run import (
+    forest_host_strict_predict,
     forest_strict_prepare_host_native,
     forest_strict_predict_host_check,
     forest_strict_predict_host_walk,
@@ -48,23 +49,18 @@ def forest_strict_prepare_host_binding[RF_INPUT: Bool](
 
 
 def forest_strict_predict_host_native[RF_INPUT: Bool](
-    handle: Int, x_address: Int, out_addr: Int, rows: Int, features: Int, outputs: Int, free: Bool = False,
+    handle: Int, x_address: Int, out_addr: Int, rows: Int, features: Int, outputs: Int,
 ) raises -> Int:
-    """The sequential vote over the kept trees (XF_STRICT_PREDICT):
-    `rows * outputs` float32 values into `out`, exactly what `rf_predict_*` /
-    `et_predict` write. A door holds the GIL, released around the walk; a
-    member's worker holds none (`free`). The two RUN halves are in
-    core/forest_host_strict_run.mojo; the registry has its own lock word."""
-    var trees = forest_strict_predict_host_check[RF_INPUT](handle, rows, features, outputs)
-    if rows == 0:
-        return 0
-    if free:
-        # a member's worker: no GIL to release (core/forest_entry.mojo)
-        forest_strict_predict_host_walk[RF_INPUT](handle, x_address, out_addr, rows, features, trees, outputs)
-    else:
-        with GILReleased(Python()):
-            forest_strict_predict_host_walk[RF_INPUT](handle, x_address, out_addr, rows, features, trees, outputs)
-    return rows
+    """The sequential vote over the kept trees for the Python entry, which
+    holds the GIL: released around the whole of `forest_host_strict_predict`
+    (core/forest_host_strict_run.mojo; the check reads plain words and the
+    registry has its own lock word). The host images' forest entries call
+    the core body directly (lane bm-trees, 2026-11-22: the `free` word this
+    took for them is gone with them)."""
+    var written = 0
+    with GILReleased(Python()):
+        written = forest_host_strict_predict[RF_INPUT](handle, x_address, out_addr, rows, features, outputs)
+    return written
 
 
 def forest_strict_predict_host_binding[RF_INPUT: Bool](

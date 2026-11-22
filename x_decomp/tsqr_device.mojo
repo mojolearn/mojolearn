@@ -1282,6 +1282,27 @@ def ts_factor_device(ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m:
     _ = work^
 
 
+def ts_factor_device_owned(
+    ctx: DeviceContext, mut da: DeviceBuffer[DType.float32], m: Int, n: Int, r: F32Ptr
+) raises -> List[DeviceBuffer[DType.float32]]:
+    """`ts_factor_device` for a caller that applies inside the same call
+    (`_orth_tsqr_device`): the five buffers of the factorization (`da`, T, R
+    tiles, tau, T2, the kept state's order) are returned to the caller, and
+    the process's kept state is never touched (lane r3-small, 2026-11-22: two
+    fits through the one kept factorization took each other's factor)."""
+    var work = ts_factor_begin(ctx, m, n, False)
+    ts_leaf_phase(ctx, da, work, m, n, 0, ts_blocks(m))
+    ts_factor_finish(ctx, da, work, m, n, r, False)
+    var held = List[DeviceBuffer[DType.float32]]()
+    held.append(da)
+    held.append(work.dt)
+    held.append(work.dtl)
+    held.append(work.dtau)
+    held.append(work.dt2)
+    _ = work^
+    return held^
+
+
 # TOMBSTONE: MOJOLEARN_IDN_TSQR_RSTACK_TREE (loser) deleted 2026-10-11 by 7d76f567e; code recoverable at 7d76f567e^.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_TSQR_RSTACK_TREE.patch
 def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep: Bool = False) raises -> DeviceBuffer[DType.float32]:
@@ -1303,33 +1324,49 @@ def ts_apply_device(ctx: DeviceContext, c: F32Ptr, m: Int, n: Int, k: Int, keep:
     return _ts_apply_dcb(ctx, dcb^, m, n, k, keep)
 
 
-def ts_apply_device_buf(
-    ctx: DeviceContext, dc: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int
+def ts_apply_device_owned(
+    ctx: DeviceContext, dc: DeviceBuffer[DType.float32], held: List[DeviceBuffer[DType.float32]],
+    m: Int, n: Int, k: Int,
 ) raises -> DeviceBuffer[DType.float32]:
     """`ts_apply_device` for a c (n x k) that is already on the device (its
-    first n * k words), so no host matrix crosses: RSVD_IDN_TSQR_ORTHO's
-    selection matrix. The state is released."""
-    if len(_ts_dev_kept(m, n)) != 5:
-        ts_free_device()
-        raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
+    first n * k words), so no host matrix crosses, over the factorization
+    the caller owns (`ts_factor_device_owned`): RSVD_IDN_TSQR_ORTHO's
+    selection matrix. Was `ts_apply_device_buf` over the process's kept
+    state (lane r3-small, 2026-11-22)."""
     var nb = ts_blocks(m)
     var dcb = ctx.enqueue_create_buffer[DType.float32](nb * n * k)
     ctx.enqueue_copy(
         dst_buf=dcb.create_sub_buffer[DType.float32](0, n * k), src_buf=dc.create_sub_buffer[DType.float32](0, n * k)
     )
-    return _ts_apply_dcb(ctx, dcb^, m, n, k, False)
+    return _ts_apply_held(ctx, dcb^, held, m, n, k)
 
 
 def _ts_apply_dcb(
     ctx: DeviceContext, var dcb: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, keep: Bool
 ) raises -> DeviceBuffer[DType.float32]:
-    """The apply proper: `dcb` holds c in its first n * k words (the rest is
-    the tree's workspace)."""
+    """The apply over the process's kept state: `dcb` holds c in its first
+    n * k words (the rest is the tree's workspace)."""
     # The five references are copied out under the state's lock (THE LOCK
     # above); every launch below runs with no lock held.
     var held = _ts_dev_kept(m, n)
     if len(held) != 5:
         raise Error("x_decomp tsqr: no kept factorization of this shape (tsqr_r with keep first)")
+    var dq = _ts_apply_held(ctx, dcb^, held, m, n, k)
+    _ = held^
+    if not keep:
+        ts_free_device()
+    return dq^
+
+
+def _ts_apply_held(
+    ctx: DeviceContext, var dcb: DeviceBuffer[DType.float32], held: List[DeviceBuffer[DType.float32]],
+    m: Int, n: Int, k: Int,
+) raises -> DeviceBuffer[DType.float32]:
+    """The apply proper over the five buffers `held` (da, T, R tiles, tau,
+    T2): `dcb` holds c in its first n * k words (the rest is the tree's
+    workspace). Synchronizes before it returns."""
+    if len(held) != 5:
+        raise Error("x_decomp tsqr: the apply needs the five buffers of one factorization")
     var da = held[0]
     var dt = held[1]
     var dtl = held[2]
@@ -1405,6 +1442,4 @@ def _ts_apply_dcb(
     _ = dt2^
     _ = dtl^
     _ = dtau^
-    if not keep:
-        ts_free_device()
     return dq^

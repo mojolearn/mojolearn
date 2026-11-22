@@ -76,36 +76,13 @@ from metrics.impl.stats.detail.batched.silhouette_score import (
 )
 
 
-def _check_pair(y_true: List[Int32], y_pred: List[Int32], n: Int) raises:
-    """Both label arrays must hold at least `n` entries. A short list is a
-    read past the end, which is a crash on a good day."""
-    if n <= 0:
-        raise Error("metrics: n must be positive, got " + String(n))
-    if len(y_true) < n or len(y_pred) < n:
-        raise Error(
-            "metrics: labels_true holds " + String(len(y_true))
-            + " and labels_pred holds " + String(len(y_pred))
-            + " entries, both must hold at least n = " + String(n)
-        )
-
-
-def _check_float_pair(a: List[Float32], b: List[Float32], n: Int) raises:
-    if n <= 0:
-        raise Error("metrics: n must be positive, got " + String(n))
-    if len(a) < n or len(b) < n:
-        raise Error(
-            "metrics: the two float arrays hold " + String(len(a)) + " and "
-            + String(len(b)) + " entries, both must hold at least n = "
-            + String(n)
-        )
-
-
-def _check_range(lower: Int32, upper: Int32) raises:
-    if upper < lower:
-        raise Error(
-            "metrics: upper_class_range (" + String(upper)
-            + ") is below lower_class_range (" + String(lower) + ")"
-        )
+# The admission is written once, in metrics/label_pair_admission.mojo (lane r3-small, 2026-11-22);
+# the host column imports the same three checks.
+from metrics.label_pair_admission import (
+    metrics_check_pair as _check_pair,
+    metrics_check_float_pair as _check_float_pair,
+    metrics_check_range as _check_range,
+)
 
 
 # ===========================================================================
