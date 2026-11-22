@@ -372,7 +372,7 @@ class _MambaBase(NumericModeMixin):
 
 
 # Contract: profile mojolearn.identical.mamba1.fp32.v1 (mamba/IDENTICAL_MAMBA_CONTRACT.md); reference
-# transformers modeling_mamba.py:505-530; weight names per mamba/corpus/README.md. Parity table:
+# transformers modeling_mamba.py:505-530; weight names per verification/references/mamba/README.md. Parity table:
 # archive/evidence/mamba/FEATURE_PARITY.md section 1 (d_state/d_conv/expand/dt_rank are profile
 # constants, a change is a v2; use_fast_path refused, DEVIATION 732; no initializer by design;
 # float32 only). d_model gated at 8 and 16 in the lane checks. State explicit (DEVIATION 792);

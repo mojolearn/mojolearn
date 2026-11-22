@@ -68,7 +68,7 @@
 #      the fetch reserve), and body_exit= is appended to leg.txt. RunPod's gemm
 #      body is bounded only by its poll deadline because RunPod has its own
 #      on-pod lease; here the bound is what keeps the fetch alive.
-#   6. THE BUNDLE ALSO EXCLUDES mamba/corpus, bench/oracle*,
+#   6. THE BUNDLE ALSO EXCLUDES verification/references/mamba, bench/oracle*,
 #      bench/minentropy_oracle.txt and every *.bin (RunPod gemm excludes only
 #      bench/results). About 9.7 MB gzipped against 21.8 MB, because this
 #      desk's uplink is about 30 KB/s. The archive sha256 is verified on the
@@ -537,7 +537,7 @@ else
 fi
 
 # ---- the bundle ----
-ARCHIVE_EXCLUDES=(':!bench/results' ':!verification/records' ':!mamba/corpus' ':!bench/oracle*' ':!bench/minentropy_oracle.txt' ':!*.bin')
+ARCHIVE_EXCLUDES=(':!bench/results' ':!verification/records' ':!verification/references/mamba' ':!bench/oracle*' ':!bench/minentropy_oracle.txt' ':!*.bin')
 if git -C "$REPO" archive --format=tar -o "$TMPD/src.tar" "$COMMIT" -- . "${ARCHIVE_EXCLUDES[@]}"; then
   gzip -9 -c "$TMPD/src.tar" > "$TMPD/src.tgz"
   tar tf "$TMPD/src.tar" | grep -v '/$' > "$OUT/bundle_files.txt"
@@ -545,9 +545,9 @@ if git -C "$REPO" archive --format=tar -o "$TMPD/src.tar" "$COMMIT" -- . "${ARCH
   BUNDLE_SHA=$(sha256_of "$TMPD/src.tgz")
   mkdir "$TMPD/archive" && tar xf "$TMPD/src.tar" -C "$TMPD/archive"
   rm -f "$TMPD/src.tar"
-  if grep -Eq '(^bench/results/|^verification/records/|^mamba/corpus/|\.bin$)' "$OUT/bundle_files.txt"; then
+  if grep -Eq '(^bench/results/|^verification/records/|^verification/references/mamba/|\.bin$)' "$OUT/bundle_files.txt"; then
     rbad "the bundle carries an excluded path:"
-    grep -E '(^bench/results/|^verification/records/|^mamba/corpus/|\.bin$)' "$OUT/bundle_files.txt" | head -5 | sed 's/^/           /'
+    grep -E '(^bench/results/|^verification/records/|^verification/references/mamba/|\.bin$)' "$OUT/bundle_files.txt" | head -5 | sed 's/^/           /'
   fi
   if [ "$BUNDLE_BYTES" -gt "$MAX_BUNDLE_BYTES" ]; then
     rblock "the bundle is $BUNDLE_BYTES bytes gzipped, over the $MAX_BUNDLE_BYTES cap (about 30 KB/s uplink)"

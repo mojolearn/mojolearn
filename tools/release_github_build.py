@@ -139,7 +139,7 @@ OVERLAY = ("tools/release061_remote_build.sh", "tools/cpu_build_guard.py", "tool
 ROUTE_FILES = OVERLAY + ("tools/gha_release_box.sh", "tools/release_github_build.py",
                          ".github/workflows/" + WORKFLOW)
 #: runpod_cpu_leg.sh make_source's exclusions: the shipped tree is the same file list.
-SOURCE_EXCLUDES = (":!bench/results", ":!verification/records", ":!mamba/corpus", ":!bench/oracle_*", ":!bench/minentropy_oracle.txt")
+SOURCE_EXCLUDES = (":!bench/results", ":!verification/records", ":!verification/references/mamba", ":!bench/oracle_*", ":!bench/minentropy_oracle.txt")
 #: Measured seconds per build: 0.8.24's cold cuda/sm_89 builds on GitHub's 4 vCPU
 #: runners, two at a time (run 36318515173); only the shard balance reads them.
 WEIGHTS = {

@@ -64,7 +64,7 @@ THE MAMBA OPPONENT, AND WHICH ONE RAN
 The real opponent is `mamba_ssm.ops.selective_scan_interface.selective_scan_fn`,
 which dispatches to the fused `selective_scan_cuda` extension: arm
 `mamba-ssm-cuda`. If that package is not importable, the fallback is the
-PURE-PYTORCH sequential reference scan that `mamba/corpus/gen_corpus.py`
+PURE-PYTORCH sequential reference scan that `verification/references/mamba/gen_corpus.py`
 already contains verbatim (`selective_scan_ref`, a Python loop over the
 sequence): arm `torch-ref-scan-gpu`. **A sequential PyTorch scan is not the
 thing anyone deploys**, and every line says which one ran. If only
@@ -76,7 +76,7 @@ THE WEIGHTS ARE THE SAME ON BOTH SIDES
 Every tensor comes from the same hashed generator the Mojo driver uses:
 `value = f32(lo + (hi-lo) * top24(splitmix64(key + i)) * 2^-24)` with
 `key = splitmix64(seed ^ (tensor_id << 32))`. The implementation is
-`mamba/corpus/gen_corpus.py::hashed_unit`, IMPORTED rather than re-spelled.
+`verification/references/mamba/gen_corpus.py::hashed_unit`, IMPORTED rather than re-spelled.
 The tensor ids and ranges are the same ids and ranges the Mojo side uses,
 and every tensor's WITNESS HASH is printed as `FSPEED-WEIGHTS` by both
 sides. Two sides that agree on every witness agree on the generator. If a
@@ -154,7 +154,7 @@ ROPE_THETA = 10000.0
 MASK_FILL = -3.4028234663852886e38   # 0xFF7FFFFF, masking_utils.py:601-603
 UNMASKED_FILL = 0.0                  # ADDED and may not be elided
 
-#: `mamba/corpus/gen_corpus.py`.
+#: `verification/references/mamba/gen_corpus.py`.
 MAMBA_EPS = 1e-5
 D_STATE = 16
 D_CONV = 4
@@ -309,9 +309,9 @@ def _load_module(alias, path):
 try:
     mamba_corpus = _load_module(
         "mojolearn_mamba_corpus",
-        os.path.join(REPO, "mamba", "corpus", "gen_corpus.py"))
+        os.path.join(REPO, "verification", "references", "mamba", "gen_corpus.py"))
 except Exception as e:                          # pragma: no cover
-    raise SystemExit("speed_torch_seq: cannot import mamba/corpus/gen_corpus.py "
+    raise SystemExit("speed_torch_seq: cannot import verification/references/mamba/gen_corpus.py "
                      "(needed for the hash spec and the reference scan): %s" % e)
 
 import numpy as np                              # noqa: E402

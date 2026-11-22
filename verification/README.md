@@ -11,6 +11,7 @@ for a reason. `bench/results/` holds boards and measurements only.
 | Recorded forest / GBDT host fixtures | `verification/records/forest_host/` | `tools/forest_host_gate.py`, `forest-host-gate.yml`, `cpu-identity-gate.yml` (`host_surface.FOREST_RECORDED_ROOT`) |
 | Column-shaped records outside the identity columns (CELLS_INDEX rows and their run directories) | `verification/records/cells/{verification_faults,small_training,verify_external}/` | `tools/verification_matrix.py`, `tools/part_set_census.py` (through `verification/records/CELLS_INDEX.tsv`), `test_verify_small.py` |
 | The dated release records up to 0.8.65 that documents still cite | `verification/records/release_verification/` | `tools/release_evidence_set.py provenance_history` (MOVED_DIR; older ones through git at LEGACY_DIR) |
+| Mamba reference inputs and outputs from the PyTorch references (not a training corpus; `gen_corpus.py` makes them) | `verification/references/mamba/` (Mamba-1 cases at the top, `mamba2/`, `mamba3/`) | `mamba/checks/mamba{,2,3}_check.mojo` and fixtures, `tools/mamba_corpus_check.py` (pixi `check-mamba*-corpus`), the installed-surface release gates (`verify_linux_surface_qualification.py`, `release_macos_installed_candidate.py`, `check_linux_release_qualification.py`, `release-provenance.yml`), `neural_fast_quality.py`, the Mamba package tests; export-ignored and left out of source bundles (except `gen_corpus.py`), as before. Not shipped in a wheel |
 | Native test fixtures | `checks/native_tests/fixtures/` (stays) | the native tests beside them own them |
 
 Rules: a record is never edited or moved by hand except with `git mv` of a whole group, together with every reader,
@@ -26,6 +27,7 @@ and keeps the old spelling. Read it through this map:
 | Old path | New path | Moved |
 |---|---|---|
 | `bench/results/identity_break/` | `verification/records/identity/` (the shipped table cites records by `dir/file` under this root, so it is unchanged) | 2026-11-25, lane verify-home |
+| `mamba/corpus/` | `verification/references/mamba/` | 2026-11-25, lane verify-home |
 | `bench/results/forest_host/` | `verification/records/forest_host/` | 2026-11-25, lane verify-home |
 | `bench/results/classical_host/` | `verification/records/classical_host/` | 2026-11-25, lane verify-home |
 | `bench/results/verification_faults/` | `verification/records/cells/verification_faults/` | 2026-11-25, lane verify-home |
@@ -41,4 +43,6 @@ was made and are not edited. So are ledgers citing them (`tools/identity_lanes/c
 READMEs under `bench/results/reference_admissions/` cite `bench/results/identity_break/retained/...`, which
 `tools/release_requirements_retained.py` and `tools/release_identity_reference.py` read at the new root, and a git
 revision older than the move is read at the old root (`LEGACY_IDENTITY_BREAK`, `identity_at_freeze.RECORD_OUTPUTS`).
-Comments in Mojo and product modules that cite a record path are citations, not readers, and keep the old spelling.
+The Mamba schema name `mojolearn.mamba.corpus.hash.v1`, the `MOJOLEARN_MAMBA_CORPUS_*` variables and `gen_corpus.py`'s own
+text are names, not paths, and are unchanged. Experiment records under `experiments/` (catalogs, registrations whose
+sha256 is pinned) cite `mamba/corpus/gen_corpus.py` and are not edited. Comments in Mojo and product modules that cite a record path are citations, not readers, and keep the old spelling.

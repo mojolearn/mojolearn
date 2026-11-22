@@ -159,9 +159,9 @@ print("%s %s" % (port, ip) if ip and port else "")' "$RP_BODY" 2>/dev/null || tr
 
 archive_paths() {  # every top-level entry except the heavy ones, plus the light bench/ and mamba/ parts
     _sha="$1"
-    git -C "$HERE" ls-tree --name-only "$_sha" | grep -v -E '^(bench|mamba|archive|upstream|parked|docs)$'
+    git -C "$HERE" ls-tree --name-only "$_sha" | grep -v -E '^(bench|mamba|archive|upstream|parked|docs|verification)$'
     git -C "$HERE" ls-tree --name-only "$_sha" bench/ | grep -v -E '^bench/(results|oracle)'
-    git -C "$HERE" ls-tree --name-only "$_sha" mamba/ | grep -v -E '^mamba/corpus$'
+    git -C "$HERE" ls-tree --name-only "$_sha" mamba/  # the Mamba references left with verification/ (verification/README.md)
 }
 
 cmd_ship() {

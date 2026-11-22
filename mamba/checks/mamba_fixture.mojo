@@ -4,7 +4,7 @@
 
 Two generators live here and each exists for a stated reason.
 
-1. **The corpus generator, reimplemented bit for bit.** `mamba/corpus/` is
+1. **The corpus generator, reimplemented bit for bit.** `verification/references/mamba/` is
    written by the corpus lane (`gen_corpus.py`, spec
    `mojolearn.mamba.corpus.hash.v1`): every tensor element is
    `f32(lo + (hi - lo) * top24(splitmix64(key + i)) * 2^-24)` with
@@ -65,7 +65,7 @@ struct MambaDims(Copyable, Movable):
 
 struct MambaWeights(Copyable, Movable):
     """One block's parameters, host side, in the reference shapes
-    (`shapes_for` in `mamba/corpus/gen_corpus.py`), all row-major:
+    (`shapes_for` in `verification/references/mamba/gen_corpus.py`), all row-major:
 
         norm_w   [d_model]
         w_in     [2*d_inner, d_model]     in_proj.weight   (bias: none, use_bias False)
@@ -107,7 +107,7 @@ struct MambaWeights(Copyable, Movable):
 
 # ===========================================================================
 # The corpus hash, spec `mojolearn.mamba.corpus.hash.v1`
-# (mamba/corpus/gen_corpus.py::splitmix64_scalar / hashed_unit / map_range).
+# (verification/references/mamba/gen_corpus.py::splitmix64_scalar / hashed_unit / map_range).
 # ===========================================================================
 
 

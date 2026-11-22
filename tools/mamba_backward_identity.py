@@ -17,7 +17,7 @@ import sys
 
 SOURCE_PATHS = (
     "mamba/__init__.mojo", "mamba/checks", "mamba/impl",
-    "mamba/corpus/gen_corpus.py", "checks/__init__.mojo",
+    "verification/references/mamba/gen_corpus.py", "checks/__init__.mojo",
     "checks/numerics.mojo", "checks/kernel_matrix.mojo",
     "checks/kernel_matrix_gemm.mojo",
     "core/__init__.mojo", "core/identity_trace.mojo",

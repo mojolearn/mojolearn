@@ -7,7 +7,7 @@ actual tiny VJPs against float64 autograd, and optionally exact native dumps.
 ABI tests use deterministic arrays and run from an installed wheel; numerical
 autograd qualification remains separate below.
 NVIDIA fixture dependency: x.f32 and the nine constructor weight files in
-mamba/corpus/mamba{2,3}/m{2,3}_base_b2_l4_d32; no ref32/ref64 files or full
+verification/references/mamba/mamba{2,3}/m{2,3}_base_b2_l4_d32; no ref32/ref64 files or full
 corpus generation is required. The NVIDIA oracle additionally imports the
 repository gen_corpus.py and requires CUDA PyTorch plus NumPy.
 No test in this file provisions hardware or spawns another process.

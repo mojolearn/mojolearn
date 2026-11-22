@@ -121,7 +121,7 @@ permissions:
 
 env:
   IMAGE: rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484
-  EXCLUDES: ":!bench/results :!verification/records :!mamba/corpus :!bench/oracle_* :!bench/minentropy_oracle.txt"
+  EXCLUDES: ":!bench/results :!verification/records :!verification/references/mamba :!bench/oracle_* :!bench/minentropy_oracle.txt"
 
 jobs:
   plan:

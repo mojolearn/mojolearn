@@ -48,7 +48,7 @@ are spelled:
         mamba/checks/mamba3_check.mojo refusal
 
     # gate (g)'s byte gate: REFUSES BY NAME until the corpus lane
-    # generates mamba/corpus/mamba3/ (a missing fixture is a refusal,
+    # generates verification/references/mamba/mamba3/ (a missing fixture is a refusal,
     # never a skip); afterwards every input tensor of all 18 cases is
     # byte-compared against this check's own generator:
     tools/with_identical_mode.sh pixi run mojo run -I . \\
@@ -1281,7 +1281,7 @@ def gate_e(ctx: DeviceContext, case_k: Int, b: Int, l: Int) raises:
 
 # ===========================================================================
 # GATE (g)'s byte gate: MISSING-FIXTURE REFUSAL until the corpus lane
-# generates mamba/corpus/mamba3/. Binary-safe reads (the mamba2 lesson:
+# generates verification/references/mamba/mamba3/. Binary-safe reads (the mamba2 lesson:
 # text-mode read raised on raw float32 bytes WITH THE FILE PRESENT and a
 # catch-all renamed it MISSING FIXTURE; each failure kind refuses under
 # its OWN name here).

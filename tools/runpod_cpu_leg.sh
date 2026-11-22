@@ -18,7 +18,7 @@
 #                        Uncommitted edits to tracked files ship too; the
 #                        commit and the dirty count are recorded.
 #   --include PATH       also ship this tracked path (repeatable). bench/results,
-#                        mamba/corpus and bench/oracle_* are left out by default.
+#                        verification/references/mamba and bench/oracle_* are left out by default.
 #   --build a,b          host families built BEFORE the command, through the
 #                        R2 binding cache: bindings/build_<family>_host.sh
 #   --sabotage-build a,b the same families built with --sabotage-defines into
@@ -206,12 +206,12 @@ POD_NAME="mojolearn-cpu-$LANE-$STAMP"
 # composed artifacts (dry run and rent alike)
 # ---------------------------------------------------------------------------
 make_source() {
-    ( cd "$WORKTREE" && git ls-files -z -- . ':!bench/results' ':!verification/records' ':!mamba/corpus' ':!bench/oracle_*' ':!bench/minentropy_oracle.txt' ':!experiments/six_lane_integration' ':!experiments/performance_ideas/measurements' ) > "$TMPD/files0"
+    ( cd "$WORKTREE" && git ls-files -z -- . ':!bench/results' ':!verification/records' ':!verification/references/mamba' ':!bench/oracle_*' ':!bench/minentropy_oracle.txt' ':!experiments/six_lane_integration' ':!experiments/performance_ideas/measurements' ) > "$TMPD/files0"
     # The corpus tensors stay home, but its small manifests ship: the selector's
     # data-file rule reads them by path (tools/test_lane_select_harness.py's
-    # mamba/corpus/mamba2/*/manifest.json case raised StopIteration on the pod
+    # verification/references/mamba/mamba2/*/manifest.json case raised StopIteration on the pod
     # tree, 2026-11-05) and the box's fresh `git add -A` index is all it lists.
-    ( cd "$WORKTREE" && git ls-files -z -- ':(glob)mamba/corpus/**/manifest.json' ) >> "$TMPD/files0"
+    ( cd "$WORKTREE" && git ls-files -z -- ':(glob)verification/references/mamba/**/manifest.json' ) >> "$TMPD/files0"
     if [ -n "$INCLUDES" ]; then
         printf '%s\n' "$INCLUDES" | while IFS= read -r _inc; do
             [ -n "$_inc" ] || continue

@@ -39,7 +39,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: Without it here the walk crosses every one of them and takes minutes on a
 #: tree that is otherwise scanned in about a second, which is the difference
 #: between a gate somebody runs and a script nobody does.
-SKIP_DIRS = {".git", ".pixi", ".claude", "archive", "bench/results", "verification/records",
+SKIP_DIRS = {".git", ".pixi", ".claude", "archive", "bench/results", "verification/records", "verification/references",
              "__pycache__", ".venv", "upstream", "node_modules", "corpus",
              "python/build"}
 SCAN_EXT = {".md", ".py", ".sh", ".mojo", ".toml"}

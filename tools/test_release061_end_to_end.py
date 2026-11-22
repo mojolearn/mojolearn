@@ -246,7 +246,7 @@ def fixture(root, split=False, merged=False):
     version = gate.surface.release_version(root)
     snapshot = {}
     for case in gate.surface.CORPUS_CASES:
-        p = root / 'mamba/corpus' / case / 'x.f32'
+        p = root / 'verification/references/mamba' / case / 'x.f32'
         p.parent.mkdir(parents=True)
         p.write_bytes(b'\0' * 4)
         snapshot[p.relative_to(root).as_posix()] = gate.digest_file(p)
