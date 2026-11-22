@@ -23,6 +23,8 @@ from gbdt.data.category_map import (
     category_values_from_codes,
     category_text_number,
     category_fixed_text,
+    category_keys_from_arrow_text,
+    category_keys_from_arrow_indices,
     CATEGORY_TEXT_OK,
     CATEGORY_TEXT_INVALID,
     CATEGORY_TEXT_NOT_A_NUMBER,
@@ -309,6 +311,85 @@ def fixed_text() raises:
     _ = vs
 
 
+def arrow() raises:
+    """Arrow string (int32 offsets) and large_string (int64 offsets)
+    buffers keyed as text in several tasks, a validity bitmap and a nonzero
+    offset honoured, a dictionary's indices mapped through its keyed values,
+    corrupt offsets and indices refused."""
+    var words: List[String] = ["red", "", "blue", "teal"]
+    var n = 70001
+    var start = 3  # the array's offset: its first 3 slots are not its rows
+    var slots = n + start
+    var data = List[UInt8]()
+    var o32 = List[Int32](length=slots + 1, fill=Int32(0))
+    var o64 = List[Int64](length=slots + 1, fill=Int64(0))
+    var bits = List[UInt8](length=(slots + 7) // 8, fill=UInt8(0))
+    for i in range(slots):
+        var wb = words[i % 4].as_bytes()
+        for b in range(words[i % 4].byte_length()):
+            data.append(wb[b])
+        o32[i + 1] = Int32(len(data))
+        o64[i + 1] = Int64(len(data))
+        if i % 5 != 0:  # every fifth slot is null
+            bits[i >> 3] = bits[i >> 3] | (UInt8(1) << UInt8(i & 7))
+    var got = List[UInt64](length=n, fill=UInt64(0))
+    var wide = List[UInt64](length=n, fill=UInt64(0))
+    var dp = Int(data.unsafe_ptr())
+    category_keys_from_arrow_text(Int(bits.unsafe_ptr()), Int(o32.unsafe_ptr()), dp, False, start, n, _key_ptr(got))
+    category_keys_from_arrow_text(Int(bits.unsafe_ptr()), Int(o64.unsafe_ptr()), dp, True, start, n, _key_ptr(wide))
+    for r in range(n):
+        var i = start + r
+        var want = CATEGORY_KEY_MISSING if i % 5 == 0 else _text_key(words[i % 4])
+        _need(got[r] == want and wide[r] == want, "an Arrow text slot keys as its text, a null as missing")
+    # no validity buffer: every slot valid
+    category_keys_from_arrow_text(0, Int(o32.unsafe_ptr()), dp, False, 0, n, _key_ptr(got))
+    _need(got[5] == _text_key(words[1]), "no validity bitmap: every slot is valid")
+    # a dictionary: indices -1 .. 3 over 4 keyed values (int8, uint16), nulls by bitmap
+    var table: List[UInt64] = [_text_key("a"), _text_key("b"), CATEGORY_KEY_MISSING, _text_key("d")]
+    var i8 = List[Int8](length=slots, fill=Int8(0))
+    var u16 = List[UInt16](length=slots, fill=UInt16(0))
+    for i in range(slots):
+        i8[i] = Int8(i % 4)
+        u16[i] = UInt16(i % 4)
+    var di = List[UInt64](length=n, fill=UInt64(0))
+    var du = List[UInt64](length=n, fill=UInt64(0))
+    category_keys_from_arrow_indices(Int(bits.unsafe_ptr()), Int(i8.unsafe_ptr()), 1, True, start, n,
+                                     _key_ptr(table), 4, _key_ptr(di))
+    category_keys_from_arrow_indices(Int(bits.unsafe_ptr()), Int(u16.unsafe_ptr()), 2, False, start, n,
+                                     _key_ptr(table), 4, _key_ptr(du))
+    for r in range(n):
+        var i = start + r
+        var want = CATEGORY_KEY_MISSING if i % 5 == 0 else table[i % 4]
+        _need(di[r] == want and du[r] == want, "an Arrow dictionary index maps to its value's key")
+    i8[slots - 1] = Int8(-1)
+    var refused = False
+    try:
+        category_keys_from_arrow_indices(0, Int(i8.unsafe_ptr()), 1, True, start, n, _key_ptr(table), 4,
+                                         _key_ptr(di))
+    except:
+        refused = True
+    _need(refused, "a valid negative dictionary index is refused")
+    o32[slots] = Int32(0)
+    refused = False
+    try:
+        category_keys_from_arrow_text(0, Int(o32.unsafe_ptr()), dp, False, start, n, _key_ptr(got))
+    except:
+        refused = True
+    _need(refused, "offsets that run backwards are refused")
+    _ = words
+    _ = data
+    _ = o32
+    _ = o64
+    _ = bits
+    _ = got
+    _ = wide
+    _ = table
+    _ = i8
+    _ = u16
+    _ = di
+    _ = du
+
+
 def run_checks() raises:
     keys()
     # one task, several tasks, all distinct, heavy repeats
@@ -321,3 +402,4 @@ def run_checks() raises:
     codes()
     numbers()
     fixed_text()
+    arrow()
