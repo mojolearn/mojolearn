@@ -30,13 +30,48 @@ the recipe for the remaining families, split into batches that touch disjoint fi
 
 ## The pieces (all in this branch)
 
-- `checks/native_tests/testsuite_cases.mojo`: `check_cases(label, n, body)` (a case table inside one `test_*`, rows
-  across the host cores, every failing row named in the one raised error), `check_rows(label, rows, body)` (the
+- `checks/native_tests/testsuite_cases.mojo` (the one shared helper module; lane ts-build folded `testsuite_serial.mojo`
+  and the per-file copies into it): `check_cases(label, n, body)` (a case table inside one `test_*`, rows across the
+  host cores, every failing row named in the one raised error), `check_cases_serial(label, n, body)` (the same in
+  order on the calling thread, for cases that share the one device context), `check_rows(label, rows, body)` (the
   same over a `List` of parameter structs, a failing row named by its fields), `assert_same_words` (bit-for-bit, any
-  dtype), `assert_close` (rtol/atol, NaN only against NaN), `column_name()`.
-- `tools/ops/native_testsuite.sh build|run|is`: builds every TestSuite file of a column to `bin/ts/<name>` (workers =
-  min(cores, MemAvailable x 0.8 / `NC_TS_PEAK_MB`, default 1200)), a failed compile is that check's red row; runs one
-  file as one process with the crash localisation above.
+  dtype), `assert_close` (rtol/atol, NaN only against NaN), `require(ok, message)`, `CPU_COLUMN_BUILD` and
+  `column_name()`, and the fixture readers `fixture_words` / `fixture_f32` / `fixture_i32` (`count` words, extent
+  checked) and `read_f32_file` / `read_i32_file` (length from the file). Import them from here; never restate one.
+- `tools/ops/native_testsuite.sh build|run|one|is`: `build` compiles a column's TestSuite files as G GROUP programs
+  (lane ts-build, below), prepares the generated sources, fixture packs, column defines and x86-64-v3 target itself,
+  and gives a file that fails to compile its own red row; `run` runs one file as one process with the crash
+  localisation above; `one <column> <name>` builds and runs one file alone (the e1 scripts).
+
+### The grouped build (lane ts-build, 2026-11-22)
+
+One binary per file recompiled the code the files share once per file: the 361 GPU-column files took 4,741 s on the
+14-core L40S (nvc1-0004) against about 50 min for the old one `run_gpu`. `tools/ops/native_testsuite_groups.py plan`
+deals a column's files into G groups (G = the compiles at once: min(allocation cores, memory x 0.8 /
+`NC_TS_GROUP_PEAK_MB`)), families kept together and balanced by the per-file compile seconds in
+`tools/ops/native_testsuite_costs.tsv` (measured once on cpc2). For each group it writes, in the build tree only:
+per member `ts_<name>.mojo`, a copy whose `main()` lists its tests by name, and the driver `ts_group_<k>.mojo`, whose
+`main()` calls the member named by `MOJOLEARN_TS_FILE`. `bin/ts/<name>` is a wrapper that runs its group binary with
+that variable, so the command line (`--only`, `--skip`, `--skip-all`), the output, the per-file result row and the
+crash localisation are exactly those of a single-file binary. A group that fails to compile is rebuilt one file at a
+time, so the failing file is the red row and the others still run. Why copies (measured, Mojo 1.2.0): a module with
+`main()` cannot be imported through a package ("'main()' is not supported within packages"), and
+`__functions_in_module()` called from an imported module's `main()` does not see that module's tests (0 ran).
+
+### The two-column rule (what the batches found)
+
+A file that runs on both columns, or a GPU-column file whose module holds device code, must build for the HOST too:
+discovery (`TestSuite.discover_tests[__functions_in_module()]`) elaborates EVERY function of the module, not only the
+`test_*` ones, so a device-only helper fails the host build ("target 'unknown' is not supported", or the stdlib's
+`_get_intrinsic_name` constraint for a GPU kernel).
+
+1. Put each device-only route under `comptime if not CPU_COLUMN_BUILD:` (from `testsuite_cases`), with the host route
+   in the `else`, inside the function that needs it; never two copies of a test.
+2. When the module's GPU kernels refuse the host target even guarded, register the tests by name in `main()` instead
+   of discovery (`var suite = TestSuite()`, `suite.test[test_x]()` per test, `suite^.run()`) and say why in a comment
+   there (`checks/division_check.mojo`). The grouped build does the same for every file in its generated copies.
+3. A column-specific test is `comptime if` inside it or `suite.skip[...]()` in `main()`; the column is the build
+   define, never a runtime argument.
 - `tools/ops/native_checks_steps.sh build` runs it beside the one `run_<column>` compile (the cores that compile leaves
   idle); `shard` runs a TestSuite check's own binary. `tools/ops/native_checks_gpu_job.sh` does the same on the L40S.
 - `tools/ops/native_checks_report.py`: a TestSuite check is a file whose SECOND line is `# native-check: cpu`,
@@ -123,8 +158,8 @@ Steps, per check:
 6. Delete, each with one line in the commit saying what still covers it: a case that duplicates another case, a case
    that only asserts source text or file layout, a case of a path that no longer exists. Same inputs, references,
    tolerances, messages and kernel calls otherwise: this moves test structure, not what is asserted.
-7. A check that registered a `serial` reason (a global registry or the one device): its case tables loop in order
-   instead of `check_cases` (write `check_cases_serial` once, in `testsuite_cases.mojo`, when the first one comes).
+7. A check that registered a `serial` reason (a global registry or the one device): its case tables use
+   `check_cases_serial` (in `testsuite_cases.mojo`) instead of `check_cases`.
 
 Mechanical help: `~/mojolearn-evidence/ts-pilot/tools/convert_fixture_check.py <repo> <name>` converts a check whose
 dispatch is plain fixture ranges (steps 1-3 and the marker) and refuses anything else; steps 4-7 are by hand.

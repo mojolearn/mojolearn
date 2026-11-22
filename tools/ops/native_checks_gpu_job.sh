@@ -108,9 +108,9 @@ BIN="$BIN_DIR/run_gpu"
 say "building run_gpu ($n checks planned)"
 bsampler=$(busy_sampler "$RES/busy_cores_build.txt")
 bstart=$(date +%s)
-# the TestSuite check files of the device column, one binary each, beside the one compile (lane ts-pilot)
-NC_DEFINES="-D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1" NC_TARGET="" IN_FILTER="$FILTER" \
-    bash tools/ops/native_testsuite.sh build gpu "$BIN_DIR" "$RES" > "$RES/logs/build-testsuite-gpu.log" 2>&1 &
+# the TestSuite check files of the device column, as group programs (tools/ops/native_testsuite.sh build: its own
+# defines, target, generated sources and fixtures), beside the one compile (lane ts-pilot; grouped, lane ts-build)
+IN_FILTER="$FILTER" bash tools/ops/native_testsuite.sh build gpu "$BIN_DIR" "$RES" > "$RES/logs/build-testsuite-gpu.log" 2>&1 &
 tspid=$!
 if [ -x /usr/bin/time ]; then
     /usr/bin/time -v -o "$RES/time/build-gpu.txt" pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_RESIDENT_UPLOAD_COUNT=1 -I . \

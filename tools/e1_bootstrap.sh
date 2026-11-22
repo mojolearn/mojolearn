@@ -121,17 +121,17 @@ E1_IDENT_BINDINGS="build.sh build_estimators.sh build_gbdt.sh build_rf.sh build_
 
 if run_phase 0; then
 step "phase 0: smoke (hardware matrix, column detection)"
-"$IDENT" pixi run check-native-cpu hardware_matrix_check || echo "PHASE0-FINDING: hardware matrix (see log)"
+"$IDENT" bash tools/ops/native_testsuite.sh one cpu hardware_matrix_check || echo "PHASE0-FINDING: hardware matrix (see log)"
 
 fi
 
 if run_phase 1; then
 step "phase 1: vendor characterization (row 10 precondition)"
-"$IDENT" pixi run check-native-gpu ieee_arith_check || echo "PHASE1-FINDING: ieee-arith (see log)"
+"$IDENT" bash tools/ops/native_testsuite.sh one gpu ieee_arith_check || echo "PHASE1-FINDING: ieee-arith (see log)"
 # row 12's certificate line: the printed device hash must be the SAME
 # NUMBER on every vendor column (Apple measured 8705486125800438413)
-"$IDENT" pixi run check-native-gpu portable_translog_check || echo "PHASE1-FINDING: portable-translog (see log)"
-"$IDENT" pixi run check-native-gpu portable_sqrtcos_check || echo "PHASE1-FINDING: portable-sqrtcos (see log)"
+"$IDENT" bash tools/ops/native_testsuite.sh one gpu portable_translog_check || echo "PHASE1-FINDING: portable-translog (see log)"
+"$IDENT" bash tools/ops/native_testsuite.sh one gpu portable_sqrtcos_check || echo "PHASE1-FINDING: portable-sqrtcos (see log)"
 
 fi
 

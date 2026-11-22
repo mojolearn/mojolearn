@@ -100,11 +100,11 @@ MOJOLEARN_IDENTITY_TRACE="$OUT/.probe.card" MOJOLEARN_UNSUP_ARM=kmeans \
 rm -f "$OUT/.probe.card"
 
 step "phase 1: vendor characterization (row 10's precondition)"
-tools/with_identical_mode.sh pixi run check-native-gpu ieee_arith_check || echo "PHASE1-FINDING: ieee-arith"
+tools/with_identical_mode.sh bash tools/ops/native_testsuite.sh one gpu ieee_arith_check || echo "PHASE1-FINDING: ieee-arith"
 
 step "phase 1b: the portable transcendental certificate"
-tools/with_identical_mode.sh pixi run check-native-gpu portable_translog_check || echo "PHASE1-FINDING: portable-translog"
-tools/with_identical_mode.sh pixi run check-native-gpu portable_sqrtcos_check || echo "PHASE1-FINDING: portable-sqrtcos"
+tools/with_identical_mode.sh bash tools/ops/native_testsuite.sh one gpu portable_translog_check || echo "PHASE1-FINDING: portable-translog"
+tools/with_identical_mode.sh bash tools/ops/native_testsuite.sh one gpu portable_sqrtcos_check || echo "PHASE1-FINDING: portable-sqrtcos"
 
 step "phase 2: the local gates, IDENTICAL"
 # Already inside the flip, so the files run directly rather than through
