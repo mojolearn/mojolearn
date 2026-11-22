@@ -42,7 +42,8 @@ class NativeMetadataOwnerConnections(unittest.TestCase):
         frameworks_before = {name for name in ('torch', 'onnx', 'tensorflow') if name in sys.modules}
         owners = {
             'mojolearn._array': '_ARRAY_CONTEXT',
-            'mojolearn._expansion_trees': '_TREES_CONTEXT',
+            # mojolearn._expansion_trees is not registered: 946b5877d3 removed the by-name read
+            # of _TREES_CONTEXT (a bag's estimators_ take the run context from the trees door).
             'mojolearn._mode': '_MODE_METADATA_CONTEXT',
             'mojolearn._native_family_bridge': '_CONTEXT',
             'mojolearn.importers._program': '_IMPORT_CONTEXT',
