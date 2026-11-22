@@ -38,7 +38,7 @@ from core.host_helpers_impl import (
     gather_i64,
     gather_rows_bytes,
 )
-from core.host_helpers_impl import _i64_ptr
+from bindings.host_helpers_run import _i64_ptr
 
 
 def all_finite_f32_binding(addr: PythonObject, n: PythonObject) raises -> PythonObject:
