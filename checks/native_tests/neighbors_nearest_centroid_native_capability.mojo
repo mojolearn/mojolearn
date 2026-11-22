@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """NearestCentroid probabilities through the native descriptor's softmax.
 
 Ported from `python/mojolearn/tests/test_nearest_centroid_native_capability.py`
@@ -14,10 +15,20 @@ here; the relations hold for any data). Priors are the class proportions
 from std.math import cos, exp, log, sqrt
 from core.nearest_centroid_plan import NcDriver, NcFitPlan, NcQueryPlan, NcLabelCodes
 from core.native_descriptor_abi import NativeDescriptorCall
-from core.host_parallel import host_parallelize
 from x_neighbors.native_descriptor_host import xn_native_v1
 from x_neighbors.native_descriptor_device import xn_native_v1 as xn_native_v1_gpu
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime NC_CAPABILITY_FIXTURES = 2
@@ -118,14 +129,8 @@ def fixture(entry: NativeDescriptorCall, unit: Int) raises:
 
 # ---- The host column (was neighbors_nearest_centroid_native_capability_cpu_suite.mojo) ----
 # NearestCentroid softmax-capability fixtures; independent fixtures run across host workers.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(NC_CAPABILITY_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(xn_native_v1, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, NC_CAPABILITY_FIXTURES)
+def _host_fixture(unit: Int) raises:
+    fixture(xn_native_v1, unit)
 
 
 # ---- The device column (was neighbors_nearest_centroid_native_capability_gpu_suite.mojo) ----
@@ -134,24 +139,24 @@ def _run_cpu(mut report: Report) raises:
 # The descriptor's graphs share one DeviceContext, so the fixtures are
 # submitted in order (as `nearest_centroid_numeric_gpu_suite.mojo` does); the
 # kernels keep their own parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(NC_CAPABILITY_FIXTURES)
-    for unit in range(NC_CAPABILITY_FIXTURES):
+def _device_fixtures_in_order() raises:
+    var failed = 0
+    for unit in range(NC_CAPABILITY_FIXTURES):  # one shared device context: the fixtures in order
         try:
             fixture(xn_native_v1_gpu, unit)
         except error:
-            cases.fail(unit, error)
+            failed += 1
+            print("FAIL neighbors_nearest_centroid_native_capability gpu fixture", unit, String(error))
+    if failed:
+        raise Error("neighbors_nearest_centroid_native_capability GPU failed " + String(failed) + " of " + String(NC_CAPABILITY_FIXTURES) + " fixtures")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", NC_CAPABILITY_FIXTURES, _host_fixture)
+    else:
+        _device_fixtures_in_order()
 
 
-def register() -> Check:
-    return Check("neighbors_nearest_centroid_native_capability", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

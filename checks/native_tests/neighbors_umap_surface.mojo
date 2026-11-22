@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """UMAP fit and transform numerics through the UMAP operations table.
 
 Ported from `python/mojolearn/tests/test_umap_surface.py`
@@ -30,10 +31,20 @@ from core.neighbors_entry_table_umap import (
     UMAP_TAIL_LEGACY,
     UMAP_TAIL_RATES,
 )
-from core.host_parallel import host_parallelize
 from umap.ops_entry_host import umap_ops_host_v1
 from umap.ops_entry_device import umap_ops_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime UMAP_SURFACE_FIXTURES = 9
@@ -269,14 +280,8 @@ def fixture(entry: NativeDescriptorCall, unit: Int) raises:
 
 # ---- The host column (was neighbors_umap_surface_cpu_suite.mojo) ----
 # UMAP fit/transform numerics on the CPU column; independent fixtures run across host workers.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(UMAP_SURFACE_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(umap_ops_host_v1, unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, UMAP_SURFACE_FIXTURES)
+def _host_fixture(unit: Int) raises:
+    fixture(umap_ops_host_v1, unit)
 
 
 # ---- The device column (was neighbors_umap_surface_gpu_suite.mojo) ----
@@ -285,24 +290,24 @@ def _run_cpu(mut report: Report) raises:
 # The entries share the metrics image's device context, so the fixtures submit
 # in order (as `umap_ops_gpu_suite.mojo` does); the kernels keep their native
 # parallelism.
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(UMAP_SURFACE_FIXTURES)
-    for unit in range(UMAP_SURFACE_FIXTURES):
+def _device_fixtures_in_order() raises:
+    var failed = 0
+    for unit in range(UMAP_SURFACE_FIXTURES):  # one shared device context: the fixtures in order
         try:
             fixture(umap_ops_device_v1, unit)
         except error:
-            cases.fail(unit, error)
+            failed += 1
+            print("FAIL neighbors_umap_surface gpu fixture", unit, String(error))
+    if failed:
+        raise Error("neighbors_umap_surface GPU failed " + String(failed) + " of " + String(UMAP_SURFACE_FIXTURES) + " fixtures")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", UMAP_SURFACE_FIXTURES, _host_fixture)
+    else:
+        _device_fixtures_in_order()
 
 
-def register() -> Check:
-    return Check("neighbors_umap_surface", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

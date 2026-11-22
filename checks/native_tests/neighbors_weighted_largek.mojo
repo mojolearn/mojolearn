@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Distance-weighted k-NN votes and large-k ranked selection on the device.
 
 Ported from `python/mojolearn/tests/test_neighbors_weighted_largek.py` (the
@@ -29,7 +30,17 @@ from neighbors.estimator import knn_classifier_predict, knn_regressor_predict, k
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.impl.distance.detail.distance_ops import DIST_L1
 from neighbors.impl.selection.distance_weights import WEIGHTS_UNIFORM, WEIGHTS_DISTANCE
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The device column (was neighbors_weighted_largek_gpu_suite.mojo) ----
@@ -211,28 +222,26 @@ def case_strided_ranks(ctx: DeviceContext) raises:
     _ = order^
 
 
-def _run_gpu(mut report: Report) raises:
-    var ctx = DeviceContext()
-    var cases = report.cases(WEIGHTED_LARGEK_FIXTURES)
-    for unit in range(WEIGHTED_LARGEK_FIXTURES):
-        try:
-            if unit == 0:
-                case_exact_matches(ctx)
-            elif unit == 1:
-                case_inverse_distance(ctx)
-            else:
-                case_strided_ranks(ctx)
-        except error:
-            cases.fail(unit, error)
+def test_cases_in_order() raises:
+    """Device column only; the three cases share one device context, in order."""
+    comptime if not CPU_COLUMN_BUILD:
+        var ctx = DeviceContext()
+        var failed = 0
+        for unit in range(WEIGHTED_LARGEK_FIXTURES):  # one device context: the cases in order
+            try:
+                if unit == 0:
+                    case_exact_matches(ctx)
+                elif unit == 1:
+                    case_inverse_distance(ctx)
+                else:
+                    case_strided_ranks(ctx)
+            except error:
+                failed += 1
+                print("FAIL neighbors_weighted_largek case", unit, String(error))
+        if failed:
+            raise Error("neighbors_weighted_largek failed " + String(failed) + " of "
+                        + String(WEIGHTED_LARGEK_FIXTURES) + " cases")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("neighbors_weighted_largek", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

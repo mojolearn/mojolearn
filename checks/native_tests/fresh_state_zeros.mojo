@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Fresh optimizer state reads zeros (lane unfilled-storage-audit, 2026-11-15).
 
 Optimizer moments are STATE: a step reads them before it writes them, so a
@@ -16,17 +17,27 @@ columns:
      every cell.
 
 Serial: the optimizer pool is one process-wide registry, and case 2 relies on
-the freed handle being the one reopened.
+the freed handle being the one reopened. One `test_*` per case; TestSuite runs
+them one after another, and each case closes what it opens.
 """
 from training.optimizer_native_api import OptimizerNativeDriver
 from training.host.optimizer_native import optimizer_host_v1
 from training.optimizer_native_gpu import optimizer_gpu_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime _GUARD = Float32(913.25)
 comptime _DIRT = Float32(-7.5)
-comptime _CASES = 3
 
 
 struct _Cells(Movable):
@@ -92,18 +103,24 @@ def _case(driver: OptimizerNativeDriver, case_id: Int) raises:
             _ = driver.close(handle)
 
 
-def run_cases(column: Column, mut report: Report):
-    var cases = report.cases(_CASES)
-    for case_id in range(_CASES):  # serial: one process-wide optimizer pool (see the module docstring)
-        try:
-            comptime if CPU_COLUMN_BUILD:
-                _case(OptimizerNativeDriver(optimizer_host_v1, True), case_id)
-            else:
-                _case(OptimizerNativeDriver(optimizer_gpu_v1, False), case_id)
-        except error:
-            cases.fail(case_id, error)
+def _driver() -> OptimizerNativeDriver:
+    comptime if CPU_COLUMN_BUILD:
+        return OptimizerNativeDriver(optimizer_host_v1, True)
+    else:
+        return OptimizerNativeDriver(optimizer_gpu_v1, False)
 
 
-def register() -> Check:
-    return Check("fresh_state_zeros", cpu=True, gpu=True,
-        serial="one process-wide optimizer pool; the reuse cases need the freed handle", run=run_cases)
+def test_fresh_slot() raises:
+    _case(_driver(), 0)
+
+
+def test_reopened_slot() raises:
+    _case(_driver(), 1)
+
+
+def test_grown_slot() raises:
+    _case(_driver(), 2)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

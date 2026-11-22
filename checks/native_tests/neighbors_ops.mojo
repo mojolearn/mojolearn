@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The neighbors operations table (core/neighbors_entry_table.mojo), one case
 per entry the k-NN owner (bindings/neighbors_knn_native.mojo) calls, with
 expectations known by construction (one-feature points far apart, exact
@@ -24,11 +25,21 @@ from core.neighbors_entry_table import (
     neighbors_vendor_word,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from core.host_parallel import host_parallelize
 from neighbors.ops_entry_host import neighbors_ops_host_v1, NEIGHBORS_OPS_HOST_API
 from checks.vendor import COMPILED_VENDOR
 from neighbors.ops_entry_device import neighbors_ops_device_v1, NEIGHBORS_OPS_DEVICE_API
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 comptime NEIGHBORS_SHARED_CASES = 4
@@ -251,21 +262,17 @@ def check_neighbors_table(key: NeighborsEntryKey, publisher: Int, entry: NativeD
 # The CPU column of the neighbors operations table: the table round trip
 # first (ordered metadata), then the independent entry cases on the existing
 # host pool.
-def _run_cpu(mut report: Report) raises:
+def _host_table() raises:
     var mode = Int(GLOBAL_NUMERIC_MODE)
     var api = NEIGHBORS_OPS_HOST_API.get_or_create_ptr()
     check_neighbors_table(NeighborsEntryKey(mode, 0), Int(api[].entries.unsafe_ptr()), neighbors_ops_host_v1)
-    var total = NEIGHBORS_SHARED_CASES + 1
-    var cases = report.cases(total)
-    def task(case_id: Int) {imm cases}:
-        try:
-            if case_id < NEIGHBORS_SHARED_CASES:
-                run_shared_case(neighbors_ops_host_v1, case_id)
-            else:
-                case_host_refuses_resident(neighbors_ops_host_v1)
-        except error:
-            cases.fail(case_id, error)
-    report.parallel(task, total)
+
+
+def _host_case(case_id: Int) raises:
+    if case_id < NEIGHBORS_SHARED_CASES:
+        run_shared_case(neighbors_ops_host_v1, case_id)
+    else:
+        case_host_refuses_resident(neighbors_ops_host_v1)
 
 
 # ---- The device column (was neighbors_ops_gpu_suite.mojo) ----
@@ -273,7 +280,7 @@ def _run_cpu(mut report: Report) raises:
 # the base binding's device context and resident registry, so the cases
 # submit in order; the kernels keep their native parallelism (no concurrency
 # claim).
-def _run_gpu(mut report: Report) raises:
+def _device_cases_in_order() raises:
     var mode = Int(GLOBAL_NUMERIC_MODE)
     var vendor = neighbors_vendor_word(COMPILED_VENDOR)
     require(vendor > 0, "neighbors_ops_gpu: this build has no GPU vendor")
@@ -296,15 +303,14 @@ def _run_gpu(mut report: Report) raises:
     print("PASS neighbors_ops_gpu:", NEIGHBORS_SHARED_CASES + NEIGHBORS_DEVICE_CASES, "native neighbors table cases")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_table_then_cases() raises:
+    """The table check first, then the cases: across the host cores on the host column, in order on the device."""
+    comptime if CPU_COLUMN_BUILD:
+        _host_table()
+        check_cases("case", NEIGHBORS_SHARED_CASES + 1, _host_case)
+    else:
+        _device_cases_in_order()
 
 
-def register() -> Check:
-    return Check("neighbors_ops", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

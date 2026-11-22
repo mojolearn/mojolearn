@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual variant provider fixtures with small, independent arithmetic oracles.
 
 No Python, timing, seeded-output hashes or alternate numerical implementation.
 Independent cases run in parallel; the two partial updates within one case
 are necessarily ordered because the second consumes the first model state.
 """
-from core.host_parallel import host_parallelize
 from core.kmeans_variants_api import (
     KMeansVariantsDriver,
     VariantsSpan,
@@ -18,7 +18,18 @@ from core.kmeans_variants_api import (
 )
 from x_cluster.variants_host import kmeans_variants_host_v1
 from x_cluster.variants_device import kmeans_variants_device_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The host column (was kmeans_variants_native_cpu_suite.mojo) ----
@@ -158,23 +169,17 @@ def fixture(driver: KMeansVariantsDriver, unit: Int) raises:
         query_case(driver, unit - 7)
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(KMEANS_VARIANTS_NATIVE_CPU_FIXTURES)
-    def run(unit: Int) {imm cases}:
-        try:
-            fixture(KMeansVariantsDriver(kmeans_variants_host_v1), unit)
-        except problem:
-            cases.fail(unit, problem)
-    report.parallel(run, KMEANS_VARIANTS_NATIVE_CPU_FIXTURES)
+def _host_fixture(unit: Int) raises:
+    fixture(KMeansVariantsDriver(kmeans_variants_host_v1), unit)
 
 
 # ---- The device column (was kmeans_variants_native_gpu_suite.mojo) ----
 # Actual device numerical fixtures, ordered within one GPU process.
 #
 # The shared DeviceContext concurrent-submit reproducer remains parked. This
-# wrapper exercises existing numerical routes only; product operations remain
-# unchanged and parallel. CPU fixture units use their parallel suite runner.
-def _run_gpu(mut report: Report) raises:
+# exercises existing numerical routes only; product operations remain
+# unchanged and parallel. The host column runs its fixtures across the host cores.
+def _device_fixtures_in_order() raises:
     var driver = KMeansVariantsDriver(kmeans_variants_device_v1)
     var failed = 0
     for unit in range(KMEANS_VARIANTS_NATIVE_CPU_FIXTURES):  # one shared device context; no concurrency qualification
@@ -185,18 +190,14 @@ def _run_gpu(mut report: Report) raises:
             print("FAIL kmeans_variants_native_gpu fixture", unit, String(problem))
     if failed:
         raise Error("native KMeans variants GPU failed " + String(failed) + " fixtures")
-    print("PASS kmeans_variants_native_gpu:", KMEANS_VARIANTS_NATIVE_CPU_FIXTURES, "ordered actual device numerical fixtures")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_fixtures() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("fixture", KMEANS_VARIANTS_NATIVE_CPU_FIXTURES, _host_fixture)
+    else:
+        _device_fixtures_in_order()
 
 
-def register() -> Check:
-    return Check("kmeans_variants_native", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

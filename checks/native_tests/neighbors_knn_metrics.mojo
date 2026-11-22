@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Brute-force k-NN under metric='inner_product' on the device.
 
 Ported from `test_inner_product_is_the_largest_products` in
@@ -22,7 +23,17 @@ from core.hostptr import f32_ptr, u32_ptr
 from neighbors.estimator import knn_search, DEFAULT_QUERY_TILE
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.impl.distance.detail.distance_ops import DIST_INNER_PRODUCT
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from std.sys.compile import is_defined
+from std.testing import TestSuite
+
+
+# The column this binary was built for (`-D MOJOLEARN_COLUMN_CPU=1` builds the host column).
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The device column (was neighbors_knn_metrics_gpu_suite.mojo) ----
@@ -45,7 +56,7 @@ def normal_rows(seed: Int, count: Int) -> List[Float32]:
     return values^
 
 
-def _run_gpu(mut report: Report) raises:
+def _inner_product_against_float64() raises:
     comptime N = 200
     comptime D = 7
     comptime Q = 20
@@ -100,13 +111,11 @@ def _run_gpu(mut report: Report) raises:
     print("PASS neighbors_knn_metrics_gpu: inner_product k-NN against the float64 products")
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_inner_product_against_float64() raises:
+    """Device column only (the k-NN search runs on the device)."""
+    comptime if not CPU_COLUMN_BUILD:
+        _inner_product_against_float64()
 
 
-def register() -> Check:
-    return Check("neighbors_knn_metrics", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
