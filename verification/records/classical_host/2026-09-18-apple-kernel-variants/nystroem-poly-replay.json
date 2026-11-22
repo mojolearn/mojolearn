@@ -1,0 +1,417 @@
+{
+  "binaries": {
+    "_mojolearn": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_forecast_host.so",
+    "_mojolearn_embedding": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_embedding_infer_host.so",
+    "_mojolearn_estimators": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+    "_mojolearn_gp": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_gp_infer_host.so",
+    "_mojolearn_hdbscan": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_ivf": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_ivf_search_host.so",
+    "_mojolearn_kernel_methods": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_svm_host.so",
+    "_mojolearn_tsa": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_forecast_host.so"
+  },
+  "binary": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-18T13:46:11-0400",
+  "commit": "7861634088d8c00889c4aeb876ed75c542bd19e6",
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "02ec78f40b7df2355331bef94ec6d49b218bbec7be458d1992a482ae2f535a5f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "02ec78f40b7df2355331bef94ec6d49b218bbec7be458d1992a482ae2f535a5f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "72f8d08aabdc42ba",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "72f8d08aabdc42ba",
+        "want": "72f8d08aabdc42ba"
+      },
+      "kind": "base",
+      "lane": "nystroem-poly",
+      "model_sha256": "c774abd983d4c17ea35b7a5ca0d2c5de77990984e15cf271e95a54287461dfeb",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.001616
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "6c7ee0bfaa440df53e409eb2c16828c6429c1edf92eea97be701e3e89f798fc6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "6c7ee0bfaa440df53e409eb2c16828c6429c1edf92eea97be701e3e89f798fc6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "b31d6cf88a1b4b0a",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "b31d6cf88a1b4b0a",
+        "want": "b31d6cf88a1b4b0a"
+      },
+      "kind": "denormal",
+      "lane": "nystroem-poly",
+      "model_sha256": "60625a8079a65c6507729272f1e44c7309f9da5f87e96464d3602727d7a26b7a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000206
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "6c7ee0bfaa440df53e409eb2c16828c6429c1edf92eea97be701e3e89f798fc6",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "6c7ee0bfaa440df53e409eb2c16828c6429c1edf92eea97be701e3e89f798fc6",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "b31d6cf88a1b4b0a",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "b31d6cf88a1b4b0a",
+        "want": "b31d6cf88a1b4b0a"
+      },
+      "kind": "denormal_ftz",
+      "lane": "nystroem-poly",
+      "model_sha256": "bae6fd03176179824a5fa798a770fe41b0107b675403a4157bd59045884336c4",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000183
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "02ec78f40b7df2355331bef94ec6d49b218bbec7be458d1992a482ae2f535a5f",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "02ec78f40b7df2355331bef94ec6d49b218bbec7be458d1992a482ae2f535a5f",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "72f8d08aabdc42ba",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "72f8d08aabdc42ba",
+        "want": "72f8d08aabdc42ba"
+      },
+      "kind": "dupes",
+      "lane": "nystroem-poly",
+      "model_sha256": "c774abd983d4c17ea35b7a5ca0d2c5de77990984e15cf271e95a54287461dfeb",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000162
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "5d6826b0ae1e255fb286a3b773980fb3e9f90bd12d5129c837a7c13fbd2d71c4",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "5d6826b0ae1e255fb286a3b773980fb3e9f90bd12d5129c837a7c13fbd2d71c4",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "43c1429ff4e1ffc7",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "43c1429ff4e1ffc7",
+        "want": "43c1429ff4e1ffc7"
+      },
+      "kind": "hashed",
+      "lane": "nystroem-poly",
+      "model_sha256": "6a75a46ca93a2495ea53a0316bb1b3ba18b6043e406724219d5ec0c00c2bd128",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.00024
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "fde7d8815ea0982fcefaf99aca78aeea764eb803534e34ff2478bbb096d5efe3",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "fde7d8815ea0982fcefaf99aca78aeea764eb803534e34ff2478bbb096d5efe3",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "a4efe593469513e6",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "a4efe593469513e6",
+        "want": "a4efe593469513e6"
+      },
+      "kind": "negative",
+      "lane": "nystroem-poly",
+      "model_sha256": "f3f717a18d4b83739a40e8842db4990c7e208dded0f6b33ea15ce1799b49cd9b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000186
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "6a543ed4e2af62572442867b8448a8d1c080f06aad69f0b2bba20a4b06a3fa0b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "6a543ed4e2af62572442867b8448a8d1c080f06aad69f0b2bba20a4b06a3fa0b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "63e12b1c9e908484",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "63e12b1c9e908484",
+        "want": "63e12b1c9e908484"
+      },
+      "kind": "odd",
+      "lane": "nystroem-poly",
+      "model_sha256": "710ec4027aef65f9ba13a6fb7a1b560d7fbf305a1e26cabaf4e92288915e8527",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000204
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "4e8a78116edf64c616f7636e837893fd2762bd5542fe124c553ff6638a385498",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "4e8a78116edf64c616f7636e837893fd2762bd5542fe124c553ff6638a385498",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "0a5956cc444a717c",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "0a5956cc444a717c",
+        "want": "0a5956cc444a717c"
+      },
+      "kind": "ties",
+      "lane": "nystroem-poly",
+      "model_sha256": "83fbe7988b4088564a80f178cbb32b2e6597b26d47cc04937089d251ff7a99b6",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000188
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "600d2da549afc1f83630ce193afff56498059491ece2e741eb75688cb5e98bd5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "600d2da549afc1f83630ce193afff56498059491ece2e741eb75688cb5e98bd5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-poly.json",
+          "equal": true,
+          "infer": "ff8f858e03b81a4c",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "ff8f858e03b81a4c",
+        "want": "ff8f858e03b81a4c"
+      },
+      "kind": "wide",
+      "lane": "nystroem-poly",
+      "model_sha256": "b31eacfe0fee330801bb2ee746700c8b90bf7d7592a1bc43fe262df4878e0f21",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000167
+    }
+  ],
+  "gpu_columns": [
+    "apple-nystroem-poly.json"
+  ],
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "unmoved": [
+    "nystroem-poly/base",
+    "nystroem-poly/denormal",
+    "nystroem-poly/denormal_ftz",
+    "nystroem-poly/dupes",
+    "nystroem-poly/hashed",
+    "nystroem-poly/negative",
+    "nystroem-poly/odd",
+    "nystroem-poly/ties",
+    "nystroem-poly/wide"
+  ],
+  "vendor": "metal",
+  "verdict": "IDENTICAL"
+}

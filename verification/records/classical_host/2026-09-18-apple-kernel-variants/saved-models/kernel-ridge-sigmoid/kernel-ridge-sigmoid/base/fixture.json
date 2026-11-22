@@ -1,0 +1,8 @@
+{
+  "estimator": "KernelRidge",
+  "heldout_seed": 1,
+  "kind": "base",
+  "lane": "kernel-ridge-sigmoid",
+  "probe_rows": 256,
+  "x_sha256": "81b95ad35ae40207bf9d58c1ac22161034eab4823e33bc91bebee40ddda2ac8d"
+}

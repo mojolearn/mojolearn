@@ -1,0 +1,8 @@
+{
+  "estimator": "SpectralClustering",
+  "heldout_seed": 1,
+  "kind": "denormal",
+  "lane": "spectral-precomputed",
+  "probe_rows": 256,
+  "x_sha256": "a67775cb50fa4e97d03889cd219ee75e0b531598a6674bd6ab4ad2e2d51ed998"
+}

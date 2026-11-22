@@ -138,7 +138,7 @@ why this family's arm is a unit and not an order. Read back by
 
 That arm is in `host_accumulate`, which ONLY THE FIT walks. It therefore
 says nothing about a SAVED model's `predict` and `transform`, which is what
-`bench/results/classical_host/` records and what a CPU-only install actually
+`verification/records/classical_host/` records and what a CPU-only install actually
 runs. The arms for that side are `KMEANS_PREDICT_HOST_SABOTAGE` (one bit into
 every predicted label AND one unit into every transform cell) and
 `KMEANS_TRANSFORM_HOST_SABOTAGE` (the transform half alone, which the family

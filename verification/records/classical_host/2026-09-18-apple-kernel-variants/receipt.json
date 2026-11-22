@@ -1,0 +1,71 @@
+{
+  "status": "APPLE_SAVED_MODEL_REPLAY_PASSED_UNQUALIFIED",
+  "source_commit": "7861634088d8c00889c4aeb876ed75c542bd19e6",
+  "scope": "Apple saved-model recording and CPU replay using retained kernel-identity native bindings; not fresh main-native or wheel qualification",
+  "native": {
+    "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/apple/_mojolearn_kernel_methods.so": "483bf3ed0a1c0f269a34f6002ebd77e5ca13a0641b6241e6346f8325d9513436",
+    "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so": "5b9f77144bd20a10776e803bc967aa2c2c9c2bb0b867c9c28ac2d0510a0410e3"
+  },
+  "stages": [
+    {
+      "lane": "kernel-ridge-poly",
+      "mode": "record",
+      "exit": 0
+    },
+    {
+      "lane": "kernel-ridge-poly",
+      "mode": "replay",
+      "exit": 0
+    },
+    {
+      "lane": "kernel-ridge-sigmoid",
+      "mode": "record",
+      "exit": 0
+    },
+    {
+      "lane": "kernel-ridge-sigmoid",
+      "mode": "replay",
+      "exit": 0
+    },
+    {
+      "lane": "kernel-ridge-laplacian",
+      "mode": "record",
+      "exit": 0
+    },
+    {
+      "lane": "kernel-ridge-laplacian",
+      "mode": "replay",
+      "exit": 0
+    },
+    {
+      "lane": "nystroem-poly",
+      "mode": "record",
+      "exit": 0
+    },
+    {
+      "lane": "nystroem-poly",
+      "mode": "replay",
+      "exit": 0
+    },
+    {
+      "lane": "nystroem-sigmoid",
+      "mode": "record",
+      "exit": 0
+    },
+    {
+      "lane": "nystroem-sigmoid",
+      "mode": "replay",
+      "exit": 0
+    },
+    {
+      "lane": "nystroem-laplacian",
+      "mode": "record",
+      "exit": 0
+    },
+    {
+      "lane": "nystroem-laplacian",
+      "mode": "replay",
+      "exit": 0
+    }
+  ]
+}

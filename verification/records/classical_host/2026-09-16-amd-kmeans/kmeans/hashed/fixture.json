@@ -1,0 +1,8 @@
+{
+  "estimator": "KMeans",
+  "heldout_seed": 1,
+  "kind": "hashed",
+  "lane": "kmeans",
+  "probe_rows": 20000,
+  "x_sha256": "fd2cef0e9a9046cee22df946aa6b7c0ef7f8c9b421b12ee9fce722f1cb9909bb"
+}

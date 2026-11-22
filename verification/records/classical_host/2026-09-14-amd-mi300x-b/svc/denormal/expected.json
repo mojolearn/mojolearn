@@ -1,0 +1,48 @@
+{
+  "commit": null,
+  "estimator": "SVC",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8470",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-124-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "denormal",
+  "lane": "svc",
+  "model_sha256": "29bbbd98ccefdde2fa2d1242ef29daf365e63eeb8f807c8b2cbbcc91838ece47",
+  "numeric_mode": "identical",
+  "predictions": {
+    "decision_function": {
+      "dtype": "<f4",
+      "sha256": "ec956d4b1ed71fca95bab5e5fd4dfbc552389930cb78b8c1b0b71f09288073fb",
+      "shape": [
+        256
+      ]
+    },
+    "identity_hash": "ebc593040592ca1e",
+    "predict": {
+      "dtype": "<i8",
+      "sha256": "b76a9a6c408c25f424aa29264bbfb20af5a05218d4820332f5a931a9e65ba3b5",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.004337
+  },
+  "recorded_at": "2026-09-14T10:18:02+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "hip",
+  "x_sha256": "a67775cb50fa4e97d03889cd219ee75e0b531598a6674bd6ab4ad2e2d51ed998"
+}

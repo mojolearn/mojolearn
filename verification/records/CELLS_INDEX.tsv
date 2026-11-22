@@ -2,6 +2,10 @@
 # tools/part_set_census.py (never by the verify table). Same rules as identity_break/INDEX.tsv.
 # A byte-identical copy of an identity_break record is not listed (it was counted twice).
 path	sha256	class	vendor	commit
+verification/records/classical_host/2026-09-13-apple-m4/identity_break_apple-m4_five-lanes.json	7d1ad1bf0046431dd09481be68cca78803c98368440396fce09145888fd5828e	apple	apple-m4	7c534e71347103cb236b38deeba4988b5cbe3f19
+verification/records/classical_host/2026-09-14-apple-m4-kde-svc/identity_break_apple-m4_three-lanes.json	dc3abc2d118710cff7decf8237a09b412140185ec70abf22838ee5bf00eaf51a	apple	arm64	6796ceff932391adeaea8d788a6c5230ddfacf53
+verification/records/release_verification/2026-10-26_pypi_0860/final-fixture-package/apple.json	9ab5aea42f89987d6ed0d53bebc7b933fcdec197837347f86e813c2796f2a454	apple	arm64	667ed9fdd1638644a73f547e70b0f376ea1246f0
+verification/records/release_verification/2026-10-26_pypi_0860/final-fixture-package/cpu.json	a60f3fbc3794a42909982e024562cdefc68bbb3a37ed58088dc20457aa64b185	cpu	cpu-apple-m4	667ed9fdd1638644a73f547e70b0f376ea1246f0
 verification/records/cells/small_training/2026-09-18-apple-m4/provenance-v2/cpu-replay.json	9d10273f1b1171eecb2dab99f3d65ca4c3ee41ec3cc5d53de7085256754ea381	cpu	-	-
 verification/records/cells/small_training/2026-09-18-apple-m4/provenance-v2/cpu-ridge-sabotage.json	6d4916640bdc071581aa9e10f2cc175e50a643027d23986fe040e80a6a27f1b3	cpu	-	-
 verification/records/cells/small_training/2026-09-18-apple-m4/provenance-v2/cpu.json	7c88c14652e1fa13d521a14c7662c80172c5d6b76e4791606687e2b9e5b5352f	cpu	-	-
@@ -116,5 +120,3 @@ verification/records/cells/verification_faults/2026-10-26-0860/x_sequence-1/sab_
 verification/records/cells/verification_faults/2026-10-26-0860/x_sequence-1/sab_device.json	cfdfb7ab159bac0a176782f7edabab9b45f6be0ee8aa6ead7a7a72f74888d1ca	-	arm64	04af3a7565a4d418eaebdebb55655e05ef212001
 verification/records/cells/verify_external/2026-09-14_nvidia-h100-outsider/nvidia-h100-sm_90a.json	d9e2ac871fa1d972179813f9a7530d89905158bee9e801f97f93f8844b76d32a	nvidia	nvidia-h100-sm_90a	7bf4f4cc9f73b47dce98fd55eccc281ead6691d3
 verification/records/cells/verify_external/2026-09-14_nvidia-h100-outsider/nvidia-h100-sm_90a.run2.json	d9e2ac871fa1d972179813f9a7530d89905158bee9e801f97f93f8844b76d32a	nvidia	nvidia-h100-sm_90a	7bf4f4cc9f73b47dce98fd55eccc281ead6691d3
-verification/records/release_verification/2026-10-26_pypi_0860/final-fixture-package/apple.json	9ab5aea42f89987d6ed0d53bebc7b933fcdec197837347f86e813c2796f2a454	apple	arm64	667ed9fdd1638644a73f547e70b0f376ea1246f0
-verification/records/release_verification/2026-10-26_pypi_0860/final-fixture-package/cpu.json	a60f3fbc3794a42909982e024562cdefc68bbb3a37ed58088dc20457aa64b185	cpu	cpu-apple-m4	667ed9fdd1638644a73f547e70b0f376ea1246f0

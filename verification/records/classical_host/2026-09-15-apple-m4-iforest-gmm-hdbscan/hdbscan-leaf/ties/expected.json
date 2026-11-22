@@ -1,0 +1,55 @@
+{
+  "commit": "cd20fc0b10b1a9a6ee7db3b3438a1d51de159932",
+  "estimator": "HDBSCAN",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "ties",
+  "lane": "hdbscan-leaf",
+  "model_sha256": "7649091225d549bde2abad85bb194fdae58f13e8b8aea2c55b9aab9f7797937b",
+  "numeric_mode": "identical",
+  "predictions": {
+    "all_points_membership_vectors": {
+      "dtype": "<f4",
+      "sha256": "a22ec3b1bb3b817bab3be478a7cf6124e2ca108677e02bfbb4917ac2f7ab7e1f",
+      "shape": [
+        6000,
+        183
+      ]
+    },
+    "approximate_predict_labels": {
+      "dtype": "<i4",
+      "sha256": "47225e4d8f45061c7d240616ad2fecf0a9306fa6bb3457ce668eb558111b4d47",
+      "shape": [
+        256
+      ]
+    },
+    "identity_hash": "47607746aff5c75c",
+    "membership_vector": {
+      "dtype": "<f4",
+      "sha256": "e4ef87bfb61bade6695bc6a2058a9157c721f94714b5618c0e477611d812170a",
+      "shape": [
+        256,
+        183
+      ]
+    },
+    "probabilities": {
+      "dtype": "<f4",
+      "sha256": "2415e45ef989a2d3c23d3a8bb6749993fc6531f38f555a3ef18ecd2bebe28522",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.270077
+  },
+  "recorded_at": "2026-09-15T13:26:26-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "cb717abc7fdea535547b185d7f6b53f113cbab5b15e61b6f0f7c62e31ea62f5e"
+}

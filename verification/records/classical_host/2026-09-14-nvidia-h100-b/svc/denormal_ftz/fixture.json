@@ -1,0 +1,8 @@
+{
+  "estimator": "SVC",
+  "heldout_seed": 1,
+  "kind": "denormal_ftz",
+  "lane": "svc",
+  "probe_rows": 256,
+  "x_sha256": "4e4a32ec62cf73fd1bd2f5ffa0a6be6345aaae4392587c3c784e9121b407d664"
+}

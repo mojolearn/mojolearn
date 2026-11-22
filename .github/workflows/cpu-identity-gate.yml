@@ -179,7 +179,10 @@ env:
   #                       name. The INFERENCE-ONLY lanes (logistic,
   #                       logistic-multiclass) are deliberately not there:
   #                       their train cell refuses by name on the CPU column,
-  #                       so `--require-columns 4` cannot hold on it. Since workstream E (2026-09-14) the knn,
+  #                       so `--require-columns 4` cannot hold on it. Their
+  #                       gate is tools/classical_host_gate.py over
+  #                       CLASSICAL_RECORDED, the same shape as the forest
+  #                       host gate. Since workstream E (2026-09-14) the knn,
   #                       pca, pca-whiten, tsvd, ols and ridge lanes train on
   #                       the host too and sit in both lists, and dbscan
   #                       trains on the host; batch 2 adds logistic (the
@@ -212,10 +215,15 @@ env:
   #                       `cpu_identity_gate_check.py build-list` fails the
   #                       manifest step when any of the three lists leaves out
   #                       a binding the manifest declares.
-  #   (The committed classical recordings, CLASSICAL_RECORDED,
-  #   SAVED_MODEL_RECORDED and CLASSICAL_GPU_COLUMNS, and their four gate
-  #   steps were deleted on 2026-11-25 (Andrew): the next release records
-  #   every lane fresh; tools/release_installed_checks.sh replays saved models.)
+  #   SAVED_MODEL_RECORDED
+  #                       the saved-model recordings of the unrouted inference
+  #                       families (forecast, mixture_infer, gp_infer,
+  #                       hdbscan_infer, ivf_search, embedding_infer),
+  #                       space separated, checked like CLASSICAL_RECORDED.
+  #   CLASSICAL_RECORDED  the classical host gate recordings, space separated.
+  #   CLASSICAL_GPU_COLUMNS
+  #                       the three 46-lane GPU columns the classical gate
+  #                       compares each host identity hash against.
   #   GPU_COLUMNS         the three committed GPU columns the CPU TRAINING
   #                       column is diffed against (--require-columns 4). The
   #                       record must not lag the surface: run 34832840859 at
@@ -445,6 +453,7 @@ jobs:
             !/bench/results/*
             !/verification/records/*
             /verification/records/forest_host/
+            /verification/records/classical_host/
             /verification/records/identity/
             !/verification/records/identity/*
             /verification/records/identity/2026-09-13_three-columns/
@@ -533,6 +542,9 @@ jobs:
               echo "SABOTAGE_FAMILIES=$(python3 $manifest --wheel-families)"
               echo "ALL_HOST_BINDINGS=$(python3 $manifest --wheel-bindings --sep ,)"
             fi
+            echo "CLASSICAL_RECORDED=$(python3 $manifest --classical-recorded)"
+            echo "SAVED_MODEL_RECORDED=$(python3 $manifest --saved-model-recorded)"
+            echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
             echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
             echo "RECORD_COVERED_LANES=$(python3 $manifest --record-covered-lanes)"
             echo "FIX_COVERED_LANES=$(python3 $manifest --fix-covered-lanes)"
@@ -551,7 +563,7 @@ jobs:
             --sabotage-families "$(sed -n 's/^SABOTAGE_FAMILIES=//p' "$GATE_OUT/manifest.txt")" \
             --readback "$(sed -n 's/^ALL_HOST_BINDINGS=//p' "$GATE_OUT/manifest.txt")" \
             2>&1 | tee "$GATE_OUT/build_list.log"
-          for d in $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns) $(python3 $manifest --gbdt-ctr-models); do
+          for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --saved-model-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns) $(python3 $manifest --gbdt-ctr-models); do
             [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
           done
           # The `if: always()` steps below run after an earlier failure too,
@@ -704,6 +716,42 @@ jobs:
           [ -n "${RECORDED:-}" ] || { echo "::error::RECORDED is empty: the forest fixture sorting step did not run (an earlier step failed); fix the first failed step" >&2; exit 1; }
           python3 tools/forest_host_gate.py check $RECORDED --expect-mismatch \
             --report "$GATE_OUT/forest_gate_sab.json" 2>&1 | tee "$GATE_OUT/forest_gate_sab.log"
+
+      # The classical host gate (ols, ridge, tsvd, logistic, pca; the classical
+      # host inference lane, 2026-09-13): every recording made on a GPU box
+      # (Apple M4, NVIDIA H100, AMD MI300X) predicts the same bits through the
+      # estimators and core host bindings built above, and each identity hash
+      # equals the three committed 2026-09-14 GPU infer cells.
+      - name: Classical host gate, every recorded prediction through the CPU column build
+        if: always()
+        run: |
+          set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
+          columns=""
+          for c in $CLASSICAL_GPU_COLUMNS; do columns="$columns --gpu-column $c"; done
+          python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED $columns \
+            --report "$GATE_OUT/classical_gate_prod.json" 2>&1 | tee "$GATE_OUT/classical_gate_prod.log"
+
+      # The saved-model recordings of the unrouted inference families
+      # (host_surface.saved_model_recorded(): ARIMA through forecast; GMM,
+      # its samples and HDBSCAN approximate_predict through mixture_infer and
+      # hdbscan_infer; the GP regressor and classifier through gp_infer; the
+      # IVF-Flat index and embedding table through ivf_search and
+      # embedding_infer; the isolation forest through core), recorded on the
+      # M4's Metal set and predicted here through the bindings built above.
+      # The neural binding has no saved-model recording: its gate is the
+      # covered lanes' four-column diff below, whose mlp, transformer, mamba
+      # and samba infer, batch, batchscale and ragged cells a CPU column
+      # asks through the public inference classes over _mojolearn_neural_host.
+      - name: Saved-model host gate (forecast, mixture, GP, HDBSCAN, IVF, embedding), every recorded prediction
+        if: always()
+        run: |
+          set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
+          columns=""
+          for c in $CLASSICAL_GPU_COLUMNS; do columns="$columns --gpu-column $c"; done
+          python3 tools/classical_host_gate.py check $SAVED_MODEL_RECORDED $columns \
+            --report "$GATE_OUT/saved_model_gate_prod.json" 2>&1 | tee "$GATE_OUT/saved_model_gate_prod.log"
 
       # The tool loads on this CPU and the three committed GPU columns diff
       # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
@@ -1020,6 +1068,8 @@ jobs:
           done
           echo "sabotage caught on the covered lanes"
 
+      # The same sabotage host set (built by the step above into host-sab)
+      # must make the classical gate say so on every recording.
       - name: Retain fault-column checkpoint
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -1027,6 +1077,38 @@ jobs:
           name: cpu-identity-${{ matrix.slot }}-fault-column-${{ github.run_attempt }}
           path: cpu-identity-gate-out/
           if-no-files-found: warn
+
+      - name: Classical host gate, the sabotage build must be caught
+        if: always()
+        env:
+          MOJOLEARN_HOST_DIR: ${{ runner.temp }}/host-sab
+          MOJOLEARN_HOST_ALLOW_SABOTAGE: "1"
+        run: |
+          set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
+          [ -f "$MOJOLEARN_HOST_DIR/_mojolearn_estimators_host.so" ] || { echo "no sabotage estimators host binding under $MOJOLEARN_HOST_DIR" >&2; exit 1; }
+          python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED --expect-mismatch \
+            --report "$GATE_OUT/classical_gate_sab.json" 2>&1 | tee "$GATE_OUT/classical_gate_sab.log"
+
+      # The same sabotage host set must move EVERY fixture of EVERY saved-model
+      # lane (--every-fixture): one moved family or fixture must not hide one
+      # that did not. Until lane/ties-sabotage (2026-09-15) ivf/ties and
+      # ivf-euclidean/ties stayed EQUAL (an exact integer fold), so the rule
+      # was one fixture per lane; the IVF value arm moves them now.
+      - name: Saved-model host gate, the sabotage build must be caught on every fixture
+        if: always()
+        env:
+          MOJOLEARN_HOST_DIR: ${{ runner.temp }}/host-sab
+          MOJOLEARN_HOST_ALLOW_SABOTAGE: "1"
+        run: |
+          set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
+          for b in _mojolearn_forecast_host _mojolearn_mixture_infer_host _mojolearn_gp_infer_host \
+                   _mojolearn_hdbscan_infer_host _mojolearn_ivf_search_host _mojolearn_embedding_infer_host; do
+            [ -f "$MOJOLEARN_HOST_DIR/$b.so" ] || { echo "no sabotage $b under $MOJOLEARN_HOST_DIR" >&2; exit 1; }
+          done
+          python3 tools/classical_host_gate.py check $SAVED_MODEL_RECORDED --expect-mismatch --every-fixture \
+            --report "$GATE_OUT/saved_model_gate_sab.json" 2>&1 | tee "$GATE_OUT/saved_model_gate_sab.log"
 
       - name: Upload reports and logs
         if: always()

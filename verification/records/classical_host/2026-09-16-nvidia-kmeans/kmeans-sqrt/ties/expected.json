@@ -1,0 +1,62 @@
+{
+  "commit": null,
+  "estimator": "KMeans",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "AMD EPYC 7742 64-Core Processor",
+    "family": "23",
+    "isa": [
+      "avx2",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "49",
+    "python": "3.14.7",
+    "release": "6.8.0-100-generic",
+    "stepping": "0",
+    "system": "Linux",
+    "vendor": "AuthenticAMD"
+  },
+  "kind": "ties",
+  "lane": "kmeans-sqrt",
+  "model_sha256": "7181baa5430d7dab34162e74e8b734a9e94f5d391376e459eed5216a1fb245ce",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "11403f38e806a8a7",
+    "labels": {
+      "dtype": "<i4",
+      "sha256": "f8f17a00ecc001b2a60c14e1d14f8e31d58accff300e0b335be0045376b54a57",
+      "shape": [
+        20000
+      ]
+    },
+    "predict": {
+      "dtype": "<i4",
+      "sha256": "4abcf52591638af1dc332d0fef50c8c149d5a3fcc64f526db72bc75fedf01626",
+      "shape": [
+        20000
+      ]
+    },
+    "predict_training_rows": {
+      "dtype": "<i4",
+      "sha256": "f8f17a00ecc001b2a60c14e1d14f8e31d58accff300e0b335be0045376b54a57",
+      "shape": [
+        20000
+      ]
+    },
+    "seconds": 0.005439,
+    "transform": {
+      "dtype": "<f4",
+      "sha256": "8bcb3ae0500e931453d93e90589c95a5b2e9b2b9a42323d1238844869fcf9624",
+      "shape": [
+        20000,
+        8
+      ]
+    }
+  },
+  "recorded_at": "2026-09-16T18:18:48+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "cuda",
+  "x_sha256": "cd54dad609e3f6ae50ccf70956890da967189c336bc3960a2c0048452170b366"
+}

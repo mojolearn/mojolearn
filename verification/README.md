@@ -7,6 +7,7 @@ for a reason. `bench/results/` holds boards and measurements only.
 |---|---|---|
 | What `python -m mojolearn verify` ships | `python/mojolearn/verify_reference/` (unchanged) | the wheel packers copy it; verify opens it from the installed package |
 | The recorded identity columns (the verify table's inputs, `INDEX.tsv` beside them) | `verification/records/identity/` | read: `_verify_reference.repository_record_paths` (`verify --all --emit-reference`, maintainer path), `tools/identity_columns.py`, `verification_matrix.py`, `part_set_census.py`, the release identity tools; written: `tools/admit_identity_columns.sh`, `tools/retain_run_summary.py`, `tools/gap_column_leg.sh`; the wheel packers copy `host_surface.TRAINING_GPU_COLUMNS` and `GBDT_CTR_MODELS_DIR` from here |
+| Recorded classical host columns and saved models | `verification/records/classical_host/` | `tools/classical_host_gate.py` (`host_surface.CLASSICAL_GPU_COLUMNS`), `cpu-identity-gate.yml`, `test_host_surface.py`; two files are rows of `verification/records/CELLS_INDEX.tsv` |
 | Recorded forest / GBDT host fixtures | `verification/records/forest_host/` | `tools/forest_host_gate.py`, `forest-host-gate.yml`, `cpu-identity-gate.yml` (`host_surface.FOREST_RECORDED_ROOT`) |
 | Column-shaped records outside the identity columns (CELLS_INDEX rows and their run directories) | `verification/records/cells/{verification_faults,small_training,verify_external}/` | `tools/verification_matrix.py`, `tools/part_set_census.py` (through `verification/records/CELLS_INDEX.tsv`), `test_verify_small.py` |
 | The dated release records up to 0.8.65 that documents still cite | `verification/records/release_verification/` | `tools/release_evidence_set.py provenance_history` (MOVED_DIR; older ones through git at LEGACY_DIR) |
@@ -28,7 +29,7 @@ and keeps the old spelling. Read it through this map:
 | `bench/results/identity_break/` | `verification/records/identity/` (the shipped table cites records by `dir/file` under this root, so it is unchanged) | 2026-11-25, lane verify-home |
 | `mamba/corpus/` | `checks/native_tests/fixtures/mamba/` (all 46 cases, moved) | 2026-11-25, lane verify-home |
 | `bench/results/forest_host/` | `verification/records/forest_host/` | 2026-11-25, lane verify-home |
-| `bench/results/classical_host/` | deleted 2026-11-25 (Andrew): no wheel ships it and the shipped verify never opened it; git history keeps it (last at a357af3748); the next release records every lane fresh | 2026-11-25, lane verify-home |
+| `bench/results/classical_host/` | `verification/records/classical_host/` | 2026-11-25, lane verify-home |
 | `bench/results/verification_faults/` | `verification/records/cells/verification_faults/` | 2026-11-25, lane verify-home |
 | `bench/results/small_training/` | `verification/records/cells/small_training/` | 2026-11-25, lane verify-home |
 | `bench/results/verify_external/` | `verification/records/cells/verify_external/` | 2026-11-25, lane verify-home |

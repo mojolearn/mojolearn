@@ -1,0 +1,8 @@
+{
+  "estimator": "ARIMA",
+  "heldout_seed": 1,
+  "kind": "hashed",
+  "lane": "arima-exog",
+  "probe_rows": 512,
+  "x_sha256": "616d29ce135089b11c1bb646dfc02a31520e2a678337e6f40c33e897401b467a"
+}

@@ -1,0 +1,87 @@
+{
+  "commit": "9805b5df38b139a8bf69cc3a46a47d70af59de84",
+  "estimator": "ARIMA",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "wide",
+  "lane": "arima-exog",
+  "model_sha256": "f7dae018bf9937561f94960cdc796ff85c65a9db7ca541cbca43900f7d57b3db",
+  "numeric_mode": "identical",
+  "predictions": {
+    "ar": {
+      "dtype": "<f4",
+      "sha256": "50f128991f0c7ab468b7088e8f7032c3fe7db5f2e2a5764e33e4ad2abe141b9b",
+      "shape": [
+        4,
+        1
+      ]
+    },
+    "beta": {
+      "dtype": "<f4",
+      "sha256": "26097d46e91b14050e97c9ce1e74eec8ce3381d4916453342b47e213dd041785",
+      "shape": [
+        4,
+        2
+      ]
+    },
+    "forecast": {
+      "dtype": "<f4",
+      "sha256": "707f4be6dd84735f6a0b26c5077922e09a53ea6b397cf11a5e8bd8bf3e314c22",
+      "shape": [
+        4,
+        512
+      ]
+    },
+    "identity_hash": "fa4ad43b61573ad3",
+    "mu": {
+      "dtype": "<f4",
+      "sha256": "c7b40a1051312c3c9e44f7e7f0ba6a90eef44c940332d37464defb8226c32683",
+      "shape": [
+        4
+      ]
+    },
+    "params": {
+      "dtype": "<f4",
+      "sha256": "45bef482c086c21148a08cea6f7b9f9f89d60546b0634e79c5b2021b82ed2809",
+      "shape": [
+        4,
+        5
+      ]
+    },
+    "predict_in_sample": {
+      "dtype": "<f4",
+      "sha256": "0d7596fe72f4d9ffc43aa743557492b03799122bf6f68371cbe1fd1b4212bc3c",
+      "shape": [
+        4,
+        512
+      ]
+    },
+    "predict_straddle": {
+      "dtype": "<f4",
+      "sha256": "19f0590f56c41a01680812b06e925eb88b1858aef6589db72f4a4a2458466ee4",
+      "shape": [
+        4,
+        32
+      ]
+    },
+    "seconds": 0.335496,
+    "sigma2": {
+      "dtype": "<f4",
+      "sha256": "5247d584e721f50a585a898de0aefeac6f29571c5811bc605eb2110f628592ba",
+      "shape": [
+        4
+      ]
+    }
+  },
+  "recorded_at": "2026-09-15T19:31:51-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "ee9ce9b2667c2f08ef5ace37a58b08e8d2c908961ffae1804aa7677df13baf32"
+}

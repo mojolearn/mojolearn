@@ -1,0 +1,32 @@
+{
+  "commit": "59cbcedd2b3c7bb809ffd3b28dc26a2d7791c8fa",
+  "estimator": "LinearRegression",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "base",
+  "lane": "ols-weighted",
+  "model_sha256": "22419c862a253d42d5854d4721f59ce94fbfe1b42b53d1f39278be4f01daf3a9",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "aa6de46fa1ca4da9",
+    "predict": {
+      "dtype": "<f4",
+      "sha256": "3819fcb4f7d3f6705dc707b945bf3901d65a59eb0148c9f7078b9ecdbc22c5a3",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.093403
+  },
+  "recorded_at": "2026-09-15T12:47:41-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "81b95ad35ae40207bf9d58c1ac22161034eab4823e33bc91bebee40ddda2ac8d"
+}

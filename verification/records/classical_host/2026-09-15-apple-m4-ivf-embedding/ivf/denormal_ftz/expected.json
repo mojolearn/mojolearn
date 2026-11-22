@@ -1,0 +1,56 @@
+{
+  "commit": "d5265152bc05e9acc9c1d38bfbe8a53ba712f3a9",
+  "estimator": "IVFIndex",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "denormal_ftz",
+  "lane": "ivf",
+  "model_sha256": "1f2b8dd1cf726bc0db6d26adbcbadefdb0dd08f652ad1ee1f37eb6adf9a75d72",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "3ff4c07c575048cf",
+    "list_data": {
+      "dtype": "<f4",
+      "sha256": "00a542d799a5f9bb950b8be4056693288501c2e2c06818efa7515592e07c6df9",
+      "shape": [
+        4096,
+        16
+      ]
+    },
+    "list_indices": {
+      "dtype": "<i4",
+      "sha256": "df8c995616f4b49372c2f9f8d50f46ce1e3aebc5ea66d99fa60b52c8786a280f",
+      "shape": [
+        4096
+      ]
+    },
+    "search_distances": {
+      "dtype": "<f4",
+      "sha256": "fccb6d29996114e9f22fb1fb0dadab48d5bfdf4f2ddcd4a48ea6053deed74739",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "search_second_batch_ids": {
+      "dtype": "<i4",
+      "sha256": "29692e8e4b8ae4de6c21317910ee04d35f5400acdc0d439c9c6de38ed51fb51c",
+      "shape": [
+        64,
+        8
+      ]
+    },
+    "seconds": 0.168316
+  },
+  "recorded_at": "2026-09-15T13:29:48-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "4e4a32ec62cf73fd1bd2f5ffa0a6be6345aaae4392587c3c784e9121b407d664"
+}

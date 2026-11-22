@@ -1,0 +1,8 @@
+{
+  "estimator": "ARIMA",
+  "heldout_seed": 1,
+  "kind": "ties",
+  "lane": "arima-exog-seasonal",
+  "probe_rows": 512,
+  "x_sha256": "b2ccdd95266253761c5a0f411d064b22381708c1af4a5f9d7a157c1070de853c"
+}

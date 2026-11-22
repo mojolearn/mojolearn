@@ -1,0 +1,41 @@
+{
+  "commit": null,
+  "estimator": "KNeighborsRegressor",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8470",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-90-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "dupes",
+  "lane": "knn-reg",
+  "model_sha256": "dd4b16d90ea35affc3081b5550e08486f8d4fb4b1c89ebc91bff7c8c7989c86f",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "0e04bd5ca4150340",
+    "predict": {
+      "dtype": "<f4",
+      "sha256": "e77a4726e8e123e8176b533976e5ef24bfd33e4d429192194022b6ceef7cc7a7",
+      "shape": [
+        64
+      ]
+    },
+    "seconds": 0.000389
+  },
+  "recorded_at": "2026-09-14T10:13:27+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "cuda",
+  "x_sha256": "e31c19919dd0d22a22c740be1b69d4029a2203b50921ee428a485970456fcfa7"
+}

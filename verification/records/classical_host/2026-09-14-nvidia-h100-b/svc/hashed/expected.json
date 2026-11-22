@@ -1,0 +1,48 @@
+{
+  "commit": null,
+  "estimator": "SVC",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8470",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-90-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "hashed",
+  "lane": "svc",
+  "model_sha256": "c1eb413ecf366aabf21953d7522d48b22526cafea3e55c4a909430d517a051cd",
+  "numeric_mode": "identical",
+  "predictions": {
+    "decision_function": {
+      "dtype": "<f4",
+      "sha256": "b0dc8b3784c65f9652a9b7786db02a7e34ea7003f4db1c0ae2c249912f80d730",
+      "shape": [
+        256
+      ]
+    },
+    "identity_hash": "94cb46a9aa6a811c",
+    "predict": {
+      "dtype": "<i8",
+      "sha256": "c640ba2be6029281825f0a98e23528270e3791694c3c42767b969e2ab0f05cca",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.001006
+  },
+  "recorded_at": "2026-09-14T10:13:25+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "cuda",
+  "x_sha256": "610f791343247286a120f012f4d03fb2d0bbc4500feb992df2fb844a344e4986"
+}

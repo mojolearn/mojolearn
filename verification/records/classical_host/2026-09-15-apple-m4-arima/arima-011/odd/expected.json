@@ -1,0 +1,72 @@
+{
+  "commit": "ae97a3e0ffe3b1a1abf4dcdabf0a021e1a4e6aae",
+  "estimator": "ARIMA",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "odd",
+  "lane": "arima-011",
+  "model_sha256": "a1e2bf9001d05853f24256463bebc921c27dacc019e30d9769cef2d2c9a458f1",
+  "numeric_mode": "identical",
+  "predictions": {
+    "forecast": {
+      "dtype": "<f4",
+      "sha256": "731d32ba91783845e3372d3586b9756bab46f995aa072a1af217e934b899ac34",
+      "shape": [
+        4,
+        512
+      ]
+    },
+    "identity_hash": "b17ec31edbdbf345",
+    "ma": {
+      "dtype": "<f4",
+      "sha256": "3354311e4603eb64ca011afecae5220c3813d5b12e57bc19b79a9c186dbfcbbd",
+      "shape": [
+        4,
+        1
+      ]
+    },
+    "params": {
+      "dtype": "<f4",
+      "sha256": "5430ab4e92ce11b8459234311241f5916f5ab64fa829f6d5bc7477576a17d30c",
+      "shape": [
+        4,
+        2
+      ]
+    },
+    "predict_in_sample": {
+      "dtype": "<f4",
+      "sha256": "3a33f3eafb7651428bc51b268d1a7999800a2eb5e7b0ca2a4199377805794a49",
+      "shape": [
+        4,
+        512
+      ]
+    },
+    "predict_straddle": {
+      "dtype": "<f4",
+      "sha256": "e8a4f7611b4011a8f66b682e7169ca9be39577842b3f4432d8fdc262429e7eb5",
+      "shape": [
+        4,
+        32
+      ]
+    },
+    "seconds": 0.02879,
+    "sigma2": {
+      "dtype": "<f4",
+      "sha256": "3d8e0f9cad122ebd38d2a5cedcf1ef2ae338f759b5429435316ad8753aafa0b5",
+      "shape": [
+        4
+      ]
+    }
+  },
+  "recorded_at": "2026-09-15T12:55:02-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "a000619abf2e78b511b82f4a2ba73ce0a68c0d919f5f66f0f49f3c1b00e9ad0a"
+}

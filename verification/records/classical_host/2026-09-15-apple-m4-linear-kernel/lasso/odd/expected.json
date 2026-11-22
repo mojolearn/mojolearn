@@ -1,0 +1,32 @@
+{
+  "commit": "59cbcedd2b3c7bb809ffd3b28dc26a2d7791c8fa",
+  "estimator": "Lasso",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.6",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "odd",
+  "lane": "lasso",
+  "model_sha256": "dd93f0301683411b3e512f9577377efaa60a3787eda37718e42683f81ec83013",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "1c17e2eb1ef6a2e2",
+    "predict": {
+      "dtype": "<f4",
+      "sha256": "a6310fb8a9f912e7356c2ddd7a04e75f901a40b810d4b45343e44c89f84d0d46",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.002235
+  },
+  "recorded_at": "2026-09-15T12:47:49-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "a000619abf2e78b511b82f4a2ba73ce0a68c0d919f5f66f0f49f3c1b00e9ad0a"
+}

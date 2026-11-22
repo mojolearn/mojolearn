@@ -1,0 +1,8 @@
+{
+  "estimator": "Embedding",
+  "heldout_seed": 1,
+  "kind": "negative",
+  "lane": "embedding",
+  "probe_rows": 256,
+  "x_sha256": "847c388bfeba3f3c07afd7ef560fc8a4f09111dfa48339717efd190e64ce72cf"
+}

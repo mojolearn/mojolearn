@@ -1,0 +1,87 @@
+{
+  "commit": "9805b5df38b139a8bf69cc3a46a47d70af59de84",
+  "estimator": "ARIMA",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "hashed",
+  "lane": "arima-exog",
+  "model_sha256": "7a8acb745895f97bd9e7b4fbe18fd99525a363d5b4fa7c6acc5b503cab3ed29d",
+  "numeric_mode": "identical",
+  "predictions": {
+    "ar": {
+      "dtype": "<f4",
+      "sha256": "98cc59a03cb445fcd85b0e8e7ed8264fd0b79dd7e7260fca32567de65e5e78be",
+      "shape": [
+        4,
+        1
+      ]
+    },
+    "beta": {
+      "dtype": "<f4",
+      "sha256": "6d2ce0d1a08c4563928483e91b8d25f5f1806b65182d6f630860076ecf38c074",
+      "shape": [
+        4,
+        2
+      ]
+    },
+    "forecast": {
+      "dtype": "<f4",
+      "sha256": "1c7e73ffd49167733cab7b7c5815fae6902db5734b3760a7c49a113907dd7cef",
+      "shape": [
+        4,
+        512
+      ]
+    },
+    "identity_hash": "d1f6dae58ca38fc6",
+    "mu": {
+      "dtype": "<f4",
+      "sha256": "745600c818ad02f5bf799ef1717905dee47185e0370b6aabb4092ddd30370cb4",
+      "shape": [
+        4
+      ]
+    },
+    "params": {
+      "dtype": "<f4",
+      "sha256": "fc042759fd68a8016b724645f8cbba7edf131116ae47f49f246041aceb3cf66c",
+      "shape": [
+        4,
+        5
+      ]
+    },
+    "predict_in_sample": {
+      "dtype": "<f4",
+      "sha256": "20c8b46ca000ab45d67596520d14ddd7996a5a4cf9c0bd6c8b5a787d48654d47",
+      "shape": [
+        4,
+        512
+      ]
+    },
+    "predict_straddle": {
+      "dtype": "<f4",
+      "sha256": "ccab82013c64da4b215c755b590c2eefe2f539c5595741675a05e416d214198e",
+      "shape": [
+        4,
+        32
+      ]
+    },
+    "seconds": 0.290082,
+    "sigma2": {
+      "dtype": "<f4",
+      "sha256": "82a0a3911e4dcf8fe1363f815f17a5201e4942b60e313ca8f2123b0a8d4bbb06",
+      "shape": [
+        4
+      ]
+    }
+  },
+  "recorded_at": "2026-09-15T19:31:46-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "616d29ce135089b11c1bb646dfc02a31520e2a678337e6f40c33e897401b467a"
+}

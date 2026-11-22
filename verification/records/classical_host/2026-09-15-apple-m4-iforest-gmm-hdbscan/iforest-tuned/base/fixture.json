@@ -1,0 +1,8 @@
+{
+  "estimator": "IsolationForest",
+  "heldout_seed": 1,
+  "kind": "base",
+  "lane": "iforest-tuned",
+  "probe_rows": 20000,
+  "x_sha256": "d28282eb77481c68ef988a7a561a90f941eeba1b8f57d4c1e98ce968238f50c4"
+}

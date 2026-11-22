@@ -1,0 +1,8 @@
+{
+  "estimator": "AgglomerativeClustering",
+  "heldout_seed": 1,
+  "kind": "hashed",
+  "lane": "agglomerative",
+  "probe_rows": 256,
+  "x_sha256": "610f791343247286a120f012f4d03fb2d0bbc4500feb992df2fb844a344e4986"
+}

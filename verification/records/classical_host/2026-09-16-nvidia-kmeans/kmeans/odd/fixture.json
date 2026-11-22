@@ -1,0 +1,8 @@
+{
+  "estimator": "KMeans",
+  "heldout_seed": 1,
+  "kind": "odd",
+  "lane": "kmeans",
+  "probe_rows": 12345,
+  "x_sha256": "2b4bdb60ca1730d931fe161342ef71be8ae877fd40f3daf04a6e36e193d083d4"
+}

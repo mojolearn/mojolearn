@@ -1,0 +1,41 @@
+{
+  "commit": null,
+  "estimator": "DBSCAN",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "AMD EPYC 9474F 48-Core Processor",
+    "family": "25",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "17",
+    "python": "3.14.7",
+    "release": "6.8.0-138-generic",
+    "stepping": "1",
+    "system": "Linux",
+    "vendor": "AuthenticAMD"
+  },
+  "kind": "ties",
+  "lane": "dbscan",
+  "model_sha256": "7c766eb707695149c1090edfceffbade90452a0592eddc65b3c0616b2a883ead",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "63990f64c63d296b",
+    "predict": {
+      "dtype": "<i4",
+      "sha256": "acfe749ff986473bbc9cefc8facdb9d91a1d66a8bc1516fd842fe72915b31f6f",
+      "shape": [
+        256
+      ]
+    },
+    "seconds": 0.078918
+  },
+  "recorded_at": "2026-09-16T18:34:41+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "hip",
+  "x_sha256": "cb717abc7fdea535547b185d7f6b53f113cbab5b15e61b6f0f7c62e31ea62f5e"
+}

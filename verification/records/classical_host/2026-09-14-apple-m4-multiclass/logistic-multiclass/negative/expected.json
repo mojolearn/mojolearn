@@ -1,0 +1,48 @@
+{
+  "commit": "bba81880d1496870320c1275a47abe98aeeb6d1c",
+  "estimator": "LogisticRegression",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.13.15",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "negative",
+  "lane": "logistic-multiclass",
+  "model_sha256": "534c14d079eed480e4f4cae62967509ca9bd3354de5c4288869388ba1c433f23",
+  "numeric_mode": "identical",
+  "predictions": {
+    "decision_function": {
+      "dtype": "<f4",
+      "sha256": "e7ca74d5fa45c3ecb2a22169c68c4809f10cee564c6a41f7f6bb1eaf8c25dddc",
+      "shape": [
+        256,
+        3
+      ]
+    },
+    "identity_hash": "776efb8677ed42eb",
+    "predict": {
+      "dtype": "<i8",
+      "sha256": "1b36f8836a4f669b023c992894c5bf770aae05260ba1dafadafbd96b02d3dbfb",
+      "shape": [
+        256
+      ]
+    },
+    "predict_proba": {
+      "dtype": "<f8",
+      "sha256": "d85dba4776d3dc16f06a0728a32ec11ea9b63734c52a4544506520f13256b873",
+      "shape": [
+        256,
+        3
+      ]
+    },
+    "seconds": 0.007883
+  },
+  "recorded_at": "2026-09-14T07:03:18-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "847c388bfeba3f3c07afd7ef560fc8a4f09111dfa48339717efd190e64ce72cf"
+}
