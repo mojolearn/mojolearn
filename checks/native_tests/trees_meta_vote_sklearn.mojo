@@ -8,8 +8,6 @@ VotingRegressor R^2 (`fixtures/meta_vote/sk-scores.f64`, tools/py2mojo_native_fi
 of depths 4 and 8 at least scikit-learn's accuracy minus 0.05, the hard vote of depths 4, 8 and 6 at least minus
 0.08, the regressor (weights 1, 2) at least scikit-learn's R^2 minus 0.05.
 
-A file of its own, not a second test of trees_meta_vote.mojo: in one process after that file's cases the process
-dies at exit in the runtime's thread teardown (lane bm-meta finding; ~/mojolearn-evidence/bm-meta-2-asyncrt-exit/).
 """
 from std.testing import TestSuite
 from checks.native_tests.tsa_metrics_fixture_words import fixture_f32, fixture_i32
@@ -102,6 +100,11 @@ def test_voting_sklearn() raises:
         pred[i] = Float32(mean[i])
     var q = r2(pred, tb)
     require(q >= scores[1] - 0.05, "regress vote R^2 " + String(q) + ", scikit-learn " + String(scores[1]))
+    # Mojo frees a local at its last named use: every buffer RUN wrote or read through an address is named here.
+    _ = len(counts)
+    _ = len(acc)
+    _ = len(got)
+    _ = len(mean)
     _ = len(classes)
     _ = len(proba)
     _ = len(codes)
