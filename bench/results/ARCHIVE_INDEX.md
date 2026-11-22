@@ -11,6 +11,12 @@ sha256, in `~/mojolearn-evidence/repo-archive-20261125/MANIFEST.tsv`; each is in
 
 Removed paths (both clean-up rounds, bench/results, plans, one-off experiments) live in `~/mojolearn-evidence/repo-archive-20261125/<same path>` (and R2), listed in its `MANIFEST.tsv`; git history holds every file.
 
+2026-11-22 (lane cut-bench, commit 3c7eec6ad7): 739 files of 13 cold groups (amd_step_time_2026-09-24, lowbit_mma_speed,
+runpod_cpu, e1g, lowbit_int15, lowbit_apple_tuned, lowbit_units, e1, mamba_poison_gate, identical-integration-20261004,
+numpy_free, consolidated_check, lowbit_default) live in `~/mojolearn-evidence/repo-data/<same path>`, one row each in
+its `MANIFEST.tsv` (class cut-bench-cold-group, 7th column the R2 object), and in R2 as the pinned tar
+`repo-data/bench/results/cut-bench-cold-20261122.tar` (`sh tools/dataset_store.sh pull <key> <dest>`).
+
 ## Trim of 2026-11-11 14:15 UTC (tree at 21f43e730f)
 
 | path | last commit | date | size |

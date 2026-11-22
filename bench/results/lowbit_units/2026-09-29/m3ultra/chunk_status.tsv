@@ -1,3 +1,0 @@
-chunk	0	5s	expected=pass	held=yes
-chunk-sabotage	1	4s	expected=fail	held=yes
-chunk-value-sabotage	1	4s	expected=fail	held=yes
