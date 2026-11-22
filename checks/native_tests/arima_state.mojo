@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Native ARIMA fitted-state checks and exact dyadic prediction expectations.
 
 Original MLE/maxiter5/order111 and order100+one-regressor settings are retained
@@ -7,18 +8,27 @@ conditional-mean/random-walk equations, with zero MA coefficient in the111
 closed forms. Fitted-case resident/per-call equality is ownership parity, not
 an independent numerical oracle. No Python runtime or old hashes are used.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.hostptr import f32_ptr
 from arima.host.arima_host_entries import _order, _forecast_into, _predict_in_sample_into, arima_host_fit_into
 from arima.estimator import arima_fit_ptr_host, arima_predict_ptr_host, arima_forecast_ptr_host
 from arima.resident_state import (
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
     arima_resident_prepare,
     arima_resident_count,
     arima_resident_release,
     arima_predict_resident,
 )
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime ARIMA_STATE_FIXTURES = 8
@@ -270,8 +280,7 @@ def per_call[K: ArimaCalls](state: ArimaState, future: ArimaWords, target: Arima
     _ = target
 
 
-# ---- The host column (was arima_state_cpu_suite.mojo) ----
-# Importable native CPU ARIMA state suite; private state per parallel fixture.
+# Host column: Importable native CPU ARIMA state suite; private state per parallel fixture.
 struct HostArima(ArimaCalls):
     @staticmethod
     def fit(state: ArimaState) raises -> Int:
@@ -323,18 +332,7 @@ def fixture(fixture_id: Int) raises:
     _ = state
 
 
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(ARIMA_STATE_FIXTURES)
-    def task(fixture_id: Int) {imm cases}:
-        try:
-            fixture(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
-    report.parallel(task, ARIMA_STATE_FIXTURES)
-
-
-# ---- The device column (was arima_state_gpu_suite.mojo) ----
-# Importable ARIMA resident owner suite; ordered shared GPU context submission.
+# Device column: Importable ARIMA resident owner suite; ordered shared GPU context submission.
 struct DeviceArima(ArimaCalls):
     @staticmethod
     def fit(state: ArimaState) raises -> Int:
@@ -421,24 +419,23 @@ def fixture_gpu(fixture_id: Int) raises:
     _ = expected
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(ARIMA_STATE_FIXTURES)
-    for fixture_id in range(ARIMA_STATE_FIXTURES):
-        try:
-            fixture_gpu(fixture_id)
-        except error:
-            cases.fail(fixture_id, error)
+def _host_fixture(fixture_id: Int) raises:
+    fixture(fixture_id)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_arima_state() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("arima_state", ARIMA_STATE_FIXTURES, _host_fixture)
+    else:
+        var failures = String("")
+        for fixture_id in range(ARIMA_STATE_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                fixture_gpu(fixture_id)
+            except error:
+                failures += "\n      row " + String(fixture_id) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("arima_state: device fixtures failed:" + failures)
 
 
-def register() -> Check:
-    return Check("arima_state", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

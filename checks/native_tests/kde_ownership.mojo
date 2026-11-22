@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Native retained KDE leases, ordered GPU work and sequential pool reuse.
 
 The original 131x7 weighted fixture and query lengths9/3 retain the existing
@@ -6,6 +7,7 @@ allocation4/reuse1 expectation. Overlapping owners are acquired by metadata
 operations only; GPU submissions remain ordered on one physical GPU. This
 does not test or clear the separate shared-context concurrent-submit failure.
 """
+from std.testing import TestSuite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.host_parallel import host_parallelize
@@ -15,8 +17,7 @@ from kde.resident_fit import KdeFitLease, _kde_fit_lease, _kde_fit_return
 # TOMBSTONE: MOJOLEARN_IDN_KDE_PARTIAL_POOL (unmeasured opt-in arm (I20 mixed, no promotion)) deleted 2026-11-15 by lane/expdel2-19-kernel; code recoverable at 3af082d6f4.
 # Restore: git apply experiments/removed/MOJOLEARN_IDN_KDE_PARTIAL_POOL.patch; record in docs/TOMBSTONES.md.
 from kde.checks.kde_fixture import train_fixture, query_fixture, weight_fixture
-from checks.native_tests.pca_native import guards, PCA_TEST_GUARD
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from checks.native_tests.pca_native_helpers import guards, PCA_TEST_GUARD, require
 
 
 # ---- The device column (was kde_ownership_gpu_suite.mojo) ----
@@ -140,23 +141,17 @@ def fixture(unit: Int) raises:
             _ = expected_weights
 
 
-def _run_gpu(mut report: Report) raises:
+def test_kde_ownership() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(KDE_OWNERSHIP_FIXTURES)
-    for unit in range(KDE_OWNERSHIP_FIXTURES):
+    var failures = String("")
+    for unit in range(KDE_OWNERSHIP_FIXTURES):  # driver-loop: over fixtures, in order
         try:
             fixture(unit)
         except error:
-            cases.fail(unit, error)
+            failures += "\n      row " + String(unit) + ": " + String(error)
+    if failures.byte_length() > 0:
+        raise Error("kde_ownership: device fixtures failed:" + failures)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("kde_ownership", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

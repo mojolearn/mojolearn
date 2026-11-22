@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """Actual TSVD fit routes using original inputs and independent saved oracles.
 
 Shared PCA test helpers provide only buffer guards/comparison/ownership;
 no PCA kernel or fitted output supplies a TSVD reference.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from core.host_parallel import host_parallelize
 from core.pca_native_api import PCAFoldStore
@@ -17,7 +21,7 @@ from core.tsvd_native_api import (
     TSVD_RANDOMIZED,
     TSVD_TSQR,
 )
-from checks.native_tests.pca_native import close_values, unchanged, guards, PCA_TEST_GUARD
+from checks.native_tests.pca_native_helpers import close_values, unchanged, guards, PCA_TEST_GUARD, require
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.tsvd_native_host import tsvd_host_native_v1
 from core.tsvd_native_decomp import tsvd_decomp_native_v1
@@ -30,7 +34,8 @@ from x_decomp.pca_randomized_dev import DevRDev
 from core.msel_device_x import msel_fold_store, msel_device_x_context
 from core.tsvd_native_api import TSVD_FOLD
 from core.tsvd_native_fold import tsvd_fold_native_v1
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime TSVD_FIT_FIXTURES = 10
@@ -269,48 +274,37 @@ def fold_fixture(unit: Int) raises:
         _ = ctx^
 
 
-# ---- The host column (was tsvd_fit_cpu_suite.mojo) ----
-# Actual host TSVD fit graphs run independently through the native host pool.
-def _run_cpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-    var cases = report.cases(TSVD_FIT_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            fixture(TSVDNativeDriver(tsvd_host_native_v1),
-                TSVDNativeDriver(tsvd_decomp_native_v1[HostExec, NoRDev, False]), unit, True)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, TSVD_FIT_FIXTURES)
-
-
-# ---- The device column (was tsvd_fit_gpu_suite.mojo) ----
-# Actual estimator, randomized/TSQR and resident-fold TSVD fit providers.
+# Host column: Actual host TSVD fit graphs run independently through the native host pool.
+# Device column: Actual estimator, randomized/TSQR and resident-fold TSVD fit providers.
 #
 # Fixture graphs submit in order over shared device contexts/pools. Existing
 # GPU algorithms and independent oracle cells retain parallel execution.
-def _run_gpu(mut report: Report) raises:
-    comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(TSVD_FIT_FIXTURES + TSVD_FOLD_FIXTURES)
-    for unit in range(TSVD_FIT_FIXTURES + TSVD_FOLD_FIXTURES):
-        try:
-            if unit < TSVD_FIT_FIXTURES:
-                fixture(TSVDNativeDriver(tsvd_device_native_v1),
-                    TSVDNativeDriver(tsvd_decomp_native_v1[DevExec, DevRDev, True]), unit, False)
-            else:
-                fold_fixture(unit - TSVD_FIT_FIXTURES)
-        except error:
-            cases.fail(unit, error)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def _host_fixture(unit: Int) raises:
+    fixture(TSVDNativeDriver(tsvd_host_native_v1),
+        TSVDNativeDriver(tsvd_decomp_native_v1[HostExec, NoRDev, False]), unit, True)
 
 
-def register() -> Check:
-    return Check("tsvd_fit", cpu=True, gpu=True, serial="", run=run_cases)
+def test_tsvd_fit() raises:
+    comptime if CPU_COLUMN_BUILD:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        check_cases("tsvd_fit", TSVD_FIT_FIXTURES, _host_fixture)
+    else:
+        comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
+        var failures = String("")
+        for unit in range(TSVD_FIT_FIXTURES + TSVD_FOLD_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                if unit < TSVD_FIT_FIXTURES:
+                    fixture(TSVDNativeDriver(tsvd_device_native_v1),
+                        TSVDNativeDriver(tsvd_decomp_native_v1[DevExec, DevRDev, True]), unit, False)
+                else:
+                    fold_fixture(unit - TSVD_FIT_FIXTURES)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("tsvd_fit: device fixtures failed:" + failures)
+
+
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

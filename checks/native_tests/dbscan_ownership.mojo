@@ -1,18 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: gpu
 """Resident reference copies and leases across release, without concurrent GPU work.
 
 Three independent lifecycle graphs run in order on one physical GPU/shared
 context. Overlapping leases are metadata owners; all copies/queries remain
 ordered. This does not clear the recorded shared-context submission failure.
 """
+from std.testing import TestSuite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_CPU
 from core.host_parallel import host_parallelize
 from core.dbscan_native_api import DBSCANNativeDriver, DBSCANReferenceRequest, DBSCANResidentQuery, dbscan_native_v1
 from core.dbscan_native_device import DBSCANDeviceKernels
 from core.labeled_reference_resident import LabeledReferenceLease, labeled_reference_lease
-from checks.native_tests.dbscan_native import integer_guards, DBSCAN_I32_GUARD
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+from checks.native_tests.dbscan_native_profiles import integer_guards, DBSCAN_I32_GUARD
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
 
 
 # ---- The device column (was dbscan_ownership_gpu_suite.mojo) ----
@@ -147,23 +153,17 @@ def fixture(unit: Int) raises:
                 _ = next_labels^
 
 
-def _run_gpu(mut report: Report) raises:
+def test_dbscan_ownership() raises:
     comptime assert GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN != COLUMN_CPU
-    var cases = report.cases(DBSCAN_OWNERSHIP_FIXTURES)
-    for unit in range(DBSCAN_OWNERSHIP_FIXTURES):
+    var failures = String("")
+    for unit in range(DBSCAN_OWNERSHIP_FIXTURES):  # driver-loop: over fixtures, in order
         try:
             fixture(unit)
         except error:
-            cases.fail(unit, error)
+            failures += "\n      row " + String(unit) + ": " + String(error)
+    if failures.byte_length() > 0:
+        raise Error("dbscan_ownership: device fixtures failed:" + failures)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if not CPU_COLUMN_BUILD:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
-
-
-def register() -> Check:
-    return Check("dbscan_ownership", cpu=False, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()

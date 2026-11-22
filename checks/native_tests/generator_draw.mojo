@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# native-check: cpu gpu
 """The training Generator's draws against an independent Philox4x32-10
 written here (lane tests-to-mojo-neural, 2026-11-15; moved from
 python/mojolearn/tests/test_generator_draw_native.py, the `philox_words` /
@@ -34,11 +35,20 @@ unit is (word >> 8) * 2^-24, exact in float32.
 The public shapes, the Generator's counter and state_dict, the input
 layouts and the refusals stay in the Python test.
 """
+from std.testing import TestSuite
+from checks.native_tests.testsuite_cases import check_cases
+from std.sys.compile import is_defined
 from std.memory import bitcast
 from checks.numerics import identical_mul
 from core.mojolearn_training_host_impl import neural_rng_host_into
 from training.native_primitive_dispatch import native_primitive_operation
-from checks.native_tests.runner import CPU_COLUMN_BUILD, Check, Column, Report, require
+
+
+def require(ok: Bool, message: String) raises:
+    if not ok:
+        raise Error(message)
+
+comptime CPU_COLUMN_BUILD = is_defined["MOJOLEARN_COLUMN_CPU"]()
 
 
 comptime GEN_DRAW_FIXTURES = 4
@@ -197,34 +207,25 @@ def run_fixture(unit: Int) raises:
 # The host column runs the four independent fixtures across the host pool,
 # each with its own buffers; a device runs them in order on the one shared
 # training context, each launch keeping its own parallelism.
-def _run_cpu(mut report: Report) raises:
-    var cases = report.cases(GEN_DRAW_FIXTURES)
-    def task(unit: Int) {imm cases}:
-        try:
-            run_fixture(unit)
-        except error:
-            cases.fail(unit, error)
-    report.parallel(task, GEN_DRAW_FIXTURES)
 
 
-def _run_gpu(mut report: Report) raises:
-    var cases = report.cases(GEN_DRAW_FIXTURES)
-    for unit in range(GEN_DRAW_FIXTURES):  # driver-loop: over fixtures on the one device
-        try:
-            run_fixture(unit)
-        except error:
-            cases.fail(unit, error)
+def _host_fixture(unit: Int) raises:
+    run_fixture(unit)
 
 
-def run_cases(column: Column, mut report: Report):
-    try:
-        comptime if CPU_COLUMN_BUILD:
-            _run_cpu(report)
-        else:
-            _run_gpu(report)
-    except error:
-        report.abort(error)
+def test_generator_draw() raises:
+    comptime if CPU_COLUMN_BUILD:
+        check_cases("generator_draw", GEN_DRAW_FIXTURES, _host_fixture)
+    else:
+        var failures = String("")
+        for unit in range(GEN_DRAW_FIXTURES):  # driver-loop: over fixtures, in order
+            try:
+                run_fixture(unit)
+            except error:
+                failures += "\n      row " + String(unit) + ": " + String(error)
+        if failures.byte_length() > 0:
+            raise Error("generator_draw: device fixtures failed:" + failures)
 
 
-def register() -> Check:
-    return Check("generator_draw", cpu=True, gpu=True, serial="", run=run_cases)
+def main() raises:
+    TestSuite.discover_tests[__functions_in_module()]().run()
