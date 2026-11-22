@@ -70,7 +70,10 @@ def test_proving_loaded_model_has_the_fitted_digest(name, params, target, tmp_pa
 @pytest.mark.parametrize("name,params,target", [
     ("RandomForestRegressor", dict(n_estimators=5, random_state=0), "r"),
     ("ExtraTreesRegressor", dict(n_estimators=5, random_state=0), "r"),
-    ("GradientBoostingRegressor", dict(n_estimators=5, max_depth=3, random_state=0), "r"),
+    # HostGBDT loads a `GradientBoosting.save` file (`host_model`'s docstring). The scikit-learn adapters
+    # GradientBoostingRegressor / Classifier refuse save by design (python/mojolearn/_gbdt_adapters.py `save`,
+    # commit 4a4abf3f01: no adapter archive format, pickle keeps the adapter state).
+    ("GradientBoosting", dict(n_estimators=5, max_depth=3, random_state=0), "r"),
 ])
 def test_proving_host_twin_has_the_saving_models_digest(name, params, target, tmp_path):
     # fx-audit session 3: HostForest (rf, et) and HostGBDT digest_ == the saving model's digest_, and the twin

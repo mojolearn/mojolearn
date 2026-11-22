@@ -184,13 +184,23 @@ PRIVATE_STATE = [
 ]
 
 
+#: Classes whose fitted state is drawn from `random_state` and the input's width only, never from its values
+#: (GaussianRandomProjection: "each component entry is drawn from N(0, 1 / n_components)", its docstring in
+#: python/mojolearn/_expansion_decomp.py, as scikit-learn's): changed data of the same width fits the same model,
+#: so the fitted state is changed through the seed.
+DATA_FREE = {"GaussianRandomProjection": dict(random_state=1)}
+
+
 @pytest.mark.parametrize("name,params,target", PRIVATE_STATE)
 def test_private_fitted_state_is_in_the_digest(name, params, target):
     if getattr(mojolearn, name, None) is None:
         pytest.skip(f"no {name} in this build")
     first = _fit(name, params, target).digest_
     assert _fit(name, params, target).digest_ == first
-    assert _fit(name, params, target, X_OTHER).digest_ != first
+    if name in DATA_FREE:
+        assert _fit(name, {**params, **DATA_FREE[name]}, target).digest_ != first
+    else:
+        assert _fit(name, params, target, X_OTHER).digest_ != first
 
 
 def test_how_the_input_arrived_is_not_in_the_digest():
