@@ -99,6 +99,7 @@ from core.member_abi import (
     member_publish, member_call_from_spans, member_unsupported,
 )
 from core.member_families import MEMBER_FAMILY_DISCRIMINANT
+from core.host_parallel import host_widen_index_i64
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot, shared_slot_lock, shared_slot_unlock
@@ -429,6 +430,9 @@ def _fit_qda(slot: _Slot, call: _Call) raises:
     slot[].put(DA_BLOCK_SCALINGS, _copy_out(scalings, K * d), K, d)
     if o.keep != CLS_NONE:
         slot[].put(DA_BLOCK_COV, _copy_out(done.arena.f32(o.keep), K * d * d), K, d * d)
+    # `scalings` points into the arena: `done` is named after its last read
+    # (without a kept covariance its last named use was the rotations' copy).
+    _ = done^
     slot[].scalars = [Float64(d), Float64(K), Float64(d), 0.0]
     slot[].features = d
     slot[].classes = K
@@ -536,13 +540,20 @@ def _score(slot: _Slot, call: _Call, operation: Int) raises:
         unsafe_memcpy(dest=_F32P(unsafe_from_address=call[].dst.data), src=done.arena.f32(o.pp),
                       count=(2 if p64 else 1) * n * K)
         return
+    # `found` points into the run's arena: `done` is named again after each
+    # read (Mojo frees a local at its last named use; the arena is freed with
+    # it). Proving suite 2026-11-22: a member's codes were read from the freed
+    # arena and Voting / MultiOutput over a device="cpu" member refused
+    # "code out of range".
     var found = _I32P(unsafe_from_address=done.arena.address + 4 * o.am)
     if call[].dst.dtype == MEMBER_I32:
         unsafe_memcpy(dest=_I32P(unsafe_from_address=call[].dst.data), src=found, count=n)
+        _ = done^
         return
-    var wide = _I64P(unsafe_from_address=call[].dst.data)
-    for i in range(n):  # driver-loop: one class code per row, widened for an int64 buffer
-        wide[i] = Int64(found[i])
+    # int64 output: the codes widened in chunks across the host's cores
+    # (core/naive_bayes_member.mojo does the same), not one row at a time.
+    host_widen_index_i64(Int(found), call[].dst.data, n)
+    _ = done^
 
 
 def _transform_width(slot: _Slot) -> Int:
