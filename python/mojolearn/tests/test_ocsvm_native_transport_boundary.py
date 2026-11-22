@@ -161,6 +161,8 @@ def test_ocsvm_invalid_scalar_array_diagnostic_avoids_numpy_formatter():
     assert calls == []
 
 
+# The fitted fields are published together once RUN has finished: a fit that
+# fails leaves the estimator as it was, `_gamma` included (958c0e63f1).
 def test_ocsvm_refusals_keep_gamma_and_fitted_publication_stages():
     negative = _model(gamma="auto")
     with pytest.raises(ValueError, match="negative sample_weight"):
@@ -170,7 +172,7 @@ def test_ocsvm_refusals_keep_gamma_and_fitted_publication_stages():
     iterations = _model(gamma="auto", max_iter="invalid")
     with pytest.raises(ValueError, match="invalid literal"):
         iterations.fit(_train())
-    assert iterations._gamma == 0.5
+    assert "_gamma" not in vars(iterations)
     assert "support_" not in vars(iterations)
 
 
@@ -213,7 +215,7 @@ def test_ocsvm_precomputed_array_rank_preserves_native_route(rank):
         else:
             with pytest.raises(TypeError, match="unhashable"):
                 model.fit(gram)
-            assert model._gamma == 2.0  # non-precomputed gamma publication precedes key refusal
+            assert "_gamma" not in vars(model)  # a refused fit publishes nothing (958c0e63f1)
             fitted = _model(gamma=0.5).fit(_train())
             vars(fitted)["kernel"] = kernel
             with pytest.raises(TypeError, match="unhashable"):
@@ -225,8 +227,8 @@ def test_ocsvm_precomputed_array_rank_preserves_native_route(rank):
     ("nu", "fit", False),
     ("degree", "fit", False),
     ("coef0", "fit", False),
-    ("max_iter", "fit", True),
-    ("tol", "fit", True),
+    ("max_iter", "fit", False),
+    ("tol", "fit", False),
     ("_gamma", "score_samples", True),
     ("offset_", "decision_function", True),
     ("offset_", "predict", True),
@@ -292,7 +294,7 @@ def test_ocsvm_multielement_object_numeric_options_keep_typeerror(field):
     with pytest.raises(TypeError):
         model.fit(_train())
     assert calls == []
-    assert ("_gamma" in vars(model)) is (field in {"max_iter", "tol"})
+    assert "_gamma" not in vars(model)  # a refused fit publishes nothing (958c0e63f1)
     assert "support_" not in vars(model)
 
 
