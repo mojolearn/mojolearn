@@ -24,6 +24,7 @@ from core.causal_layer_run import (
     CAUSAL_LAYER_TRANSFORMER, CAUSAL_LAYER_MAMBA1, CAUSAL_LAYER_MAMBA2, CAUSAL_LAYER_OTHER,
 )
 from core.generation_buffers_impl import generation_shape_size, generation_shape_text
+from std.atomic import Atomic, Ordering
 
 
 struct CausalModelWords(Copyable, Movable):
@@ -249,3 +250,88 @@ def causal_state_buffer_address(buffer: CausalBufferWords, expected: List[Int], 
     if buffer.nbytes != size * 4:
         raise Error("CausalLM: state buffer " + name + " span differs from its shape")
     return buffer.address
+
+
+# The resident session lease of one model: ONE word, read and written only
+# through the functions below. The bits:
+#   CAUSAL_LEASE_BUSY     a holder has the model's kept resident sessions
+#                         (a resident forward, a resident generate, a read
+#                         that keeps them across its tokens);
+#   CAUSAL_LEASE_EXPOSED  `parameters()` handed the live arrays out
+#                         (monotonic for the lease's life): nothing is kept
+#                         any more, every call opens and closes its own.
+# The rule: taking the lease is one compare-and-set (free -> busy). A caller
+# that finds it busy is refused with CAUSAL_LEASE_REFUSAL, the words the
+# native decode session itself gives a second holder; it never takes, loads
+# or closes the kept sessions. A caller that finds it exposed runs on a
+# private session set of its own and holds no lease. No lock is held across
+# a forward: the word is the whole test-and-set.
+comptime CAUSAL_LEASE_BUSY = 1
+comptime CAUSAL_LEASE_EXPOSED = 2
+
+comptime CAUSAL_LEASE_TAKEN = 0
+comptime CAUSAL_LEASE_REFUSED = 1
+comptime CAUSAL_LEASE_PRIVATE = 2
+
+comptime CAUSAL_LEASE_REFUSAL = "transformer decode session: busy"
+
+comptime CausalLeaseWord = MutPointer[Int64, MutUntrackedOrigin]
+
+
+@always_inline
+def causal_lease_load(word: CausalLeaseWord) -> Int:
+    """The live lease word."""
+    return Int(Atomic.load[ordering=Ordering.ACQUIRE](word))
+
+
+def causal_lease_take(word: CausalLeaseWord) -> Int:
+    """The test-and-set: CAUSAL_LEASE_TAKEN when this caller now holds the
+    kept sessions (the word went free -> busy in one step),
+    CAUSAL_LEASE_PRIVATE when the model is exposed (no lease is held; the
+    caller opens its own sessions), CAUSAL_LEASE_REFUSED when another holder
+    has it."""
+    var expected = Int64(0)
+    if Atomic.compare_exchange[
+        success_ordering=Ordering.SEQUENTIAL,
+        failure_ordering=Ordering.RELAXED,
+    ](word, expected, Int64(CAUSAL_LEASE_BUSY)):
+        return CAUSAL_LEASE_TAKEN
+    # Exposure is monotonic, so a word seen exposed stays exposed; a word
+    # seen busy and not exposed is a refusal whatever happens next.
+    if (causal_lease_load(word) & CAUSAL_LEASE_EXPOSED) != 0:
+        return CAUSAL_LEASE_PRIVATE
+    return CAUSAL_LEASE_REFUSED
+
+
+def causal_lease_release(word: CausalLeaseWord) -> Bool:
+    """The holder gives the lease back. True when the model was exposed
+    while it held (or before): the holder then closes its sessions instead
+    of leaving them kept; no taker can reach them, because an exposed word
+    is never taken."""
+    while True:  # driver-loop: compare-and-set retry on the one lease word
+        var current = Atomic.load[ordering=Ordering.ACQUIRE](word)
+        var expected = current
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, current & ~Int64(CAUSAL_LEASE_BUSY)):
+            return (Int(current) & CAUSAL_LEASE_EXPOSED) != 0
+
+
+def causal_lease_expose(word: CausalLeaseWord) -> Bool:
+    """Mark the model exposed. True when the word was free and this caller
+    now ALSO holds it busy (it drops the kept sessions and then calls
+    `causal_lease_release`); False when a holder is running: that holder
+    sees the bit at its next test and at its release, and closes."""
+    while True:  # driver-loop: compare-and-set retry on the one lease word
+        var current = Atomic.load[ordering=Ordering.ACQUIRE](word)
+        var expected = current
+        var free = (Int(current) & CAUSAL_LEASE_BUSY) == 0
+        var wanted = current | Int64(CAUSAL_LEASE_EXPOSED)
+        if free:
+            wanted = wanted | Int64(CAUSAL_LEASE_BUSY)
+        if Atomic.compare_exchange[
+            success_ordering=Ordering.SEQUENTIAL,
+            failure_ordering=Ordering.RELAXED,
+        ](word, expected, wanted):
+            return free
