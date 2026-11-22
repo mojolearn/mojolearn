@@ -8379,7 +8379,7 @@
     "head": "c1ebc6314",
     "lane": "classical-encoders",
     "path": "experiments/six_lane_integration/grid_controls/classical-encoders.json",
-    "sha256": "c5c306ed3e371c1df6d67487410a5c4ef588ea54254f74eb394c7eb6b5b9994f"
+    "sha256": "4791b4d2633447c64bf96a84df3832307200fe6394206d2ac3069888ddf6fd5a"
    },
    "classical-fixes": {
     "branch": "lane/classical-fixes",
