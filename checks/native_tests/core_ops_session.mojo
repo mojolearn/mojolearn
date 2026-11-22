@@ -27,7 +27,7 @@ table stay in the Python test.
 from std.math import exp
 from autograd.ops_api import OpsSession
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, op1, op2, total, values, gradient, same_words
+from checks.native_tests.ops_higher_common import tensor, op1, op2, total, values, gradient, same_words
 from checks.native_tests.core_ops_common import (
     normal,
     uniform,

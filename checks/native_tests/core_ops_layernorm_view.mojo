@@ -16,7 +16,7 @@ each gradient in its stored (transposed when a view) layout and shape.
 from std.math import sqrt
 from autograd.ops_api import OpsSession
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, op1, op2, total, values, gradient
+from checks.native_tests.ops_higher_common import tensor, op1, op2, total, values, gradient
 from checks.native_tests.core_ops_common import allclose, dims2, same_shape, opi
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec

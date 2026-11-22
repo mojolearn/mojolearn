@@ -48,7 +48,7 @@ from autograd.model import (
     LOSS_MSE, LOSS_CROSS_ENTROPY, LOSS_HUBER, TARGET_DENSE, TARGET_CODES, OUT_RAW, OUT_SOFTMAX, OUT_ARGMAX,
 )
 from checks.native_tests.core_ops_common import normal, dims2
-from checks.native_tests.ops_higher import tensor, op2, linear, loss, total, values, gradient
+from checks.native_tests.ops_higher_common import tensor, op2, linear, loss, total, values, gradient
 from checks.native_tests.training_sequential_common import (
     SeqModel, codes_as_words, L_RELU, L_TANH, L_SIGMOID, L_LAYER_NORM,
 )

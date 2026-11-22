@@ -15,7 +15,7 @@ the session's recovery after it, stay in the Python test.
 """
 from autograd.ops_api import OpsSession
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, values, scale
+from checks.native_tests.ops_higher_common import tensor, values, scale
 from checks.native_tests.core_ops_common import exact, dims3, dims4, opi, require
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec

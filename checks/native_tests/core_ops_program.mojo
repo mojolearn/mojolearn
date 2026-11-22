@@ -27,7 +27,7 @@ from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
 from sequence.ops import FP
-from checks.native_tests.ops_higher import tensor, op1, op2, scale, values, same_words
+from checks.native_tests.ops_higher_common import tensor, op1, op2, scale, values, same_words
 from checks.native_tests.core_ops_common import normal, dims2, dims3, dims4, opi
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec

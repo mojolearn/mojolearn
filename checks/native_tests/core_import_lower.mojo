@@ -51,7 +51,7 @@ from autograd.rankn import ShapeN
 from core.cast_in import CastIn, CAST_KIND_SIGNED
 from sequence.exec_trait import Exec
 from sequence.ops import FP
-from checks.native_tests.ops_higher import tensor, op1, op2, reshape, values
+from checks.native_tests.ops_higher_common import tensor, op1, op2, reshape, values
 from checks.native_tests.core_ops_common import normal, unit_value, allclose, exact, dims2, dims3, dims4, opi
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec

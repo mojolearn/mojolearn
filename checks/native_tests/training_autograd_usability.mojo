@@ -57,7 +57,7 @@ from sequence.exec_trait import Exec
 from sequence.ops import FP
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.ops_higher import tensor, op2, linear, loss, values
+from checks.native_tests.ops_higher_common import tensor, op2, linear, loss, values
 from checks.native_tests.core_ops_common import normal, dims2, dims3
 from checks.native_tests.training_sequential_common import SeqModel, L_LINEAR
 from checks.native_tests.training_check_common import same_words

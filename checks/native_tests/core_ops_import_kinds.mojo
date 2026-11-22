@@ -41,7 +41,7 @@ from std.math import erf, exp, log, log1p, tanh, sin, cos, sqrt, floor, ceil, na
 from std.memory import bitcast
 from autograd.ops_api import OpsSession
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, total, values, gradient, same_words
+from checks.native_tests.ops_higher_common import tensor, total, values, gradient, same_words
 from checks.native_tests.core_ops_common import uniform, wide, allclose, exact, dims2, dims3, same_shape, opi
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec

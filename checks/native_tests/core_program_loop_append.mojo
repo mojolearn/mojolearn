@@ -39,7 +39,7 @@ from autograd.program_io import ProgramInput
 from autograd.rankn import ShapeN
 from core.cast_in import CastIn
 from sequence.exec_trait import Exec
-from checks.native_tests.ops_higher import tensor, op2, values, same_words
+from checks.native_tests.ops_higher_common import tensor, op2, values, same_words
 from checks.native_tests.core_ops_common import dims2, opi
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec

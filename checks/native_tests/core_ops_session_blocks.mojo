@@ -84,7 +84,7 @@ from core.cast_in import CastIn
 from sequence.exec_trait import Exec
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
-from checks.native_tests.ops_higher import tensor, total, values, gradient, same_words
+from checks.native_tests.ops_higher_common import tensor, total, values, gradient, same_words
 from checks.native_tests.core_ops_common import dims2, normal, all_finite
 from std.testing import TestSuite
 from checks.native_tests.testsuite_serial import CPU_COLUMN_BUILD, check_cases_serial

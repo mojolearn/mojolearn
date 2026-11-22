@@ -33,7 +33,7 @@ the Python test.
 from std.math import cos, exp, log, max, sin, sqrt
 from std.memory import bitcast, unsafe_memcpy
 from autograd.ops_api import OpsSession
-from checks.native_tests.ops_higher import gradient, op1, op2, tensor, total, values
+from checks.native_tests.ops_higher_common import gradient, op1, op2, tensor, total, values
 from sequence.exec_trait import Exec
 from core.host_parallel import host_parallelize
 from sequence.exec import HostExec
