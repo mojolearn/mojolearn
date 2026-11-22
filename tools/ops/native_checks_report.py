@@ -73,21 +73,32 @@ _CHECK = re.compile(r'Check\(\s*"([\w.-]+)"\s*,\s*cpu=(True|False)\s*,\s*gpu=(Tr
 _CHECK_LINE = re.compile(r"^CHECK (\S+) column=(\w+) cases=(\d+) failed=(\d+) skipped=(\d+)", re.M)
 # The TestSuite summary (std.testing, Mojo 1.2.0): `Summary [ 0.010 ] 3 tests run: 2 passed , 1 failed , 0 skipped`
 _SUITE_LINE = re.compile(r"^Summary \[ *[\d.]+ *\] (\d+) tests run: (\d+) passed , (\d+) failed , (\d+) skipped", re.M)
-TESTSUITE_DIR = "checks/native_tests"
+# TestSuite check files live in checks/native_tests/ and, for the older standalone checks other checks import from
+# there, at the top of checks/ (lane ts-b9, 2026-11-22). One name in both directories is refused.
+TESTSUITE_DIRS = ("checks/native_tests", "checks")
 _SUITE_MARK = re.compile(r"\A[^\n]*\n# native-check:((?: (?:cpu|gpu))+)[ \t]*\n")
+
+
+def testsuite_paths(root: Path) -> dict[str, tuple[str, tuple[bool, bool]]]:
+    """{name: (repo-relative path, (cpu, gpu))} of every TestSuite check file (second line `# native-check: <columns>`)
+    in TESTSUITE_DIRS. A name marked in two directories is refused."""
+    out: dict[str, tuple[str, tuple[bool, bool]]] = {}
+    for d in TESTSUITE_DIRS:
+        for path in sorted((Path(root) / d).glob("*.mojo")):
+            with path.open(errors="replace") as f:
+                head = f.readline() + f.readline()
+            m = _SUITE_MARK.match(head)
+            if m:
+                if path.stem in out:
+                    raise ValueError(f"{path.stem}: a TestSuite file in both {out[path.stem][0]} and {d}/")
+                cols = m.group(1).split()
+                out[path.stem] = (f"{d}/{path.name}", ("cpu" in cols, "gpu" in cols))
+    return out
 
 
 def testsuite_checks(root: Path) -> dict[str, tuple[bool, bool]]:
     """{name: (cpu, gpu)} of every TestSuite check file (its second line `# native-check: <columns>`)."""
-    out: dict[str, tuple[bool, bool]] = {}
-    for path in sorted((Path(root) / TESTSUITE_DIR).glob("*.mojo")):
-        with path.open(errors="replace") as f:
-            head = f.readline() + f.readline()
-        m = _SUITE_MARK.match(head)
-        if m:
-            cols = m.group(1).split()
-            out[path.stem] = ("cpu" in cols, "gpu" in cols)
-    return out
+    return {name: cols for name, (_, cols) in testsuite_paths(root).items()}
 
 
 def load_checks(root: Path) -> dict[str, tuple[bool, bool]]:
@@ -275,9 +286,10 @@ def _cmd_list(a) -> int:
 def _cmd_testsuite(a) -> int:
     """The TestSuite check files of a column (filtered), one `<name> <path>` per line: what
     tools/ops/native_testsuite.sh builds and runs."""
-    suites = testsuite_checks(Path(a.root))
+    paths = testsuite_paths(Path(a.root))
+    suites = {name: cols for name, (_, cols) in paths.items()}
     for name in select(column_names(suites, a.column), a.filter):
-        print(name, f"{TESTSUITE_DIR}/{name}.mojo")
+        print(name, paths[name][0])
     return 0
 
 
