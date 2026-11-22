@@ -7,7 +7,7 @@ producers that never wrote the ledger:
 
 * ``identity-table-admission``: the committed identity table admission
   (``bench/results/reference_admissions/<date>/README.md`` naming retained
-  column records under ``bench/results/identity_break/retained/<sha256>/``).
+  column records under ``verification/records/identity/retained/<sha256>/``).
   Each ``identity-<vendor>/<lane>`` unit is admitted at the commit its records
   carry, as a retained execution (``run_id`` null), through
   tools/release_ledger_admission.py. The unit passes there only when every
@@ -42,11 +42,15 @@ from release_ledger_admission import require, reference, digest
 TOOL = "tools/release_requirements_retained.py"
 IDENTITY = "identity-table-admission"
 ADMISSIONS = "bench/results/reference_admissions"
-RECORD_RE = re.compile(r"`(bench/results/identity_break/retained/([0-9a-f]{64})/[^`/]+\.identical\.json)`")
+#: An admission README cites a retained record by its repository path. READMEs written before 2026-11-25 spell the
+#: old root (bench/results/identity_break, verification/README.md); they are records and are not rewritten, so
+#: both spellings are read and the path is opened under IDENTITY_BREAK.
+RECORD_RE = re.compile(r"`((?:verification/records/identity|bench/results/identity_break)/retained/([0-9a-f]{64})/[^`/]+\.identical\.json)`")
+LEGACY_IDENTITY_BREAK = "bench/results/identity_break"
 HEX40 = re.compile(r"[0-9a-f]{40}")
 IDENTITY_SPECS = ("identity-apple", "identity-nvidia", "identity-amd", "identity-cpu")
 TABLE = "python/mojolearn/verify_reference/table.json"
-IDENTITY_BREAK = "bench/results/identity_break"
+IDENTITY_BREAK = "verification/records/identity"
 _TABLES = {}
 
 
@@ -67,7 +71,7 @@ def _sha(raw):
 def cited_records(root, table):
     """The table's column records that are retained by content address in this checkout:
     index -> dict(index, cls, commit, path, sha256). A record the table lists without a sha256, or
-    whose bytes are not under bench/results/identity_break, is not cited (a unit needing it is refused)."""
+    whose bytes are not under verification/records/identity, is not cited (a unit needing it is refused)."""
     root = Path(root).resolve()
     found = {}
     for index, row in enumerate(table.get("records") or []):
@@ -103,6 +107,8 @@ def admission_records(root, admission):
     readme = Path(root) / admission / "README.md"
     found = []
     for rel, sha in RECORD_RE.findall(evidence.read_text(readme)):
+        if rel.startswith(LEGACY_IDENTITY_BREAK + "/"):
+            rel = IDENTITY_BREAK + rel[len(LEGACY_IDENTITY_BREAK):]
         if rel not in [r for r, _ in found]:
             found.append((rel, sha))
     require(found, "admission names no retained identity column records: " + str(readme))

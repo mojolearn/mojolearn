@@ -192,7 +192,7 @@ The records live OUTSIDE the checkout, under
 `~/mojolearn-evidence`), as every leg's raw output does. What comes into the
 repository is a dated directory under `bench/results/model/` holding the JSON
 records (about 100 KB each), the diff output and a README in the shape of
-`bench/results/identity_break/2026-09-14_136-lanes/README.md`: a column table
+`verification/records/identity/2026-09-14_136-lanes/README.md`: a column table
 (column, box, how, cells) and the diff summary.
 
 ## The verdicts
@@ -298,7 +298,7 @@ Read when present: `lm.numeric_mode`, `lm.weight_format`, `lm.device`,
 not timed: its per-step contract is not fixed and the decode time is what a
 user's `generate` costs. The CPU column loads the package from a copy that
 carries no GPU set with `MOJOLEARN_HOST_DIR` naming the host bindings
-(`bench/results/identity_break/2026-09-17_lowbit-m4/README.md`'s recipe), and
+(`verification/records/identity/2026-09-17_lowbit-m4/README.md`'s recipe), and
 passes `device="cpu"`.
 
 ## Results

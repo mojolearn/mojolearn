@@ -267,7 +267,7 @@ BUILDER = "bindings/build_host_family.sh"
 #: training cell, kmeans-sqrt/wide (the H100 inertia stands alone), on a lane no
 #: CPU column covers, and the workflow asserts that count exactly. That cell is
 #: fixed since 9fde8f5f7 (DEVIATIONS 2715 and 2716); the kmeans lanes' cells
-#: after the fix are bench/results/identity_break/2026-09-14_kmeans-sqrt-fix,
+#: after the fix are verification/records/identity/2026-09-14_kmeans-sqrt-fix,
 #: which the workflow asserts IDENTICAL x3 in its own step.
 #:
 #: release-0845 (2026-10-14): the record is the one taken from pip-installed
@@ -283,9 +283,9 @@ BUILDER = "bindings/build_host_family.sh"
 #: identity lanes' kernels, and the new TSNE and IVFSQIndex options are off by
 #: default, so the record stands for 0.8.45.
 TRAINING_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-10-14_0844-pypi/apple-m4.json",
-    "bench/results/identity_break/2026-10-14_0844-pypi/nvidia-l40s-sm_89.json",
-    "bench/results/identity_break/2026-10-14_0844-pypi/amd-mi325x-gfx942.json",
+    "verification/records/identity/2026-10-14_0844-pypi/apple-m4.json",
+    "verification/records/identity/2026-10-14_0844-pypi/nvidia-l40s-sm_89.json",
+    "verification/records/identity/2026-10-14_0844-pypi/amd-mi325x-gfx942.json",
 )
 
 #: Covered lanes whose cells in TRAINING_GPU_COLUMNS predate a fix of the
@@ -302,9 +302,9 @@ TRAINING_FIX_LANES = ()
 #: The GPU columns the classical INFERENCE gate compares each host identity
 #: hash against (tools/classical_host_gate.py check --gpu-column).
 CLASSICAL_GPU_COLUMNS = (
-    "bench/results/identity_break/2026-09-14_46-lanes/apple-m4.json",
-    "bench/results/identity_break/2026-09-14_46-lanes/nvidia-h100-sm_90a.json",
-    "bench/results/identity_break/2026-09-14_46-lanes/amd-mi300x-gfx942.json",
+    "verification/records/identity/2026-09-14_46-lanes/apple-m4.json",
+    "verification/records/identity/2026-09-14_46-lanes/nvidia-h100-sm_90a.json",
+    "verification/records/identity/2026-09-14_46-lanes/amd-mi300x-gfx942.json",
 )
 
 #: The classical inference recordings (one directory per GPU box and lane
@@ -347,7 +347,7 @@ CLASSICAL_RECORDED = (
     # under --every-fixture, so every one of the 36 cells was watched to fail
     # before it was believed. The Apple and AMD recordings are owed to the
     # next release record; the identity columns behind these cells are
-    # bench/results/identity_break/2026-09-16_predict-nvidia.
+    # verification/records/identity/2026-09-16_predict-nvidia.
     "verification/records/classical_host/2026-09-16-nvidia-predict",
     # lane/classical-host-recordings (2026-09-16): the six FITTED k-means
     # lanes, the last entry SAVED_MODEL_INFERENCE_OWED had, on all nine
@@ -363,7 +363,7 @@ CLASSICAL_RECORDED = (
     # `SABOTAGE NOT CAUGHT` on all 54 when it was first rehearsed. The Apple
     # and AMD recordings are owed to the next release record; the identity
     # column behind these cells is
-    # bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu.
+    # verification/records/identity/2026-09-16_kmeans-and-spectral-cpu.
     "verification/records/classical_host/2026-09-16-nvidia-kmeans",
     # The AMD column of the same six lanes, same nine fixtures, on a RunPod
     # MI300X (gfx942): `gate verdict IDENTICAL (54 fixtures, exit 0)` and the
@@ -548,7 +548,7 @@ TRAINING_LANE_NAMES = {
     # matrix, the ridge, the factorization, the solve and three scalars.
     # At bafab59ef all nine training and infer cells of each lane read
     # IDENTICAL x4, and the sabotage build moves every one. That move is
-    # carried by committed columns under bench/results/identity_break, so it
+    # carried by committed columns under verification/records/identity, so it
     # can be re-checked here rather than in a CI log.
     "gp": "the Gaussian process with an RBF kernel",
     "gp-matern12": "the Gaussian process with a Matern kernel at nu 0.5",
@@ -1246,7 +1246,7 @@ TRAINING_LANE_NAMES = _merge_expansion("TRAINING_LANE_NAMES", TRAINING_LANE_NAME
 #: and odd by lane/inference-gbdt-ctr-tables at 1386833b4, the other six
 #: fixtures by lane/cpu-verifier-gaps-7 from that lane's same Metal build.
 #: The CPU identity gate exports it as MOJOLEARN_IDENTITY_GBDT_CTR_MODELS.
-GBDT_CTR_MODELS_DIR = "bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models"
+GBDT_CTR_MODELS_DIR = "verification/records/identity/2026-09-15_gbdt-ctr-tables/models"
 GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 
 # Native functions/types connected once by load_host_module, before public API
@@ -4157,14 +4157,14 @@ PUBLIC_PENDING_LANES = {
     #
     #     merge_reference_lanes -> language-model-config/base: missing parts ['batch']
     #
-    # bench/results/identity_break/2026-09-19_language-model-config/ carries
+    # verification/records/identity/2026-09-19_language-model-config/ carries
     # ONE fixture (base) and three parts (train, infer, model) for it, and a
     # scoped admission requires all nine fixtures with train, infer, model
     # and batch. So its debt is unchanged and is a RECORD: one CPU column
     # over all nine fixtures at `--repeats 2` with the batch part run. It is
     # not a GPU debt and not a rental.
     # ADMITTED 2026-09-20: language-model-config carries cells in the shipped table now
-    # (bench/results/identity_break/2026-09-20_language-model-config/, nine fixtures, 4 s).
+    # (verification/records/identity/2026-09-20_language-model-config/, nine fixtures, 4 s).
 
     # lane/linalg-public (2026-09-19). Adding these three to the linalg
     # family's `training_lanes` made them public reference lanes with no
@@ -4192,7 +4192,7 @@ PUBLIC_PENDING_LANES = {
 
     # lane/laneless-public-classes (2026-09-19). Three lanes joined their
     # families' `training_lanes` with no committed column of any kind. Their
-    # CPU evidence is in `bench/results/identity_break/
+    # CPU evidence is in `verification/records/identity/
     # 2026-09-19_laneless-public-classes/`: 27 of 27 cells STABLE over all
     # nine fixtures at `--repeats 2`, both declared batch parts STABLE and
     # seen BATCH_MOVED under the harness switch, and each one watched failing
@@ -4214,7 +4214,7 @@ PUBLIC_PENDING_LANES = {
     # lane/models-namespace-lanes (2026-09-19). The three `mojolearn.models`
     # lanes joined the linalg, tokenizer and neural families' `training_lanes`
     # with no committed column. Their CPU evidence is in
-    # `bench/results/identity_break/2026-09-19_models-namespace/`: 27 of 27
+    # `verification/records/identity/2026-09-19_models-namespace/`: 27 of 27
     # cells STABLE over all nine fixtures at `--repeats 2`, a clean replay
     # IDENTICAL on all 27, `hf-causal-lm`'s batch part STABLE, and each lane
     # watched failing 9/9 under a build define -- `hf-checkpoint` under
@@ -4244,7 +4244,7 @@ PUBLIC_PENDING_LANES = {
     # (measured 2026-09-19, lane/lm-attention-fallback). These five read
     # amd + cpu in the shipped table and nothing else, and the obvious
     # reading -- that a Mac owes them all nine fixtures -- is wrong.
-    # bench/results/identity_break/2026-09-18_installed-apple-properties/
+    # verification/records/identity/2026-09-18_installed-apple-properties/
     # carries one Apple M4 column per lane at commit aff968968, two repeats,
     # identical mode, `admit()` clean, and every one of them agrees with the
     # SHIPPED refs on every comparable part with ZERO disagreements:
@@ -4283,12 +4283,12 @@ PUBLIC_PENDING_LANES = {
     # lacks is parts. Five of the nine carry a usable value at every fixture
     # (train, infer, model, batch, rlpair) and four do not: `stepfull`, which
     # is a DEFAULT compared part, and batchgrad, batchscale and ragged. It is
-    # also outside bench/results/identity_break/, the only tree
+    # also outside verification/records/identity/, the only tree
     # `_verify_reference.build_table` walks, so nothing would find it.
     #
     # THE APPLE COLUMN IS A THIRD, SMALLER DEBT AND IT IS NOT GPU TIME. All
     # five read `apple` above, from
-    # bench/results/identity_break/2026-09-18_installed-apple-properties/,
+    # verification/records/identity/2026-09-18_installed-apple-properties/,
     # which is committed, `admit()` clean, nine fixtures, two repeats and
     # complete on all nine parts -- and is in NO cell of the shipped table for
     # these lanes, which still read amd + cpu. Admitting it is a scoped
@@ -4316,7 +4316,7 @@ PUBLIC_PENDING_LANES = {
     #
     # The class-sharded Gaussian process classifier drivers ARE covered lanes
     # -- they take a CPU column, recorded in
-    # bench/results/identity_break/2026-09-20_unlaned-public-algorithms/ with
+    # verification/records/identity/2026-09-20_unlaned-public-algorithms/ with
     # a sabotage pair that moved every cell -- but no committed record carries
     # a GPU hash for them and the shipped table has no cell, so an installed
     # `verify --all` would read OWED for every part. `PUBLIC_INAPPLICABLE_PREFIXES`
@@ -4350,7 +4350,7 @@ PUBLIC_PENDING_LANES = {
     #   would be a sentence with nothing behind it.
     #
     # So all four are covered lanes with a CPU column, recorded in
-    # bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/ with a
+    # verification/records/identity/2026-09-20_cpu-routes-gpu-only-four/ with a
     # sabotage pair that moved every arithmetic cell. What they owe now is
     # what `par-gpc-fit` and `par-gpc-predict` owe: a committed record that
     # carries a GPU hash, so an installed `verify --all` has a cell to read.
@@ -4364,7 +4364,7 @@ PUBLIC_PENDING_LANES = {
     # ADMITTED 2026-09-22: holtwinters, holtwinters-multiplicative, par-holtwinters and
     # par-forecast-holtwinters at the estimated-initialization default. Apple M4, arm64 CPU,
     # NVIDIA H100, AMD MI325X and x86-64 CPU agree on all nine fixtures
-    # (bench/results/identity_break/2026-09-22_holtwinters-estimated-init/).
+    # (verification/records/identity/2026-09-22_holtwinters-estimated-init/).
     # ADMITTED 2026-09-28: gmm and gmm-sample at classic-kmeanspp-init-1;
     # complete nine-fixture witnesses and current CPU/Metal/HIP base agreement.
     # See docs/CONSOLIDATED_REFERENCE_ADMISSION_124.md.
@@ -4764,10 +4764,10 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
 #: AND THE NVIDIA COLUMN THEY NEED IS ALREADY IN THE TREE, COMMITTED AND
 #: ADMISSIBLE. It is not a rental:
 #:
-#:   bench/results/identity_break/2026-09-19_gpu-class-gaps/
+#:   verification/records/identity/2026-09-19_gpu-class-gaps/
 #:     nvidia-nvidia-geforce-rtx-4090-sm_89.classical.json   (commit 14e0c6bbe)
 #:       -- 16 of the 18, all nine fixtures, identical mode, repeats 2
-#:   bench/results/identity_break/2026-09-19_single-device-gaps/
+#:   verification/records/identity/2026-09-19_single-device-gaps/
 #:     nvidia-nvidia-geforce-rtx-4090-sm_89.single-device-gaps.json
 #:       -- gp-normalize-y and gp-sample-y-normalize, same terms
 #:

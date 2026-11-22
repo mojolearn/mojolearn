@@ -605,7 +605,7 @@ def source_tree(work, commit, dry):
     # under extensions.worktreeConfig; a no-op on a full tree. (2026-11-12: two measurement builds packed
     # 56/56 bindings and then refused on the missing models.)
     sh("git", "-C", str(tree), "sparse-checkout", "disable")
-    models = tree / "bench/results/identity_break"
+    models = tree / "verification/records/identity"
     if not models.is_dir():
         raise SystemExit(f"candidate: {tree} lacks {models.relative_to(tree)} after the checkout; "
                          f"git worktree remove --force {tree} and rerun")

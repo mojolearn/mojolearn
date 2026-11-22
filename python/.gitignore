@@ -50,7 +50,7 @@ mojolearn/host/_mojolearn_merged.json
 # `python -m mojolearn identity` has the harness, the three training GPU
 # columns and the commit witness. The single sources stay in git:
 # tools/identity_trace_diff.py, tools/identity_break.py and the columns
-# python/mojolearn/host_surface.py names under bench/results/identity_break/.
+# python/mojolearn/host_surface.py names under verification/records/identity/.
 mojolearn/_identity_trace_diff.py
 mojolearn/_identity_break.py
 mojolearn/_identity_lane_*.py

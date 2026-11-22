@@ -26,8 +26,6 @@
 #   bench/results/dataset_store/manifest.tsv dataset manifest  [dataset store tools]
 #   bench/results/dataset_store/groups/*.txt  group member pins [tools/opponent_wheels.sh]
 #   bench/results/dataset_store/repo-data/*.tsv per-file pins of a repo-data bucket [tools/repo_data.py pack]
-#   bench/results/identity_break/** (no *.log) identity columns, verify inputs
-#                                           [tools/admit_identity_columns.sh, tools/retain_run_summary.py]
 #   bench/results/reference_admissions/**   release tools
 #   bench/results/release_evidence/**       release tools
 #   bench/results/ARCHIVE_INDEX.md          record of removed evidence
@@ -47,7 +45,7 @@ allowed() {
     esac
     case "$1" in
         bench/results/bench_board/*|bench/results/board-archive/*|bench/results/opponent-archive/*) return 0 ;;
-        bench/results/identity_break/*|bench/results/reference_admissions/*) return 0 ;;
+        bench/results/reference_admissions/*) return 0 ;;
         bench/results/release_evidence/*) return 0 ;;
         bench/results/board_best_ever/*/*|bench/results/paper_compare/*/*) return 1 ;;
         bench/results/board_best_ever/*.json|bench/results/paper_compare/*) return 0 ;;

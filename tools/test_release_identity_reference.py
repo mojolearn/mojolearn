@@ -113,7 +113,7 @@ class Repo:
                 for lane in ("ols", "ridge")})
             raw = json.dumps(body, sort_keys=True)
             sha = hashlib.sha256(raw.encode()).hexdigest()
-            self.write(f"bench/results/identity_break/col/{cls}.identical.json", raw)
+            self.write(f"verification/records/identity/col/{cls}.identical.json", raw)
             records.append(dict(**{"class": cls}, commit=record_commit, dir="col", file=f"{cls}.identical.json",
                                 sha256=sha, vendor=cls))
         for lane in ("ols", "ridge"):
@@ -126,7 +126,7 @@ class Repo:
             body = dict(commit=legacy, cells={"ols/base": dict(rlpair=[legacy_ref], rlpair_verdict=(
                 "N/A" if legacy_ref.startswith("n/a:") else "STABLE"))})
             raw = json.dumps(body, sort_keys=True)
-            self.write("bench/results/identity_break/old/apple.identical.json", raw)
+            self.write("verification/records/identity/old/apple.identical.json", raw)
             records.append(dict(**{"class": "apple"}, commit=legacy, dir="old", file="apple.identical.json",
                                 sha256=hashlib.sha256(raw.encode()).hexdigest(), vendor="apple"))
             cells["ols/base"]["rlpair"] = dict(ref=legacy_ref, cols={"apple": len(records) - 1})
@@ -136,7 +136,7 @@ class Repo:
                                      for lane in ("ols", "ridge")})
         self.write(IR.TABLE_PATH, json.dumps(table, sort_keys=True))
         self.write("bench/results/reference_admissions/2026-11-04-test/README.md",
-                   "".join(f"`bench/results/identity_break/retained/{r['sha256']}/{r['file']}`\n" for r in records))
+                   "".join(f"`verification/records/identity/retained/{r['sha256']}/{r['file']}`\n" for r in records))
         return self.commit("admit reference columns")
 
 
@@ -183,7 +183,7 @@ def test_unchanged_closure_passes_with_the_admission_as_evidence(repo, tmp_path)
     assert row["reference"]["decision"] == "passed" and row["reference"]["release_floor"] is None
     paths = {item["path"] for item in row["evidence"]}
     assert IR.TABLE_PATH in paths
-    assert "bench/results/identity_break/col/nvidia.identical.json" in paths
+    assert "verification/records/identity/col/nvidia.identical.json" in paths
     assert "bench/results/reference_admissions/2026-11-04-test/README.md" in paths
     assert all(item["revision"] == freeze for item in row["evidence"])
     assert {item["cls"] for item in row["reference"]["basis"]} == {"nvidia"}
@@ -343,7 +343,7 @@ def test_floor_with_receipt_passes_from_the_floor(repo, tmp_path):
     # The receipt's evidence (the floor's table and its admitted record) is cited at the floor.
     floor_evidence = {(e["path"], e["revision"]) for e in row["evidence"] if e["revision"] == tagged}
     assert (IR.TABLE_PATH, tagged) in floor_evidence
-    assert ("bench/results/identity_break/col/amd.identical.json", tagged) in floor_evidence
+    assert ("verification/records/identity/col/amd.identical.json", tagged) in floor_evidence
     # ridge changed between its record and the floor: no receipt, measured from its record.
     ridge = rows["identity-amd/ridge"]
     assert ridge["status"] == "untested" and ridge["reference"]["basis"][0]["basis"] == "record"
@@ -374,7 +374,7 @@ def test_waived_floor_is_never_a_floor(repo, tmp_path, monkeypatch, source):
         state.write_text(json.dumps(dict(owner_waivers=[dict(
             approved_by="owner", reason="one-time", file=str(tmp_path / "gone.json"), waived=["identity-apple/ols"])])))
     else:
-        raw = (repo.root / "bench/results/identity_break/col/apple.identical.json").read_bytes()
+        raw = (repo.root / "verification/records/identity/col/apple.identical.json").read_bytes()
         repo.write("docs/release/0.8.64-identity-reuse-waiver.json", json.dumps(dict(
             approved_by="owner", reason="reuse", records_sha256=[hashlib.sha256(raw).hexdigest()])))
     repo.write("docs/notes.md", "after the release\n")
@@ -500,7 +500,7 @@ def test_tooling_scope():
     assert D.tooling_only("CHANGELOG.md")
     for path in ("tools/identity_break.py", "tools/identity_lanes/core.py", "core/ols.mojo",
                  "bindings/_mojolearn.mojo", "python/mojolearn/host_surface.py", "packaging/linux/build_sets.sh",
-                 "bench/results/identity_break/col/a.json", "pixi.toml", "pyproject.toml"):
+                 "verification/records/identity/col/a.json", "pixi.toml", "pyproject.toml"):
         assert not D.tooling_only(path), path
 
 

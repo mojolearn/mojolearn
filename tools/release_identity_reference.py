@@ -53,7 +53,9 @@ SCHEMA = "mojolearn.release-identity-reference.v1"
 CLOSURE_DEFINITION = "lane-select-selection.v1"
 TABLE_PATH = "python/mojolearn/verify_reference/table.json"
 HARNESS_PATH = "tools/identity_break.py"
-IDENTITY_BREAK = "bench/results/identity_break"
+IDENTITY_BREAK = "verification/records/identity"
+#: The root before 2026-11-25 (verification/README.md): a freeze revision older than the move holds the records there.
+LEGACY_IDENTITY_BREAK = "bench/results/identity_break"
 ADMISSIONS = "bench/results/reference_admissions"
 #: identity_columns._OPTIONAL_PARTS / _verify_reference.OPTIONAL_PARTS: a part a column may not carry.
 OPTIONAL_PARTS = ("batchgrad", "batchscale", "ragged", "rlpair")
@@ -280,8 +282,8 @@ class Frozen:
             if not isinstance(row, dict) or not isinstance(row.get("sha256"), str) or not row.get("file"):
                 raise ValueError(f"the table cites column record {index} without a content address")
             found = None
-            for rel in (f"{IDENTITY_BREAK}/retained/{row['sha256']}/{row['file']}",
-                        f"{IDENTITY_BREAK}/{row.get('dir') or ''}/{row['file']}"):
+            for rel in (f"{base}/{sub}/{row['file']}" for base in (IDENTITY_BREAK, LEGACY_IDENTITY_BREAK)
+                        for sub in (f"retained/{row['sha256']}", row.get('dir') or '')):
                 raw = _blob(self.root, self.revision, rel)
                 if raw is not None and hashlib.sha256(raw).hexdigest() == row["sha256"]:
                     found = (dict(path=rel, revision=self.revision, sha256=row["sha256"]), json.loads(raw))
@@ -306,7 +308,7 @@ class Frozen:
                 if raw is None:
                     continue
                 ref = dict(path=path, revision=self.revision, sha256=hashlib.sha256(raw).hexdigest())
-                for found in set(re.findall(r"identity_break/retained/([0-9a-f]{64})/", raw.decode("utf-8", "replace"))):
+                for found in set(re.findall(r"(?:identity_break|records/identity)/retained/([0-9a-f]{64})/", raw.decode("utf-8", "replace"))):
                     self._admissions.setdefault(found, []).append(ref)
         return self._admissions.get(sha, [])
 

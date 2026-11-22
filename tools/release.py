@@ -1837,8 +1837,8 @@ class Release(release_identity_wheels.IdentityOnWheels):
             patterns = git_at(p, "sparse-checkout", "list") or ""
             if patterns.strip() and patterns.strip() != "/*":
                 return "it is a sparse checkout (" + patterns.strip().splitlines()[-1] + ")"
-        if not (Path(p) / "bench/results/identity_break").is_dir():
-            return "it lacks bench/results/identity_break (the verification CTR models the pack stages)"
+        if not (Path(p) / "verification/records/identity").is_dir():
+            return "it lacks verification/records/identity (the verification CTR models the pack stages)"
         return None
 
     def _verify_source(self, p, c):
@@ -6633,7 +6633,7 @@ class Release(release_identity_wheels.IdentityOnWheels):
             summary = work / f"identity-{col}.json"
             cmd = [PY, "tools/identity_columns.py", "changed-lanes", "--scope", rr.SURFACE_SCOPE, "--backend", backend]
             if mode == "class":
-                cmd += ["--class", col, "--records", str(Path(self.src) / "bench/results/identity_break")]
+                cmd += ["--class", col, "--records", str(Path(self.src) / "verification/records/identity")]
             cmd += ["--summary-json", str(summary)]
             with open(work / f"identity-{col}.log", "w") as log:
                 rc = subprocess.run(cmd, cwd=str(self.src), stdout=subprocess.DEVNULL, stderr=log).returncode

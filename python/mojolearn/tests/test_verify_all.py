@@ -97,7 +97,7 @@ def test_every_reference_is_in_the_record_it_names():
     """No hash in the table is typed: each agreeing column's record file
     carries exactly that value for that cell part."""
     table = vref.load_table()
-    base = ROOT / "bench" / "results" / "identity_break"
+    base = ROOT / "verification" / "records" / "identity"
     cache = {}
     checked = 0
     for key, cell in table["cells"].items():
@@ -147,7 +147,7 @@ def test_build_table_newest_wins_and_same_commit_disagreement_is_a_conflict(tmp_
 
     fx = {"base": dict(X="fx", y_clf="fx", y_reg="fx")}
     stable = lambda h: dict(verdict="STABLE", hashes=[h, h], infer=["n/a:function"] * 2, infer_verdict="N/A")
-    d = tmp_path / "bench" / "results" / "identity_break" / "r"
+    d = tmp_path / "verification" / "records" / "identity" / "r"
     d.mkdir(parents=True)
     files = {
         "apple-m4.json": _column("apple-m4", "a" * 40, {"lane-a/base": stable("1111111111111111"), "lane-b/base": stable("5555555555555555")}, fx),
@@ -1048,7 +1048,7 @@ def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
 #: `mamba2-dtlimit` is the cross-check: another session recorded it
 #: independently at the corrected clamp and this lane's CPU column reproduced
 #: `6cefffbc50e10b84` bit for bit.
-#: Source: bench/results/identity_break/2026-09-17_reference-regen/.
+#: Source: verification/records/identity/2026-09-17_reference-regen/.
 STEPFULL_LANES = {
     "transformer": "5b8c0b041a329128",
     "transformer-window": "787dac866cd00329",

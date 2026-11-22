@@ -10,7 +10,7 @@
 # WHY THIS FILE AND NOT tools/identity_three_columns_leg.sh. That body builds
 # EVERY binding and runs EVERY lane. It did so on 2026-09-14 at 166 lanes, in
 # 1010 s of builds plus 1006 s of identity run SPLIT ACROSS TWO GPUs
-# (bench/results/identity_break/2026-09-14_166-lanes). The harness carries 241
+# (verification/records/identity/2026-09-14_166-lanes). The harness carries 241
 # lanes today and this leg has ONE GPU and a SIXTY MINUTE HARD LEASE. Serially
 # that does not fit, and a lease that expires mid-run fetches nothing at all.
 # So this body is the same body, scoped: the same builds, the same

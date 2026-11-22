@@ -454,18 +454,18 @@ jobs:
             !/verification/records/*
             /verification/records/forest_host/
             /verification/records/classical_host/
-            /bench/results/identity_break/
-            !/bench/results/identity_break/*
-            /bench/results/identity_break/2026-09-13_three-columns/
-            /bench/results/identity_break/2026-09-14_46-lanes/
-            /bench/results/identity_break/2026-09-14_47-lanes/
-            /bench/results/identity_break/2026-09-14_136-lanes/
-            /bench/results/identity_break/2026-09-14_166-lanes/
-            /bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/
-            /bench/results/identity_break/2026-09-15_embedding-sort/
-            /bench/results/identity_break/2026-09-14_ivf-euclidean/
-            /bench/results/identity_break/2026-09-15_gbdt-ctr-tables/
-            /bench/results/identity_break/2026-10-14_0844-pypi/
+            /verification/records/identity/
+            !/verification/records/identity/*
+            /verification/records/identity/2026-09-13_three-columns/
+            /verification/records/identity/2026-09-14_46-lanes/
+            /verification/records/identity/2026-09-14_47-lanes/
+            /verification/records/identity/2026-09-14_136-lanes/
+            /verification/records/identity/2026-09-14_166-lanes/
+            /verification/records/identity/2026-09-14_kmeans-sqrt-fix/
+            /verification/records/identity/2026-09-15_embedding-sort/
+            /verification/records/identity/2026-09-14_ivf-euclidean/
+            /verification/records/identity/2026-09-15_gbdt-ctr-tables/
+            /verification/records/identity/2026-10-14_0844-pypi/
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -509,7 +509,7 @@ jobs:
           echo "GATE_SHARDS=$shards" >> "$GITHUB_ENV"
           echo "identity_break shards on this runner: $shards"
           python3 -m pip install --quiet numpy
-          ls verification/records/forest_host/ bench/results/identity_break/2026-09-13_three-columns/
+          ls verification/records/forest_host/ verification/records/identity/2026-09-13_three-columns/
 
       # ONE STEP reads every list from the manifest. It runs the file by path
       # because the package cannot import yet (no binding is built on this
@@ -819,14 +819,14 @@ jobs:
           echo "control OK: --require-columns 4 refused three columns"
 
       # The kmeans lanes after the kmeans-sqrt fix (DEVIATIONS 2715 and 2716,
-      # bench/results/identity_break/2026-09-14_kmeans-sqrt-fix): the three fixed
+      # verification/records/identity/2026-09-14_kmeans-sqrt-fix): the three fixed
       # columns diff IDENTICAL on all 72 cells, and the unfixed columns of the
       # same boxes must still read the one NVIDIA inertia cell DIVERGENT, so the
       # record cannot pass by carrying identical files.
       - name: identity_break --diff over the kmeans-sqrt fix record (fixed IDENTICAL, unfixed DIVERGENT)
         if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
-          R=bench/results/identity_break/2026-09-14_kmeans-sqrt-fix
+          R=verification/records/identity/2026-09-14_kmeans-sqrt-fix
           st=0
           python3 tools/identity_break.py --diff $R/apple-m4.json $R/nvidia-h100-sm_90a.json \
             $R/amd-mi325x-gfx942.json --require-columns 3 > "$GATE_OUT/diff_kmsqrt_fixed.txt" 2>&1 || st=$?

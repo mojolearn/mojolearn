@@ -252,7 +252,7 @@ def test_floor_receipts_for_needs_the_table_and_every_class(monkeypatch):
     monkeypatch.setattr(rir, "floor_receipts", fake)
     table = {"cells": {"lane_a/base": {"train": {"ref": "1" * 16, "cols": {"nvidia": 0}}},
                        "lane_b/base": {"train": {"ref": "2" * 16, "cols": {"nvidia": 0, "amd": 1}}}}}
-    points = {"lane_c": {"source": "bench/results/identity_break/x/nvidia.identical.json"}}
+    points = {"lane_c": {"source": "verification/records/identity/x/nvidia.identical.json"}}
     got = ic.floor_receipts_for(table, {"commit": "c" * 40, "tags": {}}, ["lane_a", "lane_b", "lane_c"], "",
                                 points)
     assert calls == [[("lane_a", "nvidia"), ("lane_b", "amd"), ("lane_b", "nvidia")]]

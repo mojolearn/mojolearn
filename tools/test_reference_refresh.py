@@ -19,8 +19,8 @@ OTHER = "ba50061e5252b41adef5ae65dc8017cb073f887d"
 ADMIT_NEXT = """PTX rc=0 ptx_records=13 divergent_parts=0
 NEXT (after SELFTEST rc=0):
   git add -- bench/results/reference_admissions/2026-11-04-nv-fix0865 python/mojolearn/verify_reference/table.json \
-bench/results/identity_break/retained/04eb/nvidia-rtx-sm_89.lanes-eaeec399.identical.json \
-bench/results/identity_break/retained/04eb/nvidia-rtx-sm_89.lanes-eaeec399.provenance.txt \
+verification/records/identity/retained/04eb/nvidia-rtx-sm_89.lanes-eaeec399.identical.json \
+verification/records/identity/retained/04eb/nvidia-rtx-sm_89.lanes-eaeec399.provenance.txt \
 && git commit -m 'verify_reference: table regenerated from 0814836ff columns' && git push
   Re-record portable model files only if their admitted model/batch hashes changed.
 """
@@ -322,7 +322,7 @@ class TestIdempotency(Base):
         self.assertEqual(st["apple"]["phase"], "running-local")
         self.assertEqual(sh.count(" submit "), 1)
         # the sync cleaned record outputs from the pod tree first
-        i_clean = next(i for i, c in enumerate(sh.cmds) if "git clean -fdq -- bench/results/identity_break" in " ".join(c))
+        i_clean = next(i for i, c in enumerate(sh.cmds) if "git clean -fdq -- verification/records/identity" in " ".join(c))
         i_sync = next(i for i, c in enumerate(sh.cmds) if "nvidia_central.sh" in " ".join(c) and " sync " in " ".join(c))
         self.assertLess(i_clean, i_sync)
 

@@ -296,7 +296,7 @@ def test_broken_verifier_companions_never_publish_column(repo,tmp_path,monkeypat
     elif damage=='expanded_limit': monkeypatch.setattr(R,'MAX_IDENTITY_REPORT_BYTES',4)
     write(column,doc)
     with pytest.raises((OSError,ValueError)): R.retain_identity(column)
-    assert not list(repo.glob('bench/results/identity_break/retained/**/*.identical.json'))
+    assert not list(repo.glob('verification/records/identity/retained/**/*.identical.json'))
 
 
 def test_retained_conversion_still_passes_admission_after_original_removed(repo,tmp_path,monkeypatch):

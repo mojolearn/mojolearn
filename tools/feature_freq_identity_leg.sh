@@ -34,7 +34,7 @@
 #
 # THE VERDICT IS COMPUTED AT HOME on the Mac:
 #   PYTHONPATH=python python3 tools/identity_break.py --diff \
-#       bench/results/identity_break/2026-09-13_46-lanes/apple-m4.json \
+#       verification/records/identity/2026-09-13_46-lanes/apple-m4.json \
 #       <leg out>/remote/feature_freq/identity_break.<label>.2710.json
 # and the on-box gate.txt carries the two in-box diffs (fixed vs dead must
 # be DIVERGENT on gbdt-feature-freq only; fixed vs fixed-again IDENTICAL).

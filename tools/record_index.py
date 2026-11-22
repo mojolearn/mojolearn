@@ -9,7 +9,7 @@ the verify table builder (`python/mojolearn/_verify_reference.py`
 `bench/results/**/*.json` and took every JSON with a `cells` dict). They now
 read only the rows of two tracked indexes:
 
-  bench/results/identity_break/INDEX.tsv  the verify table's inputs (and the
+  verification/records/identity/INDEX.tsv  the verify table's inputs (and the
                                           identity_break part of the matrix)
   verification/records/CELLS_INDEX.tsv    column-shaped JSONs outside
                                           identity_break (matrix, census only)
@@ -23,7 +23,7 @@ A new record gets its row from the tool that retains it
 Usage:
   python3 tools/record_index.py check            # listed files intact? unlisted column JSONs?
   python3 tools/record_index.py add <file>...    # index new records (idempotent)
-  python3 tools/record_index.py add --unlisted-under bench/results/identity_break   # adopt restored records
+  python3 tools/record_index.py add --unlisted-under verification/records/identity   # adopt restored records
   python3 tools/record_index.py retire --reason "..." <file>...   # drop rows on purpose
   python3 tools/record_index.py generate [--force]   # ONE-TIME: from what the walk/glob took
 
@@ -51,7 +51,7 @@ def vref(root=ROOT):
 def walked_records(root):
     """What `repository_record_paths` walked before the index (os.walk of
     identity_break, `.admission-preview-*` pruned, every `*.json`)."""
-    base = os.path.join(root, "bench", "results", "identity_break")
+    base = os.path.join(root, "verification", "records", "identity")
     out = []
     for directory, children, names in os.walk(base):
         children[:] = [n for n in children if not n.startswith(".admission-preview-")]

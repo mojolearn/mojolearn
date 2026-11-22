@@ -12,7 +12,7 @@ import subprocess
 
 
 TABLE = "python/mojolearn/verify_reference/table.json"
-RECORDS = "bench/results/identity_break"
+RECORDS = "verification/records/identity"
 DATA_PREFIXES = ("mojolearn/verify_reference/", "mojolearn/reference_cards/", "mojolearn/identity_columns/")
 
 

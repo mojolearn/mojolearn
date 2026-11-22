@@ -62,7 +62,7 @@ def harness_path():
 def columns():
     """[(label, path, how)] for the three training GPU columns the manifest
     names: the wheel's identity_columns/<record>/ copies, else the checkout's
-    bench/results/identity_break/ originals. Raises FileNotFoundError."""
+    verification/records/identity/ originals. Raises FileNotFoundError."""
     record = host_surface.training_gpu_column_record()
     root = _checkout_root()
     out, missing = [], []

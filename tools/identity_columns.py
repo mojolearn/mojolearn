@@ -547,7 +547,7 @@ def record_lane_results(path, h, v, cls, want_fix, want_held):
 def record_sources(dirs):
     """Every *.identical.json under `dirs` (recursively), sorted, deduplicated.
 
-    A checkout's `bench/results/identity_break` is read through its record
+    A checkout's `verification/records/identity` is read through its record
     index (INDEX.tsv, the rows the verify table reads; 2026-11-21 lane
     tree-readers), never walked, so a stray file there is no reuse evidence
     either. Other directories (a run's output dir) are walked as given."""
@@ -556,7 +556,7 @@ def record_sources(dirs):
         d = Path(d)
         if not d.is_dir():
             continue
-        if d.resolve().parts[-3:] == ("bench", "results", "identity_break"):
+        if d.resolve().parts[-3:] == ("verification", "records", "identity"):
             found = sorted(Path(p) for p in vref().indexed_record_paths(str(d), str(d.resolve().parents[2]))
                            if p.endswith(".identical.json"))
         else:
@@ -654,7 +654,7 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
       * the admitted table: the OLDEST record any agreeing `cls` column of the
         lane's cells points at (every part of every fixture must have one);
       * every admissible column record of class `cls` under `record_dirs`
-        (bench/results/identity_break, its retained/ copies, the output dir,
+        (verification/records/identity, its retained/ copies, the output dir,
         MOJOLEARN_IDENTITY_REUSE_RECORDS), per lane that the record covers.
     The newest by commit time wins. A lane absent from every source is owed.
 
@@ -730,7 +730,7 @@ def reuse_points(h, lanes, table, cls, record_dirs, log=lambda s: None):
     want_fix = {f: dict(X=h._h(X), y_clf=h._h(yc), y_reg=h._h(yr))
                 for f, (X, yc, yr) in ((f, h.fixture(f)) for f in h.FIXTURES)}
     want_held = {f: dict(X=h._h(h.heldout(f))) for f in h.FIXTURES}
-    committed_root = (ROOT / "bench" / "results" / "identity_break").resolve()
+    committed_root = (ROOT / "verification" / "records" / "identity").resolve()
     used = 0
     for path in record_sources(record_dirs):
         got, why = record_lane_results(path, h, v, cls, want_fix, want_held)

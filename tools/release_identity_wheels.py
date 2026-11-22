@@ -245,7 +245,7 @@ class IdentityOnWheels:
         work.mkdir(parents=True, exist_ok=True)
         summary = work / ("%s.reuse.json" % column)
         cmd = [sys.executable, "tools/identity_columns.py", "changed-lanes", "--scope", "all", "--class", cls,
-               "--records", str(Path(self.src) / "bench/results/identity_break"), "--backend", backend,
+               "--records", str(Path(self.src) / "verification/records/identity"), "--backend", backend,
                "--summary-json", str(summary)]
         with open(work / ("%s.log" % column), "w") as log:
             p = subprocess.run(cmd, cwd=str(self.src), stdout=subprocess.PIPE, stderr=log, text=True)

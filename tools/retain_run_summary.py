@@ -259,7 +259,7 @@ def identity_companions(path, record):
 
 def index_identity(root, paths):
     """Give retained columns their rows in the record index the verify table
-    reads (bench/results/identity_break/INDEX.tsv; python/mojolearn/
+    reads (verification/records/identity/INDEX.tsv; python/mojolearn/
     _verify_reference.py repository_record_paths reads ONLY listed files,
     2026-11-21 lane tree-readers). Idempotent; a file that is not
     column-shaped gets no row. A checkout with no index is given one only when
@@ -273,7 +273,7 @@ def index_identity(root, paths):
     spec = importlib.util.spec_from_file_location('_retain_vref', source)
     v = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(v)
-    base = root / 'bench/results/identity_break'
+    base = root / 'verification/records/identity'
     named = {Path(p).resolve() for p in paths}
     others = (q for q in base.rglob('*.json')
               if q.resolve() not in named and not any(x.startswith('.admission-preview-') for x in q.parts))
@@ -291,7 +291,7 @@ def retain_identity(path, repo=None):
     record = json.loads(raw)
     companions = identity_companions(path, record)
     sha = hashlib.sha256(raw).hexdigest()
-    target = destination(root, Path('bench/results/identity_break/retained') / sha / path.name)
+    target = destination(root, Path('verification/records/identity/retained') / sha / path.name)
     # Publish the column only after its relative companions are durable here.
     retained_companions = []
     for companion in companions:

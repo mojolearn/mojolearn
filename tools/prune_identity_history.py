@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 """Move the identity-record HISTORY out of the tree (2026-11-07).
 
-bench/results/identity_break/ holds one dated directory per identity record
+verification/records/identity/ holds one dated directory per identity record
 round since 2026-09-13, plus `retained/` (the content-addressed live set the
 admission keeps). Most dated directories are history nothing reads any more.
 This tool lists them and, on order, removes the ones nothing needs with
@@ -53,7 +53,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_ROOT = HERE.parent
-REL_BREAK = "bench/results/identity_break"
+REL_BREAK = "verification/records/identity"
 REL_EVIDENCE = "bench/results/release_evidence"
 REL_TABLE = "python/mojolearn/verify_reference/table.json"
 REL_DOCS_TSV = "docs/identity_history_pruned.tsv"
@@ -141,12 +141,14 @@ def read_text(path):
 
 def tokens(text, names):
     """Dated identity_break dir names that `text` names. A name right after a
-    `/` counts only as `identity_break/<name>`: `identity_columns/2026-10-14_0844-pypi`
+    `/` counts only as `identity_break/<name>` or `records/identity/<name>` (the root since 2026-11-25):
+    `identity_columns/2026-10-14_0844-pypi`
     is another directory that happens to share a dated name."""
     found = set()
     for m in TOKEN.finditer(text):
         start = m.start()
-        if start and text[start - 1] == "/" and not text[max(0, start - 15):start] == "identity_break/":
+        if start and text[start - 1] == "/" and not (text[max(0, start - 15):start] == "identity_break/"
+                                                    or text[max(0, start - 17):start] == "records/identity/"):
             continue
         t = m.group(0).rstrip(".")
         if t in names:
@@ -401,7 +403,7 @@ def main(argv=None):
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--plan", action="store_true", help="classify and write the plan tsv; changes nothing")
     mode.add_argument("--apply", action="store_true", help="git rm -r the PRUNE dirs and append the docs tsv")
-    ap.add_argument("--root", default=str(DEFAULT_ROOT), help="checkout holding bench/results/identity_break")
+    ap.add_argument("--root", default=str(DEFAULT_ROOT), help="checkout holding verification/records/identity")
     ap.add_argument("--out", default=None, help="plan tsv (default ~/mojolearn-evidence/identity-history-prune-<date>.tsv)")
     a = ap.parse_args(argv)
     today = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")

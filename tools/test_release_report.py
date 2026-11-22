@@ -307,10 +307,10 @@ def build_0865_like_repo(tmp_path, units):
         raw = json.dumps(body, sort_keys=True)
         sha = hashlib.sha256(raw.encode()).hexdigest()
         rel = f"{vendor}-{short}"
-        repo.write(f"bench/results/identity_break/{rel}/{vendor}.identical.json", raw)
+        repo.write(f"verification/records/identity/{rel}/{vendor}.identical.json", raw)
         records.append(dict(**{"class": vendor}, commit=commits[short], dir=rel, file=f"{vendor}.identical.json",
                             sha256=sha, vendor=vendor))
-        readmes.setdefault(vendor, []).append(f"`bench/results/identity_break/retained/{sha}/{vendor}.identical.json`\n")
+        readmes.setdefault(vendor, []).append(f"`verification/records/identity/retained/{sha}/{vendor}.identical.json`\n")
         for lane in held:
             for p in PARTS:
                 cells.setdefault(f"{lane}/base", {}).setdefault(p, dict(ref=h16(lane, p), cols={}))["cols"][vendor] = \

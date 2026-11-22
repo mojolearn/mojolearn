@@ -19,7 +19,7 @@
 #   #!/bin/sh
 #   MOJOLEARN_GAP_LANES=a,b,c
 #   MOJOLEARN_GAP_SLUG=vendor-class-gaps
-#   MOJOLEARN_GAP_COMMIT_DIR=bench/results/identity_break/<dir>/
+#   MOJOLEARN_GAP_COMMIT_DIR=verification/records/identity/<dir>/
 #   MOJOLEARN_COMPILE_JOBS=16
 #   export MOJOLEARN_GAP_LANES MOJOLEARN_GAP_SLUG MOJOLEARN_GAP_COMMIT_DIR \
 #          MOJOLEARN_COMPILE_JOBS
@@ -669,7 +669,7 @@ fi
 # 2026-09-19. MOJOLEARN_NUMERIC_MODE is set because `_verify_reference` lives
 # INSIDE the package, so reaching it runs `__init__.py` and `_backend.select()`,
 # which refuses an unset mode on a box that has only identical bindings.
-COMMIT_DIR="${MOJOLEARN_GAP_COMMIT_DIR:-bench/results/identity_break/$SLUG/}"
+COMMIT_DIR="${MOJOLEARN_GAP_COMMIT_DIR:-verification/records/identity/$SLUG/}"
 say "admit_commit_dir=$COMMIT_DIR"
 run admit_check timeout "$(cap 180)" env MOJOLEARN_NUMERIC_MODE=identical \
     PYTHONPATH=/root/mojolearn/python pixi run python -c "

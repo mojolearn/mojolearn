@@ -189,8 +189,6 @@ box-out/
 !/bench/results/dataset_store/manifest.tsv
 !/bench/results/dataset_store/groups/*.txt
 !/bench/results/dataset_store/repo-data/*.tsv
-!/bench/results/identity_break/**
-/bench/results/identity_break/**/*.log
 !/bench/results/reference_admissions/**
 !/bench/results/release_evidence/**
 !/bench/results/ARCHIVE_INDEX.md
