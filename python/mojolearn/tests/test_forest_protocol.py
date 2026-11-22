@@ -49,13 +49,16 @@ def test_set_params_refreshes_native_config_atomically(cls):
     with pytest.raises(ValueError):
         model.set_params(unknown=1)
     # The parameter checks run at fit (`_refresh_config`), as in
-    # scikit-learn; a refused value leaves the fitted state in place.
+    # scikit-learn; a refused value leaves the fitted state in place. Every
+    # public forest operation resolves the estimator's device route
+    # (94e28cf5d9: device=None | 'gpu' | 'cpu'), so the fitted state is
+    # checked once the valid values are back; None is this installation's device.
     for bad, match in ((dict(device='invalid'), 'device'), (dict(numeric_mode='typo'), 'numeric_mode')):
         model.__dict__.update(bad)
         with pytest.raises(ValueError, match=match):
             model._refresh_config()
+        model.__dict__.update(device=None, numeric_mode='fast')
         assert model.__sklearn_is_fitted__()
-        model.__dict__.update(device='gpu', numeric_mode='fast')
     model._refresh_config()
     assert model._cfg['max_depth'] == 3
     model._offsets = np.array([0, 1])
