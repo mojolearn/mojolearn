@@ -8803,20 +8803,20 @@
    }
   },
   "guards": {
-   "asserts": 1643,
+   "asserts": 1645,
    "modules": {
-    "core/experiment_guards_base.mojo": "a15b10d43416ad0bd4480f339f1efdae93da0990acb959d4764a6235bc09053d",
-    "core/experiment_guards_cluster.mojo": "73f5e36d6ca503cf592b58654a8980e11c045bf2ea284d4bd60f97503978f2a1",
-    "core/experiment_guards_decomposition.mojo": "d2ea77b52936e13ec3b5f0936a7c6278a480e0d46fa3561075b6455d8bb8aba3",
-    "core/experiment_guards_kernel.mojo": "55a65b34b89882107e19d458c21a301f6252355efc3795d5cf72c7dacd75a32c",
-    "core/experiment_guards_linear.mojo": "0089b485bc0d26b1e88897ea7977db843dc49331e0f1db66ff269ab884847a71",
-    "core/experiment_guards_neural.mojo": "58ddd3fcb98f657aa76e8c2704b4a956205a36336b853996877bb253757890c6",
-    "core/experiment_guards_series.mojo": "bd3d0e9299e3bd1157b4d04dfab58081fdd98e3a8a278428eaac79847bb574c5",
-    "core/experiment_guards_trees.mojo": "353af953fb96495baf01d158f6604c0edefaac2421065f741676092f2bb3d6c9",
-    "core/six_lane_experiment_guards.mojo": "c3bb0b4a7eaa4cba4ef66e20377fd2d17aa0d53c707afc60342745fe5fab2a75"
+    "core/experiment_guards_base.mojo": "5f8895f20e856b795f48db4d674dbeb180309702b24baa2fff08f54123f42007",
+    "core/experiment_guards_cluster.mojo": "b03fdef8b9bdcd8b0554acfa03c817bdce35dfa5a4544aa37dad0e752b5e3350",
+    "core/experiment_guards_decomposition.mojo": "3e235fec84682e6efe82c22d39a759d4953820d81520c98def0cb390756c9793",
+    "core/experiment_guards_kernel.mojo": "316d9c0cdd1b3df3731dda23059a0c99b38bda5b1c4f381a92329874caf85d65",
+    "core/experiment_guards_linear.mojo": "fa4c66ffdbcfdc52b66b78f882bb2892a0e3ef18bf16399bbcf1e1de843a9ce6",
+    "core/experiment_guards_neural.mojo": "957105e647f0479dc32d48cef9c74cd14bffed5adeaffbde8cd2622f9efdfbb6",
+    "core/experiment_guards_series.mojo": "56261e6bb3c64d334919711a183a49363d7cda2502eb444514a7b0597b785d70",
+    "core/experiment_guards_trees.mojo": "669eecd62d14ed669eed8372588609e7fbd9401f70ec785059d3156a1f6de5f7",
+    "core/six_lane_experiment_guards.mojo": "f7f3abf4194602584028164dd04d0341811e33014317f395eb3dfb80aee6a404"
    },
    "path": "core/six_lane_experiment_guards.mojo",
-   "sha256": "c3bb0b4a7eaa4cba4ef66e20377fd2d17aa0d53c707afc60342745fe5fab2a75"
+   "sha256": "f7f3abf4194602584028164dd04d0341811e33014317f395eb3dfb80aee6a404"
   },
   "stale_not_used": [
    "experiments/six_lane_integration/catalog.json (define lists)",
@@ -8995,7 +8995,7 @@
   "deferred_cross_configs": 65,
   "deferred_cross_groups": 4,
   "excluded_controls": 19,
-  "guard_asserts": 1643,
+  "guard_asserts": 1645,
   "mapped_algorithms": 25,
   "packed_multi_member": 7,
   "packs": 101,
