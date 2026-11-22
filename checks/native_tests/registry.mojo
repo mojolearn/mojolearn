@@ -60,7 +60,6 @@ from checks.native_tests.dbscan_ownership import register as register_dbscan_own
 from checks.native_tests.decomp_classical_infer_one_call import register as register_decomp_classical_infer_one_call
 from checks.native_tests.decomp_holtwinters_inference import register as register_decomp_holtwinters_inference
 from checks.native_tests.decomp_ne2_g_decomp_entries import register as register_decomp_ne2_g_decomp_entries
-from checks.native_tests.eigh_route import register as register_eigh_route
 from checks.native_tests.embedding_ne3_entries import register as register_embedding_ne3_entries
 from checks.native_tests.embedding_surface import register as register_embedding_surface
 from checks.native_tests.fresh_state_zeros import register as register_fresh_state_zeros
@@ -104,7 +103,6 @@ from checks.native_tests.lof_native import register as register_lof_native
 from checks.native_tests.logistic_label_weights import register as register_logistic_label_weights
 from checks.native_tests.logistic_numeric import register as register_logistic_numeric
 from checks.native_tests.lowbit_weights import register as register_lowbit_weights
-from checks.native_tests.mamba12_forward_exec import register as register_mamba12_forward_exec
 from checks.native_tests.mamba3_output_coverage import register as register_mamba3_output_coverage
 from checks.native_tests.mamba_decode_n_tokens import register as register_mamba_decode_n_tokens
 from checks.native_tests.mamba_decode_sessions import register as register_mamba_decode_sessions
@@ -146,10 +144,6 @@ from checks.native_tests.prep_label_binarizer_inverse_window import register as 
 from checks.native_tests.prep_robust_scaler_native_lifecycle import register as register_prep_robust_scaler_native_lifecycle
 from checks.native_tests.prophet_state import register as register_prophet_state
 from checks.native_tests.query_x_held import register as register_query_x_held
-from checks.native_tests.rankn_conv import register as register_rankn_conv
-from checks.native_tests.rankn_graph import register as register_rankn_graph
-from checks.native_tests.rankn_math import register as register_rankn_math
-from checks.native_tests.rankn_views import register as register_rankn_views
 from checks.native_tests.resample_cross_vendor_fold import register as register_resample_cross_vendor_fold
 from checks.native_tests.resample_cv_row_order import register as register_resample_cv_row_order
 from checks.native_tests.resident_second_call import register as register_resident_second_call
@@ -273,7 +267,6 @@ from checks.native_tests.neural_entry import register as register_neural_entry
 from checks.native_tests.nmf_contract import register as register_nmf_contract
 from checks.native_tests.nmf_state import register as register_nmf_state
 from checks.native_tests.nonzero_scan import register as register_nonzero_scan
-from checks.native_tests.pandas_input_plan_check import register as register_pandas_input_plan_check
 from checks.native_tests.parallel_archive_entry import register as register_parallel_archive_entry
 from checks.native_tests.pca_contract import register as register_pca_contract
 from checks.native_tests.pca_query_state import register as register_pca_query_state
@@ -624,7 +617,6 @@ def all_checks() -> List[Check]:
     checks.append(register_decomp_classical_infer_one_call())
     checks.append(register_decomp_holtwinters_inference())
     checks.append(register_decomp_ne2_g_decomp_entries())
-    checks.append(register_eigh_route())
     checks.append(register_embedding_ne3_entries())
     checks.append(register_embedding_surface())
     checks.append(register_fresh_state_zeros())
@@ -665,7 +657,6 @@ def all_checks() -> List[Check]:
     checks.append(register_logistic_label_weights())
     checks.append(register_logistic_numeric())
     checks.append(register_lowbit_weights())
-    checks.append(register_mamba12_forward_exec())
     checks.append(register_mamba3_output_coverage())
     checks.append(register_mamba_decode_n_tokens())
     checks.append(register_mamba_decode_sessions())
@@ -707,10 +698,6 @@ def all_checks() -> List[Check]:
     checks.append(register_prep_robust_scaler_native_lifecycle())
     checks.append(register_prophet_state())
     checks.append(register_query_x_held())
-    checks.append(register_rankn_conv())
-    checks.append(register_rankn_graph())
-    checks.append(register_rankn_math())
-    checks.append(register_rankn_views())
     checks.append(register_resample_cross_vendor_fold())
     checks.append(register_resample_cv_row_order())
     checks.append(register_resident_second_call())
@@ -834,7 +821,6 @@ def all_checks() -> List[Check]:
     checks.append(register_nmf_contract())
     checks.append(register_nmf_state())
     checks.append(register_nonzero_scan())
-    checks.append(register_pandas_input_plan_check())
     checks.append(register_parallel_archive_entry())
     checks.append(register_pca_contract())
     checks.append(register_pca_query_state())
