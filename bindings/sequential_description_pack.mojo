@@ -176,6 +176,79 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
             _ = py_call(args.append, -2)
         a0 = args[0]
         a1 = args[1]
+    elif kind == "silu" or kind == "softplus":
+        if len(supplied) != 0 or len(keywords) != 0:
+            raise Error("TypeError: " + kind + " takes no arguments")
+        args = Python.list(0, 0, 0, 0, 0, 0)
+    elif kind == "gelu":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("approximate"), Python.tuple("none"), 0)
+        var form = String(py_call(b.str, options[0]))
+        if form != "none" and form != "tanh":
+            raise Error("approximate must be 'none' or 'tanh'")
+        a0 = PythonObject(1 if form == "tanh" else 0)
+        args = Python.list(a0, 0, 0, 0, 0, 0)
+    elif kind == "rms_norm":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("eps"), Python.tuple(1e-6), 0)
+        if not Bool(py=options[0] > PythonObject(0)):
+            raise Error("eps must be positive")
+        f = py_call(b.float, options[0])
+        args = Python.list(0, 0, 0, 0, 0, 0)
+    elif kind == "rotary":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("head_dim", "theta"),
+                                 Python.tuple(None, 10000.0), 1)
+        a0 = PythonObject(_positive(options[0], "head_dim", 2, context))
+        if not Bool(py=options[1] > PythonObject(0)):
+            raise Error("theta must be positive")
+        f = py_call(b.float, options[1])
+        args = Python.list(a0, 0, 0, 0, 0, 0)
+    elif kind == "multiply":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("source"), Python.tuple(-1), 0)
+        if not _integer(options[0], context):
+            raise Error("source must be -1 or the index of an earlier layer")
+        a0 = py_call(b.int, options[0])
+        args = Python.list(a0, 0, 0, 0, 0, 0)
+    elif kind == "narrow":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("axis", "start", "length"),
+                                 Python.tuple(None, None, None), 3)
+        var axis = _positive(options[0], "axis", 0, context)
+        var start = _positive(options[1], "start", 0, context)
+        var length = _positive(options[2], "length", 1, context)
+        a0 = PythonObject(axis)
+        a1 = PythonObject(start)
+        args = Python.list(axis, start, length, 0, 0, 0)
+    elif kind == "embedding":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("num_embeddings", "embedding_dim"),
+                                 Python.tuple(None, None), 2)
+        var num = _positive(options[0], "num_embeddings", 1, context)
+        var dim = _positive(options[1], "embedding_dim", 1, context)
+        a0 = PythonObject(num)
+        a1 = PythonObject(dim)
+        args = Python.list(num, dim, 0, 0, 0, 0)
+    elif kind == "attention":
+        var options = _arguments(mods, kind, supplied, keywords,
+            Python.tuple("heads", "kv_heads", "rotary", "theta", "window", "causal"),
+            Python.tuple(None, None, True, 10000.0, 0, True), 1)
+        var heads = _positive(options[0], "heads", 1, context)
+        var kv = heads if options[1] is None else _positive(options[1], "kv_heads", 1, context)
+        var window = _positive(options[4], "window", 0, context)
+        if not Bool(py=options[3] > PythonObject(0)):
+            raise Error("theta must be positive")
+        f = py_call(b.float, options[3])
+        a0 = PythonObject(heads)
+        a1 = PythonObject(kv)
+        args = Python.list(heads, kv, 1 if Bool(py=options[2]) else 0, window, 1 if Bool(py=options[5]) else 0, 0)
+    elif kind == "rnn" or kind == "lstm" or kind == "gru":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("hidden_size"), Python.tuple(None), 1)
+        var hidden = _positive(options[0], "hidden_size", 1, context)
+        var cell = 0 if kind == "rnn" else (1 if kind == "lstm" else 2)
+        a0 = PythonObject(hidden)
+        a1 = PythonObject(cell)
+        args = Python.list(hidden, cell, 0, 0, 0, 0)
+    elif kind == "gated":
+        var options = _arguments(mods, kind, supplied, keywords, Python.tuple("gate", "up"),
+                                 Python.tuple(None, None), 2)
+        _gated(mods, model, options[0], options[1], context)
+        return model
     elif kind == "residual_block":
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("body", "shortcut"),
                                  Python.tuple(None, None), 1)
@@ -201,6 +274,8 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
 comptime _CODE_RESIDUAL = 8
 comptime _CODE_BRANCH = 19
 comptime _CODE_CONCAT = 20
+# lane neural-blocks: the multiply layer (autograd/model_blocks.mojo LAYER_MULTIPLY) reads an earlier output
+comptime _CODE_MULTIPLY = 37
 
 
 def _model_layers(mut mods: NativeModules, model: PythonObject, part: PythonObject, what: String) raises -> PythonObject:
@@ -230,7 +305,7 @@ def _emit(mut mods: NativeModules, model: PythonObject, sub: PythonObject, entry
         var args = py_call(b.list, layer[4])
         var a0 = layer[1]
         var a1 = layer[2]
-        if code == _CODE_RESIDUAL or code == _CODE_BRANCH:
+        if code == _CODE_RESIDUAL or code == _CODE_BRANCH or code == _CODE_MULTIPLY:
             var r = _remap(Int(py=layer[1]), base, entry)
             a0 = PythonObject(r)
             py_setitem(args, 0, r)
@@ -295,6 +370,22 @@ def _parallel(mut mods: NativeModules, model: PythonObject, branches: PythonObje
     while len(ends) < 6:  # driver-loop: over unused concat source slots
         _ = py_call(ends.append, -2)
     _ = _append_code(mods, model, _CODE_CONCAT, ends)
+
+
+def _gated(mut mods: NativeModules, model: PythonObject, gate: PythonObject, up: PythonObject,
+           context: PythonObject) raises:
+    """gate(h) * up(h) (lane neural-blocks, 2026-11-22): the gate's layers from the block input, a branch
+    back to it, the up path's layers, then a multiply by the gate's output (a SwiGLU MLP is
+    gated(Sequential().linear(F).silu(), Sequential().linear(F)) then linear(D))."""
+    var gate_layers = _model_layers(mods, model, gate, "gate")
+    var up_layers = _model_layers(mods, model, up, "up")
+    if len(gate_layers) == 0:
+        raise Error("gate must hold at least one layer")
+    var entry = _block_entry(mods, model)
+    var gate_end = _emit(mods, model, gate_layers, entry)
+    _ = _append_code(mods, model, _CODE_BRANCH, Python.list(entry, 0, 0, 0, 0, 0))
+    _ = _emit(mods, model, up_layers, entry)
+    _ = _append_code(mods, model, _CODE_MULTIPLY, Python.list(gate_end, 0, 0, 0, 0, 0))
 
 
 def sequential_compile(mut mods: NativeModules, model: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:

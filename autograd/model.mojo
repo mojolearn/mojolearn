@@ -38,6 +38,11 @@ from autograd.rankn_conv import (
 )
 from autograd.rankn_layout import rankn_concat
 from autograd.rankn_api import RankNRules, rn_as_shape, rn_dims, rn_resolve, rn_shape, rn_with_batch
+# Lane neural-blocks (2026-11-22): the neural building blocks (codes 32..41) and the version-2 backward rules
+from autograd.model_blocks import (
+    LAYER_MULTIPLY, ModelRules, block_forward, block_init_bounds, block_param_sizes, block_reads, block_shape,
+    is_block,
+)
 
 # Tape.dropout is part of the native tape. Its mask is keyed by seed,
 # optimizer step and layer, including across checkpoint/resume.
@@ -530,6 +535,24 @@ def parse_model_v2(prog: List[Int], ptab: List[Float32]) raises -> ModelSpec:
             var jd = rn_dims(first)
             jd[0] = total
             nxt = rn_shape(jd, _layer_name(i) + " (Concat)")
+        elif is_block(k):
+            # lane neural-blocks: autograd/model_blocks.mojo validates the block and sizes its parameters
+            var la = List[Int](capacity=SPEC2_ARGS)
+            for j in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): description parsing, no data
+                la.append(_arg(prog, base, j))
+            if k == LAYER_MULTIPLY:
+                if a0 < -1 or a0 >= i:
+                    raise Error(_layer_name(i) + " (Multiply): the source must be -1 (the model input) "
+                                + "or the index of an earlier layer")
+                var src_shape = s.sample if a0 == -1 else s.out_shape[a0]
+                if not src_shape.same(cur):
+                    raise Error(_layer_name(i) + " (Multiply): multiplies tensors of different shapes")
+            nxt = block_shape(k, la, 0, f, cur, _layer_name(i))
+            var sizes = block_param_sizes(k, la, 0, cur)
+            if len(sizes) > 0:
+                p_off = off
+                for j in range(len(sizes)):  # small-loop(at most four parameter tensors): description parsing
+                    off += sizes[j]
         else:
             raise Error(_layer_name(i) + ": unknown layer code " + String(k))
         if nxt.ndim > RN_MAX_RANK - 1:
@@ -693,6 +716,17 @@ def model_init_params[E: Exec](mut ex: E, spec: ModelSpec, P: FP, seed: UInt64) 
             var bound = ftz(identical_sqrt(ftz(identical_div(Float32(6), Float32(fan)))))
             var n = oc * c * ks + (oc if spec.xargs[SPEC2_ARGS * i + 4] == 1 else 0)
             _init_uniform(ex, P + off, n, off, seed, bound)
+        elif is_block(k) and off >= 0:
+            # lane neural-blocks: per parameter tensor a seeded uniform bound, or a constant fill (-v: v - 1)
+            var sizes = block_param_sizes(k, spec.xargs, i, spec.in_shape[i])
+            var bounds = block_init_bounds(k, spec.xargs, i, spec.in_shape[i])
+            var o = off
+            for j in range(len(sizes)):  # small-loop(at most four parameter tensors of the layer)
+                if bounds[j] < Float32(0):
+                    _fill(ex, P + o, sizes[j], -bounds[j] - Float32(1))
+                else:
+                    _init_uniform(ex, P + o, sizes[j], o, seed, bounds[j])
+                o += sizes[j]
 
 
 def _param[E: Exec](
@@ -926,6 +960,12 @@ def _model_forward_v2[E: Exec](
                 parts.append(x0 if v == -1 else outs[v])
             # axis 1: the sample's first axis (the channels), after the batch axis
             h = rankn_concat(tape, ex, parts, 1)
+        elif is_block(k):
+            var other: Optional[Tensor] = None
+            if k == LAYER_MULTIPLY:
+                other = Optional[Tensor](x0 if spec.arg0[i] == -1 else outs[spec.arg0[i]])
+            h = block_forward(tape, ex, k, spec.xargs, i, spec.farg[i], spec.in_shape[i], P, Gr,
+                              spec.param_off[i], h, other, train)
         h = rn_as_shape(tape, ex, h, rn_with_batch(B, spec.out_shape[i], "model"))
         outs.append(h)
         i += 1
@@ -944,6 +984,8 @@ def _absorbed_activation(spec: ModelSpec, i: Int) -> Int:
     for j in range(i + 1, spec.n_layers()):  # driver-loop: over layers
         var kj = spec.kinds[j]
         if (kj == LAYER_RESIDUAL or kj == LAYER_BRANCH) and spec.arg0[j] == i:
+            return 0
+        if is_block(kj) and block_reads(kj, spec.xargs, j, i):
             return 0
         if kj == LAYER_CONCAT:
             for q in range(SPEC2_ARGS):  # small-loop(SPEC2_ARGS: six layer arguments): metadata, no data
@@ -1299,8 +1341,10 @@ def model_fit_state[E: Exec](
             var loss = model_loss(tape, ex, cfg, out, target)
             var word_done = tape.disarm_fold_word(loss)
             if spec.version == SPEC2_VERSION:
-                # the rank-N lanes' custom tags (conv2d, pools) beside NeuralRules
-                tape.backward_scalar_with_rules(ex, loss, RankNRules())
+                # the rank-N lanes' custom tags (conv2d, pools) beside NeuralRules; lane neural-blocks:
+                # ModelRules is RankNRules plus the import family (the block activations, the attention
+                # mask, the embedding's ids) and the recurrent layer's rules; RankNRules' tags unchanged
+                tape.backward_scalar_with_rules(ex, loss, ModelRules())
             else:
                 tape.backward_scalar_with_rules(ex, loss, NeuralRules())
             if not word_done:

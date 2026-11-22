@@ -14,7 +14,9 @@ _LAYER = {"linear": 1, "relu": 2, "sigmoid": 3, "tanh": 4, "softmax": 5,
           "layer_norm": 6, "dropout": 7, "residual": 8,
           "reshape": 9, "permute": 10, "flatten": 11, "conv2d": 12, "max_pool2d": 13, "avg_pool2d": 14,
           "conv1d": 15, "max_pool1d": 16, "avg_pool1d": 17, "adaptive_avg_pool1d": 18, "branch": 19,
-          "concat": 20, "residual_block": 0, "parallel": 0}
+          "concat": 20, "residual_block": 0, "parallel": 0,
+          "silu": 32, "gelu": 33, "softplus": 34, "rms_norm": 35, "rotary": 36, "multiply": 37,
+          "narrow": 38, "embedding": 39, "attention": 40, "rnn": 41, "lstm": 41, "gru": 41, "gated": 0}
 _LOSS = {"mse": 0, "cross_entropy": 1, "bce_with_logits": 2, "huber": 3}
 _TARGET_DENSE, _TARGET_CODES, _TARGET_CODE_VALUES = 0, 1, 2
 _SCHED = {"constant": 0, "step": 1, "exponential": 2}
@@ -312,6 +314,133 @@ class Sequential(_CheckMixin):
         >>> model = mojolearn.Sequential(input_shape=(4, 32)).parallel(a, b, c).relu()
         """
         return _SEQUENTIAL_ENTRY(self, "add", ("parallel", branches, _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def silu(self):
+        """Append a SiLU (swish) activation, ``x * sigmoid(x)``."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("silu", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def gelu(self, approximate="none"):
+        """Append a GELU activation: ``x * Phi(x)`` with the normal CDF
+        ``Phi`` (``approximate='none'``), or its tanh approximation
+        (``approximate='tanh'``)."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("gelu", (approximate,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def softplus(self):
+        """Append a softplus activation, ``log(1 + exp(x))``."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("softplus", (), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def rms_norm(self, eps=1e-6):
+        """Append a root-mean-square normalization of the last axis with a
+        learned weight: ``x / sqrt(mean(x ** 2) + eps) * weight``.
+
+        Example::
+
+            model.rms_norm(1e-6)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("rms_norm", (eps,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def rotary(self, head_dim, theta=10000.0):
+        """Append rotary position embeddings over ``(length, features)``
+        samples: each block of ``head_dim`` features is rotated by angles of
+        its position ``0 .. length - 1`` (the two halves of the block form
+        the pairs). ``head_dim`` is even and divides the features."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("rotary", (head_dim, theta), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def multiply(self, source=-1):
+        """Multiply the current output elementwise by the output of layer
+        ``source`` (-1: the model input); the shapes must agree."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("multiply", (source,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def narrow(self, axis, start, length):
+        """Keep positions ``start .. start + length - 1`` of sample axis
+        ``axis`` (axes count from 0 within a sample).
+
+        Example: a causal depthwise convolution over a ``(channels, length)``
+        sample of length ``L``::
+
+            model.conv1d(64, 4, padding=3, groups=64).narrow(1, 0, L)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("narrow", (axis, start, length), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def embedding(self, num_embeddings, embedding_dim):
+        """Append an embedding lookup: each sample holds integer ids (stored
+        as floats) in ``[0, num_embeddings)`` and each id becomes the
+        ``embedding_dim`` values of its row in a learned table, so a
+        ``(length,)`` sample becomes ``(length, embedding_dim)``."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("embedding", (num_embeddings, embedding_dim), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def attention(self, heads, kv_heads=None, rotary=True, theta=10000.0, window=0, causal=True):
+        """Append multi-head self-attention over ``(length, features)``
+        samples: query, key, value and output projections (no bias), scaled
+        dot-product attention per head, with rotary position embeddings when
+        ``rotary`` is True.
+
+        Parameters
+        ----------
+        heads : int
+            Number of query heads; it divides the features.
+        kv_heads : int or None, default None
+            Number of key and value heads (grouped-query attention); it
+            divides ``heads``. None uses ``heads``.
+        rotary : bool, default True
+            Rotate queries and keys by their positions.
+        theta : float, default 10000.0
+            Rotary base.
+        window : int, default 0
+            With ``window > 0`` each position attends only to the ``window``
+            most recent positions, itself included (sliding-window
+            attention).
+        causal : bool, default True
+            Each position attends only to itself and earlier positions.
+
+        Example: a pre-norm Transformer layer::
+
+            S = mojolearn.Sequential
+            mlp = S().rms_norm().gated(S().linear(256, bias=False).silu(),
+                                       S().linear(256, bias=False)).linear(64, bias=False)
+            model = (S(input_shape=(32,)).embedding(512, 64)
+                     .residual_block(S().rms_norm().attention(4))
+                     .residual_block(mlp))
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("attention", (heads, kv_heads, rotary, theta, window, causal), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def lstm(self, hidden_size):
+        """Append an LSTM layer over ``(length, features)`` samples from a
+        zero state; the output is every step's hidden state,
+        ``(length, hidden_size)``. Weights follow PyTorch's ``nn.LSTM``
+        layout and gate order."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("lstm", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def gru(self, hidden_size):
+        """Append a GRU layer over ``(length, features)`` samples from a zero
+        state; the output is every step's hidden state."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("gru", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def rnn(self, hidden_size):
+        """Append a tanh recurrent layer over ``(length, features)`` samples
+        from a zero state; the output is every step's hidden state."""
+        return _SEQUENTIAL_ENTRY(self, "add", ("rnn", (hidden_size,), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
+
+    def gated(self, gate, up):
+        """Append a gated block: ``gate(h) * up(h)``, where ``h`` is the
+        current output (a gated MLP: SwiGLU is ``gate`` a linear layer and
+        :meth:`silu`, ``up`` a linear layer).
+
+        Parameters
+        ----------
+        gate, up : Sequential
+            The layers of the two paths; their outputs must have the same
+            shape. Their layers are copied into this model; the two models
+            themselves are not changed or trained.
+
+        Examples
+        --------
+        >>> import mojolearn
+        >>> gate = mojolearn.Sequential().linear(32, bias=False).silu()
+        >>> up = mojolearn.Sequential().linear(32, bias=False)
+        >>> model = mojolearn.Sequential(input_shape=(8, 16)).gated(gate, up).linear(16)
+        """
+        return _SEQUENTIAL_ENTRY(self, "add", ("gated", (gate, up), _SEQUENTIAL_NO_KEYWORDS), _SEQUENTIAL_CONTEXT)
 
     @property
     def layers(self):
@@ -763,7 +892,9 @@ _SEQUENTIAL_CONTEXT = {
     "layer_names": ("", "linear", "relu", "sigmoid", "tanh", "softmax",
                     "layer_norm", "dropout", "residual", "reshape", "permute",
                     "flatten", "conv2d", "max_pool2d", "avg_pool2d", "conv1d", "max_pool1d",
-                    "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat"),
+                    "avg_pool1d", "adaptive_avg_pool1d", "branch", "concat",
+                    "", "", "", "", "", "", "", "", "", "", "", "silu", "gelu", "softplus", "rms_norm",
+                    "rotary", "multiply", "narrow", "embedding", "attention", "recurrent"),
 }
 
 
