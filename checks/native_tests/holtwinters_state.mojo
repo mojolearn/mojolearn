@@ -266,10 +266,12 @@ def test_device_owners() raises:
 
 
 def main() raises:
-    var suite = TestSuite.discover_tests[__functions_in_module()]()
-    # A column's tests are compiled empty on the other column and reported SKIP there.
+    # Each column registers its own tests by hand. Discovery (`__functions_in_module()`) reflects over every
+    # function of the module, which elaborates the device helpers in the host column's build ("target 'unknown'
+    # is not supported"), so a two-column file names its tests.
+    var suite = TestSuite()
     comptime if CPU_COLUMN_BUILD:
-        suite.skip[test_device_owners]()
+        suite.test[test_host_queries]()
     else:
-        suite.skip[test_host_queries]()
+        suite.test[test_device_owners]()
     suite^.run()
