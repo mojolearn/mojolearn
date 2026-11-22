@@ -59,6 +59,14 @@ project of its own. None blocks the next release except the last, which happens 
 
 ## 5. Mojo tests on the standard library's TestSuite (Andrew, 2026-11-22; first step of section 1)
 
+THE NEXT PROJECT after the proving run is green (Andrew, 2026-11-22), one project in three parts, in this order:
+(a) the native suites move onto TestSuite and the wrapper files go; (b) Mojo test REMOVAL in the same pass: as each
+suite is converted, delete the cases that duplicate another case, only assert source text or file layout, or test a
+path that no longer exists (inventory: `~/mojolearn-evidence/repo-data/` copy of `inv-shrink-RESULT.md`, rows 4, 5
+and the duplicate-body list), and fold the same behaviour repeated per class into one case table; (c) Python test
+removal (section 1): the numeric and kernel Python tests move into the TestSuite suites and are deleted once their
+Mojo suite is green; Python keeps only the boundary tests. Every removal names what still covers the behaviour.
+
 Use the official library where it exists; write only what it lacks. Checked on the project compiler (Mojo 1.2.0,
 CPU box, 2026-11-22): `from std.testing import TestSuite, assert_equal` and
 `TestSuite.discover_tests[__functions_in_module()]().run()` find every `test_*` function in a file, print one
