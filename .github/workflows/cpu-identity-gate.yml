@@ -453,7 +453,7 @@ jobs:
             !/bench/results/*
             !/verification/records/*
             /verification/records/forest_host/
-            /bench/results/classical_host/
+            /verification/records/classical_host/
             /bench/results/identity_break/
             !/bench/results/identity_break/*
             /bench/results/identity_break/2026-09-13_three-columns/

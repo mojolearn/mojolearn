@@ -2,8 +2,8 @@
 # tools/part_set_census.py (never by the verify table). Same rules as identity_break/INDEX.tsv.
 # A byte-identical copy of an identity_break record is not listed (it was counted twice).
 path	sha256	class	vendor	commit
-bench/results/classical_host/2026-09-13-apple-m4/identity_break_apple-m4_five-lanes.json	7d1ad1bf0046431dd09481be68cca78803c98368440396fce09145888fd5828e	apple	apple-m4	7c534e71347103cb236b38deeba4988b5cbe3f19
-bench/results/classical_host/2026-09-14-apple-m4-kde-svc/identity_break_apple-m4_three-lanes.json	dc3abc2d118710cff7decf8237a09b412140185ec70abf22838ee5bf00eaf51a	apple	arm64	6796ceff932391adeaea8d788a6c5230ddfacf53
+verification/records/classical_host/2026-09-13-apple-m4/identity_break_apple-m4_five-lanes.json	7d1ad1bf0046431dd09481be68cca78803c98368440396fce09145888fd5828e	apple	apple-m4	7c534e71347103cb236b38deeba4988b5cbe3f19
+verification/records/classical_host/2026-09-14-apple-m4-kde-svc/identity_break_apple-m4_three-lanes.json	dc3abc2d118710cff7decf8237a09b412140185ec70abf22838ee5bf00eaf51a	apple	arm64	6796ceff932391adeaea8d788a6c5230ddfacf53
 bench/results/release_verification/2026-10-26_pypi_0860/final-fixture-package/apple.json	9ab5aea42f89987d6ed0d53bebc7b933fcdec197837347f86e813c2796f2a454	apple	arm64	667ed9fdd1638644a73f547e70b0f376ea1246f0
 bench/results/release_verification/2026-10-26_pypi_0860/final-fixture-package/cpu.json	a60f3fbc3794a42909982e024562cdefc68bbb3a37ed58088dc20457aa64b185	cpu	cpu-apple-m4	667ed9fdd1638644a73f547e70b0f376ea1246f0
 bench/results/small_training/2026-09-18-apple-m4/provenance-v2/cpu-replay.json	9d10273f1b1171eecb2dab99f3d65ca4c3ee41ec3cc5d53de7085256754ea381	cpu	-	-

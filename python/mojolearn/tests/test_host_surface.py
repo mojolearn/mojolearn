@@ -579,7 +579,7 @@ def test_saved_model_inference_owed_names_real_lanes_and_remaining_debt():
     declared = set(host_surface.inference_lanes())
     for lane in set(owed) & declared:
         assert "qualification remain owed" in owed[lane], lane
-        record = EVIDENCE_ROOT / "bench/results/classical_host/2026-09-18-apple-kernel-variants/saved-models" / lane / lane
+        record = EVIDENCE_ROOT / "verification/records/classical_host/2026-09-18-apple-kernel-variants/saved-models" / lane / lane
         assert len(list(record.glob("*/expected.json"))) == 9, lane
         assert len(list(record.glob("*/model.npz"))) == 9, lane
     text = _harness_text()
