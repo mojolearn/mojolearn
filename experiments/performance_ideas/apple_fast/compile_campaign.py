@@ -16,7 +16,7 @@ import shutil
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
-from support import ROOT
+from support import ROOT, card as load_card
 
 
 def matrix():
@@ -30,7 +30,7 @@ def matrix():
         jobs[key]['consumers'].append(consumer)
         return jobs[key]['id']
     for n in range(1,21):
-        idea=f'F{n:02d}';card=json.loads((ROOT/'experiments/performance_ideas'/idea/'manifest.json').read_text())
+        idea=f'F{n:02d}';card=load_card(idea)
         for variant in sorted({'default'}|card.get('variants',{}).keys()):
             consumer=f'{idea}/{variant}';binding=card.get('variant_bindings',{}).get(variant,card['binding'])
             candidate=card.get('variants',{}).get(variant,card['candidate_defines'])

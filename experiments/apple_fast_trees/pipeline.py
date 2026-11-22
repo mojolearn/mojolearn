@@ -19,6 +19,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 from apple_fast_tree_ideas import ids_from_text, load_cards, selection
+import apple_fast_cards  # the lane cards live in cards.json; <lane>.json is each lane's address
 from apple_fast_tree_integration import closure
 
 THREAD_LIMITS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
@@ -230,8 +231,8 @@ def run(args) -> None:
         require(quality.get("mode") == "fast" and quality.get("vendor") == "apple", "quality receipt mode/vendor mismatch")
         require(quality.get("workload_sha256") == sha(Path(configured)), "quality receipt covers a different workload contract")
         if len(ids) == 1:
-            lane_path = ROOT / "experiments/apple_fast_trees" / (ids[0][0] + ".json")
-            require(quality.get("manifest_sha256") == sha(lane_path), "quality receipt covers another idea record")
+            lane_card = "experiments/apple_fast_trees/" + ids[0][0] + ".json"
+            require(quality.get("manifest_sha256") == apple_fast_cards.digest(lane_card, ROOT), "quality receipt covers another idea record")
     output = external(args.output)
     output.mkdir(parents=True, exist_ok=False)
     retained = output / "workloads.json"

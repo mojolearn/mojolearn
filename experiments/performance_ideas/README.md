@@ -24,6 +24,14 @@ Their source-ready status means implementation source exists, not acceptance.
 See the [integration workflow](../apple_fast_classical_20261006/INTEGRATION.md)
 for common catalog selection, paired packages and full-workload recipe inputs.
 
+The Apple FAST cards are tables, one row per card (2026-11-22): the F01-F20 manifests,
+compile audits and the F16 compile matrix are rows of
+[`apple_fast/cards.json`](apple_fast/cards.json), their callers are in
+[`apple_fast/callers/`](apple_fast/callers/), and the `AFCL-*` manifests are rows of
+[`../apple_fast_classical_20261006/cards.json`](../apple_fast_classical_20261006/cards.json).
+A former path such as `experiments/performance_ideas/F01/manifest.json` is still the card's
+address; [`tools/apple_fast_cards.py`](../../tools/apple_fast_cards.py) rebuilds it.
+
 This directory implements the cards in
 [`PERFORMANCE_EXPERIMENT_IDEAS_2026-10-05.md`](../../docs/plans/PERFORMANCE_EXPERIMENT_IDEAS_2026-10-05.md).
 Each card has its own source changes and manifest. Candidates remain opt-in;
