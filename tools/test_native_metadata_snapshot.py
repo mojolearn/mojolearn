@@ -16,18 +16,21 @@ def function(path, name):
 class NativeMetadataSnapshotSourceTests(unittest.TestCase):
     def test_stacking_member_loop_reuses_metadata(self):
         source = function('bindings/trees_public_meta_door.mojo', '_stacking_fit')
-        folds = source[source.index('    for f in range(len(splits)):'):]
-        members = folds[folds.index('        for i in range(len(active.ests)):'):
-                        folds.index('    if passthrough:')]
+        # The folds run in waves (one unit set per wave of folds, train blocks
+        # gathered once per fold for every member, then the test outputs).
+        start = source.index('    while f0 < n_folds:')
+        waves = source[start:source.index('    if passthrough:')]
+        train = waves[:waves.index('for f in range(f0, f1):  # driver-loop: over the wave\'s cv folds (test outputs)')]
+        test = waves[len(train):]
         # Regression guard for the demonstrated callbacks/repeated field reads,
         # not a claim that arbitrary PythonObject calls are interpreted Python.
         for pattern in (r'len\((y_full|tr|te)\)', r'trees_address\((Xa|y_full|sw)\)',
                         r'_attr\(model,', r'_view_of_array\('):
-            self.assertNotRegex(members, pattern)
+            self.assertNotRegex(waves, pattern)
         for name in ('x_view', 'y_view', 'meta_view', 'cols_view', 'native_methods', 'native_widths'):
-            self.assertIn('var ' + name + ' =', source[:source.index('    for f in range(len(splits)):')])
-        self.assertIn('var tr_view =', folds[:folds.index('        for i in range(len(active.ests)):')])
-        self.assertIn('var te_view =', folds[:folds.index('        for i in range(len(active.ests)):')])
+            self.assertIn('var ' + name + ' =', source[:start])
+        self.assertIn('var tr_view =', train[:train.index('for i in range(n_members):')])
+        self.assertIn('var te_view =', test[:test.index('for i in range(n_members):')])
 
     def test_prepared_helpers_use_native_metadata_and_retain_owners(self):
         cases = (
