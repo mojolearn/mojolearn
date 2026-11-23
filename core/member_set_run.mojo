@@ -30,6 +30,7 @@ GIL, a Mojo test or another RUN):
      (`member_set_run_release`) and raises them.
 """
 from std.memory import unsafe_memcpy
+from std.time import perf_counter_ns
 from bindings.native_unit_os_threads_run import native_unit_cores
 from core.device_route import DEVICE_CPU
 from core.host_parallel import host_parallelize
@@ -130,6 +131,10 @@ struct MemberSetRun(Movable):
     # longer skip one). False: the set's own cover pass, and one lacking unit
     # fails the whole set before any fit (every other caller).
     var skip_lacking: Bool
+    # Per member, its fit's wall-clock seconds (lane mf-msel5: the cv tools'
+    # `fit_time`, scikit-learn's `_fit_and_score` clock around one fit), 0.0
+    # until fitted. One clock read before and one after each fit.
+    var seconds: List[Float64]
 
     def __init__(out self, x: Int, rows: Int, cols: Int, y_dtype: Int, index_dtype: Int):
         self.plans = List[MemberPlan]()
@@ -162,6 +167,7 @@ struct MemberSetRun(Movable):
         self.part_y = List[List[Int32]]()
         self.part_w = List[List[Float32]]()
         self.skip_lacking = False
+        self.seconds = List[Float64]()
 
     def count(self) -> Int:
         return len(self.plans)
@@ -193,6 +199,7 @@ struct MemberSetRun(Movable):
         self.part_x.append(List[Float32]())
         self.part_y.append(List[Int32]())
         self.part_w.append(List[Float32]())
+        self.seconds.append(0.0)
 
     def own_block(mut self, x: Int, rows: Int):
         """The member added last reads its own float32 C-order X block
@@ -438,6 +445,7 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
     # THE LIFETIME RULE: a borrowing kind's gathered block is the run's (its
     # state reads it again at PACK); this unit's own slots, no other worker's.
     var hold = run[].borrows[u] != UInt8(0)
+    var started = perf_counter_ns()
     var call = member_new(run[].plans[u])
     call.scope = run[].scope
     call.pin = 0
@@ -494,9 +502,11 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
                 if member_pin_settle(call) != 0:
                     run[].pin_tokens[u] = 0  # the scope's cache holds this reference now
         run[].states[u] = call.state
+        run[].seconds[u] = Float64(perf_counter_ns() - started) / 1e9
         done = True
     finally:
         if not done:
+            run[].seconds[u] = Float64(perf_counter_ns() - started) / 1e9
             member_free(run[].plans[u], call)
             run[].part_free(u)
         # Integer addresses carry no lifetime: the gathered block lives to here.

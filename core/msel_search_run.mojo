@@ -78,6 +78,23 @@ the warnings its scores' public metrics raise (lane mf-score5: test side,
 then train side, in the scorers' order; core/member_notices.mojo
 MEMBER_NOTICE_METRIC_*).
 
+THE CV TOOLS (lane mf-msel5): cross_validate, cross_val_score,
+learning_curve and cross_val_predict are this RUN over ONE candidate (the
+door's carrier search, cv = the door's own folds as given folds;
+learning_curve's are its size-major (train[:size], test) units). The RUN
+then also answers, per unit, its fit's and its test scores' wall-clock
+seconds (`fit_seconds`, `score_seconds`: scikit-learn's `_fit_and_score`
+clocks: the fit, then the test side's scoring only); with `keep` every
+unit's fitted state, OWNED by the caller (`unit_states`; return_estimator;
+a kind that borrows its fit buffers is refused, its gathered train block
+would not outlive the wave); with `indices` each fold's train and test rows
+(`fold_train`, `fold_test`); with `respond` (a response op, -1: none) no
+scorer at all: each unit's test-side response in the member's own words
+(`outputs`, `output_cols`, `output_dtype`; cross_val_predict's method),
+placed in row order by the caller's PACK. Given folds whose test rows are
+the same rows (a learning curve's sizes of one fold) share ONE gathered test
+block (`_same_rows`), as the door's units reused it.
+
 SERIAL BY NATURE: the waves follow one another (each bounds the gathered
 blocks); inside a wave every unit is independent and runs on the workers.
 """
@@ -92,12 +109,13 @@ from core.msel_scorer_run import (
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
 )
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of,
+    MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
 )
 from core.member_notices import member_notices_take
+from std.time import perf_counter_ns
 from core.member_set_run import (
     MemberSetRun, member_set_prepare, member_set_fit_free, member_set_turn, member_set_run_release,
     member_set_first_failure, MEMBER_SET_WORKER, MEMBER_SET_TURN_RELEASED, MEMBER_SET_TURN_HELD, MEMBER_SET_LACKING,
@@ -180,6 +198,12 @@ struct MselSearchPlan(Movable):
     # reprs by class code (the binary scorers' refusal words).
     var cluster: EntryRef
     var label_words: List[String]
+    # THE CV TOOLS (lane mf-msel5, module note): keep every unit's fitted
+    # state for the caller; answer each fold's rows; answer each unit's
+    # test-side response `respond` (a MEMBER_OP_*; -1: score as above).
+    var keep: Bool
+    var indices: Bool
+    var respond: Int
 
     def __init__(out self, var plans: List[MemberPlan], var masks: List[Int], x: Int, rows: Int, cols: Int, y: Int,
                  classes: Int, n_splits: Int, glue: EntryRef, metric: MetricRoute):
@@ -214,6 +238,9 @@ struct MselSearchPlan(Movable):
         self.kept_at = 0
         self.cluster = entry_ref_unresolved()
         self.label_words = List[String]()
+        self.keep = False
+        self.indices = False
+        self.respond = -1
 
 
 struct MselSearchResult(Movable):
@@ -240,6 +267,20 @@ struct MselSearchResult(Movable):
     var scorer_stds: List[List[Float64]]
     var scorer_ranks: List[List[Int]]
     var scorer_train_means: List[List[Float64]]
+    # THE CV TOOLS (lane mf-msel5, module note), per unit (candidate-major,
+    # u = c * folds + f): its fit's and its test scores' seconds; with
+    # `keep` its fitted state (0: its fit failed), owned by the caller; with
+    # `respond` its test-side response words as float64 (int codes and
+    # float32 values exact), their columns and the member's element type.
+    # Per fold (with `indices` or `respond`): its train and test rows.
+    var fit_seconds: List[Float64]
+    var score_seconds: List[Float64]
+    var unit_states: List[Int]
+    var outputs: List[List[Float64]]
+    var output_cols: List[Int]
+    var output_dtype: List[Int]
+    var fold_train: List[List[Int32]]
+    var fold_test: List[List[Int32]]
 
     def __init__(out self):
         self.n_splits = 0
@@ -259,6 +300,14 @@ struct MselSearchResult(Movable):
         self.scorer_stds = List[List[Float64]]()
         self.scorer_ranks = List[List[Int]]()
         self.scorer_train_means = List[List[Float64]]()
+        self.fit_seconds = List[Float64]()
+        self.score_seconds = List[Float64]()
+        self.unit_states = List[Int]()
+        self.outputs = List[List[Float64]]()
+        self.output_cols = List[Int]()
+        self.output_dtype = List[Int]()
+        self.fold_train = List[List[Int32]]()
+        self.fold_test = List[List[Int32]]()
 
 
 def _set_word(mask: Int) -> UInt8:
@@ -359,13 +408,14 @@ def _member_score(run_at: Int, v: Int, side: _Side, cols: Int, y_dtype: Int, y_c
 
 
 def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, capacity: Int,
-             dtype: Int) raises -> Int:
+             dtype: Int, narrow: Bool) raises -> Int:
     """Unit `v`'s response `op` (predict, predict_proba or decision_function)
     on one side (`_Side`), written in the member's own `dtype` into
     the 8-byte words at `dst` (`capacity` words), then narrowed in place to
     the scorer's words: int32 codes (an int64 predict) or float32 (a float64
-    output; the rounding the metric doors' admission applies). Answers the
-    output's columns per row."""
+    output; the rounding the metric doors' admission applies) unless
+    `narrow` is False (THE CV TOOLS' `respond`: the member's own words).
+    Answers the output's columns per row."""
     var run = _RunPtr(unsafe_from_address=run_at)
     var call = member_call_of(run[].plans[v], run[].states[v])
     var count = side.count
@@ -378,6 +428,8 @@ def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, cap
     call.dst = MemberMatrix(dst, count, width, dtype)
     _offered(run[].plans[v].member, op, call, side)
     var words = count * width
+    if not narrow:
+        return width
     if dtype == MEMBER_I64:
         var wide = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=dst)
         var narrow = _I32P(unsafe_from_address=dst)
@@ -469,6 +521,56 @@ def _note_kept(plan: MselSearchPlan):
         _IntP(unsafe_from_address=plan.kept_at)[0] = plan.pin
 
 
+def _same_rows(a: Int, b: Int, count: Int) -> Bool:
+    """Two int32 row views of `count` rows hold the same rows in the same
+    order (THE CV TOOLS: one gathered test block per distinct test side)."""
+    if a == b:
+        return True
+    var p = _I32P(unsafe_from_address=a)
+    var q = _I32P(unsafe_from_address=b)
+    for i in range(count):  # driver-loop: over one test side's rows (stops at the first difference)
+        if p[i] != q[i]:
+            return False
+    return True
+
+
+def _drop_kept(plan: MselSearchPlan, mut res: MselSearchResult):
+    """THE CV TOOLS: release every kept unit state before a raise (the
+    caller owns them only when the RUN returns). Never raises."""
+    var used = max(res.n_splits, 1)
+    for u in range(len(res.unit_states)):  # driver-loop: over the kept units (one release each)
+        if res.unit_states[u] != 0:
+            var c = u // used
+            var call = MemberCall(plan.plans[c].route, res.unit_states[u])
+            member_free(plan.plans[c], call)
+            res.unit_states[u] = 0
+
+
+def _widen(src: Int, words: Int, dtype: Int) -> List[Float64]:
+    """THE CV TOOLS' `respond`: a unit's response, written in the member's
+    own element type, as float64 words (int codes and float32 exact)."""
+    var out = List[Float64](length=max(words, 1), fill=0.0)
+    if dtype == MEMBER_I64:
+        var p = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=src)
+        for i in range(words):  # driver-loop: over the response words
+            out[i] = Float64(p[i])
+    elif dtype == MEMBER_I32:
+        var p = _I32P(unsafe_from_address=src)
+        for i in range(words):  # driver-loop: over the response words
+            out[i] = Float64(p[i])
+    elif dtype == MEMBER_F64:
+        var p = _F64P(unsafe_from_address=src)
+        for i in range(words):  # driver-loop: over the response words
+            out[i] = p[i]
+    else:
+        var p = _F32P(unsafe_from_address=src)
+        for i in range(words):  # driver-loop: over the response words
+            out[i] = Float64(p[i])
+    if words == 0:
+        out.clear()
+    return out^
+
+
 def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     """The whole search fit over native members (module note). Raises the
     door's words for empty candidates, the folds' refusals and (error_score
@@ -480,9 +582,20 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var classifier = k > 0
     var y_dtype = plan.y_dtype
     var y_cols = max(plan.y_cols, 1)
+    var responding = plan.respond >= 0
     var codes = plan.scorers.copy()
-    if len(codes) == 0:
+    if responding:
+        # THE CV TOOLS' `respond` (module note): no scorer; one placeholder
+        # table of zeros keeps the tables' shape.
+        if len(codes) != 0 or y_cols > 1:
+            raise Error("member ABI: a search that answers its units' responses takes no scorer and one output")
+        codes.append(SEARCH_SCORE_MEMBER)
+    elif len(codes) == 0:
         codes.append(plan.scoring)
+    if plan.keep:
+        for c in range(len(plan.masks)):  # small-loop(the candidates' masks: a kept state must not borrow a wave's block)
+            if (plan.masks[c] & MEMBER_BORROWS_FIT) != 0:
+                raise Error("member ABI: a search that keeps its units' states needs members that own their fit rows")
     if y_cols > 1 and (classifier or len(codes) != 1 or codes[0] != SEARCH_SCORE_MEMBER):
         raise Error("member ABI: a search over a multi-output member folds by KFold and scores by the member")
     if m == 0:
@@ -535,15 +648,32 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             tr_n.append(plan.fold_train_n[f])
             te_at.append(plan.fold_test_at[f])
             te_n.append(plan.fold_test_n[f])
-    var sides = 2 if plan.return_train else 1
+    var res = MselSearchResult()
+    res.n_splits = used
+    var sides = 2 if plan.return_train and not responding else 1
+    if plan.indices or responding:
+        for f in range(used):  # driver-loop: over the folds (their rows, copied once for the caller)
+            var tr = List[Int32](length=tr_n[f], fill=Int32(0))
+            var te = List[Int32](length=te_n[f], fill=Int32(0))
+            var tp = _I32P(unsafe_from_address=tr_at[f])
+            var ep = _I32P(unsafe_from_address=te_at[f])
+            for i in range(tr_n[f]):  # driver-loop: over the fold's train rows
+                tr[i] = tp[i]
+            for i in range(te_n[f]):  # driver-loop: over the fold's test rows
+                te[i] = ep[i]
+            res.fold_train.append(tr^)
+            res.fold_test.append(te^)
     # The scorers (resolved once) and the member responses they read: each
     # distinct response is asked once per unit and side.
-    var member_score = len(codes) == 1 and codes[0] == SCORER_MEMBER
+    var member_score = len(codes) == 1 and codes[0] == SCORER_MEMBER and not responding
     var rows_of = List[MselScorer]()
     var ops = List[Int]()
     var op_of = List[Int]()
     var clusterer = False
-    if not member_score:
+    if responding:
+        ops.append(plan.respond)
+        op_of.append(0)
+    elif not member_score:
         for j in range(len(codes)):  # driver-loop: over the scorers (once per fit)
             if codes[j] == SCORER_MEMBER:
                 raise Error("member ABI: the member's own score cannot be one of several scorers")
@@ -618,14 +748,26 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         if sides == 2:
             side_rows[f * sides + 1] = tr_at[f]
             side_count[f * sides + 1] = tr_n[f]
+    # THE CV TOOLS (module note): a given fold's test side holding the same
+    # rows as an earlier one's reads that side's blocks (alias_of: -1, its own).
+    var alias_of = List[Int](length=max(used * sides, 1), fill=-1)
+    if given > 0:
+        for f in range(1, used):  # driver-loop: over the given folds (their test sides, once per fit)
+            for g in range(f):  # driver-loop: over the earlier folds (the first with the same test rows)
+                if te_n[g] == te_n[f] and alias_of[g * sides] < 0 and _same_rows(te_at[g], te_at[f], te_n[f]):
+                    alias_of[f * sides] = g * sides
+                    break
     for s in range(used * sides):  # driver-loop: over the fold sides (their blocks, allocated once)
-        side_x.append(List[Float32](length=max(side_count[s] * d if any_gathered else 1, 1), fill=0.0))
-        side_y.append(List[Int32](length=max(side_count[s] * y_cols, 1), fill=Int32(0)))
+        var own = alias_of[s] < 0
+        side_x.append(List[Float32](length=max(side_count[s] * d if any_gathered and own else 1, 1), fill=0.0))
+        side_y.append(List[Int32](length=max(side_count[s] * y_cols if own else 1, 1), fill=Int32(0)))
     var columns = List[Int32](length=max(d, 1), fill=Int32(0))
     for j in range(d):  # small-loop(the column numbers 0 .. d-1 of a side's gather, once per fit)
         columns[j] = Int32(j)
     if any_gathered:
         for s in range(used * sides):  # driver-loop: over the fold sides (one glue gather of X each, parallel inside)
+            if alias_of[s] >= 0:
+                continue
             _ = xt_gather_f32(plan.glue, plan.x, side_rows[s], Int(columns.unsafe_ptr()), Int(side_x[s].unsafe_ptr()),
                               n, d, side_count[s], d)
     var side_rows_at = Int(side_rows.unsafe_ptr())
@@ -633,10 +775,16 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var y_src = plan.y
     var y_dst = List[Int](length=used * sides, fill=0)
     for s in range(used * sides):  # driver-loop: over the fold sides (the target block addresses)
-        y_dst[s] = Int(side_y[s].unsafe_ptr())
+        y_dst[s] = Int(side_y[s].unsafe_ptr()) if alias_of[s] < 0 else Int(side_y[alias_of[s]].unsafe_ptr())
+    var y_own = List[Int](length=max(used * sides, 1), fill=0)
+    for s in range(used * sides):  # driver-loop: over the fold sides (1: the side gathers its own target block)
+        y_own[s] = 1 if alias_of[s] < 0 else 0
+    var y_own_at = Int(y_own.unsafe_ptr())
     var y_dst_at = Int(y_dst.unsafe_ptr())
 
-    def _gather_y(s: Int) {imm side_rows_at, imm side_count_at, imm y_src, imm y_dst_at, imm y_cols}:
+    def _gather_y(s: Int) {imm side_rows_at, imm side_count_at, imm y_src, imm y_dst_at, imm y_cols, imm y_own_at}:
+        if _IntP(unsafe_from_address=y_own_at)[s] == 0:
+            return
         var rows = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=side_rows_at)[s]
         var count = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=side_count_at)[s]
         var dst = MutPointer[Int, MutUntrackedOrigin](unsafe_from_address=y_dst_at)[s]
@@ -647,8 +795,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     var units = m * used
     var test = List[Float64](length=max(units * nsc, 1), fill=0.0)
     var train = List[Float64](length=max(units * nsc, 1), fill=0.0)
-    var res = MselSearchResult()
-    res.n_splits = used
+    res.fit_seconds = List[Float64](length=units, fill=0.0)
+    res.score_seconds = List[Float64](length=units, fill=0.0)
+    if plan.keep:
+        res.unit_states = List[Int](length=units, fill=0)
+    if responding:
+        for _ in range(units):  # small-loop(one response list per unit)
+            res.outputs.append(List[Float64]())
+        res.output_cols = List[Int](length=units, fill=1)
+        res.output_dtype = List[Int](length=units, fill=MEMBER_F32)
     var wave = max(native_unit_cores(), 1)
     if plan.cap > 0:
         wave = min(wave, plan.cap)
@@ -678,6 +833,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 # `by_index`) out of the whole X, X's pin offered
                 run.pin_tokens[u - u0] = plan.pin
         _fit_wave(run)
+        for v in range(width):  # driver-loop: over the wave's units (their fits' seconds)
+            res.fit_seconds[u0 + v] = run.seconds[v]
         for v in range(width):  # driver-loop: over the wave's units (did a cache take X's reference)
             if rows_route[(u0 + v) // used] == SEARCH_ROWS_RESIDENT and run.pin_tokens[v] == 0:
                 _note_kept(plan)
@@ -686,6 +843,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             if first >= 0:
                 var words = run.errors[first].copy()
                 member_set_run_release(run)
+                _drop_kept(plan, res)
                 raise Error(words)
         # The scores: one task per (unit, side), every member call of the wave.
         var tasks = width * sides
@@ -706,7 +864,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 pred_cap[t * nops + o] = count * width_o
         var x_at = List[Int](length=used * sides, fill=0)
         for s in range(used * sides):  # driver-loop: over the fold sides (their X block addresses)
-            x_at[s] = Int(side_x[s].unsafe_ptr())
+            x_at[s] = Int(side_x[s].unsafe_ptr()) if alias_of[s] < 0 else Int(side_x[alias_of[s]].unsafe_ptr())
         var run_at = Int(UnsafePointer(to=run))
         var values_at = Int(values.unsafe_ptr())
         var failed_at = Int(failed.unsafe_ptr())
@@ -718,6 +876,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         # THE RESIDENT ROUTE: one byte per task, 1 when a cache took X's pin.
         var took = List[UInt8](length=max(tasks, 1), fill=UInt8(0))
         var took_at = Int(took.unsafe_ptr())
+        # THE CV TOOLS: each test task's seconds (its member calls).
+        var task_secs = List[Float64](length=max(tasks, 1), fill=0.0)
+        var secs_at = Int(task_secs.unsafe_ptr())
+        var narrow = not responding
         var base_x = plan.x
         var base_y = plan.y
         var scope = plan.scope
@@ -727,9 +889,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                             imm cap_list, imm x_list, imm y_dst_at, imm side_count_at, imm sides, imm used, imm u0,
                             imm d, imm y_dtype, imm y_cols, imm member_score, imm nsc, imm nops, imm ops_at,
                             imm out_dtypes_at, imm rows_route_at, imm side_rows_at, imm took_at, imm base_x,
-                            imm base_y, imm n, imm scope, imm pin}:
+                            imm base_y, imm n, imm scope, imm pin, imm secs_at, imm narrow}:
             var v = t // sides
             var side = t % sides
+            var started = perf_counter_ns()
             var s = ((u0 + v) % used) * sides + side
             var rp = _RunPtr(unsafe_from_address=run_at)
             if rp[].failed[v] != UInt8(0) or rp[].states[v] == 0:
@@ -745,13 +908,17 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
             try:
                 if member_score:
                     _F64P(unsafe_from_address=values_at)[t] = _member_score(run_at, v, place, d, y_dtype, y_cols)
+                    if side == 0:
+                        _F64P(unsafe_from_address=secs_at)[t] = Float64(perf_counter_ns() - started) / 1e9
                     return
                 for o in range(nops):  # small-loop(the distinct responses)
                     var at = t * nops + o
                     _IntP(unsafe_from_address=cols_list)[at] = _respond(
                         run_at, v, _IntP(unsafe_from_address=ops_at)[o], place, d,
                         _IntP(unsafe_from_address=pred_list)[at], _IntP(unsafe_from_address=cap_list)[at],
-                        _IntP(unsafe_from_address=out_dtypes_at)[c * nops + o])
+                        _IntP(unsafe_from_address=out_dtypes_at)[c * nops + o], narrow)
+                if side == 0:
+                    _F64P(unsafe_from_address=secs_at)[t] = Float64(perf_counter_ns() - started) / 1e9
             except error:
                 for j in range(nsc):  # small-loop(the scorers)
                     _U8P(unsafe_from_address=failed_at)[t * nsc + j] = UInt8(2)
@@ -772,9 +939,21 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         var metric_notes = List[List[Float64]](capacity=width)
         for _ in range(width):  # small-loop(the wave's units: one warning list each)
             metric_notes.append(List[Float64]())
-        if not member_score:
+        if responding:
+            for t in range(tasks):  # driver-loop: over the wave's tasks (one test side each: its response words)
+                var at = t * nops
+                var c = (u0 + t) // used
+                if failed[t] != UInt8(0):
+                    continue
+                var s = ((u0 + t) % used) * sides
+                var dtype = out_dtypes[c * nops]
+                res.outputs[u0 + t] = _widen(pred_at[at], side_count[s] * pred_cols[at], dtype)
+                res.output_cols[u0 + t] = pred_cols[at]
+                res.output_dtype[u0 + t] = dtype
+        elif not member_score:
             for t in range(tasks):  # driver-loop: over the wave's tasks (one native metric program per scorer)
                 var s = ((u0 + t // sides) % used) * sides + t % sides
+                var started = perf_counter_ns()
                 for j in range(nsc):  # small-loop(the scorers)
                     var at = t * nsc + j
                     if failed[at] != UInt8(0):
@@ -790,6 +969,8 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                         errors[at] = String(error)
                     for i in range(len(notes)):  # small-loop(one score's warnings: a triple or two)
                         metric_notes[t // sides].append(notes[i])
+                if t % sides == 0:
+                    task_secs[t] += Float64(perf_counter_ns() - started) / 1e9
         # The error rule, in unit order (then scorer order).
         for t in range(tasks):  # driver-loop: over the wave's tasks (their scores)
             var u = u0 + t // sides
@@ -800,12 +981,15 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     if not plan.tolerate:
                         var words = errors[t * nsc + j].copy()
                         member_set_run_release(run)
+                        _drop_kept(plan, res)
                         raise Error(words)
                     value = plan.error_value
                 if side == 0:
                     test[j * units + u] = value
                 else:
                     train[j * units + u] = value
+            if side == 0:
+                res.score_seconds[u] = task_secs[t]
         # The units' fit notices, then their scores' metric warnings, in
         # unit order; the states go.
         for v in range(width):  # driver-loop: over the wave's units (their fit notices)
@@ -819,6 +1003,10 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 words.append(metric_notes[v][i])
             if len(words) > 0:
                 res.notices.append(words^)
+            if plan.keep and run.failed[v] == UInt8(0):
+                # THE CV TOOLS: the unit's state is the caller's now.
+                res.unit_states[u0 + v] = run.states[v]
+                run.states[v] = 0
         member_set_run_release(run)
         _ = len(preds)  # the response buffers were read through the tasks above
         _ = len(pred_cols)
@@ -829,6 +1017,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         _ = len(x_at)
         _ = len(pred_at)
         _ = len(took)
+        _ = len(task_secs)
         u0 = u1
     _ = len(out_dtypes)
     _ = len(ops)
@@ -838,11 +1027,14 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     _ = len(y_dst)
     _ = len(side_rows)
     _ = len(side_count)
+    _ = len(alias_of)
+    _ = len(y_own)
     _ = len(fold_rows)
     _ = len(fold_counts)
     _ = len(columns)
     # 5. The tables, per scorer; the best by the refit scorer.
     if plan.refit_scorer < 0 or plan.refit_scorer >= nsc:
+        _drop_kept(plan, res)
         raise Error("member ABI: the refit scorer is not one of the search's scorers")
     for j in range(nsc):  # driver-loop: over the scorers (their tables)
         var rows_test = List[List[Float64]](capacity=m)
@@ -897,6 +1089,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         if first >= 0:
             var words = run.errors[first].copy()
             member_set_run_release(run)
+            _drop_kept(plan, res)
             raise Error(words)
         res.best_state = run.states[0]
         var words = List[Float64]()
