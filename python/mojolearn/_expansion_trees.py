@@ -2142,6 +2142,8 @@ class MultiOutputRegressor(_MetaRegressorScore, _TreesWrapperBase):
     >>> model.predict(X[:5]).shape
     (5, 2)
     """
+    # The multi-output META member kind (core/ensemble_member.mojo META_MULTI_REGRESSOR).
+    _mojolearn_member = (39, 13)
     _estimator_type = "regressor"
     # scikit-learn's multi-output-only target tags: its checks pass a 2-D y.
     _sklearn_target_tags = {"single_output": False, "multi_output": True}
@@ -2216,6 +2218,8 @@ class MultiOutputClassifier(_TreesWrapperBase):
     >>> model.predict(X[:5]).shape
     (5, 2)
     """
+    # The multi-output META member kind (core/ensemble_member.mojo META_MULTI_CLASSIFIER).
+    _mojolearn_member = (39, 12)
     _estimator_type = "classifier"
     # scikit-learn's multi-output-only target tags: its checks pass a 2-D y.
     _sklearn_target_tags = {"single_output": False, "multi_output": True}

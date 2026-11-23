@@ -8,8 +8,13 @@ CalibratedClassifierCV, BaggingClassifier and BaggingRegressor
 (lane mf-ada4, THE ADABOOST KIND) AdaBoostClassifier and AdaBoostRegressor
 (`_admit_ada` / `_ada_pack` / `_ada_state`; their door keeps an estimator
 whose base is a random-splitter DecisionTree or carries a class_weight).
-MultiOutput and RandomTreesEmbedding carry no mark and keep their
-doors. A unit kind answers False, and its door keeps the estimator, for:
+Since lane mf-search4 also GridSearchCV / RandomizedSearchCV (THE SEARCH
+KIND, mark (39, 10): `_admit_search` / `_search_pack` / `_search_state`;
+the candidates and their clones are read once per admission and kept by
+the search's identity, `_search_prepare`) and MultiOutputClassifier /
+MultiOutputRegressor (THE MULTI-OUTPUT KIND, (39, 12) / (39, 13):
+`_admit_multi` / `_multi_pack` / `_multi_state`). RandomTreesEmbedding
+carries no mark and keeps its door. A unit kind answers False, and its door keeps the estimator, for:
 a OneVsRest base whose kind lacks the scores its predict reads; a
 Calibrated cv that is not an int (a splitter, an index list, 'prefit') or a
 base that takes the resident DeviceRows route (a measured winner); a
@@ -86,6 +91,19 @@ from core.member_abi import (
     MEMBER_CAN_IMPORT, MEMBER_CAN_EXPORT, MEMBER_CAN_SAMPLE_WEIGHT, MEMBER_BLOCK_SCALARS,
 )
 from xtrees.trees_meta_vote_run import STACK_PREDICT, STACK_PROBA, STACK_DECISION
+from core.ensemble_member import (
+    meta_plan_metric, META_SEARCH_CLASSIFIER, META_SEARCH_REGRESSOR, META_MULTI_CLASSIFIER, META_MULTI_REGRESSOR,
+    META_BLOCK_SEARCH,
+)
+from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
+from bindings.native_loaded_module_door import native_loaded_module
+from bindings.metrics_keys_unpack import metrics_keys
+from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
+from bindings.msel_candidates_door import msel_grid_list, msel_sampler_check, msel_sampler_list
+from bindings.msel_estimator_native_door import msel_native_clone, msel_native_set_params, msel_clone_parameter
+from bindings.msel_common_door import msel_get_scorer, msel_f64_list, msel_i32_list
+from bindings.msel_search_state_door import msel_search_update
+from bindings.msel_split_door import msel_cls
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -97,7 +115,16 @@ def _stack(kind: Int) -> Bool:
 
 def _classifier(kind: Int) -> Bool:
     return (kind == META_VOTE_CLASSIFIER or kind == META_STACK_CLASSIFIER or kind == META_OVR
-            or kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER or kind == META_ADA_CLASSIFIER)
+            or kind == META_CALIBRATED or kind == META_BAG_CLASSIFIER or kind == META_ADA_CLASSIFIER
+            or kind == META_SEARCH_CLASSIFIER or kind == META_MULTI_CLASSIFIER)
+
+
+def _search(kind: Int) -> Bool:
+    return kind == META_SEARCH_CLASSIFIER or kind == META_SEARCH_REGRESSOR
+
+
+def _multi(kind: Int) -> Bool:
+    return kind == META_MULTI_CLASSIFIER or kind == META_MULTI_REGRESSOR
 
 
 def _ada(kind: Int) -> Bool:
@@ -221,7 +248,9 @@ def _admit_nested(done: _Done, mut nested: _Nested, est: PythonObject, classifie
     var plan = prep_estimator_plan(est, context)
     if plan is None or py_get(plan, "member") is None:
         return False
-    if Bool(py=plan["classifier"]) != classifier:
+    # A nested META estimator answers by its kind-exact mask (a search's class
+    # says no estimator type of its own: its base decides, lane mf-search4).
+    if member_mark(plan, b).family != MEMBER_FAMILY_ENSEMBLE and Bool(py=plan["classifier"]) != classifier:
         return False
     if member_mark(plan, b).family == MEMBER_FAMILY_ENSEMBLE:
         var at = done.find(est)
@@ -318,14 +347,23 @@ comptime _NESTED_META_MAX = 256
 
 
 def _meta_children(est: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
-                   b: PythonObject) raises -> PythonObject:
+                   b: PythonObject, prepared: PythonObject) raises -> PythonObject:
     """The nested estimators of an unfitted meta-estimator that its
     admission reads (and so may be meta-estimators themselves): the active
     voting / stacked members and the final estimator, a OneVsRest or
     Calibrated base. A Bagging base is a tree, forest or extra-trees member
     (`_require_tree`): none."""
     var out = Python.list()
-    if kind == META_OVR or kind == META_CALIBRATED:
+    if _search(kind):
+        # THE SEARCH KIND (lane mf-search4): its candidate clones, made once
+        # here and kept in `prepared` for its admission.
+        var got = _search_prepare(est, fields, context, b, prepared)
+        if got is not None:
+            var clones = got[1]
+            for c in range(len(clones)):  # driver-loop: over the candidates' clones
+                _ = py_call(out.append, clones[c])
+        return out
+    if kind == META_OVR or kind == META_CALIBRATED or _multi(kind):
         var base = py_get(fields, "estimator")
         if base is not None:
             _ = py_call(out.append, base)
@@ -360,6 +398,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
     if kind < META_VOTE_CLASSIFIER or kind > META_KIND_LAST:
         return False
     var done = _Done()
+    var prepared = Python.dict()  # a search's candidates and clones, once per admission (lane mf-search4)
     var order = Python.list()
     var order_fields = Python.list()
     var order_context = Python.list()
@@ -383,7 +422,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         order_kinds.append(est_kind)
         if len(order_kinds) > _NESTED_META_MAX:
             return False
-        var children = _meta_children(est, est_fields, est_kind, est_context, b)
+        var children = _meta_children(est, est_fields, est_kind, est_context, b, prepared)
         for c in range(len(children)):  # driver-loop: over one meta-estimator's nested estimators
             var child = children[c]
             var child_plan = prep_estimator_plan(child, est_context)
@@ -412,7 +451,7 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         sub.plan.kind = order_kinds[i]
         var served = False
         try:
-            served = _admit_one(order[i], order_fields[i], order_kinds[i], order_context[i], b, sub, done)
+            served = _admit_one(order[i], order_fields[i], order_kinds[i], order_context[i], b, sub, done, prepared)
             if served:
                 sub.plan.member = member_resolve_family(MEMBER_FAMILY_ENSEMBLE, sub.plan.route)
                 var mask = member_kind_capabilities(sub.plan)
@@ -423,14 +462,18 @@ def ensemble_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         except:
             served = False  # not served: its parents look it up and keep their doors
         i -= 1
-    return _admit_one(model, fields, kind, context, b, owner, done)
+    return _admit_one(model, fields, kind, context, b, owner, done, prepared)
 
 
 def _admit_one(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
-    b: PythonObject, mut owner: MemberOwner, done: _Done) raises -> Bool:
+    b: PythonObject, mut owner: MemberOwner, done: _Done, prepared: PythonObject) raises -> Bool:
     """One meta-estimator's admission (the body `ensemble_member_admit`'s
     work-list runs per meta-estimator): its nested meta-estimators are in
-    `done`."""
+    `done`, a search's candidates in `prepared`."""
+    if _search(kind):
+        return _admit_search(model, fields, context, b, owner, done, prepared)
+    if _multi(kind):
+        return _admit_multi(fields, kind, context, b, owner, done)
     if _ada(kind):
         return _admit_ada(fields, kind, context, b, owner)
     if _unit(kind):
@@ -684,6 +727,12 @@ def _pack_one(model: PythonObject, fields: PythonObject, context: PythonObject, 
     if _ada(kind):
         _ada_pack(fields, context, b, plan, state, labels, features, k, jobs)
         return
+    if _search(kind):
+        _search_pack(model, fields, context, b, plan, state, labels, jobs)
+        return
+    if _multi(kind):
+        _multi_pack(model, fields, context, b, plan, state, labels, features, jobs)
+        return
     if _unit(kind):
         # THE UNIT KINDS (lane mf-meta3b): the attributes the door's fit writes.
         var unit_contexts = _unit_pack(model, fields, context, b, plan, state, labels, features, k, jobs)
@@ -798,6 +847,11 @@ def _fitted_children(est: PythonObject, fields: PythonObject, kind: Int, b: Pyth
     var out = Python.list()
     if _bag(kind) or _ada(kind):
         return out
+    if _search(kind):
+        var best = py_get(fields, "best_estimator_")
+        if best is not None:
+            _ = py_call(out.append, best)
+        return out
     if kind == META_CALIBRATED:
         var pairs = py_get(fields, "calibrated_classifiers_")
         if pairs is not None:
@@ -903,7 +957,12 @@ def ensemble_member_state(model: PythonObject, fields: PythonObject, context: Py
                 raise Error("TypeError: mojolearn: a nested estimator cannot be imported")
             owner.plan.member = member_resolve_family(MEMBER_FAMILY_ENSEMBLE, owner.plan.route)
             var labels = py_get(order_fields[i], "classes_")
-            owner.plan.classes = len(labels) if _classifier(order_kinds[i]) and labels is not None else 0
+            var word = Int(owner.plan.params[0])
+            if _search(word):
+                # A search's classes are its best estimator's (lane mf-search4).
+                var best = py_get(order_fields[i], "best_estimator_")
+                labels = py_get(py_fields(best), "classes_") if best is not None else PythonObject(None)
+            owner.plan.classes = len(labels) if _classifier(word) and not _multi(word) and labels is not None else 0
             var handle = _state_one(order[i], order_fields[i], order_context[i], b, owner.plan, imported)
             _ = py_call(imported.objs.append, order[i])
             imported.plans.append(owner.plan.copy())
@@ -925,6 +984,10 @@ def _state_one(model: PythonObject, fields: PythonObject, context: PythonObject,
     var kind = Int(plan.params[0])
     if _ada(kind):
         return _ada_state(fields, context, b, plan)
+    if _search(kind):
+        return _search_state(fields, context, b, plan, imported)
+    if _multi(kind):
+        return _multi_state(fields, context, b, plan, imported)
     if _unit(kind):
         return _unit_state(model, fields, context, b, plan, imported)
     var classifier = _classifier(kind)
@@ -1908,5 +1971,417 @@ def _ada_state(fields: PythonObject, context: PythonObject, b: PythonObject, pla
             for i in range(len(handles)):  # driver-loop: over the round states not handed over
                 var free = MemberCall(base.route, Int(handles[i]))
                 member_free(base, free)
+            member_free(plan, call)
+    return call.state
+
+
+# ------------------------------------------------------------ the search kind (lane mf-search4)
+
+
+def _search_seed_word(fields: PythonObject, b: PythonObject) raises -> Int:
+    """A RandomizedSearchCV's sampler seed for its admission and its PACK:
+    its own exact non-negative int below 2^52 (the words are float64), or,
+    for random_state=None, one fresh draw per admission (scikit-learn's
+    sampler draws afresh per fit too). -1: a seed the words cannot hold (the
+    door keeps the search)."""
+    var state = py_get(fields, "random_state")
+    if state is None:
+        var raw = py_call(b.int.from_bytes, py_call(native_loaded_module("os").urandom, PythonObject(7)),
+                          PythonObject("little"))
+        return Int(py=raw) >> 4  # 52 random bits
+    var word = _int_word(state, b)
+    if word < 0 or word >= 4503599627370496:
+        return -1
+    return word
+
+
+def _search_candidates(model: PythonObject, fields: PythonObject, seed: Int, warn: Bool,
+                       context: PythonObject) raises -> PythonObject:
+    """UNPACK (and the PACK's re-draw): the search's candidate parameter
+    dicts, as its fit reads them (bindings/msel_candidates_door.mojo
+    `msel_candidates`), a RandomizedSearchCV's drawn with `seed`."""
+    var cls = py_type(model)
+    if cls is msel_cls("GridSearchCV", context):
+        return msel_grid_list(fields["param_grid"], context)
+    var dists = msel_sampler_check(fields["param_distributions"], context, True)
+    return msel_sampler_list(dists, fields["n_iter"], PythonObject(seed), context, True, warn)
+
+
+def _search_prepare(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+                    prepared: PythonObject) raises -> PythonObject:
+    """UNPACK, once per admission: (candidates, their clones, the seed word),
+    kept in `prepared` by the search's identity so the work-list admits a
+    META candidate clone before the search reads it; None: not served."""
+    var key = py_call(b.id, model)
+    var got = py_get(prepared, key)
+    if got is not None:
+        return got
+    var base = py_get(fields, "estimator")
+    if base is None:
+        return PythonObject(None)
+    var seed = -1
+    if py_type(model) is not msel_cls("GridSearchCV", context):
+        if py_type(model) is not msel_cls("RandomizedSearchCV", context):
+            return PythonObject(None)
+        seed = _search_seed_word(fields, b)
+        if seed < 0:
+            return PythonObject(None)
+    var candidates = _search_candidates(model, fields, seed, True, context)
+    var clones = Python.list()
+    for c in range(len(candidates)):  # driver-loop: over the candidates (one native clone with its parameters each)
+        var clone = msel_native_clone(base, context)
+        _ = msel_native_set_params(clone, msel_clone_parameter(candidates[c], context), context)
+        _ = py_call(clones.append, clone)
+    var out = Python.tuple(candidates, clones, PythonObject(seed))
+    py_setitem(prepared, key, out)
+    return out
+
+
+def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+                  mut owner: MemberOwner, done: _Done, prepared: PythonObject) raises -> Bool:
+    """UNPACK of THE SEARCH KIND (core/ensemble_member.mojo): every
+    candidate (the base's clone with the candidate's parameters set) admitted
+    as a member with those words, read as `msel_search_fit` reads the
+    search's settings. Answers False (the door's fit keeps the search) for an
+    int cv it cannot take (a splitter, an index list), a named scorer other
+    than 'accuracy' or several scorers, refit other than True, the search's
+    own `device`, and any candidate with no serving member. A Python scorer
+    callback is refused in the door's words."""
+    var scoring_in = py_get(fields, "scoring")
+    var scoring = 0
+    if scoring_in is not None:
+        if py_type(scoring_in) is not b.str:
+            # A scorer object: the door's admission words for a Python
+            # callback; a native scorer object keeps the door.
+            _ = msel_get_scorer(scoring_in, context)
+            return False
+        if String(py=scoring_in) != "accuracy":
+            return False
+        scoring = 1
+    var refit = py_get(fields, "refit")
+    if refit is None or py_type(refit) is not b.bool or not Bool(py=refit):
+        return False
+    var device = py_get(fields, "device")
+    if device is not None:
+        return False
+    var cv = py_get(fields, "cv")
+    var folds = 5 if cv is None else _int_word(cv, b)
+    if folds < 2:
+        return False
+    var error_score = py_get(fields, "error_score")
+    var tolerate = 0.0
+    var error_value = 0.0
+    if error_score is not None and py_type(error_score) is b.str:
+        if String(py=error_score) != "raise":
+            return False
+    elif error_score is not None and (py_type(error_score) is b.float or py_type(error_score) is b.int):
+        tolerate = 1.0
+        error_value = Float64(py=py_call(b.float, error_score))
+    else:
+        return False
+    var train = py_get(fields, "return_train_score")
+    var return_train = train is not None and _truthy(train, b)
+    var got = _search_prepare(model, fields, context, b, prepared)
+    if got is None:
+        return False
+    var clones = got[1]
+    var seed = Int(py=got[2])
+    if len(clones) == 0:
+        return False  # the door raises "No fits were performed. ..."
+    var base = py_get(fields, "estimator")
+    var base_plan = prep_estimator_plan(base, context)
+    if base_plan is None or py_get(base_plan, "member") is None:
+        return False
+    var classifier = False
+    if member_mark(base_plan, b).family == MEMBER_FAMILY_ENSEMBLE:
+        var at = done.find(clones[0])
+        if at < 0:
+            return False
+        classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
+    else:
+        classifier = Bool(py=base_plan["classifier"])
+    if scoring == 1 and not classifier:
+        return False
+    var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
+    if classifier:
+        needs |= MEMBER_CAN_CLASSIFIER
+    if scoring == 0:
+        needs |= MEMBER_CAN_SCORE
+    var nested = _Nested()
+    for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
+        if not _admit_nested(done, nested, clones[c], classifier, needs, context, b):
+            return False
+    for c in range(len(nested.plans)):  # driver-loop: over the candidates (their predict's element type)
+        var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
+        if multi and scoring != 0:
+            return False  # a multi-output target is scored by the member itself
+        if scoring == 1:
+            var probe = nested.plans[c].copy()
+            probe.classes = 2
+            if member_output_dtype(probe, MEMBER_OP_PREDICT, 1, 1, MEMBER_I32) != MEMBER_I32:
+                return False
+    var words: List[Float64] = [Float64(scoring), tolerate, error_value, 1.0 if return_train else 0.0, Float64(seed)]
+    var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
+    if not _finish(fields, context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
+                   List[List[Int32]](), List[List[Int32]]()):
+        return False
+    if scoring == 1:
+        # THE NATIVE METRIC RUN's route (bindings/arena_prog_run.mojo
+        # `metric_inputs_run`): the default-mode x_metrics runner, its
+        # connection pinned with the plan entry.
+        var nk = metrics_keys()
+        var prog_context = py_get(context, nk[].k_family_metrics_prog_context)
+        if prog_context is None:
+            return False
+        var pin = metric_route_of(metric_route_entries(PythonObject(None), prog_context))
+        meta_plan_metric(Int(owner.plan.params[1]), pin.route)
+        _ = py_call(owner.pins.append, pin.provider)
+        _ = py_call(owner.pins.append, pin.entries)
+    return True
+
+
+def _search_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+                 plan: MemberPlan, state: Int, labels: PythonObject, mut jobs: _PackJobs) raises:
+    """PACK of THE SEARCH KIND: the attributes `msel_search_fit` writes
+    (`cv_results_` with `params`, `param_<name>`, `split<i>_test_score`,
+    `mean_test_score`, `std_test_score`, `rank_test_score` and
+    `mean_train_score`; `n_splits_`, `multimetric_`, `best_index_`,
+    `best_score_`, `best_params_`, `best_estimator_` (the best candidate's
+    clone holding the refit state), `scorer_`), then the units' fit notices
+    with the best estimator's context."""
+    var nested = meta_state_plans(state)
+    var handles = _export_i64(plan, state, META_BLOCK_NESTED)
+    if len(nested) != 1 or len(handles) != 1:
+        raise Error("RuntimeError: mojolearn: the search member state does not match its best estimator")
+    var view = _export_view(plan, state, META_BLOCK_SEARCH)
+    var words = _F64P(unsafe_from_address=view.dst.data)
+    var count = view.dst.rows * view.dst.cols
+    if count < 6:
+        raise Error("RuntimeError: mojolearn: the search member state has no tables")
+    var best = Int(words[0])
+    var folds = Int(words[1])
+    var best_score = words[2]
+    var m = Int(words[3])
+    var train = words[4] != 0.0
+    var seed = Int(words[5])
+    var candidates = _search_candidates(model, fields, seed, False, context)
+    if len(candidates) != m or best < 0 or best >= m:
+        raise Error("RuntimeError: mojolearn: the search's candidates changed since its admission")
+    var at = 6
+    var test = List[List[Float64]](capacity=m)
+    for c in range(m):  # driver-loop: over the candidates (their fold scores)
+        var row = List[Float64](capacity=folds)
+        for f in range(folds):  # small-loop(one candidate's folds)
+            row.append(words[at + c * folds + f])
+        test.append(row^)
+    at += m * folds
+    var means = List[Float64](capacity=m)
+    var stds = List[Float64](capacity=m)
+    var ranks = List[Int](capacity=m)
+    for c in range(m):  # driver-loop: over the candidates (their tables)
+        means.append(words[at + c])
+        stds.append(words[at + m + c])
+        ranks.append(Int(words[at + 2 * m + c]))
+    at += 3 * m
+    var results = Python.dict()
+    py_setitem(results, "params", candidates)
+    var itertools = native_loaded_module("itertools")
+    var keys = py_call(b.sorted, py_call(b.set, py_call(itertools.chain.from_iterable, candidates)))
+    for i in range(len(keys)):  # driver-loop: over the candidates' parameter names
+        var getter = py_call(native_loaded_module("operator").methodcaller, PythonObject("get"), keys[i])
+        py_setitem(results, py_call(b.str.__add__, PythonObject("param_"), py_call(b.str, keys[i])),
+                   py_call(b.list, py_call(b.map, getter, candidates)))
+    for f in range(folds):  # driver-loop: over the folds (one column each)
+        var column = List[Float64](capacity=m)
+        for c in range(m):  # small-loop(one fold's candidates)
+            column.append(test[c][f])
+        py_setitem(results, PythonObject("split" + String(f) + "_test_score"), msel_f64_list(column, context))
+    py_setitem(results, PythonObject("mean_test_score"), msel_f64_list(means, context))
+    py_setitem(results, PythonObject("std_test_score"), msel_f64_list(stds, context))
+    py_setitem(results, PythonObject("rank_test_score"), msel_i32_list(ranks, context))
+    if train:
+        var train_means = List[Float64](capacity=m)
+        for c in range(m):  # driver-loop: over the candidates (their train means)
+            train_means.append(words[at + m * folds + c])
+        py_setitem(results, PythonObject("mean_train_score"), msel_f64_list(train_means, context))
+    # The best estimator: the best candidate's clone holding the refit state.
+    var base = py_get(fields, "estimator")
+    var clone = msel_native_clone(base, context)
+    _ = msel_native_set_params(clone, msel_clone_parameter(candidates[best], context), context)
+    var clone_plan = prep_estimator_plan(clone, context)
+    var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
+    var clone_context = clone_plan["context"]
+    _pack_into(clone, clone_fields, clone_context, b, nested[0], handles[0], labels, jobs)
+    var updates = Python.dict()
+    py_setitem(updates, "cv_results_", results)
+    py_setitem(updates, "n_splits_", PythonObject(folds))
+    py_setitem(updates, "multimetric_", PythonObject(False))
+    py_setitem(updates, "best_index_", PythonObject(best))
+    py_setitem(updates, "best_score_", PythonObject(best_score))
+    py_setitem(updates, "best_params_", candidates[best])
+    py_setitem(updates, "best_estimator_", clone)
+    py_setitem(updates, "scorer_", msel_get_scorer(py_get(fields, "scoring"), context))
+    msel_search_update(fields, updates, context)
+    var owners = List[Int]()
+    var notices = List[List[Float64]]()
+    meta_state_notices(state, owners, notices)
+    for i in range(len(owners)):  # driver-loop: over the units' notices (a few warnings each)
+        member_fit_notices_raise(notices[i], clone_context)
+
+
+def _search_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan,
+                  mut imported: _Imported) raises -> Int:
+    """UNPACK of a FITTED search: a new search state holding its
+    `best_estimator_` (imported through its family) and the best index."""
+    var best = py_get(fields, "best_estimator_")
+    var index = py_get(fields, "best_index_")
+    if best is None or index is None:
+        raise Error("NotFittedError: this search is not fitted yet")
+    var call = member_call_of(plan)
+    _ = member_call(plan.member, MEMBER_OP_NEW, call)
+    var nested = List[MemberPlan]()
+    var handles = List[Int64]()
+    var ok = False
+    try:
+        handles.append(Int64(_nested_state(best, context, b, plan.classes, imported, nested)))
+        var block = MemberCall(plan.route, call.state)
+        block.block = META_BLOCK_NESTED
+        block.x = MemberMatrix(Int(handles.unsafe_ptr()), 1, 1, MEMBER_I64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, block)
+        handles = List[Int64]()  # the search state owns it now
+        var words: List[Float64] = [Float64(Int(py=index)), 0.0, 0.0, 0.0, 0.0, -1.0]
+        var search = MemberCall(plan.route, call.state)
+        search.block = META_BLOCK_SEARCH
+        search.x = MemberMatrix(Int(words.unsafe_ptr()), 1, len(words), MEMBER_F64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, search)
+        _ = len(words)  # copied in by the call above
+        var last = MemberCall(plan.route, call.state)
+        last.flags = MEMBER_IMPORT_DONE
+        last.classes = plan.classes
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, last)
+        ok = True
+    finally:
+        if not ok:
+            for i in range(len(handles)):  # driver-loop: over the nested state not handed over
+                var free = MemberCall(nested[i].route, Int(handles[i]))
+                member_free(nested[i], free)
+            member_free(plan, call)
+    return call.state
+
+
+# ------------------------------------------------------------ the multi-output kind (lane mf-search4)
+
+
+def _admit_multi(fields: PythonObject, kind: Int, context: PythonObject, b: PythonObject,
+                 mut owner: MemberOwner, done: _Done) raises -> Bool:
+    """UNPACK of THE MULTI-OUTPUT KIND: the base admitted once through the
+    LEAF dispatch. False (the door keeps it) for a plain Ridge base of a
+    MultiOutputRegressor (the door's one-program ridge route over every
+    output, a measured winner kept on the door) and a base with no serving
+    member."""
+    var classifier = kind == META_MULTI_CLASSIFIER
+    var base = py_get(fields, "estimator")
+    if base is None:
+        return False
+    if not classifier:
+        var defaults = py_get(context, "native_estimator_defaults")
+        var ridge = py_get(defaults, "Ridge") if defaults is not None else PythonObject(None)
+        if ridge is not None and py_type(base) is py_type(ridge):
+            return False
+    var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
+    if classifier:
+        needs |= MEMBER_CAN_CLASSIFIER
+    var nested = _Nested()
+    if not _admit_nested(done, nested, base, classifier, needs, context, b):
+        return False
+    var words: List[Float64] = [0.0]
+    return _finish(fields, context, b, owner, nested, kind, 0.0, 0, List[Float64](), List[Int](), words^,
+                   List[List[Int32]](), List[List[Int32]]())
+
+
+def _multi_pack(model: PythonObject, fields: PythonObject, context: PythonObject, b: PythonObject,
+                plan: MemberPlan, state: Int, labels: PythonObject, features: Int, mut jobs: _PackJobs) raises:
+    """PACK of THE MULTI-OUTPUT KIND: the attributes the door's fit writes
+    (`estimators_`, one clone per output holding its unit's state; a
+    classifier's `classes_`, the list of each output's labels, the labels the
+    caller held; `n_features_in_`, `_fitted`, and `_multi_ridge` None for
+    the regressor), then the units' fit notices."""
+    var kind = Int(plan.params[0])
+    var classifier = kind == META_MULTI_CLASSIFIER
+    var nested = meta_state_plans(state)
+    var handles = _export_i64(plan, state, META_BLOCK_NESTED)
+    if len(handles) != len(nested):
+        raise Error("RuntimeError: mojolearn: the meta member state does not match its outputs")
+    if classifier and len(labels) != len(nested):
+        raise Error("RuntimeError: mojolearn: a MultiOutputClassifier member is packed without each output's labels")
+    var base = py_get(fields, "estimator")
+    var fitted = Python.list()
+    var contexts = Python.list()
+    for j in range(len(nested)):  # driver-loop: over the outputs (one clone and one pack each)
+        var clone = prep_estimator_clone(base, context)
+        var clone_plan = prep_estimator_plan(clone, context)
+        var clone_fields = py_call(clone_plan["fields_get"], clone, py_type(clone))
+        var clone_context = clone_plan["context"]
+        _pack_into(clone, clone_fields, clone_context, b, nested[j], handles[j],
+                   labels[j] if classifier else PythonObject(None), jobs)
+        _ = py_call(fitted.append, clone)
+        _ = py_call(contexts.append, clone_context)
+    py_setattr(model, "estimators_", fitted)
+    if classifier:
+        py_setattr(model, "classes_", py_call(b.list, labels))
+    else:
+        py_setattr(model, "_multi_ridge", PythonObject(None))
+    py_setattr(model, "n_features_in_", PythonObject(features))
+    py_setattr(model, "_fitted", PythonObject(True))
+    var owners = List[Int]()
+    var notices = List[List[Float64]]()
+    meta_state_notices(state, owners, notices)
+    for i in range(len(owners)):  # driver-loop: over the nested notices (a few warnings each)
+        if owners[i] < len(contexts):
+            member_fit_notices_raise(notices[i], contexts[owners[i]])
+
+
+def _multi_state(fields: PythonObject, context: PythonObject, b: PythonObject, plan: MemberPlan,
+                 mut imported: _Imported) raises -> Int:
+    """UNPACK of a FITTED MultiOutput estimator: its `estimators_` imported
+    through their family, each output's class count from `classes_`."""
+    var kind = Int(plan.params[0])
+    var classifier = kind == META_MULTI_CLASSIFIER
+    var done = py_get(fields, "_fitted")
+    var members = py_get(fields, "estimators_")
+    if done is None or not Bool(py=done) or members is None or py_get(fields, "_multi_ridge") is not None:
+        raise Error("NotFittedError: this MultiOutput estimator is not fitted as one member per output")
+    var ests = py_call(b.list, members)
+    var counts = List[Int]()
+    if classifier:
+        var classes = py_get(fields, "classes_")
+        if classes is None or len(classes) != len(ests):
+            raise Error("NotFittedError: this MultiOutputClassifier is not fitted yet")
+        for j in range(len(ests)):  # driver-loop: over the outputs (their class counts)
+            counts.append(len(classes[j]))
+    var call = member_call_of(plan)
+    _ = member_call(plan.member, MEMBER_OP_NEW, call)
+    var handles = List[Int64]()
+    var nested = List[MemberPlan]()
+    var ok = False
+    try:
+        for j in range(len(ests)):  # driver-loop: over the fitted outputs (one import each)
+            handles.append(Int64(_nested_state(ests[j], context, b, counts[j] if classifier else 0, imported, nested)))
+        var block = MemberCall(plan.route, call.state)
+        block.block = META_BLOCK_NESTED
+        block.x = MemberMatrix(Int(handles.unsafe_ptr()), 1, len(handles), MEMBER_I64)
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, block)
+        handles = List[Int64]()
+        var last = MemberCall(plan.route, call.state)
+        last.flags = MEMBER_IMPORT_DONE
+        last.class_counts = Int(counts.unsafe_ptr()) if classifier else 0
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, last)
+        _ = len(counts)  # read through the call above
+        ok = True
+    finally:
+        if not ok:
+            for i in range(len(handles)):  # driver-loop: over the nested states not handed over
+                var free = MemberCall(nested[i].route, Int(handles[i]))
+                member_free(nested[i], free)
             member_free(plan, call)
     return call.state

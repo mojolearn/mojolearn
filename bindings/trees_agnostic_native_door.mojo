@@ -1280,8 +1280,9 @@ struct _DoorModel(AgnModel):
     mf-iterimp3b. Since mf-meta3b a VotingClassifier / VotingRegressor / StackingClassifier / StackingRegressor /
     OneVsRestClassifier / CalibratedClassifierCV / BaggingClassifier / BaggingRegressor used as a member opens as its
     META state, and since lane mf-ada4 an AdaBoostClassifier / AdaBoostRegressor too (THE ADABOOST KIND). What is
-    left: a member of a meta-estimator that is a MultiOutput* or a search CV (no META kind: MultiOutput's per-output
-    label vectors and the search's Python scorers and candidate clones are not typed yet), or an AdaBoost* whose base
+    left: a member of a meta-estimator that is a MultiOutput* or a search CV whose admission keeps its door (META kinds
+    since lane mf-search4: a search with a splitter cv, a named scorer other than 'accuracy', refit other than True
+    or its own device; a MultiOutputRegressor over a plain Ridge), or an AdaBoost* whose base
     is a random-splitter DecisionTree or carries a class_weight (its admit keeps its door); a META class whose admit keeps
     its door (a Calibrated non-int cv or DeviceRows base, a Stacking splitter cv). Since lane mf-meta3c the batched
     Bagging route and metas nested at any depth (the boundary's admission work-list) open as META states too. When

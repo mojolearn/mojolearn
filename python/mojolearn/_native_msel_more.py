@@ -231,6 +231,36 @@ def connect_members(context, register, registry):
             plan['initial_fields'] = {} if row is not None else derived[2]
             plan['keywords'] = {key: () for key in methods}  # glue: no keyword arguments in these recipes
     _connect_host_members(registry, register, waiting)
+    _connect_search_members(context, registry, register, waiting)
+
+
+import sys
+
+
+def _connect_search_members(context, registry, register, waiting):
+    # glue: import-time class metadata. 5. A marked SEARCH class (GridSearchCV, RandomizedSearchCV: the search META
+    # member kind, core/ensemble_member.mojo META_SEARCH_*; lane mf-search4, 2026-11-23) has a native constructor that
+    # `_derive_member` cannot read, and its storage layout is the one model selection connected at import
+    # (python/mojolearn/_native_msel_search.py `family_msel_search_layouts`): it is registered as a MEMBER-ONLY plan
+    # with those constructor parameters, the owner entry and context of its own module, no method recipes. A class
+    # whose layout is not connected yet stays waiting and is retried at the next connect.
+    layouts = context.get('family_msel_search_layouts', {})
+    for cls in tuple(waiting):  # glue: the classes the scan above left waiting, once per connect
+        own = vars(cls)
+        layout = layouts.get(cls)
+        mark = own.get('_mojolearn_member')
+        if layout is None or type(mark) is not tuple or mark[0] != 39:
+            continue
+        module = sys.modules.get(own.get('__module__'))
+        fields = vars(module) if module is not None else {}
+        if '_NATIVE' not in fields or type(fields.get('_NATIVE_CONTEXT')) is not dict:
+            continue
+        register(cls, fields['_NATIVE'], fields['_NATIVE_CONTEXT'], layout['parameters'], None, {})
+        plan = registry[cls]
+        plan['member_only'] = True
+        plan['initial_fields'] = {}
+        plan['keywords'] = {}
+        waiting.remove(cls)
 
 
 def _connect_host_members(registry, register, waiting):
