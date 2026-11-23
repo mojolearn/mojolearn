@@ -623,6 +623,11 @@ def _check_configuration() -> Bool:
     # Restore: git apply experiments/removed/MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_NEIGHBORS_FAST_MATRIX_UNITS"](), "removed 2026-11-20 (lane/fx-verdicts6, A/B abf2 NVIDIA L40S, wheel e41b5148b24d, job nvc-ab-20261120T224801Z-458a59, one run per arm; NOISE: knn, knn-clf and knn-reg on istella and taxi, 6 cells 0.98-1.01, median 0.99): the brute-force k-NN distance product on the matrix unit in a fast build; the exact distance tiles are the code; see docs/TOMBSTONES.md"
     # ---- end lane fx-verdicts6
+    # ---- lane ab-prep-classical (2026-11-23): owed arms closed without a run (plumbing, rule 2026-11-22) or from the record
+    # TOMBSTONE: MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-classical; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD"](), "removed 2026-11-23 (lane/ab-prep-classical, removed without measurement: plumbing, rule 2026-11-22: the label columns copy the same int32 words on both arms; the B arm only added the int64 widening, two device min/max reductions and the narrowing back; ab3 2026-11-18 had left it undecided, geomean 0.947); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_KNN_I32_LABEL_RANGE_OLD.ab-prep.patch"
+    # ---- end lane ab-prep-classical
     return True
 
 
