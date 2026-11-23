@@ -345,8 +345,9 @@ def sequential_add(mut mods: NativeModules, model: PythonObject, kind_arg: Pytho
           or kind == "reflection_pad1d" or kind == "reflection_pad2d" or kind == "replication_pad1d"
           or kind == "replication_pad2d"):
         var constant = kind.startswith("constant")
+        var value_default = PythonObject(None) if constant else PythonObject(0.0)
         var options = _arguments(mods, kind, supplied, keywords, Python.tuple("padding", "value"),
-                                 Python.tuple(None, None if constant else 0.0), 2 if constant else 1)
+                                 Python.tuple(None, value_default), 2 if constant else 1)
         if not constant and (len(supplied) > 1 or py_contains(keywords, "value")):
             raise Error("TypeError: " + kind + " takes one argument, padding")
         var two = kind.endswith("2d")
