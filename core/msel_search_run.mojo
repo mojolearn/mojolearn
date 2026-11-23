@@ -113,6 +113,7 @@ from core.host_parallel import host_parallelize
 from core.msel_scorer_run import (
     MselScorer, msel_scorer_row, msel_scorer_value, msel_scorer_regression, msel_scorer_binary_column,
     msel_scorer_positive, msel_scorer_ap, msel_scorer_cluster, msel_scorer_cluster_entry,
+    msel_scorer_labels_from_truth, msel_scorer_log_loss,
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND, SCORER_POSITIVE_MIXED,
     SCORER_MIXED_WORDS,
 )
@@ -465,8 +466,116 @@ def _respond(run_at: Int, v: Int, op: Int, side: _Side, cols: Int, dst: Int, cap
     return width
 
 
+def _held_words(label_words: List[String], held: Int, held_n: Int) -> String:
+    """A fold estimator's `classes_` as scikit-learn's messages print a NumPy
+    array: the labels' reprs, space-separated, in brackets."""
+    var h = _I32P(unsafe_from_address=held)
+    var shown = String("[")
+    for j in range(held_n):  # small-loop(the fold's held classes)
+        if j > 0:
+            shown += " "
+        var c = Int(h[j])
+        if c < len(label_words):
+            shown += label_words[c]
+        else:
+            shown += String(c)
+    return shown + "]"
+
+
+def _fold_view_side(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer, truth: Int,
+                    response: Int, count: Int, classes: Int, cols: Int, positive: Int, held: Int, held_n: Int,
+                    mut notices: List[Float64]) raises -> Float64:
+    """THE FOLD THAT LACKS A CLASS, scored by probabilities or decisions
+    (lane mf-kmeans5): what scikit-learn's scorer hands the metric, from the
+    FOLD ESTIMATOR's own `classes_` (the `held_n` held classes, ascending
+    ensemble codes at `held`) and its own `cols` columns, never scattered into
+    the ensemble's `classes`. `_get_response_values` (sklearn/utils/
+    _response.py): a pos_label outside the fold's classes is refused in its
+    words; a fold of at most two classes is a BINARY estimator: its
+    predict_proba of one column is refused ("need classifier with two
+    classes"), of two columns gives the column of the positive (classes[-1]
+    without one), and its 1-D decision is negated when the positive is
+    classes[0] (`_process_decision_function`). Then the metric: one whose
+    labels come from the side's `y_true` (`msel_scorer_labels_from_truth`:
+    roc_auc, log_loss, top_k) reads the side's codes ranked among the labels
+    the side holds, with that label count; log_loss with a different count
+    raises its words. Any other metric reads the ensemble's codes."""
+    var h = _I32P(unsafe_from_address=held)
+    var pos_col = held_n - 1  # pos_label None: classes[-1]
+    if positive >= 0 or positive == SCORER_POSITIVE_ABSENT or positive == SCORER_POSITIVE_KIND:
+        var at = -1
+        for j in range(held_n):  # small-loop(the fold's held classes)
+            if Int(h[j]) == positive:
+                at = j
+        if msel_scorer_ap(row) or msel_scorer_positive(row):
+            if at < 0:
+                raise Error("ValueError: pos_label=1 is not a valid label: It should be one of "
+                            + _held_words(label_words, held, held_n))
+            pos_col = at
+    var src = _F32P(unsafe_from_address=response)
+    var column = List[Float32]()
+    var view = response
+    var view_cols = cols
+    if held_n <= 2:
+        if row.op == MEMBER_OP_PREDICT_PROBA:
+            if cols < 2:
+                raise Error("ValueError: Got predict_proba of shape (" + String(count) + ", " + String(cols)
+                            + "), but need classifier with two classes.")
+            column = List[Float32](length=max(count, 1), fill=0.0)
+            for i in range(count):  # driver-loop: over the side's rows (the positive's probability column)
+                column[i] = src[cols * i + pos_col]
+            view = Int(column.unsafe_ptr())
+            view_cols = 1
+        elif pos_col == 0 and cols == 1:
+            column = List[Float32](length=max(count, 1), fill=0.0)
+            for i in range(count):  # driver-loop: over the side's rows (the decision of the first class)
+                column[i] = -src[i]
+            view = Int(column.unsafe_ptr())
+    var labels_at = truth
+    var label_count = classes
+    var ranked = List[Int32]()
+    if msel_scorer_labels_from_truth(row):
+        var seen = List[Int32](length=max(classes, 1), fill=Int32(-1))
+        var t = _I32P(unsafe_from_address=truth)
+        for i in range(count):  # driver-loop: over the side's true codes (the labels it holds)
+            var c = Int(t[i])
+            if c >= 0 and c < classes:
+                seen[c] = Int32(0)
+        label_count = 0
+        for c in range(classes):  # small-loop(the classes: each held one's rank)
+            if seen[c] == Int32(0):
+                seen[c] = Int32(label_count)
+                label_count += 1
+        ranked = List[Int32](length=max(count, 1), fill=Int32(0))
+        for i in range(count):  # driver-loop: over the side's true codes (their ranks)
+            var c = Int(t[i])
+            ranked[i] = seen[c] if (c >= 0 and c < classes) else Int32(c)
+        labels_at = Int(ranked.unsafe_ptr())
+        var predicted = 2 if view_cols == 1 else view_cols
+        if msel_scorer_log_loss(row) and label_count != predicted:
+            var present = String("[")
+            var first = True
+            for c in range(classes):  # small-loop(the classes the side holds, in order)
+                if seen[c] >= Int32(0):
+                    if not first:
+                        present += " "
+                    if c < len(label_words):
+                        present += label_words[c]
+                    else:
+                        present += String(c)
+                    first = False
+            raise Error("ValueError: y_true and y_pred contain different number of classes " + String(label_count)
+                        + ", " + String(predicted) + ". Please provide the true labels explicitly through the "
+                        + "labels argument. Classes found in y_true: " + present + "]")
+    var value = msel_scorer_value(route, cluster, label_words, row, labels_at, view, count, label_count, view_cols,
+                                  -1 if msel_scorer_labels_from_truth(row) else positive, notices)
+    _ = len(column)  # read by the program above
+    _ = len(ranked)
+    return value
+
+
 def _scorer_side(route: MetricRoute, cluster: EntryRef, label_words: List[String], row: MselScorer, truth: Int,
-                 response: Int, count: Int, classes: Int, cols: Int, positive: Int,
+                 response: Int, count: Int, classes: Int, cols: Int, positive: Int, held: Int, held_n: Int,
                  mut notices: List[Float64]) raises -> Float64:
     """One scorer on one side: the `_BINARY_PROBA` column pick of a
     two-class member's probabilities as the scorer hands it
@@ -482,6 +591,10 @@ def _scorer_side(route: MetricRoute, cluster: EntryRef, label_words: List[String
         # MIXED-KIND LABELS (lane mf-msel5b): the metric doors' refusal of a
         # target holding strings and integers, before any pos_label check.
         raise Error(SCORER_MIXED_WORDS)
+    if held_n > 0 and row.op != MEMBER_OP_PREDICT:
+        # a fold estimator holding `held_n` of the classes (lane mf-kmeans5)
+        return _fold_view_side(route, cluster, label_words, row, truth, response, count, classes, cols, positive,
+                               held, held_n, notices)
     if msel_scorer_ap(row) and classes == 2 and (positive == SCORER_POSITIVE_ABSENT
                                                  or positive == SCORER_POSITIVE_KIND):
         # AP-ABSENT (lane mf-msel5): two labels and no label 1. scikit-learn's
@@ -874,8 +987,9 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
     # fit on those rows does). A lacking fold's responses are mapped back to
     # the classes (`_place_response`, or the codes of a predict a label
     # scorer reads); a scorer reading probabilities or decisions, or the
-    # member's own score, of such a fold is the door's units' (scikit-learn
-    # hands each metric the fold estimator's own columns).
+    # member's own score, of such a fold is scored by the fold estimator's own
+    # columns (lane mf-kmeans5: `_fold_view_side`; a classifier's own score
+    # as `ClassifierMixin.score`, the accuracy of its predict).
     var fold_held = List[List[Int32]]()
     var fold_codes = List[List[Int32]]()
     var any_lacking = False
@@ -912,14 +1026,21 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         for f in range(used):  # small-loop(the folds' lacking marks)
             if len(fold_held[f]) > 0:
                 any_lacking = True
-    if any_lacking and not responding:
-        var label_only = not member_score
-        for o in range(nops):  # small-loop(the distinct responses)
-            if ops[o] != MEMBER_OP_PREDICT:
-                label_only = False
-        if not label_only:
-            raise Error("member ABI: a fold whose train rows lack a class is scored by the door's units unless "
-                        + "its scorers read labels")
+    if any_lacking and member_score:
+        # A CLASSIFIER'S OWN SCORE on folds that lack a class (lane
+        # mf-kmeans5): scikit-learn's `ClassifierMixin.score`,
+        # `accuracy_score(y, fold_estimator.predict(X))`. A fold member knows
+        # only its own classes, so every unit is scored as that: its predict
+        # (fold codes mapped back to the classes, the label scorers' path
+        # below) through the accuracy program, which the UNPACK resolves for
+        # a classifier search scored by its members.
+        member_score = False
+        codes[0] = SCORER_ACCURACY
+        var accuracy = msel_scorer_row(SCORER_ACCURACY)
+        rows_of.append(accuracy)
+        ops.append(accuracy.op)
+        op_of.append(0)
+        nops = len(ops)
     var held_addr = List[Int](length=max(used, 1), fill=0)
     var held_count = List[Int](length=max(used, 1), fill=0)
     for f in range(len(fold_held)):  # small-loop(the folds' held class views)
@@ -1220,6 +1341,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         elif not member_score:
             for t in range(tasks):  # driver-loop: over the wave's tasks (one native metric program per scorer)
                 var s = ((u0 + t // sides) % used) * sides + t % sides
+                var fold_of = (u0 + t // sides) % used
                 var started = perf_counter_ns()
                 for j in range(nsc):  # small-loop(the scorers)
                     var at = t * nsc + j
@@ -1230,7 +1352,7 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                     try:
                         values[at] = _scorer_side(plan.metric, plan.cluster, plan.label_words, rows_of[j], y_dst[s],
                                                   pred_at[t * nops + o], side_count[s], k, pred_cols[t * nops + o],
-                                                  positives[j], notes)
+                                                  positives[j], held_addr[fold_of], held_count[fold_of], notes)
                     except error:
                         failed[at] = UInt8(2)
                         errors[at] = String(error)
