@@ -96,10 +96,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from gbdt.gpu_util.kernel.random_gen import (
-    next_poisson_f,
-    next_uniform_f,
-)
+from gbdt.gpu_util.bootstrap_body import bootstrap_draw, bootstrap_seed
 
 #: lane/fam2-gbdt F1, made unconditional by cpu2-l6-bindings (2026-10-04):
 #: the 65,536 splitmix64 seeds are written by one device launch on EVERY
@@ -175,23 +172,9 @@ def bootstrap_kernel[bootstrap_type: Int](
     var i = gid
     var stride = Int(grid_dim.x) * BOOTSTRAP_BLOCK_SIZE
     while i < n:
-        var bw: Float32
-
-        comptime if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
-            var draw = next_uniform_f(s)
-            s = draw[1]
-            var tmp = -identical_log(draw[0] + Float32(1e-20))
-            bw = tmp
-            if param != Float32(1.0):
-                bw = identical_pow(tmp, param)
-        elif bootstrap_type == BOOTSTRAP_KERNEL_BERNOULLI:
-            var draw = next_uniform_f(s)
-            s = draw[1]
-            bw = Float32(1.0) if draw[0] < param else Float32(0.0)
-        else:
-            var draw = next_poisson_f(s, param)
-            s = draw[1]
-            bw = draw[0]
+        # the one draw body (gbdt/gpu_util/bootstrap_body.mojo); the kind is
+        # this kernel's comptime parameter, so its branch folds away
+        var bw = bootstrap_draw(bootstrap_type, param, s)
 
         # EVERY DERIVATIVE PLANE, NOT JUST THE FIRST. This loop used to be
         # two hard-coded loads, `stats[i]` and `stats[n + i]`, and
@@ -269,11 +252,7 @@ def bootstrap_seed_fill_kernel(
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= BOOTSTRAP_SEED_COUNT:
         return
-    var z = base_seed + UInt64(i + 1) * UInt64(0x9E3779B97F4A7C15)
-    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-    z = z ^ (z >> 31)
-    seeds.unsafe_store(i, z)
+    seeds.unsafe_store(i, bootstrap_seed(base_seed, i))
 
 
 def create_bootstrap_seeds(

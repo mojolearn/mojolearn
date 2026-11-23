@@ -107,10 +107,7 @@ from checks.kernel_matrix import (
 from checks.numerics import PIN_DETERMINISM
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 
-from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
-    hist2_dither,
-    hist2_quantize,
-)
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.methods.greedy_subsets_searcher.kernel.hist_2_one_byte_5bit import (
     hist2_add_points_5,
     hist2_reduce_tail_5,

@@ -73,10 +73,9 @@ from checks.kernel_matrix import (
     hist_smem_mode_for,
 )
 from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
-    hist2_dither,
-    hist2_quantize,
     hist2_smem_add,
 )
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 
 
 #: READ FROM THE MATRIX. Theirs is 384; Apple's 32 KB over 32 floats per

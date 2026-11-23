@@ -157,7 +157,8 @@ from checks.numerics import (
     identical_mul_add,
     identical_pow,
 )
-from gbdt.data.permutation import TRandom
+from gbdt.data.permutation import TRandom, generate_seed_for_borders
+from gbdt.gpu_util.bootstrap_body import bootstrap_draw, bootstrap_seed
 from gbdt.targets.pointwise_bodies import (
     BODY_OBJ_RMSE,
     cross_entropy_row,
@@ -220,6 +221,7 @@ from gbdt.grid_creator.binarization import (
 # the device score kernels' AddLeaf (lane gbdt-cpu-rest-4-ns)
 from gbdt.methods.greedy_subsets_searcher.leafwise_score_body import add_leaf_score
 from gbdt.methods.score_calcer_body import cosine_gain
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
@@ -789,26 +791,6 @@ def _choose_scale_from_magnitudes(
     return scale
 
 
-def _hist2_dither(pos: Int) -> Float32:
-    """`hist2_dither` (`histogram_utils.mojo:33-46`)."""
-    var h = UInt32(pos) * UInt32(2654435761)
-    h ^= h >> 16
-    h = h * UInt32(2246822519)
-    h ^= h >> 13
-    return Float32(Int(h >> 8)) * Float32(5.9604645e-08)
-
-
-def _hist2_quantize(val: Float32, fixed_scale: Float32, u: Float32) -> Int32:
-    """`hist2_quantize` (`histogram_utils.mojo:49-97`), the flushed operand
-    and product, `floor`, and the fraction compare."""
-    var scaled = ftz(ftz(val) * fixed_scale)
-    var base = floor(scaled)
-    var q = Int32(base)
-    if ftz(scaled - base) + u >= Float32(1.0):
-        q += Int32(1)
-    return q
-
-
 def _snap_gradients(
     mut stats: List[Float32], n_rows: Int, stat_count: Int, fixed_scale: Float32
 ):
@@ -827,9 +809,9 @@ def _snap_gradients(
 
     def rows(unit: Int) {imm chunk, imm n_rows, imm stat_count, imm fixed_scale, imm stats_p}:
         for pos in range(unit * chunk, min(n_rows, (unit + 1) * chunk)):
-            var u = _hist2_dither(pos)
+            var u = hist2_dither(pos)
             for st in range(1, stat_count):
-                var q = _hist2_quantize(stats_p[st * n_rows + pos], fixed_scale, u)
+                var q = hist2_quantize(stats_p[st * n_rows + pos], fixed_scale, u)
                 var v = Float32(0.0)
                 if q != Int32(0):
                     v = ftz(Float32(Int(q)) / fixed_scale)
@@ -853,7 +835,7 @@ def _snap_plane(mut plane: List[Float32], n: Int, fixed_scale: Float32, offset: 
 
     def rows(unit: Int) {imm chunk, imm n, imm fixed_scale, imm plane_p, imm offset}:
         for i in range(unit * chunk, min(n, (unit + 1) * chunk)):
-            var q = _hist2_quantize(plane_p[offset + i], fixed_scale, _hist2_dither(i))
+            var q = hist2_quantize(plane_p[offset + i], fixed_scale, hist2_dither(i))
             var v = Float32(0.0)
             if q != Int32(0):
                 v = ftz(Float32(Int(q)) / fixed_scale)
@@ -873,14 +855,6 @@ struct GbdtHostGrid(Movable):
     var borders: List[List[Float32]]
     var fold_counts: List[Int]
     var nan_treatment: List[Int]
-
-
-def _generate_seed_for_borders(from_seed: UInt64) -> UInt64:
-    """`generate_seed_for_borders` (`gbdt/train.mojo:595-602`)."""
-    var sd = from_seed
-    for _ in range(5):
-        sd = 6364136223846793005 * sd + 1442695040888963407
-    return sd
 
 
 def _best_split_phase_b(
@@ -1045,7 +1019,7 @@ def _gls_host_grid(
     other border types run `border_types.border_type_column` over the
     type's `border_table_entry` table (cpu-gpu-cleanup w2-trees)."""
     var sampled = sn < n_rows
-    var key = _generate_seed_for_borders(random_seed)
+    var key = generate_seed_for_borders(random_seed)
     var logtab = List[UInt64](length=sn + 1, fill=UInt64(0))
     var ltp = rebind[MutPointer[UInt64, MutAnyOrigin]](logtab.unsafe_ptr())
     comptime LT_CHUNK = 4096
@@ -1400,9 +1374,9 @@ def _one_byte_rows(
     and every add is an Int32 add (`q` is `stat_count` scratch words)."""
     for pos in range(lo, hi):
         var row = row_index[pos]
-        var u = _hist2_dither(pos)
+        var u = hist2_dither(pos)
         for s in range(stat_count):
-            q[s] = _hist2_quantize(stats[s * n_rows + pos], fixed_scale, u)
+            q[s] = hist2_quantize(stats[s * n_rows + pos], fixed_scale, u)
         for k in range(n_f):
             var word = cindex[f_base[k] + row]
             var bin = Int((word >> f_shift[k]) & f_mask[k])
@@ -3109,14 +3083,8 @@ def _greedy_gains(
 def gbdt_bootstrap_seeds(base_seed: UInt64) -> List[UInt64]:
     """`create_bootstrap_seeds` (`bootstrap.mojo:249-275`): splitmix64."""
     var seeds = List[UInt64](capacity=GBDT_BOOT_SEEDS)
-    var x = base_seed
-    for _ in range(GBDT_BOOT_SEEDS):
-        x += UInt64(0x9E3779B97F4A7C15)
-        var z = x
-        z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-        z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-        z = z ^ (z >> 31)
-        seeds.append(z)
+    for i in range(GBDT_BOOT_SEEDS):  # driver-loop: over the seed slots
+        seeds.append(bootstrap_seed(base_seed, i))
     return seeds^
 
 
@@ -3171,24 +3139,8 @@ def _bootstrap_pass(
                 var mag_g = Float32(0.0)
                 var i = gid
                 while i < n_rows:
-                    var bw: Float32
-                    if kind == GBDT_BOOT_BAYESIAN:
-                        # `bootstrap_kernel[BAYESIAN]` (lane/catboost-parity):
-                        # `-log(u + 1e-20)`, raised to the temperature unless 1
-                        var draw = next_uniform_f(s)
-                        s = draw[1]
-                        var tmp = -identical_log(draw[0] + Float32(1e-20))
-                        bw = tmp
-                        if param != Float32(1.0):
-                            bw = identical_pow(tmp, param)
-                    elif kind == GBDT_BOOT_BERNOULLI:
-                        var draw = next_uniform_f(s)
-                        s = draw[1]
-                        bw = Float32(1.0) if draw[0] < param else Float32(0.0)
-                    else:
-                        var draw = next_poisson_f(s, param)
-                        s = draw[1]
-                        bw = draw[0]
+                    # the one draw body (gbdt/gpu_util/bootstrap_body.mojo)
+                    var bw = bootstrap_draw(kind, param, s)
                     var w = stats_p[i] * bw
                     stats_p[i] = w
                     mag_w += abs(w)
@@ -3196,7 +3148,9 @@ def _bootstrap_pass(
                     for k in range(1, stat_count):
                         var g = stats_p[k * n_rows + i] * bw
                         stats_p[k * n_rows + i] = g
-                        gmax = max(gmax, abs(g))
+                        var a = abs(g)
+                        if a > gmax:  # the kernel's compare (a NaN keeps gmax)
+                            gmax = a
                     mag_g += gmax
                     i += stride
                 seeds_p[gid] = s

@@ -85,7 +85,9 @@ from std.math import ceil, isfinite, log2
 from checks.fixed_point import choose_scale
 from checks.numerics import ftz, identical_mul, identical_mul64, identical_mul_add, identical_mul_add_simd
 from gbdt.methods.cursor_rescale import rescaled_leaf, rescaled_leaves
+from gbdt.methods.greedy_subsets_searcher.hist2_quantize_body import hist2_dither, hist2_quantize
 from gbdt.methods.random_score_bodies import std_dev_of_sums
+from gbdt.gpu_util.bootstrap_body import bootstrap_draw
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -132,7 +134,6 @@ from gbdt.host.gbdt_oracle import (
     _binarize_columns,
     _halving_fold_live,
     _snap_plane,
-    _hist2_dither,
     GbdtI32Ptr,
     GbdtIntPtr,
     GbdtU64Ptr,
@@ -141,7 +142,6 @@ from gbdt.host.gbdt_oracle import (
     _gbdt_units,
     _partition_stats_level,
     _pinned_partition_stats,
-    _hist2_quantize,
     gbdt_host_grid,
     gbdt_host_model_text,
 )
@@ -693,9 +693,9 @@ def _ord_hist_piece(
         # document id
         for pos in range(lo, hi):
             var row = docs[pos]
-            var u = _hist2_dither(row)
-            var qw = _hist2_quantize(g_weight[pos], fixed_scale, u)
-            var qt = _hist2_quantize(g_target[pos], fixed_scale, u)
+            var u = hist2_dither(row)
+            var qw = hist2_quantize(g_weight[pos], fixed_scale, u)
+            var qt = hist2_quantize(g_target[pos], fixed_scale, u)
             var f_base = 0
             while f_base < n_feat:
                 var ci = cindex[offsets[f_base] + row]
@@ -721,9 +721,9 @@ def _ord_hist_piece(
         var is_bin = policy == POLICY_BINARY
         for pos in range(lo, hi):
             var row = docs[pos]
-            var u = _hist2_dither(row)
-            var qw = _hist2_quantize(g_weight[pos], fixed_scale, u)
-            var qt = _hist2_quantize(g_target[pos], fixed_scale, u)
+            var u = hist2_dither(row)
+            var qw = hist2_quantize(g_weight[pos], fixed_scale, u)
+            var qt = hist2_quantize(g_target[pos], fixed_scale, u)
             var f_base = 0
             while f_base < n_feat:
                 var ci = cindex[offsets[f_base] + row]
@@ -2694,22 +2694,8 @@ def _ordered_bootstrap_draws(
             var s = seeds_p[gid]
             var i = gid
             while i < total:
-                var bw: Float32
-                if kind == GBDT_ORD_BOOT_BAYESIAN:
-                    var d = next_uniform_f(s)
-                    s = d[1]
-                    var tmp = -identical_log(d[0] + Float32(1e-20))
-                    bw = tmp
-                    if param != Float32(1.0):
-                        bw = identical_pow(tmp, param)
-                elif kind == GBDT_ORD_BOOT_BERNOULLI:
-                    var d = next_uniform_f(s)
-                    s = d[1]
-                    bw = Float32(1.0) if d[0] < param else Float32(0.0)
-                else:
-                    var d = next_poisson_f(s, param)
-                    s = d[1]
-                    bw = d[0]
+                # the one draw body (gbdt/gpu_util/bootstrap_body.mojo)
+                var bw = bootstrap_draw(kind, param, s)
                 draws_p[i] = draws_p[i] * bw
                 i += stride
             seeds_p[gid] = s
