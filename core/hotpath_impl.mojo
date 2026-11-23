@@ -907,22 +907,8 @@ def count_mask_u8(mask_addr: Int, rows: Int) raises -> Int:
     return c
 
 
-def next_combination_i64(addr: Int, k: Int, rows: Int) raises -> Int:
-    """Advance the ascending p-combination of range(n) at `addr` (int64) to
-    its lexicographic successor (itertools.combinations order); 1 when it
-    advanced, 0 when it was the last (left unchanged)."""
-    if k < 1 or k > rows:
-        raise Error("next_combination_i64: needs 1 <= p <= n")
-    var cp = _ptr[DType.int64](addr)
-    var i = k - 1
-    while i >= 0 and Int(cp.unsafe_load(i)) == i + rows - k:
-        i -= 1
-    if i < 0:
-        return 0
-    var v = cp.unsafe_load(i) + 1
-    for j in range(i, k):
-        cp.unsafe_store(j, v + Int64(j - i))
-    return 1
+# next_combination_i64 deleted 2026-11-23 (lane sab-gpu-missed): no caller since its exports were removed
+# (LeavePOut.split walks itertools.combinations in bindings/msel_split_door.mojo).
 
 
 @always_inline
