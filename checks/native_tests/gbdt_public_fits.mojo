@@ -76,7 +76,7 @@ comptime UNSET = -1.0
 #: units every column runs (CPU and GPU suites)
 comptime GBDT_COMMON_UNITS = 26 + FF_UNITS + QW_UNITS
 #: units only the host column runs (the original `*_on_the_host_when_built` tests)
-comptime GBDT_HOST_UNITS = 27
+comptime GBDT_HOST_UNITS = 28
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -1237,6 +1237,8 @@ def host_unit[I: GbdtImage](unit: Int) raises:
         host_ordered_weights[I]()
     elif unit == 23:
         host_cat_rest[I]()
+    elif unit == 27:
+        host_tail_rest[I]()
     else:
         raise Error("gbdt host unit " + String(unit) + " has no body on this branch")
 
@@ -1828,6 +1830,75 @@ def host_symmetric_rest[I: GbdtImage]() raises:
     var opb = _ordered_opts("Poisson")
     opb.boost_from_average = 1
     _sym_refused[I](opb, reg, "You can use boost_from_average only", "Ordered Poisson boost_from_average")
+
+
+def host_tail_rest[I: GbdtImage]() raises:
+    """The last combinations the host refused by name until lane
+    gbdt-cpu-rest-4-tail (2026-11-23), each fit twice to the same bytes:
+    the multi-output losses' leaf walk (`device_multi_walk_estimate`) under
+    Newton at three iterations and Gradient at its default (10) and at two,
+    on MultiClass and MultiClassOneVsAll; Lossguide past depth 16 and
+    border_count 255; then `train`'s limits on both columns, in its words
+    (`check_tree_limits`): border_count 0 and 256, max_depth 17 under
+    SymmetricTree and Depthwise, and Simple leaves on MultiClass in the
+    walker's words."""
+    var mc_in = _fixed("e3-x.f32", 600, 6, "e3-y3.f32")
+    var mc1 = _twice[I](_sym_opts("MultiClass", "Cosine"), mc_in, "MultiClass Newton one iteration")
+    var n3 = _sym_opts("MultiClass", "Cosine")
+    n3.leaf_method = "Newton"
+    n3.leaf_iterations = 3
+    var mn3 = _twice[I](n3, mc_in, "MultiClass Newton three iterations")
+    require(mn3.text != mc1.text, "MultiClass Newton at three iterations: the one-step model")
+    require(all_finite_f32(predict(mn3.text, mc_in.x, 600)), "MultiClass Newton three iterations: nonfinite predict")
+    var gd = _sym_opts("MultiClass", "Cosine")
+    gd.leaf_method = "Gradient"
+    gd.leaf_iterations = -1
+    var mgd = _twice[I](gd, mc_in, "MultiClass Gradient at its default count")
+    require(mgd.text != mc1.text, "MultiClass Gradient: the Newton model")
+    var g2 = gd.copy()
+    g2.leaf_iterations = 2
+    var mg2 = _twice[I](g2, mc_in, "MultiClass Gradient at two iterations")
+    require(mg2.text != mgd.text, "MultiClass Gradient at two iterations: the default-count model")
+    var ova = _sym_opts("MultiClassOneVsAll", "Cosine")
+    var mova = _twice[I](ova, mc_in, "MultiClassOneVsAll Newton one iteration")
+    var ovg = ova.copy()
+    ovg.leaf_method = "Gradient"
+    ovg.leaf_iterations = -1
+    var movg = _twice[I](ovg, mc_in, "MultiClassOneVsAll Gradient")
+    require(movg.text != mova.text, "MultiClassOneVsAll Gradient: the Newton model")
+    var ovn = ova.copy()
+    ovn.leaf_method = "Newton"
+    ovn.leaf_iterations = 2
+    var movn = _twice[I](ovn, mc_in, "MultiClassOneVsAll Newton two iterations")
+    require(movn.text != mova.text, "MultiClassOneVsAll Newton at two iterations: the one-step model")
+    # depth and borders: Lossguide's depth is uncapped, 255 borders train
+    var clf = _e3()
+    var lg = GbdtOpts("Logloss", 3, 20)
+    lg.grow_policy = "Lossguide"
+    lg.max_leaves = 8
+    lg.score_function = "Cosine"
+    var mlg = _twice[I](lg, clf, "Lossguide at max_depth 20")
+    require("\nntree 0 " in mlg.text, "Lossguide max_depth 20: non-symmetric model text")
+    var b255 = _sym_opts("Logloss", "Cosine")
+    b255.border_count = 255
+    _ = _twice[I](b255, clf, "symmetric Logloss at border_count 255")
+    # `train`'s limits, refused on both columns in its words
+    var b0 = _sym_opts("Logloss", "Cosine")
+    b0.border_count = 0
+    _sym_refused[I](b0, clf, "border_count must be in 1..255", "border_count 0")
+    var b256 = _sym_opts("Logloss", "Cosine")
+    b256.border_count = 256
+    _sym_refused[I](b256, clf, "border_count must be in 1..255", "border_count 256")
+    var d17 = _sym_opts("Logloss", "Cosine")
+    d17.max_depth = 17
+    _sym_refused[I](d17, clf, "Maximum tree depth is 16", "SymmetricTree max_depth 17")
+    var dw17 = GbdtOpts("Logloss", 3, 17)
+    dw17.grow_policy = "Depthwise"
+    dw17.score_function = "Cosine"
+    _sym_refused[I](dw17, clf, "Maximum tree depth is 16", "Depthwise max_depth 17")
+    var simple = _sym_opts("MultiClass", "Cosine")
+    simple.leaf_method = "Simple"
+    _sym_refused[I](simple, mc_in, "only Newton and Gradient reach the walker", "MultiClass Simple leaves")
 
 
 def _ordered_opts(loss: String) -> GbdtOpts:
