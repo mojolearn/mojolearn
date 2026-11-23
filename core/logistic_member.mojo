@@ -6,8 +6,8 @@ One entry, `logistic_member_v2`, published by each estimators image
 existing typed RUN (core/logistic_route.mojo `logistic_fit_run` /
 `logistic_query_run`) through the QN entry the route holds in `entry` (the
 route LogisticRegression's own doors resolve, packed by
-`logistic_route_pack`; its flag bits say whether the image has the row-argmax
-entry). No kernel is touched; no other route slot is read.
+`logistic_route_pack`; every image answers the class-code query, the host
+one since lane mf-img3). No kernel is touched; no other route slot is read.
 
 Kind 1, QNRegressor, is core/qn_regressor_member.mojo (its own words, views
 and blocks; this entry hands it every kind-1 NEW and every state it minted).
@@ -57,13 +57,12 @@ The fitted state is OWNED here, in a process-wide store of fixed chunks: a
 slot never moves once minted, so a fit or predict runs on its slot without
 the store's lock; the lock covers only mint, free and the handle lookup.
 Serial by nature here: the store's bookkeeping. The code cast, the accuracy
-count and the host argmax split their rows across the host's workers.
+count splits its rows across the host's workers.
 """
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
 from core.admitted_refusals import admitted_finite_refuse, admitted_finite_wording
 from core.host_finite_scan import host_all_finite_f32
-from core.host_helpers_impl import argmax_rows_f32
 from core.host_parallel import host_parallelize
 from core.host_predict_threads import host_predict_task_count_work, host_predict_chunk
 from core.logistic_model_state import LogisticFitLayout, logistic_fit_target_count, logistic_publish_coefficients
@@ -363,22 +362,6 @@ def _query_x(slot: _SlotP, call: _CallP) raises:
     _features_check(slot, call[].x.cols)
 
 
-def _argmax(scores: Int, rows: Int, cols: Int, dst: Int):
-    """First-max row argmax (the host column's own scan), rows split across
-    the host's workers; each row is scanned whole by one worker."""
-    var tasks = host_predict_task_count_work(rows, rows * cols)
-    var chunk = host_predict_chunk(rows, tasks)
-
-    def task(worker: Int) {imm scores, imm rows, imm cols, imm dst, imm chunk}:
-        var begin = worker * chunk
-        var end = min(begin + chunk, rows)
-        if end > begin:
-            argmax_rows_f32(_F32P(unsafe_from_address=scores + begin * cols * 4), end - begin, cols,
-                _I64P(unsafe_from_address=dst + begin * 8))
-
-    host_parallelize(task, tasks)
-
-
 def _codes(slot: _SlotP, call: _CallP, dst: Int) raises:
     """Predicted int64 codes of `call.x` into `dst`."""
     var rows = call[].x.rows
@@ -387,15 +370,10 @@ def _codes(slot: _SlotP, call: _CallP, dst: Int) raises:
     var route = logistic_route_view(call[].route)
     if slot[].targets == 1:
         _query(slot, call, QN_NATIVE_BINARY, dst, 1, route)
-    elif route.multiclass:
-        _query(slot, call, QN_NATIVE_MULTICLASS, dst, slot[].targets, route)
     else:
-        # An image without the row-argmax entry (the host column): its
-        # scores, then the same first-maximum rule as the estimator's door.
-        var scores = List[Float32](length=rows * slot[].targets, fill=0.0)
-        _query(slot, call, QN_NATIVE_DECISION, Int(scores.unsafe_ptr()), slot[].targets, route)
-        _argmax(Int(scores.unsafe_ptr()), rows, slot[].targets, dst)
-        _ = scores^
+        # Every image answers the class-code query (the host image since
+        # lane mf-img3: its decision body, then the same first-max argmax).
+        _query(slot, call, QN_NATIVE_MULTICLASS, dst, slot[].targets, route)
 
 
 def _predict(slot: _SlotP, call: _CallP) raises:
