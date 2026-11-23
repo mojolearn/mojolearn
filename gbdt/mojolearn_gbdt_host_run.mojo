@@ -84,6 +84,8 @@ from gbdt.host.gbdt_oracle_depthwise import (
     GBDT_HOST_SCORE_NEWTON_COSINE,
     GBDT_HOST_SCORE_NEWTON_L2,
     GbdtHostTreeParams,
+    gbdt_ctr_host_fit_non_symmetric,
+    gbdt_ctr_host_ns_model_text,
     gbdt_host_fit_non_symmetric,
     gbdt_host_ns_model_text,
 )
@@ -1725,6 +1727,25 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
                 od_kind, od.auto_stop_p_value, od.iterations_wait,
                 use_best_model, best_model_min_trees,
             )
+            if len(flags) != 0:
+                # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): cat_features and
+                # one_hot_features columns on the non-symmetric driver, the
+                # symmetric categorical fit's prelude and every permutation
+                # (gbdt_oracle_depthwise.mojo::gbdt_ctr_host_fit_non_symmetric)
+                var pw_cat = gbdt_ctr_host_fit_non_symmetric(
+                    x, y, n_rows, n_features, pw_tp, flags, permutation_count,
+                    ctr_permutation_id, pw_ev^, max_ctr_complexity, pw_start,
+                    row_weights,
+                )
+                text = gbdt_text_with_bias(
+                    gbdt_ctr_host_ns_model_text(pw_cat),
+                    len(pw_cat.model.losses), pw_start,
+                )
+                losses = pw_cat.model.losses.copy()
+                best_iteration = pw_cat.model.best_iteration
+                stopped_early = pw_cat.model.stopped_early
+                test_losses = pw_cat.model.test_losses.copy()
+                return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
             var pw_ns = gbdt_host_fit_non_symmetric(
                 x, y, n_rows, n_features, pw_tp, pw_ev^, pw_start, row_weights
             )
@@ -1883,16 +1904,35 @@ def gbdt_fit_native_run(params: GbdtFitArgs) raises -> GbdtFitOutcome:
             od_kind, od.auto_stop_p_value, od.iterations_wait,
             use_best_model, best_model_min_trees,
         )
-        var ns_model = gbdt_host_fit_non_symmetric(
-            x, y, n_rows, n_features, tp, ev^, ns_start, row_weights
-        )
-        text = gbdt_text_with_bias(
-            gbdt_host_ns_model_text(ns_model), len(ns_model.losses), ns_start
-        )
-        losses = ns_model.losses.copy()
-        best_iteration = ns_model.best_iteration
-        stopped_early = ns_model.stopped_early
-        test_losses = ns_model.test_losses.copy()
+        if len(flags) != 0:
+            # lane gbdt-cpu-rest-4-cat-ns (2026-11-23): Logloss and RMSE with
+            # cat_features and one_hot_features columns on the non-symmetric
+            # driver (gbdt_oracle_depthwise.mojo::
+            # gbdt_ctr_host_fit_non_symmetric)
+            var cat_ns = gbdt_ctr_host_fit_non_symmetric(
+                x, y, n_rows, n_features, tp, flags, permutation_count,
+                ctr_permutation_id, ev^, max_ctr_complexity, ns_start,
+                row_weights,
+            )
+            text = gbdt_text_with_bias(
+                gbdt_ctr_host_ns_model_text(cat_ns), len(cat_ns.model.losses),
+                ns_start,
+            )
+            losses = cat_ns.model.losses.copy()
+            best_iteration = cat_ns.model.best_iteration
+            stopped_early = cat_ns.model.stopped_early
+            test_losses = cat_ns.model.test_losses.copy()
+        else:
+            var ns_model = gbdt_host_fit_non_symmetric(
+                x, y, n_rows, n_features, tp, ev^, ns_start, row_weights
+            )
+            text = gbdt_text_with_bias(
+                gbdt_host_ns_model_text(ns_model), len(ns_model.losses), ns_start
+            )
+            losses = ns_model.losses.copy()
+            best_iteration = ns_model.best_iteration
+            stopped_early = ns_model.stopped_early
+            test_losses = ns_model.test_losses.copy()
 
     return GbdtFitOutcome(text^, best_iteration, stopped_early, losses^, test_losses^)
 
