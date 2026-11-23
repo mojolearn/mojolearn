@@ -86,8 +86,8 @@ then also answers, per unit, its fit's and its test scores' wall-clock
 seconds (`fit_seconds`, `score_seconds`: scikit-learn's `_fit_and_score`
 clocks: the fit, then the test side's scoring only); with `keep` every
 unit's fitted state, OWNED by the caller (`unit_states`; return_estimator;
-a kind that borrows its fit buffers is refused, its gathered train block
-would not outlive the wave); with `indices` each fold's train and test rows
+a kind that borrows its fit buffers owns its rows first, MEMBER_EXPORT_OWN,
+since its gathered train block goes with the wave); with `indices` each fold's train and test rows
 (`fold_train`, `fold_test`); with `respond` (a response op, -1: none) no
 scorer at all: each unit's test-side response in the member's own words
 (`outputs`, `output_cols`, `output_dtype`; cross_val_predict's method),
@@ -109,7 +109,7 @@ from core.msel_scorer_run import (
     SCORER_MEMBER, SCORER_ACCURACY, SCORER_POSITIVE_ABSENT, SCORER_POSITIVE_KIND,
 )
 from core.member_abi import (
-    MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free,
+    MemberPlan, MemberCall, MemberMatrix, MemberRef, member_call, member_call_of, member_outputs_of, member_free, member_own,
     MEMBER_F32, MEMBER_F64, MEMBER_I32, MEMBER_I64, MEMBER_OP_SCORE, MEMBER_OP_PREDICT, member_output_dtype,
     MEMBER_CAN_TEST_ROWS, MEMBER_BORROWS_FIT, MEMBER_GIL_FREE, MEMBER_GIL_DOOR, MEMBER_CAN_ROW_INDEX,
     MEMBER_CAN_SCOPE, MEMBER_SCOPE_NONE, member_pin_settle,
@@ -604,10 +604,6 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
         codes.append(SEARCH_SCORE_MEMBER)
     elif len(codes) == 0:
         codes.append(plan.scoring)
-    if plan.keep:
-        for c in range(len(plan.masks)):  # small-loop(the candidates' masks: a kept state must not borrow a wave's block)
-            if (plan.masks[c] & MEMBER_BORROWS_FIT) != 0:
-                raise Error("member ABI: a search that keeps its units' states needs members that own their fit rows")
     if y_cols > 1 and (classifier or len(codes) != 1 or codes[0] != SEARCH_SCORE_MEMBER):
         raise Error("member ABI: a search over a multi-output member folds by KFold and scores by the member")
     if m == 0:
@@ -1015,8 +1011,17 @@ def msel_search_run(plan: MselSearchPlan) raises -> MselSearchResult:
                 words.append(metric_notes[v][i])
             if len(words) > 0:
                 res.notices.append(words^)
-            if plan.keep and run.failed[v] == UInt8(0):
-                # THE CV TOOLS: the unit's state is the caller's now.
+            if plan.keep and run.failed[v] == UInt8(0) and run.states[v] != 0:
+                # THE CV TOOLS: the unit's state is the caller's now. A kind
+                # that borrows its fit buffers first owns its rows (THE
+                # LIFETIME RULE: the wave's gathered train block goes below).
+                if (plan.masks[(u0 + v) // used] & MEMBER_BORROWS_FIT) != 0:
+                    try:
+                        member_own(run.plans[v], run.states[v])
+                    except error:
+                        member_set_run_release(run)
+                        _drop_kept(plan, res)
+                        raise error^
                 res.unit_states[u0 + v] = run.states[v]
                 run.states[v] = 0
         member_set_run_release(run)

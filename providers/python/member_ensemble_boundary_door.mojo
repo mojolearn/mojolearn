@@ -114,7 +114,6 @@ from core.ensemble_member import (
     META_BLOCK_SEARCH, META_BLOCK_FOLDS,
 )
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
-from core.member_abi import MEMBER_BORROWS_FIT
 from bindings.msel_common_door import msel_f64_block, msel_i64_list, msel_index_i64, msel_p64
 from bindings.classical_labels_door import labels_decode_i32_codes
 from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
@@ -2767,8 +2766,6 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             return False  # a multi-output target is scored by the member itself, folded by KFold
         if multi and tool_respond >= 0:
             return False  # a multi-output response: the door's placement
-        if tool_keep and (nested.masks[c] & MEMBER_BORROWS_FIT) != 0:
-            return False  # a kept state would read a wave's gathered train block
         for o in range(len(responses)):  # small-loop(the distinct responses)
             var response = responses[o]
             var probe = nested.plans[c].copy()
