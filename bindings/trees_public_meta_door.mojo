@@ -90,7 +90,7 @@ from core.member_abi import (
     MEMBER_CAN_DECISION, MEMBER_CAN_PREDICT_PROBA, member_kind_capabilities,
 )
 from core.member_set_run import MEMBER_SET_TURN_HELD, member_set_first_failure
-from core.member_families import MEMBER_FAMILY_GP
+from core.member_families import MEMBER_FAMILY_GP, MEMBER_FAMILY_ENSEMBLE
 from core.admitted_rows_plan import admitted_rows_shape
 from xtrees.trees_calibrated_fit_run import (
     CalFitPlan, CalFitOut, CalPlace, CAL_ALL_ANSWERED, CAL_FIT_FAILED, calibrated_fit_run, cal_fold_place,
@@ -3335,7 +3335,18 @@ def _cal_native(model: PythonObject, xt: PythonObject, base: PythonObject, Xa: P
     # predict_proba where a soft one has). One state minted, asked and
     # released per fit.
     var scoring = MEMBER_CAN_DECISION if decision else MEMBER_CAN_PREDICT_PROBA
-    if not set.run.plans[0].member.can(scoring) or (member_kind_capabilities(set.run.plans[0]) & scoring) == 0:
+    var kind_mask = member_kind_capabilities(set.run.plans[0])
+    var first = set.run.plans[0].copy()
+    if (first.family == MEMBER_FAMILY_ENSEMBLE and len(first.params) > 2 and Int(first.params[0]) == 0
+            and first.params[2] == 0.0 and (kind_mask & (MEMBER_CAN_DECISION | MEMBER_CAN_PREDICT_PROBA)) == 0):
+        # A hard VotingClassifier base (META kind 0, soft word 0; lane
+        # mf-meta3b): it has neither decision_function nor predict_proba, so
+        # scikit-learn 1.9's `_check_response_method` refuses it
+        # (calibration.py, before any fit for ensemble=False, after the first
+        # fold's fit for ensemble=True: the same words), in its words.
+        raise Error("AttributeError: " + String(py_type(base).__name__)
+                    + " has none of the following attributes: decision_function, predict_proba.")
+    if not set.run.plans[0].member.can(scoring) or (kind_mask & scoring) == 0:
         return _CAL_NOT_MEMBER  # its kind has no native call for the scores: its fit doors fit every fold
     # A fold with no train or no test rows (only a user's cv iterable makes
     # one): scikit-learn's check_array refusal, raised by that fold's
