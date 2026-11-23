@@ -23,6 +23,7 @@ array. Label codes are read through `MselCodes` (an address the door pins).
 
 No Python object is read, built or called here.
 """
+from std.math import ceil, floor, isinf, isnan
 from std.memory import unsafe_memcpy
 from std.builtin.sort import sort
 from core.entry_table import EntryRef, entry_ref_unresolved
@@ -54,6 +55,13 @@ comptime MSEL_FILL_RANGES = 4   # each side is a row range
 comptime MSEL_FILL_TABLES = 5   # each split has a per-group table: gather, then both sides
 comptime MSEL_FILL_SELECT = 6   # each split is the rows whose word is one value
 comptime MSEL_FILL_STRAT_SHUFFLE = 7  # each split is one x_metrics program
+comptime MSEL_FILL_LEAVE_ONE = 8  # split s is row s (test) against every other row (`leave_range_i64`)
+
+#: What a `_validate_shuffle_split` size word is (`MselSizeWord.kind`).
+comptime MSEL_SIZE_NONE = 0
+comptime MSEL_SIZE_INT = 1
+comptime MSEL_SIZE_REAL = 2
+comptime MSEL_SIZE_BAD = 3  # a value the door refuses as no native numeric size
 
 #: What the label codes handed to a stratified splitter are.
 comptime MSEL_LABELS_ALIGNED = 0     # sorted-order codes, one per row: first-seen order by first rows
@@ -227,6 +235,8 @@ struct MselSplitPlan(Movable):
     #: a UserWarning the door issues after the plan (empty: none)
     var warned: Bool
     var warning: String
+    #: LeavePOut: every combination's int64 test rows, p words each
+    var rows64: List[Int64]
 
     def __init__(out self):
         self.form = 0
@@ -254,6 +264,7 @@ struct MselSplitPlan(Movable):
         self.rng = MselCounterRng(0, 0)
         self.warned = False
         self.warning = String("")
+        self.rows64 = List[Int64]()
 
     def splits(self) -> Int:
         return len(self.test_sizes)
@@ -752,6 +763,171 @@ def msel_leave_one(route: MselSplitRoute, n: Int, row: Int, train: Int, test: In
     _ = msel_leave_range_i64(route.helpers, n, row, row + 1, train, test)
 
 
+def msel_plan_leave_one_out(n: Int) raises -> MselSplitPlan:
+    """`LeaveOneOut.split` as one plan of n splits (lane mf-split5: a member
+    fit takes every split at once; the public door makes them one at a time
+    through `msel_leave_one`, the same helper `msel_split_fill` calls for
+    each split of this plan). The door's refusal, in its words."""
+    if n <= 1:
+        raise Error("Cannot perform LeaveOneOut with n_samples=" + String(n) + ".")
+    var plan = MselSplitPlan()
+    plan.form = MSEL_FILL_LEAVE_ONE
+    plan.n = n
+    for _ in range(n):  # driver-loop: over splits (one row each)
+        plan.add(n - 1, 1)
+    return plan^
+
+
+def msel_plan_leave_p_out(n: Int, p: Int) raises -> MselSplitPlan:
+    """`LeavePOut.split` as one plan (lane mf-split5): the combinations of
+    range(n) in itertools' lexicographic order, each combination's p rows
+    the test side of one split (INDEXED: the fill `msel_plan_indexed` gives
+    the public door's lazy splits). p = 0 is one split with every row in
+    train. The door's refusals, in its words and order."""
+    if n <= p:
+        raise Error("p=" + String(p) + " must be strictly less than the number of samples=" + String(n))
+    if p < 0:
+        raise Error("r must be non-negative")
+    var plan = MselSplitPlan()
+    plan.form = MSEL_FILL_INDEXED
+    plan.n = n
+    if p < 1:
+        plan.test_src.append(0)
+        plan.add(n, 0)
+        return plan^
+    var combo = List[Int](capacity=p)
+    for i in range(p):  # small-loop(the first combination's p rows)
+        combo.append(i)
+    var count = 0
+    while True:  # driver-loop: over the combinations (lexicographic, as itertools.combinations)
+        for i in range(p):  # small-loop(one combination's p rows)
+            plan.rows64.append(Int64(combo[i]))
+        count += 1
+        var at = p - 1
+        while at >= 0 and combo[at] == n - p + at:  # small-loop(the last position that can still move)
+            at -= 1
+        if at < 0:
+            break
+        combo[at] += 1
+        for j in range(at + 1, p):  # small-loop(the positions after it, in order)
+            combo[j] = combo[j - 1] + 1
+    # Every combination is written: the addresses are taken only now (the
+    # appends above may have moved the words).
+    var base = Int(plan.rows64.unsafe_ptr())
+    for s in range(count):  # driver-loop: over splits (their test rows' addresses)
+        plan.test_src.append(base + 8 * p * s)
+        plan.add(n - p, p)
+    return plan^
+
+
+def msel_repeated_check(base: MselSeed) raises:
+    """`_Repeated.split`'s first refusal: a base random_state that is not
+    None or a non-negative int."""
+    if base.bad:
+        raise Error(msel_seed_refusal())
+
+
+def msel_plan_repeat(route: MselSplitRoute, n: Int, labels: MselCodes, form: Int, k: Int, stratified: Bool,
+                     base: MselSeed, r: Int) raises -> MselSplitPlan:
+    """Repeat r of `_Repeated.split` (lane mf-split5: ONE body, called by the
+    public door's `msel_repeated_split` and by a member fit): a shuffled
+    StratifiedKFold over `labels` or KFold over n rows, seeded with
+    `_mix_seed(base, r)`."""
+    var seed = MselSeed(UInt64(msel_mix_seed(base.value, r)), False)
+    if stratified:
+        return msel_plan_stratified(route, labels, form, k, True, seed)
+    return msel_plan_kfold(route, n, k, True, seed, False)
+
+
+@fieldwise_init
+struct MselSizeWord(Copyable, Movable):
+    """One `_validate_shuffle_split` size as UNPACK read it (lane mf-split5):
+    MSEL_SIZE_NONE, an integer (`whole`), a real (`real`, read at `bits` of
+    precision: 64 for a Python float or a float64 scalar, 32 or 16 for a
+    NumPy scalar of that width, whose product with the row count NumPy
+    rounds at that width) or a refused value; `text` is the value's `str`
+    for the refusal words."""
+
+    var kind: Int
+    var whole: Int
+    var real: Float64
+    var bits: Int
+    var text: String
+
+
+def msel_size_none() -> MselSizeWord:
+    return MselSizeWord(MSEL_SIZE_NONE, 0, 0.0, 64, String("None"))
+
+
+def _size_product(w: MselSizeWord, n: Int, up: Bool) raises -> Int:
+    """`math.ceil(w * n)` (up) or `math.floor(w * n)` at the size's precision."""
+    var v = 0.0
+    # NumPy 2 (NEP 50) converts the Python int n to the scalar's width and
+    # multiplies there; n is exact in float64, so one rounding to the width.
+    if w.bits == 32:
+        var p32 = w.real.cast[DType.float32]() * Float64(n).cast[DType.float32]()
+        v = (ceil(p32) if up else floor(p32)).cast[DType.float64]()
+    elif w.bits == 16:
+        var p16 = w.real.cast[DType.float16]() * Float64(n).cast[DType.float16]()
+        v = (ceil(p16) if up else floor(p16)).cast[DType.float64]()
+    else:
+        var p64 = w.real * Float64(n)
+        v = ceil(p64) if up else floor(p64)
+    if isinf(v):
+        raise Error("OverflowError: cannot convert float infinity to integer")
+    if isnan(v):
+        raise Error("ValueError: cannot convert float NaN to integer")
+    return Int(v)
+
+
+def msel_shuffle_sizes_run(n: Int, test: MselSizeWord, train: MselSizeWord, sum_over: Bool,
+                           sum_text: String) raises -> Tuple[Int, Int]:
+    """`_validate_shuffle_split` (lane mf-split5: ONE body, the public door's
+    and a member fit's): (n_train, n_test) of n rows with its refusals in
+    the door's words and order. `test` is the size after the default
+    substitution UNPACK made (both None: the splitter's default test size);
+    `sum_over` / `sum_text`: whether two real sizes add up past 1 and their
+    sum's `str` (both independent of n, read by UNPACK)."""
+    if ((test.kind == MSEL_SIZE_INT and (test.whole >= n or test.whole <= 0))
+            or (test.kind == MSEL_SIZE_REAL and not (0.0 < test.real and test.real < 1.0))):
+        raise Error("test_size=" + test.text + " should be either positive and smaller than the number of "
+                    + "samples " + String(n) + " or a float in the (0, 1) range")
+    if ((train.kind == MSEL_SIZE_INT and (train.whole >= n or train.whole <= 0))
+            or (train.kind == MSEL_SIZE_REAL and not (0.0 < train.real and train.real < 1.0))):
+        raise Error("train_size=" + train.text + " should be either positive and smaller than the number "
+                    + "of samples " + String(n) + " or a float in the (0, 1) range")
+    if train.kind == MSEL_SIZE_BAD:
+        raise Error("Invalid value for train_size: expected a native numeric size")
+    if test.kind == MSEL_SIZE_BAD:
+        raise Error("Invalid value for test_size: expected a native numeric size")
+    if train.kind == MSEL_SIZE_REAL and test.kind == MSEL_SIZE_REAL and sum_over:
+        raise Error("The sum of test_size and train_size = " + sum_text
+                    + ", should be in the (0, 1) range. Reduce test_size and/or train_size.")
+    var n_test = 0
+    var n_train = 0
+    if test.kind == MSEL_SIZE_REAL:
+        n_test = _size_product(test, n, True)
+    else:
+        n_test = test.whole
+    if train.kind == MSEL_SIZE_REAL:
+        n_train = _size_product(train, n, False)
+    else:
+        n_train = train.whole
+    if train.kind == MSEL_SIZE_NONE:
+        n_train = n - n_test
+    elif test.kind == MSEL_SIZE_NONE:
+        n_test = n - n_train
+    var total = n_train + n_test
+    if total > n:
+        raise Error("The sum of train_size and test_size = " + String(total) + ", should be smaller than "
+                    + "the number of samples " + String(n) + ". Reduce test_size and/or train_size.")
+    if n_train == 0:
+        raise Error("With n_samples=" + String(n) + ", test_size=" + test.text + " and train_size="
+                    + train.text + ", the resulting train set will be empty. Adjust any of the "
+                    + "aforementioned parameters.")
+    return (n_train, n_test)
+
+
 # ---------------------------------------------------------------- the rows
 
 
@@ -922,5 +1098,8 @@ def msel_split_fill(route: MselSplitRoute, mut plan: MselSplitPlan) raises:
                 raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
     elif plan.form == MSEL_FILL_STRAT_SHUFFLE:
         _fill_strat_shuffle(route, plan)
+    elif plan.form == MSEL_FILL_LEAVE_ONE:
+        for s in range(splits):  # driver-loop: over splits (one helper call each, the door's per-split call)
+            msel_leave_one(route, n, s, plan.train_dst[s], plan.test_dst[s])
     elif splits != 0:
         raise Error("RuntimeError: mojolearn: a split plan has no fill form")
