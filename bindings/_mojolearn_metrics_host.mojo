@@ -97,6 +97,12 @@ from core.neighbors_entry_table import NeighborsEntryKey
 from core.neighbors_entry_table_umap import UMAP_OP_FIT, UMAP_OP_FIT_EX, UMAP_OP_TRANSFORM, umap_ops_publish
 from umap.ops_entry_host import UMAP_OPS_HOST_API, umap_ops_host_v1, umap_ops_host_words
 from bindings.py_balanced import py_setattr
+from metrics.host.cluster_entry_host import METRICS_CLUSTER_HOST_API, metrics_cluster_host_run, metrics_cluster_host_v1
+from core.metrics_cluster_table import (
+    CLUSTER_OP_RAND, CLUSTER_OP_ADJUSTED_RAND, CLUSTER_OP_MUTUAL_INFO, CLUSTER_OP_HOMOGENEITY,
+    CLUSTER_OP_COMPLETENESS, CLUSTER_OP_V_MEASURE, CLUSTER_OP_FOWLKES_MALLOWS, CLUSTER_OP_HCV,
+    ClusterFloatPtr, cluster_ops_publish,
+)
 from metrics.host.metrics_oracle import (
     METRICS_ORACLE_HOST_SABOTAGE,
     host_accuracy_score,
@@ -166,6 +172,23 @@ def _want(name: String, params: PythonObject, k: Int) raises:
             name + ": params must contain " + String(k) + " values, got "
             + String(len(params))
         )
+
+def _cluster_export(operation: Int, y_true_addr: PythonObject, y_pred_addr: PythonObject, n: Int, lower: Int,
+                    upper: Int, beta: Float64) raises -> PythonObject:
+    """The cluster label-pair exports (lane mf-cluster5): THE ONE BODY the
+    table entry runs (metrics_cluster_host_run), with the GIL released
+    around it as the exports released it; `homogeneity_completeness_v_measure`
+    answers its three values as a tuple."""
+    var yt = _index(y_true_addr)
+    var yp = _index(y_pred_addr)
+    var out = List[Float64](length=3, fill=0.0)
+    var dst = ClusterFloatPtr(unsafe_from_address=Int(out.unsafe_ptr()))
+    var count = 0
+    with GILReleased(Python()):
+        count = metrics_cluster_host_run(operation, yt, yp, n, lower, upper, beta, dst)
+    if count == 3:
+        return Python.tuple(PythonObject(out[0]), PythonObject(out[1]), PythonObject(out[2]))
+    return PythonObject(out[0])
 
 
 def metrics_host_numeric_mode_binding() raises -> PythonObject:
@@ -256,13 +279,10 @@ def adjusted_rand_score_binding(
     `params`: `0 n`."""
     _want(String("adjusted_rand_score"), params, 1)
     var n = _index(params[0])
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
-    var out = Float64(0.0)
-    with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        out = host_adjusted_rand_score(yt, yp, n)
-    return PythonObject(out)
+    var lower = 0
+    var upper = 0
+    var beta = 0.0
+    return _cluster_export(CLUSTER_OP_ADJUSTED_RAND, y_true_addr, y_pred_addr, n, lower, upper, beta)
 
 
 def entropy_binding(
@@ -294,17 +314,10 @@ def mutual_info_score_binding(
     `0 n, 1 lower_class_range, 2 upper_class_range`."""
     _want(String("mutual_info_score"), params, 3)
     var n = _index(params[0])
-    var lower = Int32(_index(params[1]))
-    var upper = Int32(_index(params[2]))
-    var yt = i32_ptr(_index(y_true_addr))
-    var yp = i32_ptr(_index(y_pred_addr))
-    var out = Float64(0.0)
-    with GILReleased(Python()):
-        if n <= 0:
-            raise Error("metrics: n must be positive, got " + String(n))
-        _check_range(lower, upper)
-        out = host_mutual_info_ptr(yt, yp, n, lower, upper)
-    return PythonObject(out)
+    var lower = _index(params[1])
+    var upper = _index(params[2])
+    var beta = 0.0
+    return _cluster_export(CLUSTER_OP_MUTUAL_INFO, y_true_addr, y_pred_addr, n, lower, upper, beta)
 
 
 def accuracy_score_weighted_binding(
@@ -354,15 +367,10 @@ def fowlkes_mallows_score_binding(
     lower_class_range, 2 upper_class_range`."""
     _want(String("fowlkes_mallows_score"), params, 3)
     var n = _index(params[0])
-    var lower = Int32(_index(params[1]))
-    var upper = Int32(_index(params[2]))
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
-    var out = Float64(0.0)
-    with GILReleased(Python()):
-        # the body admits its inputs, as the device body does (lane r3-small)
-        out = host_fowlkes_mallows(yt, yp, n, lower, upper)
-    return PythonObject(out)
+    var lower = _index(params[1])
+    var upper = _index(params[2])
+    var beta = 0.0
+    return _cluster_export(CLUSTER_OP_FOWLKES_MALLOWS, y_true_addr, y_pred_addr, n, lower, upper, beta)
 
 
 def homogeneity_score_binding(
@@ -374,16 +382,10 @@ def homogeneity_score_binding(
     lower_class_range, 2 upper_class_range`."""
     _want(String("homogeneity_score"), params, 3)
     var n = _index(params[0])
-    var lower = Int32(_index(params[1]))
-    var upper = Int32(_index(params[2]))
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
-    var out = Float64(0.0)
-    with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        _check_range(lower, upper)
-        out = host_homogeneity_score(yt, yp, n, lower, upper)
-    return PythonObject(out)
+    var lower = _index(params[1])
+    var upper = _index(params[2])
+    var beta = 0.0
+    return _cluster_export(CLUSTER_OP_HOMOGENEITY, y_true_addr, y_pred_addr, n, lower, upper, beta)
 
 
 def completeness_score_binding(
@@ -396,16 +398,10 @@ def completeness_score_binding(
     upper_class_range`."""
     _want(String("completeness_score"), params, 3)
     var n = _index(params[0])
-    var lower = Int32(_index(params[1]))
-    var upper = Int32(_index(params[2]))
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
-    var out = Float64(0.0)
-    with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        _check_range(lower, upper)
-        out = host_homogeneity_score(yp, yt, n, lower, upper)
-    return PythonObject(out)
+    var lower = _index(params[1])
+    var upper = _index(params[2])
+    var beta = 0.0
+    return _cluster_export(CLUSTER_OP_COMPLETENESS, y_true_addr, y_pred_addr, n, lower, upper, beta)
 
 
 def v_measure_score_binding(
@@ -417,17 +413,10 @@ def v_measure_score_binding(
     `0 n, 1 lower_class_range, 2 upper_class_range, 3 beta (float)`."""
     _want(String("v_measure_score"), params, 4)
     var n = _index(params[0])
-    var lower = Int32(_index(params[1]))
-    var upper = Int32(_index(params[2]))
+    var lower = _index(params[1])
+    var upper = _index(params[2])
     var beta = Float64(py=params[3])
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
-    var out = Float64(0.0)
-    with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        _check_range(lower, upper)
-        out = host_v_measure(yt, yp, n, lower, upper, beta)
-    return PythonObject(out)
+    return _cluster_export(CLUSTER_OP_V_MEASURE, y_true_addr, y_pred_addr, n, lower, upper, beta)
 
 
 def homogeneity_completeness_v_measure_binding(
@@ -442,20 +431,10 @@ def homogeneity_completeness_v_measure_binding(
     upper_class_range, 3 beta (float)`."""
     _want(String("homogeneity_completeness_v_measure"), params, 4)
     var n = _index(params[0])
-    var lower = Int32(_index(params[1]))
-    var upper = Int32(_index(params[2]))
+    var lower = _index(params[1])
+    var upper = _index(params[2])
     var beta = Float64(py=params[3])
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
-    var h = Float64(0.0)
-    var c = Float64(0.0)
-    var v = Float64(0.0)
-    with GILReleased(Python()):
-        var hcv = homogeneity_completeness_v_measure_run(yt, yp, n, lower, upper, beta)
-        h = hcv[0]
-        c = hcv[1]
-        v = hcv[2]
-    return Python.tuple(PythonObject(h), PythonObject(c), PythonObject(v))
+    return _cluster_export(CLUSTER_OP_HCV, y_true_addr, y_pred_addr, n, lower, upper, beta)
 
 
 # ===========================================================================
@@ -847,13 +826,10 @@ def rand_score_binding(
     `0 n`."""
     _want(String("rand_score"), params, 1)
     var n = _index(params[0])
-    var yt = read_i32(_index(y_true_addr), max(0, n))
-    var yp = read_i32(_index(y_pred_addr), max(0, n))
-    var out = Float64(0.0)
-    with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        out = host_rand_score(yt, yp, n)
-    return PythonObject(out)
+    var lower = 0
+    var upper = 0
+    var beta = 0.0
+    return _cluster_export(CLUSTER_OP_RAND, y_true_addr, y_pred_addr, n, lower, upper, beta)
 
 
 def _regression_error_entry(
@@ -1172,6 +1148,13 @@ def _publish_umap_ops(module: PythonObject) raises:
     py_setattr(module, "umap_native_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
     # UMAP's member entry (core/manifold_member.mojo, family 33): its fit and transform run on this table.
     manifold_member_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(api[].entries.unsafe_ptr()))
+    # THE CLUSTER LABEL-PAIR METRICS TABLE (lane mf-cluster5, core/metrics_cluster_table.mojo):
+    # rand / adjusted rand / mutual information / homogeneity / completeness / v-measure /
+    # Fowlkes-Mallows, the bodies the exports above run; the public doors and the search scorers'
+    # RUN read the key from `metrics_cluster_key` and resolve the entry once.
+    var cluster_api = METRICS_CLUSTER_HOST_API.get_or_create_ptr()
+    cluster_ops_publish(Int(GLOBAL_NUMERIC_MODE), 0, Int(cluster_api[].entries.unsafe_ptr()), metrics_cluster_host_v1)
+    py_setattr(module, "metrics_cluster_key", Python.tuple(PythonObject(Int(GLOBAL_NUMERIC_MODE)), PythonObject(0)))
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_metrics_host.mojo
