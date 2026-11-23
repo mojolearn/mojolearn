@@ -56,7 +56,7 @@
 from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from bindings.member_boundary_door import member_admit_serving, member_pack, member_pack_labeled
+from bindings.member_boundary_door import member_admit_serving_valued, member_pack, member_pack_labeled
 from bindings.member_fit_notices_pack import member_fit_notices_raise
 from bindings.member_owner_unpack import MemberOwner
 from bindings.member_set_door import MEMBER_SET_NATIVE
@@ -744,7 +744,10 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
         var member_context = plan["context"]
         var fields_get = plan["fields_get"]
         var fields = py_call(fields_get, template, py_type(template))
-        var owner = member_admit_serving(template, fields, plan, member_context, b, needs)
+        # A classifier's class_weight dict is keyed by the step's values,
+        # read into the KEYED tail here (lane mf-adm3); each step makes its
+        # table over its classes (x_prep/iterimp_run.mojo `_member_step`).
+        var owner = member_admit_serving_valued(template, fields, plan, member_context, b, needs)
         if not owner.published:
             return out^
         if posterior and not _posterior_family(owner.plan.family):

@@ -25,6 +25,12 @@ the tail layout and the family steps).
     words here, before any fit, as each fold's own fit would.
     False: a pending tail and no labels (a caller that does not hand them
     over keeps its own path for such an estimator, as before).
+  * `member_cw_fill_keyed` (the UNPACK of a caller whose class labels are
+    its target's numeric values, known only in RUN: IterativeImputer's
+    classifier steps): the pending tail becomes the KEYED tail, each entry's
+    weight read by the same family admission over the dict's own keys (so
+    no key is absent there). False (the caller's own path) for a key that is
+    not an exact int, float or bool.
 
 SERIAL BY NATURE: one dictionary read per member admission (a few entries).
 """
@@ -42,6 +48,7 @@ from bindings.svc_common_unpack import svc_float
 from bindings.x_linear_common_unpack import xl_class_weights_unpack
 from core.member_class_weight import (
     MEMBER_CW_NONE, MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_start, member_cw_pending, member_cw_table_words,
+    member_cw_keyed_words,
 )
 from core.member_families import (
     MEMBER_FAMILY_LOGISTIC, MEMBER_FAMILY_XLINEAR, MEMBER_FAMILY_SGD, MEMBER_FAMILY_LINEAR_SVM,
@@ -91,13 +98,53 @@ def member_cw_fill(mut owner: MemberOwner, model: PythonObject, fields: PythonOb
     if labels is None:
         return False
     var class_weight = py_get(fields, PythonObject("class_weight"), PythonObject(None))
-    var family = owner.plan.family
     var listed = py_call(b.list, labels)
     var values = List[Float64]()
+    if not _dict_values(owner.plan.family, model, class_weight, listed, context, b, values):
+        return False
+    var named = List[Bool](length=len(values), fill=False)
+    for c in range(len(values)):  # driver-loop: over the caller's classes (one dict lookup each)
+        named[c] = py_contains(class_weight, listed[c])
+    member_cw_table_words(owner.plan.params, start, values, named)
+    _ = listed
+    return True
+
+
+def member_cw_fill_keyed(mut owner: MemberOwner, model: PythonObject, fields: PythonObject, context: PythonObject,
+    b: PythonObject) raises -> Bool:
+    """The UNPACK of a caller whose labels are its target's values (module
+    note): True when the words are complete (no tail, 'balanced', or the
+    KEYED tail now read); False for a key that is not an exact int, float
+    or bool, or a family this does not read. Raises the estimator's own
+    words for a dict value it refuses."""
+    var start = member_cw_start(owner.plan.family, owner.plan.kind, owner.plan.params)
+    if not member_cw_pending(owner.plan.params, start):
+        return True
+    var class_weight = py_get(fields, PythonObject("class_weight"), PythonObject(None))
+    var keys = py_call(b.list, class_weight)
+    var numbers = List[Float64](capacity=len(keys))
+    for e in range(len(keys)):  # driver-loop: over the dict's keys (exact native numbers only)
+        var kind = py_type(keys[e])
+        if kind is not b.int and kind is not b.float and kind is not b.bool:
+            return False
+        numbers.append(Float64(py=py_call(b.float, keys[e])))
+    var values = List[Float64]()
+    if not _dict_values(owner.plan.family, model, class_weight, keys, context, b, values):
+        return False
+    member_cw_keyed_words(owner.plan.params, start, numbers, values)
+    _ = keys
+    return True
+
+
+def _dict_values(family: Int, model: PythonObject, class_weight: PythonObject, var listed: PythonObject,
+    context: PythonObject, b: PythonObject, mut values: List[Float64]) raises -> Bool:
+    """The dict's weights over `listed` (labels in code order), in the
+    family's own admission and words (module note). False: a family that
+    takes no class_weight dict."""
     if family == MEMBER_FAMILY_LOGISTIC:
         var scope = labels_scope(model, context)
         class_weight_admit_dictionary(class_weight, scope)
-        listed = classifier_label_list(labels, scope)
+        listed = classifier_label_list(listed, scope)
         var inputs = class_weight_dictionary_values(class_weight, listed, scope)
         values = inputs.values.copy()
         _ = inputs^
@@ -118,9 +165,5 @@ def member_cw_fill(mut owner: MemberOwner, model: PythonObject, fields: PythonOb
         _ = words  # keep the words' owner alive through the reads above
     else:
         return False
-    var named = List[Bool](length=len(values), fill=False)
-    for c in range(len(values)):  # driver-loop: over the caller's classes (one dict lookup each)
-        named[c] = py_contains(class_weight, listed[c])
-    member_cw_table_words(owner.plan.params, start, values, named)
     _ = listed
     return True

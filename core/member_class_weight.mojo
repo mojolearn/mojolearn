@@ -25,6 +25,15 @@ Now:
     `cal_fold_classes_run`) narrows the table to those classes
     (`member_cw_subset`); a named class the fit does not hold is the
     refusal the estimator's own fit raises for a key absent from its y.
+  * a dict whose labels are the target's own numeric VALUES, known only in
+    RUN (an IterativeImputer classifier step: its classes are the step's
+    distinct values, x_prep/iterimp_run.mojo `iterimp_class_values`) is
+    read at UNPACK into a KEYED tail, one (key, weight) pair per dict entry
+    in the estimator's own conversion (`member_cw_fill_keyed`); the step
+    turns it into the table over its classes (`member_cw_from_values`): a
+    class matches the key equal to its value (Python's numeric `==` of the
+    key and the float32 label: one float64 compare), and a key no class
+    matches is the absent refusal.
 
 THE TAIL, appended to the family's NEW words at `member_cw_start(...)`:
   [0] mode (MEMBER_CW_BALANCED, MEMBER_CW_DICT); [1] K, the table's class
@@ -69,6 +78,8 @@ from core.member_families import (
 comptime MEMBER_CW_NONE = 0
 comptime MEMBER_CW_BALANCED = 1
 comptime MEMBER_CW_DICT = 2
+#: A dict keyed by the target's values: [3, P, 0, (key, weight) x P].
+comptime MEMBER_CW_KEYED = 3
 #: Words before the per-class table: mode, K, absent.
 comptime MEMBER_CW_HEAD = 3
 #: Words per class of the table: weight, named.
@@ -179,10 +190,61 @@ def member_cw_subset(mut plan: MemberPlan, present: List[Int32]):
     plan.params = words^
 
 
+def member_cw_keyed_words(mut params: List[Float64], start: Int, keys: List[Float64], values: List[Float64]):
+    """UNPACK: replace the tail at `start` by a KEYED tail (module note)."""
+    var words = List[Float64](capacity=start + MEMBER_CW_HEAD + MEMBER_CW_PER_CLASS * len(keys))
+    for i in range(start):  # driver-loop: over the family's own NEW words (kept)
+        words.append(params[i])
+    words.append(Float64(MEMBER_CW_KEYED))
+    words.append(Float64(len(keys)))
+    words.append(0.0)
+    for e in range(len(keys)):  # driver-loop: over the dict's entries (one pair each)
+        words.append(keys[e])
+        words.append(values[e])
+    params = words^
+
+
+def member_cw_from_values(mut plan: MemberPlan, classes: List[Float32]):
+    """RUN, before a fit whose classes are the target's values `classes`
+    (ascending, code order): a KEYED tail becomes the dict table over them
+    (module note). Anything else: nothing. Never raises."""
+    var start = member_cw_start(plan.family, plan.kind, plan.params)
+    if member_cw_mode(plan.params, start) != MEMBER_CW_KEYED:
+        return
+    var entries = Int(plan.params[start + 1])
+    var k = len(classes)
+    var matched = List[Bool](length=max(entries, 0), fill=False)
+    var words = List[Float64](capacity=start + MEMBER_CW_HEAD + MEMBER_CW_PER_CLASS * k)
+    for i in range(start):  # driver-loop: over the family's own NEW words (kept)
+        words.append(plan.params[i])
+    words.append(Float64(MEMBER_CW_DICT))
+    words.append(Float64(k))
+    words.append(0.0)
+    for c in range(k):  # driver-loop: over the step's classes (one key search each; a dict is short)
+        var value = 1.0
+        var named = 0.0
+        var label = Float64(classes[c])
+        for e in range(entries):  # driver-loop: over the dict's entries
+            if plan.params[start + MEMBER_CW_HEAD + MEMBER_CW_PER_CLASS * e] == label:
+                value = plan.params[start + MEMBER_CW_HEAD + MEMBER_CW_PER_CLASS * e + 1]
+                named = 1.0
+                matched[e] = True
+                break
+        words.append(value)
+        words.append(named)
+    for e in range(entries):  # driver-loop: over the dict's entries (a key no class holds)
+        if not matched[e]:
+            words[start + 2] = 1.0
+    plan.params = words^
+
+
 def member_cw_dict_ready(params: List[Float64], start: Int, classes: Int, absent: String) raises:
     """FIT: a dict table that this fit can read: filled at UNPACK, one entry
     per class of the fit, and naming no class the fit's rows lack (else
     `absent`, the estimator's own words for a key absent from its y)."""
+    if Int(params[start]) == MEMBER_CW_KEYED:
+        raise Error("TypeError: mojolearn: a member with a class_weight dict keyed by its target's values is "
+            + "fitted only by a caller that turns it into its step's table")
     var k = Int(params[start + 1])
     if k < 0:
         raise Error("TypeError: mojolearn: a member with a class_weight dict is fitted only by a caller that "

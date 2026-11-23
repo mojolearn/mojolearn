@@ -17,6 +17,7 @@ each once and runs them on its own workers.
 from std.python import PythonObject
 from bindings.member_owner_unpack import MemberOwner, member_mark, member_labels_hold, member_labels_take
 from bindings.py_balanced import py_setitem
+from bindings.member_class_weight_unpack import member_cw_fill_keyed
 from core.member_abi import MemberPlan, member_resolve_family, MEMBER_CAN_FIT
 from core.member_class_weight import member_cw_start, member_cw_pending
 from core.member_families import (
@@ -257,6 +258,27 @@ def member_admit_serving_labeled(model: PythonObject, fields: PythonObject, plan
             if member_cw_pending(owner.plan.params, member_cw_start(owner.plan.family, owner.plan.kind,
                                                                     owner.plan.params)):
                 owner.published = False
+        return owner^
+    except:
+        return MemberOwner()
+
+
+def member_admit_serving_valued(model: PythonObject, fields: PythonObject, plan: PythonObject,
+    context: PythonObject, b: PythonObject, needs: Int) -> MemberOwner:
+    """`member_admit_serving` for a FIT caller whose class labels are its
+    target's numeric values, known only in its RUN (IterativeImputer's
+    classifier steps): a class_weight dict is read into the KEYED tail here
+    (bindings/member_class_weight_unpack.mojo `member_cw_fill_keyed`), which
+    each step turns into its own table (core/member_class_weight.mojo
+    `member_cw_from_values`). Anything the fill does not read (a key that is
+    not an exact number, a value its family refuses) is the fallback, whose
+    path raises the estimator's own words (lane mf-adm3)."""
+    try:
+        var owner = member_admit(model, fields, plan, context, b)
+        if owner.published and not owner.plan.member.has(needs):
+            owner.published = False
+        if owner.published and not member_cw_fill_keyed(owner, model, fields, context, b):
+            owner.published = False
         return owner^
     except:
         return MemberOwner()

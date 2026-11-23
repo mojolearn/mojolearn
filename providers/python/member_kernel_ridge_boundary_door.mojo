@@ -10,9 +10,10 @@ providers/python/member_linear_boundary_door.mojo). Kind 0 is KernelRidge
     check (`km_extension`: the binary's compile-time mode must be the one
     requested), the provider table in the route's entry slot, its
     capability word in `route.flags`, and the 6 parameter words of
-    core/kernel_ridge_member.mojo. `fast` (no provider) and
-    kernel='precomputed' are not published: admit returns False and the
-    caller keeps the estimator's own doors.
+    core/kernel_ridge_member.mojo (kernel='precomputed' among them since
+    lane mf-adm3). An image without the described provider (`fast`, or a
+    binary built before the descriptor) is not published: admit returns
+    False and the caller keeps the estimator's own doors.
   * `kernel_ridge_member_pack` (PACK): the fitted attributes the estimator's
     own fit writes (`km_krr_fit_pack`, `kernel_public_fit_complete`), from
     the member state's blocks. A one-column y is packed 1-D (`_squeeze`).
@@ -29,7 +30,6 @@ from bindings.family_common_pack import family_field
 from bindings.kernel_methods_boundary_pack import km_krr_public, km_matrix, km_krr_fit_pack
 from bindings.kernel_methods_boundary_unpack import (
     KmRoute, KmUnpacked, km_extension, km_int, _km_kernel_code, _km_degree, _km_real, _km_params,
-    KM_KERNEL_PRECOMPUTED,
 )
 from bindings.member_owner_unpack import MemberOwner
 from bindings.py_balanced import py_call
@@ -58,13 +58,11 @@ def kernel_ridge_member_admit(model: PythonObject, fields: PythonObject, kind: I
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
     from the unfitted estimator. False: this configuration has no member
-    entry (`fast`, kernel='precomputed')."""
+    entry (no described provider)."""
     if kind != 0:
         raise Error("ValueError: mojolearn: unknown KernelRidge member kind " + String(kind))
     # The estimator's own checks, in its fit's order (`km_krr_fit_unpack`).
     var kernel = _km_kernel_code(family_field(fields, "kernel"), _WHERE, True)
-    if kernel == KM_KERNEL_PRECOMPUTED:
-        return False
     # An explicit Host* class (its own host-only word, lane mf-iterimp3b): the host image its own methods
     # bind (`estimator_member_binding`); any other class: the estimator's binding route, as before.
     var binding = estimator_member_binding(model, "_mojolearn_kernel_methods", context)
