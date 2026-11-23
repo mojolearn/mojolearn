@@ -26,6 +26,59 @@ def _device_values(device, expected):
     return actual
 
 
+# The Sequential layers added 2026-11-22 (lanes seq-blocks*, neural-blocks*): one bounded fixture per layer
+# method, (sample shape, build). Each builds a two-sample model with the layer, ends it in flatten + linear(1)
+# (lm_head ends itself), fits one epoch of one full unshuffled batch with SGD and returns the predictions of the
+# fitted model, so the record holds the layer's forward, backward and update in one output.
+SEQUENTIAL_LAYER_FIXTURES={
+    'conv1d':((2,4),lambda m,S:m.conv1d(2,3,padding=1)),
+    'max_pool1d':((2,4),lambda m,S:m.max_pool1d(2)),
+    'avg_pool1d':((2,4),lambda m,S:m.avg_pool1d(2)),
+    'adaptive_avg_pool1d':((2,4),lambda m,S:m.adaptive_avg_pool1d(2)),
+    'branch':((4,),lambda m,S:m.linear(3).tanh().branch(0)),
+    'concat':((4,),lambda m,S:m.linear(2).linear(3).concat([0,1])),
+    'residual_block':((4,),lambda m,S:m.residual_block(S().linear(4).tanh())),
+    'parallel':((2,4),lambda m,S:m.parallel(S().conv1d(2,1),S().conv1d(3,3,padding=1))),
+    'gated':((4,),lambda m,S:m.gated(S().linear(4).silu(),S().linear(4))),
+    'silu':((4,),lambda m,S:m.linear(4).silu()),
+    'gelu':((4,),lambda m,S:m.linear(4).gelu()),
+    'softplus':((4,),lambda m,S:m.linear(4).softplus()),
+    'rms_norm':((4,),lambda m,S:m.linear(4).rms_norm()),
+    'rotary':((2,4),lambda m,S:m.rotary(4)),
+    'multiply':((4,),lambda m,S:m.linear(4).multiply(-1)),
+    'narrow':((2,4),lambda m,S:m.narrow(1,1,2)),
+    'embedding':((3,),lambda m,S:m.embedding(5,2)),
+    'attention':((4,8),lambda m,S:m.attention(2)),
+    'lstm':((3,2),lambda m,S:m.lstm(3)),
+    'gru':((3,2),lambda m,S:m.gru(3)),
+    'rnn':((3,2),lambda m,S:m.rnn(3)),
+    'batch_norm1d':((2,4),lambda m,S:m.batch_norm1d(2)),
+    'batch_norm2d':((1,2,2),lambda m,S:m.batch_norm2d(1)),
+    'selective_scan':((4,3),lambda m,S:m.linear(12).softplus().selective_scan(4)),
+    'ssd_scan':((4,2),lambda m,S:m.linear(321).softplus().ssd_scan(1)),
+    'trapezoid_scan':((4,3),lambda m,S:m.linear(30).trapezoid_scan(2,4)),
+    'lm_head':((3,),lambda m,S:m.embedding(5,4).lm_head(5)),
+}
+
+
+def _sequential_layer_fixture(np,cls,method):
+    shape,build=SEQUENTIAL_LAYER_FIXTURES[method]
+    size=int(np.prod(shape))
+    if method in ('embedding','lm_head'):
+        x=(np.arange(2*size,dtype=np.float32)%5).reshape((2,)+shape)      # ids 0..4, stored as floats
+    else:
+        x=((np.arange(2*size,dtype=np.float32)%7)-3).reshape((2,)+shape)/8
+    m=build(cls(input_shape=shape,numeric_mode='identical'),cls)
+    if method=='lm_head':
+        y=((np.arange(2*size,dtype=np.int32)+1)%5).reshape(2,size)
+        m.compile(loss='token_cross_entropy',optimizer='sgd',lr=.125)
+    else:
+        y=np.array([.25,-.5],np.float32)
+        m.flatten().linear(1).compile(optimizer='sgd',lr=.125)
+    m.fit(x,y,epochs=1,batch_size=2,shuffle=False,seed=7)
+    return m.predict(x)
+
+
 def neural_checks(recorder,public,methods):
     import numpy as np
     import mojolearn as ml
@@ -110,6 +163,8 @@ def neural_checks(recorder,public,methods):
             m=cls(config,weights); ids=np.array([[0,1]],np.int32)
             if method=='load_weights':m.load_weights(weights)
             return getattr(m,method)(ids) if method in ('__call__','logits') else m.forward(ids)
+        if name=='Sequential' and method in SEQUENTIAL_LAYER_FIXTURES:
+            return _sequential_layer_fixture(np,cls,method)
         if name=='Sequential':
             m=cls(numeric_mode='identical')
             x=np.array([[.25,-.5],[.75,.125]],np.float32)
