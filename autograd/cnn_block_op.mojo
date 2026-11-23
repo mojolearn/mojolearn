@@ -50,7 +50,7 @@ Waits (lane fx-rnn-cnn-fit, 2026-11-19): the four device calls below pass
 `may_defer` (x_cnn/device.mojo entry_end). A session's arguments are its own
 device buffers and it reads nothing on the host before its own wait, so an
 op returns after its last launch (default since 2026-11-20, A/B round 3;
-`-D MOJOLEARN_CNN_FAST_OP_NOWAIT_OFF` makes every entry wait as before).
+the old every-entry wait was deleted 2026-11-23).
 
 A/B: `-D MOJOLEARN_CNN_GENERIC_OPS` captures tonight's generic chain
 (OPS_CONV2D, OPS_RELU, OPS_MAXPOOL2D, OPS_TRANSPOSE + OPS_LINEAR) instead;

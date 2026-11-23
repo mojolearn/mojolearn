@@ -33,7 +33,7 @@ from providers.python.operation_lock_pyapi_door import OperationLockLease, opera
 from bindings.py_model_records import bump_model_generation
 from bindings.torch_to_unpack import torch_to_device
 from providers.python.neural_descriptor_pyapi_door import (
-    neural_descriptor_reuse, NEURAL_NATIVE_DISPATCH,
+    neural_descriptor_reuse,
 )
 from providers.python.transformer_block_session_pyapi_door import (
     transformer_block_session_open, transformer_block_session_handle, transformer_block_session_serves,
@@ -352,9 +352,8 @@ def _neural_owner_runtime_names() -> List[String]:
 
 # `_neural_owner_env` (one getenv of MOJOLEARN_NEURAL_NATIVE_DISPATCH per
 # standalone block call, twice on a miss) and the owner record's env word are
-# gone: the dispatch is the build constant NEURAL_NATIVE_DISPATCH
-# (providers/python/neural_descriptor_pyapi_door.mojo; lane
-# flag-native-dispatch-gate). Record: [key, plan, derived, has_profile,
+# gone, and so is the build constant NEURAL_NATIVE_DISPATCH that replaced it
+# (deleted 2026-11-23, lane/ab-prep-neural: native dispatch is the one form). Record: [key, plan, derived, has_profile,
 # next_profile, changed, binding_key, uses_default].
 
 
@@ -1381,14 +1380,14 @@ def neural_training_selection(mut mods: NativeModules, fields: PythonObject, con
     # and bindings/mamba_public_native.mojo.
     if family == "transformer":
         var native = PythonObject(None)
-        if code == 1 and NEURAL_NATIVE_DISPATCH:
+        if code == 1:
             native = neural_descriptor_reuse(py_get(fields, "_native_block_provider_cache"),
                 _native_function(mods, entries, "transformer_block_api_v1"), String(TRANSFORMER_BLOCK_ABI_NAME), 36)
             mods.released()
         py_setitem(fields, "_native_block_provider_cache", native)
     else:
         var native = PythonObject(None)
-        if code == 1 and NEURAL_NATIVE_DISPATCH:
+        if code == 1:
             native = neural_descriptor_reuse(py_get(fields, "_native_mamba_block_provider_cache"),
                 _native_function(mods, entries, "mamba_block_api_v1"), String(MAMBA_BLOCK_ABI_NAME), 44)
             mods.released()
@@ -1836,14 +1835,14 @@ def neural_block_setstate_binding(mut mods: NativeModules, block: PythonObject, 
     if mode is None:
         mode = _native_entry_fields(mods, context["backend"])["_DEFAULT_MODE"]
     var runs_identical = word_runs_identical(String(mode), MODE_FAMILY_NEURAL)  # lane fx-fast-mask: an answered `fast` restores the identical route
-    if runs_identical and NEURAL_NATIVE_DISPATCH:
+    if runs_identical:
         py_setitem(fields, "_runtime_lock", operation_lock_create())
         mods.released()
     else:
         py_setitem(fields, "_runtime_lock", context["rlock"]())
         mods.released()
     var session = PythonObject(None)
-    if String(fields["_native_route"]) == "gpu" and runs_identical and NEURAL_NATIVE_DISPATCH:
+    if String(fields["_native_route"]) == "gpu" and runs_identical:
         # A native registry handle of the block's GPU image (lane
         # transformer-session-native; the former `transformer_session_create`).
         var bindings = _model_bindings(mods, fields["_native_route"], "transformer", context, mode)

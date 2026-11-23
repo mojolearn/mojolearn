@@ -7,7 +7,6 @@
 # provider id word (`neural_descriptor_provider_id`).
 from std.ffi import c_int
 from std.collections import Dict
-from std.sys import is_defined
 from std.python import Python, PythonObject
 from bindings.native_owner_registry_pack import borrowed_native_owner
 from std.python._cpython import GILReleased, PyObjectPtr
@@ -37,10 +36,11 @@ from core.neural_descriptor_run import (
 # (and Samba's resident forward found no primitive provider: 280f95c150). Both
 # arms run the same numerical functions with the same words
 # (experiments/neural_native_dispatch_20261027/README.md): no bit change.
-# B arm `-D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF`: the by-name CPython entry
-# calls (RUN OWED, bench/results/paper_compare/owed-pre0867.json
-# "neural-native-dispatch-off"; docs/apple-fast/EXPERIMENTS.md).
-comptime NEURAL_NATIVE_DISPATCH = not is_defined["MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF"]()
+# The B arm (the by-name CPython entry calls) and the build constant
+# NEURAL_NATIVE_DISPATCH that selected it are deleted: native dispatch is the
+# one form.
+# TOMBSTONE: MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF (removed without measurement: plumbing, rule 2026-11-22; the by-name CPython entry calls ran the same compiled entries with the same words) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF.patch; record in docs/TOMBSTONES.md.
 
 struct NeuralDescriptorProvider(Movable, Writable):
     # Door-side pins only: the compiled module, its capsule (which borrows the
@@ -472,9 +472,9 @@ def neural_descriptor_cached(
     if py_contains(fields, slot) and py_get(fields, binding_key) is canonical:
         return fields[slot]
     # The `<slot>_enabled` field that captured MOJOLEARN_NEURAL_NATIVE_DISPATCH
-    # per owner is gone: the dispatch is the build's (NEURAL_NATIVE_DISPATCH).
+    # per owner is gone, and so is the build switch that replaced it.
     var result = PythonObject(None)
-    if NEURAL_NATIVE_DISPATCH and eligible:
+    if eligible:
         var mode_name = "training_numeric_mode" if factory == "neural_primitives_api_v1" else "mamba_numeric_mode"
         var mode_entry = py_get(entry_fields, mode_name)
         if py_type(mode_entry) is not py_type(bi.len):

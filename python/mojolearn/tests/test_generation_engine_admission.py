@@ -48,6 +48,6 @@ def test_default_dispatch_constructs_native_engine_owners(tmp_path):
 # test_explicit_dispatch_opt_out_keeps_auto_legacy_route and
 # test_forced_engine_does_not_swallow_explicit_opt_out set
 # MOJOLEARN_NEURAL_NATIVE_DISPATCH=0 at run time. Native dispatch is now a build
-# constant (lane flag-native-dispatch-gate, 2026-11-15): their opt-out arm is
-# the -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF build, an A/B arm, not a runtime
-# route, so no process of the default build can reach it.
+# constant (lane flag-native-dispatch-gate, 2026-11-15) and, since 2026-11-23,
+# the one form: the -D MOJOLEARN_NEURAL_NATIVE_DISPATCH_OFF opt-out arm is
+# deleted, so no build can reach it.

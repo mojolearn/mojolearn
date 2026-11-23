@@ -25,7 +25,7 @@ from bindings.neural_block_admission_door import admit_block_f32, BLOCK_OPERATIO
 from providers.python.borrowed_buffer_pyapi_unpack import AdmittedBorrowedBuffer, admit_native_buffer_exporter
 from core.native_descriptor_abi import MAMBA_STATE_ABI_NAME
 from core.device_route import DEVICE_INSTALL, device_code, device_name, device_installed
-from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cached, NEURAL_NATIVE_DISPATCH
+from providers.python.neural_descriptor_pyapi_door import neural_descriptor_cached
 from core.hostptr import f32_ptr
 from transformer.causal_lm_construct_impl import causal_lm_gather_f32, causal_lm_check_finite
 from std.python._cpython import GILReleased
@@ -613,14 +613,14 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
         py_setitem(fields, nk[].k__opts_tail, py_ints(words.tail))
         py_setitem(fields, nk[].k__extended, PythonObject(words.extended))
         py_setitem(fields, nk[].k__gated, PythonObject(gated))
-        if String(py_item(fields, nk[].k_numeric_mode)) == "identical" and NEURAL_NATIVE_DISPATCH:
+        if String(py_item(fields, nk[].k_numeric_mode)) == "identical":
             py_setitem(fields, nk[].k__runtime_lock, operation_lock_create())
             mods.released()
         else:
             py_setitem(fields, nk[].k__runtime_lock, py_item(context, nk[].k_rlock)())
             mods.released()
         var session = PythonObject(None)
-        if String(route) == "gpu" and String(py_item(fields, nk[].k_numeric_mode)) == "identical" and NEURAL_NATIVE_DISPATCH:
+        if String(route) == "gpu" and String(py_item(fields, nk[].k_numeric_mode)) == "identical":
             # The block's session: a native registry handle of its GPU
             # Transformer image, created through the block entry of the neural
             # table (core/transformer_block_session.mojo; lane
@@ -683,7 +683,7 @@ def _model_block(mut mods: NativeModules, weights: PythonObject, input_plan: Pyt
             _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(mods, base[i], quantize_key))
         py_setitem(fields, nk[].k__int15, planes)
     if kind == "mamba3":
-        if String(route) == "gpu" and String(py_item(fields, nk[].k_numeric_mode)) == "identical" and NEURAL_NATIVE_DISPATCH:
+        if String(route) == "gpu" and String(py_item(fields, nk[].k_numeric_mode)) == "identical":
             # The block's prefill session: a native registry handle of its
             # GPU Mamba image (core/mamba3_prefill_session.mojo, lane
             # mamba3-prefill-handle; the former Python entry

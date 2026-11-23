@@ -15,7 +15,7 @@ reads dy there (a host dy is uploaded once) and returns dx as one; only the
 D-float weight, bias and their gradients cross the bus
 (`sequence/layernorm_dev.mojo`, the same launches on the same values).
 
-Lane layernorm-idn N3 (2026-10-09), two waste removals, both default ON:
+Lane layernorm-idn N3 (2026-10-09), two waste removals, the one form:
   * `LayerNorm` is a device-I/O layer: `LayerNorm._device_io` is True on a
     binding with the resident entries and `LayerNorm.to_device(a)` uploads
     once (`_x_sequence_device.to_device`), so a caller (the board's layer
@@ -23,33 +23,28 @@ Lane layernorm-idn N3 (2026-10-09), two waste removals, both default ON:
     `layer_norm_dev` instead of the host-array entry (which, at an M x D
     activation of 67 MB, uploads x, downloads y, then uploads x and dy and
     downloads dx again per fit, plus two page-faulted zero fills). Nothing
-    changes for a host-array x. `MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1` (or
-    `MOJOLEARN_SEQ_DEVICE_IO_OFF=1`) is the before arm: the class reports no device I/O and `to_device` returns
-    the host array.
+    changes for a host-array x. `MOJOLEARN_SEQ_DEVICE_IO_OFF=1` (the sequence
+    binding's before arm) makes the class report no device I/O and `to_device`
+    return the host array.
   * Kept stats: a resident forward stores its row mean and rstd in two
     M-float resident tensors the layer keeps, and `backward` hands them
     back so the device entry skips its forward recompute (one M x D launch
     and an M x D scratch fewer). The words are the forward's own stores:
-    no bit moves. `MOJOLEARN_LN_KEEP_STATS_OFF=1` is the
-    before arm (the backward recomputes).
+    no bit moves.
   * The host-array path's y and dx outputs are `np.empty`: the binding
     downloads every element, so the +0.0 fill was two 67 MB passes of
     waste per fit (no bits: every word is overwritten). dweight / dbias
     stay zero-filled (written only when weight / bias are given)."""
-import os as _os
-
 from ._optional_numpy import require_numpy
 np = require_numpy('_x_sequence_norm')
 
 from . import _x_sequence_device as _sequence_device  # glue: connect native tensor storage
 from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
-#: the before arm of the class device-I/O switch (see the module docstring)
-_CLASS_DEVICE_IO_OFF = (_os.environ.get("MOJOLEARN_LN_CLASS_DEVICE_IO_OFF", "") == "1"
-                        or _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") == "1")
-#: the before arm of the kept-stats switch: the backward recomputes the forward
-_KEEP_STATS_OFF = _os.environ.get("MOJOLEARN_LN_KEEP_STATS_OFF", "") == "1"
-_SEQ_CONTEXT["seqln_keep_stats_off"] = _KEEP_STATS_OFF  # glue: the native forward reads the before-arm switch
+# TOMBSTONE: MOJOLEARN_LN_CLASS_DEVICE_IO_OFF (env; removed: decided A/B, post-merge 2026-10-10 NV 0.96 / AMD 1.03, neutral = noise = loser) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LN_CLASS_DEVICE_IO_OFF.patch; record in docs/TOMBSTONES.md.
+# TOMBSTONE: MOJOLEARN_LN_KEEP_STATS_OFF (env; removed: decided A/B, post-merge 2026-10-10 NV 0.95 / AMD 1.07, neutral = loser) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LN_KEEP_STATS_OFF.patch; record in docs/TOMBSTONES.md.
 
 
 # The former private NumPy runners are superseded by the native owner.
@@ -247,4 +242,3 @@ _ln_descriptor = next(row["__dict__"] for row in _ln_rows if "__dict__" in row) 
 _ln_hooks = tuple((base, name, row.get(name)) for base, row in zip(_ln_mro, _ln_rows)
                   for name in ("__getattribute__", "__getattr__", "__setattr__", "__dict__"))  # glue: fixed native storage hooks
 _SEQ_CONTEXT["seqln_layout"] = (LayerNorm, _ln_mro, _ln_descriptor.__get__, _ln_hooks)
-_SEQ_CONTEXT["seqln_class_device_io_off"] = _CLASS_DEVICE_IO_OFF

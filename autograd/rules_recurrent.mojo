@@ -29,7 +29,6 @@
 # deleted hand step (HandStep) on Apple, NVIDIA and AMD.
 # Scratch comes from the trainer's Work buffers, not tape.reserve, so the
 # tape allocates only node gradients and contributions.
-from std.sys.compile import is_defined
 
 from autograd.tape import Tape, Tensor, BackwardRules
 from sequence.exec_trait import Exec
@@ -191,12 +190,12 @@ comptime RNN_BIAS_EPI = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 # TOMBSTONE: MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM (SPLIT, A/B round 3 NVIDIA L40S, wheel 28a780604c, job nvc-ab-20261120T063324Z-c630ad: lstm fits 0.95-0.96, gru fits 1.05-1.07; the LSTM backward step promoted, the GRU backward step and the non-split weight-gradient GEMM deleted) deleted 2026-11-20 by lane/fx-verdicts5; code recoverable at e25e35dab8.
 # Restore: git apply experiments/removed/MOJOLEARN_SEQ_FAST_RNN_BPTT_GEMM.patch; record in docs/TOMBSTONES.md.
 comptime RNN_STEP_GEMM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-#: The LSTM backward step on the lane's GEMM (site 2 above; default since 2026-11-20). `-D
-#: MOJOLEARN_SEQ_FAST_RNN_BPTT_LSTM_GEMM_OFF` keeps the fused backward launch for every cell (the old form, until one
-#: more measurement confirms; then an owed deletion).
-comptime RNN_BPTT_LSTM_GEMM = (
-    not is_defined["MOJOLEARN_SEQ_FAST_RNN_BPTT_LSTM_GEMM_OFF"]() and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-)
+#: The LSTM backward step on the lane's GEMM (site 2 above; default since 2026-11-20), in `identical` mode.
+# TOMBSTONE: MOJOLEARN_SEQ_FAST_RNN_BPTT_LSTM_GEMM_OFF (removed: decided A/B round 3 NVIDIA L40S 2ef132a6de04, lstm fits
+# 0.95-0.96, driver 0.949 / 0.981, quality equal; its old form, the fused backward launch for the LSTM cell too) deleted
+# 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_SEQ_FAST_RNN_BPTT_LSTM_GEMM_OFF.patch; record in docs/TOMBSTONES.md.
+comptime RNN_BPTT_LSTM_GEMM = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime RNN_STEP_GEMM_MIN_FMA = 1 << 20
 
 

@@ -55,7 +55,6 @@ Restore: git apply experiments/removed/X8_CNN_HAND_EPOCH.patch
 cnn_linear: the fused conv block and pinned GEMM head kernels only; the epoch
 drivers, per-call uploads and host epoch order stay deleted.)
 """
-from std.sys.compile import is_defined
 from sequence.exec_trait import Exec
 from sequence.ops import FP, Args, OP_COPY, OPT_SGD, OPT_ADAM, OPT_ADAMW
 from core.cast_in import CastIn, CAST_KIND_SIGNED
@@ -116,15 +115,14 @@ comptime _RESIDENT_PROGRAM = 1
 #: the 1.29x of the brief has no source cell). The tuned x_cnn_res_argmax is
 #: deleted (7c9d9d5575) and softmax_xent_row_at is not an executor op, so the
 #: generic OPS_SOFTMAX / OPS_ARGMAX stay in both arms (swapping them would move
-#: the probability bits on every column). `-D MOJOLEARN_CNN_PREDICT_PROGRAM_COPY`
-#: keeps lane x8b's per-call shape (B arm of the owed A/B, owed-pre0867.json
-#: row restore-cnn-predict-call): zero-filled X and output buffers, a new
-#: PreparedProgramReplay per call and the per-chunk copy. Same kernels on the
-#: same bytes in both arms, so no output bit moves.
+#: the probability bits on every column). Lane x8b's per-call shape (the B
+#: arm: zero-filled X and output buffers, a new PreparedProgramReplay per call
+#: and the per-chunk copy, the same kernels on the same bytes) is deleted.
 # TOMBSTONE: MOJOLEARN_CNN_PREDICT_PROGRAM_COPY (unmeasured B arm, EXP:2411 PENDING: lane x8b's per-call zero fills, new prepared replay and per-chunk copy) deleted 2026-11-15 by lane/expdel2-28-neural; code recoverable at cc4a5c63c4.
 # Restore: git apply experiments/removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.patch; record in docs/TOMBSTONES.md.
 # RESTORED 2026-11-15 by lane/expdel2-restore-owed: owed B arm (owed-pre0867.json), under four weeks old; the deletion was premature.
-comptime CNN_PREDICT_PROGRAM_COPY = is_defined["MOJOLEARN_CNN_PREDICT_PROGRAM_COPY"]()
+# TOMBSTONE: MOJOLEARN_CNN_PREDICT_PROGRAM_COPY (removed without measurement: plumbing, rule 2026-11-22; both arms ran the same replay, OPS_SOFTMAX / OPS_ARGMAX and OP_COPY of the same words) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+# Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.ab-prep.patch; record in docs/TOMBSTONES.md.
 
 
 def _device_scratch(mut ex: DeviceExec, n: Int) raises -> FP:
@@ -133,9 +131,9 @@ def _device_scratch(mut ex: DeviceExec, n: Int) raises -> FP:
 
 def _cnn_scratch[E: Exec & Movable & Deinitable](mut s: OpsSession[E], n: Int) raises -> FP:
     """n floats of executor storage that the caller writes in full before
-    any read: no zero fill on the device (CNN_PREDICT_PROGRAM_COPY's A arm);
-    the host executor's `alloc` (a plain list) and the B arm keep `alloc`."""
-    comptime if E.IS_DEVICE and not CNN_PREDICT_PROGRAM_COPY:
+    any read: no zero fill on the device; the host executor keeps `alloc`
+    (a plain list)."""
+    comptime if E.IS_DEVICE:
         return _device_scratch(rebind[DeviceExec](s.ex), n)
     return s.ex.alloc(n)
 
@@ -418,8 +416,8 @@ def _resident_predict[E: Exec & Movable & Deinitable](
 ) raises:
     """Replay the resident forward over the n images at x_addr (uploaded
     once) in chunks of `chunk` rows, each chunk's (m, k) probabilities
-    copied on the executor into one (n, k) buffer (one chunk: read in place,
-    CNN_PREDICT_PROGRAM_COPY), then ONE download: the probabilities, or
+    copied on the executor into one (n, k) buffer (one chunk: read in
+    place), then ONE download: the probabilities, or
     (codes) the int32 OPS_ARGMAX of the whole buffer. The parameters are the
     session's, read in place; nothing else moves."""
     if len(s.programs) != _RESIDENT_PROGRAM:
@@ -432,19 +430,16 @@ def _resident_predict[E: Exec & Movable & Deinitable](
     var k = p.out_shapes[0].d[1]
     var params = parameter_buffers(s, p)
     var trainable = List[Bool](length=len(p.params), fill=False)
-    # A arm: the session's cached replay inventory for program 1 (built once,
+    # The session's cached replay inventory for program 1 (built once,
     # loaned to this call and returned on every exit, as run_program does).
+    # TOMBSTONE: MOJOLEARN_CNN_PREDICT_PROGRAM_COPY (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-neural; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_CNN_PREDICT_PROGRAM_COPY.ab-prep.patch; record in docs/TOMBSTONES.md.
     var pi = s._program_index(_RESIDENT_PROGRAM)
-    var loaned: PreparedInferenceReplay
-    comptime if not CNN_PREDICT_PROGRAM_COPY:
-        if len(s.program_replays[pi]) == 0:
-            s.program_replays[pi].append(PreparedInferenceReplay(p, _SLOT_BITS, _SLOT_MASK))
-        loaned = s.program_replays[pi].pop()
-    else:
-        # B arm (lane x8b): a new prepared replay per call
-        loaned = PreparedInferenceReplay(p, _SLOT_BITS, _SLOT_MASK)
+    if len(s.program_replays[pi]) == 0:
+        s.program_replays[pi].append(PreparedInferenceReplay(p, _SLOT_BITS, _SLOT_MASK))
+    var loaned = s.program_replays[pi].pop()
     # One chunk: the forward's output is read in place (no (n, k) buffer).
-    var direct = (not CNN_PREDICT_PROGRAM_COPY) and n <= chunk
+    var direct = n <= chunk
     var temps = List[Int]()
     var phs = List[Int]()
     var none = List[Float32]()
@@ -515,10 +510,7 @@ def _resident_predict[E: Exec & Movable & Deinitable](
     finally:
         s.ex.free(xb)
         loaned.clear_live()
-        comptime if not CNN_PREDICT_PROGRAM_COPY:
-            s.program_replays[pi].append(loaned^)
-        else:
-            _ = loaned^
+        s.program_replays[pi].append(loaned^)
 
 
 def cnn_predict_program[E: Exec & Movable & Deinitable, KIND: Int](

@@ -4,68 +4,12 @@
  "branch": "lane/layernorm-idn",
  "head": "145e8b410",
  "head_note": "Neural-gaps lane N3 (2026-10-09): LayerNorm device I/O for the class (default ON, env before arm), kept forward stats (default ON, env before arm), and the IDENTICAL 32-lane row fold (default OFF, bits change, the gridded switch)",
- "controls": {
-  "ln_class_device_io_off": {
-   "define": "MOJOLEARN_LN_CLASS_DEVICE_IO_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "python/mojolearn/_x_sequence_norm.py:51",
-    "python/mojolearn/_x_sequence_norm.py:190",
-    "tools/bench_board_algos.py:3949"
-   ],
-   "binding": [
-    "_mojolearn_x_sequence"
-   ],
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-6; post-merge neural A/B, one run per arm (nv2 L40S v1052/v1056 defaults on main 9f83ea479, amd MI325X a1152/a1156 on main 0a7b206f1)): class device IO stays the default (neutral)",
-   "grid": "exclude",
-   "tags": [
-    "env_switch"
-   ],
-   "note": "Python-shell ENVIRONMENT switch, not a build define (the planner's define arms do not reach it; A/B by ENV=MOJOLEARN_LN_CLASS_DEVICE_IO_OFF=1 on the race line). Default ON (absent): mojolearn.LayerNorm reports _device_io and has to_device, so the board's generic layer path (and any caller who uploads x once) takes the resident entry layer_norm_dev: no x upload, y download, x + dy upload, dx download inside the clock (4 x M x D floats per fit) and no page-faulted zero fills. Same launches on the same values: no bits. MOJOLEARN_SEQ_DEVICE_IO_OFF=1 and MOJOLEARN_IDN_ALL_OFF=1 also turn it off. CONFIRMED 2026-10-10 (env arm): layernorm NV 1.394 -> 1.341 ms (0.96x, v1062) / AMD 1.446 -> 1.488 ms (1.03x, a1150): neutral, average 1.00x; digest 5fe9165c unchanged. Kept: no reason to move."
-  },
-  "ln_keep_stats_off": {
-   "define": "MOJOLEARN_LN_KEEP_STATS_OFF",
-   "kind": "switch",
-   "arms": {
-    "off": [],
-    "on": [
-     "MOJOLEARN_LN_KEEP_STATS_OFF=1"
-    ]
-   },
-   "default": "off",
-   "source": [
-    "python/mojolearn/_x_sequence_norm.py:54",
-    "python/mojolearn/_x_sequence_norm.py:202",
-    "sequence/layernorm_dev.mojo:45"
-   ],
-   "binding": [
-    "_mojolearn_x_sequence"
-   ],
-   "bits_change": false,
-   "status": "confirmed:postmerge-20261010 (lane/postmerge-act-7; neural RACE layernorm synthetic, one run per arm: nv2 L40S default v1056 (main 9f83ea479) -> ENV arm v1063, amd MI325X default a1156 -> ENV arm a1151 (main 0a7b206f1)): the kept stats stay the default",
-   "grid": "exclude",
-   "tags": [
-    "env_switch"
-   ],
-   "note": "Python-shell ENVIRONMENT switch (A/B by ENV=MOJOLEARN_LN_KEEP_STATS_OFF=1 on the race line). Default ON (absent): a resident LayerNorm.forward stores its row mean / rstd in two kept M-float resident tensors and backward passes them (6-handle layer_norm_dev, ip[5] = 1), so the device entry skips the forward recompute: one OP_LN_FWD launch over M x D and an M x D scratch y fewer per backward. The stats are the forward's own stores: no bits. Only reached with the class on resident x (the functional layer_norm_backward recomputes as before). CONFIRMED 2026-10-10 (neutral, vendor split): the _OFF arm is layernorm NV 0.95x / AMD 1.07x (average 1.01x, noise); kept as the default (one OP_LN_FWD launch and an M x D scratch fewer per backward, no bits)."
-  }
- },
+ "controls": {},
  "algorithms": {
   "neural:layernorm": {
    "binding": "_mojolearn_x_sequence",
    "route": "tools/bench_board_algos.py _build_layer generic layer path (LANES layernorm ours=('LayerNorm', ...)) -> layer.to_device(x) -> python/mojolearn/_x_sequence_norm.py LayerNorm.forward/backward -> _run_dev -> bindings/_mojolearn_x_sequence.mojo layer_norm_dev -> sequence/layernorm_dev.mojo -> sequence/pyapi.mojo layer_norm_fwd_core / layer_norm_bwd_core -> sequence/exec_device.mojo DeviceExec.launch[OP_LN_FWD|OP_LN_BWD_X] (coop_kernel, SEQ_LN_COOP) -> sequence/coop.mojo coop_ln_fwd_rw / coop_ln_bwd_x_rw when ln_row_warp, else coop_ln_fwd / coop_ln_bwd_x",
-   "controls": [
-    "ln_class_device_io_off",
-    "ln_keep_stats_off"
-   ],
+   "controls": [],
    "interaction_groups": []
   }
  },
@@ -74,6 +18,16 @@
    "define": "MOJOLEARN_IDN_LN_ROW_WARP_OFF",
    "control": "ln_row_warp",
    "reason": "DELETED 2026-11-15 (lane/expdel2-28-neural, docs/plans/EXPERIMENT_DELETIONS_V2_2026-11-15.md; AGENTS.md 'An unmeasured arm is deleted'): old path beside the measured default; the default is kept (no bit change); define refused in core/experiment_guards_neural.mojo; code recoverable at the sha named in docs/TOMBSTONES.md."
+  },
+  {
+   "define": "MOJOLEARN_LN_CLASS_DEVICE_IO_OFF",
+   "control": "ln_class_device_io_off",
+   "reason": "DELETED 2026-11-23 (lane/ab-prep-neural; decided A/B, post-merge A/B 2026-10-10 NV 0.96 / AMD 1.03: neutral = noise = loser): Python env switch and the path it selected removed; the default is kept (no bit change); env switch, so no comptime refusal; code recoverable at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LN_CLASS_DEVICE_IO_OFF.patch"
+  },
+  {
+   "define": "MOJOLEARN_LN_KEEP_STATS_OFF",
+   "control": "ln_keep_stats_off",
+   "reason": "DELETED 2026-11-23 (lane/ab-prep-neural; decided A/B, post-merge A/B 2026-10-10 NV 0.95 / AMD 1.07: neutral = loser): Python env switch and the path it selected removed; the default is kept (no bit change); env switch, so no comptime refusal; code recoverable at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_LN_KEEP_STATS_OFF.patch"
   }
  ]
 }
