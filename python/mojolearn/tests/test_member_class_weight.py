@@ -105,7 +105,7 @@ def test_dict_extra_key_is_ignored_when_every_class_is_weighted(name):
     # some class of y is left unweighted; a dict weighting every class may name extra labels, which change nothing.
     X, y = _data(3)
     full = {0: 0.4, 1: 2.5, 2: 1.5}
-    got = _fitted_words(_member(name, dict(full, **{9: 3.0})).fit(X, y))
+    got = _fitted_words(_member(name, {**full, 9: 3.0}).fit(X, y))
     want = _fitted_words(_member(name, full).fit(X, y))
     assert len(got) == len(want) > 0
     for a, b in zip(got, want):
