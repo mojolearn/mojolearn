@@ -1236,6 +1236,9 @@ def _check_configuration() -> Bool:
     # TOMBSTONE: MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
     # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch; record in docs/TOMBSTONES.md.
     comptime assert not is_defined["MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: Mamba-1/2 per-call stages allocated and zero-filled per run, the h_last D2D copy, the host zero state uploaded and downloaded per stateless call and zero-filled door arrays, around the same kernels in the same launch order); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_IDN_MAMBA12_FORWARD_COPIES_OLD.ab-prep.patch"
+    # TOMBSTONE: MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL (removed without measurement: plumbing, rule 2026-11-22) deleted 2026-11-23 by lane/ab-prep-mamba; code recoverable at 4d76a9e16e.
+    # Restore: git apply ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.ab-prep.patch; record in docs/TOMBSTONES.md.
+    comptime assert not is_defined["MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL"](), "removed 2026-11-23 (lane/ab-prep-mamba, removed without measurement: plumbing, rule 2026-11-22: zero-filled Mamba-3 y / reports / gradients that every native route overwrites whole; checks/native_tests/mamba3_output_coverage.mojo is the 0xFF-prefill evidence); code at 4d76a9e16e; restore: ~/mojolearn-evidence/experiments-removed/MOJOLEARN_MAMBA3_FORWARD_ZERO_FILL.ab-prep.patch"
     # ---- end lane ab-prep-mamba
     return True
 

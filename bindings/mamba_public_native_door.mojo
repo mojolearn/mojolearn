@@ -837,8 +837,8 @@ def _session_output(kind: Int, dims: List[Int]) raises -> PythonObject:
     reports are written whole by every arm (device: `MambaBlockProgram.step`
     / `.decode`, which put every token's slab and download B*N*d_model, then
     the reports at their full counts; host: the per-call state step per
-    token, every (row, token) copied into y), so they are unfilled unless
-    MAMBA3_FORWARD_ZERO_FILL (bindings/neural_prefill_native_door.mojo;
+    token, every (row, token) copied into y), so they are unfilled
+    (bindings/neural_prefill_native_door.mojo `_m3_output_array`;
     lane fix-mamba3-unfilled-rest). Mamba-1/2 keep zero-filled arrays: their
     writes were not audited by that lane."""
     if kind == 3:
