@@ -30,10 +30,12 @@ from std.python._cpython import PyObjectPtr
 from bindings.admitted_input_unpack import admit_x
 from bindings.classical_arrays_door import classical_array, classical_address
 from bindings.member_owner_unpack import MemberOwner, member_labels_take
-from bindings.member_class_weight_unpack import member_cw_kind
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message, member_cw_kind_accepted
 from core.member_class_weight import (
-    MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words,
+    MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_balanced_words, member_cw_pending_words,
+    member_cw_invalid_words,
 )
+from core.member_families import MEMBER_FAMILY_XLINEAR
 from bindings.admitted_input_unpack import admitted_array
 from bindings.py_lists import py_list_f64
 from bindings.py_lists import py_list_int
@@ -43,7 +45,7 @@ from bindings.x_linear_common_unpack import _truth, _ge, _float, _int, _name, _c
 from bindings.x_linear_common_unpack import _eq, _is_int, _isinstance
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.x_linear_regressors_unpack import _xl_tweedie_link
-from bindings.x_linear_cv_unpack import _xl_is_int_cv, _is_int_plain, _xl_cs_grid
+from bindings.x_linear_cv_unpack import _xl_is_int_cv, _is_int_plain, _xl_cs_grid, xl_cv_is_callback, XL_CV_CALLBACK_WORDS
 from bindings.x_linear_isotonic_unpack import _xl_isotonic_check
 from bindings.x_linear_route_unpack import xl_route, xl_ops_require
 from core.entry_table import EntryRef, entry_ref_word
@@ -190,6 +192,8 @@ def _xl_ridge_cv_words(fields: PythonObject, context: PythonObject, mut admitted
     admitted = True
     if cv is None:
         return words^
+    if xl_cv_is_callback(cv, context):
+        raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
     if not _xl_is_int_cv(cv, context):
         admitted = False
         return words^
@@ -224,6 +228,8 @@ def _xl_enetcv_words(model: PythonObject, fields: PythonObject, context: PythonO
     admitted = True
     var folds = 5
     if cv is not None:
+        if xl_cv_is_callback(cv, context):
+            raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
         if not _xl_is_int_cv(cv, context):
             admitted = False
             return List[Float64]()
@@ -276,16 +282,24 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     var class_weight = py_item(fields, nk[].k_class_weight)
     var balanced = False
     var keyed = False
+    var invalid = False
     if class_weight is not None:
-        if member_cw_kind(class_weight, _b()) == MEMBER_CW_DICT:
+        if member_cw_kind_accepted(MEMBER_FAMILY_XLINEAR, PythonObject(None), class_weight, _b()) == MEMBER_CW_DICT:
             keyed = True
         elif not _eq(class_weight, PythonObject("balanced")):
-            return List[Float64]()
+            # A value the fit door refuses (lane mf-left4): the INVALID tail,
+            # whose words the FIT caller's UNPACK raises; a value the door
+            # accepts that the member does not read: not admitted.
+            if len(member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, PythonObject(None), class_weight, _b())) == 0:
+                return List[Float64]()
+            invalid = True
         else:
             balanced = True
     var cv = py_item(fields, nk[].k_cv)
     var folds = 5
     if cv is not None:
+        if xl_cv_is_callback(cv, context):
+            raise Error(XL_CV_CALLBACK_WORDS)  # a user's own splitter object: never called (lane mf-split4b)
         if not _xl_is_int_cv(cv, context):
             return List[Float64]()
         folds = _int(cv)
@@ -293,11 +307,13 @@ def _xl_logistic_cv_words(fields: PythonObject, context: PythonObject, mut admit
     var cs = _xl_cs_grid(py_item(fields, nk[].k_Cs), context)
     var words: List[Float64] = [Float64(XL_MEMBER_LOGISTIC_CV), _intercept_word(fields),
         Float64(_int(py_item(fields, nk[].k_max_iter))), _float(py_item(fields, nk[].k_tol)), Float64(folds),
-        2.0 if keyed else (1.0 if balanced else 0.0), Float64(len(cs))]
+        2.0 if (keyed or invalid) else (1.0 if balanced else 0.0), Float64(len(cs))]
     for i in range(len(cs)):  # driver-loop: over the Cs grid
         words.append(cs[i])
     if keyed:
         member_cw_pending_words(words)
+    elif invalid:
+        member_cw_invalid_words(words)
     return words^
 
 
@@ -343,14 +359,20 @@ def xlinear_member_admit(model: PythonObject, fields: PythonObject, kind: Int, c
         # A class_weight is the tail from word 3 (lane mf-adm3): 'balanced',
         # or a dict's pending table the caller fills over its labels
         # (`member_cw_fill`); any other value keeps the estimator's own doors.
-        var weighting = member_cw_kind(py_item(fields, nk[].k_class_weight), b)
+        var weighting = member_cw_kind_accepted(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight), b)
         if weighting < 0:
-            return False
+            # A value the fit door refuses (lane mf-left4): the INVALID tail.
+            if len(member_cw_invalid_message(MEMBER_FAMILY_XLINEAR, model, py_item(fields, nk[].k_class_weight),
+                                             b)) == 0:
+                return False
+            weighting = MEMBER_CW_INVALID
         words = _xl_ridge_classifier_words(model, fields)
         if weighting == MEMBER_CW_BALANCED:
             member_cw_balanced_words(words)
         elif weighting == MEMBER_CW_DICT:
             member_cw_pending_words(words)
+        elif weighting == MEMBER_CW_INVALID:
+            member_cw_invalid_words(words)
     elif kind == XL_MEMBER_RIDGE_CV:
         var admitted = True
         words = _xl_ridge_cv_words(fields, context, admitted)

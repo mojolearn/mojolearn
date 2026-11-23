@@ -61,6 +61,13 @@ core/member_families.mojo (generated; no family edits this file).
   * `MEMBER_OP_CAPABILITIES` with a live `call.state` answers for that
     state's kind (a regressor of a family with classifiers has no
     predict_proba); with `state == 0` it answers the family's union.
+  * THE 2-D y (layout 4, lane mf-search4): `y` is rows x outputs (`y.cols`;
+    1 for every single-output caller, unchanged). A classifier's y holds each
+    output's codes 0 .. count-1 in its column and `call.class_counts` the
+    address of `y.cols` Int words, each output's class count (0 with one
+    output: `call.classes` is its count). Only a kind with
+    `MEMBER_CAN_MULTI_OUTPUT` is handed `y.cols > 1`; a caller's plan carries
+    the counts (`MemberPlan.class_counts`) and `member_call_of` hands them on.
   * SEQUENCES (layout 3): `MemberMatrix.steps` makes a row of X `steps` x
     features (`MEMBER_CAN_STEPS`).
   * FORECASTERS (`MEMBER_CAN_FORECAST`): fit reads the series in `y`
@@ -120,10 +127,13 @@ from core.native_descriptor_abi import NativeDescriptorCall
 #: `MEMBER_ABI` (core/member_families.mojo), on any change of `MemberCall`,
 #: `MemberMatrix`, `DeviceRoute` or the operation codes.
 #: 3 (2026-11-21): `MemberMatrix.steps`.
+#: 4 (2026-11-23, lane mf-search4): THE 2-D y, `MemberCall.class_counts` after `classes` (and
+#: `MemberPlan.class_counts`): one y layout for every caller, `y.cols` outputs.
 #: Words APPENDED to the end of `MemberCall` (round 5: out_dtype, scope, pin, devices, device_count; round 6:
-#: pin_kept; lane mf-img3: groups) do not
+#: pin_kept; lane mf-img3: groups; lane mf-left4: eval_x, eval_y, pairs, pairs_weight, cat_keys,
+#: eval_cat_keys) do not
 #: bump it: every image of one build compiles this file, and a member that does not read them is unchanged.
-comptime MEMBER_CALL_LAYOUT = 3
+comptime MEMBER_CALL_LAYOUT = 4
 
 comptime MEMBER_OP_CAPABILITIES = 0       # result word: the mask of MEMBER_CAN_* (of call.state's kind, or the family's union)
 comptime MEMBER_OP_NEW = 1                # params -> call.state (an unfitted member state)
@@ -373,6 +383,10 @@ struct MemberCall(Movable):
     var block: Int
     # Classifier: the class count (given at fit / import; answered by outputs).
     var classes: Int
+    # Layout 4 (THE 2-D y, module note): with `y.cols > 1` on a classifier,
+    # the address of `y.cols` Int words (each output's class count); 0: one
+    # output, whose count is `classes`.
+    var class_counts: Int
     # Results.
     var value: Float64
     var out_cols: Int
@@ -427,6 +441,29 @@ struct MemberCall(Movable):
     # member's query-wise losses: group_id). Not given (rows 0): no groups.
     # A member that reads no groups ignores it.
     var groups: MemberMatrix
+    # APPENDED 2026-11-23 (lane mf-left4; a member that does not read them
+    # ignores them; rows 0 = not given). MEMBER_OP_FIT: a held-out set the
+    # fit evaluates (the Gbdt member's `eval_set`): `eval_x` dense host rows x
+    # the fit's features in the fit X's dtype, `eval_y` its targets in the fit
+    # y's dtype (rows x 1).
+    var eval_x: MemberMatrix
+    var eval_y: MemberMatrix
+    # MEMBER_OP_FIT: ranking pairs over the fit's rows (the Gbdt member's
+    # PairLogit `pairs`): int32 or int64, pairs x 2 (winner row, loser row,
+    # numbered in the row order the member sees); `pairs_weight` float32
+    # pairs x 1 (not given: one each).
+    var pairs: MemberMatrix
+    var pairs_weight: MemberMatrix
+    # MEMBER_OP_FIT / PREDICT*: the keys of the categorical cells of a text
+    # (or mixed) X, read by the caller's UNPACK with the estimator's own
+    # encoding (the Gbdt fit door's `gbdt_category_admit`): int64 bit
+    # patterns of gbdt/data/category_map.mojo keys, ONE ROW PER CATEGORICAL
+    # COLUMN (ascending column order) and one column per row of `x` (the
+    # door's buffer as it is); `x` holds any float words in those columns,
+    # unread. `eval_cat_keys` the same for `eval_x`. Not given: the columns'
+    # Float32 words are the keys.
+    var cat_keys: MemberMatrix
+    var eval_cat_keys: MemberMatrix
 
     def __init__(out self, route: DeviceRoute, state: Int = 0):
         self.layout = MEMBER_CALL_LAYOUT
@@ -444,6 +481,7 @@ struct MemberCall(Movable):
         self.fit_output = 0
         self.block = 0
         self.classes = 0
+        self.class_counts = 0
         self.value = 0.0
         self.out_cols = 0
         self.out_dtype = MEMBER_DTYPE_UNSAID
@@ -453,6 +491,12 @@ struct MemberCall(Movable):
         self.device_count = 0
         self.pin_kept = 0
         self.groups = MemberMatrix()
+        self.eval_x = MemberMatrix()
+        self.eval_y = MemberMatrix()
+        self.pairs = MemberMatrix()
+        self.pairs_weight = MemberMatrix()
+        self.cat_keys = MemberMatrix()
+        self.eval_cat_keys = MemberMatrix()
 
     def on_cpu(self) -> Bool:
         """The member's RESOLVED device is the CPU (its route says so; no
@@ -489,6 +533,9 @@ struct MemberPlan(Copyable, Movable):
     var route: DeviceRoute
     var params: List[Float64]
     var classes: Int
+    # Layout 4 (THE 2-D y): a multi-output classifier's class count per
+    # output, empty for one output (`classes` is its count).
+    var class_counts: List[Int]
     # APPENDED 2026-11-21 (round 5). The member's device ids in rank order,
     # written by the family's admit from the public thread's device plan
     # (core/device_plan.mojo `device_plan_current(<the family's setting>)`),
@@ -507,6 +554,7 @@ struct MemberPlan(Copyable, Movable):
         self.route = DeviceRoute(0)
         self.params = List[Float64]()
         self.classes = 0
+        self.class_counts = List[Int]()
         self.devices = List[Int]()
         self.scope = MEMBER_SCOPE_NONE
         self.pin = 0
@@ -564,6 +612,7 @@ def member_call_of(plan: MemberPlan, state: Int = 0) raises -> MemberCall:
     call.params = Int(plan.params.unsafe_ptr())
     call.param_count = len(plan.params)
     call.classes = plan.classes
+    call.class_counts = Int(plan.class_counts.unsafe_ptr()) if len(plan.class_counts) > 0 else 0
     call.devices = Int(plan.devices.unsafe_ptr()) if len(plan.devices) > 0 else 0
     call.device_count = len(plan.devices)
     call.scope = plan.scope

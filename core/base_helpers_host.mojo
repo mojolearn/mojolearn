@@ -22,12 +22,13 @@ from core.base_entry_table import (
     BaseEntryKey, base_table_publish, base_check_spans, base_word, base_entry_vendor,
     BASE_HELPERS_ABI, BH_OP_COUNT,
     BH_CHECK_INDICES_I64, BH_BINCOUNT_I64, BH_REDUCE_STAT, BH_EQUAL_ELEMENTS, BH_BINCOUNT2_I32,
-    BH_ROW_MEANS_F64, BH_ASSIGN_FOLD_I64, BH_COUNT_FOLD_HITS_I64, BH_MARK_SPLIT_ROLES_F32,
+    BH_ROW_MEANS_F64, BH_ASSIGN_FOLD_I64, BH_COUNT_FOLD_HITS_I64, BH_MARK_SPLIT_ROLES_F32, BH_GATHER_ROWS_BYTES,
 )
 from core.hotpath_impl import HpStat, check_indices_i64, equal_elements, reduce_stat
 from core.hotpath_impl_rows import (
     assign_fold_i64, bincount2_i32, bincount_i64, count_fold_hits_i64, mark_split_roles_f32,
 )
+from core.host_helpers_impl import gather_rows_bytes
 from core.native_descriptor_abi import NativeDescriptorError
 from core.native_descriptor_call import native_descriptor_report
 from core.shared_slot import SharedSlot
@@ -95,7 +96,35 @@ def base_helpers_host_dispatch(op: Int, aa: Int, pp: Int) raises -> Int:
     if op == BH_MARK_SPLIT_ROLES_F32:
         return mark_split_roles_f32(base_word(aa, 0), base_word(pp, 0), base_word(pp, 1), base_word(pp, 2),
                                     base_word(pp, 3), base_word(aa, 1))
+    if op == BH_GATHER_ROWS_BYTES:
+        return gather_rows_bytes_host_run(base_word(aa, 0), base_word(aa, 1), base_word(aa, 2), base_word(pp, 0),
+                                          base_word(pp, 1), base_word(pp, 2))
     raise Error("base helpers: unknown operation " + String(op))
+
+
+def gather_rows_bytes_check(src: Int, dst: Int, idx: Int, ns: Int, no: Int, width: Int) raises -> Bool:
+    """The `gather_rows_bytes` export's checks, in its words: False (nothing
+    to move) for no output rows or a zero width."""
+    if ns < 0 or no < 0 or width < 0:
+        raise Error("gather_rows_bytes: dimensions must be non-negative")
+    if no == 0 or width == 0:
+        return False
+    if src == 0 or dst == 0 or idx == 0:
+        raise Error("gather_rows_bytes: null buffer address")
+    return True
+
+
+def gather_rows_bytes_host_run(src: Int, dst: Int, idx: Int, ns: Int, no: Int, width: Int) raises -> Int:
+    """`gather_rows_bytes` on the host (bindings/host_helpers_pack.mojo's
+    export, unpacked): dst row r = src row idx[r], `width` bytes each; every
+    index checked before any write."""
+    if not gather_rows_bytes_check(src, dst, idx, ns, no, width):
+        return 0
+    if gather_rows_bytes(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=src),
+                         MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=dst),
+                         MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=idx), ns, no, width):
+        raise Error("gather_rows_bytes: row index out of bounds")
+    return 0
 
 
 def base_helpers_host_v1(operation: Int, aa: Int, na: Int, pp: Int, np: Int,

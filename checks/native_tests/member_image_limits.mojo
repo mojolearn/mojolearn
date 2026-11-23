@@ -27,6 +27,17 @@ Cases (one row each, run across the host cores by `check_cases`):
     unseen code k. The oracle is the door's own body sequence (gbdt/data/category_map.mojo, as
     bindings/gbdt_category_unpack.mojo `gbdt_category_fit` / `gbdt_category_apply` run it). Fail-proof: key
     the column with `category_key_f64` of a widened value in `_category_fit`.
+  6 text categories (lane mf-left4): `_category_fit` / `_category_apply` given the caller's keys (`cat_keys`,
+    one row per categorical column) equal the door's `from_cells` sequence over the same keys (the block's
+    float words in that column are ignored: it holds zeros), and a query keyed the same way takes the fitted
+    codes; a key matrix of the wrong shape is refused. Fail-proof: key from the Float32 words when `keys` is
+    given (drop the `given != 0` branch in `_category_fit`).
+  7 PairLogit pairs (lane mf-left4, `_pairs_words`): int64 pairs [[0, 1], [3, 2]] give the uint32 words and
+    ones; given weights are copied; the door's words name the FIRST bad pair (a row outside the fit's rows:
+    `_pair_end_range`; a row paired with itself) and the first bad weight, whatever task holds it.
+    Fail-proof: raise the LAST task's noted pair (iterate `firsts` backwards).
+  8 the held-out scan (lane mf-left4, `_eval_scan`): constant targets, the largest value, and the code test
+    (a non-integer, a negative or a NaN label) only when asked. Fail-proof: compare `low == high` per task.
 """
 from std.math import nan
 from std.testing import TestSuite
@@ -48,6 +59,7 @@ from core.member_abi import (
 from core.member_families import MEMBER_FAMILY_LOGISTIC, MEMBER_FAMILY_LINEAR_SVM
 from core.gbdt_member import (
     GbdtMemberSlot, _feature_tail, _feature_flags, _group_sizes, _category_fit, _category_apply,
+    _pairs_words, _eval_scan,
 )
 from gbdt.data.category_map import (
     CategoryMaps, CategoryKeyPtr, CategoryF32Ptr, category_keys_from_f32, category_block_columns,
@@ -59,7 +71,7 @@ from glm.host.logistic_native_host import qn_host_native_v1
 comptime N = 60
 comptime D = 3
 comptime K = 3
-comptime CASES = 6
+comptime CASES = 9
 comptime _SlotP = MutPointer[GbdtMemberSlot, MutUntrackedOrigin]
 
 
@@ -250,7 +262,7 @@ def check_category_map() raises:
                                 5.0, 2.0, 5.0, nan[DType.float32](), 2.0, -1.5, nan[DType.float32](), 5.0]
     var oracle = block.copy()
     var columns: List[Int] = [1]
-    var map = _category_fit(columns, Int(block.unsafe_ptr()), rows)
+    var map = _category_fit(columns, Int(block.unsafe_ptr()), rows, MemberMatrix())
     # The door's body sequence on the oracle copy.
     var maps = CategoryMaps()
     var keys = List[UInt64](length=rows, fill=0)
@@ -277,7 +289,7 @@ def check_category_map() raises:
     p[].features = cols
     p[].cat_map = map.copy()
     var query: List[Float32] = [0.0, 0.0, 2.0, 7.0]
-    _category_apply(p, Int(query.unsafe_ptr()), 2)
+    _category_apply(p, Int(query.unsafe_ptr()), 2, MemberMatrix())
     require(query[2] == block[rows + 1], "a fitted value takes its fitted code")
     require(query[3] == Float32(4.0), "an unseen value takes the unseen code k, got " + String(query[3]))
     _ = slot^
@@ -285,6 +297,126 @@ def check_category_map() raises:
     _ = oracle^
     _ = keys^
     _ = query^
+
+
+def check_category_keys() raises:
+    var rows = 6
+    # column-major: column 0 numeric, column 1 categorical with zeros (its keys come from the caller)
+    var block: List[Float32] = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    var oracle = block.copy()
+    var keys: List[UInt64] = [UInt64(91), UInt64(17), UInt64(91), UInt64(5), UInt64(17), UInt64(91)]
+    var columns: List[Int] = [1]
+    var map = _category_fit(columns, Int(block.unsafe_ptr()), rows, MemberMatrix(Int(keys.unsafe_ptr()), 1, rows,
+                                                                               MEMBER_I64))
+    var maps = CategoryMaps()
+    var column = CategoryF32Ptr(unsafe_from_address=Int(oracle.unsafe_ptr()) + 4 * rows)
+    maps.fit_column(1, CategoryKeyPtr(unsafe_from_address=Int(keys.unsafe_ptr())), rows, column)
+    var words = List[UInt64](length=maps.block_words(), fill=0)
+    maps.write_block(CategoryKeyPtr(unsafe_from_address=Int(words.unsafe_ptr())))
+    require(len(map) == len(words), "the keyed map's word count")
+    for i in range(len(words)):  # small-loop(oracle: every map word)
+        require(map[i] == words[i], "keyed map word " + String(i))
+    for i in range(2 * rows):  # small-loop(oracle: every block word)
+        require(block[i] == oracle[i], "keyed block word " + String(i))
+    require(block[rows] == block[rows + 2] and block[rows] == block[rows + 5], "key 91 is one category")
+    require(block[rows] != block[rows + 1], "keys 91 and 17 are two categories")
+    var slot = GbdtMemberSlot()
+    var p = _SlotP(unsafe_from_address=Int(UnsafePointer(to=slot)))
+    p[].features = 2
+    p[].cat_map = map.copy()
+    var query: List[Float32] = [0.0, 0.0, 0.0, 0.0]
+    var query_keys: List[UInt64] = [UInt64(17), UInt64(5)]
+    _category_apply(p, Int(query.unsafe_ptr()), 2, MemberMatrix(Int(query_keys.unsafe_ptr()), 1, 2, MEMBER_I64))
+    require(query[2] == block[rows + 1] and query[3] == block[rows + 3], "a keyed query takes the fitted codes")
+    var said = String("")
+    try:
+        _category_apply(p, Int(query.unsafe_ptr()), 2, MemberMatrix(Int(query_keys.unsafe_ptr()), 2, 1, MEMBER_I64))
+    except e:
+        said = String(e)
+    require(said.startswith("member ABI: cat_keys is 2 x 1"), "a key matrix of the wrong shape, got '" + said + "'")
+    _ = slot^
+    _ = block^
+    _ = oracle^
+    _ = keys^
+    _ = query^
+    _ = query_keys^
+
+
+def _pairs_said(var pairs: List[Int64], m: Int, rows: Int, var weights: List[Float32]) raises -> String:
+    var call = MemberCall(DeviceRoute(DEVICE_CPU))
+    call.pairs = MemberMatrix(Int(pairs.unsafe_ptr()), m, 2, MEMBER_I64)
+    if len(weights) > 0:
+        call.pairs_weight = MemberMatrix(Int(weights.unsafe_ptr()), len(weights), 1)
+    var cp = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=call)))
+    var flat = List[UInt32]()
+    var got = List[Float32]()
+    var said = String("")
+    try:
+        _pairs_words(cp, rows, flat, got)
+    except e:
+        said = String(e)
+    _ = pairs^
+    _ = weights^
+    _ = call^
+    return said^
+
+
+def check_pairs() raises:
+    var pairs: List[Int64] = [0, 1, 3, 2]
+    var call = MemberCall(DeviceRoute(DEVICE_CPU))
+    call.pairs = MemberMatrix(Int(pairs.unsafe_ptr()), 2, 2, MEMBER_I64)
+    var cp = MutPointer[MemberCall, MutUntrackedOrigin](unsafe_from_address=Int(UnsafePointer(to=call)))
+    var flat = List[UInt32]()
+    var weights = List[Float32]()
+    _pairs_words(cp, 4, flat, weights)
+    require(len(flat) == 4 and flat[0] == 0 and flat[1] == 1 and flat[2] == 3 and flat[3] == 2, "the pair words")
+    require(len(weights) == 2 and weights[0] == 1.0 and weights[1] == 1.0, "ones without pairs_weight")
+    var given: List[Float32] = [0.5, 2.0]
+    call.pairs_weight = MemberMatrix(Int(given.unsafe_ptr()), 2, 1)
+    _pairs_words(cp, 4, flat, weights)
+    require(weights[0] == 0.5 and weights[1] == 2.0, "the given weights")
+    # Many pairs (several host tasks): the first bad pair is named.
+    var m = 4000
+    var many = List[Int64](length=2 * m, fill=0)
+    for i in range(m):  # small-loop(fixture)
+        many[2 * i] = Int64(i % 7)
+        many[2 * i + 1] = Int64(i % 7 + 1)
+    many[2 * 2500 + 1] = 9  # outside 8 rows
+    many[2 * 3900] = 3
+    many[2 * 3900 + 1] = 3  # a self pair, later
+    var said = _pairs_said(many.copy(), m, 8, List[Float32]())
+    require(said == "mojolearn: pairs[2500][1] = 9 is outside the 8 rows", "the first bad pair, got '" + said + "'")
+    many[2 * 2500 + 1] = 1
+    said = _pairs_said(many.copy(), m, 8, List[Float32]())
+    require(said == "mojolearn: pairs[3900] pairs row 3 with itself", "a self pair, got '" + said + "'")
+    many[2 * 3900 + 1] = 4
+    var bad = List[Float32](length=m, fill=1.0)
+    bad[3100] = -1.0
+    bad[3800] = nan[DType.float32]()
+    said = _pairs_said(many.copy(), m, 8, bad^)
+    require(said == "mojolearn: pairs_weight[3100] must be a finite nonnegative number",
+            "the first bad weight, got '" + said + "'")
+    _ = pairs^
+    _ = given^
+    _ = call^
+
+
+def check_eval_scan() raises:
+    var same = List[Float32](length=3000, fill=2.0)
+    var got = _eval_scan(Int(same.unsafe_ptr()), 3000, True)
+    require(got[0] and not got[1] and got[2] == 2.0, "constant integer targets")
+    same[2999] = 3.0
+    got = _eval_scan(Int(same.unsafe_ptr()), 3000, True)
+    require(not got[0] and not got[1] and got[2] == 3.0, "two values, largest 3")
+    same[10] = 0.5
+    got = _eval_scan(Int(same.unsafe_ptr()), 3000, True)
+    require(got[1], "a non-integer label is not a code")
+    got = _eval_scan(Int(same.unsafe_ptr()), 3000, False)
+    require(not got[1], "the code test only when asked")
+    same[10] = -1.0
+    got = _eval_scan(Int(same.unsafe_ptr()), 3000, True)
+    require(got[1], "a negative label is not a code")
+    _ = same^
 
 
 def test_member_image_limits() raises:
@@ -299,8 +431,14 @@ def test_member_image_limits() raises:
             check_feature_flags()
         elif which == 4:
             check_group_sizes()
-        else:
+        elif which == 5:
             check_category_map()
+        elif which == 6:
+            check_category_keys()
+        elif which == 7:
+            check_pairs()
+        else:
+            check_eval_scan()
     check_cases("member_image_limits", CASES, run_case)
 
 

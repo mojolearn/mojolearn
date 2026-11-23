@@ -1699,6 +1699,8 @@ class GridSearchCV(_BaseSearch):
     >>> search = search.fit(X, y)
     >>> best = search.best_params_
     """
+    # The search META member kind (core/ensemble_member.mojo META_SEARCH_*): its base decides classifier or regressor.
+    _mojolearn_member = (39, 10)
 
     def __init__(self, estimator, param_grid, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
                  pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False, device=None):
@@ -1764,6 +1766,8 @@ class RandomizedSearchCV(_BaseSearch):
     >>> search = RandomizedSearchCV(mojolearn.Ridge(), {'alpha': [0.01, 0.1, 1.0, 10.0]},
     ...                             n_iter=2, random_state=0).fit(X, y)
     """
+    # The search META member kind (core/ensemble_member.mojo META_SEARCH_*): its base decides classifier or regressor.
+    _mojolearn_member = (39, 10)
 
     def __init__(self, estimator, param_distributions, *, n_iter=10, scoring=None, n_jobs=None, refit=True,
                  cv=None, verbose=0, pre_dispatch='2*n_jobs', random_state=None, error_score=float('nan'),

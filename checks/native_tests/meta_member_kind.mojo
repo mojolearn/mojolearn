@@ -33,6 +33,25 @@ xtrees/trees_meta_vote_run.mojo the door runs, over the members' own answers:
    1.0 and 1.0: META predict_proba / predict == `vote_soft_run` / `vote_codes_run` over the inner META's own
    predict_proba (fitted directly, float64 rounded to float32 as the door's admission) and the logistic member's;
    the inner META runs as one more member of the outer one's set.
+11. THE ADABOOST KIND (lane mf-ada4), AdaBoostClassifier over a DecisionTreeClassifier(max_depth=1) base, k = 3,
+   5 rounds, seed 3: META fit + estimator_weights_ / estimator_errors_ (META_BLOCK_ADA), predict, predict_proba and
+   decision_function == the door's words: checks/native_tests/mf_ada_fits.mojo `ada_fit` (the door's
+   `_ada_native` plan over `rf_config`, the host session when the image serves one) and `ada_classifier_run` over
+   the members' own host codes (ADA_CODES / ADA_PROBA / ADA_DECISION);
+12. AdaBoostRegressor over DecisionTreeRegressor(max_depth=3), loss 'square' (code 1), 5 rounds: weights, errors and
+   predict (float32) == `ada_fit` + `ada_predict_values`;
+13. AdaBoostClassifier over a RandomForestClassifier(n_estimators=3, max_depth=2) base (the MEMBER ROUNDS): weights,
+   errors and predict of the training X == `ada_member_fit` (the door's `_ada_members` plan);
+14. AdaBoost IMPORT: case 11's fitted rounds copied block by block into new tree member states and imported with
+   its weights into a NEW META state: predict_proba equal to the fitted state's.
+15. THE SEARCH KIND (lane mf-search4): GridSearchCV over three LogisticRegression candidates, cv = 3: the META's
+   META_BLOCK_SEARCH words == `msel_search_run`'s tables, predict_proba == the best's refit state's;
+16. THE MULTI-OUTPUT KIND over THE 2-D y: MultiOutputClassifier, outputs of 3 and 2 classes: predict == each
+   output's member fitted directly; score == the counted share of rows with every output right.
+FAIL-PROOF EDITS, lane mf-search4: `slot[].plans = [slot[].base_plans[0].copy()]` in `_fit_search` (case 15: the
+wrong candidate's plan serves the best's state, or the header's best differs); `dst[i] = src[i * outputs]` in
+`_fit_multi`'s `_column` (case 16: the second output fits the first column); `hit += 1.0` without the
+`all_equal` test in `_score_multi` (case 16).
 The regressor kinds (VotingRegressor `vote_regress_run`, StackingRegressor, BaggingRegressor) and the Bagging kinds
 (their base is a tree, forest or extra-trees member; this process publishes only the logistic entry) run through
 tools/mf_meta3_digests.py (this file's members are classifiers).
@@ -45,6 +64,11 @@ classes); `slot[].pair_first.append(res.first[f] + 1)` in `_fit_cal` (case 7: th
 
 FAIL-PROOF EDIT, lane mf-meta3c: write `slot[].proba_dtype[u] = MEMBER_F32` in `_nested_outputs` (case 10: the
 inner META's float64 probabilities are read as float32 words).
+
+FAIL-PROOF EDITS, lane mf-ada4: write `finish = ADA_DECISION` for MEMBER_OP_PREDICT_PROBA in `_predict_ada`
+(case 11: predict_proba is the margin); drop `plan.loss = Int(words[META_ADA_LOSS])` in `_fit_ada` (case 12: the
+linear loss's weights); drop `plan.member_route = True` in `_fit_ada` (case 13: the RF base fits as session rounds
+and refuses); read `words[2 + na + i]` into `ada_alphas` in `_import_ada` (case 14: the errors weight the vote).
 
 FAIL-PROOF EDITS (each must make a case fail): drop `_zero_dst` in `_predict_vote` (cases 1, 4: the sum starts
 from stale words); use `run.states[v + 1]` in `_keep_states` (cases 1-4: a member's state is another's, or 0);
@@ -59,7 +83,25 @@ from core.entry_table import EntryRef
 from core.ensemble_member import (
     ensemble_member_v2, meta_plan_mint, meta_plan_mint_with, meta_plan_release, META_VOTE_CLASSIFIER,
     META_STACK_CLASSIFIER, META_OVR, META_CALIBRATED, META_PARAM_COUNT, META_BLOCK_NESTED, META_BLOCK_WIDTHS,
+    META_ADA_CLASSIFIER, META_ADA_REGRESSOR, META_BLOCK_ADA, META_SEARCH_CLASSIFIER, META_MULTI_CLASSIFIER,
+    META_BLOCK_SEARCH,
 )
+from bindings.arena_prog_run import MetricRoute
+from core.entry_table import entry_ref_unresolved
+from core.member_abi import MEMBER_OP_SCORE
+from core.msel_search_run import MselSearchPlan, msel_search_run
+from core.entry_table import entry_ref_gil_free
+from core.forest_calls import xf_ref, xf_caps
+from core.forest_entry_table import ForestEntryKey, FOREST_TABLE_RF
+from core.forest_fit_request import XF_CAP_SESSION
+from core.member_abi import MEMBER_OP_IMPORT, MEMBER_IMPORT_DONE, MEMBER_BLOCK_BY_INDEX, MEMBER_OP_NEW
+from core.member_families import MEMBER_FAMILY_TREE, MEMBER_FAMILY_FOREST
+from checks.native_tests.bm_rest_boost_fits import publish_host_images, trees_key
+from checks.native_tests.mf_ada_fits import (
+    AdaSpec, AdaModel, ada_fit, ada_predict_codes, ada_predict_values, publish_host_members, member_plan_of,
+    ada_member_fit,
+)
+from checks.native_tests.py2mojo_forest_fits import RfSpec, rf_config, predict, argmax_rows, RF_SQUARED
 from core.logistic_member import logistic_member_v2
 from core.logistic_native_api import QnNativeDriver
 from core.logistic_route import LogisticRoute, logistic_route_pack
@@ -78,13 +120,13 @@ from xtrees.glue_calls import xt_ref, xt_device_folds
 from xtrees.trees_calibrated_fit_run import CalFitPlan, CalFitOut, calibrated_fit_run, CAL_ALL_ANSWERED
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, stack_place_run, ovr_assemble_run,
-    calibrated_proba_run, CalPair, CalFit, STACK_PROBA, STACK_PREDICT,
+    calibrated_proba_run, CalPair, CalFit, STACK_PROBA, STACK_PREDICT, ada_classifier_run, ADA_PROBA, ADA_DECISION,
 )
 
 comptime N = 60
 comptime D = 3
 comptime K = 3
-comptime CASES = 10
+comptime CASES = 16
 comptime UNITS = 4
 
 comptime _I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -784,9 +826,328 @@ def check_nested_two_deep() raises:
     _ = y^
 
 
+# ------------------------------------------------------------ THE ADABOOST KIND (lane mf-ada4)
+
+
+def _targets(x: List[Float32]) -> List[Float32]:
+    var y = List[Float32](length=N, fill=0.0)
+    for i in range(N):  # small-loop(fixture)
+        y[i] = x[i * D] * 2.0 + x[i * D + 1] - Float32(i % 4) * 0.5
+    return y^
+
+
+def _session_served() raises -> Bool:
+    """The host RF image serves the data session (the kind and the door's `_member_session` open one)."""
+    return (xf_caps(entry_ref_gil_free(xf_ref(ForestEntryKey(FOREST_TABLE_RF, trees_key())))) & XF_CAP_SESSION) != 0
+
+
+def _ada_meta(kind: Int, var base: MemberPlan, rounds: Int, seed: Int, loss: Int, native: Bool) raises -> _Meta:
+    """An AdaBoost META plan as the boundary's `_admit_ada` mints it: the base's forest member plan and the
+    settings words (n_estimators, seed, learning_rate 1.0, loss, the session route word, no table sharing, the
+    squared criterion code, no target check, not a random-splitter tree; no class-weight tail)."""
+    var words: List[Float64] = [Float64(rounds), Float64(seed), 1.0, Float64(loss), 1.0 if native else 0.0, 0.0,
+                                Float64(RF_SQUARED), -1.0, -2.0, -2.0, -2.0, 0.0]
+    var masks: List[Int] = [member_kind_capabilities(base)]
+    var plans: List[MemberPlan] = [base^]
+    var handle = meta_plan_mint_with(plans^, List[Float64](), List[Int](), masks^, words^, List[List[Int32]](),
+                                     List[List[Int32]]())
+    var plan = MemberPlan()
+    var route = DeviceRoute(DEVICE_CPU)
+    route.mode = Int(GLOBAL_NUMERIC_MODE)
+    route.vendor = 0
+    plan.route = route
+    plan.member = MemberRef(EntryRef(ensemble_member_v2, 0), 0)
+    var probe = MemberCall(plan.route)
+    plan.member.capabilities = member_call(plan.member, MEMBER_OP_CAPABILITIES, probe)
+    plan.family = MEMBER_FAMILY_ENSEMBLE
+    plan.params = [Float64(kind), Float64(handle), 0.0, 0.0, 0.0, 0.0]
+    plan.classes = K if kind == META_ADA_CLASSIFIER else 0
+    return _Meta(plan^, handle)
+
+
+def _ada_words(meta: _Meta, state: Int) raises -> List[Float64]:
+    var call = MemberCall(meta.plan.route, state)
+    call.block = META_BLOCK_ADA
+    _ = member_call(meta.plan.member, MEMBER_OP_EXPORT, call)
+    var out = List[Float64]()
+    var w = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=call.dst.data)
+    for i in range(call.dst.rows * call.dst.cols):  # small-loop(the kept rounds' words)
+        out.append(w[i])
+    return out^
+
+
+def _want_words(alphas: List[Float64], errors: List[Float64]) -> List[Float64]:
+    var out = List[Float64]()
+    out.append(Float64(len(alphas)))
+    for i in range(len(alphas)):  # small-loop(oracle)
+        out.append(alphas[i])
+    out.append(Float64(len(errors)))
+    for i in range(len(errors)):  # small-loop(oracle)
+        out.append(errors[i])
+    return out^
+
+
+def _ada_door(m: AdaModel, x: List[Float32], finish: Int, width: Int) raises -> List[Float64]:
+    """The door's predict_proba / decision_function: each member's host codes, `ada_classifier_run`."""
+    var blocks = List[List[Int32]]()
+    var addrs = List[Int]()
+    for j in range(len(m.members)):  # small-loop(oracle: the members' host codes)
+        var c = argmax_rows(predict(m.members[j], x, N), N, m.k)
+        var words = List[Int32](length=N, fill=Int32(0))
+        for i in range(N):  # small-loop(oracle)
+            words[i] = Int32(c[i])
+        blocks.append(words^)
+    for j in range(len(blocks)):  # small-loop(oracle)
+        addrs.append(Int(blocks[j].unsafe_ptr()))
+    var acc = List[Float64](length=N * m.k, fill=0.0)
+    var out = List[Float64](length=N * width, fill=0.0)
+    ada_classifier_run(_glue(), addrs, m.alphas, N, m.k, Int(acc.unsafe_ptr()), finish, Int(out.unsafe_ptr()))
+    _ = len(blocks)
+    if m.k > 2:
+        return acc^  # more than two classes: the finish wrote the block in place
+    return out^
+
+
+def _meta_decision(meta: _Meta, state: Int, x: List[Float32]) raises -> List[Float64]:
+    var got = List[Float64](length=N * K, fill=-7.0)
+    var call = member_call_of(meta.plan, state)
+    call.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    call.dst = MemberMatrix(Int(got.unsafe_ptr()), N, K, MEMBER_F64)
+    _ = member_call(meta.plan.member, MEMBER_OP_DECISION, call)
+    return got^
+
+
+def check_ada_classifier() raises:
+    var x = _x()
+    var y = _codes()
+    var s = AdaSpec(True, 5, 3)
+    var door = ada_fit(s, x, N, D, y, K, List[Float32](), _session_served())
+    var meta = _ada_meta(META_ADA_CLASSIFIER, member_plan_of(rf_config(RfSpec.decision_tree(True, 1)),
+                                                             MEMBER_FAMILY_TREE, True), 5, 3, 0, True)
+    var state = _meta_fit(meta, x, y)
+    _same(_ada_words(meta, state), _want_words(door.alphas, door.errors), "AdaBoost weights and errors")
+    _same_i32(_meta_codes(meta, state, x), ada_predict_codes(door, x, N), "AdaBoost predict")
+    _same(_meta_proba(meta, state, x), _ada_door(door, x, ADA_PROBA, K), "AdaBoost predict_proba")
+    _same(_meta_decision(meta, state, x), _ada_door(door, x, ADA_DECISION, K), "AdaBoost decision_function")
+    _free(meta.plan, state)
+    meta.close()
+    _ = x^
+    _ = y^
+
+
+def check_ada_regressor() raises:
+    var x = _x()
+    var t = _targets(x)
+    var s = AdaSpec(False, 5, 3)
+    s.loss = 1
+    var door = ada_fit(s, x, N, D, List[Int32](), 0, t, _session_served())
+    var meta = _ada_meta(META_ADA_REGRESSOR, member_plan_of(rf_config(RfSpec.decision_tree(False, 3)),
+                                                            MEMBER_FAMILY_TREE, False), 5, 3, 1, True)
+    var call = member_new(meta.plan)
+    call.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    call.y = MemberMatrix(Int(t.unsafe_ptr()), N, 1, MEMBER_F32)
+    _ = member_call(meta.plan.member, MEMBER_OP_FIT, call)
+    var state = call.state
+    _same(_ada_words(meta, state), _want_words(door.alphas, door.errors), "AdaBoostRegressor weights and errors")
+    var got = List[Float32](length=N, fill=-7.0)
+    var p = member_call_of(meta.plan, state)
+    p.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    p.dst = MemberMatrix(Int(got.unsafe_ptr()), N, 1, MEMBER_F32)
+    _ = member_call(meta.plan.member, MEMBER_OP_PREDICT, p)
+    var want = ada_predict_values(door, x, N)
+    for i in range(N):  # small-loop(oracle: every value)
+        require(got[i] == want[i], "AdaBoostRegressor predict row " + String(i) + ": META " + String(got[i])
+                + " != door " + String(want[i]))
+    _free(meta.plan, state)
+    meta.close()
+    _ = x^
+    _ = t^
+
+
+def check_ada_member_route() raises:
+    var x = _x()
+    var y = _codes()
+    var s = AdaSpec(True, 4, 1)
+    var r = RfSpec(True, 3, 0)
+    r.max_depth = 2
+    var door = ada_member_fit(s, rf_config(r), MEMBER_FAMILY_FOREST, False, x, N, D, y, K, List[Float32](),
+                              List[Float32]())
+    var meta = _ada_meta(META_ADA_CLASSIFIER, member_plan_of(rf_config(r), MEMBER_FAMILY_FOREST, True), 4, 1, 0, False)
+    var state = _meta_fit(meta, x, y)
+    _same(_ada_words(meta, state), _want_words(door.alphas, door.errors), "AdaBoost(RF) weights and errors")
+    _same_i32(_meta_codes(meta, state, x), door.codes, "AdaBoost(RF) predict")
+    _free(meta.plan, state)
+    meta.close()
+    _ = x^
+    _ = y^
+
+
+def _copy_forest_state(plan: MemberPlan, state: Int) raises -> Int:
+    """A new state of `plan` holding `state`'s six fitted blocks (EXPORT by index, IMPORT, the last DONE)."""
+    var probe = MemberCall(plan.route, state)
+    probe.block = 0
+    probe.flags = MEMBER_BLOCK_BY_INDEX
+    _ = member_call(plan.member, MEMBER_OP_EXPORT, probe)
+    var blocks = probe.out_cols
+    var copy = member_new(plan)
+    for i in range(blocks):  # small-loop(oracle: one member's fitted blocks)
+        var view = MemberCall(plan.route, state)
+        view.block = i
+        view.flags = MEMBER_BLOCK_BY_INDEX
+        _ = member_call(plan.member, MEMBER_OP_EXPORT, view)
+        copy.block = view.block
+        copy.flags = MEMBER_IMPORT_DONE if i == blocks - 1 else 0
+        copy.x = view.dst
+        _ = member_call(plan.member, MEMBER_OP_IMPORT, copy)
+    return copy.state
+
+
+def check_ada_import() raises:
+    var x = _x()
+    var y = _codes()
+    var base = member_plan_of(rf_config(RfSpec.decision_tree(True, 1)), MEMBER_FAMILY_TREE, True)
+    var meta = _ada_meta(META_ADA_CLASSIFIER, base.copy(), 5, 3, 0, True)
+    var state = _meta_fit(meta, x, y)
+    var want = _meta_proba(meta, state, x)
+    var nested = MemberCall(meta.plan.route, state)
+    nested.block = META_BLOCK_NESTED
+    _ = member_call(meta.plan.member, MEMBER_OP_EXPORT, nested)
+    var handles = List[Int64]()
+    var hw = _I64P(unsafe_from_address=nested.dst.data)
+    for u in range(nested.dst.rows * nested.dst.cols):  # small-loop(oracle: the rounds' states copied)
+        handles.append(Int64(_copy_forest_state(base, Int(hw[u]))))
+    var words = _ada_words(meta, state)
+    var call = member_call_of(meta.plan)
+    _ = member_call(meta.plan.member, MEMBER_OP_NEW, call)
+    var block = MemberCall(meta.plan.route, call.state)
+    block.block = META_BLOCK_NESTED
+    block.x = MemberMatrix(Int(handles.unsafe_ptr()), 1, len(handles), MEMBER_I64)
+    _ = member_call(meta.plan.member, MEMBER_OP_IMPORT, block)
+    var aw = MemberCall(meta.plan.route, call.state)
+    aw.block = META_BLOCK_ADA
+    aw.x = MemberMatrix(Int(words.unsafe_ptr()), 1, len(words), MEMBER_F64)
+    _ = member_call(meta.plan.member, MEMBER_OP_IMPORT, aw)
+    var last = MemberCall(meta.plan.route, call.state)
+    last.block = 0
+    last.flags = MEMBER_IMPORT_DONE
+    last.classes = K
+    _ = member_call(meta.plan.member, MEMBER_OP_IMPORT, last)
+    _same(_meta_proba(meta, call.state, x), want, "AdaBoost imported predict_proba")
+    _ = len(handles)
+    _ = len(words)
+    _free(meta.plan, call.state)
+    _free(meta.plan, state)
+    meta.close()
+    _ = x^
+    _ = y^
+
+
+# ---------------------------------------------------------------- the search and multi-output kinds (lane mf-search4)
+
+
+def _search_plans() raises -> List[MemberPlan]:
+    var out: List[MemberPlan] = [_logistic(1.0), _logistic(0.1), _logistic(10.0)]
+    return out^
+
+
+def check_search() raises:
+    """15. GridSearchCV (META_SEARCH_CLASSIFIER) over three LogisticRegression candidates, cv = 3, scoring None:
+    the META's search words (META_BLOCK_SEARCH) == `msel_search_run` over the same candidates (whose words
+    checks/native_tests/msel_search_run.mojo proves against the door's), and its predict_proba == the RUN's refit
+    state's."""
+    var x = _x()
+    var y = _codes()
+    var words: List[Float64] = [0.0, 0.0, 0.0, 0.0, -1.0]
+    var meta = _meta_with(META_SEARCH_CLASSIFIER, 3, _search_plans(), words^, List[List[Int32]](),
+                          List[List[Int32]](), List[Int](), 0)
+    var state = _meta_fit(meta, x, y)
+    var masks = List[Int]()
+    var plans = _search_plans()
+    for c in range(len(plans)):  # small-loop(fixture: each candidate kind's mask)
+        masks.append(member_kind_capabilities(plans[c]))
+    var plan = MselSearchPlan(plans.copy(), masks^, Int(x.unsafe_ptr()), N, D, Int(y.unsafe_ptr()), K, 3, _glue(),
+                              MetricRoute(entry_ref_unresolved().call, False, False))
+    var res = msel_search_run(plan)
+    var view = member_call_of(meta.plan, state)
+    view.block = META_BLOCK_SEARCH
+    _ = member_call(meta.plan.member, MEMBER_OP_EXPORT, view)
+    var got = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=view.dst.data)
+    require(Int(got[0]) == res.best and Int(got[1]) == res.n_splits and got[2] == res.best_score
+            and Int(got[3]) == len(plans), "the search header words")
+    for c in range(len(plans)):  # small-loop(check: candidates)
+        for f in range(res.n_splits):  # small-loop(check: folds)
+            require(got[6 + c * res.n_splits + f] == res.test[c][f], "a split score")
+    var want = List[Float64](length=N * K, fill=0.0)
+    var q = member_call_of(plans[res.best], res.best_state)
+    q.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    q.dst = MemberMatrix(Int(want.unsafe_ptr()), N, K, MEMBER_F64)
+    _ = member_call(plans[res.best].member, MEMBER_OP_PREDICT_PROBA, q)
+    _same(_meta_proba(meta, state, x), want, "the search's predict_proba (its best estimator's)")
+    _free(plans[res.best], res.best_state)
+    _free(meta.plan, state)
+    meta.close()
+    _ = x^
+    _ = y^
+
+
+def check_multi_output() raises:
+    """16. MultiOutputClassifier (META_MULTI_CLASSIFIER) over LogisticRegression, two outputs with 3 and 2
+    classes (THE 2-D y: rows x 2 int32 codes, `class_counts` [3, 2]): predict (rows x 2 int32) == each output's
+    member fitted directly on its column with its count; score == the share of rows whose both outputs match,
+    counted here."""
+    var x = _x()
+    var y = _codes()
+    var y2 = List[Int32](length=N * 2, fill=Int32(0))
+    var y1 = List[Int32](length=N, fill=Int32(0))
+    for i in range(N):  # small-loop(fixture: the second output's two classes)
+        y1[i] = Int32((i // 2) % 2)
+        y2[2 * i] = y[i]
+        y2[2 * i + 1] = y1[i]
+    var counts: List[Int] = [K, 2]
+    var meta = _meta_with(META_MULTI_CLASSIFIER, 0, [_logistic(1.0)], [0.0], List[List[Int32]](),
+                          List[List[Int32]](), List[Int](), 0)
+    var call = member_new(meta.plan)
+    call.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    call.y = MemberMatrix(Int(y2.unsafe_ptr()), N, 2, MEMBER_I32)
+    call.class_counts = Int(counts.unsafe_ptr())
+    _ = member_call(meta.plan.member, MEMBER_OP_FIT, call)
+    var state = call.state
+    var got = List[Int32](length=N * 2, fill=Int32(-1))
+    var p = member_call_of(meta.plan, state)
+    p.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    p.dst = MemberMatrix(Int(got.unsafe_ptr()), N, 2, MEMBER_I32)
+    _ = member_call(meta.plan.member, MEMBER_OP_PREDICT, p)
+    var base = _logistic(1.0)
+    var s0 = _fit_k(base, x, y, K)
+    var s1 = _fit_k(base, x, y1, 2)
+    var w0 = _codes32(base, s0, Int(x.unsafe_ptr()))
+    var w1 = _codes32(base, s1, Int(x.unsafe_ptr()))
+    var hits = 0
+    for i in range(N):  # small-loop(check)
+        require(got[2 * i] == w0[i] and got[2 * i + 1] == w1[i], "an output's predicted code")
+        if w0[i] == y[i] and w1[i] == y1[i]:
+            hits += 1
+    var sc = member_call_of(meta.plan, state)
+    sc.x = MemberMatrix(Int(x.unsafe_ptr()), N, D)
+    sc.y = MemberMatrix(Int(y2.unsafe_ptr()), N, 2, MEMBER_I32)
+    _ = member_call(meta.plan.member, MEMBER_OP_SCORE, sc)
+    require(sc.value == Float64(hits) / Float64(N), "MultiOutputClassifier.score")
+    _free(base, s0)
+    _free(base, s1)
+    _free(meta.plan, state)
+    meta.close()
+    _ = counts^
+    _ = y2^
+    _ = x^
+    _ = y^
+
+
 def test_meta_member_kind() raises:
     # The publication _mojolearn_x_trees_host makes at module init (the META entry's glue), once.
     publish_x_trees_glue("cpu")
+    # The AdaBoost cases' forest images and member entries (lane mf-ada4).
+    publish_host_images()
+    publish_host_members()
     def run_case(which: Int) raises:
         if which == 0:
             check_soft_vote()
@@ -806,8 +1167,20 @@ def test_meta_member_kind() raises:
             check_stack_predict_labels()
         elif which == 8:
             check_stack_user_folds()
-        else:
+        elif which == 9:
             check_nested_two_deep()
+        elif which == 10:
+            check_ada_classifier()
+        elif which == 11:
+            check_ada_regressor()
+        elif which == 12:
+            check_ada_member_route()
+        elif which == 13:
+            check_ada_import()
+        elif which == 14:
+            check_search()
+        else:
+            check_multi_output()
     check_cases("meta_member_kind", CASES, run_case)
 
 

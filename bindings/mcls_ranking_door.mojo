@@ -48,7 +48,8 @@ from std.python._cpython import GILReleased
 from bindings.metrics_program_pack import metric_arena_array
 from bindings.mcls_ranking_run import (
     _CF_OUT, _CF_CHUNK, _OVO_WORDS, _RANK_ROW_SUM, _RANK_CURVE_SCORE, _RANK_AVERAGE, _RANK_OVO_MASK, _RANK_OVO_PAIR,
-    _CO_PR, _CO_EMPTY, _CO_ZERO_CLASS, mc_fold_stages, mc_stage_average,
+    _CO_PR, _CO_EMPTY, _CO_ZERO_CLASS, mc_fold_stages, mc_stage_average, mc_roc_binary_stages, mc_roc_ovr_stages,
+    RocOvo, ROC_OVO_OK, ROC_OVO_ROWS, ROC_OVO_LABEL, roc_ovo_run,
 )
 from bindings.mcls_classify_door import mc_targets, mc_pos_label, mc_binary_sets
 from core.host_finite_scan import host_all_finite_f32
@@ -143,13 +144,14 @@ def _roc_binary(true: McLabels, args: PythonObject, max_fpr: PythonObject, conte
     var partial = max_fpr is not None and mc_float(max_fpr, context) != 1
     var mf = mc_float(max_fpr, context) if partial else 0.0
     # `_fold_curves(s, flags, w, n, 1, fold="auc", max_fpr=mf)`
+    # the typed builder (bindings/mcls_ranking_run.mojo `mc_roc_binary_stages`):
+    # inputs s, flags and (weighted) w, pinned in that order
     var prog = MetricDoorProg()
-    var s_off = prog.put(s)
-    var pos = prog.put(flags)
-    var w_off = MC_NONE
+    var out = mc_roc_binary_stages(prog.plan, n, w is not None, partial, mf)
+    prog.pins.append(s)
+    prog.pins.append(flags)
     if w is not None:
-        w_off = prog.put(w)
-    var out = mc_fold_stages(prog.plan, s_off, 1, pos, w_off, n, 1, partial, mf, MC_NONE)
+        prog.pins.append(w)
     var arena = metric_door_run(prog, args[8], context)
     _ = s^
     _ = flags^
@@ -215,32 +217,18 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
             mc_undefined(_ROC_ONE_CLASS, context)
             return mc_nan()
         return PythonObject(got.auc.value)
-    # `_fold_curves(s, _OneHot(codes, n, k, 0), w, n, k, stride=k, fold="auc", tail=tail)`
+    # `_fold_curves(s, _OneHot(codes, n, k, 0), w, n, k, stride=k, fold="auc", tail=tail)`: the typed
+    # builder (bindings/mcls_ranking_run.mojo `mc_roc_ovr_stages`), inputs s, codes and (weighted) w
     var prog = MetricDoorProg()
-    var s_off = prog.put(s)
-    var c_off = prog.put(codes)
-    var pos = prog.scratch(n * k)
-    prog.stage("onehot", n * k, [c_off, pos, n, k, 0])
-    var w_off = MC_NONE
+    var slots = mc_roc_ovr_stages(prog.plan, n, k, w is not None, average is not None, weighted_avg)
+    prog.pins.append(s)
+    prog.pins.append(codes)
     if w is not None:
-        w_off = prog.put(w)
-    var out = mc_fold_stages(prog.plan, s_off, k, pos, w_off, n, k, False, 0.0, MC_NONE)
-    # the tail: ROW_SUM, then the supports, scores and average
-    var rows = prog.want(prog.alloc(1), 1)
-    if n:
-        prog.stage("rank_epi", n, [_RANK_ROW_SUM, s_off, n, k, rows])
-    var sc = MC_NONE
-    var fl = MC_NONE
-    var res = MC_NONE
-    if not micro:
-        var got = prog.group(c_off, n, k, MC_NONE, 1, w_off, 1)
-        sc = prog.want(prog.alloc(2 * k), 2 * k)
-        fl = prog.want(prog.alloc(k), k)
-        var sup = prog.want(prog.alloc(2 * k), 2 * k)
-        prog.stage("rank_epi", k, [_RANK_CURVE_SCORE, out, k, 0, sc, fl, got[1] if w is not None else got[0],
-                                   1 if w is not None else 0, sup])
-        if average is not None:
-            res = mc_stage_average(prog.plan, sc, sup, k, weighted_avg)
+        prog.pins.append(w)
+    var rows = slots.rows
+    var sc = slots.sc
+    var fl = slots.fl
+    var res = slots.res
     var arena = metric_door_run(prog, args[8], context)
     if arena.i32(rows) != 0:
         raise Error(_ROWS_MSG)
@@ -268,86 +256,25 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
     var weighted_avg = String(args[3]) == "weighted"
     var codes = mc_map_order(true, classes, context)
-    var n_pairs = k * (k - 1) // 2
-    var per_pair = 17 * n + 4 + 4 * _CF_OUT
-    var chunk = max(1, min(n_pairs, _OVO_WORDS // max(per_pair, 1)))
-    var pair_a = List[Int]()
-    var pair_b = List[Int]()
-    for a in range(k):  # driver-loop: over the classes (the pair table)
-        for b in range(a + 1, k):  # driver-loop: over the classes after a
-            pair_a.append(a)
-            pair_b.append(b)
-    var ps_words = List[Int32]()
-    var prev_words = List[Int32]()
-    var g0 = 0
-    for _ in range(n_pairs + 1):  # driver-loop: over the chunks of class pairs (one program each)
-        if g0 >= n_pairs:
-            break
-        var m = min(chunk, n_pairs - g0)
-        var last_only = g0 == 0 and m == n_pairs
-        var prog = MetricDoorProg()
-        var s_off = prog.put(s)
-        var c_off = prog.put(codes)
-        var oh = prog.scratch(n * k)
-        if n:
-            prog.stage("onehot", n * k, [c_off, oh, n, k, 0])
-        var rows = MC_NONE
-        if g0 == 0:
-            rows = prog.want(prog.alloc(1), 1)
-            if n:
-                prog.stage("rank_epi", n, [_RANK_ROW_SUM, s_off, n, k, rows])
-        var got = prog.group(c_off, n, k, MC_NONE, 1, MC_NONE, 1)
-        var off = got[0]
-        _ = prog.want(off + k, 1)
-        var cf = prog.scratch(2 * m * _CF_OUT)
-        for t in range(m):  # driver-loop: over the class pairs of this program
-            var a = pair_a[g0 + t]
-            var b = pair_b[g0 + t]
-            var w = prog.scratch(n)
-            if n:
-                prog.stage("rank_epi", n, [_RANK_OVO_MASK, c_off, n, a, b, w])
-            _ = mc_fold_stages(prog.plan, s_off + a, k, oh + a * n, w, n, 1, False, 0.0, cf + 2 * t * _CF_OUT)
-            _ = mc_fold_stages(prog.plan, s_off + b, k, oh + b * n, w, n, 1, False, 0.0, cf + (2 * t + 1) * _CF_OUT)
-        var sc = prog.scratch(4 * m)
-        var fl = prog.want(prog.alloc(2 * m), 2 * m)
-        prog.stage("rank_epi", 2 * m, [_RANK_CURVE_SCORE, cf, 2 * m, 0, sc, fl, MC_NONE, 0, 0])
-        var ps: Int
-        var prev: Int
-        if last_only:
-            ps = prog.scratch(2 * m)
-            prev = prog.scratch(2 * m)
-        else:
-            ps = prog.want(prog.alloc(2 * m), 2 * m)
-            prev = prog.want(prog.alloc(2 * m), 2 * m)
-        prog.stage("rank_epi", m, [_RANK_OVO_PAIR, sc, off, k, n, g0, m, ps, prev])
-        var res = MC_NONE
-        if last_only:
-            res = mc_stage_average(prog.plan, ps, prev, n_pairs, weighted_avg)
-        var arena = metric_door_run(prog, args[8], context)
-        if g0 == 0:
-            if arena.i32(rows) != 0:
-                raise Error(_ROWS_MSG)
-            if arena.i32(off + k) != n:
-                raise Error("mojolearn roc_auc_score: a y_true label is not among the classes")
-        for j in range(2 * m):  # driver-loop: over the pair directions of this program
-            if arena.i32(fl + j) == 1:
-                mc_undefined(_ROC_ONE_CLASS, context)
-        if last_only:
-            _ = codes^
-            return PythonObject(arena.f64(res))
-        for j in range(2 * m):  # driver-loop: over the pair words of this program
-            ps_words.append(Int32(arena.i32(ps + j)))
-            prev_words.append(Int32(arena.i32(prev + j)))
-        g0 += m
+    # UNPACK here (the route, the pinned scores and codes, every address read
+    # with the GIL held), RUN `roc_ovo_run` (bindings/mcls_ranking_run.mojo:
+    # the same programs, typed, lane mf-metric4), PACK the warnings and float.
+    var pin = metric_route_open(args[8], context)
+    var s_at = Int(py=classical_address(s))
+    var codes_at = Int(py=classical_address(codes))
+    var got = RocOvo(ROC_OVO_OK, 0, 0.0)
+    with GILReleased(Python()):
+        got = roc_ovo_run(pin.route, s_at, codes_at, n, k, weighted_avg)
+    _ = s  # the RUN reads the pinned words
     _ = codes^
-    # the pair words are the AVERAGE program's own words (were two Arrays
-    # copied from them and pinned as caller buffers)
-    var p2 = MetricDoorProg()
-    var ps_off = p2.put_words(ps_words^)
-    var prev_off = p2.put_words(prev_words^)
-    var res = mc_stage_average(p2.plan, ps_off, prev_off, n_pairs, weighted_avg)
-    var arena = metric_door_run(p2, args[8], context)
-    return PythonObject(arena.f64(res))
+    _ = pin^
+    if got.status == ROC_OVO_ROWS:
+        raise Error(_ROWS_MSG)
+    if got.status == ROC_OVO_LABEL:
+        raise Error("mojolearn roc_auc_score: a y_true label is not among the classes")
+    for _ in range(got.undefined):  # driver-loop: over the one-class pair directions (one warning each)
+        mc_undefined(_ROC_ONE_CLASS, context)
+    return PythonObject(got.value)
 
 
 def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObject:

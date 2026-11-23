@@ -65,6 +65,11 @@ struct MemberSetRun(Movable):
     var targets: List[Int]
     var weights: List[Int]
     var y_dtype: Int
+    # THE 2-D y (core/member_abi.mojo layout 4): the targets' columns, one per
+    # output (1: every single-output caller). Each member's target address is
+    # then `rows` x `y_cols` row-major words; its plan carries the per-output
+    # class counts (`MemberPlan.class_counts`).
+    var y_cols: Int
     # Per member, four words: row draw address and count (count 0: every
     # row), column draw address and count (count 0: every column). The
     # draws are `index_dtype` numbers (MEMBER_I32 or MEMBER_I64), in the
@@ -134,6 +139,7 @@ struct MemberSetRun(Movable):
         self.targets = List[Int]()
         self.weights = List[Int]()
         self.y_dtype = y_dtype
+        self.y_cols = 1
         self.picks = List[Int]()
         self.index_dtype = index_dtype
         self.own_x = List[Int]()
@@ -275,6 +281,7 @@ def _set_gather_span(run: MutPointer[MemberSetRun, MutUntrackedOrigin], u: Int, 
     var y_source = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=run[].targets[u])
     var y_target = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst_y)
     var has_w = run[].weights[u] != 0 and dst_w != 0
+    var yc = run[].y_cols
     for i in range(first, first + count):
         var r = _set_pick(row_draw, i, wide) if row_count > 0 else i
         if column_count > 0:
@@ -282,8 +289,10 @@ def _set_gather_span(run: MutPointer[MemberSetRun, MutUntrackedOrigin], u: Int, 
                 target[i * width + j] = source[r * cols + _set_pick(column_draw, j, wide)]
         else:
             unsafe_memcpy(dest=target + i * width, src=source + r * cols, count=cols)
-        # Targets are 4-byte words of either element type: copied as bits.
-        y_target[i] = y_source[r]
+        # Targets are 4-byte words of either element type: copied as bits
+        # (THE 2-D y: one word per output).
+        for c in range(yc):
+            y_target[i * yc + c] = y_source[r * yc + c]
         if has_w:
             MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=dst_w)[i] = MutPointer[
                 Float32, MutUntrackedOrigin](unsafe_from_address=run[].weights[u])[r]
@@ -440,7 +449,7 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
     var done = False
     try:
         call.x = MemberMatrix(x_address, rows, cols)
-        call.y = MemberMatrix(run[].targets[u], rows, 1, run[].y_dtype)
+        call.y = MemberMatrix(run[].targets[u], rows, run[].y_cols, run[].y_dtype)
         if run[].weights[u] != 0:
             call.weights = MemberMatrix(run[].weights[u], rows, 1)
         if by_index:
@@ -456,7 +465,7 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
             var w_address = 0
             if hold:
                 run[].part_x[u] = List[Float32](length=n * width, fill=0.0)
-                run[].part_y[u] = List[Int32](length=n, fill=Int32(0))
+                run[].part_y[u] = List[Int32](length=n * run[].y_cols, fill=Int32(0))
                 x_at = Int(run[].part_x[u].unsafe_ptr())
                 y_at = Int(run[].part_y[u].unsafe_ptr())
                 if run[].weights[u] != 0:
@@ -464,7 +473,7 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
                     w_address = Int(run[].part_w[u].unsafe_ptr())
             else:
                 x_part = List[Float32](length=n * width, fill=0.0)
-                y_part = List[Int32](length=n, fill=Int32(0))
+                y_part = List[Int32](length=n * run[].y_cols, fill=Int32(0))
                 x_at = Int(x_part.unsafe_ptr())
                 y_at = Int(y_part.unsafe_ptr())
                 if run[].weights[u] != 0:
@@ -472,7 +481,7 @@ def _member_set_unit(address: Int, u: Int, alone: Bool) raises:
                     w_address = Int(w_part.unsafe_ptr())
             _set_gather(address, u, n, width, x_at, y_at, w_address, alone)
             call.x = MemberMatrix(x_at, n, width)
-            call.y = MemberMatrix(y_at, n, 1, run[].y_dtype)
+            call.y = MemberMatrix(y_at, n, run[].y_cols, run[].y_dtype)
             if w_address != 0:
                 call.weights = MemberMatrix(w_address, n, 1)
         call.pin = offer
@@ -525,7 +534,8 @@ def member_set_prepare(mut run: MemberSetRun) -> Bool:
             run.parallel.append(u)
     run.cover_units.clear()
     # skip_lacking: the caller read every unit's classes (no second pass).
-    if run.y_dtype == MEMBER_I32 and not run.skip_lacking:
+    # A 2-D y has one class set per output: the members' own fits decide.
+    if run.y_dtype == MEMBER_I32 and not run.skip_lacking and run.y_cols == 1:
         for u in range(count):  # driver-loop: over the members (one cover pass per distinct target)
             if run.plans[u].classes <= 0:
                 continue

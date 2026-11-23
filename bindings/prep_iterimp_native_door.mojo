@@ -42,8 +42,10 @@
 # the Ensemble, Search and Pipeline families, whose member entries are
 # unpublished until the META member kind lands), an admission or a
 # held-state import the family refuses for a class with a full plan (a
-# class_weight that is neither None, 'balanced' nor an exact dict, or a
-# dict with a key that is not an exact number; an image without the
+# class_weight the fit door accepts in a form the member does not read, a
+# str or dict subclass; since lane mf-left4 a class_weight the estimator
+# refuses and a dict key that is not a number are native: their words are
+# raised by the RUN's first classifier fit; an image without the
 # member's entry, an unaddressable GP kernel, the gbdt adapter's fast mode
 # and categorical or multi-target losses, a CV splitter object: the
 # fallback rule, a mark never turns a call that worked into a refusal; lane
@@ -684,7 +686,9 @@ struct _Member(Movable):
     `plan_key` the class's import-time plan (the held-state record's key),
     `borrows` / `release` the kind's MEMBER_BORROWS_FIT and GIL bits,
     `classifier` a classifier kind whose PREDICT writes codes of
-    `code_dtype` (lane mf-iterimp3)."""
+    `code_dtype` (lane mf-iterimp3); `cw_refusal` the estimator's own words
+    for a class_weight it refuses (lane mf-left4: raised by the RUN at its
+    first classifier fit, where the door rounds' first fit raised them)."""
     var native: Bool
     var owner: MemberOwner
     var plan_key: PythonObject
@@ -696,9 +700,11 @@ struct _Member(Movable):
     var release: Bool
     var classifier: Bool
     var code_dtype: Int
+    var cw_refusal: String
 
     def __init__(out self):
         self.native = False
+        self.cw_refusal = String("")
         self.owner = MemberOwner()
         self.plan_key = PythonObject(None)
         self.template = PythonObject(None)
@@ -747,8 +753,11 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
         var fields = py_call(fields_get, template, py_type(template))
         # A classifier's class_weight dict is keyed by the step's values,
         # read into the KEYED tail here (lane mf-adm3); each step makes its
-        # table over its classes (x_prep/iterimp_run.mojo `_member_step`).
-        var owner = member_admit_serving_valued(template, fields, plan, member_context, b, needs)
+        # table over its classes (x_prep/iterimp_run.mojo `_member_step`). A
+        # value or a key the estimator refuses leaves its words in
+        # `refusal` for the RUN's first classifier fit (lane mf-left4).
+        var refusal = String("")
+        var owner = member_admit_serving_valued(template, fields, plan, member_context, b, needs, refusal)
         if not owner.published:
             return out^
         if posterior and not _posterior_family(owner.plan.family):
@@ -765,6 +774,7 @@ def _member(estimator: PythonObject, posterior: Bool, dk: Int, context: PythonOb
             two.classes = 2
             out.code_dtype = member_output_dtype(two, MEMBER_OP_PREDICT, max(dk - 1, 1), 1, MEMBER_I32)
             out.classifier = True
+        out.cw_refusal = refusal
         out.borrows = (mask & MEMBER_BORROWS_FIT) != 0
         out.release = (mask & (MEMBER_GIL_FREE | MEMBER_GIL_DOOR)) != 0
         out.owner = owner^
@@ -906,6 +916,7 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
         var run = IterImpMember(member.owner.plan.copy(), member.borrows, request.posterior)
         run.classifier = member.classifier
         run.code_dtype = member.code_dtype
+        run.cw_refusal = member.cw_refusal
         var fit = IterImpMemberFit()
         iterimp_member_rounds(runner, request, plan, fitted, run, fit)
         # PACK (every state is released after it, on every path)

@@ -6,10 +6,12 @@
 # RidgeCV path; nothing is published before the fit returned. UNPACK is
 # bindings/x_linear_cv_unpack.mojo.
 from std.python import Python, PythonObject
-from x_linear.door_run import xl_ridge_singular
+from x_linear.door_run import (
+    xl_ridge_singular, XlRidgeSplitsOut, XL_RIDGE_SPLITS_EMPTY, XL_RIDGE_SPLITS_SINGULAR, XL_RIDGE_SPLITS_ERROR,
+)
 from bindings.x_linear_common_unpack import _b, _name, _xl_word, _xl_float, _xl_count, _xl_slice, _xl_reals
 from bindings.x_linear_regressors_pack import _xl_set_linear
-from bindings.x_linear_cv_unpack import XlRidgeCv, XlEnetCvFit, XlLogCvFit
+from bindings.x_linear_cv_unpack import XlRidgeCv, XlEnetCvFit, XlLogCvFit, _xl_undefined_warning
 from bindings.py_balanced import py_call, py_setitem
 from bindings.x_linear_keys_unpack import x_linear_keys
 from bindings.classical_labels_door import labels_address
@@ -59,6 +61,30 @@ def xl_fit_ridge_cv_kfold_pack(model: PythonObject, fields: PythonObject, call: 
     py_setitem(fields, nk[].k_best_score_, _xl_float(call.scores, best))
     py_setitem(fields, nk[].k_n_features_in_, PythonObject(d))
     return model
+
+
+def xl_ridge_cv_splits_finish(call: XlRidgeCv, ran: XlRidgeSplitsOut, model: PythonObject,
+                              context: PythonObject) raises -> Bool:
+    """PACK of the split path's RUN, in the door's split order: scikit-learn's
+    undefined-R^2 warning for each split before the stop with fewer than two
+    test rows, then the stop's refusal (a split with no train or test rows;
+    a fit that does not factor, in the fit's words; a gather's or a fold
+    RUN's own words). True when a split's R^2
+    was undefined (every alpha's mean is then NaN)."""
+    var undefined = False
+    for s in range(len(ran.undefined)):  # driver-loop: over the cv splits reached (one warning per undefined split)
+        if ran.undefined[s]:
+            # scikit-learn's r2_score: NaN, with its warning, for fewer than
+            # two test rows; every alpha's mean is then NaN (the first wins)
+            _xl_undefined_warning("R^2 score is not well-defined with less than two samples.", context)
+            undefined = True
+    if ran.stop_kind == XL_RIDGE_SPLITS_EMPTY:
+        raise Error("mojolearn RidgeCV: every cv split needs training and test rows")
+    if ran.stop_kind == XL_RIDGE_SPLITS_SINGULAR:
+        xl_ridge_singular_refuse(model, call.fit_words, call.request.d)
+    if ran.stop_kind == XL_RIDGE_SPLITS_ERROR:
+        raise Error(ran.error)
+    return undefined
 
 
 def xl_fit_ridge_cv_splits_pack(model: PythonObject, fields: PythonObject, call: XlRidgeCv, best: Int,

@@ -26,7 +26,7 @@ from core.metrics_entry_table import MR_R2, MR_R2_WEIGHTED
 from core.entry_table import EntryRef
 from core.base_helpers_calls import (
     base_assign_fold_i64, base_check_indices_i64, base_count_fold_hits_i64, base_mark_split_roles_f32,
-    base_row_means_f64, base_reduce_stat, base_reduce_stat_int,
+    base_row_means_f64, base_reduce_stat, base_reduce_stat_int, base_gather_rows_bytes,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -680,9 +680,13 @@ def xl_logcv_fit_run(request: XlFitRequest, prep: XlClassPrepRequest, stratified
 #
 # The split path's alpha loop is serial by nature: each fit, prediction and
 # R^2 is one launch on the estimator's one device (each parallel inside),
-# and the test R^2 of an alpha reads that alpha's fit. The splits are driven
-# from the door, because a split's rows are gathered by the base binding,
-# which has no typed entry for the gather yet.
+# and the test R^2 of an alpha reads that alpha's fit. The splits run one
+# after another for the same reason (they share the one device and the
+# boundary's scratch words). Since lane mf-split4b a split's rows are
+# gathered here by the base helper table's typed `gather_rows_bytes`
+# (core/base_entry_table.mojo BH_GATHER_ROWS_BYTES: the device gather on the
+# GPU binding, the host walk on the host one, the same entry the door called
+# through CPython), so every split runs in ONE RUN (`xl_ridge_cv_splits_run`).
 
 
 struct XlRidgeCvRequest(Movable):
@@ -882,6 +886,112 @@ def xl_ridge_cv_fold_run(request: XlRidgeCvRequest, fold: XlRidgeFoldRequest, es
         table[i * request.k + fold.column] = xl_r2_run(request.r2, request.helpers, fold.y_test, fold.pred,
                                                        fold.w_test, fold.n_test, i == 0)
     return -1
+
+
+#: `XlRidgeSplitsOut.stop_kind`: every split ran; a split with no train or
+#: no test rows (refused before it runs); a split whose fit did not factor.
+comptime XL_RIDGE_SPLITS_DONE = 0
+comptime XL_RIDGE_SPLITS_EMPTY = 1
+comptime XL_RIDGE_SPLITS_SINGULAR = 2
+comptime XL_RIDGE_SPLITS_ERROR = 3
+
+
+struct XlRidgeSplitsOut(Movable):
+    """What the split path's RUN tells PACK: per split reached, whether it had
+    fewer than two test rows (its R^2 undefined: not run, scikit-learn's
+    warning is PACK's), and where it stopped (`stop`, -1: none) and why
+    (XL_RIDGE_SPLITS_*; XL_RIDGE_SPLITS_ERROR: a gather or the fold's RUN
+    raised `error`, which PACK raises after the earlier splits' warnings, as
+    the door's split loop did). The splits after `stop` did not run, as the
+    door's split loop raised there."""
+    var undefined: List[Bool]
+    var stop: Int
+    var stop_kind: Int
+    var error: String
+
+    def __init__(out self):
+        self.undefined = List[Bool]()
+        self.stop = -1
+        self.stop_kind = XL_RIDGE_SPLITS_DONE
+        self.error = String()
+
+
+def xl_ridge_cv_splits_run(request: XlRidgeCvRequest, splits: XlSplitWords, fit: Int, status: Int,
+                           est: String) raises -> XlRidgeSplitsOut:
+    """RidgeCV's split path over every cv split, in split order (the door's
+    loop of `xl_ridge_cv_fold_unpack` + `xl_ridge_cv_fold_run`, lane
+    mf-split4b): a split's empty side stops it; a split with fewer than two
+    test rows is marked and skipped; otherwise its rows are gathered (X and
+    the targets of the training rows, the training weights behind the
+    targets when weighted; X, the targets and the weights of the test rows:
+    the typed `gather_rows_bytes` of the base helper table, the bytes the
+    door's gathers wrote) and its alpha grid runs (`xl_ridge_cv_fold_run`);
+    a fit that does not factor stops it. `fit` and `status`: the boundary's
+    scratch words every split shares. No Python."""
+    var out = XlRidgeSplitsOut()
+    for s in range(request.k):  # driver-loop: over the cv splits (serial by nature: see the banner)
+        var n_tr = splits.train_sizes[s]
+        var n_te = splits.test_sizes[s]
+        if n_tr == 0 or n_te == 0:
+            out.stop = s
+            out.stop_kind = XL_RIDGE_SPLITS_EMPTY
+            return out^
+        if n_te < 2:
+            out.undefined.append(True)
+            continue
+        out.undefined.append(False)
+        try:
+            if _xl_ridge_split_run(request, splits, s, fit, status, est):
+                out.stop = s
+                out.stop_kind = XL_RIDGE_SPLITS_SINGULAR
+                return out^
+        except problem:
+            out.stop = s
+            out.stop_kind = XL_RIDGE_SPLITS_ERROR
+            out.error = String(problem)
+            return out^
+    return out^
+
+
+def _xl_ridge_split_run(request: XlRidgeCvRequest, splits: XlSplitWords, s: Int, fit: Int, status: Int,
+                        est: String) raises -> Bool:
+    """One scored split of `xl_ridge_cv_splits_run`: its typed gathers and
+    its alpha grid. True when a fit did not factor."""
+    var n = request.n
+    var d = request.d
+    var weighted = request.weighted
+    var n_tr = splits.train_sizes[s]
+    var n_te = splits.test_sizes[s]
+    var tr = splits.train[s]
+    var te = splits.test[s]
+    var x_train = List[Float32](length=n_tr * d if n_tr * d > 0 else 1, fill=0.0)
+    var y_train = List[Float32](length=2 * n_tr if weighted else n_tr, fill=0.0)
+    var x_test = List[Float32](length=n_te * d if n_te * d > 0 else 1, fill=0.0)
+    var y_test = List[Float32](length=n_te, fill=0.0)
+    var w_test = List[Float32](length=n_te if weighted else 1, fill=0.0)
+    var pred = List[Float32](length=n_te, fill=0.0)
+    base_gather_rows_bytes(request.helpers, request.x, Int(x_train.unsafe_ptr()), tr, n, n_tr, 4 * d)
+    base_gather_rows_bytes(request.helpers, request.y, Int(y_train.unsafe_ptr()), tr, n, n_tr, 4)
+    base_gather_rows_bytes(request.helpers, request.x, Int(x_test.unsafe_ptr()), te, n, n_te, 4 * d)
+    base_gather_rows_bytes(request.helpers, request.y, Int(y_test.unsafe_ptr()), te, n, n_te, 4)
+    var w_test_at = 0
+    if weighted:
+        var weights = request.y + 4 * n
+        base_gather_rows_bytes(request.helpers, weights, Int(y_train.unsafe_ptr()) + 4 * n_tr, tr, n, n_tr, 4)
+        base_gather_rows_bytes(request.helpers, weights, Int(w_test.unsafe_ptr()), te, n, n_te, 4)
+        w_test_at = Int(w_test.unsafe_ptr())
+    var fold = XlRidgeFoldRequest(Int(x_train.unsafe_ptr()), n_tr, Int(y_train.unsafe_ptr()),
+                                  Int(x_test.unsafe_ptr()), n_te, Int(y_test.unsafe_ptr()), w_test_at, fit,
+                                  Int(pred.unsafe_ptr()), status, s)
+    var singular = xl_ridge_cv_fold_run(request, fold, est)
+    # the gathered rows are read through the fold's RUN above
+    _ = len(x_train)
+    _ = len(y_train)
+    _ = len(x_test)
+    _ = len(y_test)
+    _ = len(w_test)
+    _ = len(pred)
+    return singular >= 0
 
 
 def xl_ridge_cv_choose_run(request: XlRidgeCvRequest, undefined: Bool) raises -> Int:

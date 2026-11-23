@@ -38,6 +38,7 @@ from bindings.metrics_exp_common_run import MX_NONE, mx_nan, mx_inf, mx_isnan, m
 from bindings.metrics_program_pack import metric_arena_array
 from bindings.metrics_program_door import MetricDoorProg, metric_door_run
 from bindings.arena_prog_run import MetricArenaOwner
+from bindings.mcls_classify_run import McEpi, mc_sums_stages, mc_epi_words, mc_mcc_words
 from bindings.metrics_exp_common_unpack import (
     MxLab, MxPair, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str, mx_is_real, mx_float, mx_raise_obj,
     mx_zero_division, mx_warn, mx_undefined, mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode,
@@ -94,19 +95,11 @@ struct MxSums(Movable):
     def add_epi(mut self, kind: Int, k: Int, avg: Int, zd: Int, fmode: Int, b2: Float64,
                 context: PythonObject) raises:
         """One `cls_epi` stage (x_metrics/cls_epi.mojo)."""
-        var col = self.col()
-        var bo = 0
-        if fmode == 2:
-            var words = family_array(Python.tuple(4), "<i4", context)
-            var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
-            _ = words  # keep the Python object alive through the native call above
-            dst[0] = 1 + b2
-            _ = words  # keep the Python object alive through the native call above
-            dst[1] = b2
-            _ = words  # keep the Python object alive through the native call above
-            bo = self.prog.put_i32(words)
-        var eo = self.prog.alloc(8 + 6 * max(self.L, 1))
-        self.prog.stage("cls_epi", 1, [self.grp(0), self.grp(1), self.grp(2), k, col, kind, avg, zd, eo, fmode, bo])
+        # the typed stage (bindings/mcls_classify_run.mojo `mc_epi_words`):
+        # FMODE 2's (1 + beta^2, beta^2) are program-owned binary64 words
+        # (were a pinned int32 array of the same four words)
+        var eo = mc_epi_words(self.prog.plan, self.grp(0), self.grp(1), self.grp(2), self.L, self.col(),
+                              McEpi(kind, k, avg, zd, fmode, b2))
         self.eos.append(eo)
 
 
@@ -118,29 +111,19 @@ def _sums(pair: MxPair, order: PythonObject, context: PythonObject) raises -> Mx
     var yt = mx_codes(pair.true, order, False, context)
     var yp = mx_codes(pair.pred, order, False, context)
     var s = MxSums(MetricDoorProg(), n, L, pair.w is not None)
-    var a = s.prog.put_i32(yt)
-    var b = s.prog.put_i32(yp)
-    var matched = s.prog.scratch(n)
-    s.prog.stage("pair_key", n, [a, b, matched, L, 1])
-    var W = MX_NONE
+    # the one typed sums builder (bindings/mcls_classify_run.mojo
+    # `mc_sums_stages`): inputs a, b and (weighted) w, pinned in that order
+    var typed = mc_sums_stages(s.prog.plan, n, L, pair.w is not None)
+    s.prog.pins.append(yt)
+    s.prog.pins.append(yp)
     if pair.w is not None:
-        W = s.prog.put(pair.w)
-    s.match_key = matched
-    s.W = W
-    var keys: List[Int] = [matched, a, b]
-    for i in range(3):  # driver-loop: over the three count groupings
-        var g = s.prog.group(keys[i], n, L, MX_NONE, 1, W, 1)
-        s.g_off.append(g[0])
-        s.g_out.append(g[1])
-    if pair.w is not None:
-        var zero = s.prog.scratch(n)
-        s.prog.stage("pair_key", n, [a, a, zero, 1, 2])
-        var g = s.prog.group(zero, n, 1, MX_NONE, 1, W, 1)
-        s.g_off.append(g[0])
-        s.g_out.append(g[1])
-    else:
-        for i in range(3):  # driver-loop: over the three count groupings
-            s.cnt.append(s.prog.counts(s.g_off[i], L))
+        s.prog.pins.append(pair.w)
+    s.match_key = typed.match_off
+    s.W = typed.w_off
+    for i in range(len(typed.groups) // 2):  # driver-loop: over the count groupings (three, four weighted)
+        s.g_off.append(typed.groups[2 * i])
+        s.g_out.append(typed.groups[2 * i + 1])
+    s.cnt = typed.cnt.copy()
     return s^
 
 
@@ -160,18 +143,19 @@ def _wsum_sf64(mut s: MxSums, k: Int) raises -> Int:
 def _cm_stage(mut s: MxSums, k: Int, kind: Int, size: Int) raises -> Int:
     """`_cm_stage`: a cm_epi tail over the groupings; the output slot."""
     var col = s.col()
-    var out = s.prog.alloc(max(size, 1))
     var tp = s.grp(0)
     var tr = s.grp(1)
     var pr = s.grp(2)
+    if kind == _CM_MCC:
+        # the typed tail (bindings/mcls_classify_run.mojo `mc_mcc_words`: the same 4-word slot)
+        return mc_mcc_words(s.prog.plan, tp, tr, pr, k, col)
+    var out = s.prog.alloc(max(size, 1))
     var tot = s.g_out[3] if s.weighted else s.n
     if kind == _CM_COUNT and s.weighted:
         tot = _wsum_sf64(s, k)
     if kind == _CM_MLCM:
         if k:
             s.prog.stage("cm_epi", k, [kind, tp, tr, pr, k, col, tot, out])
-    elif kind == _CM_MCC:
-        s.prog.stage("cm_epi", 1, [kind, tp, tr, pr, k, col, out])
     else:
         s.prog.stage("cm_epi", 1, [kind, tp, k, col, tot, out])
     return out

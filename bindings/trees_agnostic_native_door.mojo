@@ -1276,10 +1276,14 @@ struct _DoorModel(AgnModel):
     whose meta-estimator has a member of that kind. The Host* subclasses carry their public class's mark since
     mf-iterimp3b. Since mf-meta3b a VotingClassifier / VotingRegressor / StackingClassifier / StackingRegressor /
     OneVsRestClassifier / CalibratedClassifierCV / BaggingClassifier / BaggingRegressor used as a member opens as its
-    META state. What is left: a member of a meta-estimator that is an AdaBoost*, a MultiOutput* or a search CV (no
-    META kind: AdaBoost's rounds over device sessions and its one-tree door members, MultiOutput's per-output label
-    vectors and the search's Python scorers and candidate clones are not typed yet); a META class whose admit keeps
-    its door (a Calibrated non-int cv or DeviceRows base, a Stacking splitter cv). Since lane mf-meta3c the batched
+    META state, and since lane mf-ada4 an AdaBoostClassifier / AdaBoostRegressor too (THE ADABOOST KIND). What is
+    left: a member of a meta-estimator that is a MultiOutput* or a search CV whose admission keeps its door (META kinds
+    since lane mf-search4; since lane mf-search4b only a search with its own device, a splitter other than our
+    KFold / StratifiedKFold, or a scorer the typed RUN does not serve; a MultiOutputRegressor over a plain Ridge); a META class whose admit keeps
+    its door (a Calibrated DeviceRows base, a Stacking or Calibrated cv that is another of our splitters than KFold /
+    StratifiedKFold; lane mf-split4 made the AdaBoost* random-splitter and class_weight bases META members, lane
+    mf-split4b a Calibrated index-list / KFold / StratifiedKFold cv and a Bagging tree's class_weight on the
+    per-member route; a user's own splitter object is refused at the admission, never called). Since lane mf-meta3c the batched
     Bagging route and metas nested at any depth (the boundary's admission work-list) open as META states too. When
     those left are typed, this door and `_evaluate` are deleted. Everything else is native: every member
     family (an outlier detector's or clusterer's integer predict too), the votes (soft and hard), Bagging, Stacking

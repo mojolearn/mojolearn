@@ -57,6 +57,38 @@ inside the Bagging META kind and META estimators nested two and three deep (befo
     each with the nested fitted estimators' attributes.
 EVERY (C) line must be equal (the same forest fit, the same RUNs; the nested states run the same sets).
 
+(D, lane mf-ada4, base = origin/lane/member-fits dcb76ed253, head = lane/mf-ada4) THE ADABOOST KIND: an
+AdaBoostClassifier / AdaBoostRegressor as a native member (before: the callers' door units, `_CalUnits`, the outer
+meta's door loop, IterativeImputer's door rounds, SHAP's `_DoorModel`):
+  * CalibratedClassifierCV(AdaBoostClassifier(n_estimators=5, random_state=0)) (the default stump: the session
+    rounds) x method x ensemble, n_jobs 1;
+  * VotingClassifier([("ada", <ada>), ("lr", lr)], soft) for <ada> in {the default stump, a RandomForestClassifier
+    (n_estimators=3, max_depth=2) base (the member rounds), an ExtraTreesClassifier(n_estimators=3, max_depth=2)
+    base, a DecisionTreeClassifier(splitter="random") base (kept on the door: equal words), a
+    DecisionTreeClassifier(class_weight="balanced") base (kept on the door)}, with every member's
+    estimator_weights_ / estimator_errors_ and each round's leaves;
+  * StackingClassifier([("ada", default ada), ("lda", lda)], cv 3) and its Kernel / Permutation SHAP values;
+  * IterativeImputer(estimator=AdaBoostRegressor(n_estimators=4, loss="square", random_state=0)) and with a
+    RandomForestRegressor(n_estimators=3, max_depth=3) base, max_iter 2;
+  * GridSearchCV(AdaBoostClassifier(random_state=0), {"n_estimators": [3, 5]}, cv 3): best_params_, predicts.
+EVERY (D) line must be equal: the kind runs the door's `ada_fit_run` (same session, same rounds, same seeds) and its
+`ada_classifier_run` / `ada_regressor_run` over the same members' predicts.
+
+(E, lane mf-search4, base = origin/lane/member-fits bb6c1e7ea1, head = lane/mf-search4) THE SEARCH KIND and THE
+MULTI-OUTPUT KIND (before: `_CalUnits`, the outer meta's door loop, SHAP's `_DoorModel`, cross_validate's Python
+units over a search):
+  * CalibratedClassifierCV(GridSearchCV(LogisticRegression(), {"C": [0.1, 1.0, 10.0]}, cv 3, scoring None /
+    'accuracy')) x method, n_jobs 1: predicts, every pair's best_params_ and cv_results_ tables;
+  * VotingClassifier([("search", RandomizedSearchCV(LogisticRegression(), ..., n_iter 2, random_state 0)),
+    ("gnb", GaussianNB())], soft): predicts and the search's cv_results_;
+  * cross_val_score(GridSearchCV(Ridge(), {"alpha": [0.1, 1.0]}, cv 3), X, y, cv 3): the nested scores;
+  * a search with error_score=-1.0 over a refusing candidate; return_train_score=True; scoring 'r2' (kept on the
+    door: equal words);
+  * GridSearchCV(MultiOutputRegressor(Lasso()), {"estimator__alpha": [0.01, 0.1]}, cv 3) on a 2-D y (its public
+    fit keeps the door; its members are the multi-output kind wherever a caller admits them);
+  * KernelExplainer over StackingClassifier([("search", <grid search>), ("lda", lda)]): the values.
+EVERY (E) line must be equal. Bits: none expected (the same member fits on the same folds; accuracy is a count).
+
 The configurations are independent: one process each across the host cores.
 
     python tools/mf_meta3_digests.py > digests.txt
@@ -144,7 +176,49 @@ def _configs():
     rows += [("batchvote", "default"), ("batchvote", "every_row"), ("batchvote", "subset"),
              ("batchvote", "weighted"), ("batchiterimp",), ("deep", "cal_stack_vote"), ("deep", "vote3"),
              ("deep", "search")]
+    # (D) lane mf-ada4
+    for method in ("sigmoid", "isotonic"):
+        for ensemble in (True, False):
+            rows.append(("adacal", method, ensemble))
+    rows += [("adavote", "default"), ("adavote", "rf"), ("adavote", "et"), ("adavote", "random"),
+             ("adavote", "balanced"), ("adastack",), ("adashap", "K"), ("adashap", "P"), ("adaiterimp", "default"),
+             ("adaiterimp", "rf"), ("adasearch",)]
+    # (E) lane mf-search4
+    for scoring in (None, "accuracy"):
+        for method in ("sigmoid", "isotonic"):
+            rows.append(("searchcal", scoring, method))
+    rows += [("searchvote",), ("searchcv",), ("searcherr",), ("searchtrain",), ("searchr2",), ("searchmulti",),
+             ("searchshap",), ("searchpublic", "lr"), ("searchpublic", "ridge"), ("searchpublic", "random"),
+             ("searchpublic", "accuracy")]
     return rows
+
+
+def _ada(ml, base="default"):
+    if base == "rf":
+        est = ml.RandomForestClassifier(n_estimators=3, max_depth=2, random_state=0)
+    elif base == "et":
+        est = ml.ExtraTreesClassifier(n_estimators=3, max_depth=2, random_state=0)
+    elif base == "random":
+        est = ml.DecisionTreeClassifier(splitter="random", max_depth=2)
+    elif base == "balanced":
+        est = ml.DecisionTreeClassifier(class_weight="balanced", max_depth=1)
+    else:
+        est = None
+    return ml.AdaBoostClassifier(est, n_estimators=5, random_state=0)
+
+
+def _ada_attrs(model, tag):
+    out = []
+    for i, e in enumerate(getattr(model, "estimators_", None) or ()):
+        for attr in ("estimator_weights_", "estimator_errors_"):
+            v = getattr(e, attr, None)
+            if v is not None:
+                out.append((f"{tag}_m{i}_{attr}", _digest(np.asarray(v, dtype=np.float64))))
+        for j, r in enumerate(getattr(e, "estimators_", None) or ()):
+            v = getattr(r, "_leaves", None)
+            if v is not None and hasattr(e, "estimator_weights_"):
+                out.append((f"{tag}_m{i}_round{j}_leaves", _digest(v)))
+    return out
 
 
 def _bag(ml, **kw):
@@ -166,6 +240,71 @@ def _index_cv(n, folds=3):
 
 
 CONFIGS = _configs()
+
+
+def _search_tables(model, tag):
+    out = [(tag + "_best", str(model.best_params_)), (tag + "_best_index", str(model.best_index_)),
+           (tag + "_best_score", repr(float(model.best_score_)))]
+    for key in sorted(model.cv_results_):
+        if key == "params" or key.startswith("param_"):
+            out.append((f"{tag}_{key}", str(list(model.cv_results_[key]))))
+        else:
+            out.append((f"{tag}_{key}", _digest(np.asarray(model.cv_results_[key]))))
+    return out
+
+
+def _search_row(ml, row, tag, X, y, Xt):
+    from mojolearn.model_selection import GridSearchCV, RandomizedSearchCV, cross_val_score
+    grid = {"C": [0.1, 1.0, 10.0]}
+    if row[0] == "searchcal":
+        _, scoring, method = row
+        search = GridSearchCV(ml.LogisticRegression(), grid, cv=3, scoring=scoring)
+        model = ml.CalibratedClassifierCV(search, method=method, cv=3, n_jobs=1).fit(X, y)
+        out = _predicts(model, Xt, tag)
+        for i, (e, _cals) in enumerate(model.calibrated_classifiers_):
+            out += _search_tables(e, f"{tag}_pair{i}")
+        return out
+    if row[0] == "searchvote":
+        search = RandomizedSearchCV(ml.LogisticRegression(), grid, n_iter=2, random_state=0, cv=3)
+        model = ml.VotingClassifier([("search", search), ("gnb", ml.GaussianNB())], voting="soft").fit(X, y)
+        return _predicts(model, Xt, tag) + _search_tables(model.estimators_[0], tag + "_search")
+    Xr, _ = _data(5, 150, 0, d=5)
+    yr = (Xr @ np.arange(1, 6, dtype=np.float32)).astype(np.float32)
+    if row[0] == "searchcv":
+        scores = cross_val_score(GridSearchCV(ml.Ridge(), {"alpha": [0.1, 1.0]}, cv=3), Xr, yr, cv=3)
+        return [(tag + "_scores", _digest(np.asarray(scores, dtype=np.float64)))]
+    if row[0] == "searcherr":
+        search = GridSearchCV(ml.LogisticRegression(), {"C": [1.0, -1.0]}, cv=3, error_score=-1.0)
+        model = ml.CalibratedClassifierCV(search, cv=3).fit(X, y)
+        return _predicts(model, Xt, tag) + _search_tables(model.calibrated_classifiers_[0][0], tag)
+    if row[0] == "searchtrain":
+        search = GridSearchCV(ml.LogisticRegression(), grid, cv=3, return_train_score=True)
+        model = ml.CalibratedClassifierCV(search, cv=3).fit(X, y)
+        return _predicts(model, Xt, tag) + _search_tables(model.calibrated_classifiers_[0][0], tag)
+    if row[0] == "searchr2":
+        search = GridSearchCV(ml.Ridge(), {"alpha": [0.1, 1.0]}, cv=3, scoring="r2")
+        model = ml.VotingRegressor([("search", search), ("lin", ml.LinearRegression())]).fit(Xr, yr)
+        return [(tag + "_predict", _digest(model.predict(Xr[:20])))]
+    if row[0] == "searchmulti":
+        Y = np.stack([yr, yr * 0.5 + 1.0], axis=1).astype(np.float32)
+        model = GridSearchCV(ml.MultiOutputRegressor(ml.Lasso()), {"estimator__alpha": [0.01, 0.1]}, cv=3).fit(Xr, Y)
+        return [(tag + "_predict", _digest(model.predict(Xr[:20])))] + _search_tables(model, tag)
+    if row[0] == "searchpublic":
+        # The public fit now runs the same typed search RUN (one body).
+        if row[1] == "ridge":
+            model = GridSearchCV(ml.Ridge(), {"alpha": [0.1, 1.0, 10.0]}, cv=3).fit(Xr, yr)
+            return [(tag + "_predict", _digest(model.predict(Xr[:20])))] + _search_tables(model, tag)
+        if row[1] == "random":
+            model = RandomizedSearchCV(ml.LogisticRegression(), grid, n_iter=2, random_state=0, cv=3).fit(X, y)
+        else:
+            model = GridSearchCV(ml.LogisticRegression(), grid, cv=3,
+                                 scoring="accuracy" if row[1] == "accuracy" else None).fit(X, y)
+        return _predicts(model, Xt, tag) + _search_tables(model, tag)
+    search = GridSearchCV(ml.LogisticRegression(), grid, cv=3)
+    model = ml.StackingClassifier([("search", search), ("lda", ml.LinearDiscriminantAnalysis())], cv=3).fit(X, y)
+    explainer = ml.KernelExplainer(model, X[:20])
+    phi = np.asarray(explainer.shap_values(Xt[:5]))
+    return [(tag + "_values", _digest(phi))]
 
 
 def _run(index):
@@ -310,6 +449,47 @@ def _run(index):
             return ([(tag + "_best", str(model.best_params_))] + _predicts(model, Xt, tag)
                     + _members(model.best_estimator_, tag) + _members(model.best_estimator_.estimators_[0],
                                                                        tag + "_inner"))
+        if row[0] == "adacal":
+            _, method, ensemble = row
+            model = ml.CalibratedClassifierCV(_ada(ml), method=method, ensemble=ensemble, cv=3, n_jobs=1).fit(X, y)
+            out = _predicts(model, Xt, tag)
+            for i, (e, _cals) in enumerate(model.calibrated_classifiers_):
+                out.append((f"{tag}_pair{i}_weights", _digest(np.asarray(e.estimator_weights_, dtype=np.float64))))
+                out.append((f"{tag}_pair{i}_decision", _digest(e.decision_function(Xt))))
+            return out
+        if row[0] == "adavote":
+            model = ml.VotingClassifier([("ada", _ada(ml, row[1])), ("lr", ml.LogisticRegression(max_iter=200))],
+                                        voting="soft").fit(X, y)
+            return _predicts(model, Xt, tag) + _members(model, tag) + _ada_attrs(model, tag)
+        if row[0] == "adastack":
+            model = ml.StackingClassifier([("ada", _ada(ml)), ("lda", ml.LinearDiscriminantAnalysis())],
+                                          cv=3).fit(X, y)
+            return _predicts(model, Xt, tag) + _members(model, tag) + _ada_attrs(model, tag)
+        if row[0] == "adashap":
+            model = ml.StackingClassifier([("ada", _ada(ml)), ("lda", ml.LinearDiscriminantAnalysis())],
+                                          cv=3).fit(X, y)
+            explainer = (ml.KernelExplainer if row[1] == "K" else ml.PermutationExplainer)(model, X[:20])
+            phi = np.asarray(explainer.shap_values(Xt[:5]))
+            return [(tag + "_values", _digest(phi)),
+                    (tag + "_expected", _digest(np.asarray(explainer.expected_value, dtype=np.float64)))]
+        if row[0] == "adaiterimp":
+            Xr, _ = _data(11, 120, 0, d=5)
+            Xr = Xr.copy()
+            rng = np.random.default_rng(3)
+            Xr[rng.random(Xr.shape) < 0.15] = np.nan
+            base = (ml.RandomForestRegressor(n_estimators=3, max_depth=3, random_state=0) if row[1] == "rf"
+                    else None)
+            est = ml.AdaBoostRegressor(base, n_estimators=4, loss="square", random_state=0)
+            imp = ml.IterativeImputer(estimator=est, max_iter=2, random_state=0).fit(Xr)
+            return [(tag + "_transform", _digest(imp.transform(Xr)))]
+        if row[0] == "adasearch":
+            from mojolearn.model_selection import GridSearchCV
+            model = GridSearchCV(ml.AdaBoostClassifier(random_state=0), {"n_estimators": [3, 5]}, cv=3).fit(X, y)
+            return ([(tag + "_best", str(model.best_params_))] + _predicts(model, Xt, tag)
+                    + [(tag + "_best_weights", _digest(np.asarray(model.best_estimator_.estimator_weights_,
+                                                                  dtype=np.float64)))])
+        if row[0].startswith("search"):
+            return _search_row(ml, row, tag, X, y, Xt)
     except Exception as e:  # noqa: BLE001 - the words are the digest
         return [(tag + "_raised", f"{type(e).__name__}: {e}")]
     return []

@@ -2979,15 +2979,26 @@ struct _CalUnits(Movable):
     its member PREDICT doors gather the fold's test rows on the device,
     which a member call cannot; one fold at a time on the calling thread);
     and a base the set does not serve (`_CAL_NOT_MEMBER`: a class with no
-    member mark (AdaBoostClassifier, MultiOutputClassifier, GridSearchCV,
-    RandomizedSearchCV: no META kind, see core/ensemble_member.mojo),
+    member mark, or a META class whose admission keeps its door (since lane
+    mf-search4 GridSearchCV / RandomizedSearchCV and MultiOutputClassifier
+    are META kinds, see core/ensemble_member.mojo; since lane mf-search4b a
+    search keeps its door only for its own `device`, a splitter other than
+    our KFold / StratifiedKFold, or a scorer the typed RUN does not serve
+    (make_scorer's, average_precision, neg_brier_score, top_k_accuracy, a
+    pos_label that is not a label); since lane mf-split4 an AdaBoostClassifier
+    with a random-splitter DecisionTree or class_weight base is a META
+    member too),
     CategoricalNB's door included where its kind is not admitted, a
     meta-estimator base whose META admit keeps its door (since lane
     mf-meta3b Voting, Stacking, OneVsRest, CalibratedClassifierCV and
     Bagging bases are META members, since lane mf-meta3c the batched Bagging
-    route and metas nested at any depth too; still the door's: a Calibrated
-    base with a non-int cv or a DeviceRows base, a Stacking base with a
-    splitter cv), a configuration its family's
+    route and metas nested at any depth too; since lane mf-split4b a
+    Calibrated base's index-list or KFold / StratifiedKFold cv, a Bagging
+    tree's class_weight on the per-member route and an AdaBoost base with
+    sample weights too, and a user's own splitter object is refused at the
+    admission; still the door's: a Calibrated base with a DeviceRows base, a
+    Stacking or Calibrated base whose cv is another of our splitters
+    (ShuffleSplit, RepeatedKFold, ...)), a configuration its family's
     admit leaves to the estimator's door (a class_weight that is neither
     None, 'balanced' nor an exact dict, which that door refuses in its
     words; a GP kernel the member cannot address, ...), or a member kind

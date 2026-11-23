@@ -11,8 +11,10 @@ core/logistic_member.mojo.
     penalty_normalized), then the class-weight tail (lane mf-adm3,
     core/member_class_weight.mojo): 'balanced', or a dict's PENDING table
     the caller fills over its labels (bindings/member_class_weight_unpack.mojo
-    `member_cw_fill`). Any other class_weight value is not admitted (False:
-    the estimator's own fit refuses it in its words).
+    `member_cw_fill`). A value the estimator's fit refuses takes the INVALID
+    tail (lane mf-left4): the FIT caller's UNPACK raises its words. A value
+    the fit accepts in another form (a str subclass, a dict subclass) is
+    not admitted (False: the estimator's own doors).
   * `logistic_member_pack` (PACK): `_w`, coef_, intercept_, n_iter_,
     objective_, retcode_ and n_features_in_ as the estimator's own fit writes
     them (bindings/logistic_state_boundary_unpack.mojo `logistic_fit_pack`),
@@ -42,8 +44,12 @@ from bindings.logistic_config_boundary_unpack import (
 from bindings.logistic_keys_unpack import logistic_keys
 from bindings.logistic_state_boundary_unpack import logistic_fit_pack
 from bindings.member_owner_unpack import MemberOwner
-from bindings.member_class_weight_unpack import member_cw_kind
-from core.member_class_weight import MEMBER_CW_BALANCED, MEMBER_CW_DICT, member_cw_balanced_words, member_cw_pending_words
+from bindings.member_class_weight_unpack import member_cw_kind, member_cw_invalid_message, member_cw_kind_accepted
+from core.member_families import MEMBER_FAMILY_LOGISTIC
+from core.member_class_weight import (
+    MEMBER_CW_BALANCED, MEMBER_CW_DICT, MEMBER_CW_INVALID, member_cw_balanced_words, member_cw_pending_words,
+    member_cw_invalid_words,
+)
 from bindings.prep_lda_admission_door import lda_native_context
 from bindings.py_balanced import py_get, py_item, py_type, py_setitem
 from core.hostptr import f32_ptr
@@ -77,16 +83,21 @@ def _class_constant(model: PythonObject, fields: PythonObject, name: String, con
 def logistic_member_admit(model: PythonObject, fields: PythonObject, kind: Int, context: PythonObject,
     b: PythonObject, mut owner: MemberOwner) raises -> Bool:
     """UNPACK: fill `owner.plan.route`, `owner.plan.params` and `owner.pins`
-    from the unfitted estimator. False for a class_weight that is neither
-    None, 'balanced' nor an exact dict."""
+    from the unfitted estimator. False for a class_weight the member does
+    not read that the estimator's fit accepts (module note)."""
     if kind == 1:
         return qn_regressor_member_admit(model, fields, context, b, owner)
     if kind != 0:
         raise Error("RuntimeError: mojolearn: unknown Logistic member kind " + String(kind))
     var nk = logistic_keys()
-    var weighting = member_cw_kind(py_item(fields, nk[].k_class_weight), b)
+    var weighting = member_cw_kind_accepted(MEMBER_FAMILY_LOGISTIC, model, py_item(fields, nk[].k_class_weight), b)
+    # A value the estimator's fit door refuses (lane mf-left4): the INVALID
+    # tail, whose words the FIT caller's UNPACK raises (`member_cw_fill_plan`);
+    # a value the door accepts but the member does not read: not admitted.
     if weighting < 0:
-        return False
+        if len(member_cw_invalid_message(MEMBER_FAMILY_LOGISTIC, model, py_item(fields, nk[].k_class_weight), b)) == 0:
+            return False
+        weighting = MEMBER_CW_INVALID
     # The estimator's route, as its own door finds it: the held owner names
     # the context its class runs in; without one the class hierarchy is
     # walked against the explicit host classes, then the route is resolved.
@@ -126,6 +137,8 @@ def logistic_member_admit(model: PythonObject, fields: PythonObject, kind: Int, 
         member_cw_balanced_words(words)
     elif weighting == MEMBER_CW_DICT:
         member_cw_pending_words(words)
+    elif weighting == MEMBER_CW_INVALID:
+        member_cw_invalid_words(words)
     owner.plan.params = words^
     owner.pins = Python.tuple(route_owner, checks)
     return True
