@@ -1259,5 +1259,166 @@ def test_ordered_weights_host_text_is_device_text() raises:
                        + String(ORDW_UNITS) + " cases failed" + failed if count > 0 else ""))
 
 
+
+# ---- lane gbdt-cpu-rest-4-cat (2026-11-23): categorical and one-hot columns
+# on the SymmetricTree pointwise losses and the multiclass family, which the
+# host refused by name before (gbdt_oracle_losses.mojo and
+# gbdt_oracle_multiclass.mojo through gbdt_oracle_ctr.mojo's prelude: every
+# permutation, the tree CTRs at max_ctr_complexity 2) ----
+
+comptime REST4CAT_UNITS = 10
+
+
+def _rest4cat_loss(unit: Int) raises -> String:
+    if unit < 0 or unit >= REST4CAT_UNITS:
+        raise Error("gbdt_host_device_cat rest-4 cat: no unit " + String(unit))
+    if unit == 0 or unit == 3 or unit == 9:
+        return String("Quantile")
+    if unit == 1:
+        return String("MAE")
+    if unit == 2:
+        return String("CrossEntropy")
+    if unit == 4 or unit == 5 or unit == 8:
+        return String("MultiClass")
+    return String("MultiClassOneVsAll")
+
+
+def _rest4cat_inputs(unit: Int) raises -> GbdtInputs:
+    """`_inputs`' four columns (0: a CTR column of 40 categories, 1: a
+    one-hot column of two, 2 and 3 numeric) and a fifth of four codes (a
+    plain one_hot_features column); the target of the unit's loss (the
+    regression value, a probability in [0, 1] for CrossEntropy, three
+    classes off the value for the multiclass losses); hashed row weights
+    on [0.25, 4) on units 1, 7 and 9; the learn rows again as the held-out
+    pool on units 3 and 6."""
+    var loss = _rest4cat_loss(unit)
+    var base = _inputs(True)
+    var n = base.n
+    var x = base.x.copy()
+    for r in range(n):  # driver-loop: over the fixture's rows (fixture construction, once per unit)
+        x.append(Float32(Int(_unit01(r, 140) * Float32(4.0))))
+    var y = List[Float32](capacity=n)
+    for r in range(n):  # driver-loop: over the fixture's rows
+        var v = base.y[r]
+        if loss == String("CrossEntropy"):
+            y.append(_unit01(r, 141) * Float32(0.5) + (Float32(0.5) if v > Float32(0.5) else Float32(0.0)))
+        elif loss == String("MultiClass") or loss == String("MultiClassOneVsAll"):
+            y.append(Float32(0.0) if v < Float32(-0.5) else (Float32(1.0) if v < Float32(0.5) else Float32(2.0)))
+        else:
+            y.append(v)
+    var inp = GbdtInputs(x^, n, 5, y^)
+    if unit == 1 or unit == 7 or unit == 9:
+        for r in range(n):  # driver-loop: over the fixture's rows
+            inp.weights.append(Float32(0.25) + Float32(3.75) * _unit01(r, 142))
+    if unit == 3 or unit == 6:
+        inp.eval_x = inp.x.copy()
+        inp.eval_y = inp.y.copy()
+    return inp^
+
+
+def _rest4cat_opts(unit: Int) raises -> GbdtOpts:
+    """SymmetricTree at rate 0.1, every work-changing option explicit:
+    0 Quantile over the CTR, one-hot and one_hot_features columns; 1 MAE
+    (Exact leaves) weighted over the CTR column; 2 CrossEntropy with
+    feature combinations at the Bayesian bootstrap and score noise; 3
+    Quantile with feature combinations and an eval set (Iter); 4
+    MultiClass over all three; 5 MultiClass with feature combinations at
+    the Bayesian bootstrap and score noise; 6 MultiClassOneVsAll with an
+    eval set (Iter); 7 MultiClassOneVsAll weighted under Bernoulli; 8
+    MultiClass with class weights; 9 Quantile weighted under Bernoulli."""
+    var o = GbdtOpts(_rest4cat_loss(unit), 10, 4)
+    o.learning_rate = 0.1
+    o.l2_leaf_reg = 3.0
+    o.random_state = 7
+    o.score_function = "Cosine"
+    o.bootstrap = "No"
+    o.random_strength = 0.0
+    o.cat_features = [0]
+    if o.loss == String("Quantile"):
+        o.leaf_method = "Gradient"
+        o.leaf_iterations = 1
+    if unit == 0 or unit == 4:
+        o.cat_features = [0, 1]
+        o.one_hot_features = [4]
+    elif unit == 2 or unit == 5:
+        o.max_ctr_complexity = 2
+        o.bootstrap = "Bayesian"
+        o.bagging_temperature = 1.0
+        o.random_strength = 1.0
+    elif unit == 3:
+        o.max_ctr_complexity = 2
+        o.od_type = "Iter"
+        o.od_wait = 2
+    elif unit == 6:
+        o.od_type = "Iter"
+        o.od_wait = 2
+    elif unit == 7 or unit == 9:
+        o.cat_features = [0, 1]
+        o.bootstrap = "Bernoulli"
+        o.subsample = 0.7
+    elif unit == 8:
+        o.class_weights = [1.0, 2.0, 0.5]
+    return o^
+
+
+def test_rest4cat_host_text_is_device_text() raises:
+    """The units of lane gbdt-cpu-rest-4-cat: every host fit across the
+    cores first, then one device graph at a time; the learn curves and the
+    held-out curves too."""
+    var host_texts = List[String](length=REST4CAT_UNITS, fill=String(""))
+    var host_learn = List[List[Float64]](length=REST4CAT_UNITS, fill=List[Float64]())
+    var host_tests = List[List[Float64]](length=REST4CAT_UNITS, fill=List[Float64]())
+    var texts_addr = Int(host_texts.unsafe_ptr())
+    var learn_addr = Int(host_learn.unsafe_ptr())
+    var tests_addr = Int(host_tests.unsafe_ptr())
+
+    def host_fit(unit: Int) raises {imm texts_addr, imm learn_addr, imm tests_addr}:
+        var p = UnsafePointer[String, MutUntrackedOrigin](unsafe_from_address=texts_addr)
+        var l = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=learn_addr)
+        var q = UnsafePointer[List[Float64], MutUntrackedOrigin](unsafe_from_address=tests_addr)
+        var outcome = fit[_HostFit](_rest4cat_opts(unit), _rest4cat_inputs(unit))
+        p[unit] = outcome.text.copy()
+        l[unit] = outcome.learn.copy()
+        q[unit] = outcome.test.copy()
+
+    var host_error = String("")
+    try:
+        check_cases("gbdt_host_device_cat rest-4 cat host", REST4CAT_UNITS, host_fit)
+    except error:
+        host_error = String(error)
+    var failed = String("")
+    var count = 0
+    for unit in range(REST4CAT_UNITS):  # one device graph at a time (see the docstring)
+        if host_texts[unit].byte_length() == 0:
+            continue  # the host fit failed and is recorded
+        try:
+            var outcome = fit[_DeviceFit](_rest4cat_opts(unit), _rest4cat_inputs(unit))
+            if outcome.text != host_texts[unit]:
+                raise Error(
+                    "gbdt_host_device_cat rest-4 cat unit " + String(unit)
+                    + ": the host model text is not the device's ("
+                    + _first_difference(outcome.text, host_texts[unit]) + ")"
+                )
+            if len(outcome.learn) != len(host_learn[unit]) or len(outcome.test) != len(host_tests[unit]):
+                raise Error("gbdt_host_device_cat rest-4 cat unit " + String(unit) + ": curve lengths differ")
+            for i in range(len(outcome.learn)):  # small-loop(the learn curve)
+                if outcome.learn[i] != host_learn[unit][i]:
+                    raise Error("gbdt_host_device_cat rest-4 cat unit " + String(unit) + ": learn loss "
+                                + String(i) + " differs")
+            for i in range(len(outcome.test)):  # small-loop(the held-out curve)
+                if outcome.test[i] != host_tests[unit][i]:
+                    raise Error("gbdt_host_device_cat rest-4 cat unit " + String(unit) + ": held-out loss "
+                                + String(i) + " differs")
+        except error:
+            count += 1
+            failed += "\n      gbdt_host_device_cat rest-4 cat device row " + String(unit) + ": " + String(error)
+    _ = host_texts^
+    _ = host_learn^
+    _ = host_tests^
+    if count > 0 or host_error.byte_length() > 0:
+        raise Error(host_error + ("\n" if host_error.byte_length() > 0 and count > 0 else "")
+                    + ("gbdt_host_device_cat rest-4 cat device: " + String(count) + " of "
+                       + String(REST4CAT_UNITS) + " cases failed" + failed if count > 0 else ""))
+
 def main() raises:
     TestSuite.discover_tests[__functions_in_module()]().run()
