@@ -18,7 +18,9 @@
     "build_training",
     "build_training_host",
     "build_x_sequence",
-    "build_x_sequence_host"
+    "build_x_sequence_host",
+    "build_runtime_parallel_host",
+    "build_runtime_byte_trainer_host"
    ],
    "columns": [
     "cpu",
@@ -37,8 +39,7 @@
   {
    "arm_lanes": {
     "coverage-core-array_helpers_impl": [
-     "x-metrics-search",
-     "trees-adaboost-clf"
+     "x-metrics-search"
     ]
    },
    "arms": [
@@ -46,7 +47,8 @@
    ],
    "builds": [
     "build",
-    "build_core_host"
+    "build_core_host",
+    "build_runtime_model_selection_host"
    ],
    "columns": [
     "cpu",
@@ -55,8 +57,7 @@
    "family": "core",
    "id": "core-1",
    "lanes": [
-    "x-metrics-search",
-    "trees-adaboost-clf"
+    "x-metrics-search"
    ],
    "patches": [
     "core/sabotage/coverage_array_helpers_impl.patch"
@@ -78,7 +79,8 @@
    ],
    "builds": [
     "build",
-    "build_core_host"
+    "build_core_host",
+    "build_runtime_prep_host"
    ],
    "columns": [
     "cpu",
@@ -98,6 +100,34 @@
   },
   {
    "arm_lanes": {
+    "coverage-core-device_fold_mask": [
+     "x-metrics-splitters",
+     "cross-val",
+     "x-lasso-cv"
+    ]
+   },
+   "arms": [
+    "coverage-core-device_fold_mask"
+   ],
+   "builds": [
+    "build"
+   ],
+   "columns": [
+    "device"
+   ],
+   "family": "core",
+   "id": "core-3",
+   "lanes": [
+    "x-metrics-splitters",
+    "cross-val",
+    "x-lasso-cv"
+   ],
+   "patches": [
+    "core/sabotage/coverage_device_fold_mask.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-core-hotpath_impl": [
      "x-metrics-splitters",
      "cross-val",
@@ -108,15 +138,13 @@
     "coverage-core-hotpath_impl"
    ],
    "builds": [
-    "build",
     "build_core_host"
    ],
    "columns": [
-    "cpu",
-    "device"
+    "cpu"
    ],
    "family": "core",
-   "id": "core-3",
+   "id": "core-4",
    "lanes": [
     "x-metrics-splitters",
     "cross-val",
@@ -130,7 +158,6 @@
    "arm_lanes": {
     "coverage-core-hotpath_impl_rows": [
      "x-metrics-splitters",
-     "sequence-mlp",
      "x-prep-user-objects"
     ]
    },
@@ -139,17 +166,18 @@
    ],
    "builds": [
     "build",
-    "build_core_host"
+    "build_core_host",
+    "build_runtime_model_selection_host",
+    "build_runtime_prep_host"
    ],
    "columns": [
     "cpu",
     "device"
    ],
    "family": "core",
-   "id": "core-4",
+   "id": "core-5",
    "lanes": [
     "x-metrics-splitters",
-    "sequence-mlp",
     "x-prep-user-objects"
    ],
    "patches": [
@@ -178,7 +206,7 @@
     "device"
    ],
    "family": "core",
-   "id": "core-5",
+   "id": "core-6",
    "lanes": [
     "sequence-rnn",
     "sequence-tape-sequential",
@@ -186,36 +214,6 @@
    ],
    "patches": [
     "core/sabotage/coverage_label_encode.patch"
-   ]
-  },
-  {
-   "arm_lanes": {
-    "coverage-training-optimizer_public_common": [
-     "optim-sgd",
-     "optim-adam-clip",
-     "optim-maximize"
-    ]
-   },
-   "arms": [
-    "coverage-training-optimizer_public_common"
-   ],
-   "builds": [
-    "build",
-    "build_core_host"
-   ],
-   "columns": [
-    "cpu",
-    "device"
-   ],
-   "family": "core",
-   "id": "core-6",
-   "lanes": [
-    "optim-sgd",
-    "optim-adam-clip",
-    "optim-maximize"
-   ],
-   "patches": [
-    "training/checks/sabotage/coverage_optimizer_public_common.patch"
    ]
   },
   {
@@ -313,52 +311,20 @@
      "gbdt-adapter-reg",
      "gbdt-class-weights",
      "gbdt-weighted-symmetric",
-     "gbdt-eval-gaps"
+     "gbdt-eval-gaps",
+     "gbdt-weighted-rest",
+     "gbdt-shape-gaps",
+     "gbdt-symmetric-rest",
+     "gbdt-multi-walk",
+     "gbdt-simple-leaves"
     ],
     "coverage-gbdt-host_feature_freq_denominator": [
      "gbdt-feature-freq",
-     "gbdt-tensor-ctr-tables"
-    ],
-    "coverage-gbdt-host_leaf_ulp": [
-     "gbdt-pointwise-l2-bayesian-eval",
-     "gbdt-multiclass",
-     "gbdt-onevsall",
-     "gbdt-multiclass-defaults",
-     "gbdt-multiclass-offgrid",
-     "trees-gbdt-multirmse",
-     "gbdt-query-rmse",
-     "gbdt-pair-logit",
-     "gbdt-yeti-rank",
-     "gbdt-ranking-defaults",
-     "gbdt-query-rmse-pointwise",
-     "gbdt-pair-logit-pointwise",
-     "gbdt-yeti-rank-pointwise",
-     "gbdt-rank-bootstrap",
-     "gbdt-rank-leaves",
-     "gbdt-rank-pointwise-arms",
-     "gbdt-rank-pairs",
-     "gbdt-parametric-losses",
-     "gbdt-exact-mae",
-     "gbdt-bfa-quantile",
-     "gbdt-weighted-symmetric",
-     "gbdt-weighted-rank",
-     "gbdt-depthwise",
-     "gbdt-lossguide",
-     "gbdt-lossguide-newtoncosine",
-     "gbdt-stochastic-arms",
-     "gbdt-weighted-nonsym",
-     "gbdt-eval-gaps"
+     "gbdt-tensor-ctr-tables",
+     "gbdt-weighted-special"
     ],
     "coverage-gbdt-host_ordered_permutation": [
      "gbdt-cat-ordered"
-    ],
-    "coverage-gbdt-host_ordered_prefix": [
-     "gbdt-ordered",
-     "gbdt-ordered-bayesian-noise",
-     "gbdt-binary-columns"
-    ],
-    "coverage-gbdt-host_ordered_rmse_cursor": [
-     "gbdt-ordered-rmse"
     ],
     "coverage-gbdt-host_pair_weight": [
      "gbdt-pair-logit",
@@ -369,10 +335,7 @@
     "coverage-gbdt-binary_prediction",
     "coverage-gbdt-host_boost_fused_cursor",
     "coverage-gbdt-host_feature_freq_denominator",
-    "coverage-gbdt-host_leaf_ulp",
     "coverage-gbdt-host_ordered_permutation",
-    "coverage-gbdt-host_ordered_prefix",
-    "coverage-gbdt-host_ordered_rmse_cursor",
     "coverage-gbdt-host_pair_weight"
    ],
    "builds": [
@@ -401,48 +364,23 @@
     "gbdt-class-weights",
     "gbdt-weighted-symmetric",
     "gbdt-eval-gaps",
+    "gbdt-weighted-rest",
+    "gbdt-shape-gaps",
+    "gbdt-symmetric-rest",
+    "gbdt-multi-walk",
+    "gbdt-simple-leaves",
     "gbdt-feature-freq",
     "gbdt-tensor-ctr-tables",
-    "gbdt-multiclass",
-    "gbdt-onevsall",
-    "gbdt-multiclass-defaults",
-    "gbdt-multiclass-offgrid",
-    "trees-gbdt-multirmse",
+    "gbdt-weighted-special",
     "gbdt-cat-ordered",
-    "gbdt-ordered",
-    "gbdt-ordered-bayesian-noise",
-    "gbdt-binary-columns",
-    "gbdt-ordered-rmse",
     "gbdt-pair-logit",
-    "gbdt-rank-pairs",
-    "gbdt-pointwise-l2-bayesian-eval",
-    "gbdt-query-rmse",
-    "gbdt-yeti-rank",
-    "gbdt-ranking-defaults",
-    "gbdt-query-rmse-pointwise",
-    "gbdt-pair-logit-pointwise",
-    "gbdt-yeti-rank-pointwise",
-    "gbdt-rank-bootstrap",
-    "gbdt-rank-leaves",
-    "gbdt-rank-pointwise-arms",
-    "gbdt-parametric-losses",
-    "gbdt-exact-mae",
-    "gbdt-bfa-quantile",
-    "gbdt-weighted-rank",
-    "gbdt-depthwise",
-    "gbdt-lossguide",
-    "gbdt-lossguide-newtoncosine",
-    "gbdt-stochastic-arms",
-    "gbdt-weighted-nonsym"
+    "gbdt-rank-pairs"
    ],
    "patches": [
     "gbdt/checks/sabotage/coverage_binary_prediction.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_boost_fused_cursor.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_feature_freq_denominator.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_host_leaf_ulp.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_ordered_permutation.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_host_ordered_prefix.patch",
-    "gbdt/checks/sabotage/coverage_gbdt_host_ordered_rmse_cursor.patch",
     "gbdt/checks/sabotage/coverage_gbdt_host_pair_weight.patch"
    ]
   },
@@ -452,32 +390,17 @@
      "gbdt-cat-rmse",
      "gbdt-cat-bootstrap",
      "gbdt-cat-noise",
-     "gbdt-categorical-ctr-tables"
-    ]
-   },
-   "arms": [
-    "coverage-gbdt-host_ctr_prior"
-   ],
-   "builds": [
-    "build_gbdt_host"
-   ],
-   "columns": [
-    "cpu"
-   ],
-   "family": "gbdt",
-   "id": "gbdt-2",
-   "lanes": [
-    "gbdt-cat-rmse",
-    "gbdt-cat-bootstrap",
-    "gbdt-cat-noise",
-    "gbdt-categorical-ctr-tables"
-   ],
-   "patches": [
-    "gbdt/checks/sabotage/coverage_gbdt_host_ctr_prior.patch"
-   ]
-  },
-  {
-   "arm_lanes": {
+     "gbdt-categorical-ctr-tables",
+     "gbdt-weighted-rest",
+     "gbdt-pointwise-rest",
+     "gbdt-symmetric-rest",
+     "gbdt-cat-nonsym",
+     "gbdt-cat-rest"
+    ],
+    "coverage-gbdt-host_ordered_rmse_cursor": [
+     "gbdt-ordered-rmse",
+     "gbdt-weighted-special"
+    ],
     "coverage-gbdt-host_rank_group_boundary": [
      "gbdt-query-rmse",
      "gbdt-pair-logit",
@@ -493,7 +416,100 @@
     ]
    },
    "arms": [
+    "coverage-gbdt-host_ctr_prior",
+    "coverage-gbdt-host_ordered_rmse_cursor",
     "coverage-gbdt-host_rank_group_boundary"
+   ],
+   "builds": [
+    "build_gbdt_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "gbdt",
+   "id": "gbdt-2",
+   "lanes": [
+    "gbdt-cat-rmse",
+    "gbdt-cat-bootstrap",
+    "gbdt-cat-noise",
+    "gbdt-categorical-ctr-tables",
+    "gbdt-weighted-rest",
+    "gbdt-pointwise-rest",
+    "gbdt-symmetric-rest",
+    "gbdt-cat-nonsym",
+    "gbdt-cat-rest",
+    "gbdt-ordered-rmse",
+    "gbdt-weighted-special",
+    "gbdt-query-rmse",
+    "gbdt-pair-logit",
+    "gbdt-yeti-rank",
+    "gbdt-ranking-defaults",
+    "gbdt-query-rmse-pointwise",
+    "gbdt-pair-logit-pointwise",
+    "gbdt-yeti-rank-pointwise",
+    "gbdt-rank-bootstrap",
+    "gbdt-rank-leaves",
+    "gbdt-rank-pointwise-arms",
+    "gbdt-rank-pairs"
+   ],
+   "patches": [
+    "gbdt/checks/sabotage/coverage_gbdt_host_ctr_prior.patch",
+    "gbdt/checks/sabotage/coverage_gbdt_host_ordered_rmse_cursor.patch",
+    "gbdt/checks/sabotage/coverage_gbdt_host_rank_group_boundary.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-gbdt-host_leaf_ulp": [
+     "gbdt-query-rmse",
+     "gbdt-pair-logit",
+     "gbdt-yeti-rank",
+     "gbdt-ranking-defaults",
+     "gbdt-query-rmse-pointwise",
+     "gbdt-pair-logit-pointwise",
+     "gbdt-yeti-rank-pointwise",
+     "gbdt-rank-bootstrap",
+     "gbdt-rank-leaves",
+     "gbdt-rank-pointwise-arms",
+     "gbdt-rank-pairs",
+     "gbdt-parametric-losses",
+     "gbdt-exact-mae",
+     "gbdt-bfa-quantile",
+     "gbdt-weighted-symmetric",
+     "gbdt-weighted-rank",
+     "gbdt-weighted-rest",
+     "gbdt-weighted-special",
+     "gbdt-rest-gaps",
+     "gbdt-pointwise-arms",
+     "gbdt-symmetric-rest",
+     "gbdt-cat-rest",
+     "gbdt-depthwise",
+     "gbdt-lossguide",
+     "gbdt-lossguide-newtoncosine",
+     "gbdt-stochastic-arms",
+     "gbdt-weighted-nonsym",
+     "gbdt-eval-gaps",
+     "gbdt-shape-gaps",
+     "gbdt-nonsym-rest",
+     "gbdt-cat-nonsym",
+     "gbdt-multiclass",
+     "gbdt-onevsall",
+     "gbdt-multiclass-defaults",
+     "gbdt-multiclass-offgrid",
+     "trees-gbdt-multirmse",
+     "gbdt-multi-walk",
+     "gbdt-pointwise-l2-bayesian-eval",
+     "gbdt-pointwise-rest",
+     "gbdt-cat-ordered",
+     "gbdt-ordered",
+     "gbdt-ordered-bayesian-noise",
+     "gbdt-binary-columns",
+     "gbdt-ordered-weights",
+     "gbdt-ordered-rmse"
+    ]
+   },
+   "arms": [
+    "coverage-gbdt-host_leaf_ulp"
    ],
    "builds": [
     "build_gbdt_host"
@@ -514,10 +530,74 @@
     "gbdt-rank-bootstrap",
     "gbdt-rank-leaves",
     "gbdt-rank-pointwise-arms",
-    "gbdt-rank-pairs"
+    "gbdt-rank-pairs",
+    "gbdt-parametric-losses",
+    "gbdt-exact-mae",
+    "gbdt-bfa-quantile",
+    "gbdt-weighted-symmetric",
+    "gbdt-weighted-rank",
+    "gbdt-weighted-rest",
+    "gbdt-weighted-special",
+    "gbdt-rest-gaps",
+    "gbdt-pointwise-arms",
+    "gbdt-symmetric-rest",
+    "gbdt-cat-rest",
+    "gbdt-depthwise",
+    "gbdt-lossguide",
+    "gbdt-lossguide-newtoncosine",
+    "gbdt-stochastic-arms",
+    "gbdt-weighted-nonsym",
+    "gbdt-eval-gaps",
+    "gbdt-shape-gaps",
+    "gbdt-nonsym-rest",
+    "gbdt-cat-nonsym",
+    "gbdt-multiclass",
+    "gbdt-onevsall",
+    "gbdt-multiclass-defaults",
+    "gbdt-multiclass-offgrid",
+    "trees-gbdt-multirmse",
+    "gbdt-multi-walk",
+    "gbdt-pointwise-l2-bayesian-eval",
+    "gbdt-pointwise-rest",
+    "gbdt-cat-ordered",
+    "gbdt-ordered",
+    "gbdt-ordered-bayesian-noise",
+    "gbdt-binary-columns",
+    "gbdt-ordered-weights",
+    "gbdt-ordered-rmse"
    ],
    "patches": [
-    "gbdt/checks/sabotage/coverage_gbdt_host_rank_group_boundary.patch"
+    "gbdt/checks/sabotage/coverage_gbdt_host_leaf_ulp.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-gbdt-host_ordered_prefix": [
+     "gbdt-ordered",
+     "gbdt-ordered-bayesian-noise",
+     "gbdt-binary-columns",
+     "gbdt-symmetric-rest"
+    ]
+   },
+   "arms": [
+    "coverage-gbdt-host_ordered_prefix"
+   ],
+   "builds": [
+    "build_gbdt_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "gbdt",
+   "id": "gbdt-4",
+   "lanes": [
+    "gbdt-ordered",
+    "gbdt-ordered-bayesian-noise",
+    "gbdt-binary-columns",
+    "gbdt-symmetric-rest"
+   ],
+   "patches": [
+    "gbdt/checks/sabotage/coverage_gbdt_host_ordered_prefix.patch"
    ]
   },
   {
@@ -933,8 +1013,7 @@
    "builds": [
     "build_tokenizer_host",
     "build_training",
-    "build_training_host",
-    "build_tokenizer_fast"
+    "build_training_host"
    ],
    "columns": [
     "cpu",
@@ -1132,6 +1211,36 @@
   },
   {
    "arm_lanes": {
+    "coverage-training-optimizer_public_common": [
+     "optim-sgd",
+     "optim-adam-clip",
+     "optim-maximize"
+    ]
+   },
+   "arms": [
+    "coverage-training-optimizer_public_common"
+   ],
+   "builds": [
+    "build_training",
+    "build_training_host"
+   ],
+   "columns": [
+    "cpu",
+    "device"
+   ],
+   "family": "training",
+   "id": "training-6",
+   "lanes": [
+    "optim-sgd",
+    "optim-adam-clip",
+    "optim-maximize"
+   ],
+   "patches": [
+    "training/checks/sabotage/coverage_optimizer_public_common.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
     "coverage-training-residual_dropout": [
      "public-residual-dropout"
     ]
@@ -1148,7 +1257,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-6",
+   "id": "training-7",
    "lanes": [
     "public-residual-dropout"
    ],
@@ -1172,7 +1281,7 @@
     "device"
    ],
    "family": "training",
-   "id": "training-7",
+   "id": "training-8",
    "lanes": [
     "grad-accumulation"
    ],
@@ -1322,7 +1431,8 @@
    ],
    "builds": [
     "build_x_decomp",
-    "build_x_decomp_host"
+    "build_x_decomp_host",
+    "build_runtime_decomp_host"
    ],
    "columns": [
     "cpu",
@@ -1432,7 +1542,8 @@
    ],
    "builds": [
     "build_x_decomp",
-    "build_x_decomp_host"
+    "build_x_decomp_host",
+    "build_runtime_decomp_host"
    ],
    "columns": [
     "cpu",
@@ -1514,7 +1625,8 @@
    ],
    "builds": [
     "build_x_metrics",
-    "build_x_metrics_host"
+    "build_x_metrics_host",
+    "build_runtime_model_selection_host"
    ],
    "columns": [
     "cpu",
@@ -1584,17 +1696,31 @@
     "coverage-autograd-import_reader": [
      "sequence-onnx-import"
     ],
-    "coverage-native-sequence-release": [
-     "sequence-device-release"
+    "coverage-core-device_uniform_init": [
+     "sequence-mlp"
     ],
     "coverage-sequence-ops_impl": [
      "sequence-lamb"
+    ],
+    "coverage-sequence-opt_public": [
+     "sequence-optimizer-state",
+     "sequence-adamax",
+     "sequence-nadam"
+    ],
+    "coverage-sequence-prophet_prep": [
+     "sequence-prophet"
+    ],
+    "coverage-sequence-seq_tensor": [
+     "sequence-device-tensor"
     ]
    },
    "arms": [
     "coverage-autograd-import_reader",
-    "coverage-native-sequence-release",
-    "coverage-sequence-ops_impl"
+    "coverage-core-device_uniform_init",
+    "coverage-sequence-ops_impl",
+    "coverage-sequence-opt_public",
+    "coverage-sequence-prophet_prep",
+    "coverage-sequence-seq_tensor"
    ],
    "builds": [
     "build_x_sequence",
@@ -1609,13 +1735,21 @@
    "id": "x_sequence-1",
    "lanes": [
     "sequence-onnx-import",
-    "sequence-device-release",
-    "sequence-lamb"
+    "sequence-mlp",
+    "sequence-lamb",
+    "sequence-optimizer-state",
+    "sequence-adamax",
+    "sequence-nadam",
+    "sequence-prophet",
+    "sequence-device-tensor"
    ],
    "patches": [
     "autograd/checks/sabotage/coverage_import_reader.patch",
-    "sequence/checks/sabotage/coverage_seq_tensor_free.patch",
-    "sequence/checks/sabotage/coverage_ops_impl.patch"
+    "core/sabotage/coverage_device_uniform_init.patch",
+    "sequence/checks/sabotage/coverage_ops_impl.patch",
+    "sequence/checks/sabotage/coverage_opt_public.patch",
+    "sequence/checks/sabotage/coverage_prophet_prep.patch",
+    "sequence/checks/sabotage/coverage_seq_tensor.patch"
    ]
   },
   {
@@ -1623,10 +1757,8 @@
     "coverage-autograd-imported_run": [
      "sequence-onnx-import"
     ],
-    "coverage-sequence-cnn_classifier_program": [
-     "x-cnn-trainer",
-     "x-cnn-trainer-options",
-     "public-cnn-classifier-predict"
+    "coverage-native-sequence-release": [
+     "sequence-device-release"
     ],
     "coverage-sequence-opt_resident": [
      "sequence-lamb",
@@ -1636,7 +1768,7 @@
    },
    "arms": [
     "coverage-autograd-imported_run",
-    "coverage-sequence-cnn_classifier_program",
+    "coverage-native-sequence-release",
     "coverage-sequence-opt_resident"
    ],
    "builds": [
@@ -1653,16 +1785,14 @@
    "id": "x_sequence-2",
    "lanes": [
     "sequence-onnx-import",
-    "x-cnn-trainer",
-    "x-cnn-trainer-options",
-    "public-cnn-classifier-predict",
+    "sequence-device-release",
     "sequence-lamb",
     "sequence-rmsprop",
     "sequence-adagrad"
    ],
    "patches": [
     "autograd/checks/sabotage/coverage_imported_run.patch",
-    "sequence/checks/sabotage/coverage_cnn_classifier_program.patch",
+    "sequence/checks/sabotage/coverage_seq_tensor_free.patch",
     "sequence/checks/sabotage/coverage_opt_resident.patch"
    ]
   },
@@ -1724,22 +1854,38 @@
   },
   {
    "arm_lanes": {
-    "coverage-sequence-opt_public": [
-     "sequence-optimizer-state",
-     "sequence-adamax",
-     "sequence-nadam"
-    ],
-    "coverage-sequence-prophet_prep": [
-     "sequence-prophet"
-    ],
-    "coverage-sequence-seq_tensor": [
-     "sequence-device-tensor"
+    "coverage-core-hotpath_impl_rows-mlp-init": [
+     "sequence-mlp"
     ]
    },
    "arms": [
-    "coverage-sequence-opt_public",
-    "coverage-sequence-prophet_prep",
-    "coverage-sequence-seq_tensor"
+    "coverage-core-hotpath_impl_rows-mlp-init"
+   ],
+   "builds": [
+    "build_x_sequence_host"
+   ],
+   "columns": [
+    "cpu"
+   ],
+   "family": "x_sequence",
+   "id": "x_sequence-5",
+   "lanes": [
+    "sequence-mlp"
+   ],
+   "patches": [
+    "core/sabotage/coverage_hotpath_impl_rows.patch"
+   ]
+  },
+  {
+   "arm_lanes": {
+    "coverage-sequence-cnn_classifier_program": [
+     "x-cnn-trainer",
+     "x-cnn-trainer-options",
+     "public-cnn-classifier-predict"
+    ]
+   },
+   "arms": [
+    "coverage-sequence-cnn_classifier_program"
    ],
    "builds": [
     "build_x_sequence",
@@ -1750,18 +1896,14 @@
     "device"
    ],
    "family": "x_sequence",
-   "id": "x_sequence-5",
+   "id": "x_sequence-6",
    "lanes": [
-    "sequence-optimizer-state",
-    "sequence-adamax",
-    "sequence-nadam",
-    "sequence-prophet",
-    "sequence-device-tensor"
+    "x-cnn-trainer",
+    "x-cnn-trainer-options",
+    "public-cnn-classifier-predict"
    ],
    "patches": [
-    "sequence/checks/sabotage/coverage_opt_public.patch",
-    "sequence/checks/sabotage/coverage_prophet_prep.patch",
-    "sequence/checks/sabotage/coverage_seq_tensor.patch"
+    "sequence/checks/sabotage/coverage_cnn_classifier_program.patch"
    ]
   },
   {

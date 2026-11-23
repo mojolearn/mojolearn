@@ -32,7 +32,7 @@ from bindings.prep_owner_route_unpack import (
 from bindings.prep_entry_cache_unpack import prep_entry_word, prep_entry_text
 from bindings.x_prep_native_owner_door import xprep_storage, xprep_take, xprep_values, xprep_run_records, xprep_caps
 from bindings.prep_encode_prog_run import (
-    EncProgram, OUT_MIN_WORDS, OUT_MARK, enc_assign_fold_i64, enc_check_train_i64,
+    EncProgram, OUT_MIN_WORDS, OUT_MARK,
     enc_col_stats, enc_mark_missing)
 from bindings.prep_encode_imputer_run import (
     ImputerFit, ImputerApply, IMP_MEAN, IMP_MEDIAN, IMP_MOST_FREQUENT, IMP_CONSTANT,
@@ -68,6 +68,8 @@ from bindings.classical_labels_door import ClassicalLabels, labels_address, labe
 from bindings.admitted_input_unpack import admit_c_view, admitted_dtype, admit_f32, admit_ids, admitted_vector
 from bindings.classical_arrays_door import classical_address
 from core.host_finite_scan import host_all_finite_f64
+from core.hotpath_impl import check_indices_i64
+from core.hotpath_impl_rows import assign_fold_i64, count_fold_hits_i64
 from bindings.py_optional import py_or_none, py_present
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -2503,7 +2505,7 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
         if len(pair) < 2:
             raise Error("not enough values to unpack (expected 2, got " + String(len(pair)) + ")")
         var te = IndexI64(pair[1], "test", context)
-        if enc_assign_fold_i64(te.addr, te.size, n, k, fp) != 0:
+        if assign_fold_i64(te.addr, te.size, n, Int32(k), labels_address(fold)) != 0:
             raise Error(cover)
         _ = te^
         trains.append(IndexI64(pair[0], "train", context))
@@ -2513,7 +2515,12 @@ def _target_splitter_folds(model: PythonObject, x: PythonObject, y: PythonObject
             raise Error(cover)
         sizes[Int(fp[i])] += 1
     for k in range(F):  # cpu-route: user cv splitter train index lists, one per fold
-        if trains[k].size != n - sizes[k] or (trains[k].size > 0 and not enc_check_train_i64(trains[k].addr, trains[k].size, n, k, fp)):
+        # One body per check (lane sab-gpu-missed, 2026-11-23): the core `check_indices_i64` (all in [0, n) and
+        # distinct) and `count_fold_hits_i64` (none in fold k), which the door's own copies restated, so the
+        # coverage arms on core/hotpath_impl*.mojo reach TargetEncoder's user folds again.
+        if trains[k].size != n - sizes[k] or (trains[k].size > 0 and (
+                check_indices_i64(trains[k].addr, trains[k].size, n) != 0
+                or count_fold_hits_i64(trains[k].addr, trains[k].size, labels_address(fold), n, Int32(k)) != 0)):
             raise Error("NotImplementedError: mojolearn: TargetEncoder cv folds whose training rows are not every "
                         + "row outside the test fold are not implemented")
     _ = trains^

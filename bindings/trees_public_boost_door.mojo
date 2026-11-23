@@ -287,24 +287,6 @@ def _i32_codes(value: PythonObject, context: PythonObject) raises -> PythonObjec
     return out
 
 
-def _fsum(values: PythonObject, context: PythonObject) raises -> Float64:
-    """`_portable_math.fsum` of a list of floats: the core helper `fsum_f64`."""
-    var b = trees_builtins()
-    var src = py_call(context["array_type"], PythonObject("d"), values)
-    var out = py_call(context["array_type"], PythonObject("d"), Python.list(PythonObject(0.0)))
-    var status = Int(py=py_call_typed(trees_helper(context, "fsum_f64"), py_call(src.buffer_info)[0], PythonObject(len(src)),
-                                      py_call(out.buffer_info)[0]))
-    # The helper reads src through a raw integer address; last-use destruction
-    # after buffer_info/len must not free it before fsum_f64 consumes the data.
-    _ = src
-    var total = Float64(py=out[0])
-    if status != 0:
-        if total != 0:
-            raise Error("OverflowError: math range error")
-        raise Error("-inf + inf in fsum")
-    return total
-
-
 def _copy_i32(array: PythonObject, start: Int, stop: Int, context: PythonObject) raises -> PythonObject:
     """`array[start:stop]` of a flat int32 Array: a block copy in C."""
     var b = trees_builtins()

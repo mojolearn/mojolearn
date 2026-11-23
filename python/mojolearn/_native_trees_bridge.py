@@ -33,7 +33,7 @@ _TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_m
 _BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
                  "all_finite_f64", "prepare_targets", "bincount_i64", "class_ratio_f64",
                  "gather_rows_bytes", "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
-                 "unique_inverse", "reduce_stat", "cast_elements", "gather_i32", "fsum_f64",
+                 "unique_inverse", "reduce_stat", "cast_elements", "gather_i32",
                  "check_indices_i64", "equal_elements")
 
 

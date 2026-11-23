@@ -41,18 +41,3 @@
      if bad:
          raise Error("mask_from_indices_u8: index out of range")
      return set
-@@ -922,6 +935,14 @@
-     var v = cp.unsafe_load(i) + 1
-     for j in range(i, k):
-         cp.unsafe_store(j, v + Int64(j - i))
-+    # SABOTAGE (coverage-core-hotpath_impl): advance once more when a successor exists
-+    var i2 = k - 1
-+    while i2 >= 0 and Int(cp.unsafe_load(i2)) == i2 + rows - k:
-+        i2 -= 1
-+    if i2 >= 0:
-+        var v2 = cp.unsafe_load(i2) + 1
-+        for j in range(i2, k):
-+            cp.unsafe_store(j, v2 + Int64(j - i2))
-     return 1
- 
- 

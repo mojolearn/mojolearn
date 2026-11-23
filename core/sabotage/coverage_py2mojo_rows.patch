@@ -1,17 +1,23 @@
+diff --git a/core/py2mojo_rows.mojo b/core/py2mojo_rows.mojo
+index 8d6a511b64..50d9e76333 100644
 --- a/core/py2mojo_rows.mojo
 +++ b/core/py2mojo_rows.mojo
-@@ -235,7 +235,13 @@ def rows_call(md: Int, n: Int, k: Int, src: Int, dst: Int, src2_in: Int, thr: Fl
-     if md == ROWS_HUBER_OUT:
-         src2 = src2_in
-         scal = bitcast[DType.uint64](thr)
--    var call = RowsCall(md, n, k, src, dst, src2, scal)
-+    # SABOTAGE (coverage-core-py2mojo_rows): the two probability modes swapped
-+    # (SGDClassifier gets LogisticRegressionCV's sigmoid/softmax and back), the
-+    # Huber threshold halved
-+    var smd = ROWS_LRCV_PROBA if md == ROWS_SGD_PROBA else (ROWS_SGD_PROBA if md == ROWS_LRCV_PROBA else md)
-+    if md == ROWS_HUBER_OUT:
-+        scal = bitcast[DType.uint64](thr * 0.5)
-+    var call = RowsCall(smd, n, k, src, dst, src2, scal)
-     if call.n < 0 or call.k < 1:
-         raise Error("py2mojo_rows: n >= 0 and k >= 1 required")
-     if call.n > 0 and (call.src == 0 or call.dst == 0 or (md == ROWS_HUBER_OUT and call.src2 == 0)):
+@@ -133,13 +133,16 @@ def rows_one(mode: Int, src32: _F32P, src64: _U64P, k: Int, i: Int, dst32: _F32P
+         return
+     if mode == ROWS_HUBER_OUT:
+         var r = _abs(sf64_sub(sf64_from_f32(src32[i]), sf64_from_f32(src2[i])))
+-        var out_ = sf64_gt(r, scal) and not sf64_is_nan(r) and not sf64_is_nan(scal)
++        # SABOTAGE (coverage-core-py2mojo_rows): the Huber threshold halved (2r > thr)
++        var out_ = sf64_gt(sf64_add(r, r), scal) and not sf64_is_nan(r) and not sf64_is_nan(scal)
+         dst8[i] = UInt8(1) if out_ else UInt8(0)
+         return
+     if mode == ROWS_LOG:
+         dst64[i] = log_or_inf(src64[i])
+         return
+-    if mode == ROWS_SGD_PROBA:
++    # SABOTAGE (coverage-core-py2mojo_rows): the two probability modes swapped (SGDClassifier gets
++    # LogisticRegressionCV's sigmoid/softmax and back)
++    if mode == ROWS_LRCV_PROBA:
+         if k == 1:
+             var p = src32[i]
+             dst32[2 * i] = sf64_to_f32(sf64_sub(SF64_ONE, sf64_from_f32(p)))
