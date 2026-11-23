@@ -96,6 +96,9 @@ from core.ensemble_member import (
     META_BLOCK_SEARCH,
 )
 from core.member_abi import MEMBER_CAN_SCORE, MEMBER_CAN_MULTI_OUTPUT, MEMBER_OP_PREDICT, member_output_dtype
+from core.member_abi import MEMBER_OP_PREDICT_PROBA, MEMBER_OP_DECISION
+from core.msel_scorer_run import msel_scorer_code, msel_scorer_row, msel_scorer_regression
+from bindings.msel_scorer_native_door import msel_scorer_response
 from bindings.native_loaded_module_door import native_loaded_module
 from bindings.metrics_keys_unpack import metrics_keys
 from bindings.arena_prog_native_door import metric_route_of, metric_route_entries
@@ -2043,8 +2046,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     candidate (the base's clone with the candidate's parameters set) admitted
     as a member with those words, read as `msel_search_fit` reads the
     search's settings. Answers False (the door's fit keeps the search) for an
-    int cv it cannot take (a splitter, an index list), a named scorer other
-    than 'accuracy' or several scorers, refit other than True, the search's
+    int cv it cannot take (a splitter, an index list), a named scorer the
+    typed RUN does not serve (core/msel_scorer_run.mojo) or several scorers
+    (the kind's words carry one), refit other than True, the search's
     own `device`, and any candidate with no serving member. A Python scorer
     callback is refused in the door's words."""
     var scoring_in = py_get(fields, "scoring")
@@ -2055,9 +2059,9 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
             # callback; a native scorer object keeps the door.
             _ = msel_get_scorer(scoring_in, context)
             return False
-        if String(py=scoring_in) != "accuracy":
-            return False
-        scoring = 1
+        # a named scorer: its code is read below, with the base's response
+        # method (lane mf-metric4, core/msel_scorer_run.mojo)
+        scoring = -1
     var refit = py_get(fields, "refit")
     if refit is None or py_type(refit) is not b.bool or not Bool(py=refit):
         return False
@@ -2100,13 +2104,31 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         classifier = (done.masks[at] & MEMBER_CAN_CLASSIFIER) != 0
     else:
         classifier = Bool(py=base_plan["classifier"])
-    if scoring == 1 and not classifier:
-        return False
+    # THE SCORER (lane mf-metric4): a name the typed search RUN serves
+    # (core/msel_scorer_run.mojo `msel_scorer_code`), with the response its
+    # scorer reads off the base's class (`msel_scorer_response`, the
+    # scorer's own rule: 'roc_auc' takes decision_function when the class
+    # has it); any other name keeps the door.
+    var response = MEMBER_OP_PREDICT
+    if scoring < 0:
+        var scorer = msel_get_scorer(scoring_in, context)
+        var method = String(py=msel_scorer_response(scorer, base_plan, context))
+        scoring = msel_scorer_code(String(py=scoring_in), method == "decision_function")
+        if scoring < 0:
+            return False
+        var row = msel_scorer_row(scoring)
+        if msel_scorer_regression(row) == classifier:
+            return False
+        response = row.op
     var needs = MEMBER_CAN_FIT | MEMBER_CAN_PREDICT
     if classifier:
         needs |= MEMBER_CAN_CLASSIFIER
     if scoring == 0:
         needs |= MEMBER_CAN_SCORE
+    elif response == MEMBER_OP_PREDICT_PROBA:
+        needs |= MEMBER_CAN_PREDICT_PROBA
+    elif response == MEMBER_OP_DECISION:
+        needs |= MEMBER_CAN_DECISION
     var nested = _Nested()
     for c in range(len(clones)):  # driver-loop: over the candidates (admission, once each)
         if not _admit_nested(done, nested, clones[c], classifier, needs, context, b):
@@ -2115,12 +2137,15 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
         var multi = (nested.masks[c] & MEMBER_CAN_MULTI_OUTPUT) != 0
         if multi and scoring != 0:
             return False  # a multi-output target is scored by the member itself
-        if scoring == 1:
+        if scoring != 0:
             var probe = nested.plans[c].copy()
-            probe.classes = 2
-            var dtype = member_output_dtype(probe, MEMBER_OP_PREDICT, 1, 1, MEMBER_I32)
-            if dtype != MEMBER_I32 and dtype != MEMBER_I64:
+            probe.classes = 2 if classifier else 0
+            var labels_out = response == MEMBER_OP_PREDICT and classifier
+            var dtype = member_output_dtype(probe, response, 1, 1, MEMBER_I32 if labels_out else MEMBER_F32)
+            if labels_out and dtype != MEMBER_I32 and dtype != MEMBER_I64:
                 return False  # a member whose predict is not class codes
+            if not labels_out and dtype != MEMBER_F32 and dtype != MEMBER_F64:
+                return False  # a response the scorer's metric does not read
     var words: List[Float64] = [Float64(scoring), tolerate, error_value, 1.0 if return_train else 0.0, Float64(seed)]
     var kind = META_SEARCH_CLASSIFIER if classifier else META_SEARCH_REGRESSOR
     # The META entry and its glue run on an x_trees image: the search's own
@@ -2135,7 +2160,7 @@ def _admit_search(model: PythonObject, fields: PythonObject, context: PythonObje
     if not _finish(fields, trees_context, b, owner, nested, kind, 0.0, folds, List[Float64](), List[Int](), words^,
                    List[List[Int32]](), List[List[Int32]]()):
         return False
-    if scoring == 1:
+    if scoring != 0:
         # THE NATIVE METRIC RUN's route (bindings/arena_prog_run.mojo
         # `metric_inputs_run`): the default-mode x_metrics runner, its
         # connection pinned with the plan entry.
