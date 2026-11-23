@@ -61,8 +61,14 @@ from bindings.member_set_door import (
     MemberSet, member_set_admit, member_set_width, member_set_run, member_set_pack, member_set_release,
     member_set_notices, member_set_resident,
     member_set_tests, member_set_host, member_marked, member_held_open, member_held_run, member_held_close,
+    MemberHeldCall,
 )
 from core.member_abi import MEMBER_F32, MEMBER_I32, MEMBER_OP_PREDICT, MEMBER_OP_PREDICT_PROBA
+from xtrees.trees_meta_vote_run import (
+    VoteMember, VOTE_ALL_ANSWERED, bag_predict_run, bag_oob_run, bag_oob_classifier_finish, bag_oob_r2_run,
+    ada_classifier_run, ada_regressor_run, ADA_DECISION, ADA_PROBA, ADA_CODES,
+)
+from std.python._cpython import GILReleased
 # TOMBSTONE: TreesView / _view_of_array / trees_f32 / trees_all_finite / trees_check_sample_weight / trees_vector / trees_empty uses (the trees admission aliases) deleted 2026-11-09 by lane a1b-doors-opt-in-trees-linear; code recoverable at f59d913b0b.
 # Restore: experiments/removed/A1B_LABELS_ADMISSION_COPY.patch.
 from xtrees.trees_forest_run import ForestFit, trees_check_features, forest_export_dtype
@@ -373,33 +379,6 @@ def _gather_vec(xt: PythonObject, v_addr: Int, n: Int, rows: PythonObject, conte
     var col = admitted_vector(1, "<i4", context)
     var out = _gather(xt, v_addr, n, 1, rows, col, context)
     return trees_reshape(out, Python.tuple(Int(py=rows.shape[0])), context)
-
-
-def _acc_cols(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: PythonObject, n: Int, k: Int,
-              context: PythonObject) raises:
-    var xa = admit_f32(x, 2, "sub-estimator output", context, finite=False)
-    var glue = _xr(xt)
-    _ = xt_accumulate_cols(glue, trees_address(acc), xa.address, trees_address(cols), n, k,
-                           Int(py=cols.shape[0]), 1.0)
-    _ = cols
-    _ = xa  # keep the Python object alive through the native call above
-    _ = xa^
-
-
-def _acc(xt: PythonObject, acc: PythonObject, x: PythonObject, n: Int, context: PythonObject) raises:
-    var xa = admit_f32(x, 1, "sub-estimator output", context, finite=False)
-    var glue = _xr(xt)
-    _ = xt_accumulate(glue, trees_address(acc), xa.address, n, 1.0)
-    _ = xa  # keep the Python object alive through the native call above
-    _ = xa^
-
-
-def _acc_votes(xt: PythonObject, acc: PythonObject, codes: PythonObject, n: Int, k: Int, on: Float64,
-               off: Float64) raises:
-    var glue = _xr(xt)
-    _ = xt_accumulate_onehot(glue, trees_address(acc), trees_address(codes), n, k, on, off)
-    _ = acc
-    _ = codes
 
 
 def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
@@ -1145,7 +1124,7 @@ def _members(fields: PythonObject) raises -> PythonObject:
 
 def _bagging_held(members: PythonObject, staged: PythonObject, context: PythonObject) -> Bool:
     """True when this prediction's members may predict through the member
-    states they hold (`_bagging_member_out`) and not through their doors: no
+    states they hold (`_bag_unpack`) and not through their doors: no
     device copy of X is staged for them (`staged` empty: a CPU route, or a
     binary that cannot stage; with one staged the doors read it and a member
     call would upload X once per member) and the member class carries a
@@ -1158,35 +1137,175 @@ def _bagging_held(members: PythonObject, staged: PythonObject, context: PythonOb
         return False
 
 
-def _bagging_member_out(member: PythonObject, xs: PythonObject, m: Int, operation: Int, classifier: Bool,
-                        width: Int, x_address: Int, x_words: Int, mut proven: Int, host_only: Bool,
-                        context: PythonObject) raises -> PythonObject:
-    """A fitted member's `operation` over its `m` rows `xs` (float32 C-order,
-    rows and columns of the admitted X at `x_address`, `x_words` values)
-    through the member state it holds, or None: its door runs (the fallback
-    rule). Never raises.
+struct _BagUnpack(Movable):
+    """What `_bag_unpack` read for one Bagging operation (lane bm-meta-3,
+    2026-11-23): the typed members (a native member's plan by address into
+    `opened`, else its door's float32 block), each member's rows (`xs`,
+    `ns` x `ds`; `oobs`: its out-of-bag row numbers, OOB only), and the
+    Python owners of the row blocks, class columns and door blocks."""
+    var members: List[VoteMember]
+    var opened: List[MemberHeldCall]
+    var keep: PythonObject
+    var rows: PythonObject
+    var subs: PythonObject
+    var xs: List[Int]
+    var ns: List[Int]
+    var ds: List[Int]
+    var oobs: List[Int]
+    var native: Int
 
-    WHO REFUSES A NON-FINITE X: a member whose kind tests its rows
-    (MEMBER_CAN_TEST_ROWS) refuses in its own kernel pass, the call answers
-    None and the member's door raises its words: no host scan. For any other
-    member the whole admitted X is scanned ONCE per public operation, when
-    the first such member is served (`proven`: 0 not known, 1 finite, -1 not
-    finite; the caller keeps it across its members); not finite = None for
-    every such member, whose door refuses. `host_only`: a member whose
-    route is a GPU is not served (the caller's doors upload its rows)."""
-    var opened = member_held_open(member, operation, classifier, width, False, context, trees_builtins())
-    var out = PythonObject(None)
+    def __init__(out self) raises:
+        self.members = List[VoteMember]()
+        self.opened = List[MemberHeldCall]()
+        self.keep = Python.list()
+        self.rows = Python.list()
+        self.subs = Python.list()
+        self.xs = List[Int]()
+        self.ns = List[Int]()
+        self.ds = List[Int]()
+        self.oobs = List[Int]()
+        self.native = 0
+
+
+def _bag_close(mut got: _BagUnpack):
+    for i in range(len(got.opened)):  # driver-loop: over the opened native members
+        member_held_close(got.opened[i])
+
+
+def _bag_door(member: PythonObject, xs: PythonObject, classifier: Bool, sub: PythonObject, name: String,
+              keep: PythonObject, answer: PythonObject, context: PythonObject) raises -> VoteMember:
+    """One member's float32 block from its own door (`_member_proba` /
+    `_member_predict`, which raise the estimator's own words), or from the
+    Array its held state already wrote (`answer`), admitted as before; its
+    owners kept in `keep`."""
+    if classifier:
+        var p = admit_f32(answer if answer is not None else _member_proba(member, xs, context), 2,
+                          "sub-estimator output", context, finite=False)
+        _ = py_call(keep.append, p.array)
+        var got = VoteMember(p.address, Int(py=sub.shape[0]), trees_address(sub), 1.0)
+        _ = p^
+        return got
+    var p = admit_f32(answer if answer is not None else _member_predict(member, xs, context), 1, name, context,
+                      finite=False)
+    _ = py_call(keep.append, p.array)
+    var got = VoteMember(p.address, 1, 0, 1.0)
+    _ = p^
+    return got
+
+
+def _bag_unpack(members: PythonObject, blocks: PythonObject, oob_rows: PythonObject, classifier: Bool,
+                operation: Int, var held: Bool, var proven: Int, host_only: Bool, name: String, x_address: Int,
+                x_words: Int, context: PythonObject) raises -> _BagUnpack:
+    """UNPACK of a Bagging predict or OOB pass. `blocks[i]`: member i's rows
+    (float32 C-order Array; None for a member with no out-of-bag rows,
+    which is skipped). While `held`, each member is opened on the state it
+    holds (`member_held_open`); THE OLD ROUTE RULE, kept: the first member
+    not served (not of a published family, a GPU route under `host_only`,
+    rows not proven) ends the native route, and it and every member after
+    it take their doors. WHO PROVES THE ROWS: a kind that tests its rows
+    refuses a non-finite one itself; for any other the whole admitted X
+    (`x_address`, `x_words`) is scanned ONCE, at the first such member
+    (`proven`: 0 not known, 1 finite, -1 not). A served member whose kind
+    needs the GIL answers here, with the GIL held, as before."""
+    var got = _BagUnpack()
+    got.rows = blocks
     try:
-        if opened.served and (opened.host or not host_only):
-            if not opened.tests and proven == 0:
-                proven = 1 if trees_finite_f32(x_address, x_words) else -1
-            if opened.tests or proven == 1:
-                out = member_held_run(opened, trees_address(xs), m, Int(py=xs.shape[1]), context)
-    except:
-        out = PythonObject(None)
-    member_held_close(opened)
-    _ = xs  # the rows are read through the whole member call
-    return out
+        for i in range(len(members)):  # driver-loop: over the member estimators (admission, once each)
+            var member = members[i]
+            var xs = blocks[i]
+            if xs is None:
+                _ = py_call(got.subs.append, PythonObject(None))
+                got.xs.append(0)
+                got.ns.append(0)
+                got.ds.append(0)
+                got.oobs.append(0 if oob_rows is None else trees_address(oob_rows[i]))
+                got.members.append(VoteMember(0, 0, 0, 1.0))
+                continue
+            var sub = _sub_cols(member, context) if classifier else PythonObject(None)
+            _ = py_call(got.subs.append, sub)
+            var m = Int(py=xs.shape[0])
+            var d = Int(py=xs.shape[1])
+            got.xs.append(trees_address(xs))
+            got.ns.append(m)
+            got.ds.append(d)
+            got.oobs.append(0 if oob_rows is None else trees_address(oob_rows[i]))
+            var width = Int(py=sub.shape[0]) if classifier else 1
+            if held:
+                var opened = member_held_open(member, operation, classifier, width, False, context, trees_builtins())
+                var served = opened.served and (opened.host or not host_only)
+                if served and not opened.tests and proven == 0:
+                    try:
+                        proven = 1 if trees_finite_f32(x_address, x_words) else -1
+                    except:
+                        served = False
+                served = served and (opened.tests or proven == 1)
+                if served and opened.gil_free:
+                    got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
+                                                  opened.dtype, trees_address(sub) if classifier else 0, 1.0))
+                    got.native += 1
+                    got.opened.append(opened^)
+                    continue
+                var answer = PythonObject(None)
+                if served:
+                    try:
+                        answer = member_held_run(opened, trees_address(xs), m, d, context)
+                    except:
+                        answer = PythonObject(None)
+                member_held_close(opened)
+                held = answer is not None
+                got.members.append(_bag_door(member, xs, classifier, sub, name, got.keep, answer, context))
+                continue
+            got.members.append(_bag_door(member, xs, classifier, sub, name, got.keep, PythonObject(None), context))
+        # The native members' plans by address, now that `got.opened` is final.
+        for i in range(len(got.members)):  # driver-loop: over members
+            if got.members[i].native:
+                got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+    except e:
+        _bag_close(got)
+        raise e^
+    return got^
+
+
+def _bag_refused(mut got: _BagUnpack, refused: Int, members: PythonObject, classifier: Bool, name: String,
+                 context: PythonObject) raises:
+    """The fallback rule after a native member refused in RUN: it and every
+    native member after it take their doors (the old route ended at the
+    first member not served), which raise the estimator's own words."""
+    for j in range(refused, len(got.members)):  # driver-loop: over the members from the refusing one
+        if got.members[j].native:
+            got.members[j] = _bag_door(members[j], got.rows[j], classifier, got.subs[j], name, got.keep,
+                                       PythonObject(None), context)
+            got.native -= 1
+
+
+def _bag_predict(members: PythonObject, blocks: PythonObject, classifier: Bool, held: Bool, x: AdmittedXView,
+                 glue: EntryRef, k: Int, acc: Int, context: PythonObject) raises:
+    """UNPACK `_bag_unpack`, RUN `bag_predict_run` (the GIL released when a
+    member is native), the fallback rule on a refusal."""
+    var name = String("sub-estimator output")
+    var got = _bag_unpack(members, blocks, PythonObject(None), classifier,
+                          MEMBER_OP_PREDICT_PROBA if classifier else MEMBER_OP_PREDICT, held, 0, False, name,
+                          x.address, x.rows * x.cols, context)
+    try:
+        var start = 0
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = bag_predict_run(glue, got.members, got.xs, got.ds, x.rows, k, classifier, acc, start)
+            else:
+                refused = bag_predict_run(glue, got.members, got.xs, got.ds, x.rows, k, classifier, acc, start)
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            _bag_refused(got, refused, members, classifier, name, context)
+            start = refused
+    except e:
+        _bag_close(got)
+        raise e^
+    _bag_close(got)
+    _ = got.keep  # the door blocks are read through RUN
+    _ = got.rows  # the row blocks are read through RUN
+    _ = got.subs
 
 
 def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: AdmittedXView, k: Int, classifier: Bool,
@@ -1196,59 +1315,59 @@ def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: AdmittedXVie
 
     `fit_word`: `_bagging_fit_bags`' answer for this fit. When every member
     holds its fitted state on the CPU route (_BAG_STATES_HELD) each member
-    predicts its out-of-bag rows through that state (`_bagging_member_out`:
-    a hit, one member call, the GIL released) and not through its predict
-    door, which re-read the model and tested the gathered rows per member;
-    the first member not served ends the native route for the rest. X's
-    finite proof is the fit's own (_BAG_X_PROVEN: no second scan); a member
-    kind that tests its rows needs none. Any other fit (a door-fitted
-    member, a GPU route, a state not kept) keeps the doors: a held call
-    there would import every member's state first."""
+    predicts its out-of-bag rows through that state (one member call in
+    RUN) and not through its predict door; the first member not served ends
+    the native route for the rest. X's finite proof is the fit's own
+    (_BAG_X_PROVEN: no second scan); a member kind that tests its rows needs
+    none. Any other fit (a door-fitted member, a GPU route, a state not
+    kept) keeps the doors: a held call there would import every member's
+    state first. Lane bm-meta-3 (2026-11-23): UNPACK (the gathers, the
+    member opens) `_bag_unpack`, RUN `bag_oob_run`, no Python."""
     var n = x.rows
     var acc = admitted_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var counts = admitted_vector(n, "<i4", context)
     var members = _members(fields)
     var features = fields["estimators_features_"]
     var oob_rows = fields["_oob_rows"]
-    var glue = _xr(xt)
     var held = (fit_word & _BAG_STATES_HELD) != 0 and _bagging_held(members, Python.list(), context)
     var proven = 1 if (fit_word & _BAG_X_PROVEN) != 0 else 0
-    for i in range(len(members)):  # driver-loop: over the member estimators
+    var blocks = Python.list()
+    for i in range(len(members)):  # driver-loop: over the member estimators (their out-of-bag rows)
         var oob = oob_rows[i]
-        var m = len(oob)
-        if m == 0:
-            continue
-        var xs = _gather(xt, x.address, n, x.cols, oob, features[i], context)
-        var out = PythonObject(None)
-        if classifier:
-            var proba = PythonObject(None)
-            var sub = _sub_cols(members[i], context)
-            if held:
-                proba = _bagging_member_out(members[i], xs, m, MEMBER_OP_PREDICT_PROBA, True, Int(py=sub.shape[0]),
-                                            x.address, n * x.cols, proven, True, context)
-                held = proba is not None
-            if proba is None:
-                proba = _member_proba(members[i], xs, context)
-            out = admitted_vector(m * k, "<f8", context)
-            _acc_cols(xt, out, proba, sub, m, k, context)
+        if len(oob) == 0:
+            _ = py_call(blocks.append, PythonObject(None))
         else:
-            var native = PythonObject(None)
-            if held:
-                native = _bagging_member_out(members[i], xs, m, MEMBER_OP_PREDICT, False, 1, x.address, n * x.cols,
-                                             proven, True, context)
-                held = native is not None
-            var p = _f32_vector(native if native is not None else _member_predict(members[i], xs, context), context)
-            out = admitted_vector(m, "<f8", context)
-            trees_cast(p.address, "<f4", trees_address(out), "<f8", m, context)
-            _ = p  # keep the Python object alive through the native call above
-            _ = out  # keep the Python object alive through the native call above
-        _ = xt_accumulate_rows(glue, trees_address(acc), trees_address(out), trees_address(oob), n, k, m)
-        _ = out  # keep the Python object alive through the native call above
-        _ = oob  # keep the Python object alive through the native call above
-        _ = acc  # keep the Python object alive through the native call above
-        _ = xt_count_rows(glue, trees_address(counts), trees_address(oob), n, m)
-        _ = oob  # keep the Python object alive through the native call above
-        _ = counts  # keep the Python object alive through the native call above
+            _ = py_call(blocks.append, _gather(xt, x.address, n, x.cols, oob, features[i], context))
+    var name = String("prediction")
+    var got = _bag_unpack(members, blocks, oob_rows, classifier,
+                          MEMBER_OP_PREDICT_PROBA if classifier else MEMBER_OP_PREDICT, held, proven, True, name,
+                          x.address, n * x.cols, context)
+    var glue = _xr(xt)
+    try:
+        var start = 0
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = bag_oob_run(glue, got.members, got.xs, got.ns, got.ds, got.oobs, n, k, classifier,
+                                          trees_address(acc), trees_address(counts), start)
+            else:
+                refused = bag_oob_run(glue, got.members, got.xs, got.ns, got.ds, got.oobs, n, k, classifier,
+                                      trees_address(acc), trees_address(counts), start)
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            _bag_refused(got, refused, members, classifier, name, context)
+            start = refused
+    except e:
+        _bag_close(got)
+        raise e^
+    _bag_close(got)
+    _ = got.keep  # the door blocks are read through RUN
+    _ = got.rows  # the row blocks are read through RUN
+    _ = got.subs
+    _ = oob_rows  # the out-of-bag row numbers are read through RUN
+    _ = acc
+    _ = counts
     return Python.tuple(acc, counts)
 
 
@@ -1274,15 +1393,15 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
             var n = x.rows
             var pair = _bagging_oob_outputs(xt, fields, x.view(), k, True, fit_word, context)
             var acc = pair[0]
-            _ = xt_normalize_rows(glue, trees_address(acc), n, k)
+            # RUN `bag_oob_classifier_finish`: normalize, argmax, hits.
+            var pred = admitted_vector(n, "<i4", context)
+            var hits = bag_oob_classifier_finish(glue, trees_address(acc), trees_address(labels.codes),
+                                                 trees_address(pred), n, k)
             _ = acc  # keep the Python object alive through the native call above
-            py_setitem(fields, "oob_decision_function_", trees_reshape(acc, Python.tuple(n, k), context))
-            var pred = _argmax(xt, acc, n, k, context)
-            var hits = xt_count_equal(glue, trees_address(pred), trees_address(labels.codes), n)
             _ = pred  # keep the Python object alive through the native call above
             _ = labels  # the encoded-label owner outlives its raw-address read
+            py_setitem(fields, "oob_decision_function_", trees_reshape(acc, Python.tuple(n, k), context))
             py_setitem(fields, "oob_score_", _F(Float64(hits) / Float64(n)))
-            _ = pred  # keep the Python object alive through the native call above
         return model
     var y32 = admit_f32(args[1], 1, "y", context, finite=False)
     var y_array = _as_array(y32, Python.tuple(y32.rows), context)
@@ -1296,24 +1415,21 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         var pair = _bagging_oob_outputs(xt, fields, x.view(), 1, False, fit_word, context)
         _ = x  # owner pin: the view above reads its words
         var pred = admitted_vector(n, "<f8", context)
-        var words = admitted_vector(4, "<f8", context)
-        var flags = admitted_vector(4, "<i4", context)
-        _ = xt_oob_r2(glue, trees_address(pair[0]), trees_address(pair[1]), trees_address(y_array),
-                      trees_address(pred), trees_address(words), trees_address(flags), n)
+        # RUN `bag_oob_r2_run`: oob_prediction_ and the R2 sums.
+        var r2 = bag_oob_r2_run(glue, trees_address(pair[0]), trees_address(pair[1]), trees_address(y_array),
+                                trees_address(pred), n)
         # The tuple owns the accumulated predictions and counts. Extracting
         # their integer addresses does not retain either array through the
         # native call; releasing the tuple early corrupts its first rows.
         _ = pair
-        _ = flags  # keep the Python object alive through the native call above
-        _ = words  # keep the Python object alive through the native call above
         _ = pred  # keep the Python object alive through the native call above
         _ = y_array  # keep the Python object alive through the native call above
-        if _i32_word(flags, 0) != 0 or _i32_word(flags, 1) != 0:
+        if not r2.finite:
             raise Error("BaggingRegressor oob_score: a non-finite target or out-of-bag prediction, "
                         + "or a sum that overflows float64")
         py_setitem(fields, "oob_prediction_", pred)
-        var ss_tot = _f64_word(words, 1)
-        var ss_res = _f64_word(words, 2)
+        var ss_tot = r2.ss_tot
+        var ss_res = r2.ss_res
         var score = 1.0 - ss_res / ss_tot if ss_tot > 0 else (1.0 if ss_res == 0 else 0.0)
         py_setitem(fields, "oob_score_", _F(score))
     return model
@@ -1341,26 +1457,20 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
     # One device copy of X for the full-width members (trees_staged_input).
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
     # Members of a published family predict through the states they hold
-    # when nothing is staged (`_bagging_held`, `_bagging_member_out`). A
+    # when nothing is staged (`_bagging_held`, `_bag_unpack`). A
     # member that is not served ends the native route for this call: its
     # door, and the doors of the members after it, answer as before.
     var held = _bagging_held(members, staged, context)
-    var proven = 0
     try:
-        for i in range(len(members)):  # driver-loop: over the member estimators
-            var xs = _sub_x(xt, x.view(), xa, features[i], rows_all, context)
-            var sub = _sub_cols(members[i], context)
-            var proba = PythonObject(None)
-            if held:
-                proba = _bagging_member_out(members[i], xs, n, MEMBER_OP_PREDICT_PROBA, True, Int(py=sub.shape[0]),
-                                            x.address, n * x.cols, proven, False, context)
-                held = proba is not None
-            if proba is None:
-                proba = _member_proba(members[i], xs, context)
-            _acc_cols(xt, acc, proba, sub, n, k, context)
+        var blocks = Python.list()
+        for i in range(len(members)):  # driver-loop: over the member estimators (their feature subsets)
+            _ = py_call(blocks.append, _sub_x(xt, x.view(), xa, features[i], rows_all, context))
+        # Lane bm-meta-3: UNPACK + RUN `bag_predict_run` (sums, then / m).
+        _bag_predict(members, blocks, True, held, x.view(), _xr(xt), k, trees_address(acc), context)
     finally:
         trees_unstage(staged)
-    _scale(xt, acc, Float64(len(members)))
+    _ = xa  # the rows are read through RUN
+    _ = x
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
@@ -1401,21 +1511,16 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
     # As `_bagging_proba`: members of a published family predict through the
     # states they hold when nothing is staged.
     var held = _bagging_held(members, staged, context)
-    var proven = 0
     try:
-        for i in range(len(members)):  # driver-loop: over the member estimators
-            var xs = _sub_x(xt, x.view(), xa, features[i], rows_all, context)
-            var p = PythonObject(None)
-            if held:
-                p = _bagging_member_out(members[i], xs, n, MEMBER_OP_PREDICT, False, 1, x.address, n * x.cols,
-                                        proven, False, context)
-                held = p is not None
-            if p is None:
-                p = _member_predict(members[i], xs, context)
-            _acc(xt, acc, p, n, context)
+        var blocks = Python.list()
+        for i in range(len(members)):  # driver-loop: over the member estimators (their feature subsets)
+            _ = py_call(blocks.append, _sub_x(xt, x.view(), xa, features[i], rows_all, context))
+        # Lane bm-meta-3: UNPACK + RUN `bag_predict_run` (sums, then / m).
+        _bag_predict(members, blocks, False, held, x.view(), _xr(xt), 1, trees_address(acc), context)
     finally:
         trees_unstage(staged)
-    _scale(xt, acc, Float64(len(members)))
+    _ = xa  # the rows are read through RUN
+    _ = x
     return acc
 
 
@@ -1819,34 +1924,49 @@ def _ada_x(fields: PythonObject, X: PythonObject, context: PythonObject) raises 
     return x^
 
 
-def _ada_decision(fields: PythonObject, x: AdmittedX, xt: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`AdaBoostClassifier._decision`: the members' weighted one-hot votes
-    over the native fsum of their weights."""
+def _ada_weights(alphas: PythonObject, context: PythonObject) raises -> List[Float64]:
+    """The member weights as float64, read once: `array('d', alphas)` (one
+    C conversion, as before) copied into native words."""
+    var store = py_call(context["array_type"], PythonObject("d"), alphas)
+    var count = len(store)
+    var words = List[Float64](length=count, fill=0.0)
+    var src = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(store.buffer_info)[0]))
+    for i in range(count):  # small-loop(one copy of the m member weights)
+        words[i] = src[unsafe_offset=i]
+    _ = store  # keep the store alive through the reads above
+    return words^
+
+
+def _ada_classify(fields: PythonObject, x: AdmittedX, xt: PythonObject, finish: Int, dst: Int,
+                  context: PythonObject) raises -> PythonObject:
+    """`AdaBoostClassifier._decision` and its finish (lane bm-meta-3,
+    2026-11-23): UNPACK the members' int32 codes (each one-tree member's
+    door over the one staged device copy of X, `_member_codes`) and their
+    weights read once as float64 (`array('d', alphas)`'s conversion), RUN
+    `ada_classifier_run`. Answers the float64 n x k decision block."""
     var n = x.rows
     var k = Int(py=_int(fields["n_classes_"]))
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
     var acc = admitted_vector(n * k, "<f8", context)  # zero-filled: `_class_major([0.0])` without its fill program
     var members = fields["estimators_"]
     var alphas = fields["estimator_weights_"]
-    # One device copy of X for every one-tree member (trees_staged_input).
-    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
-    # The weights as one float64 store, read once (`array('d', alphas)` is
-    # the same float conversion `_float` made per member, and the store fsum
-    # reads): one conversion per predict instead of one per member plus the
-    # fsum's own (lane perf-sweep-trees, 2026-11-05).
-    var weights = py_call(context["array_type"], PythonObject("d"), alphas)
+    var weights = _ada_weights(alphas, context)
     if len(weights) < len(members):
         raise Error("IndexError: list index out of range")
-    var wp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(weights.buffer_info)[0]))
+    # One device copy of X for every one-tree member (trees_staged_input).
+    var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
+    var keep = Python.list()
+    var codes = List[Int](capacity=len(members))
     try:
-        for i in range(len(members)):  # driver-loop: over the member estimators
+        for i in range(len(members)):  # driver-loop: over the member estimators (their codes)
             var pred = _member_codes(members[i], xa, context)
-            var a = wp[unsafe_offset=i]
-            _acc_votes(xt, acc, pred, n, k, a, -a / Float64(k - 1))
+            _ = py_call(keep.append, pred)
+            codes.append(trees_address(pred))
     finally:
         trees_unstage(staged)
-    _ = weights  # keep the store alive through the reads above
-    _scale(xt, acc, _fsum(alphas, context))
+    ada_classifier_run(_xr(xt), codes, weights, n, k, trees_address(acc), finish, dst)
+    _ = keep  # the members' codes are read through RUN
+    _ = acc
     return acc
 
 
@@ -1856,15 +1976,12 @@ def ada_decision_function(model: PythonObject, args: PythonObject, context: Pyth
     var xt = _xt(fields, context)
     var n = x.rows
     var k = Int(py=_int(fields["n_classes_"]))
-    var acc = _ada_decision(fields, x, xt, context)
-    var glue = _xr(xt)
     if k == 2:
         var d = admitted_vector(n, "<f8", context)
-        _ = xt_margin2(glue, trees_address(acc), trees_address(d), n, 0)
-        _ = d  # keep the Python object alive through the native call above
-        _ = acc  # keep the Python object alive through the native call above
+        _ = _ada_classify(fields, x, xt, ADA_DECISION, trees_address(d), context)
+        _ = d  # written through RUN
         return d
-    return trees_reshape(acc, Python.tuple(n, k), context)
+    return trees_reshape(_ada_classify(fields, x, xt, ADA_DECISION, 0, context), Python.tuple(n, k), context)
 
 
 def ada_predict_proba(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1873,35 +1990,19 @@ def ada_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     var xt = _xt(fields, context)
     var n = x.rows
     var k = Int(py=_int(fields["n_classes_"]))
-    var acc = _ada_decision(fields, x, xt, context)
-    var glue = _xr(xt)
     if k == 2:
         var pairs = admitted_vector(n * 2, "<f8", context)
-        _ = xt_margin2(glue, trees_address(acc), trees_address(pairs), n, 2)
-        _ = pairs  # keep the Python object alive through the native call above
-        _ = acc  # keep the Python object alive through the native call above
-        acc = pairs
-    else:
-        _scale(xt, acc, Float64(k - 1))
-    _ = xt_softmax_rows(glue, trees_address(acc), n, k)
-    _ = acc  # keep the Python object alive through the native call above
-    return trees_reshape(acc, Python.tuple(n, k), context)
+        _ = _ada_classify(fields, x, xt, ADA_PROBA, trees_address(pairs), context)
+        _ = pairs  # written through RUN
+        return trees_reshape(pairs, Python.tuple(n, k), context)
+    return trees_reshape(_ada_classify(fields, x, xt, ADA_PROBA, 0, context), Python.tuple(n, k), context)
 
 
 def _ada_codes_of(fields: PythonObject, x: AdmittedX, xt: PythonObject, context: PythonObject) raises -> PythonObject:
     """AdaBoostClassifier's predicted class codes (int32), undecoded."""
-    var n = x.rows
-    var k = Int(py=_int(fields["n_classes_"]))
-    var acc = _ada_decision(fields, x, xt, context)
-    var codes = PythonObject(None)
-    var glue = _xr(xt)
-    if k == 2:
-        codes = admitted_vector(n, "<i4", context)
-        _ = xt_margin2(glue, trees_address(acc), trees_address(codes), n, 1)
-        _ = codes  # keep the Python object alive through the native call above
-        _ = acc  # keep the Python object alive through the native call above
-    else:
-        codes = _argmax(xt, acc, n, k, context)
+    var codes = admitted_vector(x.rows, "<i4", context)
+    _ = _ada_classify(fields, x, xt, ADA_CODES, trees_address(codes), context)
+    _ = codes  # written through RUN
     return codes
 
 
@@ -1922,26 +2023,26 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
     var members = fields["estimators_"]
     var m = len(members)
     var xa = _as_array(x, Python.tuple(n, x.cols), context)
-    var preds = admitted_vector(m * n, "<f4", context)
     var staged = trees_stage_members(members, trees_address(xa), n, x.cols, context)
-    var glue = _xr(xt)
+    # Lane bm-meta-3: UNPACK (the members' float32 predictions from their
+    # doors, the weights read once as float64), RUN `ada_regressor_run`.
+    var keep = Python.list()
+    var blocks = List[Int](capacity=m)
     try:
-        for j in range(m):  # driver-loop: over the member estimators
+        for j in range(m):  # driver-loop: over the member estimators (their predictions)
             var p = _f32_vector(_member_predict(members[j], xa, context), context)
-            _ = xt_put_f32(glue, trees_address(preds), p.address, j * n, n)
-            _ = p  # keep the Python object alive through the native call above
-            _ = preds  # keep the Python object alive through the native call above
+            _ = py_call(keep.append, p.array)
+            blocks.append(p.address)
+            _ = p^
     finally:
         trees_unstage(staged)
-    var b = trees_builtins()
-    # `array('d', ...)` converts each weight with float() itself: no map layer.
-    var weights_store = py_call(context["array_type"], PythonObject("d"), fields["estimator_weights_"])
-    var weights = classical_wrap_array(weights_store, Python.tuple(m), "<f8", "C", context)
+    var weights = _ada_weights(fields["estimator_weights_"], context)
+    if len(weights) < m:
+        raise Error("IndexError: list index out of range")
     var out = admitted_vector(n, "<f4", context)
-    _ = xt_weighted_median(glue, trees_address(preds), trees_address(weights), trees_address(out), n, m)
+    ada_regressor_run(_xr(xt), blocks, weights, n, trees_address(out))
     _ = out  # keep the Python object alive through the native call above
-    _ = weights  # keep the Python object alive through the native call above
-    _ = preds  # keep the Python object alive through the native call above
+    _ = keep  # the members' predictions are read through RUN
     return out
 
 

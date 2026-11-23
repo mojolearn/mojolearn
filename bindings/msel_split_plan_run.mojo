@@ -37,7 +37,7 @@ from core.base_helpers_calls import base_bincount_i64, base_bincount2_i32
 from core.hotpath_impl_rows import group_fold_assign_i32, strat_alloc_i64, strat_group_plan_i32
 from x_metrics.epilogue import first_rows_i32
 from core.metrics_program_plan import MetricProgramPlan
-from bindings.arena_prog_run import MetricArenaOwner, MetricProgramInput, metrics_plan_execute
+from bindings.arena_prog_run import MetricArenaOwner, MetricRoute, metric_inputs_run
 from bindings.msel_split_run import (
     MSEL_SPLIT_GOLDEN, MSEL_SPLIT_NONE, MselCounterRng, MselFoldRows, msel_fold_rows_fits, msel_split_mix64,
     msel_split_signed32, msel_shuffled_fold_rows_plan, msel_stratified_fold_rows_plan,
@@ -149,25 +149,11 @@ struct MselProg(Movable):
 
 
 def msel_prog_run(route: MselSplitRoute, prog: MselProg) raises -> MetricArenaOwner:
-    """Run a typed program: its input records (program-owned constants and
-    the buffer inputs, in input order; an empty buffer has no record), then
-    `metrics_plan_execute`. The records are the ones the shared door runner
-    builds (bindings/arena_prog_native_door.mojo `_metrics_run_plan`)."""
-    if len(prog.addresses) != prog.plan.buffer_inputs():
-        raise Error("ValueError: x_metrics: the program's inputs do not match its layout")
-    var records = List[MetricProgramInput](capacity=len(prog.plan.input_offsets))
-    var next_buffer = 0
-    for k in range(len(prog.plan.input_offsets)):  # driver-loop: over the program's input records
-        if prog.plan.input_consts[k] >= 0:
-            records.append(MetricProgramInput(prog.plan.input_offsets[k], prog.plan.const_address(k),
-                                              len(prog.plan.consts[prog.plan.input_consts[k]])))
-            continue
-        var at = next_buffer
-        next_buffer += 1
-        if prog.sizes[at] == 0:
-            continue
-        records.append(MetricProgramInput(prog.plan.input_offsets[k], prog.addresses[at], prog.sizes[at]))
-    return metrics_plan_execute(route.program, prog.plan, records, route.ranges, route.output_ranges)
+    """Run a typed program through the one typed program runner
+    (bindings/arena_prog_run.mojo `metric_inputs_run`; lane bm-meta-3,
+    2026-11-23: its record loop was a copy of the door runner's)."""
+    return metric_inputs_run(MetricRoute(route.program, route.ranges, route.output_ranges), prog.plan,
+                             prog.addresses, prog.sizes)
 
 
 def msel_draw_rows(route: MselSplitRoute, mut rng: MselCounterRng, sizes: List[Int],

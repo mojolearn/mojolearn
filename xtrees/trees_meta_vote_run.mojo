@@ -27,9 +27,11 @@ from core.member_abi import (
     MEMBER_OP_PREDICT,
 )
 from core.array_helpers_impl import fsum_f64
+from xtrees.trees_meta_run import CalibratedProgram
 from xtrees.glue_calls import (
     xt_accumulate, xt_accumulate_cols, xt_accumulate_cols_many, xt_accumulate_onehot, xt_argmax_rows, xt_scale,
-    xt_scatter, xt_ovr_assemble,
+    xt_scatter, xt_ovr_assemble, xt_accumulate_rows, xt_count_rows, xt_normalize_rows, xt_count_equal, xt_oob_r2,
+    xt_calibrated_proba, xt_margin2, xt_softmax_rows, xt_weighted_median, xt_put_f32,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -135,12 +137,10 @@ def _member_f32(m: VoteMember, rows: VoteRows, mut keep: List[List[Float32]]) ->
     return Int(keep[len(keep) - 1].unsafe_ptr())
 
 
-def _member_codes(m: VoteMember, rows: VoteRows, mut keep: List[List[Int32]]) -> Int:
-    """The member's int32 class codes: its door's codes, or one native call
-    (int64 codes narrowed once, as the door's int32 cast narrowed them). 0
-    when the native call refused."""
-    if not m.native:
-        return m.address
+def _member_codes_into(m: VoteMember, rows: VoteRows, dst: Int) -> Bool:
+    """One native member's int32 class codes written at `dst` (`rows.n`
+    words; int64 codes narrowed once, as the door's int32 cast narrowed
+    them). False when the native call refused."""
     try:
         var plan = _PlanP(unsafe_from_address=m.plan)
         var call = member_call_of(plan[], m.state)
@@ -149,18 +149,28 @@ def _member_codes(m: VoteMember, rows: VoteRows, mut keep: List[List[Int32]]) ->
             var wide = List[Int64](unsafe_uninit_length=rows.n)
             call.dst = MemberMatrix(Int(wide.unsafe_ptr()), rows.n, 1, MEMBER_I64)
             _ = member_call(plan[].member, m.operation, call)
-            var codes = List[Int32](unsafe_uninit_length=rows.n)
+            var codes = _I32P(unsafe_from_address=dst)
             for i in range(rows.n):  # small-loop(one narrowing pass over one member's codes, as the door's cast made)
                 codes[i] = Int32(wide[i])
             _ = wide^
-            keep.append(codes^)
         else:
-            var codes = List[Int32](unsafe_uninit_length=rows.n)
-            call.dst = MemberMatrix(Int(codes.unsafe_ptr()), rows.n, 1, MEMBER_I32)
+            call.dst = MemberMatrix(dst, rows.n, 1, MEMBER_I32)
             _ = member_call(plan[].member, m.operation, call)
-            keep.append(codes^)
     except:
+        return False
+    return True
+
+
+def _member_codes(m: VoteMember, rows: VoteRows, mut keep: List[List[Int32]]) -> Int:
+    """The member's int32 class codes: its door's codes, or one native call
+    into storage `keep` owns (`_member_codes_into`). 0 when the native call
+    refused."""
+    if not m.native:
+        return m.address
+    var codes = List[Int32](unsafe_uninit_length=rows.n)
+    if not _member_codes_into(m, rows, Int(codes.unsafe_ptr())):
         return 0
+    keep.append(codes^)
     return Int(keep[len(keep) - 1].unsafe_ptr())
 
 
@@ -315,3 +325,342 @@ def ovr_assemble_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], 
     _ = xt_ovr_assemble(glue, addrs, ints, floats)
     _ = keep^  # the native blocks are read through the program above
     return VOTE_ALL_ANSWERED
+
+
+def multioutput_codes_run(rows: VoteRows, members: List[VoteMember], dst: List[Int], start: Int) -> Int:
+    """`MultiOutputClassifier` predict and score before the decode (lane
+    bm-meta-3, 2026-11-23): member j's int32 codes into output j's fitted
+    classes, written at `dst[j]` (`rows.n` words) for members `start` ..
+    m-1. A door member's codes are already its column (`dst[j]` is its
+    block's address): nothing is written. The members run one after the
+    other, each call splitting its own rows over the cores, as before. A
+    native member that refuses is returned by index (outputs before it are
+    final; the caller asks its door and runs again from it)."""
+    for j in range(start, len(members)):  # driver-loop: over members (outputs)
+        if members[j].native and not _member_codes_into(members[j], rows, dst[j]):
+            return j
+    return VOTE_ALL_ANSWERED
+
+
+def multioutput_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], ks: List[Int],
+                          accs: List[Int], start: Int) raises -> Int:
+    """`MultiOutputClassifier.predict_proba` (lane bm-meta-3, 2026-11-23):
+    member j's probabilities placed at their class columns of output j's
+    float64 `rows.n x ks[j]` zero block `accs[j]` (one `xt_accumulate_cols`,
+    weight 1), member after member from `start`, the same op over the same
+    blocks in the same order as the door before this split: no bits change.
+    A native member that refuses is returned by index before its block is
+    touched (blocks before it are final)."""
+    var keep = List[List[Float32]]()
+    for j in range(start, len(members)):  # driver-loop: over members (outputs)
+        var block = _member_f32(members[j], rows, keep)
+        if block == 0:
+            return j
+        _ = xt_accumulate_cols(glue, accs[j], block, members[j].class_cols, rows.n, ks[j], members[j].cols, 1.0)
+    _ = keep^  # the native blocks are read through the accumulations above
+    return VOTE_ALL_ANSWERED
+
+
+# ----------------------------------------------------------------- Bagging
+# Lane bm-meta-3 (2026-11-23). Each Bagging member reads its own rows: the
+# feature subset of X (or X itself) for predict, its out-of-bag rows for the
+# OOB score, gathered by the UNPACK (bindings/trees_public_boost_door.mojo)
+# into float32 C-order blocks whose addresses `xs[j]` (`ns[j]` x `ds[j]`)
+# the caller keeps alive through RUN.
+
+
+def bag_predict_run(glue: EntryRef, members: List[VoteMember], xs: List[Int], ds: List[Int], n: Int, k: Int,
+                    classifier: Bool, acc: Int, start: Int) raises -> Int:
+    """`BaggingClassifier.predict_proba` (classifier: acc float64 n x k,
+    zero: each member's probabilities placed at its class columns, weight 1)
+    and `BaggingRegressor.predict` (acc float64 n, zero: the members'
+    float32 predictions added), member after member from `start`, then
+    divided by the member count once every member has answered: the ops of
+    the door before this split, over the same blocks in the same order (no
+    bits change). A native member that refuses is returned by index before
+    its block is added (the sums before it are final)."""
+    var keep = List[List[Float32]]()
+    for j in range(start, len(members)):  # driver-loop: over the member estimators
+        var block = _member_f32(members[j], VoteRows(xs[j], n, ds[j]), keep)
+        if block == 0:
+            return j
+        if classifier:
+            _ = xt_accumulate_cols(glue, acc, block, members[j].class_cols, n, k, members[j].cols, 1.0)
+        else:
+            _ = xt_accumulate(glue, acc, block, n, 1.0)
+    _ = keep^  # the native blocks are read through the sums above
+    _ = xt_scale(glue, acc, n * (k if classifier else 1), Float64(len(members)))
+    return VOTE_ALL_ANSWERED
+
+
+def bag_oob_run(glue: EntryRef, members: List[VoteMember], xs: List[Int], ns: List[Int], ds: List[Int],
+                oobs: List[Int], n: Int, k: Int, classifier: Bool, acc: Int, counts: Int, start: Int) raises -> Int:
+    """`_BaggingBase._oob_outputs`: each member's output on its `ns[j]`
+    out-of-bag rows (int32 row numbers at `oobs[j]`; a member with none is
+    skipped), added into `acc` (float64 n x k, zero; k 1 for a regressor)
+    at those rows, and `counts` (int32 n) counting them, in member order. A
+    classifier member's probabilities are placed at its class columns of a
+    float64 m x k zero block first; a regressor's float32 predictions are
+    widened to float64 (exact). The same glue ops in the same order as the
+    door before this split: no bits change. A native member that refuses is
+    returned by index before anything of it is added."""
+    var keep = List[List[Float32]]()
+    for j in range(start, len(members)):  # driver-loop: over the member estimators
+        var m = ns[j]
+        if m == 0:
+            continue
+        var block = _member_f32(members[j], VoteRows(xs[j], m, ds[j]), keep)
+        if block == 0:
+            return j
+        var width = k if classifier else 1
+        var out = List[Float64](length=m * width, fill=0.0)
+        if classifier:
+            _ = xt_accumulate_cols(glue, Int(out.unsafe_ptr()), block, members[j].class_cols, m, k, members[j].cols,
+                                   1.0)
+        else:
+            var p = _F32P(unsafe_from_address=block)
+            for i in range(m):  # small-loop(one exact widening pass over one member's out-of-bag predictions)
+                out[i] = Float64(p[i])
+        _ = xt_accumulate_rows(glue, acc, Int(out.unsafe_ptr()), oobs[j], n, width, m)
+        _ = out^  # read through the accumulation above
+        _ = xt_count_rows(glue, counts, oobs[j], n, m)
+    _ = keep^  # the native blocks are read through the sums above
+    return VOTE_ALL_ANSWERED
+
+
+def bag_oob_classifier_finish(glue: EntryRef, acc: Int, codes: Int, pred: Int, n: Int, k: Int) raises -> Int:
+    """`BaggingClassifier._set_oob_score` after the sums: each row of `acc`
+    normalized in place (`oob_decision_function_`), its argmax into `pred`
+    (int32 n), and the count of rows whose argmax is the true code
+    (`codes`, int32 n): `oob_score_` = hits / n."""
+    _ = xt_normalize_rows(glue, acc, n, k)
+    _ = xt_argmax_rows(glue, acc, pred, n, k)
+    return xt_count_equal(glue, pred, codes, n)
+
+
+@fieldwise_init
+struct BagR2(ImplicitlyCopyable, Movable):
+    """`bag_oob_r2_run`'s answer: `finite` False when a target or
+    out-of-bag prediction is not finite or a sum overflows float64 (the
+    door raises its words); else the R2 sums."""
+
+    var finite: Bool
+    var ss_tot: Float64
+    var ss_res: Float64
+
+
+def bag_oob_r2_run(glue: EntryRef, acc: Int, counts: Int, y: Int, pred: Int, n: Int) raises -> BagR2:
+    """`BaggingRegressor._set_oob_score` after the sums: `oob_prediction_`
+    (float64 n at `pred`) and the R2 sums of the float32 targets at `y`
+    (one `x_trees_oob_r2` call, as the door made)."""
+    var words = List[Float64](length=4, fill=0.0)
+    var flags = List[Int32](length=4, fill=0)
+    _ = xt_oob_r2(glue, acc, counts, y, pred, Int(words.unsafe_ptr()), Int(flags.unsafe_ptr()), n)
+    var got = BagR2(flags[0] == 0 and flags[1] == 0, words[1], words[2])
+    _ = words^
+    _ = flags^
+    return got
+
+
+# ---------------------------------------------------------------- Stacking
+# Lane bm-meta-3 (2026-11-23): the members' stacked outputs (`transform`,
+# the predict path, and each cv fold's test outputs inside fit), typed.
+
+#: What a Stacking member's `stack_method_` asks it for.
+comptime STACK_PREDICT = 0
+comptime STACK_PROBA = 1
+comptime STACK_DECISION = 2
+
+
+def stack_place_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], kinds: List[Int],
+                    class_counts: List[Int], k: Int, binary: Bool, meta: Int, meta_rows: Int, width: Int,
+                    place: Int, col0: Int, mut widths: List[Int], start: Int) raises -> Int:
+    """`_StackingBase` meta features: each member's output over `rows`
+    placed into `meta` (float64 `meta_rows` x `width`) at the rows `place`
+    (int32 `rows.n` row numbers) and the member's columns, side by side from
+    `col0`, member after member from `start` (`widths[j]` is written for
+    each member done: the columns it took).
+
+    `kinds[j]` / `class_counts[j]` (the member's own fitted class count; 0
+    for STACK_PREDICT): a predict block is placed as it is (its columns).
+    A probability or decision block whose member saw every class (`cols`
+    == k) is placed as it is, except that a binary predict_proba keeps its
+    second column (`_StackingBase._out`): the old door's block, the same
+    words (no bits change). THE FOLD THAT LACKS A CLASS (a cv fold whose
+    training rows miss a class, scikit-learn `_enforce_prediction_order`):
+    the member's columns go to its class columns (`class_cols`) of a k-wide
+    block, a missing class's column 0.0 for predict_proba and the lowest
+    float32 for decision_function; a decision_function member that saw two
+    classes or fewer is refused in scikit-learn's words. A native member
+    that refuses is returned by index before anything of it is placed.
+    `meta` 0: nothing is placed, only `widths` is written (the fit's
+    width probe over the first rows)."""
+    var keep = List[List[Float32]]()
+    var at = col0
+    for j in range(start):  # driver-loop: over the members already placed
+        at += widths[j]
+    for j in range(start, len(members)):  # driver-loop: over members
+        var m = members[j]
+        var block = _member_f32(m, rows, keep)
+        if block == 0:
+            return j
+        var n = rows.n
+        var src = block
+        var c = m.cols
+        var placed = List[Float32]()
+        if kinds[j] != STACK_PREDICT and c != k and not (kinds[j] == STACK_DECISION and k == 2 and c == 1):
+            if kinds[j] == STACK_DECISION and class_counts[j] <= 2:
+                raise Error("ValueError: Only " + String(class_counts[j]) + " class/es in training fold, but "
+                            + String(k) + " in overall dataset. This is not supported for decision_function with "
+                            + "imbalanced folds. To fix this, use a cross-validation technique resulting in "
+                            + "properly stratified folds")
+            var fill = Float32(0.0) if kinds[j] == STACK_PROBA else Float32.MIN_FINITE
+            placed = List[Float32](length=n * k, fill=fill)
+            var b = _F32P(unsafe_from_address=block)
+            var codes = _I32P(unsafe_from_address=m.class_cols)
+            for i in range(n):  # small-loop(one placing pass over one member's fold block: a copy, no arithmetic)
+                for q in range(c):  # small-loop(the member's class columns)
+                    placed[i * k + Int(codes[q])] = b[i * c + q]
+            src = Int(placed.unsafe_ptr())
+            c = k
+        if kinds[j] == STACK_PROBA and binary:
+            # `_one_col(p, 1)`: the second column alone
+            if meta != 0:
+                var col = List[Float32](unsafe_uninit_length=n)
+                var b = _F32P(unsafe_from_address=src)
+                for i in range(n):  # small-loop(one column copy of one member's block)
+                    col[i] = b[i * c + 1]
+                _ = xt_scatter(glue, meta, Int(col.unsafe_ptr()), place, meta_rows, width, n, 1, at)
+                _ = col^
+            c = 1
+        elif meta != 0:
+            _ = xt_scatter(glue, meta, src, place, meta_rows, width, n, c, at)
+        _ = placed^  # read through the scatter above
+        if j < len(widths):
+            widths[j] = c
+        else:
+            widths.append(c)
+        at += c
+    _ = keep^  # the native blocks are read through the scatters above
+    return VOTE_ALL_ANSWERED
+
+
+# ------------------------------------------------- CalibratedClassifierCV
+# Lane bm-meta-3 (2026-11-23).
+
+
+@fieldwise_init
+struct CalPair(ImplicitlyCopyable, Movable):
+    """One fitted (member, calibrators) pair of a calibrated predict: the
+    member's score block's positive column `at` (binary, a two-column
+    block), its class codes `class_cols` and class count `ks` (k > 2), and
+    its calibrators `cals[first : first + count]`."""
+
+    var at: Int
+    var class_cols: Int
+    var ks: Int
+    var first: Int
+    var count: Int
+
+
+@fieldwise_init
+struct CalFit(ImplicitlyCopyable, Movable):
+    """One fitted calibrator: Platt (`isotonic` False: `a`, `b`) or isotonic
+    (`m` knots at `knots_x` / `knots_y`, float64, the caller's)."""
+
+    var isotonic: Bool
+    var a: Float64
+    var b: Float64
+    var knots_x: Int
+    var knots_y: Int
+    var m: Int
+
+
+def calibrated_proba_run(glue: EntryRef, rows: VoteRows, members: List[VoteMember], pairs: List[CalPair],
+                         cals: List[CalFit], k: Int, acc: Int) raises -> Int:
+    """`CalibratedClassifierCV.predict_proba` (k >= 2): each pair's member
+    scores (its decision_function, else its predict_proba: `members[i]`,
+    native or its door's float32 block), then the whole epilogue as one
+    `x_trees_calibrated_proba` program (`CalibratedProgram`: the same words
+    in the same order as the door's `_calibrated_fused` before this split,
+    no bits change) into `acc` (float64 n x k). Every member answers before
+    the program runs; a native member that refuses is returned by index."""
+    var keep = List[List[Float32]]()
+    var blocks = List[Int](capacity=len(members))
+    for i in range(len(members)):  # driver-loop: over the (member, calibrators) pairs (every member answers first)
+        var block = _member_f32(members[i], rows, keep)
+        if block == 0:
+            return i
+        blocks.append(block)
+    var program = CalibratedProgram(acc, rows.n, k, len(pairs))
+    for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+        var p = pairs[i]
+        program.pair(blocks[i], p.class_cols, members[i].cols, p.at, p.ks, p.count)
+        for j in range(p.first, p.first + p.count):  # driver-loop: over the pair's calibrators
+            if cals[j].isotonic:
+                program.isotonic(cals[j].knots_x, cals[j].knots_y, cals[j].m)
+            else:
+                program.sigmoid(cals[j].a, cals[j].b)
+    _ = xt_calibrated_proba(glue, program.addrs, program.ints, program.floats)
+    _ = keep^  # the native blocks are read through the program above
+    _ = blocks^
+    return VOTE_ALL_ANSWERED
+
+
+# ---------------------------------------------------------------- AdaBoost
+# Lane bm-meta-3 (2026-11-23). An AdaBoost member is a one-tree forest: its
+# door predicts from the one staged device copy of X (not served by a member
+# call, by rule), so the UNPACK hands RUN each member's door block.
+
+#: What `ada_classifier_run` finishes the decision into.
+comptime ADA_DECISION = 0
+comptime ADA_PROBA = 1
+comptime ADA_CODES = 2
+
+
+def ada_classifier_run(glue: EntryRef, codes: List[Int], alphas: List[Float64], n: Int, k: Int, acc: Int,
+                       finish: Int, dst: Int) raises:
+    """`AdaBoostClassifier._decision` and its finishes: acc (float64 n x k,
+    zero) = each member's one-hot vote of its int32 codes (`codes[i]`),
+    weighted +a / -a/(k-1) with its weight `alphas[i]`, over the fsum of
+    every weight (`vote_weight_sum`, the core fsum the door's `_fsum` called).
+    Then `finish`: ADA_DECISION (k 2: the margin into `dst`, float64 n),
+    ADA_PROBA (k 2: the margin pairs into `dst`, float64 n x 2; else acc /
+    (k-1) in place; then the row softmax of that block), ADA_CODES (int32 n
+    into `dst`: k 2 the margin's sign, else the row argmax). The glue ops of
+    the door before this split in the same order: no bits change."""
+    for i in range(len(codes)):  # driver-loop: over the member estimators
+        var a = alphas[i]
+        _ = xt_accumulate_onehot(glue, acc, codes[i], n, k, a, -a / Float64(k - 1))
+    _ = xt_scale(glue, acc, n * k, vote_weight_sum(alphas))
+    if finish == ADA_DECISION:
+        if k == 2:
+            _ = xt_margin2(glue, acc, dst, n, 0)
+    elif finish == ADA_PROBA:
+        var block = acc
+        if k == 2:
+            _ = xt_margin2(glue, acc, dst, n, 2)
+            block = dst
+        else:
+            _ = xt_scale(glue, acc, n * k, Float64(k - 1))
+        _ = xt_softmax_rows(glue, block, n, k)
+    else:
+        if k == 2:
+            _ = xt_margin2(glue, acc, dst, n, 1)
+        else:
+            _ = xt_argmax_rows(glue, acc, dst, n, k)
+
+
+def ada_regressor_run(glue: EntryRef, blocks: List[Int], weights: List[Float64], n: Int, dst: Int) raises:
+    """`AdaBoostRegressor.predict`: the weighted median (float32 n into
+    `dst`) of the members' float32 predictions (`blocks[j]`, n each) under
+    their weights, one `x_trees_weighted_median` over the m x n block the
+    door filled member by member before this split (same words)."""
+    var m = len(blocks)
+    var preds = List[Float32](unsafe_uninit_length=max(m * n, 1))
+    for j in range(m):  # driver-loop: over the member estimators
+        _ = xt_put_f32(glue, Int(preds.unsafe_ptr()), blocks[j], j * n, n)
+    var w = weights.copy()
+    _ = xt_weighted_median(glue, Int(preds.unsafe_ptr()), Int(w.unsafe_ptr()), dst, n, m)
+    _ = preds^
+    _ = w^

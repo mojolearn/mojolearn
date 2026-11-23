@@ -93,7 +93,8 @@ from bindings.member_set_door import (
 )
 from xtrees.trees_meta_vote_run import (
     VoteMember, VoteRows, VOTE_ALL_ANSWERED, vote_soft_run, vote_codes_run, vote_regress_run, vote_transform_run,
-    ovr_assemble_run,
+    ovr_assemble_run, multioutput_codes_run, multioutput_proba_run, stack_place_run, STACK_PREDICT, STACK_PROBA,
+    STACK_DECISION,
 )
 from bindings.prep_native_estimator_door import (
     prep_estimator_admit, prep_estimator_clone, prep_estimator_call, prep_estimator_has,
@@ -1193,16 +1194,20 @@ comptime _VOTE_BLOCK = 3      # a transform block: float32 (n, c) predictions
 struct _VoteUnpack(Movable):
     """What `_vote_unpack` read: the typed members, the held native states
     they point into (closed by `_vote_close`; every one may run with no
-    GIL), and the Python owners of the door blocks."""
+    GIL), and the Python owners of the door blocks. `blocks`: per member,
+    the Python object of its door block (its codes Array for a hard vote),
+    None for a native member."""
     var members: List[VoteMember]
     var opened: List[MemberHeldCall]
     var keep: PythonObject
+    var blocks: PythonObject
     var native: Int
 
     def __init__(out self) raises:
         self.members = List[VoteMember]()
         self.opened = List[MemberHeldCall]()
         self.keep = Python.list()
+        self.blocks = Python.list()
         self.native = 0
 
 
@@ -1252,7 +1257,12 @@ def _vote_unpack(model: PythonObject, Xa: PythonObject, kind: Int, classifier: B
     """UNPACK of a vote: per fitted member its held native state when its
     family serves the operation (`_member_open`), else its door's block."""
     var nk = trees_keys()
-    var members = _attr(model, nk[].k_estimators_, Python.list())
+    return _vote_unpack_of(_attr(model, nk[].k_estimators_, Python.list()), Xa, kind, classifier, weights, context)
+
+
+def _vote_unpack_of(members: PythonObject, Xa: PythonObject, kind: Int, classifier: Bool, weights: PythonObject,
+                    context: PythonObject) raises -> _VoteUnpack:
+    """`_vote_unpack` over the fitted `members` (a list)."""
     var n = _rows(Xa)
     var got = _VoteUnpack()
     try:
@@ -1290,6 +1300,7 @@ def _vote_unpack_members(mut got: _VoteUnpack, members: PythonObject, Xa: Python
                 finally:
                     member_held_close(opened)
                 got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context, answer))
+                _ = py_call(got.blocks.append, got.keep[len(got.keep) - 1])
                 continue
             if opened.served:
                 var class_cols = 0
@@ -1303,8 +1314,10 @@ def _vote_unpack_members(mut got: _VoteUnpack, members: PythonObject, Xa: Python
                                               opened.dtype, class_cols, weight))
                 got.native += 1
                 got.opened.append(opened^)
+                _ = py_call(got.blocks.append, PythonObject(None))
                 continue
         got.members.append(_vote_door(e, kind, Xa, n, weight, got.keep, context, PythonObject(None)))
+        _ = py_call(got.blocks.append, got.keep[len(got.keep) - 1])
 
 
 def _vote_close(mut got: _VoteUnpack):
@@ -1453,17 +1466,108 @@ def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool, cont
     return PythonObject("predict")
 
 
-def _stack_out(xt: PythonObject, est: PythonObject, method: String, Xs: PythonObject, n: Int, binary: Bool,
-               context: PythonObject) raises -> PythonObject:
-    """`_StackingBase._out`: a binary predict_proba keeps its second column."""
-    var out = (_predict32(est, Xs, context) if method == "predict"
-               else _member_scores(est, method, Xs, context))
-    if method == "predict_proba" and binary:
-        var p = _out2d(out, n, context)
-        var col = _one_col(xt, p.view(), 1, context)
-        _ = p^
-        return col
-    return out
+def _stack_kind(method: String) -> Int:
+    if method == "predict_proba":
+        return STACK_PROBA
+    if method == "decision_function":
+        return STACK_DECISION
+    return STACK_PREDICT
+
+
+def _stack_door(member: PythonObject, kind: Int, Xs: PythonObject, n: Int, class_cols: Int, keep: PythonObject,
+                answer: PythonObject, context: PythonObject) raises -> VoteMember:
+    """One member's float32 (n, c) block from its own door (`_StackingBase._out`
+    before the column choice: the internal float32 predict door, or the
+    named method's door, which raises the estimator's own words), or from
+    the Array its held state already wrote (`answer`)."""
+    var out = answer
+    if out is None:
+        if kind == STACK_PREDICT:
+            out = meta_member_call(member, Python.tuple(Xs), context)
+        else:
+            out = meta_member_call(member, "predict_proba" if kind == STACK_PROBA else "decision_function",
+                                   Python.tuple(Xs), context)
+    var blk = _out2d(out, n, context)
+    _ = py_call(keep.append, blk.array)
+    var got = VoteMember(blk.address, blk.cols, class_cols, 1.0)
+    _ = blk^
+    return got
+
+
+def _stack_place(glue: EntryRef, members: PythonObject, kinds: List[Int], Xs: PythonObject, k: Int, binary: Bool,
+                 meta: Int, meta_rows: Int, width: Int, place: Int, col0: Int, with_classes: Bool,
+                 context: PythonObject) raises -> List[Int]:
+    """UNPACK of the stacked outputs of `members` over the rows `Xs` (a
+    float32 C-order Array): per member its held native state when its family
+    serves the call (`_member_open`: predict as a regressor's float32
+    predict, `_predict32`; predict_proba / decision_function as a
+    classifier's, `_member_scores`), else its door's block; a kind that
+    needs the GIL answers here. RUN `stack_place_run` (the GIL released when
+    a member is native) into `meta` at the rows `place`; the fallback rule
+    on a refusal. `with_classes`: each member's class columns and count are
+    read (a cv fold's members, which may lack a class); a member fitted on
+    every row saw every class. Answers the columns each member took."""
+    var n = _rows(Xs)
+    var got = _VoteUnpack()
+    var counts = List[Int](capacity=len(members))
+    var widths = List[Int](capacity=len(members))
+    try:
+        for i in range(len(members)):  # driver-loop: over members (admission, once each)
+            var e = members[i]
+            var kind = kinds[i]
+            var classifier = kind != STACK_PREDICT
+            var class_cols = 0
+            var count = 0
+            if classifier and with_classes:
+                var cols = _sub_cols(e, context)
+                _ = py_call(got.keep.append, cols)
+                class_cols = trees_address(cols)
+                count = Int(py=cols.shape[0])
+            counts.append(count)
+            var operation = MEMBER_OP_PREDICT if kind == STACK_PREDICT else (
+                MEMBER_OP_PREDICT_PROBA if kind == STACK_PROBA else MEMBER_OP_DECISION)
+            var opened = _member_open(e, Xs, operation, classifier, context)
+            if opened.served and opened.gil_free:
+                got.members.append(VoteMember(len(got.opened), opened.held.state, operation, opened.cols,
+                                              opened.dtype, class_cols, 1.0))
+                got.native += 1
+                got.opened.append(opened^)
+                continue
+            var answer = PythonObject(None)
+            if opened.served:
+                try:
+                    answer = member_held_run(opened, trees_address(Xs), n, _cols(Xs), context)
+                finally:
+                    member_held_close(opened)
+            got.members.append(_stack_door(e, kind, Xs, n, class_cols, got.keep, answer, context))
+        for i in range(len(got.members)):  # driver-loop: over members
+            if got.members[i].native:
+                got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+        var rows = VoteRows(trees_address(Xs), n, _cols(Xs))
+        var start = 0
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = stack_place_run(glue, rows, got.members, kinds, counts, k, binary, meta, meta_rows,
+                                              width, place, col0, widths, start)
+            else:
+                refused = stack_place_run(glue, rows, got.members, kinds, counts, k, binary, meta, meta_rows,
+                                          width, place, col0, widths, start)
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            got.members[refused] = _stack_door(members[refused], kinds[refused], Xs, n,
+                                               got.members[refused].class_cols, got.keep, PythonObject(None),
+                                               context)
+            got.native -= 1
+            start = refused
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = Xs  # the rows are read through RUN
+    _ = got.keep  # the door blocks and class columns are read through RUN
+    return widths^
 
 
 def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, codes: Bool, splits: PythonObject,
@@ -1510,11 +1614,11 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     for i in range(n_members):  # driver-loop: over members
         _ = py_call(fitted.append, full[i])
     var methods = Python.list()
-    var native_methods = List[String]()
+    var kinds = List[Int]()
     for i in range(len(fitted)):  # driver-loop: over members
         var method = _stack_method(model, fitted[i], classifier, context)
         _ = py_call(methods.append, method)
-        native_methods.append(String(method))
+        kinds.append(_stack_kind(String(method)))
     _set(model, "stack_method_", methods)
     var binary = _truthy(_attr(model, nk[].k__binary, PythonObject(False)))
     var passthrough = _truthy(_attr(model, nk[].k_passthrough, PythonObject(False)))
@@ -1522,15 +1626,16 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var head = _gather(xt, trees_address(x_view), n, d, _arange(xt, head_n, context), _arange(xt, d, context), context)
     _ = Xa  # keep the Python object alive through the native call above
     var widths = Python.list()
-    var native_widths = List[Int]()
+    var k_classes = len(_attr(model, PythonObject("classes_"), Python.list())) if classifier else 0
+    var glue = _xr(xt)
+    # The width probe over the first rows: the stacking RUN with no meta
+    # block (`stack_place_run`, meta 0) answers the columns each member takes.
+    var native_widths = _stack_place(glue, fitted, kinds, head, k_classes, binary, 0, 0, 0, 0, 0, False, context)
+    _ = Xa  # keep the Python object alive through the native call above
     var total = 0
-    for i in range(len(fitted)):  # driver-loop: over members
-        var blk = _out2d(_stack_out(xt, fitted[i], native_methods[i], head, head_n, binary, context), 2, context)
-        _ = Xa  # keep the Python object alive through the native call above
-        _ = py_call(widths.append, PythonObject(blk.cols))
-        native_widths.append(blk.cols)
-        total += blk.cols
-        _ = blk^
+    for i in range(len(native_widths)):  # driver-loop: over members
+        _ = py_call(widths.append, PythonObject(native_widths[i]))
+        total += native_widths[i]
     var width = total + (d if passthrough else 0)
     var meta = _zeros(n * width, context)
     var meta_view = meta
@@ -1591,20 +1696,23 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         _ = py_call(unit_w.clear)
         for f in range(f0, f1):  # driver-loop: over the wave's cv folds (test outputs)
             var te_view = splits[f][1]
-            var col0 = 0
             var Xte = _gather(xt, trees_address(x_view), n, d, te_view, cols_view, context)
             _ = Xa  # keep the Python object alive through the native call above
             if admitted_is_held(Xa):
                 admitted_hold_rows_of(Xa, Xte, trees_address(Xte), Int(py=te_view.shape[0]), d)
+            var fold_members = Python.list()
             for i in range(n_members):  # driver-loop: over members
-                var e = unit_members[(f - f0) * n_members + i]
-                var blk = _out2d(_stack_out(xt, e, native_methods[i], Xte, Int(py=te_view.shape[0]), binary, context), Int(py=te_view.shape[0]), context)
-                _ = Xa  # keep the Python object alive through the native call above
-                var got = _place(xt, meta_view, n, width, blk.view(), te_view, col0)
-                _ = blk^
-                if got != native_widths[i]:
-                    raise Error("a member's output width changed between folds (a class missing from a fold)")
-                col0 += got
+                _ = py_call(fold_members.append, unit_members[(f - f0) * n_members + i])
+            # The fold's stacked outputs, typed (`stack_place_run`): a fold
+            # whose training rows lack a class places its members' columns
+            # at their classes (scikit-learn `_enforce_prediction_order`).
+            var got = _stack_place(glue, fold_members, kinds, Xte, k_classes, binary, trees_address(meta_view), n,
+                                   width, trees_address(te_view), 0, True, context)
+            _ = meta_view  # written through the RUN above
+            _ = te_view  # the rows are read through the RUN above
+            for i in range(n_members):  # driver-loop: over members
+                if got[i] != native_widths[i]:
+                    raise Error("a member's output width changed between folds")
         f0 = f1
     if passthrough:
         var xb = admitted_words(Xa, trees_address(x_view), n, d)
@@ -1648,10 +1756,19 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
     var col0 = 0
     var members = _attr(model, nk[].k_estimators_, Python.list())
     var methods = _attr(model, nk[].k_stack_method_, Python.list())
+    var kinds = List[Int]()
     for i in range(len(members)):  # driver-loop: over members
-        var blk = _out2d(_stack_out(xt, members[i], String(methods[i]), Xa, n, binary, context), n, context)
-        col0 += _place(xt, meta_view, n, width, blk.view(), rows_view, col0)
-        _ = blk^
+        kinds.append(_stack_kind(String(methods[i])))
+    var k = len(_attr(model, nk[].k_classes_, Python.list()))  # 0 for a regressor
+    # Lane bm-meta-3: UNPACK + RUN `stack_place_run` (members fitted on
+    # every row saw every class: no class columns read).
+    if len(members) > 0:
+        var got = _stack_place(_xr(xt), members, kinds, Xa, k, binary, trees_address(meta_view), n, width,
+                               trees_address(rows_view), 0, False, context)
+        for i in range(len(got)):  # driver-loop: over members
+            col0 += got[i]
+    _ = meta_view  # written through the RUN above
+    _ = rows_view  # read through the RUN above
     if passthrough:
         var xb = admitted_words(Xa, trees_address(x_view), n, d)
         _ = Xa  # keep the Python object alive through the native call above
@@ -1703,8 +1820,8 @@ def _stacking_predict(model: PythonObject, X: PythonObject, classifier: Bool, co
     var Xm = _stacking_meta32(model, X, context)
     if not classifier:
         return meta_member_call(final_, "predict", Python.tuple(Xm), context)
-    return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)), _member_label_codes(final_, Xm, context),
-                               context)
+    return trees_decode_labels(_attr(model, nk[].k_classes_, PythonObject(None)),
+                               _codes_of(Python.list(final_), Xm, context)[0], context)
 
 
 def _stacking_codes(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1712,19 +1829,15 @@ def _stacking_codes(model: PythonObject, X: PythonObject, context: PythonObject)
     int32 codes into `classes_`."""
     var nk = trees_keys()
     var final_ = _attr(model, nk[].k_final_estimator_, PythonObject(None))
-    return _member_label_codes(final_, _stacking_meta32(model, X, context), context)
+    return _codes_of(Python.list(final_), _stacking_meta32(model, X, context), context)[0]
 
 
 def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
     var nk = trees_keys()
     var final_ = _attr(model, nk[].k_final_estimator_, PythonObject(None))
-    var k = len(_attr(model, nk[].k_classes_, Python.list()))
+    var ks: List[Int] = [len(_attr(model, nk[].k_classes_, Python.list()))]
     var Xm = _stacking_meta32(model, X, context)
-    var n = _rows(Xm)
-    var xt = _xt(py_fields(model), context)
-    var acc = _class_zero(xt, n * k, context)
-    _acc_cols_w(xt, acc, _member_scores(final_, "predict_proba", Xm, context), _sub_cols(final_, context), n, k, 1.0, context)
-    return trees_reshape(acc, Python.tuple(n, k), context)
+    return _probas_of(model, Python.list(final_), ks, Xm, context)[0]
 
 
 # ------------------------------------------------------------- MultiOutput
@@ -2067,12 +2180,56 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
 
 def _multioutput_member_codes(model: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
     """Each output's member codes (int32, into that output's `classes_[j]`;
-    the members were fitted on the column codes): `_member_label_codes`."""
+    the members were fitted on the column codes), lane bm-meta-3: UNPACK
+    `_vote_unpack` (kind _VOTE_HARD: per member its held native state, else
+    its door's codes, `_member_label_codes`'s routes in its order), RUN
+    `multioutput_codes_run` (no Python; the GIL released when a member is
+    native) into one int32 Array per output allocated here (PACK), which the
+    native call writes directly, as `member_held_run`'s new Array was."""
     var nk = trees_keys()
-    var members = _attr(model, nk[].k_estimators_, Python.list())
+    return _codes_of(_attr(model, nk[].k_estimators_, Python.list()), Xa, context)
+
+
+def _codes_of(members: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
+    """The int32 codes of each fitted classifier member of `members` (its
+    classes are the ensemble's int codes): UNPACK `_vote_unpack_of`, RUN
+    `multioutput_codes_run`; one int32 Array per member (a MultiOutput
+    column, a Stacking final estimator)."""
+    var got = _vote_unpack_of(members, Xa, _VOTE_HARD, True, PythonObject(None), context)
+    var n = _rows(Xa)
     var out = Python.list()
-    for j in range(len(members)):  # driver-loop: over members
-        _ = py_call(out.append, _member_label_codes(members[j], Xa, context))
+    var dst = List[Int](capacity=len(got.members))
+    try:
+        for j in range(len(got.members)):  # driver-loop: over members (outputs)
+            var col = got.blocks[j]
+            if got.members[j].native:
+                col = admitted_vector(n, "<i4", context)
+            _ = py_call(out.append, col)
+            dst.append(trees_address(col))
+        var rows = VoteRows(trees_address(Xa), n, _cols(Xa))
+        var start = 0
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = multioutput_codes_run(rows, got.members, dst, start)
+            else:
+                refused = multioutput_codes_run(rows, got.members, dst, start)
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            # The fallback rule: the refusing member's door raises its words.
+            got.members[refused] = _vote_door(members[refused], _VOTE_HARD, Xa, n, 1.0, got.keep, context,
+                                              PythonObject(None))
+            py_setitem(out, PythonObject(refused), got.keep[len(got.keep) - 1])
+            dst[refused] = got.members[refused].address
+            got.native -= 1
+            start = refused + 1
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = Xa  # the rows are read through RUN
+    _ = got.keep  # the door blocks are read through RUN
     return out
 
 
@@ -2158,18 +2315,62 @@ def _multioutput_assemble(model: PythonObject, Xa: PythonObject, codes: PythonOb
 
 
 def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`MultiOutputClassifier.predict_proba` (lane bm-meta-3): UNPACK
+    `_vote_unpack` (kind _VOTE_SOFT: per member its held native state, else
+    its door's float32 probabilities and class columns, `_member_scores`'s
+    routes), RUN `multioutput_proba_run` into one float64 zero block per
+    output allocated here, PACK the (n, k_j) views of them."""
     var Xa = _check_x(model, X, context)
+    var nk = trees_keys()
+    var ks = List[Int]()
+    var classes = _attr(model, nk[].k_classes_, Python.list())
+    for j in range(len(classes)):  # driver-loop: over members (outputs)
+        ks.append(len(classes[j]))
+    return _probas_of(model, _attr(model, nk[].k_estimators_, Python.list()), ks, Xa, context)
+
+
+def _probas_of(model: PythonObject, members: PythonObject, ks: List[Int], Xa: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """Each fitted classifier member's probabilities placed at its class
+    columns of a float64 (n, ks[j]) block (a MultiOutput column, a
+    Stacking final estimator): UNPACK `_vote_unpack_of`, RUN
+    `multioutput_proba_run`."""
     var xt = _xt(py_fields(model), context)
     var n = _rows(Xa)
-    var nk = trees_keys()
-    var members = _attr(model, nk[].k_estimators_, Python.list())
-    var classes = _attr(model, nk[].k_classes_, Python.list())
+    var got = _vote_unpack_of(members, Xa, _VOTE_SOFT, True, PythonObject(None), context)
+    var blocks = Python.list()
+    var accs = List[Int](capacity=len(got.members))
+    try:
+        for j in range(len(got.members)):  # driver-loop: over members (outputs)
+            var acc = _zeros(n * ks[j], context)
+            _ = py_call(blocks.append, acc)
+            accs.append(trees_address(acc))
+        var rows = VoteRows(trees_address(Xa), n, _cols(Xa))
+        var glue = _xr(xt)
+        var start = 0
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = multioutput_proba_run(glue, rows, got.members, ks, accs, start)
+            else:
+                refused = multioutput_proba_run(glue, rows, got.members, ks, accs, start)
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            # The fallback rule: the refusing member's door raises its words.
+            got.members[refused] = _vote_door(members[refused], _VOTE_SOFT, Xa, n, 1.0, got.keep, context,
+                                              PythonObject(None))
+            got.native -= 1
+            start = refused
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
+    _ = Xa  # the rows are read through RUN
+    _ = got.keep  # the door blocks are read through RUN
     var out = Python.list()
-    for j in range(len(members)):  # driver-loop: over members
-        var k = len(classes[j])
-        var acc = _zeros(n * k, context)
-        _acc_cols_w(xt, acc, _member_scores(members[j], "predict_proba", Xa, context), _sub_cols(members[j], context), n, k, 1.0, context)
-        _ = py_call(out.append, trees_reshape(acc, Python.tuple(n, k), context))
+    for j in range(len(blocks)):  # driver-loop: over members (outputs)
+        _ = py_call(out.append, trees_reshape(blocks[j], Python.tuple(n, ks[j]), context))
     return out
 
 
@@ -2998,57 +3199,106 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
     return model
 
 
+def _cal_door(e: PythonObject, decision: Bool, Xa: PythonObject, n: Int, class_cols: Int, keep: PythonObject,
+             answer: PythonObject, context: PythonObject) raises -> VoteMember:
+    """One pair member's float32 score block from its door (or the Array its
+    held state already wrote, `answer`), as `_out2d` admitted it."""
+    var out = answer
+    if out is None:
+        out = meta_member_call(e, "decision_function" if decision else "predict_proba", Python.tuple(Xa), context)
+    var blk = _out2d(out, n, context)
+    _ = py_call(keep.append, blk.array)
+    var got = VoteMember(blk.address, blk.cols, class_cols, 1.0)
+    _ = blk^
+    return got
+
+
 def _calibrated_fused(model: PythonObject, xt: PythonObject, pairs: PythonObject,
                       Xa: PythonObject, n: Int, k: Int, context: PythonObject) raises -> PythonObject:
     """`_calibrated_proba` through `x_trees_calibrated_proba`: the members'
     scores, then the whole epilogue (scores, calibrators, complement or
     normalization, float32 narrowing, the mean) as one device program with
-    one readback (lane perf-sweep-trees, 2026-11-05; before it about twenty
-    glue round trips per pair). Same kernels in the same order: no bit moves
-    (xtrees/calibrated_apply.mojo)."""
-    var keep = List[PythonObject]()
+    one readback (lane perf-sweep-trees, 2026-11-05; xtrees/calibrated_apply.mojo).
+
+    Lane bm-meta-3 (2026-11-23): UNPACK here (per pair its member opened on
+    its held state when its family serves it, else its door's block; the
+    positive column, class codes and calibrator parameters read once), RUN
+    `calibrated_proba_run` (no Python; the GIL released when a member is
+    native), the fallback rule on a refusal. Same words: no bit moves."""
     var acc = admitted_vector(n * k, "<f8", context)
-    var program = CalibratedProgram(trees_address(acc), n, k, len(pairs))
     var nk = trees_keys()
-    for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
-        var e = pairs[i][0]
-        var cals = pairs[i][1]
-        var out: PythonObject
-        if prep_estimator_has(e, "decision_function", context):
-            out = _member_scores(e, "decision_function", Xa, context)
-        else:
-            out = _member_scores(e, "predict_proba", Xa, context)
-        var blk = _out2d(out, n, context)
-        keep.append(blk.array)
-        var at = 0
-        var cols_addr = 0
-        var ks = 0
-        if k == 2:
-            if blk.cols != 1:
+    var got = _VoteUnpack()
+    var cal_pairs = List[CalPair](capacity=len(pairs))
+    var cals = List[CalFit]()
+    var decisions = List[Bool](capacity=len(pairs))
+    try:
+        for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs (admission, once each)
+            var e = pairs[i][0]
+            var fitted = pairs[i][1]
+            var decision = prep_estimator_has(e, "decision_function", context)
+            decisions.append(decision)
+            var cols_addr = 0
+            var ks = 0
+            if k != 2:
+                var sub_cols = _sub_cols(e, context)
+                _ = py_call(got.keep.append, sub_cols)
+                cols_addr = trees_address(sub_cols)
+                ks = len(_attr(e, nk[].k_classes_, Python.list()))
+            var operation = MEMBER_OP_DECISION if decision else MEMBER_OP_PREDICT_PROBA
+            var opened = _member_open(e, Xa, operation, True, context)
+            var member: VoteMember
+            if opened.served and opened.gil_free:
+                member = VoteMember(len(got.opened), opened.held.state, operation, opened.cols, opened.dtype,
+                                    cols_addr, 1.0)
+                got.native += 1
+                got.opened.append(opened^)
+            else:
+                var answer = PythonObject(None)
+                if opened.served:
+                    try:
+                        answer = member_held_run(opened, trees_address(Xa), n, _cols(Xa), context)
+                    finally:
+                        member_held_close(opened)
+                member = _cal_door(e, decision, Xa, n, cols_addr, got.keep, answer, context)
+            var at = 0
+            if k == 2 and member.cols != 1:
                 at = _index_of_one(e, context)
                 meta_binary_column_check(at)
-        else:
-            var sub_cols = _sub_cols(e, context)
-            keep.append(sub_cols)
-            cols_addr = trees_address(sub_cols)
-            ks = len(_attr(e, nk[].k_classes_, Python.list()))
-        program.pair(blk.address, cols_addr, blk.cols, at, ks, len(cals))
-        for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
-            var entry = cals[j]
-            var par = entry[1]
-            if String(entry[0]) == "sigmoid":
-                program.sigmoid(Float64(py=par[0]), Float64(py=par[1]))
+            got.members.append(member)
+            cal_pairs.append(CalPair(at, cols_addr, ks, len(cals), len(fitted)))
+            for j in range(len(fitted)):  # driver-loop: over the class columns (one calibrator each)
+                var par = fitted[j][1]
+                if String(fitted[j][0]) == "sigmoid":
+                    cals.append(CalFit(False, Float64(py=par[0]), Float64(py=par[1]), 0, 0, 0))
+                else:
+                    _ = py_call(got.keep.append, par[0])
+                    _ = py_call(got.keep.append, par[1])
+                    cals.append(CalFit(True, 0.0, 0.0, trees_address(par[0]), trees_address(par[1]),
+                                       Int(py=par[2])))
+        for i in range(len(got.members)):  # driver-loop: over members
+            if got.members[i].native:
+                got.members[i].plan = Int(UnsafePointer(to=got.opened[got.members[i].plan].held.plan))
+        var glue = _xr(xt)
+        var rows = VoteRows(trees_address(Xa), n, _cols(Xa))
+        while True:  # driver-loop: over refusals (at most one round per native member)
+            var refused = VOTE_ALL_ANSWERED
+            if got.native > 0:
+                with GILReleased(Python()):
+                    refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, trees_address(acc))
             else:
-                var knots_x = par[0]
-                var knots_y = par[1]
-                keep.append(knots_x)
-                keep.append(knots_y)
-                program.isotonic(trees_address(knots_x), trees_address(knots_y), Int(py=par[2]))
-        _ = blk^
-    var glue = _xr(xt)
-    _ = xt_calibrated_proba(glue, program.addrs, program.ints, program.floats)
+                refused = calibrated_proba_run(glue, rows, got.members, cal_pairs, cals, k, trees_address(acc))
+            if refused == VOTE_ALL_ANSWERED:
+                break
+            got.members[refused] = _cal_door(pairs[refused][0], decisions[refused], Xa, n,
+                                             got.members[refused].class_cols, got.keep, PythonObject(None), context)
+            got.native -= 1
+    except e:
+        _vote_close(got)
+        raise e^
+    _vote_close(got)
     _ = acc  # keep the Python object alive through the native call above
-    _ = keep  # keep the members' blocks, class codes and knots alive through the native call above
+    _ = Xa  # the rows are read through RUN
+    _ = got.keep  # the members' blocks, class codes and knots are read through RUN
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 

@@ -1,6 +1,6 @@
 """Before/after digests of the meta-estimator operations lanes bm-meta and bm-meta-2 split (VotingClassifier /
 VotingRegressor: fit, predict, predict_proba, transform; bm-meta-2: MultiOutput*, OneVsRest, Bagging* and the OOB
-score, Stacking*, CalibratedClassifierCV, AdaBoost*, micro one-vs-rest roc_auc), host column. Prints one line per case: name sha256 of the
+score, Stacking*, CalibratedClassifierCV, AdaBoost*, micro one-vs-rest roc_auc; bm-meta-3: the Stacking fold that lacks a class), host column. Prints one line per case: name sha256 of the
 output bytes (dtype and shape included). Test tool, never product runtime.
 
     python tools/bm_meta_digests.py > digests.txt
@@ -139,6 +139,19 @@ def _more(out, X, y, c, labels, Xt):
             return [("predict", _digest(m.predict(Xt))), ("transform", _digest(m.transform(Xt))),
                     ("score", repr(float(m.score(Xt[:60], y[:60]))))]
         _safe(out, f"stackr_{passthrough}", stack_r)
+    # bm-meta-3: a cv fold whose training rows lack a class (class 3 only in the first rows, unshuffled KFold):
+    # before, refused ("a member's output width changed between folds"); now placed at the classes (scikit-learn
+    # `_enforce_prediction_order`). The one EXPECTED difference of the base/head comparison.
+    for method in ("predict_proba", "decision_function"):
+        def stack_gap(method=method):
+            from mojolearn.model_selection import KFold
+            lab4 = np.array(labels, dtype=object)
+            lab4[:20] = "d"
+            m = mojolearn.StackingClassifier([("lr", mojolearn.LogisticRegression(max_iter=200))],
+                                             final_estimator=mojolearn.LogisticRegression(max_iter=200),
+                                             cv=KFold(3), stack_method=method).fit(X, lab4)
+            return [("predict", _digest(m.predict(Xt))), ("transform", _digest(m.transform(Xt)))]
+        _safe(out, f"stackgap_{method}", stack_gap)
     for name, make in (("dt", lambda: mojolearn.DecisionTreeClassifier(max_depth=2, random_state=0)),
                        ("lr", lambda: mojolearn.LogisticRegression(max_iter=100))):
         def ada_c(make=make):

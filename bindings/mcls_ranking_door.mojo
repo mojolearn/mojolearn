@@ -42,7 +42,9 @@ from bindings.mcls_common_unpack import (
     mc_sorted, mc_set, mc_nan, mc_warn, mc_undefined, mc_entry, mc_shape_of, mc_rank, mc_dim, mc_labels,
     mc_map_order, mc_map_equal, mc_selected, mc_positive, mc_weights, mc_f32_lists,
 )
-from bindings.metrics_program_door import MetricDoorProg, metric_door_run
+from bindings.metrics_program_door import MetricDoorProg, metric_door_run, metric_route_open
+from bindings.mcls_ranking_run import McAuc, RocMicro, mc_fold_auc_value, roc_ovr_micro_run
+from std.python._cpython import GILReleased
 from bindings.metrics_program_pack import metric_arena_array
 from bindings.mcls_ranking_run import (
     _CF_OUT, _CF_CHUNK, _OVO_WORDS, _RANK_ROW_SUM, _RANK_CURVE_SCORE, _RANK_AVERAGE, _RANK_OVO_MASK, _RANK_OVO_PAIR,
@@ -111,32 +113,13 @@ def _binary_labels(y_true: PythonObject, context: PythonObject) raises -> McLabe
 
 
 def mc_fold_auc(arena: MetricArenaOwner, off: Int, partial: Bool, max_fpr: Float64, context: PythonObject) raises -> PythonObject:
-    """`_FoldCurve.auc(max_fpr)` from the fold's words."""
-    var s = arena.f32(off) + arena.f32(off + 1)
-    var f_tot = arena.f32(off + 2)
-    var t_tot = arena.f32(off + 3)
-    var k = arena.i32(off + 4)
-    var a = arena.f32(off + 5)
-    var b = arena.f32(off + 6)
-    var u = arena.f32(off + 7)
-    var v = arena.f32(off + 8)
-    var c = arena.i32(off + 9)
-    if c <= 0 or not (f_tot > 0 and t_tot > 0):
+    """`_FoldCurve.auc(max_fpr)` from the fold's words (the typed body
+    `mc_fold_auc_value`); a one-class fold warns and answers NaN."""
+    var got = mc_fold_auc_value(arena, off, partial, max_fpr)
+    if not got.defined:
         mc_undefined(_ROC_ONE_CLASS, context)
         return mc_nan()
-    var whole = s / pinned_mul_f64(pinned_mul_f64(2.0, f_tot), t_tot)
-    if not partial or k >= c:
-        return PythonObject(whole)
-    var x0 = a / f_tot
-    var x1 = b / f_tot
-    var y0 = u / t_tot
-    var y1 = v / t_tot
-    var yi = y0
-    if x1 != x0:
-        yi = y0 + pinned_mul_f64(max_fpr - x0, y1 - y0) / (x1 - x0)
-    var part = whole + pinned_mul_f64(max_fpr - x0, yi + y0) / 2.0
-    var min_area = pinned_mul_f64(pinned_mul_f64(0.5, max_fpr), max_fpr)
-    return PythonObject(pinned_mul_f64(0.5, 1 + (part - min_area) / (max_fpr - min_area)))
+    return PythonObject(got.value)
 
 
 # ------------------------------------------------------------ roc_auc_score
@@ -203,25 +186,30 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
         # scores), and the flag is read before the AUC as before: the same
         # refusal, the same fold over the same words, the same bits.
         # `_micro_inputs` and `_curves(s.reshape((n * k,)), flags, wm, n * k, 1, fold="auc")`
-        var p2 = MetricDoorProg()
-        var s2 = p2.put(s)
-        var c2 = p2.put(codes)
-        var pos2 = p2.scratch(n * k)
-        p2.stage("onehot", n * k, [c2, pos2, n, k, 1])
-        var w2 = MC_NONE
+        # Lane bm-meta-3 (2026-11-23): UNPACK here (the route, the pinned
+        # scores, codes and weights), RUN `roc_ovr_micro_run`
+        # (bindings/mcls_ranking_run.mojo: the same program, typed, through
+        # the one program runner `metric_inputs_run`), PACK the float.
+        var pin = metric_route_open(args[8], context)
+        var w_at = 0
+        var w_words = -1
         if w is not None:
-            var w_in = p2.put(w)
-            w2 = p2.scratch(n * k)
-            p2.stage("rep_rows", n * k, [w_in, w2, k])
-        var out2 = mc_fold_stages(p2.plan, s2, 1, pos2, w2, n * k, 1, False, 0.0, MC_NONE)
-        var rows2 = p2.want(p2.alloc(1), 1)
-        if n:
-            p2.stage("rank_epi", n, [_RANK_ROW_SUM, s2, n, k, rows2])
-        var arena2 = metric_door_run(p2, args[8], context)
-        if arena2.i32(rows2) != 0:
-            raise Error(_ROWS_MSG)
+            w_at = Int(py=classical_address(w))
+            w_words = Int(py=w.size)
+        var got = RocMicro(False, McAuc(False, 0.0))
+        with GILReleased(Python()):
+            got = roc_ovr_micro_run(pin.route, Int(py=classical_address(s)), Int(py=s.size),
+                                    Int(py=classical_address(codes)), Int(py=codes.size), w_at, w_words, n, k)
+        _ = s  # the RUN reads the pinned words
         _ = codes^
-        return mc_fold_auc(arena2, out2, False, 0.0, context)
+        _ = w
+        _ = pin^
+        if not got.rows_ok:
+            raise Error(_ROWS_MSG)
+        if not got.auc.defined:
+            mc_undefined(_ROC_ONE_CLASS, context)
+            return mc_nan()
+        return PythonObject(got.auc.value)
     # `_fold_curves(s, _OneHot(codes, n, k, 0), w, n, k, stride=k, fold="auc", tail=tail)`
     var prog = MetricDoorProg()
     var s_off = prog.put(s)
